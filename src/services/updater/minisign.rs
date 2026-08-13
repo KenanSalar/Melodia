@@ -40,10 +40,8 @@ use minisign_verify::{Error as MinisignVerifyError, PublicKey, Signature};
 ///      release-or-newer pick up updates normally; clients on prior
 ///      releases stay stuck on their installed version until the user
 ///      manually downloads + installs from the GitHub release page.
-const EMBEDDED_PUBKEY: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/updater-pubkey.b64"
-));
+const EMBEDDED_PUBKEY: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/updater-pubkey.b64"));
 
 #[derive(Debug, thiserror::Error)]
 pub enum MinisignError {
@@ -65,8 +63,7 @@ pub enum MinisignError {
 /// caching) so a swapped `assets/updater-pubkey.b64` always takes
 /// effect on rebuild.
 pub fn embedded_pubkey() -> Result<PublicKey, MinisignError> {
-    PublicKey::decode(EMBEDDED_PUBKEY)
-        .map_err(|e| MinisignError::PubkeyDecode(e.to_string()))
+    PublicKey::decode(EMBEDDED_PUBKEY).map_err(|e| MinisignError::PubkeyDecode(e.to_string()))
 }
 
 /// Stream-verify `reader`'s contents against `sig_text` (the full
@@ -101,22 +98,20 @@ pub fn verify_stream<R: Read>(
     pubkey: &PublicKey,
     expected_version: Option<&str>,
 ) -> Result<(), MinisignError> {
-    let sig = Signature::decode(sig_text)
-        .map_err(|e| MinisignError::SignatureDecode(e.to_string()))?;
+    let sig =
+        Signature::decode(sig_text).map_err(|e| MinisignError::SignatureDecode(e.to_string()))?;
     // Capture the trusted comment up front. After `pubkey.verify_stream(&sig)`
     // moves `sig` into the verifier we can't reach it from here; reading
     // before `finalize()` is safe because the global signature covers the
     // trusted-comment bytes, so a tampered comment would fail
     // verification below before this string is acted on.
     let trusted_comment = sig.trusted_comment().to_string();
-    let mut verifier = pubkey
-        .verify_stream(&sig)
-        .map_err(|e| match e {
-            MinisignVerifyError::UnsupportedLegacyMode => MinisignError::StreamSetup(
-                "signature is not prehashed (CI must sign with `minisign -SH …`)".into(),
-            ),
-            other => MinisignError::StreamSetup(other.to_string()),
-        })?;
+    let mut verifier = pubkey.verify_stream(&sig).map_err(|e| match e {
+        MinisignVerifyError::UnsupportedLegacyMode => MinisignError::StreamSetup(
+            "signature is not prehashed (CI must sign with `minisign -SH …`)".into(),
+        ),
+        other => MinisignError::StreamSetup(other.to_string()),
+    })?;
     let mut buf = [0u8; 8192];
     loop {
         let n = reader.read(&mut buf)?;
@@ -125,9 +120,7 @@ pub fn verify_stream<R: Read>(
         }
         verifier.update(&buf[..n]);
     }
-    verifier
-        .finalize()
-        .map_err(|e| MinisignError::Verify(e.to_string()))?;
+    verifier.finalize().map_err(|e| MinisignError::Verify(e.to_string()))?;
 
     if let Some(expected) = expected_version {
         match parse_trusted_comment_version(&trusted_comment) {
@@ -198,21 +191,17 @@ pub fn verify_manifest_bytes(
     expected_version: Option<&str>,
     expected_manifest_tag: Option<&str>,
 ) -> Result<(), MinisignError> {
-    let sig = Signature::decode(sig_text)
-        .map_err(|e| MinisignError::SignatureDecode(e.to_string()))?;
+    let sig =
+        Signature::decode(sig_text).map_err(|e| MinisignError::SignatureDecode(e.to_string()))?;
     let trusted_comment = sig.trusted_comment().to_string();
-    let mut verifier = pubkey
-        .verify_stream(&sig)
-        .map_err(|e| match e {
-            MinisignVerifyError::UnsupportedLegacyMode => MinisignError::StreamSetup(
-                "manifest signature is not prehashed (CI must sign with `minisign -SH …`)".into(),
-            ),
-            other => MinisignError::StreamSetup(other.to_string()),
-        })?;
+    let mut verifier = pubkey.verify_stream(&sig).map_err(|e| match e {
+        MinisignVerifyError::UnsupportedLegacyMode => MinisignError::StreamSetup(
+            "manifest signature is not prehashed (CI must sign with `minisign -SH …`)".into(),
+        ),
+        other => MinisignError::StreamSetup(other.to_string()),
+    })?;
     verifier.update(body);
-    verifier
-        .finalize()
-        .map_err(|e| MinisignError::Verify(e.to_string()))?;
+    verifier.finalize().map_err(|e| MinisignError::Verify(e.to_string()))?;
 
     if let Some(expected_tag) = expected_manifest_tag {
         match parse_trusted_comment_field(&trusted_comment, "manifest") {

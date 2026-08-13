@@ -64,10 +64,7 @@ fn sort_changed(a: &ViewSort, b: &ViewSort) -> bool {
 /// its header clicks this way all along.
 pub fn resort_and_apply(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
     let sort = current_sort(fav_ui);
-    fav_ui
-        .state()
-        .tracks_all
-        .resort(&sort.field, dir_token(sort.dir));
+    fav_ui.state().tracks_all.resort(&sort.field, dir_token(sort.dir));
     apply_filtered_tracks(fav_ui, weak);
 }
 
@@ -175,10 +172,7 @@ pub async fn refresh_tracks(
     }
     let sort_now = current_sort(fav_ui);
     if sort_changed(&sort_now, &sort_used) {
-        fav_ui
-            .state()
-            .tracks_all
-            .resort(&sort_now.field, dir_token(sort_now.dir));
+        fav_ui.state().tracks_all.resort(&sort_now.field, dir_token(sort_now.dir));
     }
     // Then republish: `kick_full_refresh` runs this task concurrently with the
     // hero and grid fetches, so whichever of those published did so against the
@@ -261,11 +255,7 @@ fn build_filtered_tracks(fav_ui: &FavoritesUi) -> Option<Vec<UiTrackListRow>> {
 /// Both gates are re-asked here rather than trusted from the build: on the
 /// posting path a section leave or a tab pick can land while the closure is in
 /// flight, and either one has already emptied this model on purpose.
-fn write_filtered_tracks(
-    ui: &AppWindow,
-    fav_ui: &FavoritesUi,
-    mut rendered: Vec<UiTrackListRow>,
-) {
+fn write_filtered_tracks(ui: &AppWindow, fav_ui: &FavoritesUi, mut rendered: Vec<UiTrackListRow>) {
     if !fav_ui.section_active() || fav_ui.active_tab() != FavoritesTab::Songs {
         return;
     }

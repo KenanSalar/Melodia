@@ -1,6 +1,6 @@
 use crate::database::queries;
 use crate::database::queries::tests::helpers::insert_test_track;
-use crate::database::{chunked_in_query, DbPool, SQLITE_BIND_LIMIT};
+use crate::database::{DbPool, SQLITE_BIND_LIMIT, chunked_in_query};
 use crate::error::AppError;
 
 // Private to `database/mod.rs`; reachable from this child test module via `super::`.
@@ -30,21 +30,14 @@ async fn chunked_in_query_small_set() -> Result<(), AppError> {
     // Insert a folder + track so we have data to query
     queries::folder::insert_folder(&db, "/test", true).await?;
 
-    let track_id = insert_test_track(
-        &db,
-        "/test/song.mp3",
-        "Test Song",
-        "Test Artist",
-        "Test Album",
-        "Rock",
-    )
-    .await?;
+    let track_id =
+        insert_test_track(&db, "/test/song.mp3", "Test Song", "Test Artist", "Test Album", "Rock")
+            .await?;
 
     let ids = vec![track_id, 99999]; // one real, one missing
-    let result: Vec<(i64,)> = chunked_in_query(db.read(), &ids, |ph| {
-        format!("SELECT id FROM tracks WHERE id IN ({ph})")
-    })
-    .await?;
+    let result: Vec<(i64,)> =
+        chunked_in_query(db.read(), &ids, |ph| format!("SELECT id FROM tracks WHERE id IN ({ph})"))
+            .await?;
 
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].0, track_id);
@@ -58,10 +51,9 @@ async fn chunked_in_query_single_item() -> Result<(), AppError> {
     let track_id = insert_test_track(&db, "/test/a.mp3", "A", "Art", "Alb", "Pop").await?;
 
     let ids = vec![track_id];
-    let result: Vec<(i64,)> = chunked_in_query(db.read(), &ids, |ph| {
-        format!("SELECT id FROM tracks WHERE id IN ({ph})")
-    })
-    .await?;
+    let result: Vec<(i64,)> =
+        chunked_in_query(db.read(), &ids, |ph| format!("SELECT id FROM tracks WHERE id IN ({ph})"))
+            .await?;
 
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].0, track_id);
@@ -181,10 +173,9 @@ async fn db_pool_read_write_accessors() -> Result<(), AppError> {
 async fn chunked_in_query_all_missing() -> Result<(), AppError> {
     let db = DbPool::test_pool().await;
     let ids = vec![9999_i64, 8888, 7777];
-    let result: Vec<(i64,)> = chunked_in_query(db.read(), &ids, |ph| {
-        format!("SELECT id FROM tracks WHERE id IN ({ph})")
-    })
-    .await?;
+    let result: Vec<(i64,)> =
+        chunked_in_query(db.read(), &ids, |ph| format!("SELECT id FROM tracks WHERE id IN ({ph})"))
+            .await?;
     assert!(result.is_empty());
     Ok(())
 }
@@ -200,9 +191,8 @@ async fn insert_folder_raw(db: &DbPool, path: &str) -> Result<(), AppError> {
 }
 
 async fn folder_paths(db: &DbPool) -> Result<Vec<String>, AppError> {
-    let rows: Vec<(String,)> = sqlx::query_as("SELECT path FROM folders ORDER BY id")
-        .fetch_all(db.read())
-        .await?;
+    let rows: Vec<(String,)> =
+        sqlx::query_as("SELECT path FROM folders ORDER BY id").fetch_all(db.read()).await?;
     Ok(rows.into_iter().map(|(p,)| p).collect())
 }
 
@@ -284,9 +274,7 @@ async fn strip_verbatim_normalizes_track_file_paths() -> Result<(), AppError> {
     strip_windows_verbatim_paths(db.write()).await?;
 
     let rows: Vec<(String,)> =
-        sqlx::query_as("SELECT file_path FROM tracks ORDER BY id")
-            .fetch_all(db.read())
-            .await?;
+        sqlx::query_as("SELECT file_path FROM tracks ORDER BY id").fetch_all(db.read()).await?;
     let paths: Vec<String> = rows.into_iter().map(|(p,)| p).collect();
     assert_eq!(
         paths,

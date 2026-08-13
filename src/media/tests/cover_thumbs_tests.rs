@@ -7,9 +7,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 fn new_decodes_to_row_tier_size() -> TestResult {
     let thumbs = CoverThumbs::new();
     let (_tmp, path) = write_test_png(600)?;
-    let buf = thumbs
-        .get_or_load_rgb8(&path)
-        .ok_or("row-tier cover failed to decode")?;
+    let buf = thumbs.get_or_load_rgb8(&path).ok_or("row-tier cover failed to decode")?;
     assert_eq!(buf.width(), ROW_THUMB_SIZE);
     assert_eq!(buf.height(), ROW_THUMB_SIZE);
     Ok(())
@@ -20,9 +18,7 @@ fn with_config_decodes_to_requested_size() -> TestResult {
     let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
     let thumbs = CoverThumbs::with_config(512, cap);
     let (_tmp, path) = write_test_png(1000)?;
-    let buf = thumbs
-        .get_or_load_rgb8(&path)
-        .ok_or("album-tier cover failed to decode")?;
+    let buf = thumbs.get_or_load_rgb8(&path).ok_or("album-tier cover failed to decode")?;
     assert_eq!(buf.width(), 512);
     assert_eq!(buf.height(), 512);
     Ok(())
@@ -114,9 +110,7 @@ fn set_thumb_size_drops_stale_buffers_only_when_the_size_moves() -> TestResult {
     thumbs.set_thumb_size(ROW_THUMB_SIZE_HIDPI);
     assert_eq!(thumbs.cache.lock().len(), 0);
 
-    let buf = thumbs
-        .get_or_load_rgb8(&path)
-        .ok_or("cover failed to decode at the retuned size")?;
+    let buf = thumbs.get_or_load_rgb8(&path).ok_or("cover failed to decode at the retuned size")?;
     assert_eq!(buf.width(), ROW_THUMB_SIZE_HIDPI);
     Ok(())
 }

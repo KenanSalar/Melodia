@@ -13,8 +13,7 @@
 
 use crate::test_support::{binding_value as binding, strip_line_comments};
 
-const BAND: &str =
-    include_str!("../../../melodia-ui/ui/components/hero/library-tab-band.slint");
+const BAND: &str = include_str!("../../../melodia-ui/ui/components/hero/library-tab-band.slint");
 
 /// The band's only mount. Three of the pins below are about the seam rather than
 /// the component, and a band nobody feeds passes every check on its own source.
@@ -167,12 +166,16 @@ fn every_tab_bar_brush_crosses_from_a_theme_token_to_a_backdrop_tier() {
 #[test]
 fn the_palette_crossing_is_anchored_to_the_morph() {
     let code = code();
-    let declarations = code
-        .split_once("states [")
-        .map_or(String::new(), |(before, _)| before.to_owned());
+    let declarations =
+        code.split_once("states [").map_or(String::new(), |(before, _)| before.to_owned());
     assert!(!declarations.is_empty(), "the band no longer declares a `states` block");
 
-    for input in ["label-brush", "active-brush", "hover-brush", "divider-brush"] {
+    for input in [
+        "label-brush",
+        "active-brush",
+        "hover-brush",
+        "divider-brush",
+    ] {
         assert!(
             !declarations.contains(&format!("animate {input}")),
             "`{input}` must cross inside the state's transition, never on an `animate` of its own \
@@ -211,7 +214,12 @@ fn the_palette_crossing_is_anchored_to_the_morph() {
             "the `hero` state must declare an `{direction}` transition — an `in-out` block can \
              only carry one curve, and the morph now has two"
         );
-        for input in ["label-brush", "active-brush", "hover-brush", "divider-brush"] {
+        for input in [
+            "label-brush",
+            "active-brush",
+            "hover-brush",
+            "divider-brush",
+        ] {
             assert!(
                 transition.contains(input),
                 "the `hero` state's `{direction}` transition must animate `{input}` — left out, \
@@ -325,9 +333,14 @@ fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
 /// fix, it only strands the five tab bodies on a direction they can't reach.
 #[test]
 fn the_band_forwards_what_the_shared_row_publishes() {
-    for prop in
-        ["tab-enter-from", "tab-anim-armed", "tip-w", "tip-h", "tip-label", "tip-visible"]
-    {
+    for prop in [
+        "tab-enter-from",
+        "tab-anim-armed",
+        "tip-w",
+        "tip-h",
+        "tip-label",
+        "tip-visible",
+    ] {
         assert!(
             BAND.contains(&format!("{prop} <=> header.{prop};")),
             "the band must re-publish `{prop}` off the shared header — its sheet reads that name"
@@ -601,9 +614,7 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
          whole of the bug"
     );
     assert_eq!(
-        title
-            .matches("color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);")
-            .count(),
+        title.matches("color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);").count(),
         2,
         "the title *and* the subtitle must carry the fade in their own brush. The subtitle is the \
          block's last child, so it is the edge a layer cut from below — fixing only the title \
@@ -910,7 +921,10 @@ fn the_back_button_takes_every_brush_from_the_backdrop() {
         .split_once("icon: \"arrow_back\";")
         .and_then(|(_, rest)| rest.split_once("clicked =>"))
         .map_or(String::new(), |(body, _)| body.to_owned());
-    assert!(!button.is_empty(), "the band no longer mounts a back button ahead of its click handler");
+    assert!(
+        !button.is_empty(),
+        "the band no longer mounts a back button ahead of its click handler"
+    );
 
     for (prop, tier) in [
         ("idle-bg", "HeroBackdrop.chip-fill"),

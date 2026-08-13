@@ -53,7 +53,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
 
                 let d = ui.global::<PlaylistDetail>();
                 release_detail_hero_images!(ui, d);
-                clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "playlists: clear detail tracks");
+                clear_vec_model::<UiTrackListRow>(
+                    &d.get_tracks(),
+                    "playlists: clear detail tracks",
+                );
                 clear_vec_model::<i32>(&d.get_selected_ids(), "playlists: clear detail selection");
                 d.set_selection_anchor(-1);
             }
@@ -65,9 +68,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 runtime.spawn(async move {
                     if pu.take_dirty() {
                         let open_id = pu.detail_playlist_id();
-                        if let Err(e) =
-                            playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await
-                        {
+                        if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
                             log::warn!("playlists::section_enter fetch_grid: {e}");
                         }
                         if open_id >= 0
@@ -80,9 +81,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                             )
                             .await
                         {
-                            log::warn!(
-                                "playlists::section_enter open_playlist({open_id}): {e}"
-                            );
+                            log::warn!("playlists::section_enter open_playlist({open_id}): {e}");
                             playlists_ui_mod::clear_detail(&pu);
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<PlaylistDetail>();
@@ -132,15 +131,21 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     let s = s.clone();
                     let pu = pu.clone();
                     let weak = weak.clone();
-                    spawn_logged!(s, "playlists::library_changed",
-                        playlists_ui_mod::fetch_grid(&s, &pu, weak));
+                    spawn_logged!(
+                        s,
+                        "playlists::library_changed",
+                        playlists_ui_mod::fetch_grid(&s, &pu, weak)
+                    );
                 }
                 if open_id >= 0 {
                     let s = s.clone();
                     let pu = pu.clone();
                     let weak = weak.clone();
-                    spawn_logged!(s, "playlists::library_changed_detail",
-                        playlists_ui_mod::refresh_detail(&s, &pu, weak, open_id));
+                    spawn_logged!(
+                        s,
+                        "playlists::library_changed_detail",
+                        playlists_ui_mod::refresh_detail(&s, &pu, weak, open_id)
+                    );
                 }
             }
         }));
@@ -174,15 +179,21 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     let s = s.clone();
                     let pu = pu.clone();
                     let weak = weak.clone();
-                    spawn_logged!(s, "playlists::stats_changed",
-                        playlists_ui_mod::fetch_grid_stats(&s, &pu, weak));
+                    spawn_logged!(
+                        s,
+                        "playlists::stats_changed",
+                        playlists_ui_mod::fetch_grid_stats(&s, &pu, weak)
+                    );
                 }
                 if open_smart {
                     let s = s.clone();
                     let pu = pu.clone();
                     let weak = weak.clone();
-                    spawn_logged!(s, "playlists::stats_changed_detail",
-                        playlists_ui_mod::refresh_detail(&s, &pu, weak, open_id));
+                    spawn_logged!(
+                        s,
+                        "playlists::stats_changed_detail",
+                        playlists_ui_mod::refresh_detail(&s, &pu, weak, open_id)
+                    );
                 }
             }
         }));

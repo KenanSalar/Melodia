@@ -25,9 +25,7 @@ pub async fn set_rating(state: &AppState, ids: Vec<i64>, rating: i32) -> Result<
     // rating onto `current_track` so the Now-Playing star strip updates without
     // waiting for the next track load (parity with `set_current_rating`).
     sync_current_track_rating(state, &ids, rating);
-    state
-        .library_changed_tx
-        .send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
     Ok(())
 }
 
@@ -68,9 +66,7 @@ pub async fn set_current_rating(
         Vec::<PlayerAction>::new()
     });
 
-    state
-        .library_changed_tx
-        .send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
 
     Ok(Some((id, rating)))
 }

@@ -736,8 +736,7 @@ fn detect_os_locale() -> Option<String> {
 fn detect_system_locale_raw() -> Option<String> {
     if let Ok(val) = std::env::var("LANGUAGE")
         && !val.is_empty()
-        && let Some(first) =
-            val.split(':').find(|s| !s.is_empty() && *s != "C" && *s != "POSIX")
+        && let Some(first) = val.split(':').find(|s| !s.is_empty() && *s != "C" && *s != "POSIX")
     {
         return Some(first.to_owned());
     }

@@ -5,11 +5,10 @@ use crate::entities::album;
 use crate::error::AppError;
 
 pub async fn get_all_albums(db: &DbPool) -> Result<Vec<album::AlbumStats>, AppError> {
-    let albums = sqlx::query_as::<_, album::AlbumStats>(
-        "SELECT * FROM album_stats ORDER BY name ASC"
-    )
-    .fetch_all(db.read())
-    .await?;
+    let albums =
+        sqlx::query_as::<_, album::AlbumStats>("SELECT * FROM album_stats ORDER BY name ASC")
+            .fetch_all(db.read())
+            .await?;
     Ok(albums)
 }
 
@@ -21,9 +20,12 @@ pub async fn get_album_by_id(db: &DbPool, id: i64) -> Result<album::AlbumStats, 
         .ok_or_else(|| AppError::not_found("Album", id))
 }
 
-pub async fn get_albums_by_artist(db: &DbPool, artist_id: i64) -> Result<Vec<album::AlbumStats>, AppError> {
+pub async fn get_albums_by_artist(
+    db: &DbPool,
+    artist_id: i64,
+) -> Result<Vec<album::AlbumStats>, AppError> {
     let albums = sqlx::query_as::<_, album::AlbumStats>(
-        "SELECT * FROM album_stats WHERE artist_id = ? ORDER BY year ASC"
+        "SELECT * FROM album_stats WHERE artist_id = ? ORDER BY year ASC",
     )
     .bind(artist_id)
     .fetch_all(db.read())
@@ -49,9 +51,7 @@ pub async fn set_album_artwork(
     for chunk in album_ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("UPDATE albums SET artwork_path = ? WHERE id IN ({placeholders})");
-        let mut query = sqlx::query(AssertSqlSafe(sql))
-            .persistent(false)
-            .bind(artwork_path);
+        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(artwork_path);
         for id in chunk {
             query = query.bind(*id);
         }

@@ -43,8 +43,8 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use flexi_logger::{
-    AdaptiveFormat, Age, Cleanup, Criterion, Duplicate, FileSpec, FlexiLoggerError, LogSpecification,
-    LogfileSelector, Logger, LoggerHandle, Naming, WriteMode, detailed_format,
+    AdaptiveFormat, Age, Cleanup, Criterion, Duplicate, FileSpec, FlexiLoggerError,
+    LogSpecification, LogfileSelector, Logger, LoggerHandle, Naming, WriteMode, detailed_format,
 };
 
 use crate::config::Paths;
@@ -182,10 +182,7 @@ fn base_logger(spec: &str) -> Logger {
 fn start_to_file(paths: &Paths, spec: &str) -> Result<LoggerHandle, FlexiLoggerError> {
     base_logger(spec)
         .log_to_file(
-            FileSpec::default()
-                .directory(&paths.logs_dir)
-                .basename("melodia")
-                .suppress_timestamp(),
+            FileSpec::default().directory(&paths.logs_dir).basename("melodia").suppress_timestamp(),
         )
         // Without this a restart truncates, so the run that crashed is gone by
         // the time the user opens the folder — the one call whose absence
@@ -253,12 +250,9 @@ pub fn log_files() -> Vec<PathBuf> {
     };
     // Two calls, because asked for together the live file is *appended* after
     // the rotated ones and no single ordering of that list is meaningful.
-    let current = handle
-        .existing_log_files(&LogfileSelector::none().with_r_current())
-        .unwrap_or_default();
-    let rotated = handle
-        .existing_log_files(&LogfileSelector::default())
-        .unwrap_or_default();
+    let current =
+        handle.existing_log_files(&LogfileSelector::none().with_r_current()).unwrap_or_default();
+    let rotated = handle.existing_log_files(&LogfileSelector::default()).unwrap_or_default();
     newest_first(current, rotated)
 }
 

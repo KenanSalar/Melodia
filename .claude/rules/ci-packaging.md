@@ -23,11 +23,12 @@ obligations every artifact carries.
 
 ## The PR gate
 
-`pr-validation.yml`, on PRs into `dev`: `changes` (skip matrix) → `audit` ∥ `clippy` → `test`.
-`clippy` is one step (`--all-targets --locked -- -D warnings`, both packages); `test` is plain
-`cargo test --locked`, `needs: [clippy]` so a lint failure fast-fails; `audit` compiles nothing
-and is clippy's *sibling*, so an advisory hit doesn't hide the lint and test results. **No `fmt`
-job** — the tree isn't `cargo fmt`-clean — and no coverage.
+`pr-validation.yml`, on PRs into `dev`: `changes` (skip matrix) → `audit` ∥ `fmt` ∥ `clippy` ∥
+`test`. `clippy` is one step (`--all-targets --locked -- -D warnings`, both packages); `test` is
+plain `cargo test --locked`. All four hang off `changes` alone — chaining `test` behind `clippy`
+made the gate's wall clock their sum, and what waits on it is a person deciding whether to merge.
+`audit` and `fmt` compile nothing, so neither an advisory hit nor a reflow hides the lint and test
+results. No coverage on this path.
 
 - **The aggregate `pr-validation` job is the required status check, and adding a job to it is two
   edits**: `needs:` *and* the `results=( … )` bash array the check step loops over. No

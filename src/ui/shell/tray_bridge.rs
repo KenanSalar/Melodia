@@ -21,13 +21,13 @@ use std::sync::{Arc, Mutex};
 
 use slint::ComponentHandle;
 
-use crate::{AppWindow, Settings, Visualizer};
 use crate::player::event_sink::{EventSink, PlayerEvent};
 use crate::player::state::PlayerViewModelLight;
 use crate::services::tray::{self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TraySnapshot};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use crate::ui::shell::event_sink::SlintEventSink;
+use crate::{AppWindow, Settings, Visualizer};
 
 /// User preference: hide the window to tray on close instead of quitting.
 /// Mirrors `settings.tray.close_to_tray`; seeded at startup and updated by
@@ -159,10 +159,7 @@ pub fn hide_window(ui: &AppWindow) {
 /// renderer and stretches the UI.
 fn show_window(ui: &AppWindow) {
     let window = ui.window();
-    let from_tray_hide = SAVED_WINDOW_GEOM
-        .lock()
-        .ok()
-        .and_then(|mut slot| slot.take());
+    let from_tray_hide = SAVED_WINDOW_GEOM.lock().ok().and_then(|mut slot| slot.take());
 
     let geom = if let Some(g) = from_tray_hide {
         if let Err(e) = window.show() {
@@ -244,9 +241,7 @@ pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
                 ui.global::<Settings>().set_tray_active(true);
                 spawn_state_subscriber_linux(spawner, state, linux_tray);
             }
-            None => log::info!(
-                "tray: not active — close-to-tray will fall back to quitting"
-            ),
+            None => log::info!("tray: not active — close-to-tray will fall back to quitting"),
         }
     }
     #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -355,10 +350,7 @@ fn snapshot_from_vm(vm: Option<&PlayerViewModelLight>) -> TraySnapshot {
     match vm {
         Some(vm) => TraySnapshot {
             track_title: vm.current_track.as_ref().map(|t| t.title.clone()),
-            track_artist: vm
-                .current_track
-                .as_ref()
-                .and_then(|t| t.artist.clone()),
+            track_artist: vm.current_track.as_ref().and_then(|t| t.artist.clone()),
             is_playing: vm.status == "playing",
         },
         None => TraySnapshot::default(),
@@ -369,11 +361,7 @@ fn snapshot_from_vm(vm: Option<&PlayerViewModelLight>) -> TraySnapshot {
 /// refreshes it on every view-model change. Dropping the tray when the task
 /// ends (shutdown) removes the icon, so no explicit teardown is needed.
 #[cfg(target_os = "linux")]
-fn spawn_state_subscriber_linux(
-    spawner: &TaskSpawner,
-    state: &AppState,
-    tray: tray::LinuxTray,
-) {
+fn spawn_state_subscriber_linux(spawner: &TaskSpawner, state: &AppState, tray: tray::LinuxTray) {
     let mut rx = state.sinks.view_model.subscribe();
     spawner.spawn_cancellable(move |shutdown| async move {
         // `tray` is owned here; it is dropped (→ ksni shutdown) when the loop

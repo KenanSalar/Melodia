@@ -43,9 +43,7 @@ pub fn handle_select_row(
         // looking at even mid-debounce.
         || {
             let rows = g.get_tracks();
-            (0..rows.row_count())
-                .filter_map(|i| rows.row_data(i).map(|r| r.id))
-                .collect()
+            (0..rows.row_count()).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect()
         },
         idx,
         id,

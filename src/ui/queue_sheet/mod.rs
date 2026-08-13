@@ -47,8 +47,7 @@ pub fn install(
     state: &AppState,
 ) -> Result<QueueSheetHandles, slint::EventLoopError> {
     let queue_model: Rc<VecModel<QueueRow>> = Rc::new(VecModel::default());
-    ui.global::<Queue>()
-        .set_rows(ModelRc::from(queue_model.clone()));
+    ui.global::<Queue>().set_rows(ModelRc::from(queue_model.clone()));
 
     let shadow: Arc<Mutex<Vec<ShadowEntry>>> = Arc::new(Mutex::new(Vec::new()));
     let anchor: Arc<Mutex<Option<usize>>> = Arc::new(Mutex::new(None));
@@ -64,7 +63,9 @@ pub fn install(
     let tune_covers = queue_covers.clone();
     let tune_weak = ui.as_weak();
     if let Err(e) = slint::invoke_from_event_loop(move || {
-        let Some(ui) = tune_weak.upgrade() else { return };
+        let Some(ui) = tune_weak.upgrade() else {
+            return;
+        };
         tune_covers.set_thumb_size(row_cover_size(f64::from(ui.window().scale_factor())));
     }) {
         log::warn!("Failed to schedule queue-cover display tuning: {e}");
@@ -95,15 +96,7 @@ pub fn install(
         });
     }
 
-    callbacks::wire_callbacks(
-        ui,
-        state,
-        &queue_model,
-        &queue_covers,
-        &shadow,
-        &anchor,
-        &is_open,
-    );
+    callbacks::wire_callbacks(ui, state, &queue_model, &queue_covers, &shadow, &anchor, &is_open);
     rows::spawn_queue_rows_subscriber(ui, state, queue_model, shadow, is_open.clone())?;
 
     // No install-time seed: the sheet is closed at startup, so the

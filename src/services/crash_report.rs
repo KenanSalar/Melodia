@@ -110,10 +110,7 @@ pub fn install_hook(logs_dir: &Path) {
     let previous = std::panic::take_hook();
 
     std::panic::set_hook(Box::new(move |info| {
-        if IN_HOOK
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
+        if IN_HOOK.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
             previous(info);
             return;
         }
@@ -125,13 +122,7 @@ pub fn install_hook(logs_dir: &Path) {
         let payload = info.payload_as_str().unwrap_or("<non-string panic payload>");
         let backtrace = std::backtrace::Backtrace::force_capture().to_string();
 
-        let report = format_report(
-            now,
-            thread.name(),
-            location.as_deref(),
-            payload,
-            &backtrace,
-        );
+        let report = format_report(now, thread.name(), location.as_deref(), payload, &backtrace);
 
         // Plain `fs`, deliberately: a panic raised inside a logging call must
         // not have to go back through the logger to leave an artifact.

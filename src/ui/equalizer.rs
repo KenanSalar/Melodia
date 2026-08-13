@@ -110,7 +110,9 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
         let model = model.clone();
         eq.on_select_preset(move |idx| {
             let Ok(i) = usize::try_from(idx) else { return };
-            let Some(preset) = equalizer::PRESETS.get(i) else { return };
+            let Some(preset) = equalizer::PRESETS.get(i) else {
+                return;
+            };
             let gains = preset.gains;
             let name = preset.name.to_owned();
             model.set_vec(gains.to_vec());

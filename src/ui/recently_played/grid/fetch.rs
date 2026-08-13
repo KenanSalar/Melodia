@@ -14,11 +14,7 @@ use crate::ui::recently_played::RecentlyPlayedUi;
 /// Fetch the library's played tracks and apply them (filtered). Returns `()` —
 /// the caller (`kick_full_refresh`) has no use for a propagated error; failures
 /// are logged here with section context.
-pub async fn refresh_grid(
-    state: &AppState,
-    rp_ui: &Arc<RecentlyPlayedUi>,
-    weak: &Weak<AppWindow>,
-) {
+pub async fn refresh_grid(state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
     // Logged before the guard below, not at the store — a query that failed is
     // worth a line whether or not anyone is still looking at the view.
     let most_played = library::recently_played::get_most_played(state)

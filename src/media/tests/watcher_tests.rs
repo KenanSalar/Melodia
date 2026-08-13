@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use notify::event::{CreateKind, DataChange, ModifyKind, RemoveKind, RenameMode};
 use notify::EventKind;
+use notify::event::{CreateKind, DataChange, ModifyKind, RemoveKind, RenameMode};
 
 // === Audio file detection ===
 
@@ -64,7 +64,9 @@ fn classify_create_file_audio() {
     let paths = vec![PathBuf::from("/music/song.mp3")];
     let events = super::classify_event(kind, &paths);
     assert_eq!(events.len(), 1);
-    assert!(matches!(&events[0], super::FileEvent::Created(p) if p == Path::new("/music/song.mp3")));
+    assert!(
+        matches!(&events[0], super::FileEvent::Created(p) if p == Path::new("/music/song.mp3"))
+    );
 }
 
 #[test]
@@ -90,7 +92,9 @@ fn classify_remove_file() {
     let paths = vec![PathBuf::from("/music/song.mp3")];
     let events = super::classify_event(kind, &paths);
     assert_eq!(events.len(), 1);
-    assert!(matches!(&events[0], super::FileEvent::Removed(p) if p == Path::new("/music/song.mp3")));
+    assert!(
+        matches!(&events[0], super::FileEvent::Removed(p) if p == Path::new("/music/song.mp3"))
+    );
 }
 
 #[test]
@@ -187,7 +191,9 @@ fn classify_rename_audio_to_non_audio_as_removed() {
     ];
     let events = super::classify_event(kind, &paths);
     assert_eq!(events.len(), 1);
-    assert!(matches!(&events[0], super::FileEvent::Removed(p) if p == Path::new("/music/song.mp3")));
+    assert!(
+        matches!(&events[0], super::FileEvent::Removed(p) if p == Path::new("/music/song.mp3"))
+    );
 }
 
 #[test]
@@ -199,7 +205,9 @@ fn classify_rename_non_audio_to_audio_as_created() {
     ];
     let events = super::classify_event(kind, &paths);
     assert_eq!(events.len(), 1);
-    assert!(matches!(&events[0], super::FileEvent::Created(p) if p == Path::new("/music/song.mp3")));
+    assert!(
+        matches!(&events[0], super::FileEvent::Created(p) if p == Path::new("/music/song.mp3"))
+    );
 }
 
 #[test]

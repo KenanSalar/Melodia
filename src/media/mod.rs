@@ -9,9 +9,7 @@ pub mod self_writes;
 pub mod tag_writer;
 pub mod watcher;
 
-pub const AUDIO_EXTENSIONS: &[&str] = &[
-    "mp3", "flac", "m4a", "aac", "ogg", "wav", "alac", "aiff",
-];
+pub const AUDIO_EXTENSIONS: &[&str] = &["mp3", "flac", "m4a", "aac", "ogg", "wav", "alac", "aiff"];
 
 /// True when `ext` — a file extension without the dot, in any case — is one we
 /// scan. The single spelling of that question; every call site (library walk,

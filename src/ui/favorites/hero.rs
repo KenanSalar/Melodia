@@ -100,11 +100,7 @@ pub async fn refresh_hero(
 // The atlas composition itself lives in `crate::ui::mosaic_blur` — shared
 // with the Recently-Played hero so both surfaces read identically.
 
-fn push_stats_to_slint(
-    stats: &FavoriteStats,
-    fav_ui: &Arc<FavoritesUi>,
-    weak: &Weak<AppWindow>,
-) {
+fn push_stats_to_slint(stats: &FavoriteStats, fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
     let count = i32::try_from(stats.count).unwrap_or(i32::MAX);
     let paths = stats.artwork_paths.clone();
     let fav_ui = fav_ui.clone();

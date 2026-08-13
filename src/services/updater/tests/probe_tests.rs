@@ -5,20 +5,14 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 #[test]
 fn detects_writable_tempdir() -> TestResult {
     let tmp = tempfile::tempdir()?;
-    assert!(
-        dir_is_writable(tmp.path()),
-        "fresh tempdir should report writable"
-    );
+    assert!(dir_is_writable(tmp.path()), "fresh tempdir should report writable");
     Ok(())
 }
 
 #[test]
 fn returns_false_for_missing_dir() {
     let bogus = std::path::Path::new("/no/such/dir/melodia-probe-target");
-    assert!(
-        !dir_is_writable(bogus),
-        "non-existent path must not report writable"
-    );
+    assert!(!dir_is_writable(bogus), "non-existent path must not report writable");
 }
 
 #[test]
@@ -46,10 +40,7 @@ fn detects_readonly_dir() -> TestResult {
     if !mode_is_enforced {
         return Ok(());
     }
-    assert!(
-        !dir_is_writable(&ro),
-        "0o555 dir must report not writable for non-root callers"
-    );
+    assert!(!dir_is_writable(&ro), "0o555 dir must report not writable for non-root callers");
     Ok(())
 }
 
@@ -66,15 +57,8 @@ fn unique_probe_names_under_repeated_calls() -> TestResult {
     // Confirm no leaked probe files.
     let leaked: Vec<_> = std::fs::read_dir(tmp.path())?
         .filter_map(Result::ok)
-        .filter(|e| {
-            e.file_name()
-                .to_string_lossy()
-                .starts_with(".melodia-write-probe-")
-        })
+        .filter(|e| e.file_name().to_string_lossy().starts_with(".melodia-write-probe-"))
         .collect();
-    assert!(
-        leaked.is_empty(),
-        "leaked probe files: {leaked:?}"
-    );
+    assert!(leaked.is_empty(), "leaked probe files: {leaked:?}");
     Ok(())
 }

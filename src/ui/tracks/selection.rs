@@ -36,11 +36,7 @@ pub fn handle_select_row(
         // computed in the Shift branch — the filter walk is not free.
         || {
             let filter = g.get_filter().to_string();
-            tracks_ui
-                .current_ids_filtered(&filter)
-                .iter()
-                .map(|&v| clamp_i64_to_i32(v))
-                .collect()
+            tracks_ui.current_ids_filtered(&filter).iter().map(|&v| clamp_i64_to_i32(v)).collect()
         },
         idx,
         id,

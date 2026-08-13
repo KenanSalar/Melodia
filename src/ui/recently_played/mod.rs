@@ -69,8 +69,8 @@ pub(super) use songs::{
     apply_filtered_tracks, apply_filtered_tracks_now, apply_row_favorite, apply_row_rating,
     refresh_tracks, set_filter,
 };
-pub(super) use tabs::{seed_tab, tab_from_index};
 pub use tabs::RecentlyPlayedTab;
+pub(super) use tabs::{seed_tab, tab_from_index};
 
 /// Install the Recently-Played models, build the handle, wire every
 /// `RecentlyPlayed.*` callback, and seed the persisted tab.
@@ -147,10 +147,7 @@ impl RecentlyPlayedUi {
         Self {
             inner: RecentlyPlayedUiState::new(),
             cover_thumbs,
-            mosaic_thumbs: Arc::new(CoverThumbs::with_config(
-                MOSAIC_THUMB_SIZE,
-                MOSAIC_THUMB_CAP,
-            )),
+            mosaic_thumbs: Arc::new(CoverThumbs::with_config(MOSAIC_THUMB_SIZE, MOSAIC_THUMB_CAP)),
             most_played_thumbs: Arc::new(CoverThumbs::with_config(
                 crate::ui::grid_prewarm::GRID_COVER_SIZE,
                 GRID_THUMB_CAP,

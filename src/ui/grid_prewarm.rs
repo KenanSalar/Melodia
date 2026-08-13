@@ -161,11 +161,7 @@ pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroU
         return fallback;
     }
     let scale = f64::from(window.scale_factor());
-    cover_cap(
-        logical_dim(physical.width, scale),
-        logical_dim(physical.height, scale),
-        fallback,
-    )
+    cover_cap(logical_dim(physical.width, scale), logical_dim(physical.height, scale), fallback)
 }
 
 /// Resolve one grid card's cover, decoding only once the tier is known warm.

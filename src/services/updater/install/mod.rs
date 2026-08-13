@@ -26,8 +26,8 @@ use super::manifest::PlatformAsset;
 
 use download::download_to_file;
 use staging::{
-    InstallMethod, resolve_install_method, resolve_staged_path, sidecar_meta_path,
-    staged_msi_path, staged_package_path,
+    InstallMethod, resolve_install_method, resolve_staged_path, sidecar_meta_path, staged_msi_path,
+    staged_package_path,
 };
 use swap::{install_via_msiexec, install_via_package_manager};
 use verify::{attempt_post_swap_rollback, verify_staged, verify_swapped_binary};

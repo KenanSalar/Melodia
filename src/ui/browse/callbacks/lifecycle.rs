@@ -66,8 +66,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                 let s = s.clone();
                 let bu = bu.clone();
                 let weak = weak.clone();
-                spawn_logged!(s, "browse::section_enter",
-                    browse_ui_mod::fetch_and_apply(&s, &bu, weak, path));
+                spawn_logged!(
+                    s,
+                    "browse::section_enter",
+                    browse_ui_mod::fetch_and_apply(&s, &bu, weak, path)
+                );
             }
         });
     }
@@ -98,8 +101,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                 let s = s.clone();
                 let bu = bu.clone();
                 let weak = weak.clone();
-                spawn_logged!(s, "browse::library_changed",
-                    browse_ui_mod::fetch_and_apply(&s, &bu, weak, path));
+                spawn_logged!(
+                    s,
+                    "browse::library_changed",
+                    browse_ui_mod::fetch_and_apply(&s, &bu, weak, path)
+                );
             }
         }));
     }

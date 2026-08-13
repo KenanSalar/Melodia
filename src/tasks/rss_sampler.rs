@@ -63,10 +63,7 @@ pub fn install(weak: &slint::Weak<crate::AppWindow>) {
 
     #[cfg(target_os = "linux")]
     {
-        log::info!(
-            "[MEM] sampler enabled (interval {} ms)",
-            SAMPLE_INTERVAL.as_millis()
-        );
+        log::info!("[MEM] sampler enabled (interval {} ms)", SAMPLE_INTERVAL.as_millis());
         let _ = slint::spawn_local(Compat::new(run(weak.clone())));
     }
 

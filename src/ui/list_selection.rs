@@ -63,7 +63,10 @@ pub fn compute_click_selection(
 /// matches are skipped — `set_row_data` invalidates the `ListView` delegate
 /// cache for that row, so a full rewrite would re-build every row component
 /// on every click. UI-thread only.
-pub fn stamp_rows_selected<S: BuildHasher>(rows: &ModelRc<UiTrackListRow>, desired: &HashSet<i32, S>) {
+pub fn stamp_rows_selected<S: BuildHasher>(
+    rows: &ModelRc<UiTrackListRow>,
+    desired: &HashSet<i32, S>,
+) {
     let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
         return;
     };

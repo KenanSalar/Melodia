@@ -32,10 +32,7 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
         return Ok(());
     }
 
-    log::info!(
-        "Starting retroactive hashing for {} tracks",
-        unhashed.len()
-    );
+    log::info!("Starting retroactive hashing for {} tracks", unhashed.len());
 
     let updates = tokio::task::spawn_blocking(move || {
         use rayon::prelude::*;
@@ -74,10 +71,7 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
         return Ok(());
     }
 
-    log::info!(
-        "Retroactive hashing complete: {} files hashed, writing to database",
-        updates.len()
-    );
+    log::info!("Retroactive hashing complete: {} files hashed, writing to database", updates.len());
 
     queries::track::batch_update_hashes(db, &updates).await?;
 

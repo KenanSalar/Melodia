@@ -15,7 +15,11 @@ fn blit_fills_exact_destination_rect() {
     // Bottom-right quadrant painted, everything else untouched.
     for y in 0..4 {
         for x in 0..4 {
-            let expected = if x >= 2 && y >= 2 { [255, 0, 0] } else { [0, 0, 0] };
+            let expected = if x >= 2 && y >= 2 {
+                [255, 0, 0]
+            } else {
+                [0, 0, 0]
+            };
             assert_eq!(dst.get_pixel(x, y).0, expected, "pixel ({x},{y})");
         }
     }

@@ -117,8 +117,7 @@ pub async fn open_artist_with<F>(
 where
     F: FnOnce(&AppWindow) + Send + 'static,
 {
-    let (detail, albums, mut tracks) =
-        fetch_artist_detail(state, artists_ui, artist_id).await?;
+    let (detail, albums, mut tracks) = fetch_artist_detail(state, artists_ui, artist_id).await?;
 
     // Apply the persisted detail sort on the worker so the per-row prep
     // below runs in display order; the UI thread can then drop the
@@ -126,16 +125,12 @@ where
     // additional reorder pass. One shared sort for every artist —
     // restored across opens and restarts; `album` ascending is the
     // fresh-install default.
-    let (sort_field, sort_dir) =
-        resolve_view_sort(state, view_id::ARTIST_DETAIL, "album");
+    let (sort_field, sort_dir) = resolve_view_sort(state, view_id::ARTIST_DETAIL, "album");
     sort_track_list_rows(&mut tracks, &sort_field, &sort_dir);
 
-    let pair = decode_detail_pair(
-        state,
-        artists_ui.detail_artwork.clone(),
-        detail.image_path.clone(),
-    )
-    .await;
+    let pair =
+        decode_detail_pair(state, artists_ui.detail_artwork.clone(), detail.image_path.clone())
+            .await;
 
     let prepared: Vec<PreparedTrackRow> =
         tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
@@ -151,19 +146,15 @@ where
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<ArtistDetail>();
 
-        let ui_tracks: Vec<UiTrackListRow> = prepared
-            .into_iter()
-            .map(crate::ui::tracks::finish_track_list_row)
-            .collect();
+        let ui_tracks: Vec<UiTrackListRow> =
+            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
 
         let header = to_slint_artist_row(&detail);
         g.set_artist(header);
 
         // Albums sub-section model — small grid above the track list.
-        let album_rows: Vec<UiAlbumRow> = albums
-            .iter()
-            .map(crate::ui::albums::to_slint_album_row)
-            .collect();
+        let album_rows: Vec<UiAlbumRow> =
+            albums.iter().map(crate::ui::albums::to_slint_album_row).collect();
         write_albums_model(&g, album_rows);
 
         replace_tracks_model(&g, ui_tracks);
@@ -216,15 +207,11 @@ pub async fn refresh_detail(
     weak: Weak<AppWindow>,
     artist_id: i64,
 ) -> AppResult<()> {
-    let (detail, albums, mut tracks) =
-        fetch_artist_detail(state, artists_ui, artist_id).await?;
+    let (detail, albums, mut tracks) = fetch_artist_detail(state, artists_ui, artist_id).await?;
 
-    let pair = decode_detail_pair(
-        state,
-        artists_ui.detail_artwork.clone(),
-        detail.image_path.clone(),
-    )
-    .await;
+    let pair =
+        decode_detail_pair(state, artists_ui.detail_artwork.clone(), detail.image_path.clone())
+            .await;
 
     let years = crate::ui::hero_folds::year_span(&albums);
 
@@ -256,13 +243,8 @@ pub async fn refresh_detail(
         // Prune `selected-ids` to ids that still exist after the
         // refresh — otherwise the chip + applied-selection drift
         // out of sync with reality.
-        let valid: std::collections::HashSet<i32> = artists_ui
-            .detail
-            .all_tracks
-            .lock()
-            .iter()
-            .map(|t| clamp_i64_to_i32(t.id))
-            .collect();
+        let valid: std::collections::HashSet<i32> =
+            artists_ui.detail.all_tracks.lock().iter().map(|t| clamp_i64_to_i32(t.id)).collect();
         let pruned: Vec<i32> =
             g.get_selected_ids().iter().filter(|id| valid.contains(id)).collect();
         write_selection(&g, pruned);
@@ -351,10 +333,8 @@ pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>
         cache.iter().filter(|a| needle.contains(&a.name)).cloned().collect()
     };
 
-    let prepared: Vec<PreparedTrackRow> = displayed_tracks
-        .iter()
-        .map(crate::ui::tracks::prepare_track_list_row)
-        .collect();
+    let prepared: Vec<PreparedTrackRow> =
+        displayed_tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
     let album_rows: Vec<UiAlbumRow> =
         filtered_albums.iter().map(crate::ui::albums::to_slint_album_row).collect();
 
@@ -363,10 +343,8 @@ pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<ArtistDetail>();
 
-        let mut ui_tracks: Vec<UiTrackListRow> = prepared
-            .into_iter()
-            .map(crate::ui::tracks::finish_track_list_row)
-            .collect();
+        let mut ui_tracks: Vec<UiTrackListRow> =
+            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
         restamp_selection(&g, &mut ui_tracks);
         // Keep the displayed `tracks` cache in lockstep with the model.
         *artists_ui.detail.tracks.lock() = displayed_tracks;
@@ -401,19 +379,10 @@ pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
 }
 
 /// Reopen the artist that was visible at the last shutdown, if any.
-pub fn seed_detail_from_settings(
-    ui: &AppWindow,
-    state: &AppState,
-    artists_ui: &Arc<ArtistsUi>,
-) {
-    let Some(id) = library::settings::get_view_state(state)
-        .ok()
-        .and_then(|s| {
-            s.last_detail_ids
-                .get(crate::ui::track_list_view::view_id::ARTIST_DETAIL)
-                .copied()
-        })
-    else {
+pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
+    let Some(id) = library::settings::get_view_state(state).ok().and_then(|s| {
+        s.last_detail_ids.get(crate::ui::track_list_view::view_id::ARTIST_DETAIL).copied()
+    }) else {
         return;
     };
     let s = state.clone();

@@ -16,9 +16,7 @@ pub fn is_upgrade(current: &str, candidate: &str) -> AppResult<bool> {
         AppError::Validation(format!("current version '{current}' is not valid semver: {e}"))
     })?;
     let candidate = Version::parse(candidate).map_err(|e| {
-        AppError::Validation(format!(
-            "candidate version '{candidate}' is not valid semver: {e}"
-        ))
+        AppError::Validation(format!("candidate version '{candidate}' is not valid semver: {e}"))
     })?;
     Ok(candidate > current)
 }

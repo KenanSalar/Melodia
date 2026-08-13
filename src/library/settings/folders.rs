@@ -25,10 +25,7 @@ fn validate_folder_path(
     existing_folders: &[folder::Folder],
 ) -> Result<Vec<i64>, AppError> {
     if !new_path.exists() {
-        return Err(AppError::Validation(format!(
-            "Path does not exist: {}",
-            new_path.display()
-        )));
+        return Err(AppError::Validation(format!("Path does not exist: {}", new_path.display())));
     }
     if !new_path.is_dir() {
         return Err(AppError::Validation(format!(
@@ -38,11 +35,7 @@ fn validate_folder_path(
     }
 
     let canonical_new = crate::utils::canonicalize_path(new_path).map_err(|e| {
-        AppError::Validation(format!(
-            "Cannot resolve path {}: {}",
-            new_path.display(),
-            e
-        ))
+        AppError::Validation(format!("Cannot resolve path {}: {}", new_path.display(), e))
     })?;
 
     let mut children_to_remove = Vec::new();
@@ -92,9 +85,7 @@ pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder
     // visible immediately, and any child folders that were auto-aggregated
     // away cascade-deleted their tracks. The subsequent scan will fire its
     // own bump on completion.
-    state
-        .library_changed_tx
-        .send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
 
     Ok(folder)
 }
@@ -103,9 +94,7 @@ pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
     queries::folder::delete_folder(&state.db, id).await?;
     // Cascade-delete removes every track in this folder; subscribers (Tracks
     // view + folder list) need to re-fetch or the UI keeps the stale rows.
-    state
-        .library_changed_tx
-        .send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
     Ok(())
 }
 
@@ -118,11 +107,8 @@ pub async fn toggle_folder_watching(state: &AppState, enabled: bool) -> Result<(
         // Resolve folder paths via the async DB query *before* taking the
         // (sync) parking_lot lock — the guard must not span an await point.
         let folders = queries::folder::get_all_folders(&state.db).await?;
-        let paths: Vec<PathBuf> = folders
-            .iter()
-            .filter(|f| f.is_enabled)
-            .map(|f| PathBuf::from(&f.path))
-            .collect();
+        let paths: Vec<PathBuf> =
+            folders.iter().filter(|f| f.is_enabled).map(|f| PathBuf::from(&f.path)).collect();
         {
             let mut watcher = state.watcher.lock();
             watcher.start(&paths)?;
@@ -194,14 +180,13 @@ pub fn reconcile_watched_folders(state: &AppState) {
         };
         for folder in folders.iter().filter(|f| f.is_enabled) {
             if shutdown.is_cancelled() {
-                log::info!("reconcile_watched_folders: shutdown requested, bailing between folders");
+                log::info!(
+                    "reconcile_watched_folders: shutdown requested, bailing between folders"
+                );
                 return;
             }
             if let Err(e) = scan_folder_internal(&state, folder.id).await {
-                log::warn!(
-                    "reconcile_watched_folders: scan of {} failed: {}",
-                    folder.path, e
-                );
+                log::warn!("reconcile_watched_folders: scan of {} failed: {}", folder.path, e);
             }
         }
     });
@@ -212,10 +197,7 @@ pub fn reconcile_watched_folders(state: &AppState) {
 /// user's intent — `tasks::first_launch::run` will retry on next launch
 /// from the persisted flag. The reverse order would leave a running watcher
 /// that doesn't restart next session if `mutate_settings` failed.
-pub async fn set_folder_watching_enabled(
-    state: &AppState,
-    enabled: bool,
-) -> Result<(), AppError> {
+pub async fn set_folder_watching_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |s| {
         s.library.folder_watching_enabled = enabled;
     })?;
@@ -242,18 +224,12 @@ const SCAN_BULK_THRESHOLD: usize = 20;
 const TX_CHUNK_FILES: usize = 2_000;
 
 /// Internal scan implementation. Reusable by `scan_folder` and the first-launch task.
-pub async fn scan_folder_internal(
-    state: &AppState,
-    folder_id: i64,
-) -> Result<u32, AppError> {
+pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u32, AppError> {
     let folder = queries::folder::get_folder_by_id(&state.db, folder_id).await?;
 
     let folder_path = Path::new(&folder.path);
     if !folder_path.exists() {
-        return Err(AppError::scanner_msg(format!(
-            "Folder does not exist: {}",
-            folder.path
-        )));
+        return Err(AppError::scanner_msg(format!("Folder does not exist: {}", folder.path)));
     }
 
     // Read-side pre-load through the read pool (before the writer tx opens):
@@ -338,8 +314,7 @@ pub async fn scan_folder_internal(
         // faster than the UI can paint — and each tick allocates a String
         // (filename) for the watch channel. Always publish the final tick
         // (`scanned == total`) so the UI knows the scan finished.
-        let last_send =
-            std::sync::Arc::new(parking_lot::Mutex::new(std::time::Instant::now()));
+        let last_send = std::sync::Arc::new(parking_lot::Mutex::new(std::time::Instant::now()));
         tokio::task::spawn_blocking(move || {
             scan_files_parallel(
                 &to_scan,
@@ -417,14 +392,10 @@ pub async fn scan_folder_internal(
     // full on-disk set (`files`), NOT `scanned_files`: with the incremental
     // filter above, `scanned_files` omits unchanged files that are still
     // present, and treating those as orphans would delete the whole library.
-    let on_disk_paths: HashSet<String> = files
-        .iter()
-        .map(|p| p.to_string_lossy().into_owned())
-        .collect();
-    let orphans: Vec<String> = all_db_paths
-        .into_iter()
-        .filter(|p| !on_disk_paths.contains(p))
-        .collect();
+    let on_disk_paths: HashSet<String> =
+        files.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    let orphans: Vec<String> =
+        all_db_paths.into_iter().filter(|p| !on_disk_paths.contains(p)).collect();
     // On the bulk path a full recalc follows anyway, so a large orphan
     // purge shouldn't pay per-row delete triggers on top — drop them for
     // the delete. Small deltas keep the triggers on (per-row maintenance
@@ -434,11 +405,7 @@ pub async fn scan_folder_internal(
         queries::stats::disable_stats_triggers(&mut tx).await?;
     }
     if !orphans.is_empty() {
-        log::info!(
-            "Removing {} orphaned tracks from folder {}",
-            orphans.len(),
-            folder.path
-        );
+        log::info!("Removing {} orphaned tracks from folder {}", orphans.len(), folder.path);
         queries::scan::delete_tracks_by_paths_batch(&mut tx, &orphans).await?;
     }
 
@@ -482,9 +449,7 @@ pub async fn scan_folder_internal(
     );
     tasks::retroactive_hash::spawn(&TaskSpawner::from_state(state), state);
 
-    state
-        .library_changed_tx
-        .send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
 
     Ok(inserted_count)
 }

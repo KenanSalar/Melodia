@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::{chunked_in_query, DbPool};
+use crate::database::{DbPool, chunked_in_query};
 use crate::entities::track;
 use crate::error::AppError;
 
@@ -50,16 +50,17 @@ const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 #[cfg(test)]
 pub async fn get_all_tracks(db: &DbPool) -> Result<Vec<track::Track>, AppError> {
     let sql = format!("SELECT * FROM tracks ORDER BY {TRACK_LIST_ORDER}");
-    let tracks = sqlx::query_as::<_, track::Track>(AssertSqlSafe(sql))
-        .fetch_all(db.read())
-        .await?;
+    let tracks = sqlx::query_as::<_, track::Track>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
     Ok(tracks)
 }
 
 #[cfg(test)]
-pub async fn get_tracks_by_album(db: &DbPool, album_id: i64) -> Result<Vec<track::Track>, AppError> {
+pub async fn get_tracks_by_album(
+    db: &DbPool,
+    album_id: i64,
+) -> Result<Vec<track::Track>, AppError> {
     let tracks = sqlx::query_as::<_, track::Track>(
-        "SELECT * FROM tracks WHERE album_id = ? ORDER BY disc_number ASC, track_number ASC"
+        "SELECT * FROM tracks WHERE album_id = ? ORDER BY disc_number ASC, track_number ASC",
     )
     .bind(album_id)
     .fetch_all(db.read())
@@ -68,9 +69,12 @@ pub async fn get_tracks_by_album(db: &DbPool, album_id: i64) -> Result<Vec<track
 }
 
 #[cfg(test)]
-pub async fn get_tracks_by_artist(db: &DbPool, artist_id: i64) -> Result<Vec<track::Track>, AppError> {
+pub async fn get_tracks_by_artist(
+    db: &DbPool,
+    artist_id: i64,
+) -> Result<Vec<track::Track>, AppError> {
     let tracks = sqlx::query_as::<_, track::Track>(
-        "SELECT * FROM tracks WHERE artist_id = ? ORDER BY sort_key COLLATE NOCASE ASC"
+        "SELECT * FROM tracks WHERE artist_id = ? ORDER BY sort_key COLLATE NOCASE ASC",
     )
     .bind(artist_id)
     .fetch_all(db.read())
@@ -79,9 +83,12 @@ pub async fn get_tracks_by_artist(db: &DbPool, artist_id: i64) -> Result<Vec<tra
 }
 
 #[cfg(test)]
-pub async fn get_tracks_by_genre(db: &DbPool, genre_id: i64) -> Result<Vec<track::Track>, AppError> {
+pub async fn get_tracks_by_genre(
+    db: &DbPool,
+    genre_id: i64,
+) -> Result<Vec<track::Track>, AppError> {
     let tracks = sqlx::query_as::<_, track::Track>(
-        "SELECT * FROM tracks WHERE genre_id = ? ORDER BY sort_key COLLATE NOCASE ASC"
+        "SELECT * FROM tracks WHERE genre_id = ? ORDER BY sort_key COLLATE NOCASE ASC",
     )
     .bind(genre_id)
     .fetch_all(db.read())
@@ -101,11 +108,9 @@ pub async fn get_track_by_id(db: &DbPool, id: i64) -> Result<track::Track, AppEr
 /// Fetch tracks by IDs, preserving the input order.
 #[cfg(test)]
 pub async fn get_tracks_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<track::Track>, AppError> {
-    let tracks: Vec<track::Track> = chunked_in_query(
-        db.read(),
-        ids,
-        |placeholders| format!("SELECT * FROM tracks WHERE id IN ({placeholders})"),
-    )
+    let tracks: Vec<track::Track> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT * FROM tracks WHERE id IN ({placeholders})")
+    })
     .await?;
 
     // Re-order results to match the input ID order
@@ -119,10 +124,7 @@ pub async fn get_tracks_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<track::Tr
 /// chip row — reads only the 8 columns `TrackMetaRow` consumes (vs
 /// `get_track_by_id`'s full 41-column `SELECT *`). Returns `None` for a
 /// missing id; the caller renders empty chips.
-pub async fn get_track_meta(
-    db: &DbPool,
-    id: i64,
-) -> Result<Option<track::TrackMeta>, AppError> {
+pub async fn get_track_meta(db: &DbPool, id: i64) -> Result<Option<track::TrackMeta>, AppError> {
     let cols = track::track_meta_columns();
     let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
     let row: Option<track::TrackMeta> = sqlx::query_as::<_, track::TrackMeta>(AssertSqlSafe(sql))
@@ -135,13 +137,17 @@ pub async fn get_track_meta(
 /// Single-id fetch of the columns a scrobble needs, for the detector's
 /// per-track-start enrichment. Sibling of `get_track_meta`; returns `None` for
 /// a missing id (the detector then skips the scrobble).
-pub async fn get_scrobble_row(db: &DbPool, id: i64) -> Result<Option<track::ScrobbleRow>, AppError> {
+pub async fn get_scrobble_row(
+    db: &DbPool,
+    id: i64,
+) -> Result<Option<track::ScrobbleRow>, AppError> {
     let cols = track::scrobble_row_columns();
     let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
-    let row: Option<track::ScrobbleRow> = sqlx::query_as::<_, track::ScrobbleRow>(AssertSqlSafe(sql))
-        .bind(id)
-        .fetch_optional(db.read())
-        .await?;
+    let row: Option<track::ScrobbleRow> =
+        sqlx::query_as::<_, track::ScrobbleRow>(AssertSqlSafe(sql))
+            .bind(id)
+            .fetch_optional(db.read())
+            .await?;
     Ok(row)
 }
 
@@ -152,9 +158,8 @@ pub async fn get_scrobble_row(db: &DbPool, id: i64) -> Result<Option<track::Scro
 pub async fn get_favorite_scrobble_rows(db: &DbPool) -> Result<Vec<track::ScrobbleRow>, AppError> {
     let cols = track::scrobble_row_columns();
     let sql = format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE");
-    let rows = sqlx::query_as::<_, track::ScrobbleRow>(AssertSqlSafe(sql))
-        .fetch_all(db.read())
-        .await?;
+    let rows =
+        sqlx::query_as::<_, track::ScrobbleRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
     Ok(rows)
 }
 
@@ -167,11 +172,9 @@ pub async fn get_scrobble_rows_by_ids(
     ids: &[i64],
 ) -> Result<Vec<track::ScrobbleRow>, AppError> {
     let cols = track::scrobble_row_columns();
-    chunked_in_query(
-        db.read(),
-        ids,
-        |placeholders| format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})"),
-    )
+    chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
+    })
     .await
 }
 
@@ -180,19 +183,18 @@ pub async fn get_scrobble_rows_by_ids(
 /// context-menu action which only needs the on-disk location. Returns
 /// `None` for a missing id.
 pub async fn get_track_file_path(db: &DbPool, id: i64) -> Result<Option<String>, AppError> {
-    let path: Option<String> = sqlx::query_scalar("SELECT file_path FROM tracks WHERE id = ? LIMIT 1")
-        .bind(id)
-        .fetch_optional(db.read())
-        .await?;
+    let path: Option<String> =
+        sqlx::query_scalar("SELECT file_path FROM tracks WHERE id = ? LIMIT 1")
+            .bind(id)
+            .fetch_optional(db.read())
+            .await?;
     Ok(path)
 }
 
 /// How many tracks the library holds. The diagnostics bundle reports it as
 /// library shape — a bug that only shows up at scale is a different bug.
 pub async fn count_tracks(db: &DbPool) -> Result<i64, AppError> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks")
-        .fetch_one(db.read())
-        .await?;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     Ok(count)
 }
 
@@ -206,11 +208,9 @@ pub async fn get_track_summaries_by_ids(
     ids: &[i64],
 ) -> Result<Vec<track::TrackSummary>, AppError> {
     let cols = track::track_summary_columns();
-    let summaries: Vec<track::TrackSummary> = chunked_in_query(
-        db.read(),
-        ids,
-        |placeholders| format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})"),
-    )
+    let summaries: Vec<track::TrackSummary> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
+    })
     .await?;
 
     let mut map: HashMap<i64, track::TrackSummary> = HashMap::with_capacity(summaries.len());
@@ -228,11 +228,9 @@ pub async fn get_tag_edit_rows_by_ids(
     ids: &[i64],
 ) -> Result<Vec<track::TagEditRow>, AppError> {
     let cols = track::track_tag_edit_columns();
-    let rows: Vec<track::TagEditRow> = chunked_in_query(
-        db.read(),
-        ids,
-        |placeholders| format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})"),
-    )
+    let rows: Vec<track::TagEditRow> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
+    })
     .await?;
 
     let mut map: HashMap<i64, track::TagEditRow> = HashMap::with_capacity(rows.len());
@@ -248,20 +246,15 @@ pub async fn get_track_paths_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<(i64, String)>, AppError> {
-    let rows: Vec<(i64, String)> = chunked_in_query(
-        db.read(),
-        ids,
-        |placeholders| format!("SELECT id, file_path FROM tracks WHERE id IN ({placeholders})"),
-    )
+    let rows: Vec<(i64, String)> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT id, file_path FROM tracks WHERE id IN ({placeholders})")
+    })
     .await?;
 
     let mut map: HashMap<i64, String> = HashMap::with_capacity(rows.len());
     map.extend(rows);
 
-    Ok(ids
-        .iter()
-        .filter_map(|id| map.remove(id).map(|path| (*id, path)))
-        .collect())
+    Ok(ids.iter().filter_map(|id| map.remove(id).map(|path| (*id, path))).collect())
 }
 
 /// Lightweight version of `get_all_tracks` returning only list-view columns.
@@ -271,18 +264,20 @@ pub async fn get_track_paths_by_ids(
 pub async fn get_all_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
     let sql = format!("SELECT {cols} FROM tracks ORDER BY {TRACK_LIST_ORDER}");
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
-        .fetch_all(db.read())
-        .await?;
+    let tracks =
+        sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
     Ok(tracks)
 }
 
 /// Lightweight version of `get_tracks_by_album` for list views.
-pub async fn get_tracks_by_album_for_list(db: &DbPool, album_id: i64) -> Result<Vec<track::TrackListRow>, AppError> {
+pub async fn get_tracks_by_album_for_list(
+    db: &DbPool,
+    album_id: i64,
+) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(
-        AssertSqlSafe(format!("SELECT {cols} FROM tracks WHERE album_id = ? ORDER BY disc_number ASC, track_number ASC"))
-    )
+    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
+        "SELECT {cols} FROM tracks WHERE album_id = ? ORDER BY disc_number ASC, track_number ASC"
+    )))
     .bind(album_id)
     .fetch_all(db.read())
     .await?;
@@ -290,11 +285,14 @@ pub async fn get_tracks_by_album_for_list(db: &DbPool, album_id: i64) -> Result<
 }
 
 /// Lightweight version of `get_tracks_by_artist` for list views.
-pub async fn get_tracks_by_artist_for_list(db: &DbPool, artist_id: i64) -> Result<Vec<track::TrackListRow>, AppError> {
+pub async fn get_tracks_by_artist_for_list(
+    db: &DbPool,
+    artist_id: i64,
+) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(
-        AssertSqlSafe(format!("SELECT {cols} FROM tracks WHERE artist_id = ? ORDER BY sort_key COLLATE NOCASE ASC"))
-    )
+    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
+        "SELECT {cols} FROM tracks WHERE artist_id = ? ORDER BY sort_key COLLATE NOCASE ASC"
+    )))
     .bind(artist_id)
     .fetch_all(db.read())
     .await?;
@@ -302,11 +300,14 @@ pub async fn get_tracks_by_artist_for_list(db: &DbPool, artist_id: i64) -> Resul
 }
 
 /// Lightweight version of `get_tracks_by_genre` for list views.
-pub async fn get_tracks_by_genre_for_list(db: &DbPool, genre_id: i64) -> Result<Vec<track::TrackListRow>, AppError> {
+pub async fn get_tracks_by_genre_for_list(
+    db: &DbPool,
+    genre_id: i64,
+) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(
-        AssertSqlSafe(format!("SELECT {cols} FROM tracks WHERE genre_id = ? ORDER BY sort_key COLLATE NOCASE ASC"))
-    )
+    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
+        "SELECT {cols} FROM tracks WHERE genre_id = ? ORDER BY sort_key COLLATE NOCASE ASC"
+    )))
     .bind(genre_id)
     .fetch_all(db.read())
     .await?;
@@ -315,13 +316,11 @@ pub async fn get_tracks_by_genre_for_list(db: &DbPool, genre_id: i64) -> Result<
 
 pub async fn update_play_count(db: &DbPool, id: i64) -> Result<(), AppError> {
     let now = crate::utils::now_rfc3339();
-    sqlx::query(
-        "UPDATE tracks SET play_count = play_count + 1, last_played = ? WHERE id = ?"
-    )
-    .bind(now)
-    .bind(id)
-    .execute(db.write())
-    .await?;
+    sqlx::query("UPDATE tracks SET play_count = play_count + 1, last_played = ? WHERE id = ?")
+        .bind(now)
+        .bind(id)
+        .execute(db.write())
+        .await?;
     Ok(())
 }
 
@@ -350,9 +349,7 @@ pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<()
     // Reserve 1 bind slot for the `favorite` parameter itself.
     for chunk in ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!(
-            "UPDATE tracks SET is_favorite = ? WHERE id IN ({placeholders})"
-        );
+        let sql = format!("UPDATE tracks SET is_favorite = ? WHERE id IN ({placeholders})");
         let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(favorite);
         for id in chunk {
             query = query.bind(*id);
@@ -402,9 +399,7 @@ pub async fn set_track_artwork(
     for chunk in ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("UPDATE tracks SET artwork_path = ? WHERE id IN ({placeholders})");
-        let mut query = sqlx::query(AssertSqlSafe(sql))
-            .persistent(false)
-            .bind(artwork_path);
+        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(artwork_path);
         for id in chunk {
             query = query.bind(*id);
         }
@@ -417,14 +412,14 @@ pub async fn set_track_artwork(
 ///
 /// Ordered like [`get_all_tracks_for_list`] and for the same reason — the
 /// Songs tab's own sort is resolved over the retained rows, not here.
-pub async fn get_favorite_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
+pub async fn get_favorite_tracks_for_list(
+    db: &DbPool,
+) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
-    let sql = format!(
-        "SELECT {cols} FROM tracks WHERE is_favorite = TRUE ORDER BY {TRACK_LIST_ORDER}"
-    );
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
-        .fetch_all(db.read())
-        .await?;
+    let sql =
+        format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE ORDER BY {TRACK_LIST_ORDER}");
+    let tracks =
+        sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
     Ok(tracks)
 }
 
@@ -482,11 +477,9 @@ pub async fn get_track_ids_by_paths(
     db: &DbPool,
     paths: &[String],
 ) -> Result<HashMap<String, i64>, AppError> {
-    let rows: Vec<(i64, String)> = chunked_in_query(
-        db.read(),
-        paths,
-        |placeholders| format!("SELECT id, file_path FROM tracks WHERE file_path IN ({placeholders})"),
-    )
+    let rows: Vec<(i64, String)> = chunked_in_query(db.read(), paths, |placeholders| {
+        format!("SELECT id, file_path FROM tracks WHERE file_path IN ({placeholders})")
+    })
     .await?;
 
     let mut map = HashMap::with_capacity(rows.len());
@@ -503,16 +496,12 @@ pub async fn get_track_ids_by_hashes(
     db: &DbPool,
     hashes: &[String],
 ) -> Result<HashMap<String, i64>, AppError> {
-    let rows: Vec<(i64, String)> = chunked_in_query(
-        db.read(),
-        hashes,
-        |placeholders| {
-            format!(
-                "SELECT id, file_hash FROM tracks \
+    let rows: Vec<(i64, String)> = chunked_in_query(db.read(), hashes, |placeholders| {
+        format!(
+            "SELECT id, file_hash FROM tracks \
                  WHERE file_hash IS NOT NULL AND file_hash IN ({placeholders})"
-            )
-        },
-    )
+        )
+    })
     .await?;
 
     let mut map = HashMap::with_capacity(rows.len());
@@ -560,14 +549,11 @@ pub async fn get_duplicate_tracks(
 }
 
 /// Get all file paths of tracks that have no `file_hash` (for retroactive hashing).
-pub async fn get_unhashed_track_paths(
-    db: &DbPool,
-) -> Result<Vec<(i64, String)>, AppError> {
-    let rows: Vec<(i64, String)> = sqlx::query_as(
-        "SELECT id, file_path FROM tracks WHERE file_hash IS NULL",
-    )
-    .fetch_all(db.read())
-    .await?;
+pub async fn get_unhashed_track_paths(db: &DbPool) -> Result<Vec<(i64, String)>, AppError> {
+    let rows: Vec<(i64, String)> =
+        sqlx::query_as("SELECT id, file_path FROM tracks WHERE file_hash IS NULL")
+            .fetch_all(db.read())
+            .await?;
     Ok(rows)
 }
 
@@ -610,9 +596,8 @@ pub async fn batch_update_hashes(
 
     let mut tx = db.write().begin().await?;
     for chunk in updates.chunks(CHUNK_SIZE) {
-        let placeholders = std::iter::repeat_n("(?,?,?)", chunk.len())
-            .collect::<Vec<_>>()
-            .join(",");
+        let placeholders =
+            std::iter::repeat_n("(?,?,?)", chunk.len()).collect::<Vec<_>>().join(",");
         let sql = format!(
             "WITH v(id, h, m) AS (VALUES {placeholders})
              UPDATE tracks

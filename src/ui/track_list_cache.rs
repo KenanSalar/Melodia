@@ -51,12 +51,12 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
+use crate::TrackListRow as UiTrackListRow;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::ui::row_match::{self, Needle};
 use crate::ui::track_sort::{self, TrackSortFields};
 use crate::ui::tracks::to_slint_track_list_row;
 use crate::ui::util::len_as_i32;
-use crate::TrackListRow as UiTrackListRow;
 
 /// Pre-folded text columns for filtering, one per row.
 ///
@@ -252,7 +252,11 @@ impl CacheData {
     /// survivor count, and reserving a library-sized `Vec` to put three rows in
     /// it is the worse of the two wrongs.
     fn reserve_for(&self, needle: &Needle) -> usize {
-        if needle.is_empty() { self.rows.len() } else { 0 }
+        if needle.is_empty() {
+            self.rows.len()
+        } else {
+            0
+        }
     }
 
     /// Unique artwork paths in **display** order, capped — so that on a
@@ -260,9 +264,7 @@ impl CacheData {
     /// entries surviving the cap are the ones the user sees first.
     pub fn artwork_paths(&self, cap: usize) -> Vec<PathBuf> {
         crate::ui::grid_prewarm::unique_artwork_paths(
-            self.order
-                .iter()
-                .map(|&i| Some(self.rows[i].artwork_path.as_str())),
+            self.order.iter().map(|&i| Some(self.rows[i].artwork_path.as_str())),
             cap,
         )
     }
@@ -342,11 +344,7 @@ impl TrackListCache {
     /// it is what the bare indexing in [`CacheData::walk`] rests on — an index
     /// past the end panics on the next filter walk, not here.
     pub fn store_in_order(&self, rows: Vec<RsTrackListRow>, order: Vec<usize>) {
-        debug_assert_eq!(
-            order.len(),
-            rows.len(),
-            "store_in_order needs a permutation of its rows"
-        );
+        debug_assert_eq!(order.len(), rows.len(), "store_in_order needs a permutation of its rows");
         let (display, search, sort) = convert(rows);
         self.install(display, search, sort, order);
     }
@@ -479,11 +477,8 @@ fn compute_order(
     field: &str,
     dir: &str,
 ) -> Vec<usize> {
-    let pairs: Vec<SortRow<'_>> = rows
-        .iter()
-        .zip(sort)
-        .map(|(row, key)| SortRow { row, key })
-        .collect();
+    let pairs: Vec<SortRow<'_>> =
+        rows.iter().zip(sort).map(|(row, key)| SortRow { row, key }).collect();
     track_sort::compute_track_order(&pairs, field, dir)
 }
 

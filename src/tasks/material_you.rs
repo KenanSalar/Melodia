@@ -28,6 +28,7 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use crate::library;
+use crate::media::cover_thumbs::CoverThumbs;
 use crate::player::state::PlayerViewModelLight;
 use crate::services::material_you::{
     SchemeStyle, SeedCache, extract_source_argb_from_rgb8, generate_palette,
@@ -35,7 +36,6 @@ use crate::services::material_you::{
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use crate::themes::{Palette, SystemColorState};
-use crate::media::cover_thumbs::CoverThumbs;
 
 /// Spawn the coordinator on the shared task lifecycle so the main shutdown
 /// sequence waits for any in-flight palette generation to settle before the
@@ -55,15 +55,7 @@ pub fn spawn(
     cover_thumbs: Arc<CoverThumbs>,
 ) {
     spawner.spawn_cancellable(move |shutdown| {
-        run(
-            state,
-            os_state,
-            view_model_rx,
-            kick_rx,
-            repaint_tx,
-            cover_thumbs,
-            shutdown,
-        )
+        run(state, os_state, view_model_rx, kick_rx, repaint_tx, cover_thumbs, shutdown)
     });
 }
 
@@ -277,10 +269,7 @@ async fn react(
     *seed_cache = returned_cache;
 
     let Some((palette, accent_hex)) = palette else {
-        log::warn!(
-            "material_you: extraction failed for {}",
-            artwork.display()
-        );
+        log::warn!("material_you: extraction failed for {}", artwork.display());
         os_state.write().material_you = None;
         publish_repaint(repaint_tx, os_state);
         return;
@@ -296,11 +285,7 @@ async fn react(
     publish_repaint(repaint_tx, os_state);
 }
 
-fn write_palette(
-    os_state: &Arc<RwLock<SystemColorState>>,
-    palette: Palette,
-    accent_hex: u32,
-) {
+fn write_palette(os_state: &Arc<RwLock<SystemColorState>>, palette: Palette, accent_hex: u32) {
     let mut guard = os_state.write();
     guard.material_you = Some((palette, accent_hex));
 }

@@ -126,9 +126,7 @@ fn cache_image_file_basic() -> Result<(), AppError> {
         .and_then(|n| n.to_str())
         .ok_or_else(|| AppError::Validation("cached path missing file name".into()))?;
     assert!(
-        std::path::Path::new(name)
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("jpg"))
+        std::path::Path::new(name).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("jpg"))
     );
     assert_eq!(name.len(), 16 + 1 + 3); // 16 hex + dot + ext
     Ok(())

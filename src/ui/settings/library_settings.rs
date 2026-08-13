@@ -26,8 +26,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
     // `ModelRc` (which is a no-op model that ignores `set_vec` etc. — we'd
     // never see UI updates if we left it that way).
     let initial: Rc<VecModel<FolderListRow>> = Rc::new(VecModel::default());
-    ui.global::<LibrarySettings>()
-        .set_folders(ModelRc::from(initial));
+    ui.global::<LibrarySettings>().set_folders(ModelRc::from(initial));
 
     // 1. Initial fetch.
     {
@@ -112,8 +111,7 @@ pub async fn refresh_folders(ui: Weak<AppWindow>, state: AppState) {
 
     let _ = ui.upgrade_in_event_loop(move |ui| {
         let model: Rc<VecModel<FolderListRow>> = Rc::new(VecModel::from(rows));
-        ui.global::<LibrarySettings>()
-            .set_folders(ModelRc::from(model));
+        ui.global::<LibrarySettings>().set_folders(ModelRc::from(model));
     });
 }
 

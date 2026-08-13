@@ -44,10 +44,7 @@ fn a_tail_starts_on_a_line_boundary() -> Result<(), AppError> {
     let tail = reading_env(|| tail_of(&path, 25)).unwrap_or_default();
 
     for line in tail.lines() {
-        assert!(
-            line.starts_with("line "),
-            "tail kept a partial record: {line:?}"
-        );
+        assert!(line.starts_with("line "), "tail kept a partial record: {line:?}");
     }
     Ok(())
 }
@@ -160,10 +157,7 @@ fn the_crash_block_cuts_a_report_from_the_backtrace_end() -> Result<(), AppError
 
     let block = reading_env(|| crash_block(tmp.path()));
 
-    assert!(
-        block.contains("panic     : boom"),
-        "the report was cut from the wrong end: {block}"
-    );
+    assert!(block.contains("panic     : boom"), "the report was cut from the wrong end: {block}");
     Ok(())
 }
 
@@ -210,10 +204,7 @@ fn each_library_line_degrades_on_its_own() {
 #[test]
 fn the_two_kinds_of_empty_logs_read_differently() {
     let never_started = reading_env(|| {
-        log_section(
-            Some("Log cannot be written: Permission denied (os error 13)"),
-            Vec::new(),
-        )
+        log_section(Some("Log cannot be written: Permission denied (os error 13)"), Vec::new())
     });
     assert!(never_started.contains("<unavailable"));
     assert!(
@@ -230,10 +221,7 @@ fn the_two_kinds_of_empty_logs_read_differently() {
 #[test]
 fn the_unavailable_reason_is_redacted_like_everything_else() {
     let block = with_env_var("HOME", Some("/home/testuser"), || {
-        log_section(
-            Some("cannot open /home/testuser/.local/share/Melodia/logs"),
-            Vec::new(),
-        )
+        log_section(Some("cannot open /home/testuser/.local/share/Melodia/logs"), Vec::new())
     });
 
     assert!(!block.contains("/home/testuser"), "home leaked: {block}");
@@ -252,7 +240,14 @@ fn the_settings_block_is_an_allowlist() -> Result<(), AppError> {
 
     let block = reading_env(|| settings_block(&paths));
 
-    for expected in ["theme", "locale", "titlebar", "tray", "crossfade", "verbose"] {
+    for expected in [
+        "theme",
+        "locale",
+        "titlebar",
+        "tray",
+        "crossfade",
+        "verbose",
+    ] {
         assert!(block.contains(expected), "block is missing {expected:?}");
     }
     for forbidden in [
@@ -266,10 +261,7 @@ fn the_settings_block_is_an_allowlist() -> Result<(), AppError> {
         "session_key",
         "password",
     ] {
-        assert!(
-            !block.contains(forbidden),
-            "block leaked {forbidden:?}:\n{block}"
-        );
+        assert!(!block.contains(forbidden), "block leaked {forbidden:?}:\n{block}");
     }
     Ok(())
 }
@@ -279,10 +271,7 @@ fn the_settings_block_is_an_allowlist() -> Result<(), AppError> {
 /// same way a crash report's name is, since the two get read together.
 #[test]
 fn the_suggested_name_carries_a_sortable_local_stamp() {
-    let now = Local
-        .with_ymd_and_hms(2026, 8, 6, 14, 30, 5)
-        .single()
-        .unwrap_or_else(Local::now);
+    let now = Local.with_ymd_and_hms(2026, 8, 6, 14, 30, 5).single().unwrap_or_else(Local::now);
 
     assert_eq!(suggested_file_name(now), "melodia-diagnostics-20260806-143005.txt");
 }

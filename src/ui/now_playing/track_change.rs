@@ -8,9 +8,9 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, Weak};
 
+use super::NowPlayingState;
 use super::metadata::to_slint_track_meta;
 use super::write_crossfade_slot;
-use super::NowPlayingState;
 use crate::entities::track::TrackSummary;
 use crate::library;
 use crate::state::AppState;
@@ -55,10 +55,7 @@ pub(super) fn spawn_track_change_subscriber(
             // this clone is just an `Option<Arc<_>>` refcount bump. The
             // borrow guard is a statement-scoped temporary, dropped before
             // the `.await` below.
-            let new_track = rx
-                .borrow_and_update()
-                .as_ref()
-                .map(|vm| vm.current_track.clone());
+            let new_track = rx.borrow_and_update().as_ref().map(|vm| vm.current_track.clone());
             let Some(new_track) = new_track else { continue };
             let new_id = new_track.as_ref().map(|t| t.id);
             // Ignore play/pause/volume-only pushes — only a track change
@@ -127,19 +124,12 @@ pub(super) async fn apply_track_change(
     // `now_playing_artwork`) — the cover is the largest image in the app's
     // hot path, so decoding it once instead of twice halves the per-skip
     // CPU cost.
-    let artwork = track
-        .as_ref()
-        .and_then(|t| t.artwork_path.clone())
-        .filter(|p| !p.is_empty());
+    let artwork = track.as_ref().and_then(|t| t.artwork_path.clone()).filter(|p| !p.is_empty());
 
     let (cover, blurred, sample): DecodedArtwork = match artwork {
         Some(path) => {
             let np = np_artwork.clone();
-            match state
-                .runtime
-                .spawn_blocking(move || np.get_or_decode(Path::new(&path)))
-                .await
-            {
+            match state.runtime.spawn_blocking(move || np.get_or_decode(Path::new(&path))).await {
                 Ok(Some(pair)) => (
                     Some(Image::from_rgb8(pair.cover)),
                     Some(Image::from_rgb8(pair.blur)),
@@ -178,8 +168,7 @@ pub(super) async fn apply_track_change(
     // row and the strip's mount Timer fires a real width immediately. `None`
     // because this column can grow downward — the hero band can't.
     let chip_texts = super::metadata::visible_chip_texts(&meta);
-    let chip_rows =
-        chips::chunk_chips_to_rows(&chip_texts, np_state.chip_last_width.get(), None);
+    let chip_rows = chips::chunk_chips_to_rows(&chip_texts, np_state.chip_last_width.get(), None);
     // Unconditional — a new track's chips are new text, which a row-length
     // comparison can't see. Recording the shape is what lets the width channel
     // skip its own repaints; see `chips::split_shape`.

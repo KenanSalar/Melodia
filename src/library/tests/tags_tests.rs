@@ -81,10 +81,7 @@ async fn single_track_edit_updates_row_and_preserves_stats() -> Result<(), AppEr
     assert_eq!(play_count, 5, "play_count must survive the metadata refresh");
     assert_eq!(rating, 4, "rating must survive the metadata refresh");
     assert_eq!(is_favorite, 1, "is_favorite must survive the metadata refresh");
-    assert_ne!(
-        new_hash, old_hash,
-        "a tag write rewrites the file, so file_hash changes"
-    );
+    assert_ne!(new_hash, old_hash, "a tag write rewrites the file, so file_hash changes");
     Ok(())
 }
 
@@ -100,11 +97,7 @@ async fn batch_edit_reports_failure_and_commits_the_rest() -> Result<(), AppErro
     let good_id = seed_track(&db, &good_str).await?;
 
     // A DB row whose file does not exist on disk — the write fails at read.
-    let ghost_str = tmp
-        .path()
-        .join("ghost.mp3")
-        .to_string_lossy()
-        .into_owned();
+    let ghost_str = tmp.path().join("ghost.mp3").to_string_lossy().into_owned();
     let ghost_id = seed_track(&db, &ghost_str).await?;
 
     let artwork_dir = tmp.path().join("artwork");

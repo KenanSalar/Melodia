@@ -1,7 +1,7 @@
-#[allow(clippy::wildcard_imports)]
-use crate::database::queries::tests::helpers::*;
 use crate::database::DbPool;
 use crate::database::queries;
+#[allow(clippy::wildcard_imports)]
+use crate::database::queries::tests::helpers::*;
 use crate::error::AppError;
 
 #[tokio::test]
@@ -73,9 +73,7 @@ async fn delete_folder_cascades_tracks() -> Result<(), AppError> {
 
     queries::folder::delete_folder(&db, f.id).await?;
 
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks")
-        .fetch_one(db.read())
-        .await?;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     assert_eq!(count, 0);
     Ok(())
 }

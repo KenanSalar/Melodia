@@ -24,15 +24,15 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Linux ships an 8 MiB default. Spawn the compile on an explicitly-
     // sized thread so the same code path works on every host without
     // depending on linker flags or env vars.
-    let join = std::thread::Builder::new()
-        .stack_size(16 * 1024 * 1024)
-        .spawn(|| -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let join = std::thread::Builder::new().stack_size(16 * 1024 * 1024).spawn(
+        || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let cfg = slint_build::CompilerConfiguration::new()
                 .with_bundled_translations("translations")
                 .with_default_translation_context(slint_build::DefaultTranslationContext::None);
             slint_build::compile_with_config("ui/app-window.slint", cfg)?;
             Ok(())
-        })?;
+        },
+    )?;
     match join.join() {
         Ok(inner) => inner?,
         Err(payload) => std::panic::resume_unwind(payload),

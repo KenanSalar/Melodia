@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::sync::MutexGuard;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -243,11 +243,17 @@ pub enum PlayerAction {
 impl std::fmt::Display for PlayerAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PlayMedia { file_path, start_position_ms, .. } => match start_position_ms {
+            Self::PlayMedia {
+                file_path,
+                start_position_ms,
+                ..
+            } => match start_position_ms {
                 Some(ms) => write!(f, "play {file_path} from {ms}ms"),
                 None => write!(f, "play {file_path}"),
             },
-            Self::BeginCrossfade { file_path, fade_ms, .. } => {
+            Self::BeginCrossfade {
+                file_path, fade_ms, ..
+            } => {
                 write!(f, "crossfade {fade_ms}ms into {file_path}")
             }
             Self::Resume => f.write_str("resume"),
@@ -279,8 +285,7 @@ impl PlayerState {
 
     fn has_previous(&self) -> bool {
         !self.queue.play_order.is_empty()
-            && (self.queue.current_index.is_some_and(|ci| ci > 0)
-                || self.queue.repeat_mode.wraps())
+            && (self.queue.current_index.is_some_and(|ci| ci > 0) || self.queue.repeat_mode.wraps())
     }
 
     /// Full `ViewModel` — kept only for tests that assert against the
@@ -591,9 +596,7 @@ fn begin_track(
     state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
     // Clamp to 500ms before end to avoid immediate EOS detection by the playback monitor.
     let max_resume_pos = state.duration_ms.saturating_sub(500);
-    let clamped_pos = start_position_ms
-        .map(|p| p.min(max_resume_pos))
-        .filter(|&p| p > 0);
+    let clamped_pos = start_position_ms.map(|p| p.min(max_resume_pos)).filter(|&p| p > 0);
     state.position_ms = clamped_pos.unwrap_or(0);
 
     let start = TrackStart {

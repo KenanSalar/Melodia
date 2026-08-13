@@ -37,9 +37,7 @@ fn track(id: i64, album: Option<&str>) -> Arc<TrackSummary> {
 /// Two queued tracks on different albums, playing the first, gapless on.
 fn playing_state() -> PlayerState {
     let mut state = PlayerState::default();
-    state
-        .queue
-        .add_tracks(vec![track(1, Some("A")), track(2, Some("B"))]);
+    state.queue.add_tracks(vec![track(1, Some("A")), track(2, Some("B"))]);
     state.queue.current_index = Some(0);
     state.status = PlaybackStatus::Playing;
     state.current_track = Some(track(1, Some("A")));
@@ -90,8 +88,7 @@ fn tick(state: &mut PlayerState, backend: BackendSnapshot) -> Option<PlayingTick
 
 /// The path of the track this tick staged behind the current one, if any.
 fn staged(t: Option<&PlayingTick>) -> Option<&str> {
-    t.and_then(|t| t.late_preload.as_ref())
-        .map(|(path, _rg)| path.as_str())
+    t.and_then(|t| t.late_preload.as_ref()).map(|(path, _rg)| path.as_str())
 }
 
 /// The fade length this tick decided on, if it decided to crossfade.
@@ -214,9 +211,7 @@ fn a_same_album_transition_stays_gapless() {
     // Both tracks on album "A": the default `skip_same_album` keeps
     // continuous-mix albums seamless.
     state.queue.clear();
-    state
-        .queue
-        .add_tracks(vec![track(1, Some("A")), track(2, Some("A"))]);
+    state.queue.add_tracks(vec![track(1, Some("A")), track(2, Some("A"))]);
     state.queue.current_index = Some(0);
 
     let t = tick(&mut state, backend(at_remaining(1_000), crossfade_on(2_000)));

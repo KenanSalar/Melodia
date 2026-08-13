@@ -354,7 +354,12 @@ async fn a_manual_crossfade_also_holds_the_amplitude() -> std::io::Result<()> {
 
     let during = pull(&mut mix, frames_for_ms(FADE_MS));
     assert_no_clipping(&during, "manual crossfade");
-    assert_holds_at(&during[WARMUP_FRAMES..], AMPLITUDE, AMPLITUDE * SKEW, "manual mid-overlap sum");
+    assert_holds_at(
+        &during[WARMUP_FRAMES..],
+        AMPLITUDE,
+        AMPLITUDE * SKEW,
+        "manual mid-overlap sum",
+    );
 
     Ok(())
 }
@@ -498,10 +503,7 @@ async fn pausing_with_a_gapless_track_staged_is_immediate() -> std::io::Result<(
 
     // The pause keeps the deck contents (that is what makes it a pause), so the
     // staged source — and the flag — must both survive it.
-    assert!(
-        rodio.is_gapless_preloaded(),
-        "a pause must not discard the staged source"
-    );
+    assert!(rodio.is_gapless_preloaded(), "a pause must not discard the staged source");
     Ok(())
 }
 

@@ -8,7 +8,8 @@ fn parse(json: &str) -> DeezerAlbumSearchResponse {
 }
 
 /// Verbatim body from a tripped quota — HTTP **200**, `error` where `data` belongs.
-const QUOTA_BODY: &str = r#"{"error":{"type":"Exception","message":"Quota limit exceeded","code":4}}"#;
+const QUOTA_BODY: &str =
+    r#"{"error":{"type":"Exception","message":"Quota limit exceeded","code":4}}"#;
 
 #[test]
 fn extracts_cover_big_from_first_result() {
@@ -110,9 +111,7 @@ fn a_body_of_neither_shape_is_still_a_parse_failure() {
             .err()
             .map(|e| e.to_string());
     assert!(
-        message
-            .as_deref()
-            .is_some_and(|m| m.contains("Failed to parse Deezer response")),
+        message.as_deref().is_some_and(|m| m.contains("Failed to parse Deezer response")),
         "unexpected outcome: {message:?}"
     );
 }

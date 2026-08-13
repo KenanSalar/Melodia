@@ -124,11 +124,7 @@ impl NotificationsUi {
     /// Remove the row with the given id. No-op if no row matches (already
     /// dismissed, or id never existed).
     pub fn dismiss(&self, id: i32) {
-        if let Some(pos) = self
-            .rows
-            .iter()
-            .position(|r: NotificationRow| r.id == id)
-        {
+        if let Some(pos) = self.rows.iter().position(|r: NotificationRow| r.id == id) {
             self.rows.remove(pos);
         }
     }
@@ -139,11 +135,7 @@ impl NotificationsUi {
     /// doesn't invalidate the indices of pending matches.
     pub fn dismiss_by_kind(&self, kind: &str) {
         for i in (0..self.rows.row_count()).rev() {
-            if self
-                .rows
-                .row_data(i)
-                .is_some_and(|r| r.action_kind.as_str() == kind)
-            {
+            if self.rows.row_data(i).is_some_and(|r| r.action_kind.as_str() == kind) {
                 self.rows.remove(i);
             }
         }
@@ -161,8 +153,7 @@ impl NotificationsUi {
 /// closure threading.
 pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
     let rows: Rc<VecModel<NotificationRow>> = Rc::new(VecModel::default());
-    ui.global::<Notifications>()
-        .set_rows(ModelRc::from(rows.clone()));
+    ui.global::<Notifications>().set_rows(ModelRc::from(rows.clone()));
 
     let state = Rc::new(NotificationsUi {
         rows,

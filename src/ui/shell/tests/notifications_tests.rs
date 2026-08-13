@@ -72,11 +72,8 @@ fn dismiss_by_kind_removes_every_matching_row() {
     ui.dismiss_by_kind("watcher-disabled");
 
     assert_eq!(ui.rows.row_count(), 2);
-    let kinds: Vec<String> = ui
-        .rows
-        .iter()
-        .map(|r: NotificationRow| r.action_kind.to_string())
-        .collect();
+    let kinds: Vec<String> =
+        ui.rows.iter().map(|r: NotificationRow| r.action_kind.to_string()).collect();
     assert_eq!(kinds, vec!["update-available", "install-failed"]);
 }
 

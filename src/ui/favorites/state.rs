@@ -154,4 +154,3 @@ pub(super) const GRID_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(48) {
 /// The rest decode lazily as rows scroll in, which is what the `ListView`
 /// virtualization is for.
 pub(super) const GRID_PREWARM_AHEAD: usize = 24;
-

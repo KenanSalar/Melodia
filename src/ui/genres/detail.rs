@@ -28,8 +28,7 @@ use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{
-    AppWindow, GenreDetail, GenreRow as UiGenreRow, NavEnterFrom,
-    TrackListRow as UiTrackListRow,
+    AppWindow, GenreDetail, GenreRow as UiGenreRow, NavEnterFrom, TrackListRow as UiTrackListRow,
 };
 
 /// Publish the genre's hero band: its two hash-derived stops become the
@@ -147,10 +146,8 @@ where
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<GenreDetail>();
         // UI-thread step: just the cover lookups + the model swap.
-        let ui_tracks: Vec<UiTrackListRow> = prepared
-            .into_iter()
-            .map(crate::ui::tracks::finish_track_list_row)
-            .collect();
+        let ui_tracks: Vec<UiTrackListRow> =
+            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
         let header = to_slint_genre_row(&detail);
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &genres_ui);
@@ -258,10 +255,7 @@ pub async fn refresh_detail(
                 .as_any()
                 .downcast_ref::<VecModel<UiTrackListRow>>()
                 .map(|vm| {
-                    (0..vm.row_count())
-                        .filter_map(|i| vm.row_data(i))
-                        .map(|r| r.id)
-                        .collect()
+                    (0..vm.row_count()).filter_map(|i| vm.row_data(i)).map(|r| r.id).collect()
                 })
                 .unwrap_or_default()
         };
@@ -283,10 +277,8 @@ pub async fn refresh_detail(
             genres_ui.detail.all_tracks.lock().clone_from(&tracks);
             *genres_ui.detail.tracks.lock() = tracks;
         } else {
-            let ui_tracks: Vec<UiTrackListRow> = tracks
-                .iter()
-                .map(crate::ui::tracks::to_slint_track_list_row)
-                .collect();
+            let ui_tracks: Vec<UiTrackListRow> =
+                tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
             replace_tracks_model(&g, ui_tracks);
             // The fresh rows all carry `selected: false`, so the
             // `applied` shadow must be reset to match *before*
@@ -413,19 +405,10 @@ pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
 /// so the `GenreDetail` callbacks are already live by the time
 /// `open_genre`'s `upgrade_in_event_loop` lands. Silently no-ops on a
 /// missing / deleted genre.
-pub fn seed_detail_from_settings(
-    ui: &AppWindow,
-    state: &AppState,
-    genres_ui: &Arc<GenresUi>,
-) {
-    let Some(id) = library::settings::get_view_state(state)
-        .ok()
-        .and_then(|s| {
-            s.last_detail_ids
-                .get(crate::ui::track_list_view::view_id::GENRE_DETAIL)
-                .copied()
-        })
-    else {
+pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
+    let Some(id) = library::settings::get_view_state(state).ok().and_then(|s| {
+        s.last_detail_ids.get(crate::ui::track_list_view::view_id::GENRE_DETAIL).copied()
+    }) else {
         return;
     };
     let s = state.clone();

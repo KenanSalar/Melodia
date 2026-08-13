@@ -83,9 +83,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
             if batch.iter().any(|e| matches!(e, FileEvent::RescanNeeded)) {
                 log::warn!("Rescan requested via watcher overflow flag");
                 crate::library::settings::reconcile_watched_folders(&state);
-                state
-                    .rescan_notice_tx
-                    .send_modify(|n| *n = n.wrapping_add(1));
+                state.rescan_notice_tx.send_modify(|n| *n = n.wrapping_add(1));
                 continue;
             }
 

@@ -121,7 +121,8 @@ fn run_write_pass(
                 let outcome = tag_writer::apply_to_file(p, &edit, None)
                     .map_err(|e| e.to_string())
                     .and_then(|_| {
-                        extract_metadata(p, artwork_dir, cover_cache, true).map_err(|e| e.to_string())
+                        extract_metadata(p, artwork_dir, cover_cache, true)
+                            .map_err(|e| e.to_string())
                     });
                 FileWrite {
                     path: path.clone(),
@@ -131,10 +132,7 @@ fn run_write_pass(
             .collect::<Vec<FileWrite>>()
     };
 
-    match rayon::ThreadPoolBuilder::new()
-        .num_threads(MBID_WRITE_THREADS)
-        .build()
-    {
+    match rayon::ThreadPoolBuilder::new().num_threads(MBID_WRITE_THREADS).build() {
         Ok(pool) => pool.install(map_files),
         Err(e) => {
             log::warn!("mbid-write pool build failed ({e}); using the global pool");

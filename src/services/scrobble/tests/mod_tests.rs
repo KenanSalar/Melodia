@@ -271,12 +271,7 @@ async fn backfill_loves_queues_listenbrainz_favorites_with_mbid() -> TestResult 
     assert_eq!(service.queued_len(), 2);
 
     let queue = service.queue.lock();
-    assert!(
-        queue
-            .loves
-            .iter()
-            .all(|l| l.loved && l.listenbrainz_remaining && !l.lastfm_remaining)
-    );
+    assert!(queue.loves.iter().all(|l| l.loved && l.listenbrainz_remaining && !l.lastfm_remaining));
     Ok(())
 }
 
@@ -350,9 +345,7 @@ async fn enqueue_loves_noop_when_love_sync_inactive() -> TestResult {
     let service = lb_love_service(&paths_in(dir.path()), false).await?;
     assert!(!service.love_sync_active());
 
-    service
-        .enqueue_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], true)
-        .await?;
+    service.enqueue_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], true).await?;
     assert_eq!(service.queued_len(), 0);
     Ok(())
 }

@@ -298,7 +298,11 @@ fn apply_bpm(tag: &mut Tag, edit: &FieldEdit<f64>, out: &mut Vec<&'static str>) 
             // half-to-even, so it would render 128.5 as "128". `f64::round` is
             // half-away-from-zero, which is what "rounded BPM" means to everyone
             // else — and once the value is integral, `{:.0}` is exact.
-            let bpm = if v.is_nan() { 0.0 } else { v.clamp(0.0, MAX_BPM) };
+            let bpm = if v.is_nan() {
+                0.0
+            } else {
+                v.clamp(0.0, MAX_BPM)
+            };
             let int_ok = tag.insert_text(ItemKey::IntegerBpm, format!("{:.0}", bpm.round()));
             let dec_ok = tag.insert_text(ItemKey::Bpm, bpm.to_string());
             if !int_ok && !dec_ok {
@@ -355,7 +359,10 @@ fn apply_year(tag: &mut Tag, edit: &FieldEdit<u16>, out: &mut Vec<&'static str>)
         FieldEdit::Clear => tag.remove_date(),
         FieldEdit::Set(y) => {
             let existing = tag.date().unwrap_or_default();
-            let ts = Timestamp { year: *y, ..existing };
+            let ts = Timestamp {
+                year: *y,
+                ..existing
+            };
             tag.remove_key(ItemKey::Year);
             set_text(tag, ItemKey::RecordingDate, ts.to_string(), "year", out);
         }
@@ -371,44 +378,20 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
 
     apply_string(tag, &edit.title, ItemKey::TrackTitle, "title", &mut out);
     apply_string(tag, &edit.artist, ItemKey::TrackArtist, "artist", &mut out);
-    apply_string(
-        tag,
-        &edit.album_artist,
-        ItemKey::AlbumArtist,
-        "album_artist",
-        &mut out,
-    );
+    apply_string(tag, &edit.album_artist, ItemKey::AlbumArtist, "album_artist", &mut out);
     apply_string(tag, &edit.album, ItemKey::AlbumTitle, "album", &mut out);
     apply_string(tag, &edit.genre, ItemKey::Genre, "genre", &mut out);
     apply_string(tag, &edit.composer, ItemKey::Composer, "composer", &mut out);
     apply_string(tag, &edit.comment, ItemKey::Comment, "comment", &mut out);
     apply_recording_id(tag, &edit.musicbrainz_track_id);
 
-    apply_number(
-        tag,
-        &edit.track_number,
-        ItemKey::TrackNumber,
-        "track_number",
-        &mut out,
-    );
-    apply_number(
-        tag,
-        &edit.disc_number,
-        ItemKey::DiscNumber,
-        "disc_number",
-        &mut out,
-    );
+    apply_number(tag, &edit.track_number, ItemKey::TrackNumber, "track_number", &mut out);
+    apply_number(tag, &edit.disc_number, ItemKey::DiscNumber, "disc_number", &mut out);
     // `OriginalReleaseDate` maps on all three primary tag types (Vorbis
     // `ORIGINALDATE`, ID3v2 `TDOR`, MP4 freeform `…iTunes:ORIGINALDATE`), and
     // `extract_metadata` reads it back with `s.get(..4)`, so the bare 4-digit year
     // is the right shape.
-    apply_number(
-        tag,
-        &edit.original_year,
-        ItemKey::OriginalReleaseDate,
-        "original_year",
-        &mut out,
-    );
+    apply_number(tag, &edit.original_year, ItemKey::OriginalReleaseDate, "original_year", &mut out);
 
     apply_year(tag, &edit.year, &mut out);
     apply_bpm(tag, &edit.bpm, &mut out);
@@ -446,8 +429,9 @@ pub fn apply_to_file(
     // that skips picture frames *at parse*, and pictures live in `Tag.pictures`,
     // not in the format-specific companion. Skipped at read ⇒ absent from the tag
     // ⇒ `save_to_path` would **silently delete every embedded picture**.
-    let mut tagged = lofty::probe::read_from_path(path)
-        .map_err(|e| AppError::metadata(format!("Failed to read tags from {}", path.display()), e))?;
+    let mut tagged = lofty::probe::read_from_path(path).map_err(|e| {
+        AppError::metadata(format!("Failed to read tags from {}", path.display()), e)
+    })?;
 
     let tag_type = tagged.primary_tag_type();
 
@@ -465,17 +449,14 @@ pub fn apply_to_file(
         tagged.insert_tag(Tag::new(tag_type));
     }
     let Some(tag) = tagged.primary_tag_mut() else {
-        return Err(AppError::metadata_msg(format!(
-            "no writable tag for {}",
-            path.display()
-        )));
+        return Err(AppError::metadata_msg(format!("no writable tag for {}", path.display())));
     };
 
     let unsupported = apply_edit(tag, edit, picture);
 
-    tagged
-        .save_to_path(path, WriteOptions::default())
-        .map_err(|e| AppError::metadata(format!("Failed to write tags to {}", path.display()), e))?;
+    tagged.save_to_path(path, WriteOptions::default()).map_err(|e| {
+        AppError::metadata(format!("Failed to write tags to {}", path.display()), e)
+    })?;
 
     Ok(unsupported)
 }
@@ -507,9 +488,8 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
     let bytes = std::fs::read(path)
         .map_err(|e| AppError::metadata(format!("Failed to read cover {}", path.display()), e))?;
 
-    let mut reader = image::ImageReader::new(Cursor::new(&bytes))
-        .with_guessed_format()
-        .map_err(|e| {
+    let mut reader =
+        image::ImageReader::new(Cursor::new(&bytes)).with_guessed_format().map_err(|e| {
             AppError::metadata(format!("Unrecognized image format: {}", path.display()), e)
         })?;
     // Same bound every other artwork decode runs under. This one reads from
@@ -518,29 +498,21 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
     reader.limits(image_decode::capped_limits(image_decode::MAX_SOURCE_DIM));
 
     let format = reader.format();
-    let decoded = reader.decode().map_err(|e| {
-        AppError::metadata(format!("Failed to decode cover {}", path.display()), e)
-    })?;
+    let decoded = reader
+        .decode()
+        .map_err(|e| AppError::metadata(format!("Failed to decode cover {}", path.display()), e))?;
 
     // JPEG and PNG are embeddable as-is by every container we target, so hand the
     // original bytes through untouched. `decoded` was only ever the validator.
-    let passthrough = matches!(
-        format,
-        Some(image::ImageFormat::Jpeg | image::ImageFormat::Png)
-    );
+    let passthrough = matches!(format, Some(image::ImageFormat::Jpeg | image::ImageFormat::Png));
 
     let data = if passthrough {
         bytes
     } else {
         let mut jpeg = Vec::new();
-        decoded
-            .write_to(&mut Cursor::new(&mut jpeg), image::ImageFormat::Jpeg)
-            .map_err(|e| {
-                AppError::metadata(
-                    format!("Failed to re-encode cover {} to JPEG", path.display()),
-                    e,
-                )
-            })?;
+        decoded.write_to(&mut Cursor::new(&mut jpeg), image::ImageFormat::Jpeg).map_err(|e| {
+            AppError::metadata(format!("Failed to re-encode cover {} to JPEG", path.display()), e)
+        })?;
         jpeg
     };
 

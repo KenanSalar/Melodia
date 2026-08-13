@@ -1,4 +1,4 @@
-use super::{clamp_sleep_seconds, format_remaining, MAX_SLEEP_SECONDS, MIN_SLEEP_SECONDS};
+use super::{MAX_SLEEP_SECONDS, MIN_SLEEP_SECONDS, clamp_sleep_seconds, format_remaining};
 
 #[test]
 fn format_remaining_pads_seconds() {

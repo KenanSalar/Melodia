@@ -117,7 +117,7 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
                       WHERE tracks_fts MATCH ? AND t.album_id IS NOT NULL)
          ORDER BY (name LIKE ? ESCAPE '\\' OR artist_name LIKE ? ESCAPE '\\') DESC,
                   name ASC
-         LIMIT 20"
+         LIMIT 20",
     )
     .bind(&pattern)
     .bind(&pattern)
@@ -133,7 +133,7 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
                       JOIN tracks_fts f ON f.rowid = t.id
                       WHERE tracks_fts MATCH ? AND t.artist_id IS NOT NULL)
          ORDER BY (name LIKE ? ESCAPE '\\') DESC, name ASC
-         LIMIT 20"
+         LIMIT 20",
     )
     .bind(&pattern)
     .bind(&fts_query)
@@ -141,7 +141,7 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
     .fetch_all(db.read());
 
     let genres_fut = sqlx::query_as::<_, genre::GenreStats>(
-        "SELECT * FROM genre_stats WHERE name LIKE ? ESCAPE '\\' ORDER BY name ASC LIMIT 20"
+        "SELECT * FROM genre_stats WHERE name LIKE ? ESCAPE '\\' ORDER BY name ASC LIMIT 20",
     )
     .bind(&pattern)
     .fetch_all(db.read());

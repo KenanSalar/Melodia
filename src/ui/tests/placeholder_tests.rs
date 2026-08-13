@@ -89,9 +89,7 @@ const VOLUME_READOUTS: [(&str, &str); 2] = [
     ),
     (
         "volume-popup-horizontal.slint",
-        include_str!(
-            "../../../melodia-ui/ui/components/now-playing/volume-popup-horizontal.slint"
-        ),
+        include_str!("../../../melodia-ui/ui/components/now-playing/volume-popup-horizontal.slint"),
     ),
 ];
 
@@ -112,7 +110,9 @@ const BUDGETING_HOST: (&str, &str) = (
 /// counting braces inside comments.
 fn code_between(src: &str, from: &str, to: &str) -> String {
     let code = code(src);
-    let Some((_, after)) = code.split_once(from) else { return String::new() };
+    let Some((_, after)) = code.split_once(from) else {
+        return String::new();
+    };
     normalized(after.split_once(to).map_or(after, |(block, _)| block))
 }
 
@@ -174,9 +174,11 @@ fn the_multiline_placeholder_is_bounded_and_wraps() {
 #[test]
 fn the_search_bar_negotiates_its_width() {
     let src = normalized(SEARCH_BAR);
-    for constraint in
-        ["min-width: root.min-w;", "preferred-width: input-width;", "max-width: input-width;"]
-    {
+    for constraint in [
+        "min-width: root.min-w;",
+        "preferred-width: input-width;",
+        "max-width: input-width;",
+    ] {
         assert!(src.contains(constraint), "search-bar.slint's root is missing `{constraint}`");
     }
     // Leading space so this doesn't read the tail of `max-width: input-width;`.

@@ -7,9 +7,7 @@
 
 use slint::ComponentHandle;
 
-use crate::{
-    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, Nav, PlaylistDetail,
-};
+use crate::{AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, Nav, PlaylistDetail};
 
 /// The tab index a section without tabs answers with. Only My Library has any.
 ///
@@ -63,8 +61,13 @@ impl MyLibraryTab {
     /// `my-library.slint` without one here resolves to `Songs` — which reads right
     /// on the tab nobody named, and is what `ui::view_tag` would then log. Pinned
     /// against `tab-count`.
-    pub const ALL: [Self; 5] =
-        [Self::Songs, Self::Albums, Self::Artists, Self::Genres, Self::Playlists];
+    pub const ALL: [Self; 5] = [
+        Self::Songs,
+        Self::Albums,
+        Self::Artists,
+        Self::Genres,
+        Self::Playlists,
+    ];
 }
 
 /// Resolve a `MyLibrary.tab-idx` value against the global's own `tab-*` constants. UI
@@ -159,7 +162,10 @@ pub fn mounted_surface(ui: &AppWindow) -> MountedSurface {
         let g = ui.global::<MyLibrary>();
         tab_from_index(&g, g.get_tab_idx())
     };
-    MountedSurface { tab, detail_id: detail_id_for(ui, tab) }
+    MountedSurface {
+        tab,
+        detail_id: detail_id_for(ui, tab),
+    }
 }
 
 /// The mounted tab and the detail it has open, from [`mounted_surface`].

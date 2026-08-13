@@ -81,11 +81,7 @@ async fn resolve(db: &DbPool, c: &SmartCriteria) -> Result<Vec<TrackListRow>, Ap
 #[tokio::test]
 async fn genre_contains() -> Result<(), AppError> {
     let s = seed().await?;
-    let c = one(
-        RuleField::Genre,
-        RuleOp::Contains,
-        Some(RuleValue::Text("Rock".to_owned())),
-    );
+    let c = one(RuleField::Genre, RuleOp::Contains, Some(RuleValue::Text("Rock".to_owned())));
     assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t1, s.t2]));
     Ok(())
 }
@@ -125,11 +121,7 @@ async fn last_played_never() -> Result<(), AppError> {
 #[tokio::test]
 async fn last_played_in_last_30_days() -> Result<(), AppError> {
     let s = seed().await?;
-    let c = one(
-        RuleField::LastPlayed,
-        RuleOp::InLast,
-        Some(RuleValue::Days(30)),
-    );
+    let c = one(RuleField::LastPlayed, RuleOp::InLast, Some(RuleValue::Days(30)));
     // Only t1 (played 1 day ago); t2 is 400 days ago, t3/t4 never.
     assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t1]));
     Ok(())
@@ -138,16 +130,9 @@ async fn last_played_in_last_30_days() -> Result<(), AppError> {
 #[tokio::test]
 async fn last_played_not_in_last_365_days() -> Result<(), AppError> {
     let s = seed().await?;
-    let c = one(
-        RuleField::LastPlayed,
-        RuleOp::NotInLast,
-        Some(RuleValue::Days(365)),
-    );
+    let c = one(RuleField::LastPlayed, RuleOp::NotInLast, Some(RuleValue::Days(365)));
     // Old (t2) plus the never-played (t3, t4); t1 is recent → excluded.
-    assert_eq!(
-        ids(&resolve(&s.db, &c).await?),
-        HashSet::from([s.t2, s.t3, s.t4])
-    );
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t2, s.t3, s.t4]));
     Ok(())
 }
 

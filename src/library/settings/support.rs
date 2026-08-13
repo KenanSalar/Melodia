@@ -38,10 +38,7 @@ pub fn count_launch(flags: &mut SupportFlags) -> bool {
 /// writer that can race the read below is a second one, which a process-local `static`
 /// doesn't reach either way.
 pub fn record_launch(state: &AppState) -> Result<bool, AppError> {
-    if services::settings::read_settings(&state.paths)?
-        .support
-        .support_prompt_seen
-    {
+    if services::settings::read_settings(&state.paths)?.support.support_prompt_seen {
         return Ok(false);
     }
 

@@ -63,9 +63,8 @@ pub fn apply(app: &AppWindow, caption_rgb: u32) {
 pub fn reapply_from_theme(app: &AppWindow) {
     use crate::Theme;
     let color = app.global::<Theme>().get_mantle().color();
-    let rgb = (u32::from(color.red()) << 16)
-        | (u32::from(color.green()) << 8)
-        | u32::from(color.blue());
+    let rgb =
+        (u32::from(color.red()) << 16) | (u32::from(color.green()) << 8) | u32::from(color.blue());
     apply(app, rgb);
 }
 
@@ -115,12 +114,7 @@ fn set_immersive_dark(hwnd: *mut c_void, is_dark: bool) {
     // pulled it from the live winit window — it's valid for the lifetime
     // of this call.
     let hr = unsafe {
-        DwmSetWindowAttribute(
-            hwnd as HWND,
-            DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
-            pv,
-            size,
-        )
+        DwmSetWindowAttribute(hwnd as HWND, DWMWA_USE_IMMERSIVE_DARK_MODE as u32, pv, size)
     };
     if hr >= 0 {
         return;
@@ -129,12 +123,7 @@ fn set_immersive_dark(hwnd: *mut c_void, is_dark: bool) {
     // SAFETY: same contract as the first call — only the attribute id
     // changes.
     let hr_legacy = unsafe {
-        DwmSetWindowAttribute(
-            hwnd as HWND,
-            DWMWA_USE_IMMERSIVE_DARK_MODE_PRE_20H1,
-            pv,
-            size,
-        )
+        DwmSetWindowAttribute(hwnd as HWND, DWMWA_USE_IMMERSIVE_DARK_MODE_PRE_20H1, pv, size)
     };
     if hr_legacy < 0 {
         log::warn!(
@@ -149,18 +138,15 @@ fn set_immersive_dark(hwnd: *mut c_void, is_dark: bool) {
 )]
 fn set_caption_color(hwnd: *mut c_void, rgb: u32) {
     // COLORREF is 0x00_BB_GG_RR; the caller hands us 0x00_RR_GG_BB.
-    let colorref: u32 = ((rgb & 0x00_FF_00_00) >> 16)
-        | (rgb & 0x00_00_FF_00)
-        | ((rgb & 0x00_00_00_FF) << 16);
+    let colorref: u32 =
+        ((rgb & 0x00_FF_00_00) >> 16) | (rgb & 0x00_00_FF_00) | ((rgb & 0x00_00_00_FF) << 16);
     let pv: *const c_void = std::ptr::from_ref::<u32>(&colorref).cast::<c_void>();
     // COLORREF is u32 — 4 bytes. Literal dodges the
     // `cast_possible_truncation` lint.
     let size: u32 = 4;
 
     // SAFETY: `pv` targets a stack-local `u32` and `size` matches.
-    let hr = unsafe {
-        DwmSetWindowAttribute(hwnd as HWND, DWMWA_CAPTION_COLOR as u32, pv, size)
-    };
+    let hr = unsafe { DwmSetWindowAttribute(hwnd as HWND, DWMWA_CAPTION_COLOR as u32, pv, size) };
     if hr < 0 {
         // Pre-Win11 22000 builds reject this attribute. The
         // immersive-dark call already handled the dark/light variant —

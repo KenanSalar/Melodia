@@ -49,9 +49,7 @@ pub async fn create_smart_playlist(
         &criteria_json,
     )
     .await?;
-    state
-        .library_changed_tx
-        .send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
     Ok(playlist)
 }
 
@@ -62,10 +60,7 @@ pub async fn update_smart_criteria(
     criteria: &SmartCriteria,
 ) -> Result<Playlist, AppError> {
     let criteria_json = criteria_to_json(criteria)?;
-    let playlist =
-        queries::playlist::update_smart_criteria(&state.db, id, &criteria_json).await?;
-    state
-        .library_changed_tx
-        .send_modify(|n| *n = n.wrapping_add(1));
+    let playlist = queries::playlist::update_smart_criteria(&state.db, id, &criteria_json).await?;
+    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
     Ok(playlist)
 }

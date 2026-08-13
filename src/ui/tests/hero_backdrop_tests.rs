@@ -160,21 +160,9 @@ fn a_section_pre_fetched_off_screen_re_fetches_on_its_first_enter() {
     // *negation* is the half that has to be pinned — `if handle.section_active()
     // { mark_dirty() }` is the inverted bug, and it reads almost identically.
     const LIFECYCLES: [(&str, &str, &str); 4] = [
-        (
-            include_str!("../albums/callbacks/lifecycle.rs"),
-            "albums/lifecycle.rs",
-            "albums_ui",
-        ),
-        (
-            include_str!("../artists/callbacks/lifecycle.rs"),
-            "artists/lifecycle.rs",
-            "artists_ui",
-        ),
-        (
-            include_str!("../genres/callbacks/lifecycle.rs"),
-            "genres/lifecycle.rs",
-            "genres_ui",
-        ),
+        (include_str!("../albums/callbacks/lifecycle.rs"), "albums/lifecycle.rs", "albums_ui"),
+        (include_str!("../artists/callbacks/lifecycle.rs"), "artists/lifecycle.rs", "artists_ui"),
+        (include_str!("../genres/callbacks/lifecycle.rs"), "genres/lifecycle.rs", "genres_ui"),
         (
             include_str!("../playlists/callbacks/lifecycle.rs"),
             "playlists/lifecycle.rs",
@@ -212,7 +200,8 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
         "apply_detail_artwork must take the gate as a parameter"
     );
     assert!(
-        body.contains("if section_active {") && body.contains("hero_backdrop::apply(ui, pair.sample)"),
+        body.contains("if section_active {")
+            && body.contains("hero_backdrop::apply(ui, pair.sample)"),
         "apply_detail_artwork must guard the `HeroBackdrop` write on `section_active`"
     );
     assert!(
@@ -515,7 +504,8 @@ fn no_leave_clears_the_chips_behind_the_macro() {
         }
         if rel == "my_library/callbacks.rs" {
             assert!(
-                code.contains("fn release_page_hero(") && code.contains("fn release_collapsed_hero("),
+                code.contains("fn release_page_hero(")
+                    && code.contains("fn release_collapsed_hero("),
                 "`my_library.rs` no longer owns the page's two teardowns, so the skip above is \
                  exempting a file nothing is checking"
             );

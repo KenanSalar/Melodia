@@ -17,10 +17,7 @@ pub async fn get_albums(state: &AppState) -> Result<Vec<album::AlbumStats>, AppE
 
 /// Stats for a single album, or `AppError::NotFound` if the id is gone
 /// (e.g. the album's folder was removed between grid render and click).
-pub async fn get_album_detail(
-    state: &AppState,
-    id: i64,
-) -> Result<album::AlbumStats, AppError> {
+pub async fn get_album_detail(state: &AppState, id: i64) -> Result<album::AlbumStats, AppError> {
     queries::album::get_album_by_id(&state.db, id).await
 }
 

@@ -72,15 +72,9 @@ fn unknown_keys_are_ignored() {
 
 #[test]
 fn malformed_json_defaults_without_panic() {
-    assert_eq!(
-        SmartCriteria::from_json_opt(Some("{not json")),
-        SmartCriteria::default()
-    );
+    assert_eq!(SmartCriteria::from_json_opt(Some("{not json")), SmartCriteria::default());
     // Wrong top-level shape (array, not object) also degrades gracefully.
-    assert_eq!(
-        SmartCriteria::from_json_opt(Some("[1,2,3]")),
-        SmartCriteria::default()
-    );
+    assert_eq!(SmartCriteria::from_json_opt(Some("[1,2,3]")), SmartCriteria::default());
 }
 
 #[test]
@@ -108,7 +102,12 @@ fn field_value_types_and_operator_lists_are_coherent() {
     assert_eq!(RuleField::LastPlayed.value_type(), ValueType::Date);
 
     // Every value category exposes at least one operator.
-    for vt in [ValueType::Text, ValueType::Number, ValueType::Bool, ValueType::Date] {
+    for vt in [
+        ValueType::Text,
+        ValueType::Number,
+        ValueType::Bool,
+        ValueType::Date,
+    ] {
         assert!(!ops_for(vt).is_empty(), "no operators for {vt:?}");
     }
 }

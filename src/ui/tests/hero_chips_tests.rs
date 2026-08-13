@@ -2,12 +2,12 @@ use super::{
     ChipLabels, ChipOwner, FavoritesFacts, RecentlyPlayedFacts, album_chips, artist_chips,
     favorites_chips, genre_chips, playlist_chips, recently_played_chips, should_clear,
 };
-use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
 use crate::entities::genre::GenreStats;
 use crate::entities::playlist::PlaylistStats;
 use crate::ui::favorites::FavoritesTab;
+use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::recently_played::RecentlyPlayedTab;
 use slint::SharedString;
 
@@ -35,10 +35,7 @@ const HERO_VIEWS: [(&str, &str); 2] = [
 /// — a title, a chip strip or an artwork size appearing in either is the
 /// extraction coming undone one binding at a time.
 const MOSAIC_HOSTS: [(&str, &str); 2] = [
-    (
-        include_str!("../../../melodia-ui/ui/views/favorites-view.slint"),
-        "favorites-view.slint",
-    ),
+    (include_str!("../../../melodia-ui/ui/views/favorites-view.slint"), "favorites-view.slint"),
     (
         include_str!("../../../melodia-ui/ui/views/recently-played-view.slint"),
         "recently-played-view.slint",
@@ -51,10 +48,7 @@ const MOSAIC_HOSTS: [(&str, &str); 2] = [
 /// is the page wearing two banners again. The bodies are the likelier regression
 /// of the two, which is why pinning the sheet alone would not be enough.
 const BAND_HOSTS: [(&str, &str); 5] = [
-    (
-        include_str!("../../../melodia-ui/ui/views/my-library-view.slint"),
-        "my-library-view.slint",
-    ),
+    (include_str!("../../../melodia-ui/ui/views/my-library-view.slint"), "my-library-view.slint"),
     (
         include_str!("../../../melodia-ui/ui/views/my-library/album-detail.slint"),
         "my-library/album-detail.slint",
@@ -147,7 +141,14 @@ fn an_album_states_its_discs_compilation_flag_and_genre_when_it_has_them() {
     let chips = album_chips(&EnglishLabels, &album(Some(1998), Some(3), true), Some("Jazz"));
     assert_eq!(
         texts(&chips),
-        vec!["1998", "5 tracks", "45:33", "3 discs", "Compilation", "Jazz"]
+        vec![
+            "1998",
+            "5 tracks",
+            "45:33",
+            "3 discs",
+            "Compilation",
+            "Jazz"
+        ]
     );
 }
 
@@ -169,10 +170,7 @@ fn an_artist_states_albums_only_when_it_has_some() {
     );
 
     artist.album_count = 0;
-    assert_eq!(
-        texts(&artist_chips(&EnglishLabels, &artist, None)),
-        vec!["12 tracks", "1:00:00"]
-    );
+    assert_eq!(texts(&artist_chips(&EnglishLabels, &artist, None)), vec!["12 tracks", "1:00:00"]);
 }
 
 #[test]
@@ -205,7 +203,10 @@ fn a_genre_states_its_count_running_time_and_spread() {
         texts(&genre_chips(
             &EnglishLabels,
             &genre,
-            HeroFold { artists: 12, albums: 18 }
+            HeroFold {
+                artists: 12,
+                albums: 18
+            }
         )),
         vec!["30 tracks", "1:30:00", "12 artists", "18 albums"]
     );
@@ -224,7 +225,10 @@ fn a_spread_of_one_is_not_worth_a_chip() {
         texts(&genre_chips(
             &EnglishLabels,
             &genre,
-            HeroFold { artists: 1, albums: 1 }
+            HeroFold {
+                artists: 1,
+                albums: 1
+            }
         )),
         vec!["5 tracks", "10:00"]
     );
@@ -247,7 +251,10 @@ fn a_playlist_does_not_repeat_the_smart_badge() {
         track_count: 8,
         total_duration_ms: 1_800_000,
     };
-    let fold = HeroFold { artists: 6, albums: 7 };
+    let fold = HeroFold {
+        artists: 6,
+        albums: 7,
+    };
     let smart = texts(&playlist_chips(&EnglishLabels, &playlist, fold)).join("|");
     playlist.is_smart = false;
     let plain = texts(&playlist_chips(&EnglishLabels, &playlist, fold)).join("|");
@@ -281,7 +288,10 @@ fn favorites_facts(tab: FavoritesTab) -> FavoritesFacts {
         tab,
         tracks: 142,
         duration_ms: 33_273_000, // 9:14:33
-        songs: HeroFold { artists: 37, albums: 51 },
+        songs: HeroFold {
+            artists: 37,
+            albums: 51,
+        },
         most_played: MostPlayedTotals {
             tracks: 88,
             duration_ms: 20_462_000,
@@ -299,7 +309,10 @@ fn recently_played_facts(tab: RecentlyPlayedTab) -> RecentlyPlayedFacts {
         tab,
         tracks: 200,
         duration_ms: 43_451_000, // 12:04:11
-        songs: HeroFold { artists: 44, albums: 60 },
+        songs: HeroFold {
+            artists: 44,
+            albums: 60,
+        },
         most_played: MostPlayedTotals {
             tracks: 512,
             duration_ms: 118_800_000, // 33:00:00
@@ -311,17 +324,11 @@ fn recently_played_facts(tab: RecentlyPlayedTab) -> RecentlyPlayedFacts {
 #[test]
 fn the_favorites_chips_follow_the_tab() {
     assert_eq!(
-        texts(&favorites_chips(
-            &EnglishLabels,
-            &favorites_facts(FavoritesTab::Songs)
-        )),
+        texts(&favorites_chips(&EnglishLabels, &favorites_facts(FavoritesTab::Songs))),
         vec!["142 favorites", "9:14:33", "37 artists", "51 albums"]
     );
     assert_eq!(
-        texts(&favorites_chips(
-            &EnglishLabels,
-            &favorites_facts(FavoritesTab::Artists)
-        )),
+        texts(&favorites_chips(&EnglishLabels, &favorites_facts(FavoritesTab::Artists))),
         vec!["9 artists"]
     );
 }
@@ -336,11 +343,8 @@ fn most_played_sums_itself_and_not_the_songs_tab() {
         texts(&favorites_chips(&EnglishLabels, &facts)),
         vec!["88 tracks", "5:41:02", "1204 plays"]
     );
-    let songs = texts(&favorites_chips(
-        &EnglishLabels,
-        &favorites_facts(FavoritesTab::Songs),
-    ))[1]
-    .to_owned();
+    let songs = texts(&favorites_chips(&EnglishLabels, &favorites_facts(FavoritesTab::Songs)))[1]
+        .to_owned();
     assert_ne!(
         texts(&favorites_chips(&EnglishLabels, &facts))[1],
         songs,
@@ -354,13 +358,14 @@ fn most_played_sums_itself_and_not_the_songs_tab() {
 #[test]
 fn a_never_played_most_played_tab_states_no_plays() {
     let facts = FavoritesFacts {
-        most_played: MostPlayedTotals { tracks: 3, duration_ms: 600_000, plays: 0 },
+        most_played: MostPlayedTotals {
+            tracks: 3,
+            duration_ms: 600_000,
+            plays: 0,
+        },
         ..favorites_facts(FavoritesTab::MostPlayed)
     };
-    assert_eq!(
-        texts(&favorites_chips(&EnglishLabels, &facts)),
-        vec!["3 tracks", "10:00"]
-    );
+    assert_eq!(texts(&favorites_chips(&EnglishLabels, &facts)), vec!["3 tracks", "10:00"]);
 }
 
 /// Every empty band leaves the copy to the view — a sentence on the two Songs
@@ -518,11 +523,7 @@ fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
 /// then says the same thing twice.
 #[test]
 fn no_hero_view_still_declares_a_meta_line() {
-    for (src, name) in HERO_VIEWS
-        .iter()
-        .chain(MOSAIC_HOSTS.iter())
-        .chain(BAND_HOSTS.iter())
-    {
+    for (src, name) in HERO_VIEWS.iter().chain(MOSAIC_HOSTS.iter()).chain(BAND_HOSTS.iter()) {
         for prop in ["meta-line", "stats-line", "stats-text"] {
             assert!(
                 !src.contains(&format!("property <string> {prop}")),
@@ -557,11 +558,7 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
         THEME.contains("out property <length> hero-artwork:"),
         "Theme must own the hero tile size — it is the only thing keeping the six bands aligned"
     );
-    for (src, name) in HERO_VIEWS
-        .iter()
-        .chain(MOSAIC_HOSTS.iter())
-        .chain(BAND_HOSTS.iter())
-    {
+    for (src, name) in HERO_VIEWS.iter().chain(MOSAIC_HOSTS.iter()).chain(BAND_HOSTS.iter()) {
         assert!(
             !src.contains("artwork-size"),
             "{name} sizes its hero tile itself — it belongs on `Theme.hero-artwork`"
@@ -588,10 +585,7 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
         .iter()
         .find(|(_, name)| *name == "mosaic-tab-hero.slint")
         .map_or("", |(src, _)| *src);
-    assert!(
-        band.contains("MosaicHeroTile {"),
-        "mosaic-tab-hero.slint must mount `MosaicHeroTile`"
-    );
+    assert!(band.contains("MosaicHeroTile {"), "mosaic-tab-hero.slint must mount `MosaicHeroTile`");
     assert!(
         band.contains("Theme.hero-artwork"),
         "mosaic-tab-hero.slint derives its band height from the tile token, so it must read it"
@@ -755,14 +749,8 @@ fn no_hero_folds_out_of_a_shared_cache() {
         (include_str!("../artists/detail.rs"), "artists/detail.rs"),
         (include_str!("../genres/detail.rs"), "genres/detail.rs"),
         (include_str!("../playlists/detail.rs"), "playlists/detail.rs"),
-        (
-            include_str!("../recently_played/songs.rs"),
-            "recently_played/songs.rs",
-        ),
-        (
-            include_str!("../recently_played/grid/fetch.rs"),
-            "recently_played/grid/fetch.rs",
-        ),
+        (include_str!("../recently_played/songs.rs"), "recently_played/songs.rs"),
+        (include_str!("../recently_played/grid/fetch.rs"), "recently_played/grid/fetch.rs"),
         (HERO_CHIPS, "hero_chips.rs"),
     ];
 
@@ -797,7 +785,10 @@ fn no_hero_folds_out_of_a_shared_cache() {
 /// Facts arrive as arguments, or off the section's own handle.
 #[test]
 fn no_publisher_reads_its_facts_back_off_a_slint_global() {
-    for publisher in ["pub fn publish_favorites(", "pub fn publish_recently_played("] {
+    for publisher in [
+        "pub fn publish_favorites(",
+        "pub fn publish_recently_played(",
+    ] {
         let body = HERO_CHIPS
             .split_once(publisher)
             .and_then(|(_, rest)| rest.split_once("\n}"))
@@ -809,7 +800,11 @@ fn no_publisher_reads_its_facts_back_off_a_slint_global() {
             "hero_chips.rs no longer defines `{publisher}` as a body ending in `publish(...)` — \
              move this pin with it, or the checks below hold over an empty window"
         );
-        for getter in ["get_track_count(", "get_duration_text(", "get_artist_count("] {
+        for getter in [
+            "get_track_count(",
+            "get_duration_text(",
+            "get_artist_count(",
+        ] {
             assert!(
                 !body.contains(getter),
                 "`{publisher}` reads `{getter}` back off a Slint global. Take the fact as an \
@@ -909,9 +904,7 @@ fn the_strip_leaks_no_width_floor() {
 fn the_strip_spaces_its_rows_tighter_than_its_chips() {
     // Split on the repeater, so each half holds exactly one `spacing:` — the
     // rows layout's before it, the row layout's after.
-    let (rows, chips) = STRIP
-        .split_once("for row in root.rows:")
-        .unwrap_or_default();
+    let (rows, chips) = STRIP.split_once("for row in root.rows:").unwrap_or_default();
 
     let row_gap = rows.rsplit_once("spacing: Theme.").map_or("", |(_, gap)| gap);
     assert!(
@@ -1031,10 +1024,7 @@ fn every_hero_title_reads_the_same_token() {
     for (src, name) in HERO_VIEWS {
         let normalized: String = src.split_whitespace().collect::<Vec<_>>().join(" ");
         let headings = normalized.matches(WEIGHT).count();
-        assert!(
-            normalized.contains(HERO_TITLE),
-            "{name} declares no hero title"
-        );
+        assert!(normalized.contains(HERO_TITLE), "{name} declares no hero title");
         assert_eq!(
             normalized.matches(HERO_TITLE).count() + normalized.matches(IDLE_TITLE).count(),
             headings,
@@ -1136,8 +1126,5 @@ fn only_the_mounted_tabs_own_id_names_the_hero() {
     }
 
     // `0` is a real row id, so the boundary is `>= 0` and not `> 0`.
-    assert_eq!(
-        super::my_library_owner(Albums, 0, -1, -1, -1),
-        Some(ChipOwner::Album(0))
-    );
+    assert_eq!(super::my_library_owner(Albums, 0, -1, -1, -1), Some(ChipOwner::Album(0)));
 }

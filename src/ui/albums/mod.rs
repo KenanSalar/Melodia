@@ -295,8 +295,7 @@ impl AlbumsUi {
     /// the card is on screen. Resolves against the grid-tier
     /// (`GRID_COVER_SIZE`) cache.
     pub fn grid_cover(&self, artwork_path: &str) -> slint::Image {
-        self.grid_covers
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+        self.grid_covers.get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 
     /// Shared handle to the grid-tier cover cache, for surfaces that
@@ -335,10 +334,8 @@ pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
         artist_name: SharedString::from(a.artist_name.as_str()),
         year: a.year.unwrap_or(0),
         track_count: a.track_count,
-        total_duration_ms: i32::try_from(
-            a.total_duration_ms.clamp(0, i64::from(i32::MAX)),
-        )
-        .unwrap_or(i32::MAX),
+        total_duration_ms: i32::try_from(a.total_duration_ms.clamp(0, i64::from(i32::MAX)))
+            .unwrap_or(i32::MAX),
         artwork_path: SharedString::from(a.artwork_path.as_deref().unwrap_or("")),
     }
 }

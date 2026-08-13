@@ -29,10 +29,7 @@ use crate::state::AppState;
 /// Takes the settings the caller already read rather than re-reading them:
 /// `mutate_settings` writes unconditionally, which would turn a one-off
 /// migration into a full rewrite of `settings.json` on every launch.
-pub fn seed_theme_preference(
-    state: &AppState,
-    mut settings: SettingsData,
-) -> Result<(), AppError> {
+pub fn seed_theme_preference(state: &AppState, mut settings: SettingsData) -> Result<(), AppError> {
     if settings.theme_preferences.contains_key(&settings.theme_id) {
         return Ok(());
     }
@@ -70,10 +67,8 @@ pub fn set_appearance(
     accent_color: String,
 ) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
-        let preserved_static = settings
-            .theme_preferences
-            .get(&theme_id)
-            .and_then(|p| p.last_static_accent.clone());
+        let preserved_static =
+            settings.theme_preferences.get(&theme_id).and_then(|p| p.last_static_accent.clone());
         let last_static_accent = if accent_color == crate::themes::MATERIAL_YOU_ACCENT_ID {
             preserved_static
         } else {
@@ -107,10 +102,7 @@ pub fn set_dynamic_color_style(state: &AppState, style: String) -> Result<(), Ap
 /// The runtime gate (focus event → `Theme.window-focused` write) lives
 /// in `src/ui/window_chrome/`'s winit filter; this helper only commits
 /// the new value to disk so the next process boot picks it up.
-pub fn set_match_unfocused_to_system_bg(
-    state: &AppState,
-    on: bool,
-) -> Result<(), AppError> {
+pub fn set_match_unfocused_to_system_bg(state: &AppState, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
         settings.layout.match_unfocused_to_system_bg = on;
     })

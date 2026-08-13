@@ -47,9 +47,7 @@ pub(crate) fn exceeds_size_bound(downloaded: u64, expected_size: u64) -> bool {
 /// futureproof for an origin switch rather than a current production
 /// fix.
 pub(crate) fn capture_strong_etag(header_value: Option<&str>) -> Option<String> {
-    header_value
-        .filter(|tag| !tag.starts_with("W/"))
-        .map(str::to_owned)
+    header_value.filter(|tag| !tag.starts_with("W/")).map(str::to_owned)
 }
 
 /// Decision tree for an existing `dest` file when a download starts:
@@ -202,9 +200,7 @@ pub(super) async fn download_to_file(
         .map_err(|e| AppError::network(format!("update download GET {url} failed"), e))?;
     let status = resp.status();
     if !status.is_success() {
-        return Err(AppError::network_msg(format!(
-            "update download {url} returned HTTP {status}"
-        )));
+        return Err(AppError::network_msg(format!("update download {url} returned HTTP {status}")));
     }
 
     // Capture the response ETag so future resumes can send it back as
@@ -214,9 +210,7 @@ pub(super) async fn download_to_file(
     // `capture_strong_etag` drops weak tags at the boundary so they
     // never reach the sidecar — see its doc for the RFC 9110 rationale.
     let response_etag = capture_strong_etag(
-        resp.headers()
-            .get(reqwest::header::ETAG)
-            .and_then(|v| v.to_str().ok()),
+        resp.headers().get(reqwest::header::ETAG).and_then(|v| v.to_str().ok()),
     );
 
     // Server-side resume support is best-effort. A 206 Partial Content
@@ -270,15 +264,12 @@ pub(super) async fn download_to_file(
     // already 80% done. Using expected_size keeps the bar honest.
     let progress_denominator = expected_size.max(chunk_total);
     let mut stream = resp.bytes_stream();
-    let mut last_pct: u8 = u8::try_from(
-        (downloaded.saturating_mul(100) / progress_denominator).min(100),
-    )
-    .unwrap_or(0);
+    let mut last_pct: u8 =
+        u8::try_from((downloaded.saturating_mul(100) / progress_denominator).min(100)).unwrap_or(0);
     on_progress(last_pct);
 
     while let Some(chunk) = stream.next().await {
-        let chunk =
-            chunk.map_err(|e| AppError::network("update download stream broke", e))?;
+        let chunk = chunk.map_err(|e| AppError::network("update download stream broke", e))?;
         let new_total = downloaded.saturating_add(chunk.len() as u64);
         if exceeds_size_bound(new_total, expected_size) {
             // Drop the file handle + remove the partial bytes before
@@ -296,10 +287,8 @@ pub(super) async fn download_to_file(
         }
         file.write_all(&chunk)?;
         downloaded = new_total;
-        let pct = u8::try_from(
-            (downloaded.saturating_mul(100) / progress_denominator).min(100),
-        )
-        .unwrap_or(100);
+        let pct = u8::try_from((downloaded.saturating_mul(100) / progress_denominator).min(100))
+            .unwrap_or(100);
         if pct != last_pct {
             on_progress(pct);
             last_pct = pct;

@@ -118,9 +118,7 @@ pub(crate) fn staged_msi_path(asset_url: &str) -> AppResult<PathBuf> {
             // manifest with an uppercase `.MSI` URL is plausible
             // (cargo-wix output is lowercase, but a CDN redirect or
             // a hand-renamed asset could differ).
-            std::path::Path::new(n)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("msi"))
+            std::path::Path::new(n).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("msi"))
         })
         .unwrap_or_else(|| "melodia-update.msi".to_string());
     Ok(dir.join(name))
@@ -151,8 +149,8 @@ pub async fn prune_stale_staging() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             return;
         };
-        let Some(cutoff) = std::time::SystemTime::now()
-            .checked_sub(std::time::Duration::from_hours(7 * 24))
+        let Some(cutoff) =
+            std::time::SystemTime::now().checked_sub(std::time::Duration::from_hours(7 * 24))
         else {
             return;
         };
@@ -198,10 +196,7 @@ fn asset_basename(url: &str) -> Option<String> {
 /// [`resolve_staged_path`] which falls back to a user-writable cache
 /// dir when the target's parent isn't writable (RPM/.deb installs).
 pub(crate) fn staged_path(target: &Path) -> PathBuf {
-    let mut name = target
-        .file_name()
-        .map(std::ffi::OsStr::to_os_string)
-        .unwrap_or_default();
+    let mut name = target.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
     name.push(".new");
     target.with_file_name(name)
 }
@@ -228,10 +223,7 @@ pub(super) fn resolve_staged_path(target: &Path) -> AppResult<PathBuf> {
     })?;
     let dir = cache.join("Melodia").join("update-staging");
     std::fs::create_dir_all(&dir)?;
-    let mut name = target
-        .file_name()
-        .map(std::ffi::OsStr::to_os_string)
-        .unwrap_or_default();
+    let mut name = target.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
     name.push(".new");
     Ok(dir.join(name))
 }
@@ -332,9 +324,8 @@ pub(crate) fn discard_staging_if_sidecar_mismatches(
         return None;
     }
     let meta = read_staged_meta(&sidecar);
-    let valid = meta
-        .as_ref()
-        .is_some_and(|m| m.matches(expected_version, expected_size, expected_url));
+    let valid =
+        meta.as_ref().is_some_and(|m| m.matches(expected_version, expected_size, expected_url));
     if valid {
         return meta;
     }

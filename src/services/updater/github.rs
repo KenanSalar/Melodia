@@ -62,10 +62,7 @@ pub async fn fetch_latest_manifest(
         req = req.header(IF_NONE_MATCH, value);
     }
 
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| AppError::network("fetch latest.json failed", e))?;
+    let resp = req.send().await.map_err(|e| AppError::network("fetch latest.json failed", e))?;
 
     if resp.status() == StatusCode::NOT_MODIFIED {
         return Ok(FetchOutcome::NotModified);
@@ -77,15 +74,9 @@ pub async fn fetch_latest_manifest(
         )));
     }
 
-    let etag = resp
-        .headers()
-        .get(ETAG)
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_owned);
-    let body = resp
-        .bytes()
-        .await
-        .map_err(|e| AppError::network("read latest.json body failed", e))?;
+    let etag = resp.headers().get(ETAG).and_then(|v| v.to_str().ok()).map(str::to_owned);
+    let body =
+        resp.bytes().await.map_err(|e| AppError::network("read latest.json body failed", e))?;
 
     // Fetch the sibling .minisig. A missing or non-200 response is
     // treated as a verification failure — we'd rather refuse to install
@@ -118,8 +109,9 @@ pub async fn fetch_latest_manifest(
     // them). `expected_version` stays None — the manifest *is* the source
     // of the version string, so there's nothing meaningful to assert
     // here until after we parse it.
-    minisign::verify_manifest_bytes(&body, &sig_text, &pubkey, None, Some("true"))
-        .map_err(|e| AppError::Validation(format!("manifest signature verification failed: {e}")))?;
+    minisign::verify_manifest_bytes(&body, &sig_text, &pubkey, None, Some("true")).map_err(
+        |e| AppError::Validation(format!("manifest signature verification failed: {e}")),
+    )?;
 
     let manifest: LatestManifest = serde_json::from_slice(&body).map_err(|e| {
         AppError::Validation(format!(

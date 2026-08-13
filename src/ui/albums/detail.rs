@@ -107,8 +107,7 @@ where
     // Apply the persisted detail sort (one shared sort for every album —
     // restored across opens and restarts). `track_number` ascending is the
     // fresh-install default.
-    let (sort_field, sort_dir) =
-        resolve_view_sort(state, view_id::ALBUM_DETAIL, "track_number");
+    let (sort_field, sort_dir) = resolve_view_sort(state, view_id::ALBUM_DETAIL, "track_number");
     sort_track_list_rows(&mut tracks, &sort_field, &sort_dir);
 
     // Decode the `(cover, blur)` pair for the detail header on the
@@ -117,12 +116,9 @@ where
     // `ui::artwork_cache::ArtworkPair`). The buffers are raw RGB8 so they
     // cross the upcoming `upgrade_in_event_loop` boundary; the UI thread
     // wraps them in `slint::Image` via `Image::from_rgb8`.
-    let pair = decode_detail_pair(
-        state,
-        albums_ui.detail_artwork.clone(),
-        detail.artwork_path.clone(),
-    )
-    .await;
+    let pair =
+        decode_detail_pair(state, albums_ui.detail_artwork.clone(), detail.artwork_path.clone())
+            .await;
 
     // Build the `Send` half of every row here on the worker — only the
     // `!Send` cover decode is left for the UI thread, so the click→detail
@@ -142,10 +138,8 @@ where
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<AlbumDetail>();
         // UI-thread step: just the cover lookups + the model swap.
-        let ui_tracks: Vec<UiTrackListRow> = prepared
-            .into_iter()
-            .map(crate::ui::tracks::finish_track_list_row)
-            .collect();
+        let ui_tracks: Vec<UiTrackListRow> =
+            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
         let header = to_slint_album_row(&detail);
         g.set_album(header);
         replace_tracks_model(&g, ui_tracks);
@@ -227,12 +221,9 @@ pub async fn refresh_detail(
     // Re-decode the `(cover, blur)` pair — the artwork may have changed
     // (cover swap, replace-on-disk). `get_or_decode` is a cache hit when
     // the path is unchanged, so this is cheap in the steady state.
-    let pair = decode_detail_pair(
-        state,
-        albums_ui.detail_artwork.clone(),
-        detail.artwork_path.clone(),
-    )
-    .await;
+    let pair =
+        decode_detail_pair(state, albums_ui.detail_artwork.clone(), detail.artwork_path.clone())
+            .await;
 
     let genre = crate::ui::hero_folds::dominant_genre(&tracks);
 
@@ -287,10 +278,7 @@ pub async fn refresh_detail(
                 .as_any()
                 .downcast_ref::<VecModel<UiTrackListRow>>()
                 .map(|vm| {
-                    (0..vm.row_count())
-                        .filter_map(|i| vm.row_data(i))
-                        .map(|r| r.id)
-                        .collect()
+                    (0..vm.row_count()).filter_map(|i| vm.row_data(i)).map(|r| r.id).collect()
                 })
                 .unwrap_or_default()
         };
@@ -316,10 +304,8 @@ pub async fn refresh_detail(
             albums_ui.detail.all_tracks.lock().clone_from(&tracks);
             *albums_ui.detail.tracks.lock() = tracks;
         } else {
-            let ui_tracks: Vec<UiTrackListRow> = tracks
-                .iter()
-                .map(crate::ui::tracks::to_slint_track_list_row)
-                .collect();
+            let ui_tracks: Vec<UiTrackListRow> =
+                tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
             replace_tracks_model(&g, ui_tracks);
             // The fresh rows all carry `selected: false`, so the `applied`
             // shadow must be reset to match *before* re-applying — and the
@@ -450,19 +436,10 @@ pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
 /// `open_album`'s `upgrade_in_event_loop` lands. Silently no-ops on a
 /// missing / deleted album: `open_album` returns an error, we log it, and
 /// `album-id` stays at `-1` so the grid renders.
-pub fn seed_detail_from_settings(
-    ui: &AppWindow,
-    state: &AppState,
-    albums_ui: &Arc<AlbumsUi>,
-) {
-    let Some(id) = library::settings::get_view_state(state)
-        .ok()
-        .and_then(|s| {
-            s.last_detail_ids
-                .get(crate::ui::track_list_view::view_id::ALBUM_DETAIL)
-                .copied()
-        })
-    else {
+pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
+    let Some(id) = library::settings::get_view_state(state).ok().and_then(|s| {
+        s.last_detail_ids.get(crate::ui::track_list_view::view_id::ALBUM_DETAIL).copied()
+    }) else {
         return;
     };
     let s = state.clone();
@@ -485,4 +462,3 @@ pub(super) fn reset_detail_selection(g: &AlbumDetail, albums_ui: &AlbumsUi) {
     g.set_selection_anchor(-1);
     albums_ui.detail.applied_selection.lock().clear();
 }
-

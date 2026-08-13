@@ -59,11 +59,7 @@ fn main() -> AppResult<()> {
         // question. The verifier checks both `status.success()` AND
         // non-empty stdout, so a write failure here would correctly
         // be reported as a smoke-test failure (empty stdout → fail).
-        let _ = writeln!(
-            std::io::stdout().lock(),
-            "Melodia {}",
-            env!("CARGO_PKG_VERSION")
-        );
+        let _ = writeln!(std::io::stdout().lock(), "Melodia {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
 
@@ -190,8 +186,7 @@ fn main() -> AppResult<()> {
     // so the guard has to stay alive for the entire `app.run()` window.
     let runtime_guard = runtime.enter();
 
-    let (state, channels) =
-        runtime.block_on(AppState::init(paths, runtime.handle().clone()))?;
+    let (state, channels) = runtime.block_on(AppState::init(paths, runtime.handle().clone()))?;
 
     log::info!(
         "AppState initialized: db ok, watcher built, media controls = {}",
@@ -296,8 +291,7 @@ fn main() -> AppResult<()> {
     // 5–5c3. Tracks / Browse / Albums views + their callbacks + the
     // now-playing-favorite fan-out + album cover-cache tune. Returns the
     // per-view handles for downstream wiring.
-    let views =
-        boot::ui_setup::install_views(&app, &state, startup_view_state.as_ref());
+    let views = boot::ui_setup::install_views(&app, &state, startup_view_state.as_ref());
 
     // 5d–5d4. Library Settings + playback toggle + notifications stack +
     // file-watcher toggle.
@@ -368,8 +362,7 @@ fn main() -> AppResult<()> {
     // 6c. Full-screen Now Playing view (owns its own small `(cover, blur)`
     // LRU separate from `cover_thumbs`).
     let np_artwork = Arc::new(ui::now_playing_artwork::NowPlayingArtwork::new());
-    let np_state = match ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork)
-    {
+    let np_state = match ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork) {
         Ok(s) => Some(s),
         Err(e) => {
             log::warn!("now_playing::install: {e}");
@@ -439,19 +432,10 @@ fn main() -> AppResult<()> {
     );
     ui::callbacks::wire_updater(&app, &state, &notifications, &updater_event_tx);
 
-    let updater_settings_snapshot = startup_settings
-        .as_ref()
-        .map(|s| s.updates.clone())
-        .unwrap_or_default();
-    if updater_settings_snapshot.auto_check_enabled
-        && !services::updater::is_system_install()
-    {
-        tasks::updater_daily::spawn(
-            &spawner,
-            state.clone(),
-            weak.clone(),
-            updater_event_tx,
-        );
+    let updater_settings_snapshot =
+        startup_settings.as_ref().map(|s| s.updates.clone()).unwrap_or_default();
+    if updater_settings_snapshot.auto_check_enabled && !services::updater::is_system_install() {
+        tasks::updater_daily::spawn(&spawner, state.clone(), weak.clone(), updater_event_tx);
     } else {
         log::info!(
             "updater_daily: not spawning (auto_check_enabled={}, system_managed={})",
@@ -520,11 +504,7 @@ fn main() -> AppResult<()> {
                         // inert, so the OS panel is still empty. Run a no-op
                         // `with_state_emit` to push the current playback state
                         // through the canonical sync path now.
-                        melodia::player::state::with_state_emit(
-                            &player_state,
-                            &sinks,
-                            |_| {},
-                        );
+                        melodia::player::state::with_state_emit(&player_state, &sinks, |_| {});
                     }
                 }
                 None => {

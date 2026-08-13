@@ -6,9 +6,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
-use super::state::{
-    DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache,
-};
+use super::state::{DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{AlbumsUi, to_slint_album_row};
 use crate::error::AppResult;
 use crate::library;

@@ -30,8 +30,13 @@ pub enum SettingsTab {
 impl SettingsTab {
     /// Every variant, so a tab added to the `.slint` without one here fails a
     /// test rather than falling through [`tab_from_index`]'s default arm.
-    pub const ALL: [Self; 5] =
-        [Self::Library, Self::Playback, Self::Interface, Self::Services, Self::About];
+    pub const ALL: [Self; 5] = [
+        Self::Library,
+        Self::Playback,
+        Self::Interface,
+        Self::Services,
+        Self::About,
+    ];
 }
 
 /// Resolve the page's live index against the Slint-declared `tab-*` constants.

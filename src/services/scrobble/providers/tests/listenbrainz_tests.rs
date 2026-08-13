@@ -128,9 +128,6 @@ fn align_bulk_results_keys_on_index_not_position() -> TestResult {
     assert_eq!(aligned[0].as_ref().map(|m| m.recording_mbid.as_str()), Some("rec-0"));
     assert!(aligned[1].is_none()); // never returned by the server
     assert_eq!(aligned[2].as_ref().map(|m| m.recording_mbid.as_str()), Some("rec-2"));
-    assert_eq!(
-        aligned[2].as_ref().and_then(|m| m.release_mbid.as_deref()),
-        Some("rel-2"),
-    );
+    assert_eq!(aligned[2].as_ref().and_then(|m| m.release_mbid.as_deref()), Some("rel-2"),);
     Ok(())
 }

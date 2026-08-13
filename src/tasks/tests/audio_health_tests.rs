@@ -88,11 +88,7 @@ fn the_threshold_is_a_floor_and_the_spin_clears_it() {
     for _ in 1..STORM_WINDOWS_TO_REPORT {
         assert_eq!(spinning.classify(u64::MAX), Storm::Below);
     }
-    assert_eq!(
-        spinning.classify(u64::MAX),
-        Storm::Lost,
-        "the count a wedged worker loop reaches"
-    );
+    assert_eq!(spinning.classify(u64::MAX), Storm::Lost, "the count a wedged worker loop reaches");
 }
 
 /// The empty window has to reach [`StormWatch`], and only source order says so.
@@ -119,7 +115,9 @@ fn an_empty_window_is_classified_before_the_drain_is_unwrapped() {
     let unwrap = src.find("let Some(report) = report else");
     assert!(classify.is_some(), "`spawn` no longer classifies each window through `StormWatch`");
     assert!(unwrap.is_some(), "`spawn` no longer binds the drain before unwrapping it");
-    let (Some(classify), Some(unwrap)) = (classify, unwrap) else { return };
+    let (Some(classify), Some(unwrap)) = (classify, unwrap) else {
+        return;
+    };
 
     assert!(
         classify < unwrap,

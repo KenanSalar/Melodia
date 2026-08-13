@@ -19,8 +19,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
         let Some(ui) = weak.upgrade() else { return };
         let columns = ui.global::<Browse>().snapshot_visible();
         let s = s.clone();
-        spawn_blocking_logged!(s, "browse::toggle_column",
-            library::settings::update_view_columns(
-                &s, view_id::BROWSE.to_owned(), columns));
+        spawn_blocking_logged!(
+            s,
+            "browse::toggle_column",
+            library::settings::update_view_columns(&s, view_id::BROWSE.to_owned(), columns)
+        );
     });
 }

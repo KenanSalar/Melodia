@@ -23,15 +23,8 @@ static PROBE_SEQ: AtomicU64 = AtomicU64::new(0);
 /// from the binary's own location.
 pub fn dir_is_writable(dir: &Path) -> bool {
     let seq = PROBE_SEQ.fetch_add(1, Ordering::Relaxed);
-    let probe = dir.join(format!(
-        ".melodia-write-probe-{}-{seq}",
-        std::process::id()
-    ));
-    match std::fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&probe)
-    {
+    let probe = dir.join(format!(".melodia-write-probe-{}-{seq}", std::process::id()));
+    match std::fs::OpenOptions::new().create_new(true).write(true).open(&probe) {
         Ok(_) => {
             let _ = std::fs::remove_file(&probe);
             true

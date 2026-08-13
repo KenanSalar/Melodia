@@ -147,10 +147,8 @@ fn resting_bars_put_every_band_back_where_the_model_was_seeded() {
     // Bit patterns rather than `==`: this is an exact-restore claim, and the
     // crate denies a loose float comparison anyway. Reported as the first band
     // that strayed — sixty-four levels side by side say nothing on failure.
-    let strayed = model
-        .iter()
-        .enumerate()
-        .find(|(_, level)| level.to_bits() != SEEDED_LEVEL.to_bits());
+    let strayed =
+        model.iter().enumerate().find(|(_, level)| level.to_bits() != SEEDED_LEVEL.to_bits());
     assert!(strayed.is_none(), "band left off the seed: {strayed:?}");
     assert_eq!(model.row_count(), NUM_BANDS, "resting resized the model");
 }
@@ -238,10 +236,7 @@ fn a_standing_frame_count_reads_as_painting_until_the_stall_threshold() {
     // The count never moves, so every tick is a stalled one. The last tick that
     // still counts as painting is the one *before* the threshold.
     for tick in 1..FRAME_STALL_TICKS {
-        assert!(
-            watch.painting(Some(0)),
-            "stood down after only {tick} stalled tick(s)"
-        );
+        assert!(watch.painting(Some(0)), "stood down after only {tick} stalled tick(s)");
     }
     assert!(!watch.painting(Some(0)));
     // And it stays down rather than oscillating.
@@ -306,10 +301,7 @@ fn a_picker_index_outside_the_table_falls_back_the_same_way() {
     assert_eq!(style_index_from_i32(-1), 0);
     assert_eq!(style_index_from_i32(i32::MIN), 0);
     assert_eq!(style_index_from_i32(i32::MAX), 0);
-    assert_eq!(
-        style_index_from_i32(i32::try_from(STYLES.len()).unwrap_or(0)),
-        0
-    );
+    assert_eq!(style_index_from_i32(i32::try_from(STYLES.len()).unwrap_or(0)), 0);
 }
 
 #[test]

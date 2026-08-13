@@ -18,9 +18,7 @@ const TABS: usize = 2;
 /// brace is what keeps these pins honest — an unbounded split runs to EOF, so
 /// whatever is declared *after* the block gets scanned as if it were inside it.
 fn block_body(src: &'static str, open: &str, close: &str) -> Option<&'static str> {
-    src.split_once(open)
-        .and_then(|(_, rest)| rest.split_once(close))
-        .map(|(body, _)| body)
+    src.split_once(open).and_then(|(_, rest)| rest.split_once(close)).map(|(body, _)| body)
 }
 
 /// The `TrackList { … }` property block in `views/recently-played/songs-tab.slint`.
@@ -50,10 +48,7 @@ fn recently_played_global() -> Option<&'static str> {
 #[test]
 fn the_recently_played_list_is_not_sortable() {
     let mount = track_list_mount();
-    assert!(
-        mount.is_some(),
-        "songs-tab.slint must mount `tl := TrackList {{ … }}`"
-    );
+    assert!(mount.is_some(), "songs-tab.slint must mount `tl := TrackList {{ … }}`");
     let mount = mount.unwrap_or_default();
 
     assert!(
@@ -68,10 +63,7 @@ fn the_recently_played_list_is_not_sortable() {
     }
 
     let global = recently_played_global();
-    assert!(
-        global.is_some(),
-        "curated.slint must declare `export global RecentlyPlayed`"
-    );
+    assert!(global.is_some(), "curated.slint must declare `export global RecentlyPlayed`");
     for banned in ["request-sort", "sort-field", "sort-dir"] {
         assert!(
             !global.unwrap_or_default().contains(banned),
@@ -93,10 +85,7 @@ fn the_recently_played_list_is_not_sortable() {
 #[test]
 fn the_sortable_flag_reaches_every_header_cell() {
     let mount = header_mount();
-    assert!(
-        mount.is_some(),
-        "track-list.slint must mount `TrackListHeader {{ … }}`"
-    );
+    assert!(mount.is_some(), "track-list.slint must mount `TrackListHeader {{ … }}`");
     assert!(
         mount.unwrap_or_default().contains("sortable: root.sortable;"),
         "TrackList must forward `sortable` to its TrackListHeader mount"
@@ -294,13 +283,11 @@ fn the_grid_mount_forwards_the_covers_generation() {
 /// spawned **below** it, so whatever the cache does hold paints on this tick.
 #[test]
 fn the_grid_pick_rewinds_the_count_it_could_not_answer() {
-    let handler = block_body(SUBVIEWS, "g.on_tab_changed(", "\n    }")
-        .unwrap_or_default();
+    let handler = block_body(SUBVIEWS, "g.on_tab_changed(", "\n    }").unwrap_or_default();
     assert!(!handler.is_empty(), "`subviews.rs` must still register `on_tab_changed`");
 
-    let (before_apply, after_apply) = handler
-        .split_once("apply_filtered_grid_now(&ui, &ru)")
-        .unwrap_or_default();
+    let (before_apply, after_apply) =
+        handler.split_once("apply_filtered_grid_now(&ui, &ru)").unwrap_or_default();
     assert!(
         before_apply.contains("ru.take_grid_dirty()"),
         "`on_tab_changed` must consume `take_grid_dirty` before the apply — the apply's count \
@@ -340,9 +327,7 @@ fn the_grid_count_is_written_before_the_signature_can_skip_it() {
          the count sits relative to it, not about retiring it"
     );
 
-    let before_guard = write
-        .split_once("last_grid_signature")
-        .map_or("", |(head, _)| head);
+    let before_guard = write.split_once("last_grid_signature").map_or("", |(head, _)| head);
     assert!(
         before_guard.contains("set_most_played_count("),
         "the count must be written above the signature guard: the guard is what the pick's own \
@@ -372,8 +357,8 @@ fn the_grid_dirty_flag_is_maintained_beside_the_cache_it_guards() {
          flag schedules, and leaving it set makes the next pick re-query a cache this filled"
     );
 
-    let release = block_body(HANDLE, "pub fn release_section_state(", "\n    }")
-        .unwrap_or_default();
+    let release =
+        block_body(HANDLE, "pub fn release_section_state(", "\n    }").unwrap_or_default();
     assert!(
         release.contains("self.mark_grid_dirty();"),
         "`release_section_state` must re-arm the flag beside the cache it wipes — leaving it \
@@ -425,8 +410,8 @@ fn a_superseded_filter_build_does_not_reach_the_grid() {
         "the synchronous form belongs to the tab pick, whose entering `if` is already true"
     );
 
-    let settled = block_body(APPLY, "pub fn apply_filtered_grid_settled(", "\n}")
-        .unwrap_or_default();
+    let settled =
+        block_body(APPLY, "pub fn apply_filtered_grid_settled(", "\n}").unwrap_or_default();
     assert_eq!(
         settled.matches("filter_generation() != generation").count(),
         2,

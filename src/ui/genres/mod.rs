@@ -276,13 +276,11 @@ pub fn to_slint_genre_row(g: &GenreStats) -> UiGenreRow {
         id: clamp_i64_to_i32(g.id),
         name: SharedString::from(g.name.as_str()),
         track_count: g.track_count,
-        total_duration_ms: i32::try_from(
-            g.total_duration_ms.clamp(0, i64::from(i32::MAX)),
-        )
-        .unwrap_or(i32::MAX),
-        display_duration: SharedString::from(
-            crate::ui::tracks::format_duration_ms(g.total_duration_ms),
-        ),
+        total_duration_ms: i32::try_from(g.total_duration_ms.clamp(0, i64::from(i32::MAX)))
+            .unwrap_or(i32::MAX),
+        display_duration: SharedString::from(crate::ui::tracks::format_duration_ms(
+            g.total_duration_ms,
+        )),
         tile_color_1: accent.tile_color_1,
         tile_color_2: accent.tile_color_2,
         hero_color_1: accent.hero_color_1,

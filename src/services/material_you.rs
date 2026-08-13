@@ -135,9 +135,7 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
     // pixel data we keep beyond this point. `Triangle` is the sweet spot:
     // good enough for colour quantization, much faster than Lanczos3, and
     // markedly better than Nearest for averaged seed quality.
-    let small = decoded
-        .resize_exact(QUANTIZE_DIM, QUANTIZE_DIM, FilterType::Triangle)
-        .into_rgba8();
+    let small = decoded.resize_exact(QUANTIZE_DIM, QUANTIZE_DIM, FilterType::Triangle).into_rgba8();
     drop(decoded);
 
     let mut pixels: Vec<Argb> = Vec::with_capacity((QUANTIZE_DIM * QUANTIZE_DIM) as usize);
@@ -242,10 +240,7 @@ pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Opti
 /// — `f64::clamp` panics on `min > max`, and it runs before the solver ever
 /// sees the tone — so the ordering is asserted in debug.
 pub fn clamp_to_tone_band(argb: u32, min_tone: f64, max_tone: f64) -> u32 {
-    debug_assert!(
-        min_tone <= max_tone,
-        "inverted tone band {min_tone}..={max_tone}"
-    );
+    debug_assert!(min_tone <= max_tone, "inverted tone band {min_tone}..={max_tone}");
     let mut hct = Hct::new(Argb::from_u32(argb));
     let tone = hct.get_tone();
     if tone >= min_tone && tone <= max_tone {

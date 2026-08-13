@@ -101,10 +101,9 @@ async fn ingest_deduplicates_artists() -> Result<(), AppError> {
     assert_eq!(result.inserted_count, 3);
 
     // Verify only one artist row (plus the sentinel "Unknown Artist")
-    let count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM artists WHERE name = 'Same Artist'")
-            .fetch_one(db.read())
-            .await?;
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM artists WHERE name = 'Same Artist'")
+        .fetch_one(db.read())
+        .await?;
     assert_eq!(count.0, 1);
     Ok(())
 }
@@ -132,10 +131,9 @@ async fn ingest_deduplicates_albums() -> Result<(), AppError> {
     .await?;
     tx.commit().await?;
 
-    let count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM albums WHERE name = 'Same Album'")
-            .fetch_one(db.read())
-            .await?;
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM albums WHERE name = 'Same Album'")
+        .fetch_one(db.read())
+        .await?;
     assert_eq!(count.0, 1);
     Ok(())
 }
@@ -221,10 +219,7 @@ async fn ingest_updates_artwork_on_existing_when_flag_set() -> Result<(), AppErr
             .fetch_optional(db.read())
             .await?;
     assert_eq!(
-        artwork
-            .ok_or_else(|| AppError::Validation("track missing".into()))?
-            .0
-            .as_deref(),
+        artwork.ok_or_else(|| AppError::Validation("track missing".into()))?.0.as_deref(),
         Some("/art/cover.jpg")
     );
     Ok(())
@@ -417,10 +412,9 @@ async fn ingest_same_album_different_artists() -> Result<(), AppError> {
     tx.commit().await?;
 
     // Two-level album cache: same album name + different artist → separate album rows
-    let count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM albums WHERE name = 'Compilation'")
-            .fetch_one(db.read())
-            .await?;
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM albums WHERE name = 'Compilation'")
+        .fetch_one(db.read())
+        .await?;
     assert_eq!(count.0, 2);
     Ok(())
 }
@@ -472,9 +466,7 @@ async fn ingest_detects_moved_file() -> Result<(), AppError> {
     assert_eq!(new_path.0, "/music/new/song.mp3");
 
     // Verify only one track exists (no duplicate)
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks")
-        .fetch_one(db.read())
-        .await?;
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     assert_eq!(count.0, 1);
     Ok(())
 }
@@ -580,9 +572,7 @@ async fn ingest_duplicate_hash_repoints_once_inserts_second() -> Result<(), AppE
     assert_eq!(repointed.0, "/music/new/copy-a.mp3");
 
     // …and the second file got its own fresh row — no path lost.
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks")
-        .fetch_one(db.read())
-        .await?;
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     assert_eq!(count.0, 2);
     let second: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM tracks WHERE file_path = '/music/new/copy-b.mp3'")
@@ -623,9 +613,7 @@ async fn ingest_does_not_move_when_hash_differs() -> Result<(), AppError> {
     assert_eq!(result.moved_count, 0);
 
     // Two tracks should exist
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks")
-        .fetch_one(db.read())
-        .await?;
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     assert_eq!(count.0, 2);
     Ok(())
 }
@@ -646,7 +634,11 @@ async fn ingest_moved_file_preserves_playback_state() -> Result<(), AppError> {
         .await?;
 
     // Ingest same hash at new path
-    let files = vec![make_scanned_file_with_hash("/music/new.mp3", "Song", &hash.0)];
+    let files = vec![make_scanned_file_with_hash(
+        "/music/new.mp3",
+        "Song",
+        &hash.0,
+    )];
     let mut tx = db.write().begin().await?;
     ingest_scanned_files(
         &mut tx,
@@ -733,7 +725,11 @@ async fn ingest_stores_file_hash() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let hash = "c".repeat(64);
-    let files = vec![make_scanned_file_with_hash("/music/song.mp3", "Song", &hash)];
+    let files = vec![make_scanned_file_with_hash(
+        "/music/song.mp3",
+        "Song",
+        &hash,
+    )];
 
     let mut tx = db.write().begin().await?;
     ingest_scanned_files(

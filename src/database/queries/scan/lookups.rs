@@ -11,12 +11,10 @@ pub async fn track_exists_by_path(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
 ) -> Result<bool, AppError> {
-    let exists = sqlx::query_scalar::<_, i64>(
-        "SELECT 1 FROM tracks WHERE file_path = ? LIMIT 1"
-    )
-    .bind(file_path)
-    .fetch_optional(&mut **tx)
-    .await?;
+    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM tracks WHERE file_path = ? LIMIT 1")
+        .bind(file_path)
+        .fetch_optional(&mut **tx)
+        .await?;
     Ok(exists.is_some())
 }
 
@@ -41,12 +39,10 @@ pub async fn get_all_track_paths_for_folder(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     folder_id: i64,
 ) -> Result<Vec<String>, AppError> {
-    let paths = sqlx::query_scalar::<_, String>(
-        "SELECT file_path FROM tracks WHERE folder_id = ?",
-    )
-    .bind(folder_id)
-    .fetch_all(&mut **tx)
-    .await?;
+    let paths = sqlx::query_scalar::<_, String>("SELECT file_path FROM tracks WHERE folder_id = ?")
+        .bind(folder_id)
+        .fetch_all(&mut **tx)
+        .await?;
     Ok(paths)
 }
 
@@ -78,7 +74,10 @@ pub async fn get_existing_track_summaries_for_folder(
     for (path, size, mtime) in rows {
         out.insert(
             path,
-            ExistingTrackSummary { file_size: size, date_modified: mtime },
+            ExistingTrackSummary {
+                file_size: size,
+                date_modified: mtime,
+            },
         );
     }
     Ok(out)
@@ -89,11 +88,9 @@ pub async fn get_track_id_by_path(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
 ) -> Result<Option<i64>, AppError> {
-    let id = sqlx::query_scalar::<_, i64>(
-        "SELECT id FROM tracks WHERE file_path = ? LIMIT 1",
-    )
-    .bind(file_path)
-    .fetch_optional(&mut **tx)
-    .await?;
+    let id = sqlx::query_scalar::<_, i64>("SELECT id FROM tracks WHERE file_path = ? LIMIT 1")
+        .bind(file_path)
+        .fetch_optional(&mut **tx)
+        .await?;
     Ok(id)
 }

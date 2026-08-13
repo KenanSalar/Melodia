@@ -26,8 +26,8 @@ use crate::state::AppState;
 
 pub use tabs::{
     MountedSurface, MyLibraryTab, NO_TAB, close_open_detail, detail_id_for, go_to_tab,
-    mounted_surface, persist_tab, return_to_section, seed_tab, tab_from_index,
-    tab_is_mounted, tab_of_section, the_band_is_up,
+    mounted_surface, persist_tab, return_to_section, seed_tab, tab_from_index, tab_is_mounted,
+    tab_of_section, the_band_is_up,
 };
 
 /// Wire the My Library page's own three callbacks — the tab pick, the shared
@@ -51,7 +51,11 @@ pub const NAV_MY_LIBRARY: i32 = 3;
 /// and the user boots onto `PlaceholderView`. Anything else passes through — including
 /// values outside the valid range, which the caller still has to bound.
 pub fn fold_retired_nav_index(idx: i32) -> i32 {
-    if (4..=7).contains(&idx) { NAV_MY_LIBRARY } else { idx }
+    if (4..=7).contains(&idx) {
+        NAV_MY_LIBRARY
+    } else {
+        idx
+    }
 }
 
 #[cfg(test)]

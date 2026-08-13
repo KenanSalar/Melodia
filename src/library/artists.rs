@@ -18,10 +18,7 @@ pub async fn get_artists(state: &AppState) -> Result<Vec<artist::ArtistStats>, A
 }
 
 /// Stats for a single artist, or `AppError::NotFound` if the id is gone.
-pub async fn get_artist_detail(
-    state: &AppState,
-    id: i64,
-) -> Result<artist::ArtistStats, AppError> {
+pub async fn get_artist_detail(state: &AppState, id: i64) -> Result<artist::ArtistStats, AppError> {
     queries::artist::get_artist_by_id(&state.db, id).await
 }
 

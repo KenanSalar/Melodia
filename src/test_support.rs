@@ -313,9 +313,7 @@ pub(crate) fn declared_tab_count(src: &str) -> Option<usize> {
 /// The `@tr` arrays a `TabBar` mount hands over have to stay literals — a `[string]`
 /// seeded from Rust renders untranslated — so several pins count what is inside one.
 pub(crate) fn array_body<'a>(src: &'a str, marker: &str) -> Option<&'a str> {
-    src.split_once(marker)
-        .and_then(|(_, rest)| rest.split_once("];"))
-        .map(|(body, _)| body)
+    src.split_once(marker).and_then(|(_, rest)| rest.split_once("];")).map(|(body, _)| body)
 }
 
 /// The `labels` and `fields` arrays of the one `SortPillRow` mount in `src` whose

@@ -19,7 +19,10 @@ struct HashingWriter<W: Write> {
 
 impl<W: Write> HashingWriter<W> {
     fn new(inner: W) -> Self {
-        Self { inner, hasher: blake3::Hasher::new() }
+        Self {
+            inner,
+            hasher: blake3::Hasher::new(),
+        }
     }
 }
 
@@ -145,21 +148,14 @@ pub(crate) fn cache_image_file(source_path: &Path, artwork_dir: &Path) -> Option
     if data.is_empty() {
         return None;
     }
-    let ext = source_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("jpg");
+    let ext = source_path.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
     let hash_hex = compute_hash(&data);
     let filename = format!("{hash_hex}.{ext}");
     let file_path = artwork_dir.join(&filename);
     if !file_path.exists()
         && let Err(e) = std::fs::write(&file_path, &data)
     {
-        log::warn!(
-            "Failed to write artwork cache {}: {}",
-            file_path.display(),
-            e
-        );
+        log::warn!("Failed to write artwork cache {}: {}", file_path.display(), e);
         return None;
     }
     Some(file_path.to_string_lossy().into_owned())
@@ -180,11 +176,7 @@ pub fn extract_and_cache_artwork(tag: &Tag, artwork_dir: &Path) -> Option<String
     let picture = pictures
         .iter()
         .find(|p| p.pic_type() == PictureType::CoverFront)
-        .or_else(|| {
-            pictures
-                .iter()
-                .find(|p| p.pic_type() == PictureType::CoverBack)
-        })
+        .or_else(|| pictures.iter().find(|p| p.pic_type() == PictureType::CoverBack))
         .or(pictures.first())?;
 
     let data = picture.data();
@@ -209,11 +201,7 @@ pub fn extract_and_cache_artwork(tag: &Tag, artwork_dir: &Path) -> Option<String
     if !file_path.exists()
         && let Err(e) = std::fs::write(&file_path, data)
     {
-        log::warn!(
-            "Failed to write artwork cache {}: {}",
-            file_path.display(),
-            e
-        );
+        log::warn!("Failed to write artwork cache {}: {}", file_path.display(), e);
         return None;
     }
 
@@ -243,10 +231,7 @@ pub fn find_and_cache_artwork(
             // racing on the same cover may duplicate the work once,
             // but never queue behind each other's I/O.
             let result = cache_image_file(&cover_path, artwork_dir);
-            cover_cache
-                .cover_to_cached
-                .lock()
-                .put(cover_path, result.clone());
+            cover_cache.cover_to_cached.lock().put(cover_path, result.clone());
             result
         };
         if let Some(cached) = cached {
@@ -297,10 +282,8 @@ pub(crate) fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> O
     }
 
     // Load all source images
-    let images: Vec<DynamicImage> = source_paths
-        .iter()
-        .filter_map(|p| image::open(p).ok())
-        .collect();
+    let images: Vec<DynamicImage> =
+        source_paths.iter().filter_map(|p| image::open(p).ok()).collect();
 
     if images.len() != source_paths.len() {
         return None;

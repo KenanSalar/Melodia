@@ -3,17 +3,19 @@ use std::path::Path;
 
 use tempfile::tempdir;
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-use crate::services::updater::install::old_path;
 use crate::services::updater::install::download::{
     ResumeState, capture_strong_etag, exceeds_size_bound, plan_resume,
+};
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use crate::services::updater::install::old_path;
+#[cfg(target_os = "windows")]
+use crate::services::updater::install::staging::{
+    InstallMethod, resolve_install_method, staged_msi_path,
 };
 use crate::services::updater::install::staging::{
     StagedMeta, discard_staging_if_sidecar_mismatches, read_staged_meta, sidecar_meta_path,
     staged_path, write_staged_meta,
 };
-#[cfg(target_os = "windows")]
-use crate::services::updater::install::staging::{InstallMethod, resolve_install_method, staged_msi_path};
 use crate::services::updater::install::swap_in_place;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -85,10 +87,7 @@ fn staged_path_lives_next_to_target() {
 fn staged_path_preserves_extension_for_windows_exe() {
     let target = std::path::PathBuf::from("C:/Program Files/Melodia/Melodia.exe");
     let staged = staged_path(&target);
-    assert_eq!(
-        staged,
-        std::path::PathBuf::from("C:/Program Files/Melodia/Melodia.exe.new")
-    );
+    assert_eq!(staged, std::path::PathBuf::from("C:/Program Files/Melodia/Melodia.exe.new"));
 }
 
 /// `staged_msi_path` returns a `.msi`-suffixed path under the per-user
@@ -124,10 +123,7 @@ fn staged_msi_path_preserves_msi_extension_under_cache_dir() -> TestResult {
 #[test]
 fn staged_msi_path_falls_back_to_synthetic_name_when_url_lacks_msi_suffix() -> TestResult {
     let staged = staged_msi_path("https://example.test/some-redirect-without-suffix")?;
-    assert_eq!(
-        staged.file_name().and_then(|s| s.to_str()),
-        Some("melodia-update.msi"),
-    );
+    assert_eq!(staged.file_name().and_then(|s| s.to_str()), Some("melodia-update.msi"),);
     Ok(())
 }
 
@@ -193,11 +189,7 @@ fn swap_retains_old_snapshot_for_rollback() -> TestResult {
     assert_eq!(fs::read(&target)?, b"v0.2.0 NEW", "target carries new bytes");
     assert!(!staged.exists(), "staged is consumed by rename");
     assert!(old.exists(), ".old snapshot is retained for rollback");
-    assert_eq!(
-        fs::read(&old)?,
-        b"v0.1.0 OLD",
-        ".old snapshot carries previous-binary bytes"
-    );
+    assert_eq!(fs::read(&old)?, b"v0.1.0 OLD", ".old snapshot carries previous-binary bytes");
     Ok(())
 }
 
@@ -240,10 +232,7 @@ fn plan_resume_fresh_when_manifest_size_is_zero() {
 fn sidecar_meta_path_appends_meta_json_to_basename() {
     // `.new` + `.meta.json` = `.new.meta.json` (per-user tarball case).
     let p = Path::new("/opt/melodia/Melodia.new");
-    assert_eq!(
-        sidecar_meta_path(p),
-        Path::new("/opt/melodia/Melodia.new.meta.json").to_path_buf()
-    );
+    assert_eq!(sidecar_meta_path(p), Path::new("/opt/melodia/Melodia.new.meta.json").to_path_buf());
     // Multi-suffix RPM staging path — appending preserves the trailing
     // `.rpm` so dnf/apt still recognise the original (the sidecar is
     // strictly additive).
@@ -306,10 +295,7 @@ fn staged_meta_matches_requires_all_fields() {
 fn staged_meta_parses_legacy_sidecar_without_etag_field() -> TestResult {
     let dir = tempdir()?;
     let path = dir.path().join("legacy.meta.json");
-    fs::write(
-        &path,
-        br#"{"version":"0.2.0","size":1024,"asset_url":"https://u"}"#,
-    )?;
+    fs::write(&path, br#"{"version":"0.2.0","size":1024,"asset_url":"https://u"}"#)?;
     let parsed = read_staged_meta(&path).ok_or("legacy sidecar must still parse")?;
     assert_eq!(parsed.version, "0.2.0");
     assert_eq!(parsed.size, 1024);
@@ -377,10 +363,7 @@ fn discard_drops_both_when_sidecar_missing() -> TestResult {
 
     discard_staging_if_sidecar_mismatches(&staged, "0.2.0", 1024, "https://example.test/rpm");
 
-    assert!(
-        !staged.exists(),
-        "staged bytes must be discarded when no sidecar is present"
-    );
+    assert!(!staged.exists(), "staged bytes must be discarded when no sidecar is present");
     assert!(!sidecar.exists());
     Ok(())
 }

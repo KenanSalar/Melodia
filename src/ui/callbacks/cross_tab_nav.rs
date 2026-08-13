@@ -67,7 +67,10 @@ impl Origin {
     /// Read the current position off the globals. UI thread only.
     pub(in crate::ui) fn read(ui: &AppWindow) -> Self {
         let nav = ui.global::<Nav>().get_selected_index();
-        Self { nav, tab: tab_of_section(ui, nav) }
+        Self {
+            nav,
+            tab: tab_of_section(ui, nav),
+        }
     }
 
     /// What the destination stamps as its `origin-nav-index`. See [`origin_stamp`].
@@ -81,8 +84,7 @@ impl Origin {
     /// being able to tell once the four destinations became tabs of one page.
     fn still_current(self, ui: &AppWindow) -> bool {
         ui.global::<Nav>().get_selected_index() == self.nav
-            && (self.nav != NAV_MY_LIBRARY
-                || ui.global::<MyLibrary>().get_tab_idx() == self.tab)
+            && (self.nav != NAV_MY_LIBRARY || ui.global::<MyLibrary>().get_tab_idx() == self.tab)
     }
 }
 

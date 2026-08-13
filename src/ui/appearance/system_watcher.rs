@@ -8,9 +8,9 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use tokio::sync::watch;
 
+use crate::AppWindow;
 use crate::state::AppState;
 use crate::themes::SystemColorState;
-use crate::AppWindow;
 
 #[cfg(target_os = "linux")]
 use slint::ComponentHandle;

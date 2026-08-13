@@ -16,7 +16,9 @@
 //! borrow the opt-out of the `TrackList` nested inside it, which is exactly the
 //! arrangement every composite view has.
 
-use crate::test_support::{MIN_SLINT_SOURCES, UI_DIR, normalize_ws as normalized, stripped_sources};
+use crate::test_support::{
+    MIN_SLINT_SOURCES, UI_DIR, normalize_ws as normalized, stripped_sources,
+};
 
 /// The elements that own a scrollbar-policy pair. `Flickable` is deliberately
 /// absent: it has no scrollbars to turn off.
@@ -35,8 +37,10 @@ const CARD_TRACK: &str = "track-color: Theme.scrollbar-track-on-card;";
 /// The two components that own a `TrackList`'s bar pair — the plain page and the
 /// nested-under-another-scroller case. They are the only files allowed to bind a list's
 /// vertical metrics onto an `OverlayScrollbar`.
-const SCROLLBAR_COMPONENTS: [&str; 2] =
-    ["components/track-list-scrollbars.slint", "components/composite-scrollbars.slint"];
+const SCROLLBAR_COMPONENTS: [&str; 2] = [
+    "components/track-list-scrollbars.slint",
+    "components/composite-scrollbars.slint",
+];
 
 /// The band a `TrackList`'s vertical bar has to clear, and the height of what's left —
 /// the two metrics **only** a `TrackList` publishes, since only it has a column header
@@ -103,7 +107,9 @@ fn scroller_blocks(src: &str) -> Vec<(&'static str, &str)> {
             if at > 0 && (bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_') {
                 continue;
             }
-            let Some(open) = next_non_ws(bytes, from) else { continue };
+            let Some(open) = next_non_ws(bytes, from) else {
+                continue;
+            };
             if bytes[open] != b'{' {
                 continue;
             }
@@ -163,7 +169,9 @@ fn every_scroller_opts_out_of_the_stock_scrollbar() {
             let set = own_policies(body);
             for axis in AXES {
                 if !set.iter().any(|(a, v)| *a == axis && *v == OPT_OUT) {
-                    offenders.push(format!("{path}: {element} does not set {axis}-scrollbar-policy: {OPT_OUT}"));
+                    offenders.push(format!(
+                        "{path}: {element} does not set {axis}-scrollbar-policy: {OPT_OUT}"
+                    ));
                 }
             }
         }
@@ -192,19 +200,23 @@ fn every_dialog_scrollbar_takes_the_track_that_reads_on_a_card() {
     let mut offenders = Vec::new();
 
     for (path, src) in &sources {
-        let in_dialog = path.contains(DIALOG_DIR)
-            || DIALOG_STRAYS.iter().any(|stray| path.ends_with(stray));
+        let in_dialog =
+            path.contains(DIALOG_DIR) || DIALOG_STRAYS.iter().any(|stray| path.ends_with(stray));
         if !in_dialog {
             continue;
         }
         let mut from = 0;
         while let Some(at) = src[from..].find("OverlayScrollbar").map(|rel| rel + from) {
             from = at + "OverlayScrollbar".len();
-            let Some(open) = next_non_ws(src.as_bytes(), from) else { continue };
+            let Some(open) = next_non_ws(src.as_bytes(), from) else {
+                continue;
+            };
             if src.as_bytes()[open] != b'{' {
                 continue;
             }
-            let Some(body) = block_body(src, open) else { continue };
+            let Some(body) = block_body(src, open) else {
+                continue;
+            };
             bars += 1;
             if !normalized(body).contains(CARD_TRACK) {
                 offenders.push(format!("{path}: OverlayScrollbar does not set {CARD_TRACK}"));
@@ -234,7 +246,9 @@ fn no_scrollbar_policy_asks_for_the_stock_bar() {
         while let Some(at) = src[from..].find("scrollbar-policy:").map(|rel| rel + from) {
             let value_at = at + "scrollbar-policy:".len();
             from = value_at;
-            let Some(end) = src[value_at..].find(';').map(|rel| rel + value_at) else { continue };
+            let Some(end) = src[value_at..].find(';').map(|rel| rel + value_at) else {
+                continue;
+            };
             policies += 1;
             let value = src[value_at..end].trim();
             if value != OPT_OUT {
@@ -285,11 +299,15 @@ fn no_page_hand_rolls_a_track_lists_scrollbars() {
         let mut from = 0;
         while let Some(at) = src[from..].find("OverlayScrollbar").map(|rel| rel + from) {
             from = at + "OverlayScrollbar".len();
-            let Some(open) = next_non_ws(src.as_bytes(), from) else { continue };
+            let Some(open) = next_non_ws(src.as_bytes(), from) else {
+                continue;
+            };
             if src.as_bytes()[open] != b'{' {
                 continue;
             }
-            let Some(body) = block_body(src, open) else { continue };
+            let Some(body) = block_body(src, open) else {
+                continue;
+            };
             bars += 1;
             if let Some(metric) = TRACK_LIST_V_METRICS.iter().find(|m| body.contains(**m)) {
                 offenders.push(format!("{path}: OverlayScrollbar binds {metric}"));

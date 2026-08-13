@@ -22,12 +22,10 @@ use slint::{ComponentHandle, SharedString, Weak};
 
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
-use crate::ui::shell::notifications::{
-    NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS,
-};
+use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
 use crate::ui::{file_dialog, launcher};
-use crate::{library, services};
 use crate::{AppWindow, Settings};
+use crate::{library, services};
 
 /// Routing key shared with the `Notifications.action` dispatcher.
 const CRASH_TOAST_KIND: &str = "crash-report";
@@ -119,20 +117,18 @@ async fn write_report(path: PathBuf, text: String) -> AppResult<()> {
 /// `logging::install` reached from the same read, so the two can't disagree.
 fn wire_verbose_logging(ui: &AppWindow, state: &AppState) {
     if let Ok(settings) = services::settings::read_settings(&state.paths) {
-        ui.global::<Settings>()
-            .set_verbose_logging(settings.diagnostics.verbose_logging);
+        ui.global::<Settings>().set_verbose_logging(settings.diagnostics.verbose_logging);
     }
 
     let state = state.clone();
-    ui.global::<Settings>()
-        .on_verbose_logging_changed(move |on| {
-            // Live first: a failed disk write must not undo what the user can
-            // already see working.
-            services::logging::set_verbose(on);
-            state.persist_blocking("persist verbose_logging", move |s| {
-                library::settings::set_verbose_logging(s, on)
-            });
+    ui.global::<Settings>().on_verbose_logging_changed(move |on| {
+        // Live first: a failed disk write must not undo what the user can
+        // already see working.
+        services::logging::set_verbose(on);
+        state.persist_blocking("persist verbose_logging", move |s| {
+            library::settings::set_verbose_logging(s, on)
         });
+    });
 }
 
 /// Announce a panic from the previous run, once.

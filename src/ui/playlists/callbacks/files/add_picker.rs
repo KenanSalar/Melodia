@@ -13,10 +13,8 @@ use super::{
 };
 use crate::library;
 use crate::state::AppState;
-use crate::ui::shell::notifications::{
-    NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS,
-};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
+use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
 use crate::{AppWindow, Dialog, PlaylistPickRow as UiPlaylistPickRow, Playlists, Settings};
 
 pub(super) fn wire(
@@ -87,8 +85,7 @@ pub(super) fn wire(
                 .filter(|r| r.selected && !add_pick_disabled(r.contained_count, pick_total))
                 .map(|r| i64::from(r.id))
                 .collect();
-            let track_ids: Vec<i64> =
-                dlg.get_pending_track_ids().iter().map(i64::from).collect();
+            let track_ids: Vec<i64> = dlg.get_pending_track_ids().iter().map(i64::from).collect();
             if pids.is_empty() || track_ids.is_empty() {
                 return;
             }
@@ -102,8 +99,7 @@ pub(super) fn wire(
                 let track_count = track_ids.len();
                 let mut ok: usize = 0;
                 for pid in &pids {
-                    match library::playlists::add_to_playlist(&s, *pid, track_ids.clone()).await
-                    {
+                    match library::playlists::add_to_playlist(&s, *pid, track_ids.clone()).await {
                         Ok(()) => ok += 1,
                         Err(e) => log::warn!("playlists::add_tracks_to_selected({pid}): {e}"),
                     }
@@ -116,8 +112,7 @@ pub(super) fn wire(
                     let detail_id = pu.detail_playlist_id();
                     if pids.contains(&detail_id)
                         && let Err(e) =
-                            playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), detail_id)
-                                .await
+                            playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), detail_id).await
                     {
                         log::warn!("playlists::add_tracks_to_selected refresh detail: {e}");
                     }

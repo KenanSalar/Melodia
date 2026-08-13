@@ -77,7 +77,10 @@ pub fn init() -> Option<UnboundedReceiver<ToastRequest>> {
 /// shutdown.
 pub fn notify(kind: ToastKind, detail: impl Into<String>) {
     if let Some(tx) = SENDER.get() {
-        let _ = tx.send(ToastRequest { kind, detail: detail.into() });
+        let _ = tx.send(ToastRequest {
+            kind,
+            detail: detail.into(),
+        });
     }
 }
 

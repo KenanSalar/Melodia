@@ -11,8 +11,6 @@ pub mod detail_filter;
 pub mod detail_selection;
 pub mod detail_view;
 pub mod equalizer;
-pub mod replaygain;
-pub mod visualizer;
 pub mod favorites;
 pub mod file_dialog;
 pub mod genres;
@@ -35,6 +33,7 @@ pub mod now_playing_artwork;
 pub mod playlists;
 pub mod queue_sheet;
 pub mod recently_played;
+pub mod replaygain;
 pub mod row_match;
 pub mod search;
 pub mod section_state;
@@ -51,6 +50,7 @@ pub mod tracks;
 pub mod util;
 pub mod view_ctx;
 pub mod view_tag;
+pub mod visualizer;
 pub mod window_chrome;
 
 // Source pins for shared components with no Rust module of their own — the

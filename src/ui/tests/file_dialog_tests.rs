@@ -30,8 +30,10 @@ const HELPER: &str = "file_dialog::parented(";
 /// The helper owes `set_parent`: that one call is the whole module, it is the half
 /// no review on this machine can see missing, and nothing else in the tree is
 /// positioned to notice it go. This pin owes the crate name, being the needle.
-const EXEMPT: [(&str, &str); 2] =
-    [("ui/file_dialog.rs", RAW_PARENT), ("ui/tests/file_dialog_tests.rs", RAW_CRATE)];
+const EXEMPT: [(&str, &str); 2] = [
+    ("ui/file_dialog.rs", RAW_PARENT),
+    ("ui/tests/file_dialog_tests.rs", RAW_CRATE),
+];
 
 /// Add Folder, playlist import, playlist export, the tag editor's cover pick and
 /// the diagnostics bundle. A floor rather than an equality so a genuine sixth

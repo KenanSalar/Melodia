@@ -203,10 +203,7 @@ fn style_index(key: &str) -> usize {
 /// picker that has drifted out of step with [`STYLES`], and it answers the same
 /// way an unknown key does.
 fn style_index_from_i32(index: i32) -> usize {
-    usize::try_from(index)
-        .ok()
-        .filter(|&i| i < STYLES.len())
-        .unwrap_or(0)
+    usize::try_from(index).ok().filter(|&i| i < STYLES.len()).unwrap_or(0)
 }
 
 /// Whether an index selects the waveform. The remaining two styles are the same

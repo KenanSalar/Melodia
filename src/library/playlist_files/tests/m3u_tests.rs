@@ -1,7 +1,13 @@
 use super::{parse, serialize};
 use crate::entities::track::PlaylistExportRow;
 
-fn row(path: &str, hash: Option<&str>, title: &str, artist: Option<&str>, ms: i64) -> PlaylistExportRow {
+fn row(
+    path: &str,
+    hash: Option<&str>,
+    title: &str,
+    artist: Option<&str>,
+    ms: i64,
+) -> PlaylistExportRow {
     PlaylistExportRow {
         file_path: path.to_owned(),
         file_hash: hash.map(ToOwned::to_owned),
@@ -130,7 +136,13 @@ fn parse_garbage_extinf_duration_is_none_not_panic() {
 
 #[test]
 fn serialize_neutralizes_newlines_in_title() {
-    let tracks = [row("/m/a.mp3", None, "Line1\nLine2", Some("Art\rist"), 1000)];
+    let tracks = [row(
+        "/m/a.mp3",
+        None,
+        "Line1\nLine2",
+        Some("Art\rist"),
+        1000,
+    )];
     let text = serialize("Na\nme", &tracks);
     // The #PLAYLIST and #EXTINF lines must each stay single-line.
     assert!(text.contains("#PLAYLIST:Na me\n"));

@@ -1,7 +1,7 @@
-#[allow(clippy::wildcard_imports)]
-use crate::database::queries::tests::helpers::*;
 use crate::database::DbPool;
 use crate::database::queries;
+#[allow(clippy::wildcard_imports)]
+use crate::database::queries::tests::helpers::*;
 use crate::error::AppError;
 
 // === Pure unit tests for to_natural_sort_key ===
@@ -28,18 +28,12 @@ fn sort_key_empty() {
 
 #[test]
 fn sort_key_mixed_alpha_numeric() {
-    assert_eq!(
-        queries::scan::to_natural_sort_key("a1b2c3"),
-        "a00000001b00000002c00000003"
-    );
+    assert_eq!(queries::scan::to_natural_sort_key("a1b2c3"), "a00000001b00000002c00000003");
 }
 
 #[test]
 fn sort_key_large_number_not_truncated() {
-    assert_eq!(
-        queries::scan::to_natural_sort_key("track 123456789"),
-        "track 123456789"
-    );
+    assert_eq!(queries::scan::to_natural_sort_key("track 123456789"), "track 123456789");
 }
 
 #[test]
@@ -252,9 +246,11 @@ async fn update_track_artwork_if_missing_preserves_existing() -> Result<(), AppE
     insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
 
     // Set artwork first
-    sqlx::query("UPDATE tracks SET artwork_path = '/art/original.jpg' WHERE file_path = '/music/song.mp3'")
-        .execute(db.write())
-        .await?;
+    sqlx::query(
+        "UPDATE tracks SET artwork_path = '/art/original.jpg' WHERE file_path = '/music/song.mp3'",
+    )
+    .execute(db.write())
+    .await?;
 
     // Try to overwrite — should not change
     let mut tx = db.write().begin().await?;
@@ -277,9 +273,11 @@ async fn update_album_artwork_from_tracks_fills_missing() -> Result<(), AppError
     insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
 
     // Set artwork on track
-    sqlx::query("UPDATE tracks SET artwork_path = '/art/cover.jpg' WHERE file_path = '/music/song.mp3'")
-        .execute(db.write())
-        .await?;
+    sqlx::query(
+        "UPDATE tracks SET artwork_path = '/art/cover.jpg' WHERE file_path = '/music/song.mp3'",
+    )
+    .execute(db.write())
+    .await?;
 
     let mut tx = db.write().begin().await?;
     queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
@@ -308,9 +306,7 @@ async fn delete_track_by_path_returns_true_when_exists() -> Result<(), AppError>
     assert!(deleted);
 
     // Verify track is gone
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks")
-        .fetch_one(db.read())
-        .await?;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     assert_eq!(count, 0);
     Ok(())
 }
@@ -340,9 +336,7 @@ async fn delete_tracks_batch_deletes_multiple() -> Result<(), AppError> {
 
     assert_eq!(deleted, 2);
 
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks")
-        .fetch_one(db.read())
-        .await?;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     assert_eq!(count, 1); // only track2 remains
     Ok(())
 }
@@ -382,8 +376,7 @@ async fn find_folder_for_path_matches_nested() -> Result<(), AppError> {
 
     let mut tx = db.write().begin().await?;
     // Should match the longer prefix "/music/rock"
-    let folder_id =
-        queries::scan::find_folder_for_path(&mut tx, "/music/rock/song.mp3").await?;
+    let folder_id = queries::scan::find_folder_for_path(&mut tx, "/music/rock/song.mp3").await?;
     assert_eq!(folder_id, Some(rock_id));
     Ok(())
 }

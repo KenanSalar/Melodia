@@ -69,10 +69,7 @@ fn play_to(d: &mut DetectorState, target_ms: u64, duration_ms: u64, now: i64) {
 }
 
 fn now_playing_count(effects: &[Effect]) -> usize {
-    effects
-        .iter()
-        .filter(|e| matches!(e, Effect::NowPlaying { .. }))
-        .count()
+    effects.iter().filter(|e| matches!(e, Effect::NowPlaying { .. })).count()
 }
 
 #[test]
@@ -193,15 +190,16 @@ fn a_restart_before_threshold_only_now_plays() {
 #[test]
 fn republishes_of_the_same_track_now_play_only_once() {
     let mut d = DetectorState::new();
-    let mut plays = now_playing_count(&d.on_view_model(
-        Some(&vm("playing", Some(summary(1, 180_000)))),
-        START,
-    ));
+    let mut plays =
+        now_playing_count(&d.on_view_model(Some(&vm("playing", Some(summary(1, 180_000)))), START));
     // A pause, a volume-change republish, a loading blip, and advancing ticks —
     // all the same id, none should re-fire now-playing.
-    plays += now_playing_count(&d.on_view_model(Some(&vm("paused", Some(summary(1, 180_000)))), START));
-    plays += now_playing_count(&d.on_view_model(Some(&vm("playing", Some(summary(1, 180_000)))), START));
-    plays += now_playing_count(&d.on_view_model(Some(&vm("loading", Some(summary(1, 180_000)))), START));
+    plays +=
+        now_playing_count(&d.on_view_model(Some(&vm("paused", Some(summary(1, 180_000)))), START));
+    plays +=
+        now_playing_count(&d.on_view_model(Some(&vm("playing", Some(summary(1, 180_000)))), START));
+    plays +=
+        now_playing_count(&d.on_view_model(Some(&vm("loading", Some(summary(1, 180_000)))), START));
     plays += now_playing_count(&d.on_position(&tick(1_000, 180_000), START));
     plays += now_playing_count(&d.on_position(&tick(2_000, 180_000), START));
     assert_eq!(plays, 1);

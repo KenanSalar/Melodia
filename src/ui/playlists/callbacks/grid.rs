@@ -52,9 +52,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let s_fetch = s.clone();
             let pu_fetch = pu.clone();
             let weak_fetch = weak.clone();
-            spawn_logged!(s_fetch, "playlists::open_playlist",
+            spawn_logged!(
+                s_fetch,
+                "playlists::open_playlist",
                 playlists_ui_mod::open_playlist(
-                    &s_fetch, &pu_fetch, weak_fetch, id, crate::NavEnterFrom::Right));
+                    &s_fetch,
+                    &pu_fetch,
+                    weak_fetch,
+                    id,
+                    crate::NavEnterFrom::Right
+                )
+            );
 
             let pu_release = pu.clone();
             s.runtime.spawn_blocking(move || pu_release.release_grid_covers());

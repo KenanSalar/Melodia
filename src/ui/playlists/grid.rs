@@ -6,9 +6,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
-use super::state::{
-    DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache,
-};
+use super::state::{DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{PlaylistsUi, to_slint_playlist_row};
 use crate::entities::smart_criteria::SmartCriteria;
 use crate::error::AppResult;
@@ -110,18 +108,11 @@ async fn fetch_grid_inner(
     // independent — so `join_all` completion order doesn't matter.
     let parsed: Vec<(usize, SmartCriteria)> = to_count
         .iter()
-        .map(|&i| {
-            (
-                i,
-                SmartCriteria::from_json_opt(playlists[i].smart_criteria.as_deref()),
-            )
-        })
+        .map(|&i| (i, SmartCriteria::from_json_opt(playlists[i].smart_criteria.as_deref())))
         .collect();
-    let counts = futures_util::future::join_all(
-        parsed
-            .iter()
-            .map(|(i, criteria)| async move { (*i, library::smart_playlists::count(state, criteria).await) }),
-    )
+    let counts = futures_util::future::join_all(parsed.iter().map(|(i, criteria)| async move {
+        (*i, library::smart_playlists::count(state, criteria).await)
+    }))
     .await;
     for (i, result) in counts {
         match result {
@@ -250,9 +241,8 @@ fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiPlay
 /// * `"updated"` (default) — `updated_at` RFC3339 string (lex = chrono).
 fn sort_playlist_indices(indices: &mut [usize], data: &GridData, field: &str, dir: &str) {
     match field {
-        "track_count" => indices.sort_by_cached_key(|&i| {
-            (data.playlists[i].track_count, data.keys[i].name_lc.clone())
-        }),
+        "track_count" => indices
+            .sort_by_cached_key(|&i| (data.playlists[i].track_count, data.keys[i].name_lc.clone())),
         "name" => indices.sort_by_cached_key(|&i| data.keys[i].name_lc.clone()),
         // "updated" and anything unrecognised fall through to the default
         // (most-recently-updated first).

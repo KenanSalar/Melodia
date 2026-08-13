@@ -230,10 +230,7 @@ impl Needle {
         if self.ascii && haystack.is_ascii() {
             let n = self.text.as_bytes();
             return haystack.len() == n.len()
-                && haystack
-                    .bytes()
-                    .zip(n)
-                    .all(|(a, b)| fold_ascii_byte(a) == *b);
+                && haystack.bytes().zip(n).all(|(a, b)| fold_ascii_byte(a) == *b);
         }
         fold(haystack) == self.text
     }
@@ -247,10 +244,7 @@ impl Needle {
         if self.ascii && haystack.is_ascii() {
             let n = self.text.as_bytes();
             return haystack.len() >= n.len()
-                && haystack
-                    .bytes()
-                    .zip(n)
-                    .all(|(a, b)| fold_ascii_byte(a) == *b);
+                && haystack.bytes().zip(n).all(|(a, b)| fold_ascii_byte(a) == *b);
         }
         fold(haystack).starts_with(&self.text)
     }

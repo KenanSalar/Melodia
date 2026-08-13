@@ -116,9 +116,7 @@ impl TracksUi {
     pub fn current_ids_filtered(&self, filter: &str) -> Vec<i64> {
         // One lock, one `Arc::clone`, then walk off it — a concurrent fetch
         // can swap the cache underneath but not tear the set we hold.
-        self.cache
-            .snapshot()
-            .ids_filtered(&crate::ui::row_match::fold_needle(filter))
+        self.cache.snapshot().ids_filtered(&crate::ui::row_match::fold_needle(filter))
     }
 
     /// Surgical mutation of `is_favorite` on the cached row. Combined with
@@ -188,8 +186,7 @@ pub fn prepare_track_list_row(r: &RsTrackListRow) -> PreparedTrackRow {
         genre: SharedString::from(r.genre.as_deref().unwrap_or("")),
         year: r.year.unwrap_or(0),
         track_number: r.track_number.unwrap_or(0),
-        duration_ms: i32::try_from(r.duration_ms.clamp(0, i64::from(i32::MAX)))
-            .unwrap_or(i32::MAX),
+        duration_ms: i32::try_from(r.duration_ms.clamp(0, i64::from(i32::MAX))).unwrap_or(i32::MAX),
         is_favorite: r.is_favorite,
         rating: r.rating,
         artwork_path: SharedString::from(r.artwork_path.as_deref().unwrap_or("")),

@@ -17,7 +17,7 @@ pub async fn upsert_artist(
     let id = sqlx::query_scalar::<_, i64>(
         "INSERT INTO artists (name) VALUES (?)
          ON CONFLICT(name) DO UPDATE SET name = excluded.name
-         RETURNING id"
+         RETURNING id",
     )
     .bind(name)
     .fetch_one(&mut **tx)
@@ -45,7 +45,7 @@ pub async fn upsert_album(
          ON CONFLICT(name, artist_id) DO UPDATE SET
              name = excluded.name,
              year = COALESCE(excluded.year, albums.year)
-         RETURNING id"
+         RETURNING id",
     )
     .bind(name)
     .bind(artist_id)
@@ -67,7 +67,7 @@ pub async fn upsert_genre(
     let id = sqlx::query_scalar::<_, i64>(
         "INSERT INTO genres (name) VALUES (?)
          ON CONFLICT(name) DO UPDATE SET name = excluded.name
-         RETURNING id"
+         RETURNING id",
     )
     .bind(name)
     .fetch_one(&mut **tx)

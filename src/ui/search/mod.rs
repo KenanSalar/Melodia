@@ -62,9 +62,7 @@ use crate::{
     AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
 };
 
-use state::{
-    ALBUM_STRIP_THUMB_SIZE, ARTIST_STRIP_THUMB_SIZE, STRIP_THUMB_CAP, SearchUiState,
-};
+use state::{ALBUM_STRIP_THUMB_SIZE, ARTIST_STRIP_THUMB_SIZE, STRIP_THUMB_CAP, SearchUiState};
 
 pub(super) use selection::{clear_selection, handle_select_row, restamp_rows};
 
@@ -206,15 +204,13 @@ impl SearchUi {
     /// Lazy cover lookup for the Albums-strip cards. Routed via
     /// `Search.request-album-strip-cover`.
     pub fn album_strip_cover(&self, artwork_path: &str) -> Image {
-        self.album_strip_thumbs
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+        self.album_strip_thumbs.get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 
     /// Lazy cover lookup for the Artists-strip cards. Routed via
     /// `Search.request-artist-strip-cover`.
     pub fn artist_strip_cover(&self, artwork_path: &str) -> Image {
-        self.artist_strip_thumbs
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+        self.artist_strip_thumbs.get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 }
 

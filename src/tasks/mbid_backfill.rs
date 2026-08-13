@@ -106,11 +106,7 @@ async fn run_sweep(
         Ok(outcome) => {
             // Always log the outcome — a zero-match sweep used to be silent, which
             // read as "nothing happened / stuck".
-            log::info!(
-                "MBID backfill: looked up {}, tagged {}",
-                outcome.looked_up,
-                outcome.tagged
-            );
+            log::info!("MBID backfill: looked up {}, tagged {}", outcome.looked_up, outcome.tagged);
             // Anything looked up grew the attempted set (only not-yet-attempted
             // rows are queried) — persist so the next launch skips them.
             if outcome.looked_up > 0 {
@@ -136,9 +132,10 @@ fn summarize(outcome: &SweepOutcome) -> String {
         SweepOutcome { looked_up: 0, .. } => {
             "All eligible tracks already have a MusicBrainz ID".to_owned()
         }
-        SweepOutcome { tagged: 0, looked_up } => format!(
-            "No matches — {looked_up} track(s) had tags MusicBrainz couldn't identify"
-        ),
+        SweepOutcome {
+            tagged: 0,
+            looked_up,
+        } => format!("No matches — {looked_up} track(s) had tags MusicBrainz couldn't identify"),
         SweepOutcome { tagged, looked_up } => {
             format!("Tagged {tagged} of {looked_up} track(s)")
         }
@@ -218,22 +215,14 @@ async fn backfill(
                 }
                 looked_up += chunk.len();
                 idx = end;
-                if shutdown
-                    .run_until_cancelled(tokio::time::sleep(BATCH_PAUSE))
-                    .await
-                    .is_none()
-                {
+                if shutdown.run_until_cancelled(tokio::time::sleep(BATCH_PAUSE)).await.is_none() {
                     break;
                 }
             }
             Err(ListenBrainzError::RateLimited { reset_in_secs }) => {
                 let backoff = listenbrainz::rate_limit_backoff(reset_in_secs);
                 log::info!("MBID backfill rate-limited; waiting {}s", backoff.as_secs());
-                if shutdown
-                    .run_until_cancelled(tokio::time::sleep(backoff))
-                    .await
-                    .is_none()
-                {
+                if shutdown.run_until_cancelled(tokio::time::sleep(backoff)).await.is_none() {
                     break;
                 }
                 // Retry the same chunk (idx unchanged).

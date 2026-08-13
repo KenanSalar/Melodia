@@ -8,9 +8,7 @@ fn chips(texts: &[&str]) -> Vec<SharedString> {
 }
 
 fn shapes(rows: &[Vec<SharedString>]) -> Vec<Vec<&str>> {
-    rows.iter()
-        .map(|row| row.iter().map(SharedString::as_str).collect())
-        .collect()
+    rows.iter().map(|row| row.iter().map(SharedString::as_str).collect()).collect()
 }
 
 #[test]

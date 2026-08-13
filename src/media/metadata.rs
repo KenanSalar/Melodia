@@ -4,8 +4,8 @@ use std::time::UNIX_EPOCH;
 use lofty::file::TaggedFileExt;
 use lofty::prelude::*;
 
-use crate::error::AppError;
 use super::artwork;
+use crate::error::AppError;
 
 #[derive(Debug, Clone)]
 pub struct ExtractedMetadata {
@@ -43,10 +43,12 @@ pub struct ExtractedMetadata {
 /// Compute a full BLAKE3 hash of a file (64-char hex string).
 /// Uses `update_reader` for optimized streaming I/O with SIMD-friendly buffering.
 pub fn compute_file_hash(path: &Path) -> Result<String, AppError> {
-    let mut file = std::fs::File::open(path)
-        .map_err(|e| AppError::metadata(format!("Failed to open {} for hashing", path.display()), e))?;
+    let mut file = std::fs::File::open(path).map_err(|e| {
+        AppError::metadata(format!("Failed to open {} for hashing", path.display()), e)
+    })?;
     let mut hasher = blake3::Hasher::new();
-    hasher.update_reader(&mut file)
+    hasher
+        .update_reader(&mut file)
         .map_err(|e| AppError::metadata(format!("Failed to hash {}", path.display()), e))?;
     Ok(hasher.finalize().to_hex().to_string())
 }
@@ -64,10 +66,7 @@ pub fn date_modified_from_metadata(meta: &std::fs::Metadata) -> Option<String> {
         .ok()
         .and_then(|mtime| mtime.duration_since(UNIX_EPOCH).ok())
         .and_then(|dur| {
-            chrono::DateTime::from_timestamp(
-                i64::try_from(dur.as_secs()).ok()?,
-                dur.subsec_nanos(),
-            )
+            chrono::DateTime::from_timestamp(i64::try_from(dur.as_secs()).ok()?, dur.subsec_nanos())
         })
         .map(|dt| dt.to_rfc3339())
 }
@@ -75,10 +74,7 @@ pub fn date_modified_from_metadata(meta: &std::fs::Metadata) -> Option<String> {
 /// Extract the file's modification time as an RFC 3339 string.
 /// Returns `None` if the file metadata is unavailable or the timestamp is out of range.
 pub fn extract_date_modified(path: &Path) -> Option<String> {
-    std::fs::metadata(path)
-        .ok()
-        .as_ref()
-        .and_then(date_modified_from_metadata)
+    std::fs::metadata(path).ok().as_ref().and_then(date_modified_from_metadata)
 }
 
 /// Parse a `ReplayGain` gain string like "-6.50 dB" to f64. Rejects non-finite
@@ -104,17 +100,10 @@ pub fn extract_metadata(
     // Only allocate the fallback name if a tag title is actually missing — for
     // a tagged music library this avoids ~1 String allocation per scanned file
     // on the hot scan path.
-    let file_name = || {
-        path.file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("Unknown")
-            .to_owned()
-    };
+    let file_name = || path.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown").to_owned();
 
     let fs_meta = std::fs::metadata(path);
-    let file_size = fs_meta
-        .as_ref()
-        .map_or(0, |m| i64::try_from(m.len()).unwrap_or(i64::MAX));
+    let file_size = fs_meta.as_ref().map_or(0, |m| i64::try_from(m.len()).unwrap_or(i64::MAX));
 
     // Derived from the `Metadata` already in hand — `extract_date_modified` would
     // `stat` the file a second time. This is exactly what
@@ -131,24 +120,24 @@ pub fn extract_metadata(
             .map_err(|e| AppError::metadata(format!("Failed to open {}", path.display()), e))?
             .options(parse_opts)
             .read()
-            .map_err(|e| AppError::metadata(format!("Failed to read tags from {}", path.display()), e))?
+            .map_err(|e| {
+                AppError::metadata(format!("Failed to read tags from {}", path.display()), e)
+            })?
     } else {
-        lofty::probe::read_from_path(path)
-            .map_err(|e| AppError::metadata(format!("Failed to read tags from {}", path.display()), e))?
+        lofty::probe::read_from_path(path).map_err(|e| {
+            AppError::metadata(format!("Failed to read tags from {}", path.display()), e)
+        })?
     };
 
     let properties = tagged_file.properties();
-    let duration_ms =
-        i64::try_from(properties.duration().as_millis()).unwrap_or(i64::MAX);
+    let duration_ms = i64::try_from(properties.duration().as_millis()).unwrap_or(i64::MAX);
 
     let bitrate = {
         let br = properties.overall_bitrate().or(properties.audio_bitrate());
         br.map(|b| i32::try_from(b).unwrap_or(i32::MAX))
     };
     let channels = properties.channels().map(i32::from);
-    let sample_rate = properties
-        .sample_rate()
-        .map(|s| i32::try_from(s).unwrap_or(i32::MAX));
+    let sample_rate = properties.sample_rate().map(|s| i32::try_from(s).unwrap_or(i32::MAX));
     let bit_depth = properties.bit_depth().map(i32::from);
 
     // Determine codec from file type
@@ -169,52 +158,81 @@ pub fn extract_metadata(
     // they bypass the `is_empty()` guard in `upsert_artist`/`upsert_album`/
     // `upsert_genre` and create ghost entity rows that pollute the Artists
     // view and trigger Deezer image-fetch warnings on startup.
-    let (title, artist, album_artist, album, genre, track_number, disc_number, year, composer, comment) =
-        if let Some(tag) = tag {
-            (
-                // tag.title()/artist()/album()/genre()/comment() return Cow<str>; use to_string()
-                // (Cow::to_owned returns Cow). get_string() returns &str → to_owned().
-                tag.title().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()).unwrap_or_else(file_name),
-                tag.artist().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-                tag.get_string(ItemKey::AlbumArtist).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-                tag.album().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-                tag.genre().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-                tag.track().map(|t| i32::try_from(t).unwrap_or(i32::MAX)),
-                tag.disk().map(|d| i32::try_from(d).unwrap_or(i32::MAX)),
-                tag.date().map(|ts| i32::from(ts.year)),
-                tag.get_string(ItemKey::Composer).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-                tag.comment().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-            )
-        } else {
-            (file_name(), None, None, None, None, None, None, None, None, None)
-        };
+    let (
+        title,
+        artist,
+        album_artist,
+        album,
+        genre,
+        track_number,
+        disc_number,
+        year,
+        composer,
+        comment,
+    ) = if let Some(tag) = tag {
+        (
+            // tag.title()/artist()/album()/genre()/comment() return Cow<str>; use to_string()
+            // (Cow::to_owned returns Cow). get_string() returns &str → to_owned().
+            tag.title()
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(file_name),
+            tag.artist().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
+            tag.get_string(ItemKey::AlbumArtist)
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty()),
+            tag.album().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
+            tag.genre().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
+            tag.track().map(|t| i32::try_from(t).unwrap_or(i32::MAX)),
+            tag.disk().map(|d| i32::try_from(d).unwrap_or(i32::MAX)),
+            tag.date().map(|ts| i32::from(ts.year)),
+            tag.get_string(ItemKey::Composer)
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty()),
+            tag.comment().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
+        )
+    } else {
+        (file_name(), None, None, None, None, None, None, None, None, None)
+    };
 
     // Extract extended metadata from tags
-    let (bpm, musicbrainz_track_id, musicbrainz_release_id, label, original_year,
-         replaygain_track_gain, replaygain_track_peak, replaygain_album_gain, replaygain_album_peak) =
-        if let Some(tag) = tag {
-            (
-                // `ItemKey::Bpm` has NO ID3v2 mapping — MP3 / WAV / AIFF keep BPM in `TBPM`,
-                // which lofty exposes as `IntegerBpm`. Reading only `Bpm` therefore misses it
-                // on every ID3v2 file, including the ones `tag_writer::apply_bpm` writes.
-                // Prefer the decimal key (Vorbis `BPM`, MP4 freeform); fall back to the integer.
-                tag.get_string(ItemKey::Bpm)
-                    .or_else(|| tag.get_string(ItemKey::IntegerBpm))
-                    .and_then(|s| s.trim().parse::<f64>().ok())
-                    .filter(|v| v.is_finite()),
-                tag.get_string(ItemKey::MusicBrainzRecordingId).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-                tag.get_string(ItemKey::MusicBrainzReleaseId).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-                tag.get_string(ItemKey::Label).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
-                tag.get_string(ItemKey::OriginalReleaseDate)
-                    .and_then(|s| s.get(..4).and_then(|y| y.parse::<i32>().ok())),
-                tag.get_string(ItemKey::ReplayGainTrackGain).and_then(parse_replaygain_gain),
-                tag.get_string(ItemKey::ReplayGainTrackPeak).and_then(parse_replaygain_peak),
-                tag.get_string(ItemKey::ReplayGainAlbumGain).and_then(parse_replaygain_gain),
-                tag.get_string(ItemKey::ReplayGainAlbumPeak).and_then(parse_replaygain_peak),
-            )
-        } else {
-            (None, None, None, None, None, None, None, None, None)
-        };
+    let (
+        bpm,
+        musicbrainz_track_id,
+        musicbrainz_release_id,
+        label,
+        original_year,
+        replaygain_track_gain,
+        replaygain_track_peak,
+        replaygain_album_gain,
+        replaygain_album_peak,
+    ) = if let Some(tag) = tag {
+        (
+            // `ItemKey::Bpm` has NO ID3v2 mapping — MP3 / WAV / AIFF keep BPM in `TBPM`,
+            // which lofty exposes as `IntegerBpm`. Reading only `Bpm` therefore misses it
+            // on every ID3v2 file, including the ones `tag_writer::apply_bpm` writes.
+            // Prefer the decimal key (Vorbis `BPM`, MP4 freeform); fall back to the integer.
+            tag.get_string(ItemKey::Bpm)
+                .or_else(|| tag.get_string(ItemKey::IntegerBpm))
+                .and_then(|s| s.trim().parse::<f64>().ok())
+                .filter(|v| v.is_finite()),
+            tag.get_string(ItemKey::MusicBrainzRecordingId)
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty()),
+            tag.get_string(ItemKey::MusicBrainzReleaseId)
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty()),
+            tag.get_string(ItemKey::Label).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
+            tag.get_string(ItemKey::OriginalReleaseDate)
+                .and_then(|s| s.get(..4).and_then(|y| y.parse::<i32>().ok())),
+            tag.get_string(ItemKey::ReplayGainTrackGain).and_then(parse_replaygain_gain),
+            tag.get_string(ItemKey::ReplayGainTrackPeak).and_then(parse_replaygain_peak),
+            tag.get_string(ItemKey::ReplayGainAlbumGain).and_then(parse_replaygain_gain),
+            tag.get_string(ItemKey::ReplayGainAlbumPeak).and_then(parse_replaygain_peak),
+        )
+    } else {
+        (None, None, None, None, None, None, None, None, None)
+    };
 
     Ok(ExtractedMetadata {
         title,

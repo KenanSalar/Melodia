@@ -59,8 +59,9 @@ async fn fetch_playlist_detail(
         // live from the stored criteria, and derive the header stats from the
         // resolved set (the junction-maintained `track_count`/`total_duration_ms`
         // stay 0 for a virtual playlist).
-        let criteria =
-            crate::entities::smart_criteria::SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
+        let criteria = crate::entities::smart_criteria::SmartCriteria::from_json_opt(
+            detail.smart_criteria.as_deref(),
+        );
         let rows = library::smart_playlists::evaluate(state, &criteria).await?;
         detail.track_count = len_as_i32(rows.len());
         detail.total_duration_ms = rows.iter().map(|t| t.duration_ms).sum();
@@ -129,8 +130,7 @@ where
     // (the playlist's own curated order); a persisted non-`position` sort
     // is restored across opens and restarts.
     let position_order: Vec<i64> = tracks.iter().map(|t| t.id).collect();
-    let (sort_field, sort_dir) =
-        resolve_view_sort(state, view_id::PLAYLIST_DETAIL, POSITION_FIELD);
+    let (sort_field, sort_dir) = resolve_view_sort(state, view_id::PLAYLIST_DETAIL, POSITION_FIELD);
     sort_playlist_tracks(&mut tracks, &position_order, &sort_field, &sort_dir);
 
     let pair = decode_detail_pair(
@@ -167,10 +167,8 @@ where
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<PlaylistDetail>();
-        let ui_tracks: Vec<UiTrackListRow> = prepared
-            .into_iter()
-            .map(crate::ui::tracks::finish_track_list_row)
-            .collect();
+        let ui_tracks: Vec<UiTrackListRow> =
+            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
         let header = to_slint_playlist_row(&detail);
         g.set_playlist(header);
         replace_tracks_model(&g, ui_tracks);
@@ -281,10 +279,7 @@ pub async fn refresh_detail(
                 .as_any()
                 .downcast_ref::<VecModel<UiTrackListRow>>()
                 .map(|vm| {
-                    (0..vm.row_count())
-                        .filter_map(|i| vm.row_data(i))
-                        .map(|r| r.id)
-                        .collect()
+                    (0..vm.row_count()).filter_map(|i| vm.row_data(i)).map(|r| r.id).collect()
                 })
                 .unwrap_or_default()
         };
@@ -305,10 +300,8 @@ pub async fn refresh_detail(
             *playlists_ui.detail.tracks.lock() = tracks;
             *playlists_ui.detail.position_order.lock() = position_order_snapshot;
         } else {
-            let ui_tracks: Vec<UiTrackListRow> = tracks
-                .iter()
-                .map(crate::ui::tracks::to_slint_track_list_row)
-                .collect();
+            let ui_tracks: Vec<UiTrackListRow> =
+                tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
             replace_tracks_model(&g, ui_tracks);
             // Abort any in-flight drag-reorder: the row indices it was
             // computed against no longer describe the playlist, and the
@@ -505,14 +498,9 @@ pub fn seed_detail_from_settings(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
 ) {
-    let Some(id) = library::settings::get_view_state(state)
-        .ok()
-        .and_then(|s| {
-            s.last_detail_ids
-                .get(crate::ui::track_list_view::view_id::PLAYLIST_DETAIL)
-                .copied()
-        })
-    else {
+    let Some(id) = library::settings::get_view_state(state).ok().and_then(|s| {
+        s.last_detail_ids.get(crate::ui::track_list_view::view_id::PLAYLIST_DETAIL).copied()
+    }) else {
         return;
     };
     let s = state.clone();
@@ -543,11 +531,8 @@ fn sort_playlist_tracks(
     dir: &str,
 ) {
     if field == POSITION_FIELD {
-        let index_of: HashMap<i64, usize> = position_order
-            .iter()
-            .enumerate()
-            .map(|(i, &id)| (id, i))
-            .collect();
+        let index_of: HashMap<i64, usize> =
+            position_order.iter().enumerate().map(|(i, &id)| (id, i)).collect();
         rows.sort_by_cached_key(|r| index_of.get(&r.id).copied().unwrap_or(usize::MAX));
         if dir == "desc" {
             rows.reverse();

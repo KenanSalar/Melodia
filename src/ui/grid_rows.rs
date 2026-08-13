@@ -61,11 +61,7 @@ where
 ///
 /// Cannot move off the UI thread, which is why dropping the clone is the whole
 /// available win: the per-row model is an `Rc<VecModel<_>>` and `Rc` is `!Send`.
-pub fn chunk_built_rows<C, R>(
-    cards: Vec<C>,
-    columns: i32,
-    row: impl Fn(ModelRc<C>) -> R,
-) -> Vec<R>
+pub fn chunk_built_rows<C, R>(cards: Vec<C>, columns: i32, row: impl Fn(ModelRc<C>) -> R) -> Vec<R>
 where
     C: Clone + 'static,
 {

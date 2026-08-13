@@ -77,14 +77,8 @@ fn push_beyond_cap_drops_oldest() {
     queue.push(sample_item("newest", 0));
     assert_eq!(queue.items.len(), MAX_QUEUED);
     // The oldest entry (t0) was evicted; the newest sits at the back.
-    assert_eq!(
-        queue.items.front().map(|it| it.track.track.as_str()),
-        Some("t1")
-    );
-    assert_eq!(
-        queue.items.back().map(|it| it.track.track.as_str()),
-        Some("newest")
-    );
+    assert_eq!(queue.items.front().map(|it| it.track.track.as_str()), Some("t1"));
+    assert_eq!(queue.items.back().map(|it| it.track.track.as_str()), Some("newest"));
 }
 
 #[test]
@@ -102,11 +96,7 @@ fn retain_pending_drops_only_fully_submitted() {
     };
     queue.retain_pending();
 
-    let titles: Vec<&str> = queue
-        .items
-        .iter()
-        .map(|it| it.track.track.as_str())
-        .collect();
+    let titles: Vec<&str> = queue.items.iter().map(|it| it.track.track.as_str()).collect();
     assert_eq!(titles, vec!["one-flag", "pending"]);
 }
 
@@ -140,14 +130,8 @@ fn push_love_beyond_cap_drops_oldest() {
 
     queue.push_love(sample_love("newest", true));
     assert_eq!(queue.loves.len(), MAX_QUEUED);
-    assert_eq!(
-        queue.loves.front().map(|it| it.track.track.as_str()),
-        Some("t1")
-    );
-    assert_eq!(
-        queue.loves.back().map(|it| it.track.track.as_str()),
-        Some("newest")
-    );
+    assert_eq!(queue.loves.front().map(|it| it.track.track.as_str()), Some("t1"));
+    assert_eq!(queue.loves.back().map(|it| it.track.track.as_str()), Some("newest"));
 }
 
 #[test]
@@ -163,11 +147,7 @@ fn retain_pending_drops_fully_submitted_loves() {
     };
     queue.retain_pending();
 
-    let titles: Vec<&str> = queue
-        .loves
-        .iter()
-        .map(|it| it.track.track.as_str())
-        .collect();
+    let titles: Vec<&str> = queue.loves.iter().map(|it| it.track.track.as_str()).collect();
     assert_eq!(titles, vec!["pending"]);
 }
 

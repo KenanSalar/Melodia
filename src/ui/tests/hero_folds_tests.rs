@@ -4,9 +4,7 @@
 //! here builds a chip or touches the published record, so the two files split
 //! along the same seam their sources do.
 
-use super::{
-    HeroFold, MostPlayedTotals, dominant_genre, fold_most_played, fold_tracks, year_span,
-};
+use super::{HeroFold, MostPlayedTotals, dominant_genre, fold_most_played, fold_tracks, year_span};
 use crate::entities::album::AlbumStats;
 use crate::entities::track::{MostPlayedFavorite, TrackListRow};
 
@@ -79,7 +77,13 @@ fn the_fold_counts_distinct_ids_and_skips_the_untagged() {
         track(Some(2), Some(11), None),
         track(None, None, None),
     ];
-    assert_eq!(fold_tracks(&rows), HeroFold { artists: 2, albums: 2 });
+    assert_eq!(
+        fold_tracks(&rows),
+        HeroFold {
+            artists: 2,
+            albums: 2
+        }
+    );
     assert_eq!(fold_tracks(&[]), HeroFold::default());
 }
 
@@ -127,7 +131,11 @@ fn a_genre_is_named_only_when_it_actually_dominates() {
 #[test]
 fn the_year_span_ignores_albums_with_no_year() {
     assert_eq!(
-        year_span(&[dated_album(Some(1963)), dated_album(None), dated_album(Some(1957))]),
+        year_span(&[
+            dated_album(Some(1963)),
+            dated_album(None),
+            dated_album(Some(1957))
+        ]),
         Some((1957, 1963))
     );
     assert_eq!(year_span(&[dated_album(Some(0)), dated_album(None)]), None);

@@ -38,9 +38,8 @@ pub fn handle_select_row(
         if row_count == 0 {
             (vec![id], idx)
         } else {
-            let visible_ids: Vec<i32> = (0..row_count)
-                .filter_map(|i| rows.row_data(i).map(|r| r.id))
-                .collect();
+            let visible_ids: Vec<i32> =
+                (0..row_count).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect();
             let last = i32::try_from(visible_ids.len().saturating_sub(1)).unwrap_or(i32::MAX);
             let lo = usize::try_from(cur_anchor.min(idx).clamp(0, last)).unwrap_or(0);
             let hi = usize::try_from(cur_anchor.max(idx).clamp(0, last)).unwrap_or(0);
@@ -85,7 +84,9 @@ fn apply_per_row_selection(g: &Search, desired: &HashSet<i32>) {
         return;
     };
     for i in 0..vm.row_count() {
-        let Some(mut r) = vm.row_data(i) else { continue };
+        let Some(mut r) = vm.row_data(i) else {
+            continue;
+        };
         let now = desired.contains(&r.id);
         if r.selected != now {
             r.selected = now;

@@ -341,11 +341,7 @@ pub const LIMIT_ORDERS: &[LimitOrder] = &[
 /// absent. Used by the `as_index` helpers over the editor-order arrays, where
 /// the value is always present (every enum variant is listed).
 fn index_of<T: PartialEq>(slice: &[T], value: &T) -> i32 {
-    slice
-        .iter()
-        .position(|v| v == value)
-        .and_then(|i| i32::try_from(i).ok())
-        .unwrap_or(0)
+    slice.iter().position(|v| v == value).and_then(|i| i32::try_from(i).ok()).unwrap_or(0)
 }
 
 /// The element at an `i32` dropdown index, if in range.

@@ -14,9 +14,9 @@ use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowLevel;
 
+use crate::AppWindow;
 use crate::services::always_on_top::AlwaysOnTopMethod;
 use crate::state::AppState;
-use crate::AppWindow;
 
 pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool>) {
     let chrome = app.global::<crate::WindowChrome>();
@@ -129,7 +129,11 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             // routes to the `KWin` / GNOME backend (each is wrapped in
             // `spawn_blocking` internally).
             if is_native {
-                let level = if new { WindowLevel::AlwaysOnTop } else { WindowLevel::Normal };
+                let level = if new {
+                    WindowLevel::AlwaysOnTop
+                } else {
+                    WindowLevel::Normal
+                };
                 let _ = ui.window().with_winit_window(|w| w.set_window_level(level));
             }
 
@@ -144,7 +148,11 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
                         // roll the OS-level state back too so it stays in
                         // sync with the Slint property we just reverted.
                         if is_native {
-                            let revert = if new { WindowLevel::Normal } else { WindowLevel::AlwaysOnTop };
+                            let revert = if new {
+                                WindowLevel::Normal
+                            } else {
+                                WindowLevel::AlwaysOnTop
+                            };
                             let _ = ui.window().with_winit_window(|w| w.set_window_level(revert));
                         }
                     });

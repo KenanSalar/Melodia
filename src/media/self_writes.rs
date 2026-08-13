@@ -109,9 +109,7 @@ pub struct SelfWrites {
 /// `duration_since` saturates to zero rather than panicking, so a clock quirk can
 /// only ever make an entry look *young*, not negative.
 fn sweep(inner: &mut Inner, now: Instant) {
-    inner
-        .map
-        .retain(|_, written| now.duration_since(*written) < SELF_WRITE_TTL);
+    inner.map.retain(|_, written| now.duration_since(*written) < SELF_WRITE_TTL);
     inner.sweep_at = inner.map.len().saturating_mul(2).max(MIN_SWEEP_AT);
 }
 
@@ -171,10 +169,7 @@ impl SelfWrites {
         // would swallow a genuine external edit, the one way this set must never
         // be wrong. `remove` either way: a lookup consumes the entry, expired or
         // not.
-        inner
-            .map
-            .remove(path)
-            .is_some_and(|written| now.duration_since(written) < SELF_WRITE_TTL)
+        inner.map.remove(path).is_some_and(|written| now.duration_since(written) < SELF_WRITE_TTL)
     }
 
     #[cfg(test)]

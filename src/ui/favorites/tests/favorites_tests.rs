@@ -13,8 +13,7 @@ const MOST_PLAYED_TAB: &str =
     include_str!("../../../../melodia-ui/ui/views/favorites/most-played-tab.slint");
 const ARTISTS_TAB: &str =
     include_str!("../../../../melodia-ui/ui/views/favorites/artists-tab.slint");
-const GRID: &str =
-    include_str!("../../../../melodia-ui/ui/components/grid/entity-card-grid.slint");
+const GRID: &str = include_str!("../../../../melodia-ui/ui/components/grid/entity-card-grid.slint");
 const SONGS: &str = include_str!("../songs.rs");
 const SONGS_TAB: &str = include_str!("../../../../melodia-ui/ui/views/favorites/songs-tab.slint");
 const SUBVIEWS: &str = include_str!("../callbacks/subviews.rs");
@@ -44,26 +43,24 @@ fn the_songs_model_is_written_only_while_its_tab_is_mounted() {
         "songs-tab.slint is the sole reader of `Favorites.tracks` — if that moved, this gate needs re-deriving"
     );
 
-    let build = SONGS
-        .split_once("fn build_filtered_tracks")
-        .map(|(_, rest)| rest)
-        .unwrap_or_default();
+    let build =
+        SONGS.split_once("fn build_filtered_tracks").map(|(_, rest)| rest).unwrap_or_default();
     assert!(
         build.contains("if fav_ui.active_tab() != FavoritesTab::Songs {"),
         "`build_filtered_tracks` must bail before the prepare walk when Songs isn't mounted"
     );
 
-    let write = SONGS
-        .split_once("fn write_filtered_tracks")
-        .map(|(_, rest)| rest)
-        .unwrap_or_default();
+    let write =
+        SONGS.split_once("fn write_filtered_tracks").map(|(_, rest)| rest).unwrap_or_default();
     assert!(
         write.contains("|| fav_ui.active_tab() != FavoritesTab::Songs"),
         "`write_filtered_tracks` must re-check the tab — a pick can land while the post is in flight"
     );
 
     assert!(
-        SUBVIEWS.contains(r#"clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: leave songs tab")"#),
+        SUBVIEWS.contains(
+            r#"clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: leave songs tab")"#
+        ),
         "leaving the Songs tab must empty `Favorites.tracks`, the way `write_filtered_grids` empties the grid it isn't mounting"
     );
     assert!(
@@ -148,7 +145,11 @@ fn tab_count_matches_the_tabs_slint_declares() {
          favorites-view.slint"
     );
     let labels = labels.unwrap_or_default();
-    assert_eq!(labels.split(',').count(), count, "the tab bar's `labels` array is the wrong length");
+    assert_eq!(
+        labels.split(',').count(),
+        count,
+        "the tab bar's `labels` array is the wrong length"
+    );
     // Counting `@tr(` too pins the "inline literal, never Rust-seeded"
     // contract: `@tr` registers msgids at codegen, so a `[string]` filled from
     // Rust would render untranslated.
@@ -207,8 +208,7 @@ fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     // the default is a defined order, not a no-op.
     const FIELDS: [&str; 2] = ["name", "favorite_count"];
 
-    let arrays =
-        crate::test_support::sort_pill_row_arrays(VIEW, "Favorites.artist-sort-field");
+    let arrays = crate::test_support::sort_pill_row_arrays(VIEW, "Favorites.artist-sort-field");
     assert!(
         arrays.is_some(),
         "favorites-view.slint must mount a `SortPillRow` bound to \
@@ -216,7 +216,9 @@ fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     );
     // Unreachable past the assert; spelled this way because the crate denies
     // `unwrap`, `expect` and `panic!` in tests as well as in production code.
-    let Some((labels, asked)) = arrays else { return };
+    let Some((labels, asked)) = arrays else {
+        return;
+    };
     let asked: Vec<&str> = asked.split(',').map(|f| f.trim().trim_matches('"')).collect();
 
     assert_eq!(
@@ -252,11 +254,8 @@ fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
 /// right on a warm tier — a freshly-entered tab just never shows a cover.
 #[test]
 fn the_grid_card_reads_the_covers_generation() {
-    let binding = GRID
-        .lines()
-        .map(str::trim)
-        .find(|line| line.starts_with("cover:"))
-        .unwrap_or_default();
+    let binding =
+        GRID.lines().map(str::trim).find(|line| line.starts_with("cover:")).unwrap_or_default();
 
     assert!(
         binding.contains("root.covers-generation"),
@@ -420,9 +419,7 @@ fn a_grid_pick_rewinds_the_count_it_could_not_answer() {
         .map(|(body, _)| body)
         .unwrap_or_default();
 
-    let (before_fetch, after_fetch) = pick
-        .split_once("if needs_fetch {")
-        .unwrap_or_default();
+    let (before_fetch, after_fetch) = pick.split_once("if needs_fetch {").unwrap_or_default();
     assert!(
         before_fetch.contains("fu.take_songs_dirty()")
             && before_fetch.contains("fu.take_grids_dirty()"),
@@ -433,7 +430,10 @@ fn a_grid_pick_rewinds_the_count_it_could_not_answer() {
         before_fetch.contains("apply_filtered_grids_now(&ui, &fu)"),
         "and the apply must come first, so a warm cache still paints on this tick"
     );
-    for rewound in ["set_most_played_count(UNFETCHED_COUNT)", "set_artist_count(UNFETCHED_COUNT)"] {
+    for rewound in [
+        "set_most_played_count(UNFETCHED_COUNT)",
+        "set_artist_count(UNFETCHED_COUNT)",
+    ] {
         assert!(
             after_fetch.contains(rewound),
             "a grid pick that spawns a fetch must rewind that tab's count ({rewound})"
@@ -475,9 +475,7 @@ fn the_grid_counts_are_written_before_the_signature_can_skip_them() {
         "`write_filtered_grids` must still take the signature guard — this pin is about where \
          the counts sit relative to it, not about retiring it"
     );
-    let before_guard = write
-        .split_once("last_grid_signature")
-        .map_or("", |(head, _)| head);
+    let before_guard = write.split_once("last_grid_signature").map_or("", |(head, _)| head);
     for count in ["set_most_played_count(", "set_artist_count("] {
         assert!(
             before_guard.contains(count),

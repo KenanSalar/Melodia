@@ -4,9 +4,7 @@
 // Windows, so file-scope the whole module.
 #![cfg(unix)]
 
-use crate::services::updater::linux_pkg::{
-    LinuxPackageFormat, detect, resolve_install_program,
-};
+use crate::services::updater::linux_pkg::{LinuxPackageFormat, detect, resolve_install_program};
 use crate::test_support::{with_appimage_env, with_env_var};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -72,10 +70,7 @@ fn resolve_install_program_picks_dnf5_over_dnf() -> TestResult {
     make_exec_shim(&tmp.path().join("dnf"))?;
     let path = tmp.path().to_string_lossy().into_owned();
     with_path_env(&path, || {
-        assert_eq!(
-            resolve_install_program(LinuxPackageFormat::Rpm),
-            Some("dnf5")
-        );
+        assert_eq!(resolve_install_program(LinuxPackageFormat::Rpm), Some("dnf5"));
     });
     Ok(())
 }
@@ -87,10 +82,7 @@ fn resolve_install_program_falls_back_to_dnf_when_dnf5_missing() -> TestResult {
     make_exec_shim(&tmp.path().join("dnf"))?;
     let path = tmp.path().to_string_lossy().into_owned();
     with_path_env(&path, || {
-        assert_eq!(
-            resolve_install_program(LinuxPackageFormat::Rpm),
-            Some("dnf")
-        );
+        assert_eq!(resolve_install_program(LinuxPackageFormat::Rpm), Some("dnf"));
     });
     Ok(())
 }
@@ -103,10 +95,7 @@ fn resolve_install_program_picks_apt_over_apt_get() -> TestResult {
     make_exec_shim(&tmp.path().join("apt-get"))?;
     let path = tmp.path().to_string_lossy().into_owned();
     with_path_env(&path, || {
-        assert_eq!(
-            resolve_install_program(LinuxPackageFormat::Deb),
-            Some("apt")
-        );
+        assert_eq!(resolve_install_program(LinuxPackageFormat::Deb), Some("apt"));
     });
     Ok(())
 }
@@ -118,10 +107,7 @@ fn resolve_install_program_falls_back_to_apt_get_when_apt_missing() -> TestResul
     make_exec_shim(&tmp.path().join("apt-get"))?;
     let path = tmp.path().to_string_lossy().into_owned();
     with_path_env(&path, || {
-        assert_eq!(
-            resolve_install_program(LinuxPackageFormat::Deb),
-            Some("apt-get")
-        );
+        assert_eq!(resolve_install_program(LinuxPackageFormat::Deb), Some("apt-get"));
     });
     Ok(())
 }

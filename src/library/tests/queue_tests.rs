@@ -62,9 +62,7 @@ fn shuffle_inline_keeps_current_at_front() {
 #[test]
 fn shuffle_inline_enables_shuffle_flag() {
     let mut state = PlayerState::default();
-    state
-        .queue
-        .add_tracks(vec![make_summary(1), make_summary(2), make_summary(3)]);
+    state.queue.add_tracks(vec![make_summary(1), make_summary(2), make_summary(3)]);
     state.queue.current_index = Some(0);
 
     assert!(!state.queue.shuffle_enabled);
@@ -83,8 +81,8 @@ fn shuffle_inline_all_indices_present() -> Result<(), AppError> {
     shuffle_inline(&mut state);
 
     let play_order = state.queue.tracks_in_play_order();
-    let expected_len = usize::try_from(count)
-        .map_err(|_| AppError::Validation("count negative".into()))?;
+    let expected_len =
+        usize::try_from(count).map_err(|_| AppError::Validation("count negative".into()))?;
     assert_eq!(play_order.len(), expected_len);
 
     let mut ids: Vec<i64> = play_order.iter().map(|t| t.id).collect();
@@ -108,12 +106,7 @@ fn shuffle_unshuffle_roundtrip() {
     state.queue.unshuffle();
     assert!(!state.queue.shuffle_enabled);
 
-    let restored: Vec<i64> = state
-        .queue
-        .tracks_in_play_order()
-        .iter()
-        .map(|t| t.id)
-        .collect();
+    let restored: Vec<i64> = state.queue.tracks_in_play_order().iter().map(|t| t.id).collect();
     assert_eq!(restored, original_ids);
 }
 

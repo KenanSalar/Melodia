@@ -16,8 +16,7 @@ pub fn install_locale(
     state: &AppState,
     startup_settings: Option<&services::settings::SettingsData>,
 ) {
-    let persisted_locale =
-        startup_settings.map_or_else(|| "en".to_owned(), |s| s.locale.clone());
+    let persisted_locale = startup_settings.map_or_else(|| "en".to_owned(), |s| s.locale.clone());
     if let Err(e) = slint::select_bundled_translation(&persisted_locale) {
         log::warn!("select_bundled_translation({persisted_locale}): {e:?}");
     }
@@ -229,10 +228,22 @@ pub fn install_views(
 
     // 5c3. Now-Playing favourite heart + star rating fan into every per-row cache.
     ui::callbacks::wire_now_playing_favorite(
-        app, state, &tracks_ui, &browse_ui, &albums_ui, &artists_ui, &genres_ui,
+        app,
+        state,
+        &tracks_ui,
+        &browse_ui,
+        &albums_ui,
+        &artists_ui,
+        &genres_ui,
     );
     ui::callbacks::wire_now_playing_rating(
-        app, state, &tracks_ui, &browse_ui, &albums_ui, &artists_ui, &genres_ui,
+        app,
+        state,
+        &tracks_ui,
+        &browse_ui,
+        &albums_ui,
+        &artists_ui,
+        &genres_ui,
     );
     // Retune every grid-tier cover LRU to the real display — same band for
     // all of them, since they all draw the same card at the same size (see
@@ -404,8 +415,7 @@ pub fn hydrate_ui_from_settings(
     ui::track_list_view::hydrate_favorites_view(app, vs);
     ui::track_list_view::hydrate_recently_played_view(app, vs);
     ui::track_list_view::hydrate_search_view(app, vs);
-    app.global::<ArtistDetail>()
-        .set_albums_collapsed(vs.artist_albums_collapsed);
+    app.global::<ArtistDetail>().set_albums_collapsed(vs.artist_albums_collapsed);
     ui::settings::settings_page::seed_tab(app, vs.settings_tab);
 }
 
@@ -424,8 +434,7 @@ fn apply_sidebar_width(app: &AppWindow, settings: &services::settings::SettingsD
 }
 
 fn apply_sidebar_collapsed(app: &AppWindow, settings: &services::settings::SettingsData) {
-    app.global::<Nav>()
-        .set_sidebar_collapsed(settings.layout.sidebar_collapsed);
+    app.global::<Nav>().set_sidebar_collapsed(settings.layout.sidebar_collapsed);
 }
 
 /// Kick off initial Tracks fetch so the list is populated by the time the

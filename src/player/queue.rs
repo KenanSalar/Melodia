@@ -72,9 +72,7 @@ impl QueueState {
 
     /// Resolve an index in `play_order` to the actual track.
     fn track_at(&self, play_index: usize) -> Option<&Arc<TrackSummary>> {
-        self.play_order
-            .get(play_index)
-            .and_then(|&ti| self.tracks.get(ti))
+        self.play_order.get(play_index).and_then(|&ti| self.tracks.get(ti))
     }
 
     pub fn add_tracks(&mut self, new_tracks: Vec<Arc<TrackSummary>>) {
@@ -92,10 +90,7 @@ impl QueueState {
         self.tracks.push(track);
         self.original_order.push(track_idx);
 
-        let insert_pos = self
-            .current_index
-            .map_or(0, |ci| ci + 1)
-            .min(self.play_order.len());
+        let insert_pos = self.current_index.map_or(0, |ci| ci + 1).min(self.play_order.len());
         self.play_order.insert(insert_pos, track_idx);
         self.version += 1;
     }
@@ -140,18 +135,13 @@ impl QueueState {
         let index_set: std::collections::HashSet<usize> = indices.iter().copied().collect();
 
         // Collect the track indices being removed (for original_order cleanup).
-        let removed_track_indices: std::collections::HashSet<usize> = index_set
-            .iter()
-            .filter_map(|&i| self.play_order.get(i).copied())
-            .collect();
+        let removed_track_indices: std::collections::HashSet<usize> =
+            index_set.iter().filter_map(|&i| self.play_order.get(i).copied()).collect();
 
         // Determine whether the currently-playing slot is being removed and
         // count how many removed indices fall before it.
         let (current_removed, removed_before) = match self.current_index {
-            Some(ci) => (
-                index_set.contains(&ci),
-                index_set.iter().filter(|&&i| i < ci).count(),
-            ),
+            Some(ci) => (index_set.contains(&ci), index_set.iter().filter(|&&i| i < ci).count()),
             None => (false, 0),
         };
 
@@ -290,10 +280,7 @@ impl QueueState {
         self.version += 1;
         if self.repeat_mode.wraps() {
             // Wraps. None and Some(0) both go to the last track.
-            let next = self
-                .current_index
-                .filter(|&ci| ci > 0)
-                .map_or(self.len() - 1, |ci| ci - 1);
+            let next = self.current_index.filter(|&ci| ci > 0).map_or(self.len() - 1, |ci| ci - 1);
             self.current_index = Some(next);
         } else if let Some(ci) = self.current_index
             && ci > 0
@@ -316,7 +303,11 @@ impl QueueState {
             RepeatMode::All => self.track_at(next_from(self.current_index) % len),
             RepeatMode::Off => {
                 let next = next_from(self.current_index);
-                if next >= len { None } else { self.track_at(next) }
+                if next >= len {
+                    None
+                } else {
+                    self.track_at(next)
+                }
             }
         }
     }
@@ -331,10 +322,8 @@ impl QueueState {
     /// These are indices into `play_order`, not into `tracks`.
     pub fn apply_shuffle_order(&mut self, indices: &[usize]) {
         // Remap: new play_order[i] = old play_order[indices[i]]
-        let new_play_order: Vec<usize> = indices
-            .iter()
-            .filter_map(|&i| self.play_order.get(i).copied())
-            .collect();
+        let new_play_order: Vec<usize> =
+            indices.iter().filter_map(|&i| self.play_order.get(i).copied()).collect();
         self.play_order = new_play_order;
         self.current_index = Some(0);
         self.shuffle_enabled = true;
@@ -358,8 +347,7 @@ impl QueueState {
             return;
         }
         let pinned_track_idx = if anchor_to_current {
-            self.current_index
-                .and_then(|ci| self.play_order.get(ci).copied())
+            self.current_index.and_then(|ci| self.play_order.get(ci).copied())
         } else {
             None
         };
@@ -381,9 +369,10 @@ impl QueueState {
         self.play_order.clone_from(&self.original_order);
 
         if let Some(track_id) = current_track_id
-            && let Some(pos) = self.play_order.iter().position(|&ti| {
-                self.tracks.get(ti).is_some_and(|t| t.id == track_id)
-            })
+            && let Some(pos) = self
+                .play_order
+                .iter()
+                .position(|&ti| self.tracks.get(ti).is_some_and(|t| t.id == track_id))
         {
             self.current_index = Some(pos);
         }
@@ -499,11 +488,8 @@ impl QueueState {
 
     pub fn to_persistable(&self) -> PersistableQueue {
         let mut track_ids: Vec<i64> = Vec::with_capacity(self.play_order.len());
-        track_ids.extend(
-            self.play_order
-                .iter()
-                .filter_map(|&ti| self.tracks.get(ti).map(|t| t.id)),
-        );
+        track_ids
+            .extend(self.play_order.iter().filter_map(|&ti| self.tracks.get(ti).map(|t| t.id)));
         PersistableQueue {
             track_ids,
             current_index: current_index_to_i32(self.current_index),

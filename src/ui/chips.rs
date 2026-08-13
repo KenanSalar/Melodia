@@ -94,10 +94,7 @@ pub fn chunk_chips_to_rows(
     finish(rows, current)
 }
 
-fn finish(
-    mut rows: Vec<Vec<SharedString>>,
-    current: Vec<SharedString>,
-) -> Vec<Vec<SharedString>> {
+fn finish(mut rows: Vec<Vec<SharedString>>, current: Vec<SharedString>) -> Vec<Vec<SharedString>> {
     if !current.is_empty() {
         rows.push(current);
     }
@@ -124,10 +121,8 @@ pub fn split_shape(rows: &[Vec<SharedString>]) -> Vec<usize> {
 
 /// `Vec<Vec<SharedString>>` → the `[[string]]` model a `MetaChipStrip` reads.
 pub fn rows_to_model(rows: Vec<Vec<SharedString>>) -> ModelRc<ModelRc<SharedString>> {
-    let outer: Vec<ModelRc<SharedString>> = rows
-        .into_iter()
-        .map(|row| ModelRc::from(Rc::new(VecModel::from(row))))
-        .collect();
+    let outer: Vec<ModelRc<SharedString>> =
+        rows.into_iter().map(|row| ModelRc::from(Rc::new(VecModel::from(row)))).collect();
     ModelRc::from(Rc::new(VecModel::from(outer)))
 }
 

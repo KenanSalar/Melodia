@@ -35,8 +35,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
             }
             let start = ids.iter().position(|&i| i == id);
             let s = s.clone();
-            spawn_logged!(s, "recently_played::play_track",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+            spawn_logged!(
+                s,
+                "recently_played::play_track",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
+            );
         });
     }
 
@@ -79,9 +82,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
 
             // Asked *before* the apply below, because the apply is what has to know:
             // the answer decides whether the count it writes stands for anything.
-            let needs_grid_fetch =
-                entering == recently_played_ui_mod::RecentlyPlayedTab::MostPlayed
-                    && ru.take_grid_dirty();
+            let needs_grid_fetch = entering
+                == recently_played_ui_mod::RecentlyPlayedTab::MostPlayed
+                && ru.take_grid_dirty();
 
             // The entering tier was cleared when its tab was last left, so the
             // cards mount cold: hold the lookups at cache-only until the prewarm

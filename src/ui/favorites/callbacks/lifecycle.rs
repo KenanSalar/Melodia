@@ -7,9 +7,9 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, SharedString};
 
-use crate::ui::favorites::NAV_FAVORITES;
 use crate::state::AppState;
 use crate::ui::callbacks::macros::release_shared_hero;
+use crate::ui::favorites::NAV_FAVORITES;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::UNFETCHED_COUNT;

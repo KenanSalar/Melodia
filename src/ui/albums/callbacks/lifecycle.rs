@@ -104,9 +104,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                         // leaves `detail.album_id` untouched precisely so
                         // we can re-open it here.
                         let open_id = au.detail_album_id();
-                        if let Err(e) =
-                            albums_ui_mod::fetch_grid(&s, &au, weak.clone()).await
-                        {
+                        if let Err(e) = albums_ui_mod::fetch_grid(&s, &au, weak.clone()).await {
                             log::warn!("albums::section_enter fetch_grid: {e}");
                         }
                         // The preserved `AlbumDetail.album-id` points at a
@@ -183,8 +181,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                     let s = s.clone();
                     let au = au.clone();
                     let weak = weak.clone();
-                    spawn_logged!(s, "albums::library_changed",
-                        albums_ui_mod::fetch_grid(&s, &au, weak));
+                    spawn_logged!(
+                        s,
+                        "albums::library_changed",
+                        albums_ui_mod::fetch_grid(&s, &au, weak)
+                    );
                 }
                 if open_id >= 0 {
                     let s = s.clone();
@@ -192,8 +193,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                     let weak = weak.clone();
                     // `refresh_detail`, not `open_album` — a watcher tick
                     // must preserve the user's sort + selection.
-                    spawn_logged!(s, "albums::library_changed_detail",
-                        albums_ui_mod::refresh_detail(&s, &au, weak, open_id));
+                    spawn_logged!(
+                        s,
+                        "albums::library_changed_detail",
+                        albums_ui_mod::refresh_detail(&s, &au, weak, open_id)
+                    );
                 }
             }
         }));

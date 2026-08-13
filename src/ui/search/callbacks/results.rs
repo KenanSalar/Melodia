@@ -108,8 +108,11 @@ pub(super) fn wire(
             }
             let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            spawn_logged!(s, "search::play_row",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+            spawn_logged!(
+                s,
+                "search::play_row",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
+            );
         });
     }
     {
@@ -117,8 +120,7 @@ pub(super) fn wire(
         g.on_play_next(move |ids| {
             let id_vec = collect_track_ids(&ids);
             let s = s.clone();
-            spawn_logged!(s, "search::play_next",
-                library::queue::queue_play_next_many(&s, id_vec));
+            spawn_logged!(s, "search::play_next", library::queue::queue_play_next_many(&s, id_vec));
         });
     }
     {
@@ -126,8 +128,7 @@ pub(super) fn wire(
         g.on_add_to_queue(move |ids| {
             let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
             let s = s.clone();
-            spawn_logged!(s, "search::add_to_queue",
-                library::queue::queue_add_tracks(&s, id_vec));
+            spawn_logged!(s, "search::add_to_queue", library::queue::queue_add_tracks(&s, id_vec));
         });
     }
     {
@@ -200,9 +201,15 @@ pub(super) fn wire(
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<Search>().snapshot_visible();
             let s_disk = s.clone();
-            spawn_blocking_logged!(s, "search::toggle_column",
+            spawn_blocking_logged!(
+                s,
+                "search::toggle_column",
                 library::settings::update_view_columns(
-                    &s_disk, view_id::SEARCH.to_owned(), columns));
+                    &s_disk,
+                    view_id::SEARCH.to_owned(),
+                    columns
+                )
+            );
         });
     }
     {

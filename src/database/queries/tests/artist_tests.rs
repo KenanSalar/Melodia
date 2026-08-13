@@ -1,6 +1,6 @@
+use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::tests::helpers::*;
-use crate::database::queries;
 use crate::error::AppError;
 
 #[tokio::test]

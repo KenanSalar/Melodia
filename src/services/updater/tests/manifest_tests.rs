@@ -87,10 +87,7 @@ fn back_compat_parse_omits_new_fields() -> TestResult {
     }"#;
     let parsed: LatestManifest = serde_json::from_str(pre_versioned)?;
     assert_eq!(parsed.manifest_schema_version, 1);
-    assert!(
-        !parsed.critical,
-        "critical must default to false when the field is absent"
-    );
+    assert!(!parsed.critical, "critical must default to false when the field is absent");
     Ok(())
 }
 
@@ -138,10 +135,8 @@ fn unknown_platform_keys_pass_through() -> TestResult {
       }
     }"#;
     let parsed: LatestManifest = serde_json::from_str(json)?;
-    let asset: &PlatformAsset = parsed
-        .platforms
-        .get("macos-aarch64-dmg")
-        .ok_or("missing macos-aarch64-dmg asset")?;
+    let asset: &PlatformAsset =
+        parsed.platforms.get("macos-aarch64-dmg").ok_or("missing macos-aarch64-dmg asset")?;
     assert_eq!(asset.url, "https://example.test/melodia-0.3.0.dmg");
     Ok(())
 }

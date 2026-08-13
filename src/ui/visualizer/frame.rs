@@ -66,7 +66,5 @@ pub(super) fn waveform(
     }
 
     let columns = analyzer.trace(live, rate, waveform::columns_for_width(strip_width), path);
-    columns
-        .iter()
-        .all(|c| c.max.abs() < IDLE_LEVEL && c.min.abs() < IDLE_LEVEL)
+    columns.iter().all(|c| c.max.abs() < IDLE_LEVEL && c.min.abs() < IDLE_LEVEL)
 }
