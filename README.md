@@ -2,7 +2,9 @@
 
 **A fast, lightweight cross-platform desktop music player built with [Slint](https://slint.dev/) and pure Rust.**
 
-Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving off the embedded WebKitGTK browser engine cut the real-world footprint from a combined **~900 MB** down to **below 140 MB on Fedora** and **below 100 MB on Windows**, with no IPC layer and no web runtime.
+Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving off the embedded WebKitGTK browser engine cut the real-world footprint from a combined **~900 MB** down to **~155 MB RSS / ~85 MB PSS on Fedora** and **below 100 MB on Windows**, with no IPC layer and no web runtime.
+
+Those are idle figures on a track list; the heaviest view — a maximized window on the album grid — sits near **200 MB RSS / 125 MB PSS**. Grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves either number, though a higher-resolution screen raises both. PSS is the fairer figure on a desktop already running other GL applications: RSS charges the shared graphics driver stack in full, and on this machine that alone is around 80 MB of it.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/github/v/release/KenanSalar/Melodia?label=version&color=blueviolet)](https://github.com/KenanSalar/Melodia/releases)
