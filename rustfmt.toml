@@ -1,3 +1,9 @@
+# `cargo fmt` passes the edition, but a bare `rustfmt` — what an editor runs on
+# save — falls back to 2015, chokes on let chains and reflows 150 sites. Pinning
+# both is what makes format-on-save agree with the CI gate.
+edition = "2024"
+style_edition = "2024"
+
 # Sub-widths, not line lengths — `max_width` stays at its 100 default. These gate
 # when a call's arguments or a chain get broken up, and their 60% defaults split
 # code that already fits the 100 columns this tree was hand-written to.
