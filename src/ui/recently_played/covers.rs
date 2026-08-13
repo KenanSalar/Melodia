@@ -2,7 +2,7 @@
 //! and when it is handed back.
 //!
 //! Two of them are the view's own — the hero mosaic (128 px) and Most Played
-//! (grid-sized) — and the third is the shared 72 px row tier the Songs tab's
+//! (grid-sized) — and the third is the shared row tier the Songs tab's
 //! `TrackList` draws from, which this module only ever reads. Tab-leave is a
 //! release event as much as a section leave is, so the grid tier is dropped and
 //! re-warmed on a tab pick too.
@@ -35,7 +35,7 @@ impl RecentlyPlayedUi {
     }
 
     /// The cover tier a tab draws from. `None` for Songs, whose row covers come
-    /// from the shared 72 px tier instead.
+    /// from the shared row tier instead.
     fn grid_tier(&self, tab: RecentlyPlayedTab) -> Option<&CoverThumbs> {
         match tab {
             RecentlyPlayedTab::MostPlayed => Some(&self.most_played_thumbs),
@@ -125,6 +125,8 @@ impl RecentlyPlayedUi {
 /// same band.
 pub fn tune_cache_for_display(app: &AppWindow, rp_ui: &RecentlyPlayedUi) {
     let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, GRID_THUMB_CAP);
+    let size = crate::ui::grid_prewarm::cover_size_for_window(app);
     rp_ui.most_played_thumbs.resize(cap);
-    log::debug!("ui::recently_played grid-cover cache cap tuned to {cap}");
+    rp_ui.most_played_thumbs.set_thumb_size(size);
+    log::debug!("ui::recently_played grid-cover cache tuned to cap {cap}, {size} px");
 }

@@ -48,8 +48,7 @@ use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
 
 use state::{
-    GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE, MOST_PLAYED_THUMB_SIZE,
-    RecentlyPlayedUiState, SongsTotals,
+    GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE, RecentlyPlayedUiState, SongsTotals,
 };
 
 /// This page's `Nav.selected-index` — see [`crate::ui::favorites::NAV_FAVORITES`].
@@ -99,7 +98,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RecentlyPlayedUi> {
 /// `Arc<RecentlyPlayedUi>` — `Send + Sync`.
 pub struct RecentlyPlayedUi {
     inner: RecentlyPlayedUiState,
-    /// Shared row-tier (72 px) cache — used for the Songs tab's `TrackList` row
+    /// Shared row-tier cache — used for the Songs tab's `TrackList` row
     /// column. Same instance every view consumes.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
     /// Hero mosaic-tile cache (128 px). Released on section leave.
@@ -153,7 +152,7 @@ impl RecentlyPlayedUi {
                 MOSAIC_THUMB_CAP,
             )),
             most_played_thumbs: Arc::new(CoverThumbs::with_config(
-                MOST_PLAYED_THUMB_SIZE,
+                crate::ui::grid_prewarm::GRID_COVER_SIZE,
                 GRID_THUMB_CAP,
             )),
             section: SectionState::new(),

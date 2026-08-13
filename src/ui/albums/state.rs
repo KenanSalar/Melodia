@@ -108,12 +108,6 @@ pub(super) struct AlbumDetailState {
     pub filter: Mutex<Needle>,
 }
 
-/// Square decode size (px) for the Albums **grid card** tiles. Bigger than
-/// the detail header tier because the flex-filled grid cards get large on a
-/// wide panel (well past 280 px), and a tile upscaled past its decode size
-/// visibly softens. The knob to retune grid sharpness.
-pub(super) const GRID_COVER_SIZE: u32 = 448;
-
 /// Fallback LRU capacity for the **grid** cover cache, used at construction
 /// and whenever the display can't be queried. `tune_cache_for_display`
 /// replaces it at startup with a resolution-derived cap. Must stay ≥
@@ -128,5 +122,5 @@ pub(super) const DEFAULT_GRID_COVER_CAP: NonZeroUsize = match NonZeroUsize::new(
 /// reasonable column count; everything past it decodes lazily on
 /// scroll-in via `request-cover`. Kept ≤ the `ui::grid_prewarm::cover_cap`
 /// floor (32) so the prewarm can't thrash the grid-tier LRU it fills —
-/// each 448 px buffer is ~600 KB, so this stays deliberately small.
+/// a grid-tier buffer is hundreds of KB, so this stays deliberately small.
 pub(super) const GRID_PREWARM_AHEAD: usize = 24;

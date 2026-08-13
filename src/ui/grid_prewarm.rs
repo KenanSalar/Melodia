@@ -55,16 +55,17 @@ pub fn unique_artwork_paths<'a>(
 
 /// How many grid covers to keep resident on a display of this logical size.
 ///
-/// The flex-filled grid cards are *large* (the user runs them well past
-/// 200 px), so this uses a generous footprint (~260 px wide incl. gap,
-/// ~320 px tall incl. text + gap) — a smaller footprint over-counts what's
-/// really on screen. `rows` adds one partial row as the only scroll-back
-/// headroom: no extra multiplier, because even fullscreen at 1440p only
-/// ~50 cards are visible at once, so a 1.5× cushion was just dead weight.
-/// Clamped to `[32, 96]` — at 448 px / ~600 KB per entry that's a ~19–58 MB
-/// band, and every one of these caches is released entirely when the user
-/// leaves its section anyway. The footprint constants and clamps are the
-/// tunable knobs. Lands ≈ 1080p → 35, 1440p → 54, 4K → 96.
+/// The footprint (~260 px wide incl. gap, ~320 px tall incl. text + gap) is a
+/// deliberate over-estimate against a card that packs down toward
+/// `GridGeometry`'s 180 px `min-card-w` on a wide panel — it under-counts
+/// columns, where a tighter number would claim more cards are on screen than
+/// are. `rows` adds one partial row as the only scroll-back headroom: no extra
+/// multiplier, because even fullscreen at 1440p only ~50 cards are visible at
+/// once, so a 1.5× cushion was just dead weight. Clamped to `[32, 96]` — a
+/// ~6–18 MB band at [`GRID_COVER_SIZE`], ~18–55 MB at
+/// [`GRID_COVER_SIZE_HIDPI`] — and every one of these caches is released
+/// entirely when the user leaves its section anyway. The footprint constants
+/// and clamps are the tunable knobs. Lands ≈ 1080p → 35, 1440p → 54, 4K → 96.
 ///
 /// One function rather than one per grid: it was copied verbatim into
 /// `albums`, `artists` and `playlists`, so the numbers above had three places
@@ -82,6 +83,43 @@ pub fn cover_cap(logical_w: u32, logical_h: u32, fallback: NonZeroUsize) -> NonZ
     let visible = usize::try_from(cols.saturating_mul(rows)).unwrap_or(MAX_CAP);
     let cap = visible.clamp(MIN_CAP, MAX_CAP);
     NonZeroUsize::new(cap).unwrap_or(fallback)
+}
+
+/// Square decode size (px) for every grid-card tile, at a 1× display.
+///
+/// `GridGeometry` packs cards at `min-card-w: 180px`, so a card lands at
+/// ~190 px on a wide panel and grows past this only below three columns — a
+/// panel showing one or two cards, where the tier holds almost nothing. Sized
+/// to the wide case rather than that edge: `FemtoVG` minifies bilinear with no
+/// mipmaps, so covering the edge costs every card in every grid to sharpen the
+/// layout that needs it least.
+pub const GRID_COVER_SIZE: u32 = 256;
+
+/// The same tile on a `HiDPI` display, which draws it at twice the pixels.
+pub const GRID_COVER_SIZE_HIDPI: u32 = 448;
+
+/// Grid decode size for a display at `scale`.
+///
+/// One function rather than a constant per grid: `448` had been copied into
+/// `albums`, `artists`, `playlists`, `browse` and both mosaic pages, each
+/// justifying it in its own doc comment, and every grid draws the same card at
+/// the same size. Threshold matches
+/// [`crate::media::cover_thumbs::row_cover_size`] — the two tiers are asking
+/// the same question about the same display.
+pub fn cover_size(scale: f64) -> u32 {
+    if scale > 1.25 {
+        GRID_COVER_SIZE_HIDPI
+    } else {
+        GRID_COVER_SIZE
+    }
+}
+
+/// Grid decode size for the display this window is on.
+///
+/// Unlike [`cover_cap_for_window`] this needs no winit round trip and has no
+/// failure arm — the scale factor is Slint's own and always readable.
+pub fn cover_size_for_window(app: &AppWindow) -> u32 {
+    cover_size(f64::from(app.window().scale_factor()))
 }
 
 /// Convert a physical pixel extent + DPI scale into a logical extent.
@@ -105,28 +143,29 @@ fn logical_dim(physical: u32, scale: f64) -> u32 {
     }
 }
 
-/// Query the window's current monitor and derive a grid-cover cap from its
-/// logical resolution. Falls back to `fallback` when the monitor can't be read
-/// (e.g. some Wayland setups report `None`).
+/// Derive a grid-cover cap from the window's own logical size.
 ///
-/// Call once at startup, after the winit window is live — each cache is
-/// constructed with its own default and resized from here.
+/// **Must run after `app.show()`** — see the deferred call in
+/// `boot::ui_setup::install_views`. A zero extent means it ran early anyway, and
+/// falls back rather than clamping to the floor.
+///
+/// Reads Slint's window rather than winit's monitor. The monitor was the wrong
+/// question — it caps against a screen the window may occupy a corner of — and
+/// asking it cost a `with_winit_window` round trip that returned `None` for the
+/// entire window-less boot, so every tier silently kept its construction default
+/// on every platform.
 pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroUsize {
-    use slint::winit_030::WinitWindowAccessor;
-
-    app.window()
-        .with_winit_window(|w| {
-            let monitor = w.current_monitor()?;
-            let physical = monitor.size();
-            let scale = w.scale_factor();
-            Some(cover_cap(
-                logical_dim(physical.width, scale),
-                logical_dim(physical.height, scale),
-                fallback,
-            ))
-        })
-        .flatten()
-        .unwrap_or(fallback)
+    let window = app.window();
+    let physical = window.size();
+    if physical.width == 0 || physical.height == 0 {
+        return fallback;
+    }
+    let scale = f64::from(window.scale_factor());
+    cover_cap(
+        logical_dim(physical.width, scale),
+        logical_dim(physical.height, scale),
+        fallback,
+    )
 }
 
 /// Resolve one grid card's cover, decoding only once the tier is known warm.
@@ -134,7 +173,7 @@ pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroU
 /// `generation` is the page's `covers-generation`: 0 means the tab was just
 /// entered and its tier was cleared on the previous tab-leave, so answer from
 /// the cache alone and let the card paint its placeholder. Decoding here instead
-/// puts one 448 px decode per visible card on the UI thread, in the frame that
+/// puts one grid-tier decode per visible card on the UI thread, in the frame that
 /// mounts the grid — the off-thread prewarm bumps the counter when it lands,
 /// which re-runs these bindings and lets rows scrolled to later load on demand.
 /// Same contract as `Queue.request-cover`; see the "Covers" section of

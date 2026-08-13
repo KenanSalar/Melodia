@@ -19,7 +19,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
 
     // request-album-cover: lazy per-card cover lookup for the Albums
     // sub-section. Shares the Albums-tab grid-tier cache so the same
-    // 448 px decode serves both surfaces.
+    // one grid-tier decode serves both surfaces.
     {
         let albums_ui_cb = albums_ui.clone();
         detail.on_request_album_cover(move |path| albums_ui_cb.grid_cover(path.as_str()));

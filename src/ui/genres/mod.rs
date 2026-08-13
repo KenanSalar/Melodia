@@ -21,7 +21,7 @@
 //! genres have no intrinsic artwork. Each grid tile renders the
 //! `EntityCard` `theater_comedy` fallback glyph, and the detail header
 //! paints only the accent gradient floor + scrim. The only shared cache
-//! the Genre tab reads is `cover_thumbs` (row-tier 72 px) for the
+//! the Genre tab reads is `cover_thumbs` (the shared row tier) for the
 //! detail track-list's artwork column — same shared instance Albums /
 //! Artists / Tracks use.
 //!
@@ -111,7 +111,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<GenresUi> {
 pub struct GenresUi {
     grid: GenreGridState,
     detail: GenreDetailState,
-    /// Row-tier (72 px) cache shared with Tracks / Albums / Artists /
+    /// Row-tier cache shared with Tracks / Albums / Artists /
     /// now-playing-bar — backs the small artwork column of the detail
     /// view's `TrackList`. Same shared instance the other entity tabs
     /// use; the Genre tab never clears it.

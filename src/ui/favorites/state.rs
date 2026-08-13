@@ -128,14 +128,6 @@ pub(super) const MOSAIC_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(16) {
     None => panic!("MOSAIC_THUMB_CAP > 0"),
 };
 
-/// Grid-card tile size (px), shared by both grid tabs. These used to be
-/// 180 / 200 px tiers sized for 160 px strip cards; the tabs draw the same
-/// flex-filled cards the Albums and Artists grids do, which run well past
-/// 260 px, and `FemtoVG` minifies with plain bilinear (no mipmaps) — so an
-/// undersized tier is a visibly soft tile rather than a saving. Matches
-/// `ui::albums::state::GRID_COVER_SIZE`.
-pub(super) const GRID_THUMB_SIZE: u32 = 448;
-
 /// LRU capacity per grid tier. Sized like the album grid's default: enough
 /// for a screenful or two of cards, so scrolling re-decodes rather than the
 /// cache growing with the library.
@@ -152,19 +144,11 @@ pub(super) const GRID_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(48) {
     None => panic!("GRID_THUMB_CAP > 0"),
 };
 
-/// Most-Played grid tile size (px).
-pub(super) const MOST_PLAYED_THUMB_SIZE: u32 = GRID_THUMB_SIZE;
-
-/// Favorite Artists grid tile size (px). Same tier as Most Played — the
-/// circular mask is applied at draw time, so the source needs no extra
-/// resolution.
-pub(super) const ARTIST_THUMB_SIZE: u32 = GRID_THUMB_SIZE;
-
 /// How many covers to decode up front when a grid tab becomes visible.
 ///
 /// A screenful or two, matching `ui::albums::state::GRID_PREWARM_AHEAD` — not
 /// the tier's capacity. The grids are uncapped now, so prewarming everything
-/// would decode a large library's whole favourite set at 448 px on every
+/// would decode a large library's whole favourite set at grid size on every
 /// `library_changed` tick, and all but the last `GRID_THUMB_CAP_N` of them
 /// would be evicted by the prewarm itself before a single card asked for one.
 /// The rest decode lazily as rows scroll in, which is what the `ListView`

@@ -183,7 +183,7 @@ pub fn install(
     ui.global::<NowPlaying>()
         .set_up_next_rows(ModelRc::from(up_next_model.clone()));
 
-    // Lazy row covers against the shared 72 px tier — the same `RowCovers`
+    // Lazy row covers against the shared row tier — the same `RowCovers`
     // shape `boot::ui_setup` wires for the track lists. `QueueRow` carries
     // no decoded image, so this is where an Up Next row's thumbnail comes
     // from, and only the rows the virtualized list has on screen ask.

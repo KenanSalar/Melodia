@@ -66,6 +66,23 @@ fn cover_cap_clamps_and_scales_with_resolution() {
     assert!(cap(1280, 720) <= mid && mid <= cap(2560, 1440));
 }
 
+/// A grid card is drawn at roughly `GridGeometry`'s 180 px `min-card-w` on a
+/// wide panel, so the 1× tier only has to beat that; the `HiDPI` tier has to
+/// beat twice it. The threshold sits below 1.5 so a fractional-scale desktop
+/// rounds up — a soft tile is the worse of the two failures.
+#[test]
+fn cover_size_steps_up_for_hidpi_and_never_below_a_card() {
+    const MIN_CARD_W: u32 = 180;
+
+    assert_eq!(super::cover_size(1.0), super::GRID_COVER_SIZE);
+    assert_eq!(super::cover_size(2.0), super::GRID_COVER_SIZE_HIDPI);
+    // A fractional scale rounds up rather than down.
+    assert_eq!(super::cover_size(1.5), super::GRID_COVER_SIZE_HIDPI);
+
+    assert!(super::cover_size(1.0) > MIN_CARD_W);
+    assert!(super::cover_size(2.0) > MIN_CARD_W * 2);
+}
+
 /// Generation 0 means "this tier was cleared when its tab was left", and the
 /// lookup must answer from the cache alone — a decode here lands on the UI
 /// thread, in the frame that mounts the grid, once per visible card. It is not

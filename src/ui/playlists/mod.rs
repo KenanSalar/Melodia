@@ -47,9 +47,8 @@ use crate::{
     PlaylistRow as UiPlaylistRow, Playlists, TrackListRow as UiTrackListRow,
 };
 
-use state::{
-    DEFAULT_GRID_COVER_CAP, GRID_COVER_SIZE, GridData, PlaylistDetailState, PlaylistGridState,
-};
+use crate::ui::grid_prewarm::GRID_COVER_SIZE;
+use state::{DEFAULT_GRID_COVER_CAP, GridData, PlaylistDetailState, PlaylistGridState};
 
 #[cfg(test)]
 use grid::compute_indices;
@@ -96,7 +95,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
 pub struct PlaylistsUi {
     grid: PlaylistGridState,
     detail: PlaylistDetailState,
-    /// Row-tier (72 px) cache — shared with Tracks / Browse — backs the
+    /// Row-tier cache — shared with Tracks / Browse — backs the
     /// detail track-list's artwork column.
     cover_thumbs: Arc<CoverThumbs>,
     /// Grid-tier (`GRID_COVER_SIZE`) cache for the Playlists grid cards.
@@ -282,7 +281,7 @@ impl PlaylistsUi {
         data.playlists.iter().find(|p| p.id == id).cloned()
     }
 
-    /// Row-tier (72 px) cover lookup — backs
+    /// Row-tier cover lookup — backs
     /// `Playlists.request-row-cover`, used by the mosaic-picker
     /// dialog's 64 px candidate tiles and preview slots. Resolves
     /// against the shared `cover_thumbs` LRU (the same one the detail

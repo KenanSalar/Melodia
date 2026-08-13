@@ -8,7 +8,7 @@
 //! mode-gated: rows built for the surface that isn't mounted reach nothing (the
 //! `favorites::grids::apply::build_filtered_grids` precedent).
 //!
-//! The cover tier here is **private and 448 px**, never the shared 72 px row tier
+//! The cover tier here is **private and grid-sized**, never the shared row tier
 //! `BrowseUi::cover_thumbs` points at: the two hold buffers an order of magnitude
 //! apart in size, so mixing them would evict the row thumbnails Tracks and the
 //! now-playing bar are also using.
@@ -27,12 +27,6 @@ use crate::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
     BrowseCardRow as UiBrowseCardRow,
 };
-
-/// Square decode size (px) for Browse's card tiles. The same tier every other
-/// card grid uses, and for the same reason: a flex-filled card runs well past
-/// 280 px on a wide panel, and `FemtoVG` minifies bilinear with no mipmaps, so a
-/// tile upscaled past its decode size visibly softens.
-pub(super) const GRID_COVER_SIZE: u32 = 448;
 
 /// Fallback LRU capacity for the card cover cache, used at construction and
 /// whenever the display can't be queried. [`tune_cache_for_display`] replaces it
@@ -164,6 +158,9 @@ pub fn first_screenful_paths(files: &[BrowseFile]) -> Vec<PathBuf> {
 pub fn tune_cache_for_display(app: &AppWindow, browse_ui: &BrowseUi) {
     let cap = grid_prewarm::cover_cap_for_window(app, DEFAULT_GRID_COVER_CAP);
     browse_ui.grid_covers.resize(cap);
+    browse_ui
+        .grid_covers
+        .set_thumb_size(grid_prewarm::cover_size_for_window(app));
 }
 
 #[cfg(test)]

@@ -238,12 +238,37 @@ pub fn install_views(
     // all of them, since they all draw the same card at the same size (see
     // `ui::grid_prewarm::cover_cap`). Genres has no cover cache, so no
     // tuning step.
-    ui::albums::tune_cache_for_display(app, &albums_ui);
-    ui::artists::tune_cache_for_display(app, &artists_ui);
-    ui::playlists::tune_cache_for_display(app, &playlists_ui);
-    ui::favorites::tune_cache_for_display(app, &favorites_ui);
-    ui::recently_played::tune_cache_for_display(app, &recently_played_ui);
-    ui::browse::tune_cache_for_display(app, &browse_ui);
+    //
+    // **Deferred to the event loop, because this function runs long before
+    // `app.show()`.** Called inline, `cover_cap_for_window` finds no winit
+    // window, `with_winit_window` hands back `None`, and every tier silently
+    // takes its construction fallback — on every platform, which is what it
+    // had been doing. `scale_factor` has the same problem one layer up: it
+    // answers 1.0 until the window is on a monitor, so a `HiDPI` display would
+    // have been served the 1× decode size. Same one-shot shape as `main`'s
+    // post-show DWM re-apply; the closure's `Arc` clones are what keep the
+    // handles this scope drops.
+    let (tune_albums, tune_artists) = (albums_ui.clone(), artists_ui.clone());
+    let (tune_playlists, tune_favorites) = (playlists_ui.clone(), favorites_ui.clone());
+    let (tune_recent, tune_browse) = (recently_played_ui.clone(), browse_ui.clone());
+    let tune_rows = cover_thumbs.clone();
+    let weak = app.as_weak();
+    if let Err(e) = slint::invoke_from_event_loop(move || {
+        let Some(app) = weak.upgrade() else { return };
+        ui::albums::tune_cache_for_display(&app, &tune_albums);
+        ui::artists::tune_cache_for_display(&app, &tune_artists);
+        ui::playlists::tune_cache_for_display(&app, &tune_playlists);
+        ui::favorites::tune_cache_for_display(&app, &tune_favorites);
+        ui::recently_played::tune_cache_for_display(&app, &tune_recent);
+        ui::browse::tune_cache_for_display(&app, &tune_browse);
+        // The row tier has no `tune_cache_for_display` of its own — it belongs to
+        // no view — but it owes the same post-show read.
+        tune_rows.set_thumb_size(media::cover_thumbs::row_cover_size(f64::from(
+            app.window().scale_factor(),
+        )));
+    }) {
+        log::warn!("Failed to schedule cover-cache display tuning: {e}");
+    }
 
     // `browse_ui` / `favorites_ui` / `recently_played_ui` / `_search_ui` are
     // deliberately dropped here: their wired closures each hold a strong `Arc`

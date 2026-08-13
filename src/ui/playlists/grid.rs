@@ -284,6 +284,8 @@ pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
 /// [`crate::ui::detail_artwork`]).
 pub fn tune_cache_for_display(app: &AppWindow, playlists_ui: &PlaylistsUi) {
     let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, DEFAULT_GRID_COVER_CAP);
+    let size = crate::ui::grid_prewarm::cover_size_for_window(app);
     playlists_ui.grid_covers.resize(cap);
-    log::debug!("ui::playlists playlist-cover cache cap tuned to {cap}");
+    playlists_ui.grid_covers.set_thumb_size(size);
+    log::debug!("ui::playlists playlist-cover cache tuned to cap {cap}, {size} px");
 }

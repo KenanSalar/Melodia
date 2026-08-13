@@ -254,7 +254,7 @@ pub(super) fn wire(
     // restores the same state. Collapsing also drops the borrowed
     // grid-tier cover LRU (`AlbumsUi.grid_covers`): the
     // `if !albums-collapsed` gate has unmounted the scroller, so its
-    // 448 px covers are no longer visible or queried via
+    // grid-tier covers are no longer visible or queried via
     // `request-album-cover`. Safe because while Artist Detail is open
     // the Albums tab is not the active section — `grid_covers` holds
     // only this strip's covers. Re-expanding re-decodes them lazily.

@@ -94,7 +94,7 @@ pub fn install(
 /// `Arc<SearchUi>` — `Send + Sync`.
 pub struct SearchUi {
     inner: SearchUiState,
-    /// Shared row-tier (72 px) cache — used for the Songs `TrackList`
+    /// Shared row-tier cache — used for the Songs `TrackList`
     /// row column. Same instance every view consumes (cache parity
     /// with Tracks / Browse / Favorites is free).
     pub(super) cover_thumbs: Arc<CoverThumbs>,

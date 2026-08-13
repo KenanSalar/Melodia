@@ -71,7 +71,7 @@ pub async fn refresh_grid(
 
     // Prewarm the tier off-thread before its rows land in the Slint model: the
     // cards' `request-most-played-cover` lookups decode on miss *on the UI
-    // thread*, so a cold tab would otherwise pay one synchronous 448 px decode
+    // thread*, so a cold tab would otherwise pay one synchronous grid-tier decode
     // per visible card at first paint.
     //
     // Only the mounted tab, and only while the section is on screen. A

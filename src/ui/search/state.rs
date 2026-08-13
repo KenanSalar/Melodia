@@ -61,7 +61,7 @@ impl SearchUiState {
 /// Albums-strip tile size (px). The strip renders 160 px square cards, and
 /// `FemtoVG` minifies with plain bilinear (no mipmaps), so staying near the
 /// on-screen size keeps `image-fit: cover` clean without the album grid's
-/// 448 px tier. Sized against these cards rather than against another view's
+/// grid tier. Sized against these cards rather than against another view's
 /// tier: the grids draw flex-filled cards that keep growing with the window
 /// and take that tier for it, so a strip following them would decode a tile
 /// several times larger than any card it can draw.

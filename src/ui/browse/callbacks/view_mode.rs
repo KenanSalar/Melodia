@@ -93,7 +93,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
-    // request-card-cover: one card's thumbnail off Browse's own 448 px tier, decoded only
+    // request-card-cover: one card's thumbnail off Browse's own grid tier, decoded only
     // once `covers-generation` says the tier is warm.
     {
         let bu = browse_ui.clone();

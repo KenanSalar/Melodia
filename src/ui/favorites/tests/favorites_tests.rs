@@ -304,7 +304,7 @@ fn every_grid_mount_forwards_the_covers_generation() {
 /// The decode outlives a fast section leave, and `release_section_state` is
 /// spawned on that leave — it can easily finish first, so a prewarm that
 /// ignored it would refill the tier that release just emptied and hold a
-/// screenful of 448 px buffers behind a view nobody can see, until the next
+/// screenful of grid-tier buffers behind a view nobody can see, until the next
 /// leave. The check has to sit after the decode: before it, the leave hasn't
 /// happened yet, which is the whole problem.
 #[test]
