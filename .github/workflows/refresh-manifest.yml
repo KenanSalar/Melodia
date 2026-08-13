@@ -1,21 +1,15 @@
 name: Refresh manifest
 
-# Rebuilds and re-signs `latest.json` from the FINAL (edited) release
-# body once a release is published.
+# Rebuilds and re-signs `latest.json` from the FINAL release body on publish.
 #
-# `release.yml` builds `latest.json` while the release is still a draft
-# — at that point its body holds GitHub's auto-generated
-# `--generate-notes` text. Anything the author edits before flipping the
-# draft live is otherwise never reflected in the in-app updater's
-# `notes_short`. This workflow fires on the draft→published transition,
-# re-reads the (now final) body, and re-uploads the manifest.
+# release.yml builds the manifest while the release is still a draft, so its
+# `notes_short` holds GitHub's auto-generated text; anything the author edits
+# before flipping the draft live would otherwise never reach the updater panel.
+# `workflow_dispatch` with a `tag` does the same retroactively, which is the
+# recovery path when this job fails.
 #
-# `workflow_dispatch` (with a `tag` input) refreshes an already-published
-# release retroactively — e.g. to fix a release published before this
-# workflow existed.
-#
-# No self-trigger loop: `gh release upload` of assets does not emit a
-# `release` event, and `published` only fires once per release.
+# No self-trigger loop: uploading assets emits no `release` event, and
+# `published` fires once per release.
 
 on:
   release:
@@ -28,9 +22,8 @@ on:
         type: string
 
 permissions:
-  # Upload the refreshed latest.json / .minisig / SHA256SUMS.txt.
-  # No id-token/attestations: build provenance stays on the binary
-  # artifacts, which this workflow never touches.
+  # No id-token/attestations: provenance stays on the binary artifacts, which
+  # this workflow never touches.
   contents: write
 
 concurrency:
@@ -63,9 +56,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          # build-latest-json.py recomputes every platform entry's size
-          # and inlines its `.minisig`, so it needs the actual artifact
-          # files + sigs on disk.
+          # build-latest-json.py recomputes each entry's size and inlines its
+          # `.minisig`, so it needs the real files on disk.
           mkdir -p artifacts
           gh release download "$TAG" --dir ./artifacts \
             --pattern '*.AppImage' \
@@ -75,16 +67,13 @@ jobs:
             --pattern '*.msi' \
             --pattern '*.minisig'
 
-          # The published manifest is carry-over INPUT — its `version` /
-          # `manifest_schema_version` / `critical` / `pub_date` are re-used
-          # verbatim — and NOT an artifact to classify, so it is staged
-          # outside `artifacts/`. That directory holds installable artifacts
-          # and their `.minisig` siblings and nothing else, and since the
-          # missing-deb fix build-latest-json.py enforces it: a file matching
-          # no PLATFORM_PATTERNS entry aborts the rebuild rather than dropping
-          # a platform in silence. `latest.json` had been staged in there, so
-          # the first publish under that guard failed on the very file this
-          # step exists to read (v0.9.0). Keep carry-over inputs out of it.
+          # Staged OUTSIDE `artifacts/`: the published manifest is carry-over
+          # input, not something to classify, and that directory holds
+          # installable artifacts and their `.minisig` siblings and nothing else.
+          # build-latest-json.py enforces it — a file matching no
+          # PLATFORM_PATTERNS entry aborts rather than dropping a platform in
+          # silence — so staging it inside broke the first publish under that
+          # guard on the very file this step exists to read. Keep carry-over out.
           gh release download "$TAG" --dir "$RUNNER_TEMP" --pattern 'latest.json'
 
       - name: Resolve carry-over manifest fields
@@ -96,14 +85,11 @@ jobs:
             echo "::error::$MANIFEST not found in release $TAG"
             exit 1
           }
-          # `// <default>` guards a retroactive `workflow_dispatch`
-          # refresh of a manifest that predates one of these fields: a
-          # missing field makes `jq -r` emit the literal string `null`,
-          # which would crash `--manifest-schema-version` (type=int) and
-          # poison `pub_date` with "null". `// empty` yields "" so
-          # build-latest-json.py falls back to the current UTC time.
-          # `version` has no fallback on purpose — a manifest without it
-          # is broken and the rebuild should fail loudly.
+          # The `//` defaults guard a retroactive refresh of a manifest predating
+          # one of these fields: `jq -r` emits the literal string `null`, which
+          # would crash `--manifest-schema-version` and poison `pub_date`.
+          # `version` has no fallback on purpose — a manifest without one is
+          # broken and should fail loudly.
           {
             echo "version=$(jq -r '.version' "$MANIFEST")"
             echo "schema=$(jq -r '.manifest_schema_version // 1' "$MANIFEST")"
@@ -116,8 +102,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          # The release is published by now, so `.body` is the final,
-          # author-edited Markdown — not the draft-time auto-notes.
+          # Published by now, so `.body` is the author-edited Markdown rather
+          # than the draft-time auto-notes.
           gh release view "$TAG" --json body -q '.body' > release-notes.md \
             || : > release-notes.md
           wc -c release-notes.md
@@ -125,9 +111,8 @@ jobs:
       - name: Install markdown-it-py for notes stripping
         shell: bash
         run: |
-          # Same pin as release.yml — a breaking change to the
-          # token-walk API used by `_strip_via_md_it` would silently
-          # corrupt notes_short.
+          # Must equal release.yml's pin, or notes_short desyncs between the
+          # draft build and this refresh.
           python3 -m pip install --quiet markdown-it-py==4.2.0
 
       - name: Rebuild latest.json
@@ -174,9 +159,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          # The published SHA256SUMS.txt now carries stale lines for the
-          # changed latest.json / latest.json.minisig — rebuild it over
-          # the freshly-signed manifest.
+          # The published copy now carries stale lines for the re-signed
+          # manifest, so rebuild it over the fresh one.
           cp latest.json latest.json.minisig artifacts/
           cd artifacts
           shopt -s nullglob

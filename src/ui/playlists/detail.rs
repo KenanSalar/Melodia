@@ -33,6 +33,21 @@ use crate::{AppWindow, NavEnterFrom, PlaylistDetail, TrackListRow as UiTrackList
 // `sort_playlist_tracks` below.
 impl_detail_view_helpers!(artwork PlaylistDetail);
 
+/// The playlist's own curated order. Synthetic — no column header asks for it,
+/// which is why the sort cycle has to hand it back (`next_sort_with_natural`).
+pub const POSITION_FIELD: &str = "position";
+
+/// Whether the rows on screen are in canonical position order, ascending.
+///
+/// The drag hands over *display* indices and [`apply_optimistic_reorder`] writes
+/// them straight into `position_order`, so this is the whole precondition for
+/// that mapping being the identity. The direction half is the easy one to miss:
+/// [`sort_playlist_tracks`] reverses on `"desc"`, which would make every drag
+/// write the inverse permutation.
+pub(super) fn is_manual_order(field: &str, dir: &str) -> bool {
+    field == POSITION_FIELD && dir != "desc"
+}
+
 async fn fetch_playlist_detail(
     state: &AppState,
     playlists_ui: &PlaylistsUi,
@@ -115,7 +130,7 @@ where
     // is restored across opens and restarts.
     let position_order: Vec<i64> = tracks.iter().map(|t| t.id).collect();
     let (sort_field, sort_dir) =
-        resolve_view_sort(state, view_id::PLAYLIST_DETAIL, "position");
+        resolve_view_sort(state, view_id::PLAYLIST_DETAIL, POSITION_FIELD);
     sort_playlist_tracks(&mut tracks, &position_order, &sort_field, &sort_dir);
 
     let pair = decode_detail_pair(
@@ -318,16 +333,15 @@ pub async fn refresh_detail(
     Ok(())
 }
 
-/// Re-sort the cached detail tracks to the current `PlaylistDetail` sort
-/// state, then reorder the existing `tracks` model rows to match.
-/// `"position"` rebuilds from the canonical position-order cache via an
-/// O(N) `HashMap` lookup per row; any other field falls through to the
-/// shared `sort_track_rows_by` helper.
-pub fn resort_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
-    let g = ui.global::<PlaylistDetail>();
-    let field = g.get_sort_field().to_string();
-    let dir = g.get_sort_dir().to_string();
-
+/// Sort both cached track lists to `field` / `dir` and permute the visible
+/// `tracks` model to match. `"position"` rebuilds from the canonical
+/// position-order cache via an O(N) `HashMap` lookup per row; any other field
+/// falls through to the shared `sort_track_rows_by` helper.
+///
+/// Reconciling the selection is the caller's, and only [`resort_detail`] owes
+/// it: a permutation carries each row's `selected` with it, so the drag path
+/// has nothing to reconcile.
+fn reapply_order(g: &PlaylistDetail, playlists_ui: &PlaylistsUi, field: &str, dir: &str) {
     // Sort the canonical full set + the displayed subset in lockstep so
     // `play-row` / range-select read consistent order and widening the
     // filter later still yields sorted rows.
@@ -336,11 +350,11 @@ pub fn resort_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
         sort_playlist_tracks(
             &mut playlists_ui.detail.all_tracks.lock(),
             &position_order,
-            &field,
-            &dir,
+            field,
+            dir,
         );
         let mut tracks = playlists_ui.detail.tracks.lock();
-        sort_playlist_tracks(&mut tracks, &position_order, &field, &dir);
+        sort_playlist_tracks(&mut tracks, &position_order, field, dir);
         tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
     };
 
@@ -356,19 +370,40 @@ pub fn resort_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
             order.iter().filter_map(|id| by_id.remove(id)).collect();
         vm.set_vec(reordered);
     }
+}
+
+/// Re-sort the cached detail tracks to the current `PlaylistDetail` sort state,
+/// then reorder the existing `tracks` model rows to match.
+pub fn resort_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
+    let g = ui.global::<PlaylistDetail>();
+    let field = g.get_sort_field();
+    let dir = g.get_sort_dir();
+    reapply_order(&g, playlists_ui, &field, &dir);
     apply_selection_to_rows(&g, playlists_ui);
 }
 
 /// Optimistically reorder the cached detail state for a drag-and-drop
-/// commit *before* the DB write lands. Mutates both `position_order` and
-/// (if sort-field is `"position"`) the visible `tracks` Vec. Returns the
-/// pre-mutation pair so the caller can roll back on a DB error.
+/// commit *before* the DB write lands. Mutates `position_order` and the
+/// visible `tracks` Vec. Returns the pre-mutation pair so the caller can roll
+/// back on a DB error, or `None` when nothing was touched.
 pub fn apply_optimistic_reorder(
     ui: &AppWindow,
     playlists_ui: &PlaylistsUi,
     from: usize,
     to: usize,
 ) -> Option<(Vec<i64>, Vec<RsTrackListRow>)> {
+    let g = ui.global::<PlaylistDetail>();
+    let field = g.get_sort_field();
+    let dir = g.get_sort_dir();
+    // Asked here as well as in `reorder-enabled`, this being where the display
+    // indices reach the cache. The filter term is the sharp one: filtered,
+    // `tracks` is a subset of the canonical `position_order`, so `from` names a
+    // different track — and the write still lands, a filtered index being in
+    // range. (`is_smart` needs no term: the query refuses an empty item set.)
+    if !is_manual_order(&field, &dir) || !playlists_ui.detail.filter.lock().is_empty() {
+        return None;
+    }
+
     // Snapshot for rollback BEFORE we mutate anything.
     let saved = {
         let pos = playlists_ui.detail.position_order.lock().clone();
@@ -386,40 +421,9 @@ pub fn apply_optimistic_reorder(
         pos.insert(insert_at, id);
     }
 
-    let g = ui.global::<PlaylistDetail>();
-    let field = g.get_sort_field().to_string();
-    if field == "position" {
-        // Mirror the in-memory order onto the visible model. The Rust
-        // caches are mutated in lock-step; the Slint VecModel is permuted.
-        // Drag-reorder is disabled while a filter is active, so the
-        // displayed `tracks` cache equals the canonical `all_tracks`
-        // here — both are re-sorted.
-        let dir = g.get_sort_dir().to_string();
-        let order: Vec<i32> = {
-            let position_order = playlists_ui.detail.position_order.lock();
-            sort_playlist_tracks(
-                &mut playlists_ui.detail.all_tracks.lock(),
-                &position_order,
-                &field,
-                &dir,
-            );
-            let mut tracks = playlists_ui.detail.tracks.lock();
-            sort_playlist_tracks(&mut tracks, &position_order, &field, &dir);
-            tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
-        };
-        let model = g.get_tracks();
-        if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-            let mut by_id: HashMap<i32, UiTrackListRow> = HashMap::with_capacity(vm.row_count());
-            for i in 0..vm.row_count() {
-                if let Some(r) = vm.row_data(i) {
-                    by_id.insert(r.id, r);
-                }
-            }
-            let reordered: Vec<UiTrackListRow> =
-                order.iter().filter_map(|id| by_id.remove(id)).collect();
-            vm.set_vec(reordered);
-        }
-    }
+    // The guard above rules out a filter, so the displayed `tracks` cache equals
+    // the canonical `all_tracks` here and both re-sort off the same order.
+    reapply_order(&g, playlists_ui, &field, &dir);
 
     Some(saved)
 }
@@ -451,10 +455,11 @@ pub fn clear_detail(playlists_ui: &PlaylistsUi) {
     crate::ui::window_chrome::set_current_playlist_id(-1);
 }
 
-/// Update the cached filter needle. The Slint side already mirrors the
-/// live text via the `<=>` binding; this Rust mirror lets the re-fetch
-/// path (`refresh_detail`) re-apply the filter to fresh data without
-/// round-tripping the UI thread for the property read. Always stored
+/// Update the cached filter needle. Nothing binds the Slint half to this one —
+/// the page's single box reaches nine surfaces through Rust, so
+/// `ui::my_library::filter::dispatch` writes both sides. This mirror is what
+/// lets the re-fetch path (`refresh_detail`) re-apply the filter to fresh data
+/// without round-tripping the UI thread for the property read. Always stored
 /// folded so the per-keystroke walk doesn't re-fold per row.
 pub fn set_filter(playlists_ui: &PlaylistsUi, needle: &str) {
     *playlists_ui.detail.filter.lock() = crate::ui::row_match::fold_needle(needle);
@@ -537,7 +542,7 @@ fn sort_playlist_tracks(
     field: &str,
     dir: &str,
 ) {
-    if field == "position" {
+    if field == POSITION_FIELD {
         let index_of: HashMap<i64, usize> = position_order
             .iter()
             .enumerate()

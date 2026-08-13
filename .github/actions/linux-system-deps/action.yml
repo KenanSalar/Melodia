@@ -8,11 +8,10 @@ description: >-
 runs:
   using: composite
   steps:
-    # GitHub's arm64 runners default to community-hosted `ports.ubuntu.com`,
-    # which suffers sustained connectivity dropouts from Azure-hosted runner
-    # instances. Repoint to Azure's own mirror (same fabric, no cross-network
-    # hop); also swap `archive.ubuntu.com` on amd64. Both sed branches are
-    # no-ops when the URL doesn't match, so this is safe on every Linux slot.
+    # arm64 runners default to community-hosted `ports.ubuntu.com`, which drops
+    # connections from Azure-hosted instances; repoint to Azure's own mirror,
+    # same fabric. Both branches no-op when the URL doesn't match, so this is
+    # safe on every Linux slot.
     - name: Use Azure apt mirrors (mirror failover)
       shell: bash
       run: |
@@ -21,8 +20,7 @@ runs:
           -e 's|http://ports\.ubuntu\.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
           /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
 
-    # Retry wrapper layered on top of the Azure mirror swap above — defence in
-    # depth for short hiccups. 3 attempts x 15 s backoff.
+    # Defence in depth over the mirror swap above, for short hiccups.
     - name: Install Linux system deps
       shell: bash
       run: |
