@@ -58,9 +58,7 @@ use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
 
-use state::{
-    FavoritesUiState, GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE,
-};
+use state::{FavoritesUiState, GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE};
 
 /// This page's `Nav.selected-index`. **The single definition**, beside the view it
 /// names, the way [`crate::ui::my_library::NAV_MY_LIBRARY`] sits beside its page —

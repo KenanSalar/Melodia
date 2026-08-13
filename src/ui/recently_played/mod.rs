@@ -48,8 +48,7 @@ use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
 
 use state::{
-    GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE,
-    RecentlyPlayedUiState, SongsTotals,
+    GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE, RecentlyPlayedUiState, SongsTotals,
 };
 
 /// This page's `Nav.selected-index` — see [`crate::ui::favorites::NAV_FAVORITES`].

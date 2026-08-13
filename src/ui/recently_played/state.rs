@@ -102,7 +102,6 @@ pub(super) const MOSAIC_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(16) {
     None => panic!("MOSAIC_THUMB_CAP > 0"),
 };
 
-
 /// LRU capacity for the Most Played tier. Sized like the album grid's default:
 /// enough for a screenful or two of cards, so scrolling re-decodes rather than
 /// the cache growing with the library.
