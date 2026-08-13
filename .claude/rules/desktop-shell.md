@@ -19,27 +19,91 @@ paths:
 
 # The desktop shell — window chrome, tray, media keys
 
-Everything about the app's relationship with the OS window server and the desktop's
-notification/media surfaces. The theme running through it: **Slint's window API is a
-cache, winit is the truth**, and anything the OS owns has to be attached late or not
-at all on at least one platform.
+The app's relationship with the OS window server and the desktop's notification/media surfaces.
+The theme running through it: **Slint's window API is a cache, winit is the truth**, and anything
+the OS owns has to be attached late or not at all on at least one platform.
 
 ## Window chrome
 
-- **Window-control APIs go through winit, not Slint.** Slint's `set_minimized`/`set_maximized` cache stalls on Wayland. Use `WinitWindowAccessor::with_winit_window(|w| w.set_minimized(true))`.
-- **Window dragging belongs at winit layer.** `drag_window()` from Slint `pointer-event(down)` leaks input grab. `TouchArea` reports `has-hover` via `WindowChrome.drag-region-hover-changed`; `on_winit_window_event` intercepts `MouseInput { Pressed, Left }` when atomic true → `drag_window()` → `PreventDefault`.
-- **`Window.no-frame` is sticky.** Slint reads once at first show. Native Title Bar toggle requires restart via `Dialog` `"restart-titlebar"` → `window_chrome::request_respawn_and_quit`. Hydrate `Theme.use-native-titlebar` *before* `app.run()`.
-- **A restart can refuse, and the check has to sit on this side of the exit.** All three restart paths — the titlebar toggle, the tray toggle and the updater's "Restart Now" — go through **`window_chrome::request_respawn_and_quit`**, which resolves `respawn_target()` *before* setting `RESPAWN_AFTER_EXIT` and quitting. Past `slint::quit_event_loop()` the window is gone and a failed `exec` in `shutdown::respawn_if_requested` has nothing to fall back to — the app simply vanishes — so with no binary to come back to it keeps the app up and raises a sticky `ToastKind::RestartRequired` instead. Every caller has already persisted its setting by then, which is what makes staying up an honest answer: the toast asks the user to close and reopen, and the change applies on the next manual launch. `respawn_target()` is the updater's recorded pre-swap path (`set_respawn_exe`) if there is one, else `services::current_exe()` — the marker-resolving form, so a package upgrade mid-session can't hand back a `<path> (deleted)` string. Don't inline the flag store + `quit_event_loop` pair at a fourth site; that shape is what this replaced — and outside `window_chrome` you now can't, `RESPAWN_AFTER_EXIT` and `respawn_exe` both being private, so the rule only needs holding *inside* that module.
-- **Transparent ARGB Window for rounded outlines.** winit `with_transparent(true)`; `Window.background: Colors.transparent`; rounded mantle Rectangle (`clip: true`, `border-radius: Theme.shell-radius`) is the only direct child. Opaque + square when `is-maximized` or `use-native-titlebar`.
-- **Match Unfocused Window Background (KDE-only).** Tints sidebar + NP-bar to OS unfocused titlebar. `LayoutFlags.match_unfocused_to_system_bg`, serde default `is_kde_desktop()`; hidden off-KDE, disabled in custom-titlebar. `Theme.window-focused` mirrors winit `Focused(bool)` raw. Sites gate on all three: `(Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused) ? mantle-unfocused : mantle`. No `animate` — desyncs OS swap.
-- **Always-on-top (Linux)** — D-Bus to KWin or GNOME (`window-calls` ext.); falls back to native decorations on bare GNOME.
-- **OS file drag-and-drop via vendored winit fork.** Stock winit 0.30.13 has no `wl_data_device`. Fork at `winit/` (0.30.13 + 3 commits: PR #4009 + `WindowId` fix + URI percent-decoding, cfg-gated to Linux), wired via `[patch.crates-io] winit = { path = "winit" }`. Flow: `winit_filter.rs::DroppedFile` → `drop_coalescer.rs::schedule_drop_flush` (50 ms → `queue_import_files`); `HoveredFile{,Cancelled}` toggle `Queue.is-drop-hovered`. Don't bump winit without rebase + re-sync — see the Known Gaps entry in the root `CLAUDE.md` for what retires it.
+- **Window-control APIs go through winit, not Slint.** Slint's `set_minimized`/`set_maximized`
+  cache stalls on Wayland: `WinitWindowAccessor::with_winit_window(|w| w.set_minimized(true))`.
+
+- **Window dragging belongs at the winit layer.** `drag_window()` from Slint `pointer-event(down)`
+  leaks the input grab. `TouchArea` reports `has-hover` via
+  `WindowChrome.drag-region-hover-changed`; `on_winit_window_event` intercepts
+  `MouseInput { Pressed, Left }` when that atomic is true → `drag_window()` → `PreventDefault`.
+
+- **`Window.no-frame` is sticky** — read once at first show. The Native Title Bar toggle restarts
+  via `Dialog` `"restart-titlebar"` → `window_chrome::request_respawn_and_quit`; hydrate
+  `Theme.use-native-titlebar` *before* `app.run()`.
+
+- **A restart can refuse, and the check has to sit on this side of the exit.** All three restart
+  paths — titlebar toggle, tray toggle, the updater's "Restart Now" — go through
+  **`window_chrome::request_respawn_and_quit`**, which resolves `respawn_target()` *before*
+  setting `RESPAWN_AFTER_EXIT` and quitting: past `slint::quit_event_loop()` the window is gone, so
+  a failed `exec` in `shutdown::respawn_if_requested` has nothing to fall back to and the app
+  simply vanishes. With no binary to come back to it stays up and raises a sticky
+  `ToastKind::RestartRequired`; every caller has persisted its setting by then, so a toast asking
+  the user to close and reopen is an honest answer — the change lands on the next manual launch.
+  `respawn_target()` is the updater's recorded pre-swap path (`set_respawn_exe`) if there is one,
+  else `services::current_exe()` — the marker-resolving form, so a package upgrade mid-session
+  can't hand back a `<path> (deleted)` string. Don't inline the flag store + `quit_event_loop` pair
+  at a fourth site; outside `window_chrome` you can't, both statics being private, so the rule only
+  binds *inside* that module.
+
+- **Transparent ARGB window for the rounded outline.** winit `with_transparent(true)`;
+  `Window.background: Colors.transparent`; rounded mantle `Rectangle` (`clip: true`,
+  `border-radius: Theme.shell-radius`) the only direct child. Opaque + square when `is-maximized`
+  or `use-native-titlebar`.
+
+- **Match Unfocused Window Background (KDE-only)** — tints sidebar + NP-bar to the OS unfocused
+  titlebar. `LayoutFlags.match_unfocused_to_system_bg`, serde default `is_kde_desktop()`; hidden
+  off-KDE, disabled in custom-titlebar. `Theme.window-focused` mirrors winit `Focused(bool)` raw;
+  sites gate on all three:
+  `(Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused)`
+  `? mantle-unfocused : mantle`. No `animate` — desyncs the OS swap.
+
+- **Always-on-top (Linux)** — D-Bus to KWin or GNOME (`window-calls` ext.); bare GNOME falls back
+  to native decorations.
+
+- **OS file drag-and-drop rides the vendored winit fork** — stock 0.30.13 has no `wl_data_device`.
+  `winit/` is 0.30.13 + 3 commits (PR #4009, `WindowId` fix, URI percent-decoding, cfg-gated to
+  Linux), wired by `[patch.crates-io]`. Flow: `winit_filter.rs::DroppedFile` →
+  `drop_coalescer.rs::schedule_drop_flush` (50 ms → `queue_import_files`);
+  `HoveredFile{,Cancelled}` toggle `Queue.is-drop-hovered`. Don't bump winit without a rebase +
+  re-sync — the root `CLAUDE.md`'s Known Gaps has what retires it.
 
 ## Tray and media keys
 
-- **OS media controls** — souvlaki 0.8. Bounded `mpsc` (cap 32) decouples callback thread from `PlayerState`; `EventSink` trait decouples from Slint. **Windows SMTC deferred** — souvlaki panics on null `HWND` and no OS window exists at `AppState::init`, so `init_media_controls()` leaves Windows inert. `main()` posts a one-shot `invoke_from_event_loop` post-show that grabs `HWND` + calls `MediaControlsHandle::attach_smtc`; newly-attached returns `true`, triggering a no-op `with_state_emit` to flush playback. Linux MPRIS / macOS MediaPlayer attach eagerly. `event_tx` retained Windows-only for late rewire.
-- **System tray** — `src/services/tray/` cfg-split: Linux `ksni`; Win/mac `tray-icon 0.24`. Façade `mod.rs` (`TrayAction`, `TraySnapshot`, embedded `tray.png`, `init_tray`). `src/ui/shell/tray_bridge.rs`: bounded `mpsc<TrayAction>` → one task — playback reuses souvlaki `EventSink`; `ShowHideWindow`/`Quit` hop UI via `invoke_from_event_loop`; `sinks.view_model` subscriber pushes tooltip + play/pause label. Linux eager; **Win/mac deferred**, dropped by `tray_bridge::shutdown()` pre-`process::exit` or it ghosts. No SNI host → `init_tray` `None`/`false`; tray-less still usable. **Opt-in** `TrayFlags.enabled` (default off): `main.rs` gates `tray_bridge::install`. Restart-gated via `restart-tray` `Dialog` → `WindowChrome.restart-tray()` → `controls.rs::on_restart_tray` (`library::window::set_tray_enabled` + `request_respawn_and_quit`, which may decline — see the restart bullet above). **Close-to-tray** `TrayFlags.close_to_tray` (default off): Slint `Window::hide/show` on `should_hide_to_tray()` — gated on setting AND active tray; `SettingRow.disabled` when `Settings.tray-active` false. Hide→show snapshots into `SAVED_WINDOW_GEOM`; re-show re-asserts via self-rescheduling 16 ms timer (`reschedule_geometry_restore`, cap `RESTORE_ATTEMPTS`). Tray labels English-only. `WINDOW_VISIBLE` atomic shadows visibility (`is_visible()` is `None` on Wayland).
+- **OS media controls** — souvlaki 0.8. Bounded `mpsc` (cap 32) decouples the callback thread from
+  `PlayerState`, `EventSink` from Slint. **Windows SMTC deferred** — souvlaki panics on a null
+  `HWND` and no OS window exists at `AppState::init`, so `init_media_controls()` leaves Windows
+  inert; `main()` posts a one-shot post-show `invoke_from_event_loop` grabbing the `HWND` and
+  calling `MediaControlsHandle::attach_smtc`, a newly-attached `true` triggering a no-op
+  `with_state_emit` to flush playback. Linux MPRIS / macOS MediaPlayer attach eagerly; `event_tx`
+  retained Windows-only for the late rewire.
+
+- **System tray** — `src/services/tray/` cfg-split (Linux `ksni`, Win/mac `tray-icon 0.24`) behind
+  a `mod.rs` façade (`TrayAction`, `TraySnapshot`, embedded `tray.png`, `init_tray`).
+  `ui/shell/tray_bridge.rs` runs one task off a bounded `mpsc<TrayAction>`: playback reuses
+  souvlaki's `EventSink`, `ShowHideWindow`/`Quit` hop to the UI via `invoke_from_event_loop`, a
+  `sinks.view_model` subscriber pushes tooltip + play/pause label. Linux eager; **Win/mac deferred,
+  and dropped by `tray_bridge::shutdown()` before `process::exit` or the icon ghosts**. No SNI host
+  → `init_tray` `None`/`false`, tray-less still usable; labels English-only. **Opt-in**
+  `TrayFlags.enabled` (default off) gates `tray_bridge::install` from `main.rs`; flipping it is
+  restart-gated through `restart-tray` `Dialog` → `WindowChrome.restart-tray()` →
+  `controls.rs::on_restart_tray` (`library::window::set_tray_enabled` + `request_respawn_and_quit`,
+  which may decline — above).
+
+- **Close-to-tray** (`TrayFlags.close_to_tray`, default off) — Slint `Window::hide/show` on
+  `should_hide_to_tray()`, gated on the setting **and** a live tray (`SettingRow.disabled` when
+  `Settings.tray-active` false). Hide snapshots `SAVED_WINDOW_GEOM`; re-show re-asserts it from a
+  self-rescheduling 16 ms timer (`reschedule_geometry_restore`, cap `RESTORE_ATTEMPTS`).
+  `WINDOW_VISIBLE` shadows visibility — `is_visible()` is `None` on Wayland.
 
 ## Shutdown
 
-- **Force-exit shutdown.** `main()` ends `std::process::exit(0)`; normal return lets leaked `MixerDeviceSink`/MPRIS/accesskit pin the process. `tracker.wait()` + `db.close()` wrapped in a 3 s `timeout`; runtime dropped on a background thread. `save_state_on_exit` flushes synchronously *before* the timeout.
+- **Force-exit.** `main()` ends in `std::process::exit(0)`; a normal return lets the leaked
+  `MixerDeviceSink`, MPRIS and accesskit pin the process. `tracker.wait()` + `db.close()` in a 3 s
+  `timeout`, runtime dropped on a background thread; `save_state_on_exit` flushes synchronously
+  *before* the timeout.
