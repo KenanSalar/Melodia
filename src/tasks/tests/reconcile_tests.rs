@@ -91,14 +91,9 @@ async fn renamed_without_metadata_falls_back_to_a_stat() -> Result<(), AppError>
     assert!(on_disk.is_some(), "the temp file must have a readable mtime");
 
     let mut tx = db.write().begin().await?;
-    let changed = handle_renamed(
-        &mut tx,
-        &tmp.path().join("from.mp3"),
-        &to,
-        None,
-        &mut HashMap::new(),
-    )
-    .await?;
+    let changed =
+        handle_renamed(&mut tx, &tmp.path().join("from.mp3"), &to, None, &mut HashMap::new())
+            .await?;
     tx.commit().await?;
 
     assert!(changed);

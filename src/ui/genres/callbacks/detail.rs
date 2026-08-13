@@ -9,8 +9,8 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::library;
 use crate::state::AppState;
-use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::{next_sort, persist_view_sort};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::my_library::return_to_section;
@@ -70,11 +70,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
 
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_last_detail_id(
-                    &s_disk,
-                    view_id::GENRE_DETAIL,
-                    None,
-                ) {
+                if let Err(e) =
+                    library::settings::set_last_detail_id(&s_disk, view_id::GENRE_DETAIL, None)
+                {
                     log::warn!("genres::close_detail persist: {e}");
                 }
             });
@@ -106,8 +104,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             }
             let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            spawn_logged!(s, "genres::play_row",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+            spawn_logged!(
+                s,
+                "genres::play_row",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
+            );
         });
     }
 
@@ -116,8 +117,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
         detail.on_play_next(move |ids| {
             let id_vec = collect_track_ids(&ids);
             let s = s.clone();
-            spawn_logged!(s, "genres::play_next",
-                library::queue::queue_play_next_many(&s, id_vec));
+            spawn_logged!(s, "genres::play_next", library::queue::queue_play_next_many(&s, id_vec));
         });
     }
 
@@ -137,26 +137,26 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
     {
         let gu = genres_ui.clone();
         wire_row_flag!(detail, on_toggle_row_favorite, state, "genres::set_favorite",
-            library::favorites::set_favorite, collect_track_ids,
-            captures: [weak, gu],
-            after: |id_vec, fav| {
-                for id in &id_vec {
-                    gu.flip_detail_favorite(*id, fav);
-                    genres_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
-                }
-            });
+        library::favorites::set_favorite, collect_track_ids,
+        captures: [weak, gu],
+        after: |id_vec, fav| {
+            for id in &id_vec {
+                gu.flip_detail_favorite(*id, fav);
+                genres_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
+            }
+        });
     }
     {
         let gu = genres_ui.clone();
         wire_row_flag!(detail, on_set_row_rating, state, "genres::set_rating",
-            library::ratings::set_rating, collect_track_ids,
-            captures: [weak, gu],
-            after: |id_vec, rating| {
-                for id in &id_vec {
-                    gu.flip_detail_rating(*id, rating);
-                    genres_ui_mod::apply_detail_row_rating(&weak, *id, rating);
-                }
-            });
+        library::ratings::set_rating, collect_track_ids,
+        captures: [weak, gu],
+        after: |id_vec, rating| {
+            for id in &id_vec {
+                gu.flip_detail_rating(*id, rating);
+                genres_ui_mod::apply_detail_row_rating(&weak, *id, rating);
+            }
+        });
     }
 
     // select-row / clear-selection: modifier-aware selection,
@@ -209,9 +209,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<GenreDetail>().snapshot_visible();
             let s = s.clone();
-            spawn_blocking_logged!(s, "genres::toggle_column",
+            spawn_blocking_logged!(
+                s,
+                "genres::toggle_column",
                 library::settings::update_view_columns(
-                    &s, view_id::GENRE_DETAIL.to_owned(), columns));
+                    &s,
+                    view_id::GENRE_DETAIL.to_owned(),
+                    columns
+                )
+            );
         });
     }
 

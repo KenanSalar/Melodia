@@ -4,12 +4,16 @@ use crate::database::DbPool;
 use crate::entities::folder;
 use crate::error::AppError;
 
-pub async fn insert_folder(db: &DbPool, path: &str, is_enabled: bool) -> Result<folder::Folder, AppError> {
+pub async fn insert_folder(
+    db: &DbPool,
+    path: &str,
+    is_enabled: bool,
+) -> Result<folder::Folder, AppError> {
     let now = crate::utils::now_rfc3339();
     let row = sqlx::query_as::<_, folder::Folder>(
         "INSERT INTO folders (path, is_enabled, added_at)
          VALUES (?, ?, ?)
-         RETURNING *"
+         RETURNING *",
     )
     .bind(path)
     .bind(is_enabled)
@@ -20,9 +24,8 @@ pub async fn insert_folder(db: &DbPool, path: &str, is_enabled: bool) -> Result<
 }
 
 pub async fn get_all_folders(db: &DbPool) -> Result<Vec<folder::Folder>, AppError> {
-    let folders = sqlx::query_as::<_, folder::Folder>("SELECT * FROM folders")
-        .fetch_all(db.read())
-        .await?;
+    let folders =
+        sqlx::query_as::<_, folder::Folder>("SELECT * FROM folders").fetch_all(db.read()).await?;
     Ok(folders)
 }
 
@@ -36,10 +39,7 @@ pub async fn get_folder_by_id(db: &DbPool, id: i64) -> Result<folder::Folder, Ap
 
 pub async fn delete_folder(db: &DbPool, id: i64) -> Result<(), AppError> {
     // ON DELETE CASCADE on tracks.folder_id handles child deletion
-    sqlx::query("DELETE FROM folders WHERE id = ?")
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    sqlx::query("DELETE FROM folders WHERE id = ?").bind(id).execute(db.write()).await?;
     Ok(())
 }
 
@@ -74,7 +74,7 @@ pub async fn upsert_folder(
         "INSERT INTO folders (path, is_enabled, added_at)
          VALUES (?, FALSE, ?)
          ON CONFLICT(path) DO UPDATE SET path = excluded.path
-         RETURNING id"
+         RETURNING id",
     )
     .bind(path)
     .bind(&now)
@@ -83,7 +83,11 @@ pub async fn upsert_folder(
     Ok(id)
 }
 
-pub async fn update_folder_last_scanned(db: &DbPool, id: i64, timestamp: &str) -> Result<(), AppError> {
+pub async fn update_folder_last_scanned(
+    db: &DbPool,
+    id: i64,
+    timestamp: &str,
+) -> Result<(), AppError> {
     sqlx::query("UPDATE folders SET last_scanned = ? WHERE id = ?")
         .bind(timestamp)
         .bind(id)

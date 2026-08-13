@@ -13,8 +13,7 @@ const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/my-library-view
 const APP_WINDOW: &str = include_str!("../../../../melodia-ui/ui/app-window.slint");
 const SIDEBAR: &str = include_str!("../../../../melodia-ui/ui/layout/sidebar.slint");
 const PILLS: &str = include_str!("../../../../melodia-ui/ui/views/my-library/tab-pills.slint");
-const SORT_ROW: &str =
-    include_str!("../../../../melodia-ui/ui/components/sort-pill-row.slint");
+const SORT_ROW: &str = include_str!("../../../../melodia-ui/ui/components/sort-pill-row.slint");
 const CALLBACKS: &str = include_str!("../callbacks.rs");
 const NAV_HISTORY: &str = include_str!("../../nav_history.rs");
 const FILTER: &str = include_str!("../filter.rs");
@@ -25,10 +24,7 @@ const TAB_BODIES: [(&str, &str); 5] = [
     ("albums", include_str!("../../../../melodia-ui/ui/views/my-library/albums-tab.slint")),
     ("artists", include_str!("../../../../melodia-ui/ui/views/my-library/artists-tab.slint")),
     ("genres", include_str!("../../../../melodia-ui/ui/views/my-library/genres-tab.slint")),
-    (
-        "playlists",
-        include_str!("../../../../melodia-ui/ui/views/my-library/playlists-tab.slint"),
-    ),
+    ("playlists", include_str!("../../../../melodia-ui/ui/views/my-library/playlists-tab.slint")),
 ];
 
 /// The four detail bodies, each stripped of the `DetailHeader` it used to wear. They
@@ -36,10 +32,7 @@ const TAB_BODIES: [(&str, &str); 5] = [
 /// banner — so most pins walk the two together.
 const DETAIL_BODIES: [(&str, &str); 4] = [
     ("album", include_str!("../../../../melodia-ui/ui/views/my-library/album-detail.slint")),
-    (
-        "artist",
-        include_str!("../../../../melodia-ui/ui/views/my-library/artist-detail.slint"),
-    ),
+    ("artist", include_str!("../../../../melodia-ui/ui/views/my-library/artist-detail.slint")),
     ("genre", include_str!("../../../../melodia-ui/ui/views/my-library/genre-detail.slint")),
     (
         "playlist",
@@ -201,10 +194,7 @@ fn a_drill_inside_the_page_records_no_origin() {
             source.contains("set_origin_nav_index("),
             "`{name}` no longer writes `origin-nav-index` — pin is stale",
         );
-        assert!(
-            !source.contains("set_origin_tab("),
-            "`{name}` writes an `origin-tab` again",
-        );
+        assert!(!source.contains("set_origin_tab("), "`{name}` writes an `origin-tab` again");
     }
 
     // Every stamp goes through `Origin::stamp`, which is where the `-1` lives. A site
@@ -283,7 +273,12 @@ fn every_section_seed_reads_the_mounted_tab() {
 /// swap is also what puts My Library where Tracks was — directly under Recently Played.
 #[test]
 fn the_sidebar_offers_one_row_for_the_whole_page() {
-    for gone in ["@tr(\"Tracks\")", "@tr(\"Albums\")", "@tr(\"Artists\")", "@tr(\"Genres\")"] {
+    for gone in [
+        "@tr(\"Tracks\")",
+        "@tr(\"Albums\")",
+        "@tr(\"Artists\")",
+        "@tr(\"Genres\")",
+    ] {
         assert!(
             !SIDEBAR.contains(gone),
             "`sidebar.slint` still carries a row for {gone} — those are tabs now",
@@ -321,7 +316,10 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
          `on_persist_tab_idx` \
          — this pin bounds the handler between the two",
     );
-    for clear in ["g.set_filter(SharedString::from(\"\"))", "filter::clear_mounted(&ui)"] {
+    for clear in [
+        "g.set_filter(SharedString::from(\"\"))",
+        "filter::clear_mounted(&ui)",
+    ] {
         assert!(
             handler.contains(clear),
             "`on_tab_changed` must spell `{clear}` — the band's box and the entering tab's \
@@ -476,7 +474,11 @@ fn the_nine_surfaces_are_enumerated_once_and_every_caller_routes_through_it() {
 
     // Every consumer, so a fourth question about the mounted surface can't quietly grow a
     // fourth copy of the table beside them.
-    for caller in ["pub fn dispatch(", "fn mounted_filter(", "fn rewind_grid_count("] {
+    for caller in [
+        "pub fn dispatch(",
+        "fn mounted_filter(",
+        "fn rewind_grid_count(",
+    ] {
         let body = FILTER
             .split_once(caller)
             .and_then(|(_, rest)| rest.split_once("\n}\n"))
@@ -568,11 +570,7 @@ const OPEN_HANDLERS: [(&str, &str, &str); 4] = [
     ("albums", "set_album_id(clamp_i64_to_i32(", include_str!("../../albums/detail.rs")),
     ("artists", "set_artist_id(clamp_i64_to_i32(", include_str!("../../artists/detail.rs")),
     ("genres", "set_genre_id(clamp_i64_to_i32(", include_str!("../../genres/detail.rs")),
-    (
-        "playlists",
-        "set_playlist_id(clamp_i64_to_i32(",
-        include_str!("../../playlists/detail.rs"),
-    ),
+    ("playlists", "set_playlist_id(clamp_i64_to_i32(", include_str!("../../playlists/detail.rs")),
 ];
 
 /// **A fresh open clears the detail's own filter, and only that one.**
@@ -827,7 +825,11 @@ fn no_close_detail_hands_the_hero_back() {
             .map_or(String::new(), |(body, _)| body.to_owned());
         assert!(!handler.is_empty(), "{name}/detail.rs no longer wires `on_close_detail`");
 
-        for banned in ["release_detail_hero_images!", "hero_backdrop::reset", "hero_chips::clear"] {
+        for banned in [
+            "release_detail_hero_images!",
+            "hero_backdrop::reset",
+            "hero_chips::clear",
+        ] {
             assert!(
                 !handler.contains(banned),
                 "{name}/detail.rs must not run `{banned}` on close: every hero fact is a ternary \
@@ -884,7 +886,9 @@ fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
         );
         // Unreachable past the assert; spelled this way because the crate denies
         // `unwrap`, `expect` and `panic!` in tests as well as in production code.
-        let Some((labels, asked)) = arrays else { continue };
+        let Some((labels, asked)) = arrays else {
+            continue;
+        };
         let asked: Vec<&str> = asked.split(',').map(|f| f.trim().trim_matches('"')).collect();
 
         assert_eq!(
@@ -953,7 +957,14 @@ fn the_playlist_action_tooltip_is_published_rather_than_drawn() {
         4,
         "all four Playlists action pills must suppress their in-tree tooltip",
     );
-    for anchor in ["tip-x", "tip-y", "tip-w", "tip-h", "tip-label", "tip-visible"] {
+    for anchor in [
+        "tip-x",
+        "tip-y",
+        "tip-w",
+        "tip-h",
+        "tip-label",
+        "tip-visible",
+    ] {
         assert!(
             PILLS.contains(&format!("out property <{}> {anchor}", type_of(anchor))),
             "`tab-pills.slint` must publish `{anchor}` for the sheet's frame to read",
@@ -1064,14 +1075,19 @@ fn a_history_walk_lands_the_tab_beside_the_detail_id() {
         );
     }
     assert!(
-        deferred.contains("spawn_open_detail(state, ui, target.section, target.tab, id, direction, Some(pending))"),
+        deferred.contains(
+            "spawn_open_detail(state, ui, target.section, target.tab, id, direction, Some(pending))"
+        ),
         "the deferred arm must hand its `PendingNav` to `spawn_open_detail`, which is the \
          only thing that can put it in the same tick as the id",
     );
 
-    for open in
-        ["open_album_with(", "open_artist_with(", "open_genre_with(", "open_playlist_with("]
-    {
+    for open in [
+        "open_album_with(",
+        "open_artist_with(",
+        "open_genre_with(",
+        "open_playlist_with(",
+    ] {
         assert!(
             NAV_HISTORY.contains(open),
             "`spawn_open_detail` must reach `{open}` — the plain `open_*` has no hook, so the \
@@ -1157,8 +1173,7 @@ fn every_body_branch_enters_on_an_axis_the_band_is_not_already_moving() {
             let condition = pair[0].lines().next_back().unwrap_or_default().trim();
             // The branch's own closing brace: its contents are indented one level
             // deeper, so this is the first line that can end it.
-            let body =
-                pair[1].split_once("\n            }").map_or(pair[1], |(body, _)| body);
+            let body = pair[1].split_once("\n            }").map_or(pair[1], |(body, _)| body);
             (condition, body)
         })
         .collect();

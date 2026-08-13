@@ -121,8 +121,8 @@ static DECODE_POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
 fn decode_pool() -> Option<&'static rayon::ThreadPool> {
     DECODE_POOL
         .get_or_init(|| {
-            let threads = std::thread::available_parallelism()
-                .map_or(2, |p| (p.get() / 2).clamp(2, 4));
+            let threads =
+                std::thread::available_parallelism().map_or(2, |p| (p.get() / 2).clamp(2, 4));
             rayon::ThreadPoolBuilder::new()
                 .num_threads(threads)
                 .thread_name(|i| format!("cover-decode-{i}"))
@@ -262,10 +262,7 @@ impl CoverThumbs {
         let Some(p) = path.filter(|p| !p.is_empty()) else {
             return Image::default();
         };
-        self.cache
-            .lock()
-            .get(Path::new(p))
-            .map_or_else(Image::default, buf_to_image)
+        self.cache.lock().get(Path::new(p)).map_or_else(Image::default, buf_to_image)
     }
 
     /// Same caching contract as [`Self::get_or_load`] but returns the raw
@@ -355,9 +352,7 @@ impl CoverThumbs {
 }
 
 fn buf_to_image(buf: &CachedBuf) -> Image {
-    buf.as_ref()
-        .map(|b| Image::from_rgb8(b.clone()))
-        .unwrap_or_default()
+    buf.as_ref().map(|b| Image::from_rgb8(b.clone())).unwrap_or_default()
 }
 
 fn decode_thumb_buffer(path: &Path, thumb_size: u32) -> CachedBuf {

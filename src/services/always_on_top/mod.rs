@@ -133,9 +133,9 @@ pub async fn apply(state: &AppState, pinned: bool) -> Result<(), AppError> {
         AlwaysOnTopMethod::KwinDbus => kwin::set_always_on_top(state, pinned).await,
         #[cfg(target_os = "linux")]
         AlwaysOnTopMethod::GnomeExtension => gnome::set_always_on_top(pinned).await,
-        AlwaysOnTopMethod::Unsupported => Err(AppError::Window(
-            "Always-on-top is not supported on this desktop".to_owned(),
-        )),
+        AlwaysOnTopMethod::Unsupported => {
+            Err(AppError::Window("Always-on-top is not supported on this desktop".to_owned()))
+        }
     }
 }
 

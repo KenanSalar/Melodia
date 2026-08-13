@@ -24,10 +24,7 @@ fn the_prompt_is_due_once_and_the_counter_then_stops() {
     // The caller flips this once the toast is actually raised.
     flags.support_prompt_seen = true;
     assert!(!count_launch(&mut flags));
-    assert_eq!(
-        flags.launch_count, PROMPT_AT_LAUNCH,
-        "a seen install kept counting"
-    );
+    assert_eq!(flags.launch_count, PROMPT_AT_LAUNCH, "a seen install kept counting");
 }
 
 /// A session that ends before the toast is due spends the increment and not the flag,
@@ -57,21 +54,17 @@ fn a_launch_past_the_threshold_still_asks_while_unseen() {
 #[test]
 fn a_spent_prompt_is_read_before_the_settings_file_is_rewritten() {
     let src = crate::test_support::strip_line_comments(include_str!("../support.rs"));
-    let tail = src
-        .split_once("pub fn record_launch")
-        .map(|(_, tail)| tail)
-        .unwrap_or_default();
+    let tail = src.split_once("pub fn record_launch").map(|(_, tail)| tail).unwrap_or_default();
     let body = tail.split_once("\npub fn").map_or(tail, |(body, _)| body);
     assert!(!body.is_empty(), "`record_launch` is gone from support.rs");
 
     let read = body.find("read_settings");
     let mutate = body.find("mutate_settings_with");
     assert!(read.is_some(), "`record_launch` no longer reads the flag");
-    assert!(
-        mutate.is_some(),
-        "`record_launch` no longer counts through `mutate_settings_with`"
-    );
-    let (Some(read), Some(mutate)) = (read, mutate) else { return };
+    assert!(mutate.is_some(), "`record_launch` no longer counts through `mutate_settings_with`");
+    let (Some(read), Some(mutate)) = (read, mutate) else {
+        return;
+    };
 
     assert!(
         read < mutate,

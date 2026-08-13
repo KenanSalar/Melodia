@@ -10,11 +10,7 @@ use slint::ComponentHandle;
 /// spawned tasks could be dropped mid-write. A function-local `AtomicBool`
 /// makes this safe to call from multiple shutdown paths (window close +
 /// run-loop exit).
-pub fn save_state_on_exit(
-    app: &AppWindow,
-    state: &AppState,
-    runtime: &tokio::runtime::Runtime,
-) {
+pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::runtime::Runtime) {
     use melodia::database::queries;
     use melodia::player::state::lock_state;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -79,8 +75,7 @@ pub fn save_state_on_exit(
             // Recently Played stopped being sortable; drop the key builds
             // before that wrote so an upgraded views.json doesn't carry
             // state nothing reads.
-            vs.view_sort
-                .remove(ui::track_list_view::view_id::RECENTLY_PLAYED);
+            vs.view_sort.remove(ui::track_list_view::view_id::RECENTLY_PLAYED);
             if let Err(e) = services::view_state::write_view_state(&state.paths, &vs) {
                 log::warn!("save_state_on_exit: write views.json: {e}");
             }
@@ -141,11 +136,9 @@ pub fn flush_tasks_and_db(runtime: &tokio::runtime::Runtime, state: AppState) ->
 /// itself block on `Drop`s of audio / D-Bus / accesskit threads we don't
 /// control.
 pub fn drop_runtime_in_background(runtime: tokio::runtime::Runtime) {
-    let res = std::thread::Builder::new()
-        .name("melodia-runtime-drop".into())
-        .spawn(move || {
-            drop(runtime);
-        });
+    let res = std::thread::Builder::new().name("melodia-runtime-drop".into()).spawn(move || {
+        drop(runtime);
+    });
     if let Err(e) = res {
         log::warn!("could not spawn runtime-drop thread: {e}");
     }

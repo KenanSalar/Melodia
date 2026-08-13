@@ -59,11 +59,7 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
                         lib_settings_ui::show_error(&weak, "Cannot add folder", msg);
                     }
                     Err(e) => {
-                        lib_settings_ui::show_error(
-                            &weak,
-                            "Cannot add folder",
-                            e.to_string(),
-                        );
+                        lib_settings_ui::show_error(&weak, "Cannot add folder", e.to_string());
                     }
                 }
             }));

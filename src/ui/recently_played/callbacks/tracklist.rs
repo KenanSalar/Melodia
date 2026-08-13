@@ -16,8 +16,8 @@ use slint::ComponentHandle;
 use super::VIEW_ID;
 use crate::library;
 use crate::state::AppState;
-use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::ui::track_list_view::TrackListColumnState;
 use crate::{AppWindow, RecentlyPlayed};
@@ -41,8 +41,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
             }
             let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            spawn_logged!(s, "recently_played::play_row",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+            spawn_logged!(
+                s,
+                "recently_played::play_row",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
+            );
         });
     }
     {
@@ -50,8 +53,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         g.on_play_next(move |ids| {
             let id_vec = collect_track_ids(&ids);
             let s = s.clone();
-            spawn_logged!(s, "recently_played::play_next",
-                library::queue::queue_play_next_many(&s, id_vec));
+            spawn_logged!(
+                s,
+                "recently_played::play_next",
+                library::queue::queue_play_next_many(&s, id_vec)
+            );
         });
     }
     {
@@ -59,8 +65,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         g.on_add_to_queue(move |ids| {
             let id_vec = collect_track_ids(&ids);
             let s = s.clone();
-            spawn_logged!(s, "recently_played::add_to_queue",
-                library::queue::queue_add_tracks(&s, id_vec));
+            spawn_logged!(
+                s,
+                "recently_played::add_to_queue",
+                library::queue::queue_add_tracks(&s, id_vec)
+            );
         });
     }
     // toggle-row-favorite: flip in place (recency membership is independent of
@@ -70,17 +79,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     {
         let ru = rp_ui.clone();
         wire_row_flag!(g, on_toggle_row_favorite, state, "recently_played::set_favorite",
-            library::favorites::set_favorite, collect_track_ids,
-            captures: [weak, ru],
-            after: |id_vec, fav| {
-                // Surgically patch each affected row (recency membership is
-                // independent of the favorite flag, so the row stays put): no
-                // 200-row rebuild, scroll position holds, no flash.
-                for id in &id_vec {
-                    ru.flip_track_favorite(*id, fav);
-                    recently_played_ui_mod::apply_row_favorite(&weak, *id, fav);
-                }
-            });
+        library::favorites::set_favorite, collect_track_ids,
+        captures: [weak, ru],
+        after: |id_vec, fav| {
+            // Surgically patch each affected row (recency membership is
+            // independent of the favorite flag, so the row stays put): no
+            // 200-row rebuild, scroll position holds, no flash.
+            for id in &id_vec {
+                ru.flip_track_favorite(*id, fav);
+                recently_played_ui_mod::apply_row_favorite(&weak, *id, fav);
+            }
+        });
     }
 
     // set-row-rating: flip in place (recency membership is fixed to the 200,
@@ -89,16 +98,16 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     {
         let ru = rp_ui.clone();
         wire_row_flag!(g, on_set_row_rating, state, "recently_played::set_rating",
-            library::ratings::set_rating, collect_track_ids,
-            captures: [weak, ru],
-            after: |id_vec, rating| {
-                // Rating never changes membership or sort (no rating column /
-                // in-table rating sort), so patch each row in place.
-                for id in &id_vec {
-                    ru.flip_track_rating(*id, rating);
-                    recently_played_ui_mod::apply_row_rating(&weak, *id, rating);
-                }
-            });
+        library::ratings::set_rating, collect_track_ids,
+        captures: [weak, ru],
+        after: |id_vec, rating| {
+            // Rating never changes membership or sort (no rating column /
+            // in-table rating sort), so patch each row in place.
+            for id in &id_vec {
+                ru.flip_track_rating(*id, rating);
+                recently_played_ui_mod::apply_row_rating(&weak, *id, rating);
+            }
+        });
     }
 
     // --- Filter ---------------------------------------------------
@@ -131,9 +140,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<RecentlyPlayed>().snapshot_visible();
             let s_disk = s.clone();
-            spawn_blocking_logged!(s, "recently_played::toggle_column",
-                library::settings::update_view_columns(
-                    &s_disk, VIEW_ID.to_owned(), columns));
+            spawn_blocking_logged!(
+                s,
+                "recently_played::toggle_column",
+                library::settings::update_view_columns(&s_disk, VIEW_ID.to_owned(), columns)
+            );
         });
     }
 

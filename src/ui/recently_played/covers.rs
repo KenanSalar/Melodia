@@ -108,8 +108,7 @@ impl RecentlyPlayedUi {
     /// Lazy cover lookup for the hero 2×2 mosaic tiles. Routed via
     /// `RecentlyPlayed.request-mosaic-cover`.
     pub fn mosaic_cover(&self, artwork_path: &str) -> Image {
-        self.mosaic_thumbs
-            .get_or_load_opt(nonempty_artwork_path(artwork_path))
+        self.mosaic_thumbs.get_or_load_opt(nonempty_artwork_path(artwork_path))
     }
 
     /// Lazy cover lookup for the Most Played grid cards. Routed via

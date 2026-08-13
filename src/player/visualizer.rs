@@ -100,8 +100,7 @@ impl DeckRing {
     /// exists to exclude. A stamp only ever needs to move forward, so keeping the
     /// newer one costs nothing and neither can undo the other.
     fn drop_history(&self) {
-        self.valid_from
-            .fetch_max(self.write_cursor.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.valid_from.fetch_max(self.write_cursor.load(Ordering::Relaxed), Ordering::Relaxed);
     }
 
     /// Open a run. The first source on an idle deck drops the previous run's

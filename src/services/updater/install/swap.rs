@@ -150,9 +150,7 @@ pub(super) fn install_via_package_manager(
     // `resolve_install_method()` never picks `LinuxPackage` and this
     // branch is dead. The stub exists to keep the call site
     // compile-clean on non-Linux.
-    Err(AppError::Settings(
-        "package-manager install is only supported on Linux".into(),
-    ))
+    Err(AppError::Settings("package-manager install is only supported on Linux".into()))
 }
 
 /// Launches `msiexec /i <staged>.msi /qb!` to install the signed MSI.
@@ -198,18 +196,15 @@ pub(super) fn install_via_msiexec(staged: &Path) -> AppResult<()> {
     // `%SystemRoot%\System32\msiexec.exe` and shouldn't be missing,
     // but stripped containers / sandboxed dev envs can drop the
     // System32 dir from PATH).
-    Command::new("msiexec")
-        .args(["/i", path_str, "/qb!"])
-        .spawn()
-        .map_err(|e| {
-            AppError::Settings(format!(
-                "failed to spawn msiexec for {}: {e} — install requires \
+    Command::new("msiexec").args(["/i", path_str, "/qb!"]).spawn().map_err(|e| {
+        AppError::Settings(format!(
+            "failed to spawn msiexec for {}: {e} — install requires \
                  Windows Installer (msiexec.exe). The staged file is \
                  retained for retry; the 7d staging pruner reaps it if \
                  unused.",
-                staged.display()
-            ))
-        })?;
+            staged.display()
+        ))
+    })?;
     Ok(())
 }
 
@@ -219,9 +214,7 @@ pub(super) fn install_via_msiexec(_staged: &Path) -> AppResult<()> {
     // so `resolve_install_method()` never picks `WindowsMsi` and this
     // branch is dead. The stub exists to keep the call site
     // compile-clean on non-Windows.
-    Err(AppError::Settings(
-        "msiexec install is only supported on Windows".into(),
-    ))
+    Err(AppError::Settings("msiexec install is only supported on Windows".into()))
 }
 
 /// Atomic in-place swap of the live binary at `target` with the
@@ -327,17 +320,9 @@ fn elevate_swap_via_pkexec(target: &Path, staged: &Path) -> AppResult<()> {
     // Both ship by default on Fedora KDE / Workstation. On stripped
     // installs without polkit we surface a clear error and let the
     // user pick a per-user install instead.
-    log::info!(
-        "updater: elevating swap via pkexec ({} → {})",
-        staged.display(),
-        target.display()
-    );
-    let output = std::process::Command::new("pkexec")
-        .arg("mv")
-        .arg("--")
-        .arg(staged)
-        .arg(target)
-        .output();
+    log::info!("updater: elevating swap via pkexec ({} → {})", staged.display(), target.display());
+    let output =
+        std::process::Command::new("pkexec").arg("mv").arg("--").arg(staged).arg(target).output();
 
     let output = match output {
         Ok(o) => o,
@@ -347,7 +332,8 @@ fn elevate_swap_via_pkexec(target: &Path, staged: &Path) -> AppResult<()> {
             let _ = std::fs::remove_file(staged);
             return Err(AppError::Settings(
                 "polkit (pkexec) is not installed; install it or move Melodia to \
-                 a user-writable location like ~/.local/share/Melodia/".into(),
+                 a user-writable location like ~/.local/share/Melodia/"
+                    .into(),
             ));
         }
         Err(e) => return Err(AppError::Io(e)),
@@ -430,10 +416,7 @@ fn windows_swap(target: &Path, staged: &Path) -> AppResult<()> {
 /// calls at startup) shares this exact path-derivation logic.
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub(crate) fn old_path(target: &Path) -> PathBuf {
-    let mut name = target
-        .file_name()
-        .map(std::ffi::OsStr::to_os_string)
-        .unwrap_or_default();
+    let mut name = target.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
     name.push(".old");
     target.with_file_name(name)
 }

@@ -29,8 +29,8 @@ use std::sync::Arc;
 use slint::{Model, ModelRc, VecModel};
 
 use crate::state::AppState;
-use crate::ui::shell::notifications::NotificationsUi;
 use crate::ui::playlists::PlaylistsUi;
+use crate::ui::shell::notifications::NotificationsUi;
 use crate::{AppWindow, Dialog};
 
 /// Wire the `Playlists.*` import/export callbacks. Call once after both the

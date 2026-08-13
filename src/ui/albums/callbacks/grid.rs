@@ -104,9 +104,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             let s_fetch = s.clone();
             let au_fetch = au.clone();
             let weak_fetch = weak.clone();
-            spawn_logged!(s_fetch, "albums::open_album",
+            spawn_logged!(
+                s_fetch,
+                "albums::open_album",
                 albums_ui_mod::open_album(
-                    &s_fetch, &au_fetch, weak_fetch, id, crate::NavEnterFrom::Right));
+                    &s_fetch,
+                    &au_fetch,
+                    weak_fetch,
+                    id,
+                    crate::NavEnterFrom::Right
+                )
+            );
 
             let au_release = au.clone();
             s.runtime.spawn_blocking(move || au_release.release_grid_covers());

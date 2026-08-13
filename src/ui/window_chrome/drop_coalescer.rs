@@ -51,9 +51,7 @@ pub fn set_queue_sheet_open(handle: Arc<AtomicBool>) {
 /// the opt-in RSS sampler to annotate log lines with the current overlay
 /// state.
 pub fn is_queue_sheet_open() -> bool {
-    QUEUE_SHEET_OPEN
-        .get()
-        .is_some_and(|atomic| atomic.load(Ordering::Relaxed))
+    QUEUE_SHEET_OPEN.get().is_some_and(|atomic| atomic.load(Ordering::Relaxed))
 }
 
 /// Currently-open playlist id, mirrored from
@@ -131,15 +129,11 @@ pub(super) fn schedule_drop_flush(state: &AppState, path: PathBuf) {
         //      sheet sits on top of every view).
         //   2. Else if a Playlist Detail is open ⇒ import + add to it.
         //   3. Else discard — no current drop target accepts files.
-        let queue_open = QUEUE_SHEET_OPEN
-            .get()
-            .is_some_and(|atomic| atomic.load(Ordering::Relaxed));
+        let queue_open =
+            QUEUE_SHEET_OPEN.get().is_some_and(|atomic| atomic.load(Ordering::Relaxed));
         let playlist_open = CURRENT_PLAYLIST_ID.load(Ordering::Relaxed) >= 0;
 
-        let paths: Vec<String> = batch
-            .iter()
-            .map(|p| p.to_string_lossy().into_owned())
-            .collect();
+        let paths: Vec<String> = batch.iter().map(|p| p.to_string_lossy().into_owned()).collect();
 
         if queue_open {
             match library::queue::queue_import_files(&state, paths).await {

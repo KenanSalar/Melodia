@@ -16,8 +16,7 @@
 
 use crate::test_support::{binding_value as binding, strip_line_comments};
 
-const HEADER: &str =
-    include_str!("../../../melodia-ui/ui/components/hero/tab-search-header.slint");
+const HEADER: &str = include_str!("../../../melodia-ui/ui/components/hero/tab-search-header.slint");
 
 /// The header with its comments dropped, so prose about a fix can neither satisfy a
 /// pin nor bound a region early.
@@ -134,7 +133,14 @@ fn the_sub_view_slide_is_disarmed_until_the_first_switch() {
 /// rules: this one is the row's alone, that one is every band's.
 #[test]
 fn the_row_publishes_every_tooltip_anchor_its_host_needs() {
-    for prop in ["tip-x", "tip-y", "tip-w", "tip-h", "tip-label", "tip-visible"] {
+    for prop in [
+        "tip-x",
+        "tip-y",
+        "tip-w",
+        "tip-h",
+        "tip-label",
+        "tip-visible",
+    ] {
         assert!(
             HEADER.contains(&format!("out property <length> {prop}:"))
                 || HEADER.contains(&format!("out property <string> {prop}:"))
@@ -208,10 +214,7 @@ fn every_tabbed_page_mounts_the_shared_row() {
             "mosaic-tab-hero.slint",
             include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint"),
         ),
-        (
-            "settings-view.slint",
-            include_str!("../../../melodia-ui/ui/views/settings-view.slint"),
-        ),
+        ("settings-view.slint", include_str!("../../../melodia-ui/ui/views/settings-view.slint")),
     ];
 
     for (name, src) in HOSTS {

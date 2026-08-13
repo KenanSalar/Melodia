@@ -210,13 +210,8 @@ fn classify<'a>(
 fn build_presence(track: &TrackSummary, paused: bool, anchor: u64, duration_ms: u64) -> Presence {
     let details = clamp_field(&track.title).unwrap_or_else(|| APP_NAME.to_owned());
     let state = track.artist.as_deref().and_then(clamp_field);
-    let large_text = Some(
-        track
-            .album
-            .as_deref()
-            .and_then(clamp_field)
-            .unwrap_or_else(|| APP_NAME.to_owned()),
-    );
+    let large_text =
+        Some(track.album.as_deref().and_then(clamp_field).unwrap_or_else(|| APP_NAME.to_owned()));
     let (start_ts, end_ts) = if !paused && duration_ms > 0 {
         (Some(anchor), Some(anchor + duration_ms / 1000))
     } else {

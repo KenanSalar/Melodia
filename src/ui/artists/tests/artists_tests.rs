@@ -22,10 +22,7 @@ fn artist(
 }
 
 fn names(data: &GridData, indices: &[usize]) -> Vec<String> {
-    indices
-        .iter()
-        .map(|&i| data.artists[i].name.clone())
-        .collect()
+    indices.iter().map(|&i| data.artists[i].name.clone()).collect()
 }
 
 #[test]

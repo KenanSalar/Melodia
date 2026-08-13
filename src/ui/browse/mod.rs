@@ -58,9 +58,9 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::entities::browse::{BrowseFile, BrowseFolder};
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::services::view_state;
+use crate::state::AppState;
 use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
-use crate::state::AppState;
 use crate::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
     BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
@@ -200,8 +200,7 @@ impl BrowseUi {
 
     /// Mirror `Browse.view-mode` into the synchronous shadow.
     pub fn set_view_mode(&self, mode: BrowseViewMode) {
-        self.card_mode
-            .store(mode == BrowseViewMode::Card, Ordering::Relaxed);
+        self.card_mode.store(mode == BrowseViewMode::Card, Ordering::Relaxed);
     }
 
     /// Resolve one card's cover against the card tier, decoding only once the
@@ -321,11 +320,7 @@ impl BrowseUi {
     /// IDs of `last_files` rows that are in the library, in display
     /// order. `play-row` passes the result to `player_play_tracks`.
     pub fn current_in_library_ids(&self) -> Vec<i64> {
-        self.last_files
-            .lock()
-            .iter()
-            .filter_map(|f| f.in_library.then_some(f.row.id))
-            .collect()
+        self.last_files.lock().iter().filter_map(|f| f.in_library.then_some(f.row.id)).collect()
     }
 
     /// Surgically flip `is_favorite` on the cached `last_files` row so a
@@ -403,9 +398,7 @@ fn seed_from_settings(
     let state_clone = state.clone();
     let browse_clone = browse_ui.clone();
     state.runtime.spawn(async move {
-        if let Err(e) =
-            fetch_and_apply(&state_clone, &browse_clone, weak, initial_path).await
-        {
+        if let Err(e) = fetch_and_apply(&state_clone, &browse_clone, weak, initial_path).await {
             log::warn!("browse seed_from_settings fetch failed: {e}");
         }
     });

@@ -33,10 +33,7 @@ fn grid_data_precomputes_lowercased_sort_keys() {
 
 #[test]
 fn compute_indices_with_empty_filter_keeps_all_albums() {
-    let data = GridData::new(vec![
-        album(1, "Alpha", "X", None),
-        album(2, "Bravo", "Y", None),
-    ]);
+    let data = GridData::new(vec![album(1, "Alpha", "X", None), album(2, "Bravo", "Y", None)]);
     let idx = compute_indices(&data, "name", "asc", "");
     assert_eq!(names(&data, &idx), ["Alpha", "Bravo"]);
 }

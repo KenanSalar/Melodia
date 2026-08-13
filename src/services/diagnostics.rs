@@ -114,9 +114,7 @@ fn library_block(facts: &LibraryFacts) -> String {
         "\nlibrary\n\
          tracks    : {tracks}\n\
          folders   : {folders}\n",
-        tracks = facts
-            .tracks
-            .map_or_else(|| "<unavailable>".to_owned(), |count| count.to_string()),
+        tracks = facts.tracks.map_or_else(|| "<unavailable>".to_owned(), |count| count.to_string()),
         folders = facts.folders.as_ref().map_or_else(
             || "<unavailable>".to_owned(),
             |counts| format!("{} ({} enabled)", counts.total, counts.enabled),

@@ -117,13 +117,10 @@ fn extract_metadata_wav_basic_properties() -> Result<(), AppError> {
 
     let meta = extract_metadata(&wav_path, &artwork_dir, &test_cover_cache(), false)?;
 
-    let sample_rate = meta
-        .sample_rate
-        .ok_or_else(|| AppError::Validation("missing sample_rate".into()))?;
+    let sample_rate =
+        meta.sample_rate.ok_or_else(|| AppError::Validation("missing sample_rate".into()))?;
     assert_eq!(sample_rate, 44_100);
-    let channels = meta
-        .channels
-        .ok_or_else(|| AppError::Validation("missing channels".into()))?;
+    let channels = meta.channels.ok_or_else(|| AppError::Validation("missing channels".into()))?;
     assert_eq!(channels, 1);
     assert!(meta.codec.is_some());
     assert!(meta.file_size > 0);

@@ -23,9 +23,8 @@ fn the_toast_kind_matches_its_dispatcher_branch() {
 /// card's own button reaches; otherwise the toast opens nothing.
 #[test]
 fn the_crash_branch_and_the_card_open_the_same_folder() {
-    let (_, after_branch) = DISPATCHER
-        .split_once(&format!("kind == \"{CRASH_TOAST_KIND}\""))
-        .unwrap_or_default();
+    let (_, after_branch) =
+        DISPATCHER.split_once(&format!("kind == \"{CRASH_TOAST_KIND}\"")).unwrap_or_default();
     let body = after_branch.split_once('}').map(|(body, _)| body).unwrap_or_default();
 
     assert!(

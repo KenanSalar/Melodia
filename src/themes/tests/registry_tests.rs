@@ -10,7 +10,14 @@ fn registry_lists_six_themes_in_display_order() {
     let ids: Vec<_> = registry().iter().map(|t| t.id).collect();
     assert_eq!(
         ids,
-        vec!["catppuccin", "gnome-adwaita", "kde-breeze", "macos", "material3", "windows-fluent"],
+        vec![
+            "catppuccin",
+            "gnome-adwaita",
+            "kde-breeze",
+            "macos",
+            "material3",
+            "windows-fluent"
+        ],
     );
 }
 

@@ -148,11 +148,7 @@ pub async fn search_album_cover(
     album: &str,
 ) -> Result<Option<String>, AppError> {
     // Deezer advanced-search syntax pins both fields, tighter than title alone.
-    let query = format!(
-        "artist:\"{}\" album:\"{}\"",
-        quotable(artist),
-        quotable(album)
-    );
+    let query = format!("artist:\"{}\" album:\"{}\"", quotable(artist), quotable(album));
     let response = client
         .get("https://api.deezer.com/search/album")
         .query(&[("q", query.as_str()), ("limit", "1")])
@@ -168,9 +164,9 @@ pub async fn search_album_cover(
         DeezerAnswer::Body(body) => {
             Ok(body.and_then(|b| b.data.first().and_then(|a| a.cover_big.clone())))
         }
-        DeezerAnswer::HttpStatus(status) => Err(AppError::network_msg(format!(
-            "Deezer album search returned HTTP {status}"
-        ))),
+        DeezerAnswer::HttpStatus(status) => {
+            Err(AppError::network_msg(format!("Deezer album search returned HTTP {status}")))
+        }
         DeezerAnswer::ApiError { message, code } => Err(AppError::network_msg(format!(
             "Deezer refused the album search: {message} (code {code})"
         ))),
@@ -210,16 +206,14 @@ pub async fn download_and_cache_artist_image(
     artists_dir: &Path,
 ) -> Result<Option<String>, AppError> {
     // Validate URL scheme and domain
-    let parsed = reqwest::Url::parse(image_url)
-        .map_err(|e| AppError::network("Invalid image URL", e))?;
+    let parsed =
+        reqwest::Url::parse(image_url).map_err(|e| AppError::network("Invalid image URL", e))?;
     if parsed.scheme() != "https" {
         return Err(AppError::network_msg("Image URL must use HTTPS"));
     }
     let host = parsed.host_str().unwrap_or("");
     if !host.ends_with(".deezer.com") && !host.ends_with(".dzcdn.net") {
-        return Err(AppError::network_msg(format!(
-            "Image URL has untrusted domain: {host}"
-        )));
+        return Err(AppError::network_msg(format!("Image URL has untrusted domain: {host}")));
     }
 
     let response = client
@@ -237,10 +231,8 @@ pub async fn download_and_cache_artist_image(
         )));
     }
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| AppError::network("Failed to read image bytes", e))?;
+    let bytes =
+        response.bytes().await.map_err(|e| AppError::network("Failed to read image bytes", e))?;
 
     if bytes.len() as u64 > MAX_IMAGE_BYTES {
         return Err(AppError::network_msg(format!(
@@ -263,9 +255,7 @@ pub async fn download_and_cache_artist_image(
 
     // Skip write if file already exists (dedup)
     if !file_path.exists() {
-        std::fs::write(&file_path, &bytes).map_err(|e| {
-            AppError::Io(e)
-        })?;
+        std::fs::write(&file_path, &bytes).map_err(AppError::Io)?;
     }
 
     Ok(Some(file_path.to_string_lossy().into_owned()))

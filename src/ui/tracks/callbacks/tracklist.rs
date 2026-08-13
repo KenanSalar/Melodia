@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
+use crate::library;
+use crate::state::AppState;
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{
     collect_track_ids, next_sort, persist_view_sort, persisted_sort, play_row_start,
 };
-use crate::library;
-use crate::state::AppState;
 use crate::ui::track_list_view::view_id;
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
 use crate::{AppWindow, Tracks};
@@ -72,8 +72,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
             }
             let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            spawn_logged!(s, "tracks::play_row",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+            spawn_logged!(
+                s,
+                "tracks::play_row",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
+            );
         });
     }
 
@@ -82,8 +85,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         tracks.on_play_next(move |ids| {
             let id_vec = collect_track_ids(&ids);
             let s = s.clone();
-            spawn_logged!(s, "play_next",
-                library::queue::queue_play_next_many(&s, id_vec));
+            spawn_logged!(s, "play_next", library::queue::queue_play_next_many(&s, id_vec));
         });
     }
 
@@ -102,26 +104,26 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
     {
         let tu = tracks_ui.clone();
         wire_row_flag!(tracks, on_toggle_row_favorite, state, "set_favorite",
-            library::favorites::set_favorite, collect_track_ids,
-            captures: [weak, tu],
-            after: |id_vec, fav| {
-                for id in &id_vec {
-                    tu.flip_favorite(*id, fav);
-                    tracks_ui_mod::apply_row_favorite(&weak, *id, fav);
-                }
-            });
+        library::favorites::set_favorite, collect_track_ids,
+        captures: [weak, tu],
+        after: |id_vec, fav| {
+            for id in &id_vec {
+                tu.flip_favorite(*id, fav);
+                tracks_ui_mod::apply_row_favorite(&weak, *id, fav);
+            }
+        });
     }
     {
         let tu = tracks_ui.clone();
         wire_row_flag!(tracks, on_set_row_rating, state, "set_rating",
-            library::ratings::set_rating, collect_track_ids,
-            captures: [weak, tu],
-            after: |id_vec, rating| {
-                for id in &id_vec {
-                    tu.flip_rating(*id, rating);
-                    tracks_ui_mod::apply_row_rating(&weak, *id, rating);
-                }
-            });
+        library::ratings::set_rating, collect_track_ids,
+        captures: [weak, tu],
+        after: |id_vec, rating| {
+            for id in &id_vec {
+                tu.flip_rating(*id, rating);
+                tracks_ui_mod::apply_row_rating(&weak, *id, rating);
+            }
+        });
     }
 
     // select-row: modifier-aware click handler. Computes the new selected
@@ -159,8 +161,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
             let s = s.clone();
             let tu = tu.clone();
             let weak = weak.clone();
-            spawn_logged!(s, "tracks::refresh",
-                tracks_ui_mod::fetch_and_apply(&s, &tu, weak, field, dir, filter));
+            spawn_logged!(
+                s,
+                "tracks::refresh",
+                tracks_ui_mod::fetch_and_apply(&s, &tu, weak, field, dir, filter)
+            );
         });
     }
 }

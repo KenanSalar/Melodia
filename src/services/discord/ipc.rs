@@ -155,7 +155,9 @@ fn serve(
 
         if *desired != last_sent {
             let body = match desired.as_ref() {
-                Some(presence) => payload::set_activity_json(presence, pid, &next_nonce(pid, nonce)),
+                Some(presence) => {
+                    payload::set_activity_json(presence, pid, &next_nonce(pid, nonce))
+                }
                 None => payload::clear_activity_json(pid, &next_nonce(pid, nonce)),
             };
             if let Err(e) = send_frame_and_ack(conn, &body) {
@@ -228,7 +230,11 @@ fn handle_command(cmd: Command, desired: &mut Option<Presence>, enabled: &mut bo
 }
 
 /// Apply any already-queued commands without blocking (latest state wins).
-fn drain_commands(rx: &mpsc::Receiver<Command>, desired: &mut Option<Presence>, enabled: &mut bool) {
+fn drain_commands(
+    rx: &mpsc::Receiver<Command>,
+    desired: &mut Option<Presence>,
+    enabled: &mut bool,
+) {
     while let Ok(cmd) = rx.try_recv() {
         handle_command(cmd, desired, enabled);
     }
@@ -270,9 +276,7 @@ fn log_error_ack(reply: &[u8]) {
         return;
     }
     let data = value.get("data");
-    let code = data
-        .and_then(|d| d.get("code"))
-        .and_then(serde_json::Value::as_i64);
+    let code = data.and_then(|d| d.get("code")).and_then(serde_json::Value::as_i64);
     let message = data
         .and_then(|d| d.get("message"))
         .and_then(serde_json::Value::as_str)
@@ -289,10 +293,7 @@ fn read_reply(conn: &mut Connection) -> io::Result<(u32, Vec<u8>)> {
         match opcode {
             OP_PING => write_frame(conn, OP_PONG, &body)?,
             OP_CLOSE => {
-                return Err(io::Error::new(
-                    io::ErrorKind::ConnectionAborted,
-                    "discord sent CLOSE",
-                ));
+                return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "discord sent CLOSE"));
             }
             _ => return Ok((opcode, body)),
         }
@@ -321,10 +322,7 @@ fn read_frame(r: &mut impl Read) -> io::Result<(u32, Vec<u8>)> {
     let opcode = u32::from_le_bytes(op_bytes);
     let len = u32::from_le_bytes(len_bytes);
     if len > MAX_FRAME_LEN {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "frame length exceeds cap",
-        ));
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "frame length exceeds cap"));
     }
     let mut body = vec![0u8; len as usize];
     r.read_exact(&mut body)?;

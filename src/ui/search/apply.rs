@@ -89,10 +89,7 @@ fn sort_and_prepare(
     }
 
     let total = len_as_i32(sorted.len());
-    let prepared = sorted
-        .iter()
-        .map(crate::ui::tracks::prepare_track_list_row)
-        .collect();
+    let prepared = sorted.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
     (prepared, total)
 }
 
@@ -104,11 +101,8 @@ fn write_tracks(g: &Search, prepared: Vec<PreparedTrackRow>, total: i32) {
     } else {
         prepared.len().min(COMPACT_TRACK_LIMIT)
     };
-    let mut rendered: Vec<UiTrackListRow> = prepared
-        .into_iter()
-        .take(take)
-        .map(finish_track_list_row)
-        .collect();
+    let mut rendered: Vec<UiTrackListRow> =
+        prepared.into_iter().take(take).map(finish_track_list_row).collect();
     restamp_rows(g, &mut rendered);
     write_track_model(g, rendered);
     g.set_tracks_total(total);
@@ -232,11 +226,7 @@ fn write_track_model(g: &Search, rows: Vec<UiTrackListRow>) {
     vm.set_vec(rows);
 }
 
-fn write_strip(
-    model: &slint::ModelRc<UiEntityStripRow>,
-    rows: Vec<UiEntityStripRow>,
-    label: &str,
-) {
+fn write_strip(model: &slint::ModelRc<UiEntityStripRow>, rows: Vec<UiEntityStripRow>, label: &str) {
     let Some(vm) = model.as_any().downcast_ref::<VecModel<UiEntityStripRow>>() else {
         log::warn!("Search.{label}-rows: VecModel<EntityStripRow> downcast failed");
         return;

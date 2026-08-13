@@ -27,10 +27,7 @@ fn the_persisted_nav_index_is_hydrated_before_any_view_is_wired() {
     // only ever fail for the reason its message gives — an anchor that went
     // missing reports itself here instead.
     let hydrations = UI_SETUP.matches("set_selected_index(").count();
-    assert_eq!(
-        hydrations, 1,
-        "expected exactly one nav-index hydration site in `install_views`"
-    );
+    assert_eq!(hydrations, 1, "expected exactly one nav-index hydration site in `install_views`");
     let wire_alls = UI_SETUP.matches("ui::callbacks::wire_all(").count();
     assert_eq!(wire_alls, 1, "boot no longer calls `wire_all`");
 

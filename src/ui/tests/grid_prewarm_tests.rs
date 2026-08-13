@@ -10,10 +10,7 @@ fn paths(of: &[Option<&str>], cap: usize) -> Vec<String> {
 
 #[test]
 fn duplicates_collapse_and_first_seen_order_survives() {
-    let out = paths(
-        &[Some("b.jpg"), Some("a.jpg"), Some("b.jpg"), Some("c.jpg")],
-        16,
-    );
+    let out = paths(&[Some("b.jpg"), Some("a.jpg"), Some("b.jpg"), Some("c.jpg")], 16);
     assert_eq!(out, vec!["b.jpg", "a.jpg", "c.jpg"]);
 }
 

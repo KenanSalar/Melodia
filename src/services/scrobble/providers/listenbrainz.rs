@@ -76,10 +76,9 @@ pub async fn validate_token(
     if !status.is_success() {
         return Err(server_error(status, response).await);
     }
-    let validated = response
-        .json::<ValidatedToken>()
-        .await
-        .map_err(|e| AppError::network("Failed to parse ListenBrainz validate-token response", e))?;
+    let validated = response.json::<ValidatedToken>().await.map_err(|e| {
+        AppError::network("Failed to parse ListenBrainz validate-token response", e)
+    })?;
     Ok(validated)
 }
 
@@ -167,10 +166,9 @@ pub async fn lookup_recording_mbid(
     if !status.is_success() {
         return Err(error_for(status, response).await);
     }
-    let result = response
-        .json::<LookupResult>()
-        .await
-        .map_err(|e| AppError::network("Failed to parse ListenBrainz metadata-lookup response", e))?;
+    let result = response.json::<LookupResult>().await.map_err(|e| {
+        AppError::network("Failed to parse ListenBrainz metadata-lookup response", e)
+    })?;
     Ok(mbid_match(result.recording_mbid, result.release_mbid))
 }
 
@@ -199,12 +197,9 @@ pub async fn lookup_recording_mbids_bulk(
     if !status.is_success() {
         return Err(error_for(status, response).await);
     }
-    let results = response
-        .json::<Vec<BulkLookupResult>>()
-        .await
-        .map_err(|e| {
-            AppError::network("Failed to parse ListenBrainz bulk metadata-lookup response", e)
-        })?;
+    let results = response.json::<Vec<BulkLookupResult>>().await.map_err(|e| {
+        AppError::network("Failed to parse ListenBrainz bulk metadata-lookup response", e)
+    })?;
     Ok(align_bulk_results(queries.len(), results))
 }
 
@@ -281,9 +276,7 @@ const MAX_RATE_LIMIT_BACKOFF_SECS: u64 = 300;
 /// policy.
 pub fn rate_limit_backoff(reset_in_secs: Option<u64>) -> Duration {
     Duration::from_secs(
-        reset_in_secs
-            .unwrap_or(DEFAULT_RATE_LIMIT_BACKOFF_SECS)
-            .min(MAX_RATE_LIMIT_BACKOFF_SECS),
+        reset_in_secs.unwrap_or(DEFAULT_RATE_LIMIT_BACKOFF_SECS).min(MAX_RATE_LIMIT_BACKOFF_SECS),
     )
 }
 
@@ -301,7 +294,11 @@ fn playing_now_payload(track: &ScrobbleTrack) -> SubmitListens<'_> {
 /// A durable-listen payload: `single` for one listen, `import` for a batch.
 fn listens_payload<'a>(listens: &'a [(&'a ScrobbleTrack, i64)]) -> SubmitListens<'a> {
     SubmitListens {
-        listen_type: if listens.len() == 1 { "single" } else { "import" },
+        listen_type: if listens.len() == 1 {
+            "single"
+        } else {
+            "import"
+        },
         payload: listens
             .iter()
             .map(|(track, timestamp)| Listen {

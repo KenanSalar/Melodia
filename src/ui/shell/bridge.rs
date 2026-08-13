@@ -13,11 +13,9 @@ use slint::{ComponentHandle, SharedString, Weak};
 use tokio::sync::watch;
 
 use crate::entities::track::TrackSummary;
-use crate::player::event_sink::PlayerSinks;
-use crate::player::state::{
-    PlayerViewModelLight, PositionTick, QueueViewModel,
-};
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::player::event_sink::PlayerSinks;
+use crate::player::state::{PlayerViewModelLight, PositionTick, QueueViewModel};
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Player, PlayerVm, QueueVm, TrackSummaryRow};
 
@@ -176,10 +174,7 @@ pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSumm
 /// deliberately *not* on `PlayerVm` — they live as standalone properties on
 /// the `Player` global and are written directly by the position-tick
 /// subscriber. See `melodia-ui/ui/models.slint` for the rationale.
-pub fn to_slint_player_vm(
-    vm: &PlayerViewModelLight,
-    cover_thumbs: &CoverThumbs,
-) -> PlayerVm {
+pub fn to_slint_player_vm(vm: &PlayerViewModelLight, cover_thumbs: &CoverThumbs) -> PlayerVm {
     let track = vm
         .current_track
         .as_ref()

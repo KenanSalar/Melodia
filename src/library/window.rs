@@ -6,9 +6,7 @@ use crate::services::{
 };
 use crate::state::AppState;
 
-pub fn get_always_on_top_capability(
-    state: &AppState,
-) -> Result<AlwaysOnTopCapability, AppError> {
+pub fn get_always_on_top_capability(state: &AppState) -> Result<AlwaysOnTopCapability, AppError> {
     Ok(state.always_on_top.clone())
 }
 

@@ -127,11 +127,7 @@ fn generate_palette_green_and_yellow_stay_recognisable() {
                 assert!(gg > gr && gg > gb, "{at}: green 0x{:06X} isn't green", p.green);
 
                 let (yr, yg, yb) = channels(p.yellow);
-                assert!(
-                    yr > yb && yg > yb,
-                    "{at}: yellow 0x{:06X} isn't yellow",
-                    p.yellow
-                );
+                assert!(yr > yb && yg > yb, "{at}: yellow 0x{:06X} isn't yellow", p.yellow);
                 assert!(
                     channel_spread(p.yellow) > 32,
                     "{at}: yellow 0x{:06X} is too washed to signal",
@@ -198,18 +194,14 @@ fn extract_source_argb_decodes_in_bounds_source() {
     // Sanity check the path-based fallback still works for in-bounds
     // dimensions — a 256×256 vibrant uniform colour passes Limits and
     // produces a usable seed that the palette generator can consume.
-    let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
-        ImageBuffer::from_pixel(256, 256, Rgb([230, 120, 30]));
+    let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(256, 256, Rgb([230, 120, 30]));
     let tmp = NamedTempFile::with_suffix(".png").expect("tempfile");
     img.save(tmp.path()).expect("encode in-bounds PNG");
 
     let seed = extract_source_argb(tmp.path()).expect("in-bounds source should produce a seed");
     let r = (seed >> 16) & 0xFF;
     let b = seed & 0xFF;
-    assert!(
-        r > b,
-        "expected red-dominant seed for orange input, got 0x{seed:06X}"
-    );
+    assert!(r > b, "expected red-dominant seed for orange input, got 0x{seed:06X}");
 }
 
 #[test]
@@ -235,14 +227,11 @@ fn extract_source_argb_from_rgb8_produces_seed_for_uniform_colour() {
         px[1] = 120;
         px[2] = 30;
     }
-    let seed = extract_source_argb_from_rgb8(&buf)
-        .expect("uniform vibrant buffer should produce a seed");
+    let seed =
+        extract_source_argb_from_rgb8(&buf).expect("uniform vibrant buffer should produce a seed");
     let r = (seed >> 16) & 0xFF;
     let b = seed & 0xFF;
-    assert!(
-        r > b,
-        "expected red-dominant seed for orange input, got 0x{seed:06X}"
-    );
+    assert!(r > b, "expected red-dominant seed for orange input, got 0x{seed:06X}");
 }
 
 /// Google Blue — what `material_colors::Score` hands back when no cluster
@@ -277,10 +266,7 @@ fn a_greyscale_cover_seeds_from_its_own_grey() {
 
     let (r, g, b) = channels(seed);
     let spread = r.max(g).max(b) - r.min(g).min(b);
-    assert!(
-        spread <= 8,
-        "a greyscale cover should seed near-neutral, got 0x{seed:06X}"
-    );
+    assert!(spread <= 8, "a greyscale cover should seed near-neutral, got 0x{seed:06X}");
 }
 
 // --- clamp_to_tone_band ------------------------------------------------------
@@ -299,10 +285,7 @@ fn clamp_to_tone_band_leaves_a_colour_inside_the_band_alone() {
     // byte-identical — no gratuitous gamut round-trip, and no chroma lost to
     // one.
     let inside = 0x00B0_B0B0;
-    assert_eq!(
-        clamp_to_tone_band(inside, CHROME_BAND.0, CHROME_BAND.1),
-        inside
-    );
+    assert_eq!(clamp_to_tone_band(inside, CHROME_BAND.0, CHROME_BAND.1), inside);
 }
 
 #[test]
@@ -352,10 +335,7 @@ fn clamp_to_tone_band_keeps_the_dominant_hue() {
     let r = (lifted >> 16) & 0xFF;
     let g = (lifted >> 8) & 0xFF;
     let b = lifted & 0xFF;
-    assert!(
-        r > g && r > b,
-        "expected a red-dominant lift, got 0x{lifted:06X}"
-    );
+    assert!(r > g && r > b, "expected a red-dominant lift, got 0x{lifted:06X}");
 }
 
 #[test]
@@ -398,14 +378,8 @@ fn to_tone_capped_chroma_sets_the_tone_in_both_directions() {
     let light = to_tone_capped_chroma(0x0000_0000, 85.0, 24.0);
     // `relative_luminance` above is the gamma-space weighted sum, so these
     // bounds are looser than the linear-light figures the tones imply.
-    assert!(
-        relative_luminance(dark) < 0.15,
-        "a light seed must come back dark, got 0x{dark:06X}"
-    );
-    assert!(
-        relative_luminance(light) > 0.5,
-        "a dark seed must come back light, got 0x{light:06X}"
-    );
+    assert!(relative_luminance(dark) < 0.15, "a light seed must come back dark, got 0x{dark:06X}");
+    assert!(relative_luminance(light) > 0.5, "a dark seed must come back light, got 0x{light:06X}");
 }
 
 #[test]
@@ -416,10 +390,7 @@ fn to_tone_capped_chroma_keeps_the_dominant_hue() {
     let r = (toned >> 16) & 0xFF;
     let g = (toned >> 8) & 0xFF;
     let b = toned & 0xFF;
-    assert!(
-        r >= g && r >= b,
-        "expected a red-dominant result, got 0x{toned:06X}"
-    );
+    assert!(r >= g && r >= b, "expected a red-dominant result, got 0x{toned:06X}");
 }
 
 #[test]

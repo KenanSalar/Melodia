@@ -17,10 +17,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[test]
 fn format_key_linux_x86_64_appimage() {
-    assert_eq!(
-        format_key("linux", "x86_64", true, None),
-        Some("linux-x86_64-appimage"),
-    );
+    assert_eq!(format_key("linux", "x86_64", true, None), Some("linux-x86_64-appimage"),);
     // `$APPIMAGE` wins over pkg ownership — the squashfs mount can't be
     // owned by dpkg/rpm, but a buggy probe shouldn't matter.
     assert_eq!(
@@ -35,10 +32,7 @@ fn format_key_linux_x86_64_appimage() {
 
 #[test]
 fn format_key_linux_aarch64_appimage() {
-    assert_eq!(
-        format_key("linux", "aarch64", true, None),
-        Some("linux-aarch64-appimage"),
-    );
+    assert_eq!(format_key("linux", "aarch64", true, None), Some("linux-aarch64-appimage"),);
     assert_eq!(
         format_key("linux", "aarch64", true, Some(LinuxPackageFormat::Rpm)),
         Some("linux-aarch64-appimage"),
@@ -83,18 +77,12 @@ fn format_key_linux_aarch64_deb() {
 
 #[test]
 fn format_key_linux_x86_64_tarball() {
-    assert_eq!(
-        format_key("linux", "x86_64", false, None),
-        Some("linux-x86_64-tarball"),
-    );
+    assert_eq!(format_key("linux", "x86_64", false, None), Some("linux-x86_64-tarball"),);
 }
 
 #[test]
 fn format_key_linux_aarch64_tarball() {
-    assert_eq!(
-        format_key("linux", "aarch64", false, None),
-        Some("linux-aarch64-tarball"),
-    );
+    assert_eq!(format_key("linux", "aarch64", false, None), Some("linux-aarch64-tarball"),);
 }
 
 #[test]
@@ -112,10 +100,7 @@ fn format_key_windows_x86_64() {
 
 #[test]
 fn format_key_windows_aarch64() {
-    assert_eq!(
-        format_key("windows", "aarch64", false, None),
-        Some("windows-aarch64-msi"),
-    );
+    assert_eq!(format_key("windows", "aarch64", false, None), Some("windows-aarch64-msi"),);
     assert_eq!(format_key("windows", "aarch64", true, None), Some("windows-aarch64-msi"));
     assert_eq!(
         format_key("windows", "aarch64", false, Some(LinuxPackageFormat::Deb)),

@@ -148,7 +148,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let playlists_ui = playlists_ui.clone();
         se.on_commit(move || {
             let Some(ui) = weak.upgrade() else { return };
-            let Some(draft) = collect_criteria(&ui) else { return };
+            let Some(draft) = collect_criteria(&ui) else {
+                return;
+            };
             let CriteriaDraft {
                 name,
                 description,
@@ -306,13 +308,9 @@ fn rule_to_row(rule: &sc::Rule) -> Option<SmartRuleRow> {
 
 /// Rebuild a rule from an editor row (dropping incoherent / incomplete rows).
 fn row_to_rule(row: &SmartRuleRow) -> Option<sc::Rule> {
-    let field = usize::try_from(row.field_index)
-        .ok()
-        .and_then(|i| sc::FIELDS.get(i).copied())?;
+    let field = usize::try_from(row.field_index).ok().and_then(|i| sc::FIELDS.get(i).copied())?;
     let vt = field.value_type();
-    let op = usize::try_from(row.op_index)
-        .ok()
-        .and_then(|i| sc::ops_for(vt).get(i).copied())?;
+    let op = usize::try_from(row.op_index).ok().and_then(|i| sc::ops_for(vt).get(i).copied())?;
     let value = sc::RuleValue::from_input(vt, op, row.value_text.as_str());
     Some(sc::Rule { field, op, value })
 }
@@ -386,8 +384,7 @@ fn populate_editor(
     }
     se.set_target_id(clamp_i64_to_i32(target_id));
     with_rules_model(ui, |vm| {
-        let mut rows: Vec<SmartRuleRow> =
-            criteria.rules.iter().filter_map(rule_to_row).collect();
+        let mut rows: Vec<SmartRuleRow> = criteria.rules.iter().filter_map(rule_to_row).collect();
         if rows.is_empty() {
             rows.push(default_rule_row());
         }

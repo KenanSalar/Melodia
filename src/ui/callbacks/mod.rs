@@ -209,12 +209,30 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     let player = ui.global::<Player>();
     let ui_weak = ui.as_weak();
 
-    wire_sync_pb!(player, on_play_pause, state, "play_pause", library::playback::player_toggle_play_pause);
+    wire_sync_pb!(
+        player,
+        on_play_pause,
+        state,
+        "play_pause",
+        library::playback::player_toggle_play_pause
+    );
     wire_sync_pb!(player, on_next, state, "next", library::playback::player_next);
     wire_sync_pb!(player, on_previous, state, "previous", library::playback::player_previous);
-    wire_pb!(player, on_commit_volume, state, "commit_volume", library::playback::commit_player_settings);
+    wire_pb!(
+        player,
+        on_commit_volume,
+        state,
+        "commit_volume",
+        library::playback::commit_player_settings
+    );
     wire_pb!(player, on_toggle_mute, state, "toggle_mute", library::playback::player_toggle_mute);
-    wire_sync!(player, on_toggle_shuffle, state, "toggle_shuffle", library::queue::queue_toggle_shuffle);
+    wire_sync!(
+        player,
+        on_toggle_shuffle,
+        state,
+        "toggle_shuffle",
+        library::queue::queue_toggle_shuffle
+    );
     wire_sync!(player, on_cycle_repeat, state, "cycle_repeat", library::queue::queue_cycle_repeat);
 
     // seek: hold the slider at the requested position until the backend
@@ -239,7 +257,11 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
             let s = s.clone();
             // Negative → 0 (try_from fails); then cap at the volume ceiling.
             let vol = u32::try_from(level).unwrap_or(0).min(crate::player::state::MAX_VOLUME);
-            spawn_logged_sync!(s, "set_volume", library::playback::player_set_volume(&s.playback_ctx(), vol));
+            spawn_logged_sync!(
+                s,
+                "set_volume",
+                library::playback::player_set_volume(&s.playback_ctx(), vol)
+            );
         });
     }
 

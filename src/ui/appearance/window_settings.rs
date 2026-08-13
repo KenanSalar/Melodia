@@ -49,9 +49,7 @@ pub(super) fn wire_corner_radius_changed(ui: &AppWindow, state: &AppState) {
         // emits valid presets in practice — the snap is defensive
         // against future code paths that might forward arbitrary px
         // values through this callback.
-        let clamped = u32::try_from(px_i32)
-            .unwrap_or(0)
-            .min(services::settings::MAX_CORNER_RADIUS);
+        let clamped = u32::try_from(px_i32).unwrap_or(0).min(services::settings::MAX_CORNER_RADIUS);
         let radius = library::settings::snap_to_preset(clamped);
         // Apply: drive `Theme.shell-radius` synchronously. Slint length
         // properties codegen as `f32` in logical pixels.
@@ -115,8 +113,7 @@ pub(super) fn wire_titlebar_button_style_changed(ui: &AppWindow, state: &AppStat
             1 => TitlebarButtonStyle::Macos,
             _ => TitlebarButtonStyle::Standard,
         };
-        ui.global::<Theme>()
-            .set_titlebar_button_style(idx_for(style));
+        ui.global::<Theme>().set_titlebar_button_style(idx_for(style));
         let s_clone = s.clone();
         s.runtime.spawn_blocking(move || {
             if let Err(e) = library::window::set_titlebar_button_style(&s_clone, style) {
@@ -137,8 +134,7 @@ pub(super) fn wire_titlebar_button_side_changed(ui: &AppWindow, state: &AppState
             1 => TitlebarButtonSide::Left,
             _ => TitlebarButtonSide::Right,
         };
-        ui.global::<Theme>()
-            .set_titlebar_button_side(idx_for_side(side));
+        ui.global::<Theme>().set_titlebar_button_side(idx_for_side(side));
         let s_clone = s.clone();
         s.runtime.spawn_blocking(move || {
             if let Err(e) = library::window::set_titlebar_button_side(&s_clone, side) {

@@ -77,10 +77,7 @@ const MINIMIZE_PROBE_DELAY: Duration = Duration::from_millis(250);
 fn schedule_minimize_probe(weak: slint::Weak<AppWindow>) {
     slint::Timer::single_shot(MINIMIZE_PROBE_DELAY, move || {
         let Some(ui) = weak.upgrade() else { return };
-        let minimized = ui
-            .window()
-            .with_winit_window(WinitWindow::is_minimized)
-            .flatten();
+        let minimized = ui.window().with_winit_window(WinitWindow::is_minimized).flatten();
         if minimized == Some(true) {
             crate::ui::shell::tray_bridge::set_window_visible(&ui, false);
         }
@@ -200,7 +197,10 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
             // clear so the gate doesn't stick on a stale row id. Both
             // writes are gated on "value differs from sentinel" so we
             // don't churn the property on every random click.
-            WindowEvent::MouseInput { state: ElementState::Released, .. } => {
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                ..
+            } => {
                 // Synchronous `weak.upgrade()` (not `upgrade_in_event_loop`):
                 // the winit filter runs on the UI thread already, and the
                 // ordering matters — popup-internal `pointer-event(up)`

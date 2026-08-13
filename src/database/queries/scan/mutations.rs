@@ -38,7 +38,7 @@ pub async fn update_track_artwork_if_missing(
 ) -> Result<(), AppError> {
     sqlx::query(
         "UPDATE tracks SET artwork_path = ?
-         WHERE file_path = ? AND (artwork_path IS NULL OR artwork_path = '')"
+         WHERE file_path = ? AND (artwork_path IS NULL OR artwork_path = '')",
     )
     .bind(artwork_path)
     .bind(file_path)
@@ -170,75 +170,61 @@ pub async fn insert_tracks_batch(
 ) -> Result<Vec<i64>, AppError> {
     let mut out = Vec::with_capacity(rows.len());
     for chunk in rows.chunks(INSERT_CHUNK_ROWS) {
-        let sort_keys: Vec<String> = chunk
-            .iter()
-            .map(|r| to_natural_sort_key(&r.meta.title))
-            .collect();
+        let sort_keys: Vec<String> =
+            chunk.iter().map(|r| to_natural_sort_key(&r.meta.title)).collect();
 
         let mut qb = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
             "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) "
         ));
-        qb.push_values(
-            chunk.iter().zip(sort_keys.iter()),
-            |mut b, (row, sort_key)| {
-                let meta = row.meta;
-                // Bind order mirrors `bind_track_columns` — see the
-                // TRACK_INSERT_COLUMNS contract above.
-                b.push_bind(&row.file_path)
-                    .push_bind(&row.file_name)
-                    .push_bind(&meta.file_hash)
-                    .push_bind(&meta.title)
-                    .push_bind(&meta.artist)
-                    .push_bind(&meta.album_artist)
-                    .push_bind(&meta.album)
-                    .push_bind(&meta.genre)
-                    .push_bind(meta.track_number)
-                    .push_bind(meta.disc_number)
-                    .push_bind(meta.year)
-                    .push_bind(&meta.composer)
-                    .push_bind(&meta.comment)
-                    .push_bind(meta.bpm)
-                    .push_bind(&meta.musicbrainz_track_id)
-                    .push_bind(&meta.musicbrainz_release_id)
-                    .push_bind(&meta.label)
-                    .push_bind(meta.original_year)
-                    .push_bind(meta.replaygain_track_gain)
-                    .push_bind(meta.replaygain_track_peak)
-                    .push_bind(meta.replaygain_album_gain)
-                    .push_bind(meta.replaygain_album_peak)
-                    .push_bind(meta.duration_ms)
-                    .push_bind(Some(meta.file_size))
-                    .push_bind(&meta.codec)
-                    .push_bind(meta.bitrate)
-                    .push_bind(meta.channels)
-                    .push_bind(meta.sample_rate)
-                    .push_bind(meta.bit_depth)
-                    .push_bind(&meta.artwork_path)
-                    .push_bind(row.ids.album_id)
-                    .push_bind(row.ids.artist_id)
-                    .push_bind(row.ids.genre_id)
-                    .push_bind(row.ids.folder_id)
-                    .push_bind(&meta.date_modified)
-                    .push_bind(sort_key);
-                // Playback defaults as SQL literals (play_count,
-                // skip_count, rating, is_favorite, last_played,
-                // last_position) — keeps the per-row bind count at 37.
-                b.push("0")
-                    .push("0")
-                    .push("0")
-                    .push("0")
-                    .push("NULL")
-                    .push("0")
-                    .push_bind(now);
-            },
-        );
+        qb.push_values(chunk.iter().zip(sort_keys.iter()), |mut b, (row, sort_key)| {
+            let meta = row.meta;
+            // Bind order mirrors `bind_track_columns` — see the
+            // TRACK_INSERT_COLUMNS contract above.
+            b.push_bind(&row.file_path)
+                .push_bind(&row.file_name)
+                .push_bind(&meta.file_hash)
+                .push_bind(&meta.title)
+                .push_bind(&meta.artist)
+                .push_bind(&meta.album_artist)
+                .push_bind(&meta.album)
+                .push_bind(&meta.genre)
+                .push_bind(meta.track_number)
+                .push_bind(meta.disc_number)
+                .push_bind(meta.year)
+                .push_bind(&meta.composer)
+                .push_bind(&meta.comment)
+                .push_bind(meta.bpm)
+                .push_bind(&meta.musicbrainz_track_id)
+                .push_bind(&meta.musicbrainz_release_id)
+                .push_bind(&meta.label)
+                .push_bind(meta.original_year)
+                .push_bind(meta.replaygain_track_gain)
+                .push_bind(meta.replaygain_track_peak)
+                .push_bind(meta.replaygain_album_gain)
+                .push_bind(meta.replaygain_album_peak)
+                .push_bind(meta.duration_ms)
+                .push_bind(Some(meta.file_size))
+                .push_bind(&meta.codec)
+                .push_bind(meta.bitrate)
+                .push_bind(meta.channels)
+                .push_bind(meta.sample_rate)
+                .push_bind(meta.bit_depth)
+                .push_bind(&meta.artwork_path)
+                .push_bind(row.ids.album_id)
+                .push_bind(row.ids.artist_id)
+                .push_bind(row.ids.genre_id)
+                .push_bind(row.ids.folder_id)
+                .push_bind(&meta.date_modified)
+                .push_bind(sort_key);
+            // Playback defaults as SQL literals (play_count,
+            // skip_count, rating, is_favorite, last_played,
+            // last_position) — keeps the per-row bind count at 37.
+            b.push("0").push("0").push("0").push("0").push("NULL").push("0").push_bind(now);
+        });
         qb.push(" RETURNING id, file_path");
 
-        let returned: Vec<(i64, String)> = qb
-            .build_query_as()
-            .persistent(false)
-            .fetch_all(&mut **tx)
-            .await?;
+        let returned: Vec<(i64, String)> =
+            qb.build_query_as().persistent(false).fetch_all(&mut **tx).await?;
         let mut by_path: HashMap<String, i64> =
             returned.into_iter().map(|(id, path)| (path, id)).collect();
         for row in chunk {
@@ -334,7 +320,7 @@ pub async fn update_album_artwork_from_tracks(
             WHERE first_art.album_id = albums.id AND rn = 1
         )
         WHERE (artwork_path IS NULL OR artwork_path = '')
-          AND id IN (SELECT album_id FROM first_art WHERE rn = 1)"
+          AND id IN (SELECT album_id FROM first_art WHERE rn = 1)",
     )
     .execute(&mut **tx)
     .await?;

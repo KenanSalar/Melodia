@@ -28,8 +28,7 @@ pub async fn run(state: &AppState) -> AppResult<()> {
             let path = canonical.to_string_lossy().into_owned();
             let existing = queries::folder::get_all_folders(&state.db).await.unwrap_or_default();
             let dup = existing.iter().any(|f| {
-                crate::utils::canonicalize_path(Path::new(&f.path))
-                    .is_ok_and(|p| p == canonical)
+                crate::utils::canonicalize_path(Path::new(&f.path)).is_ok_and(|p| p == canonical)
             });
             if !dup {
                 match queries::folder::insert_folder(&state.db, &path, true).await {

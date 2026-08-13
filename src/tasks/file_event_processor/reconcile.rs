@@ -60,17 +60,11 @@ async fn extract_metadata_batch(
         use rayon::prelude::*;
         paths_to_extract
             .into_par_iter()
-            .filter_map(|path| {
-                match extract_metadata(&path, &artwork_dir, &cover_cache, false) {
-                    Ok(meta) => Some((path, meta)),
-                    Err(e) => {
-                        log::warn!(
-                            "Failed to extract metadata for {}: {}",
-                            path.display(),
-                            e
-                        );
-                        None
-                    }
+            .filter_map(|path| match extract_metadata(&path, &artwork_dir, &cover_cache, false) {
+                Ok(meta) => Some((path, meta)),
+                Err(e) => {
+                    log::warn!("Failed to extract metadata for {}: {}", path.display(), e);
+                    None
                 }
             })
             .collect::<HashMap<_, _>>()
@@ -115,18 +109,15 @@ pub(super) async fn process_batch(
         // Batch all hash lookups into chunked IN-clause queries.
         // For each hash, we want the lowest-id matching row, so we fetch
         // (file_hash, id, file_path) for the whole set and pick the min id per hash in Rust.
-        let rows: Vec<(String, i64, String)> = crate::database::chunked_in_query(
-            db.read(),
-            &hashes_to_check,
-            |placeholders| {
+        let rows: Vec<(String, i64, String)> =
+            crate::database::chunked_in_query(db.read(), &hashes_to_check, |placeholders| {
                 format!(
                     "SELECT file_hash, id, file_path FROM tracks \
                      WHERE file_hash IN ({placeholders})"
                 )
-            },
-        )
-        .await
-        .unwrap_or_default();
+            })
+            .await
+            .unwrap_or_default();
 
         let mut by_hash: HashMap<String, (i64, String)> = HashMap::new();
         for (hash, id, path) in rows {
@@ -170,11 +161,9 @@ pub(super) async fn process_batch(
                 if let Some(meta) = metadata_map.get(path) {
                     match handle_created(&mut tx, path, meta, &mut moved_candidates).await {
                         Ok(changed) => changes += usize::from(changed),
-                        Err(e) => log::warn!(
-                            "Failed to process created file {}: {}",
-                            path.display(),
-                            e
-                        ),
+                        Err(e) => {
+                            log::warn!("Failed to process created file {}: {}", path.display(), e);
+                        }
                     }
                 }
             }
@@ -205,11 +194,9 @@ pub(super) async fn process_batch(
                 if let Some(meta) = metadata_map.get(path) {
                     match handle_modified(&mut tx, path, meta, &mut moved_candidates).await {
                         Ok(changed) => changes += usize::from(changed),
-                        Err(e) => log::warn!(
-                            "Failed to process modified file {}: {}",
-                            path.display(),
-                            e
-                        ),
+                        Err(e) => {
+                            log::warn!("Failed to process modified file {}: {}", path.display(), e);
+                        }
                     }
                 }
             }
@@ -239,10 +226,7 @@ pub(super) async fn process_batch(
 }
 
 fn file_name_owned(path: &Path) -> String {
-    path.file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or("")
-        .to_owned()
+    path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_owned()
 }
 
 /// Returns `true` when a row was actually written (insert or moved-file
@@ -267,10 +251,7 @@ async fn handle_created(
     // per-event-query behavior.
     if let Some((existing_id, old_path)) = moved_candidates.get(&meta.file_hash).cloned() {
         let Some(folder_id) = queries::scan::find_folder_for_path(tx, &path_str).await? else {
-            log::debug!(
-                "Moved file not in any library folder, skipping: {}",
-                path.display()
-            );
+            log::debug!("Moved file not in any library folder, skipping: {}", path.display());
             return Ok(false);
         };
         let file_name = file_name_owned(path);
@@ -308,8 +289,7 @@ async fn handle_created(
 
     let file_name = file_name_owned(path);
     let now = crate::utils::now_rfc3339();
-    let _new_id =
-        queries::scan::insert_track(tx, &path_str, &file_name, meta, &ids, &now).await?;
+    let _new_id = queries::scan::insert_track(tx, &path_str, &file_name, meta, &ids, &now).await?;
     log::info!("Added new track: {path_str}");
 
     Ok(true)
@@ -328,10 +308,7 @@ async fn handle_renamed(
 
     if let Some(track_id) = queries::scan::get_track_id_by_path(tx, &from_str).await? {
         let Some(folder_id) = queries::scan::find_folder_for_path(tx, &to_str).await? else {
-            log::debug!(
-                "Renamed file not in any library folder, skipping: {}",
-                to.display()
-            );
+            log::debug!("Renamed file not in any library folder, skipping: {}", to.display());
             return Ok(false);
         };
 
@@ -344,9 +321,8 @@ async fn handle_renamed(
         // `scanner::track_is_current`. An older mtime only ever fails toward a
         // re-parse. The fallback covers the one case with nothing in hand: extraction
         // failed, or `to` vanished before the batch was extracted.
-        let date_modified = meta
-            .and_then(|m| m.date_modified.clone())
-            .or_else(|| extract_date_modified(to));
+        let date_modified =
+            meta.and_then(|m| m.date_modified.clone()).or_else(|| extract_date_modified(to));
 
         // `track_id` was resolved by path inside this transaction, so the
         // row can't have vanished — the re-point bool is vacuously true.

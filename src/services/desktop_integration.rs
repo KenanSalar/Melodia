@@ -71,9 +71,7 @@ pub fn refresh_user_install() -> AppResult<()> {
     // memoised after first call, so the second access from the
     // gating below is essentially free.
     if std::env::var("APPIMAGE").is_ok_and(|p| !p.is_empty()) {
-        log::info!(
-            "desktop_integration: skipping — running from AppImage (bundled .desktop/icon)"
-        );
+        log::info!("desktop_integration: skipping — running from AppImage (bundled .desktop/icon)");
         return Ok(());
     }
 
@@ -124,24 +122,16 @@ pub fn refresh_user_install() -> AppResult<()> {
         if let Err(e) = std::fs::remove_file(&legacy_path)
             && e.kind() != std::io::ErrorKind::NotFound
         {
-            log::debug!(
-                "desktop_integration: legacy {} remove failed: {e}",
-                legacy_path.display()
-            );
+            log::debug!("desktop_integration: legacy {} remove failed: {e}", legacy_path.display());
         }
     }
-    let icon_path = data_home
-        .join("icons")
-        .join("hicolor")
-        .join("scalable")
-        .join("apps")
-        .join("melodia.svg");
+    let icon_path =
+        data_home.join("icons").join("hicolor").join("scalable").join("apps").join("melodia.svg");
     // AppStream MetaInfo — software centres read it from the per-user
     // metainfo dir, mirroring the system-wide copy the RPM/DEB land in
     // `/usr/share/metainfo/`.
-    let metainfo_path = data_home
-        .join("metainfo")
-        .join("com.github.kenansalar.melodia.metainfo.xml");
+    let metainfo_path =
+        data_home.join("metainfo").join("com.github.kenansalar.melodia.metainfo.xml");
 
     let desktop_body = render_desktop(DESKTOP_TEMPLATE, &exec_path);
 
@@ -240,10 +230,7 @@ fn write_if_changed(path: &Path, payload: &[u8]) -> AppResult<bool> {
 fn refresh_caches(data_home: &Path) {
     let apps = data_home.join("applications");
     let icons = data_home.join("icons").join("hicolor");
-    let _ = std::process::Command::new("update-desktop-database")
-        .arg("-q")
-        .arg(&apps)
-        .output();
+    let _ = std::process::Command::new("update-desktop-database").arg("-q").arg(&apps).output();
     let _ = std::process::Command::new("gtk-update-icon-cache")
         .arg("-q")
         .arg("-t")

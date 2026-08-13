@@ -8,10 +8,7 @@ fn frame_round_trips() {
     assert!(write_frame(&mut buf, 1, b"hello world").is_ok());
 
     let mut cursor = Cursor::new(buf);
-    assert_eq!(
-        read_frame(&mut cursor).ok(),
-        Some((1u32, b"hello world".to_vec()))
-    );
+    assert_eq!(read_frame(&mut cursor).ok(), Some((1u32, b"hello world".to_vec())));
 }
 
 #[test]

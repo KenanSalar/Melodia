@@ -1,6 +1,6 @@
+use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::tests::helpers::*;
-use crate::database::queries;
 use crate::error::AppError;
 
 #[tokio::test]
@@ -98,9 +98,8 @@ async fn prune_orphans_removes_emptied_album_artist_and_genre() -> Result<(), Ap
     queries::scan::prune_orphans(&mut tx).await?;
     tx.commit().await?;
 
-    let albums: Vec<String> = sqlx::query_scalar("SELECT name FROM albums ORDER BY name")
-        .fetch_all(db.read())
-        .await?;
+    let albums: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM albums ORDER BY name").fetch_all(db.read()).await?;
     assert_eq!(albums, vec!["Album One".to_owned()]);
 
     let artist_b: Option<i64> =
@@ -115,15 +114,13 @@ async fn prune_orphans_removes_emptied_album_artist_and_genre() -> Result<(), Ap
             .fetch_optional(db.read())
             .await?;
     assert!(artist_a.is_some());
-    let unknown: Option<i64> = sqlx::query_scalar("SELECT id FROM artists WHERE id = 1")
-        .fetch_optional(db.read())
-        .await?;
+    let unknown: Option<i64> =
+        sqlx::query_scalar("SELECT id FROM artists WHERE id = 1").fetch_optional(db.read()).await?;
     assert!(unknown.is_some(), "the id-1 unknown default must never be pruned");
 
     // The emptied genre is pruned; a still-used genre survives.
-    let genres: Vec<String> = sqlx::query_scalar("SELECT name FROM genres ORDER BY name")
-        .fetch_all(db.read())
-        .await?;
+    let genres: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM genres ORDER BY name").fetch_all(db.read()).await?;
     assert_eq!(genres, vec!["Rock".to_owned()]);
 
     Ok(())

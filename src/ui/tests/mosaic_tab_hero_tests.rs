@@ -118,8 +118,14 @@ fn the_hero_tab_bar_takes_every_brush_from_the_backdrop() {
 /// here can be orphaned by a write.
 #[test]
 fn the_band_forwards_what_the_shared_row_publishes() {
-    for prop in ["tab-enter-from", "tab-anim-armed", "tip-w", "tip-h", "tip-label", "tip-visible"]
-    {
+    for prop in [
+        "tab-enter-from",
+        "tab-anim-armed",
+        "tip-w",
+        "tip-h",
+        "tip-label",
+        "tip-visible",
+    ] {
         assert!(
             HERO.contains(&format!("{prop} <=> header.{prop};")),
             "the hero band must re-publish `{prop}` off the shared header — its pages read that \

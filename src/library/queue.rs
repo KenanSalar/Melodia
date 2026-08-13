@@ -59,10 +59,7 @@ pub async fn queue_add_tracks(state: &AppState, track_ids: Vec<i64>) -> Result<(
 /// directly after `current_index`, preserving the input order so the
 /// user-visible queue ends up as `[current, id_0, id_1, …, id_n, …]`.
 /// One DB round-trip + one `with_state_emit` for the whole batch.
-pub async fn queue_play_next_many(
-    state: &AppState,
-    track_ids: Vec<i64>,
-) -> Result<(), AppError> {
+pub async fn queue_play_next_many(state: &AppState, track_ids: Vec<i64>) -> Result<(), AppError> {
     if track_ids.is_empty() {
         return Ok(());
     }
@@ -284,9 +281,7 @@ pub async fn restore_persisted_queue(state: &AppState) -> AppResult<()> {
 /// continuous. Allocation-free — no intermediate index Vec.
 fn shuffle_inline(state: &mut crate::player::state::PlayerState) {
     let mut rng = rand::rng();
-    state
-        .queue
-        .shuffle_play_order_in_place(&mut rng, /* anchor_to_current */ true);
+    state.queue.shuffle_play_order_in_place(&mut rng, /* anchor_to_current */ true);
 }
 
 #[cfg(test)]

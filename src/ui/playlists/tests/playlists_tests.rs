@@ -155,8 +155,7 @@ fn every_draggable_list_opts_out_of_drag_panning() {
          grab on either axis once the columns overflow"
     );
     assert!(
-        normalize_ws(&strip_line_comments(QUEUE_SHEET))
-            .contains("mouse-drag-pan-enabled: false"),
+        normalize_ws(&strip_line_comments(QUEUE_SHEET)).contains("mouse-drag-pan-enabled: false"),
         "every row in the queue sheet is draggable, so its ListView never gets the gesture"
     );
 }

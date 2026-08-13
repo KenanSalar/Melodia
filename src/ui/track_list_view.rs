@@ -31,12 +31,12 @@ use std::collections::HashSet;
 use slint::ComponentHandle;
 
 use crate::AppWindow;
+use crate::services::settings::ColumnWidths;
+use crate::services::view_state::ViewStateData;
 use crate::{
     AlbumDetail, ArtistDetail, Browse, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed,
     Search, Tracks,
 };
-use crate::services::settings::ColumnWidths;
-use crate::services::view_state::ViewStateData;
 
 /// The Slint-side surface of a per-view track-list global, abstracted so the
 /// hydrate/snapshot helpers can drive any number of views with a single code
@@ -91,10 +91,8 @@ pub fn snapshot_into_view_state(
     vs: &mut ViewStateData,
     h: &dyn TrackListColumnState,
 ) {
-    vs.view_column_widths
-        .insert(view_id.to_owned(), h.get_widths());
-    vs.view_columns
-        .insert(view_id.to_owned(), h.snapshot_visible());
+    vs.view_column_widths.insert(view_id.to_owned(), h.get_widths());
+    vs.view_columns.insert(view_id.to_owned(), h.snapshot_visible());
 }
 
 /// View-id constants. Centralised so the spelling stays consistent between

@@ -147,14 +147,9 @@ pub(super) async fn create(
     // It is machine-derived from `dirs::data_dir()`; doubling any quote is what
     // keeps a directory name with an apostrophe from ending the literal early.
     let escaped = tmp_path.display().to_string().replace('\'', "''");
-    sqlx::raw_sql(AssertSqlSafe(format!("VACUUM INTO '{escaped}'")))
-        .execute(pool)
-        .await?;
+    sqlx::raw_sql(AssertSqlSafe(format!("VACUUM INTO '{escaped}'"))).execute(pool).await?;
     std::fs::rename(&tmp_path, &final_path).map_err(|e| {
-        AppError::io_other(format!(
-            "Could not publish the backup as {}: {e}",
-            final_path.display()
-        ))
+        AppError::io_other(format!("Could not publish the backup as {}: {e}", final_path.display()))
     })?;
 
     log::info!("Database backup created at {}", final_path.display());
@@ -211,7 +206,9 @@ fn adopt_legacy(data_dir: &Path, backups_dir: &Path) {
             (Ok(()), true) => {
                 log::info!("Dropped legacy backup {name} — v{version} is already under retention");
             }
-            (Err(e), _) => log::warn!("Could not retire the legacy backup {}: {e}", source.display()),
+            (Err(e), _) => {
+                log::warn!("Could not retire the legacy backup {}: {e}", source.display());
+            }
         }
     }
 }

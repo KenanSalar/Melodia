@@ -69,7 +69,12 @@ pub(crate) struct TestSource {
 
 impl TestSource {
     pub(crate) fn new(data: Vec<f32>, channels: u16, sample_rate: u32) -> Self {
-        Self { data, pos: 0, channels, sample_rate }
+        Self {
+            data,
+            pos: 0,
+            channels,
+            sample_rate,
+        }
     }
 }
 

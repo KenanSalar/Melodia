@@ -232,8 +232,9 @@ cd Melodia
 
 cargo run                                      # debug build, runs the app
 cargo build --release                          # release build → target/release/Melodia
-cargo clippy --all-targets -- -D warnings       # lint
-cargo test                                      # run tests
+cargo fmt --all                                # format
+cargo clippy --all-targets -- -D warnings      # lint
+cargo test                                     # run tests
 ```
 
 > **Note — vendored winit fork.**
@@ -414,9 +415,14 @@ filter alone and says so in the log.
 
 Contributions are welcome. Before opening a pull request:
 
+- Run `cargo fmt --all` — CI checks it, and `rustfmt.toml` widens two sub-widths
+  so the formatter leaves the codebase's existing wrapping largely alone.
 - Run `cargo clippy --all-targets --locked -- -D warnings` — the lint
   configuration is strict and `unwrap()` is denied in non-test code.
 - Run `cargo test --locked` and keep it green.
+- Run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once per clone, so
+  the tree-wide rustfmt commit stays out of `git blame`. GitHub's blame view
+  already honours the file.
 - Follow the existing [Conventional Commits](https://www.conventionalcommits.org/)
   style used in the git history.
 - Open pull requests against the `dev` branch. (`main` only accepts merges from
@@ -426,9 +432,9 @@ Contributions are welcome. Before opening a pull request:
   that doesn't target the default branch.
 
 Every pull request runs the **PR Validation** workflow — a `cargo audit`
-advisory scan, `clippy` (with `-D warnings`) and the full test suite — and the
-`pr-validation` check must pass before merging. Documentation-only changes skip
-all three. Coverage is a separate manual run
+advisory scan, a `cargo fmt` check, `clippy` (with `-D warnings`) and the full
+test suite — and the `pr-validation` check must pass before merging.
+Documentation-only changes skip all four. Coverage is a separate manual run
 (**Actions → Deploy Coverage → Run workflow**) published to GitHub Pages at
 [kenansalar.github.io/Melodia](https://kenansalar.github.io/Melodia/).
 

@@ -14,11 +14,7 @@ use super::system_color_state::SystemColorState;
 /// Brushes for the colour-dot picker — one per accent in `theme`, each
 /// rendered in `variant_id`'s shade.
 pub fn accent_brushes(theme: &ThemeDef, variant_id: &str) -> Vec<Brush> {
-    theme
-        .accents
-        .iter()
-        .map(|a| brush(a.hex_in(variant_id).unwrap_or(0x88_88_88)))
-        .collect()
+    theme.accents.iter().map(|a| brush(a.hex_in(variant_id).unwrap_or(0x88_88_88))).collect()
 }
 
 /// Resolve `(theme_id, variant_id, accent_id)` (with fallbacks) and write
@@ -58,9 +54,7 @@ pub fn apply(
             } else {
                 variant_id
             };
-            theme
-                .accent_hex(accent_id, real_variant)
-                .unwrap_or(*dyn_accent)
+            theme.accent_hex(accent_id, real_variant).unwrap_or(*dyn_accent)
         };
         // Material You has no OS-defined "inactive titlebar" concept —
         // the dynamic palette is generated from artwork, not the WM —
@@ -133,12 +127,8 @@ fn parse_hex_color(s: &str) -> Option<u32> {
 /// `#rrggbb`. They only fire if that ever stops being true.
 #[cfg(target_os = "linux")]
 fn palette_from_kde(kde: &crate::services::system_theme::KdeColorPalette) -> Palette {
-    let g = |key: &str| -> u32 {
-        kde.colors
-            .get(key)
-            .and_then(|s| parse_hex_color(s))
-            .unwrap_or(0)
-    };
+    let g =
+        |key: &str| -> u32 { kde.colors.get(key).and_then(|s| parse_hex_color(s)).unwrap_or(0) };
     let overlay1 = g("overlay1");
     Palette {
         base: g("base"),
@@ -277,7 +267,11 @@ pub(super) fn on_accent_hex(accent_hex: u32) -> u32 {
     let g = f64::from((accent_hex >> 8) & 0xff) / 255.0;
     let b = f64::from(accent_hex & 0xff) / 255.0;
     let lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-    if lum > LUMA_THRESHOLD { 0x001e_1e2e } else { 0x00ff_ffff }
+    if lum > LUMA_THRESHOLD {
+        0x001e_1e2e
+    } else {
+        0x00ff_ffff
+    }
 }
 
 #[cfg(all(test, target_os = "linux"))]

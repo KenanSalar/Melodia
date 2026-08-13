@@ -225,10 +225,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         .pragma("cache_size", "-16000")
         .pragma("temp_store", "MEMORY");
 
-    let write_pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(write_opts)
-        .await?;
+    let write_pool = SqlitePoolOptions::new().max_connections(1).connect_with(write_opts).await?;
 
     // Check for pending migrations and backup before applying
     let migrator = sqlx::migrate!("./migrations");
@@ -348,16 +345,9 @@ impl DbPool {
             .pragma("synchronous", "NORMAL")
             .pragma("temp_store", "MEMORY");
 
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(opts)
-            .await
-            .unwrap();
+        let pool = SqlitePoolOptions::new().max_connections(1).connect_with(opts).await.unwrap();
 
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await
-            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
         DbPool {
             read: pool.clone(),

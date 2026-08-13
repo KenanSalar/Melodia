@@ -7,7 +7,7 @@ use walkdir::WalkDir;
 
 use super::is_audio_extension;
 use crate::database::queries::scan::ExistingTrackSummary;
-use crate::media::metadata::{extract_metadata, ExtractedMetadata};
+use crate::media::metadata::{ExtractedMetadata, extract_metadata};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ScanProgress {
@@ -26,10 +26,8 @@ pub struct ScannedFile {
 pub fn collect_media_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::with_capacity(256);
 
-    for entry in WalkDir::new(dir)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(std::result::Result::ok)
+    for entry in
+        WalkDir::new(dir).follow_links(false).into_iter().filter_map(std::result::Result::ok)
     {
         if !entry.file_type().is_file() {
             continue;
@@ -64,10 +62,7 @@ pub fn scan_files_parallel(
 
             // Report progress every 10 files
             if current.is_multiple_of(10) || current as usize == total {
-                let file_name = path
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or("");
+                let file_name = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
                 progress_callback(current, file_name);
             }
 

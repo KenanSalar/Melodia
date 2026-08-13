@@ -16,7 +16,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::database::{queries, DbPool};
+use crate::database::{DbPool, queries};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -88,11 +88,8 @@ pub async fn export_playlists_to_folder(
             match crate::services::write_text_atomic_sync(&path, &text) {
                 Ok(()) => ok += 1,
                 Err(e) => {
-                    let label = path
-                        .file_name()
-                        .and_then(|f| f.to_str())
-                        .unwrap_or("playlist")
-                        .to_owned();
+                    let label =
+                        path.file_name().and_then(|f| f.to_str()).unwrap_or("playlist").to_owned();
                     errs.push((label, e.to_string()));
                 }
             }
@@ -135,19 +132,13 @@ pub async fn import_playlist_from_file(
     let parsed = m3u::parse(&content);
 
     if parsed.entries.is_empty() {
-        return Err(AppError::Validation(
-            "No playlist entries found in file".to_owned(),
-        ));
+        return Err(AppError::Validation("No playlist entries found in file".to_owned()));
     }
 
     let name = parsed
         .playlist_name
         .clone()
-        .or_else(|| {
-            src.file_stem()
-                .and_then(|s| s.to_str())
-                .map(ToOwned::to_owned)
-        })
+        .or_else(|| src.file_stem().and_then(|s| s.to_str()).map(ToOwned::to_owned))
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "Imported Playlist".to_owned());
 
@@ -186,10 +177,7 @@ async fn match_entries(
     entries: &[m3u::ParsedEntry],
     base: Option<&Path>,
 ) -> Result<MatchOutcome, AppError> {
-    let resolved: Vec<String> = entries
-        .iter()
-        .map(|e| resolve_path(&e.path, base))
-        .collect();
+    let resolved: Vec<String> = entries.iter().map(|e| resolve_path(&e.path, base)).collect();
 
     let mut ids: Vec<Option<i64>> = vec![None; entries.len()];
     let mut matched_by_path: u32 = 0;

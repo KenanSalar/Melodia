@@ -55,14 +55,11 @@ use crate::ui::chips;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi, NAV_FAVORITES};
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::my_library::{MyLibraryTab, NAV_MY_LIBRARY, tab_from_index};
-use crate::ui::recently_played::{
-    NAV_RECENTLY_PLAYED, RecentlyPlayedTab, RecentlyPlayedUi,
-};
+use crate::ui::recently_played::{NAV_RECENTLY_PLAYED, RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::tracks::format_duration_ms;
 use crate::ui::util::len_as_i32;
 use crate::{
-    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, HeroChips, MyLibrary, Nav,
-    PlaylistDetail,
+    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, HeroChips, MyLibrary, Nav, PlaylistDetail,
 };
 
 /// How many rows a hero band gives its chips before dropping the rest.
@@ -347,9 +344,7 @@ fn is_open(ui: &AppWindow, owner: ChipOwner) -> bool {
         ChipOwner::Album(id) => i64::from(ui.global::<AlbumDetail>().get_album_id()) == id,
         ChipOwner::Artist(id) => i64::from(ui.global::<ArtistDetail>().get_artist_id()) == id,
         ChipOwner::Genre(id) => i64::from(ui.global::<GenreDetail>().get_genre_id()) == id,
-        ChipOwner::Playlist(id) => {
-            i64::from(ui.global::<PlaylistDetail>().get_playlist_id()) == id
-        }
+        ChipOwner::Playlist(id) => i64::from(ui.global::<PlaylistDetail>().get_playlist_id()) == id,
         ChipOwner::Favorites | ChipOwner::RecentlyPlayed => false,
     }
 }
@@ -373,8 +368,7 @@ fn write_rows(ui: &AppWindow, force: bool) {
     }) else {
         return;
     };
-    ui.global::<HeroChips>()
-        .set_rows(chips::rows_to_model(rows));
+    ui.global::<HeroChips>().set_rows(chips::rows_to_model(rows));
 }
 
 // --- Per-hero publishers ------------------------------------------------
@@ -437,10 +431,7 @@ pub fn publish_favorites(ui: &AppWindow, fav_ui: &FavoritesUi) {
     // it built until the statement ended — nothing here needs two at once.
     let (tracks, duration_ms) = {
         let stats = state.stats.lock();
-        (
-            i32::try_from(stats.count).unwrap_or(i32::MAX),
-            stats.total_duration_ms,
-        )
+        (i32::try_from(stats.count).unwrap_or(i32::MAX), stats.total_duration_ms)
     };
     let songs = *state.songs_fold.lock();
     let most_played = *state.most_played_totals.lock();
@@ -556,12 +547,7 @@ fn list_chips(
 }
 
 fn genre_chips(labels: &impl ChipLabels, genre: &GenreStats, fold: HeroFold) -> Vec<SharedString> {
-    list_chips(
-        labels,
-        labels.tracks(genre.track_count),
-        genre.total_duration_ms,
-        fold,
-    )
+    list_chips(labels, labels.tracks(genre.track_count), genre.total_duration_ms, fold)
 }
 
 /// No "Smart" chip — the title already carries the `auto_awesome` badge, and
@@ -571,12 +557,7 @@ fn playlist_chips(
     playlist: &PlaylistStats,
     fold: HeroFold,
 ) -> Vec<SharedString> {
-    list_chips(
-        labels,
-        labels.tracks(playlist.track_count),
-        playlist.total_duration_ms,
-        fold,
-    )
+    list_chips(labels, labels.tracks(playlist.track_count), playlist.total_duration_ms, fold)
 }
 
 /// Empty on an empty tab, whichever of the three it is: each paints its own
@@ -591,12 +572,9 @@ fn favorites_chips(labels: &impl ChipLabels, facts: &FavoritesFacts) -> Vec<Shar
     match facts.tab {
         FavoritesTab::MostPlayed => most_played_chips(labels, facts.most_played),
         FavoritesTab::Artists if facts.artists > 0 => vec![labels.artists(facts.artists)],
-        FavoritesTab::Songs if facts.tracks > 0 => list_chips(
-            labels,
-            labels.favorites(facts.tracks),
-            facts.duration_ms,
-            facts.songs,
-        ),
+        FavoritesTab::Songs if facts.tracks > 0 => {
+            list_chips(labels, labels.favorites(facts.tracks), facts.duration_ms, facts.songs)
+        }
         _ => Vec::new(),
     }
 }
@@ -610,12 +588,9 @@ fn recently_played_chips(
 ) -> Vec<SharedString> {
     match facts.tab {
         RecentlyPlayedTab::MostPlayed => most_played_chips(labels, facts.most_played),
-        RecentlyPlayedTab::Songs if facts.tracks > 0 => list_chips(
-            labels,
-            labels.tracks(facts.tracks),
-            facts.duration_ms,
-            facts.songs,
-        ),
+        RecentlyPlayedTab::Songs if facts.tracks > 0 => {
+            list_chips(labels, labels.tracks(facts.tracks), facts.duration_ms, facts.songs)
+        }
         RecentlyPlayedTab::Songs => Vec::new(),
     }
 }

@@ -61,11 +61,7 @@ fn ratio_against_tone(rgb: u32, backdrop_tone: f64) -> f64 {
 }
 
 fn unpack(rgb: u32) -> (u8, u8, u8) {
-    (
-        ((rgb >> 16) & 0xff) as u8,
-        ((rgb >> 8) & 0xff) as u8,
-        (rgb & 0xff) as u8,
-    )
+    (((rgb >> 16) & 0xff) as u8, ((rgb >> 8) & 0xff) as u8, (rgb & 0xff) as u8)
 }
 
 // --- the linearisation table --------------------------------------------------
@@ -120,7 +116,11 @@ fn luma_p90_sees_a_bright_mark_a_mean_would_miss() {
     // 20% of the buffer is white, the rest black.
     let side = 40;
     let buf = buffer_from(side, |_, y| {
-        if y < side / 5 { [255, 255, 255] } else { [0, 0, 0] }
+        if y < side / 5 {
+            [255, 255, 255]
+        } else {
+            [0, 0, 0]
+        }
     });
     let luma = p90(&buf);
 
@@ -140,13 +140,14 @@ fn luma_p90_steps_over_a_tail_smaller_than_the_percentile() {
     // black body, not the speck.
     let side = 50;
     let buf = buffer_from(side, |x, y| {
-        if y == 0 && x < side / 2 { [255, 255, 255] } else { [0, 0, 0] }
+        if y == 0 && x < side / 2 {
+            [255, 255, 255]
+        } else {
+            [0, 0, 0]
+        }
     });
     let luma = p90(&buf);
-    assert!(
-        luma < 10.0,
-        "a 1% speck must not drive the scrim, got L*{luma}"
-    );
+    assert!(luma < 10.0, "a 1% speck must not drive the scrim, got L*{luma}");
 }
 
 // --- BackdropSample ---------------------------------------------------------
@@ -158,10 +159,7 @@ fn measure_takes_the_hue_and_the_percentile_off_one_buffer() {
 
     assert_eq!(sample.luma, luma_p90(&buf));
     let (r, g, b) = unpack(sample.accent_argb.unwrap_or(0));
-    assert!(
-        r > g && r > b,
-        "a red buffer quantized to rgb({r}, {g}, {b})"
-    );
+    assert!(r > g && r > b, "a red buffer quantized to rgb({r}, {g}, {b})");
 }
 
 /// An empty buffer must leave both halves empty so the publisher falls back to
@@ -264,10 +262,7 @@ fn scrim_alpha_floors_on_an_already_dark_backdrop() {
     // Anything at or below the target tone has no darkening left to do.
     for luma in [0.0, 5.0, 20.0, 32.0] {
         let a = scrim_alpha(luma);
-        assert!(
-            (a - 0.30).abs() < f32::EPSILON,
-            "L*{luma} should take the floor, got {a}"
-        );
+        assert!((a - 0.30).abs() < f32::EPSILON, "L*{luma} should take the floor, got {a}");
     }
 }
 
@@ -276,10 +271,7 @@ fn scrim_alpha_is_monotone_in_backdrop_luma() {
     let mut previous = scrim_alpha(0.0);
     for step in 1..=100 {
         let a = scrim_alpha(f64::from(step));
-        assert!(
-            a >= previous,
-            "alpha dropped from {previous} to {a} at L*{step}"
-        );
+        assert!(a >= previous, "alpha dropped from {previous} to {a} at L*{step}");
         previous = a;
     }
 }
@@ -289,10 +281,7 @@ fn scrim_alpha_is_snapped_to_whole_percents() {
     for step in 0..=100 {
         let a = scrim_alpha(f64::from(step));
         let percents = a * 100.0;
-        assert!(
-            (percents - percents.round()).abs() < 1e-3,
-            "L*{step} produced an unsnapped {a}"
-        );
+        assert!((percents - percents.round()).abs() < 1e-3, "L*{step} produced an unsnapped {a}");
     }
 }
 
@@ -305,10 +294,7 @@ fn composited_tone_lands_in_the_target_band_for_every_backdrop() {
     for step in 0..=100 {
         let luma = f64::from(step);
         let tone = composited_tone(luma, scrim_alpha(luma));
-        assert!(
-            tone <= 33.0,
-            "L*{luma} composited to L*{tone}, above the target band"
-        );
+        assert!(tone <= 33.0, "L*{luma} composited to L*{tone}, above the target band");
     }
 }
 
@@ -319,10 +305,7 @@ fn composited_tone_never_brightens_the_backdrop() {
         let tone = composited_tone(luma, scrim_alpha(luma));
         // The scrim is near-black, so compositing can only darken — except at
         // the very bottom, where the scrim is the lighter of the two.
-        assert!(
-            tone <= luma.max(9.0),
-            "L*{luma} composited *up* to L*{tone}"
-        );
+        assert!(tone <= luma.max(9.0), "L*{luma} composited *up* to L*{tone}");
     }
 }
 
@@ -377,10 +360,7 @@ fn floor_luma_is_dark_enough_to_need_no_extra_scrim() {
         "the art-less gradient floor must already be inside the target band, got L*{luma}"
     );
     let a = scrim_alpha(luma);
-    assert!(
-        (a - 0.30).abs() < f32::EPSILON,
-        "the floor should take the minimum scrim, got {a}"
-    );
+    assert!((a - 0.30).abs() < f32::EPSILON, "the floor should take the minimum scrim, got {a}");
 }
 
 // --- solve ------------------------------------------------------------------
@@ -401,10 +381,7 @@ fn solve_keeps_the_scrim_and_floor_dark_whatever_the_seed() {
         ] {
             let (r, g, b) = unpack(rgb);
             let y = relative_luminance(r, g, b);
-            assert!(
-                y < 0.06,
-                "{name} for seed {seed:#08x} is not dark (Y={y}), rgb={rgb:#08x}"
-            );
+            assert!(y < 0.06, "{name} for seed {seed:#08x} is not dark (Y={y}), rgb={rgb:#08x}");
         }
     }
 }
@@ -468,7 +445,13 @@ fn a_white_cover_now_clears_the_non_text_bar() {
 
 #[test]
 fn gradient_luma_of_one_repeated_stop_is_that_stop() {
-    for rgb in [0x0000_0000, 0x0080_8080, 0x00ff_ffff, 0x00cb_a6f7, 0x0000_66ff] {
+    for rgb in [
+        0x0000_0000,
+        0x0080_8080,
+        0x00ff_ffff,
+        0x00cb_a6f7,
+        0x0000_66ff,
+    ] {
         let stop = rgb_lstar(rgb);
         let gradient = gradient_luma(rgb, rgb);
         assert!(
@@ -538,18 +521,9 @@ fn the_pre_solve_hero_text_defaults_clear_their_targets_on_the_worst_backdrop() 
     let tone = worst_composited_tone();
     let title = ratio_against_tone(HERO_ON_BACKDROP, tone);
     let muted = ratio_against_tone(HERO_ON_BACKDROP_MUTED, tone);
-    assert!(
-        title >= 4.5,
-        "hero title is {title}:1 on the worst backdrop (L*{tone}), owes 4.5:1"
-    );
-    assert!(
-        muted >= 3.0,
-        "hero meta line is {muted}:1 on the worst backdrop (L*{tone}), owes 3:1"
-    );
-    assert!(
-        title > muted,
-        "the title must outrank the meta line, got {title}:1 vs {muted}:1"
-    );
+    assert!(title >= 4.5, "hero title is {title}:1 on the worst backdrop (L*{tone}), owes 4.5:1");
+    assert!(muted >= 3.0, "hero meta line is {muted}:1 on the worst backdrop (L*{tone}), owes 3:1");
+    assert!(title > muted, "the title must outrank the meta line, got {title}:1 vs {muted}:1");
 }
 
 /// The constants above are copies — assert they still match the declarations
@@ -564,10 +538,7 @@ fn the_pre_solve_hero_text_defaults_clear_their_targets_on_the_worst_backdrop() 
 #[test]
 fn the_hero_text_defaults_match_hero_backdrop_slint() {
     let declarations = include_str!("../../../melodia-ui/ui/globals/hero-backdrop.slint");
-    for (name, literal) in [
-        ("on-backdrop", "#f0eef5"),
-        ("on-backdrop-muted", "#c9c5d3"),
-    ] {
+    for (name, literal) in [("on-backdrop", "#f0eef5"), ("on-backdrop-muted", "#c9c5d3")] {
         let declaration = format!("in-out property <brush> {name}: {literal};");
         assert!(
             declarations.contains(&declaration),

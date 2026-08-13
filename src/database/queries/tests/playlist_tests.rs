@@ -1,13 +1,12 @@
+use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::tests::helpers::*;
-use crate::database::queries;
 use crate::error::AppError;
 
 #[tokio::test]
 async fn create_playlist_returns_correct_fields() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let pl =
-        queries::playlist::create_playlist(&db, "My Playlist", Some("A description")).await?;
+    let pl = queries::playlist::create_playlist(&db, "My Playlist", Some("A description")).await?;
     assert_eq!(pl.name, "My Playlist");
     assert_eq!(pl.description.as_deref(), Some("A description"));
     assert!(pl.id > 0);
@@ -57,8 +56,7 @@ async fn update_playlist() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Original", None).await?;
     let updated =
-        queries::playlist::update_playlist(&db, pl.id, "Renamed", Some("New desc"), false)
-            .await?;
+        queries::playlist::update_playlist(&db, pl.id, "Renamed", Some("New desc"), false).await?;
     assert_eq!(updated.name, "Renamed");
     assert_eq!(updated.description.as_deref(), Some("New desc"));
     Ok(())
@@ -207,15 +205,11 @@ async fn clearing_thumbnail_persists_after_adding_tracks() -> Result<(), AppErro
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids[..1]).await?;
 
     let after_first_add = queries::playlist::get_playlist_by_id(&db, pl.id).await?;
-    assert_eq!(
-        after_first_add.thumbnail_path.as_deref(),
-        Some("/artwork/cover.jpg")
-    );
+    assert_eq!(after_first_add.thumbnail_path.as_deref(), Some("/artwork/cover.jpg"));
     assert!(!after_first_add.custom_thumbnail);
 
     // User clears the thumbnail via the edit dialog.
-    let cleared =
-        queries::playlist::update_playlist(&db, pl.id, "Test", None, true).await?;
+    let cleared = queries::playlist::update_playlist(&db, pl.id, "Test", None, true).await?;
     assert!(cleared.thumbnail_path.is_none());
     assert!(
         cleared.custom_thumbnail,

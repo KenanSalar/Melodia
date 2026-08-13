@@ -77,9 +77,7 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
     if let Ok(s) = settings::read_settings(&state.paths) {
         let g = ui.global::<Settings>();
         g.set_gapless_playback(s.playback.gapless_playback);
-        g.set_play_button_animation_idx(play_button_anim_idx_from_token(
-            &s.play_button_animation,
-        ));
+        g.set_play_button_animation_idx(play_button_anim_idx_from_token(&s.play_button_animation));
         g.set_resume_on_startup(s.playback.resume_on_startup);
 
         g.set_crossfade_enabled(s.crossfade.crossfade_enabled);
@@ -109,30 +107,28 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
     });
 
     let state_anim = state.clone();
-    ui.global::<Settings>()
-        .on_play_button_animation_changed(move |idx| {
-            // Runtime effect is reactive off the Slint global already —
-            // PlayButton swaps overlays via property bindings. Only the
-            // disk write needs to happen here, and it goes to the
-            // blocking pool to keep the UI thread responsive.
-            let token = play_button_anim_token_from_idx(idx).to_owned();
-            state_anim.persist_blocking("persist play_button_animation", move |s| {
-                library::settings::set_play_button_animation(s, token)
-            });
+    ui.global::<Settings>().on_play_button_animation_changed(move |idx| {
+        // Runtime effect is reactive off the Slint global already —
+        // PlayButton swaps overlays via property bindings. Only the
+        // disk write needs to happen here, and it goes to the
+        // blocking pool to keep the UI thread responsive.
+        let token = play_button_anim_token_from_idx(idx).to_owned();
+        state_anim.persist_blocking("persist play_button_animation", move |s| {
+            library::settings::set_play_button_animation(s, token)
         });
+    });
 
     let state_resume = state.clone();
-    ui.global::<Settings>()
-        .on_resume_on_startup_changed(move |on| {
-            // Single-phase: no runtime side effect — the flag is
-            // consulted only at the next `main.rs` startup, so we just
-            // persist on the blocking pool. The Slint two-way binding
-            // already updated `Settings.resume-on-startup` before this
-            // callback fired.
-            state_resume.persist_blocking("persist resume_on_startup", move |s| {
-                library::settings::set_resume_on_startup(s, on)
-            });
+    ui.global::<Settings>().on_resume_on_startup_changed(move |on| {
+        // Single-phase: no runtime side effect — the flag is
+        // consulted only at the next `main.rs` startup, so we just
+        // persist on the blocking pool. The Slint two-way binding
+        // already updated `Settings.resume-on-startup` before this
+        // callback fired.
+        state_resume.persist_blocking("persist resume_on_startup", move |s| {
+            library::settings::set_resume_on_startup(s, on)
         });
+    });
 
     install_crossfade_callbacks(ui, state);
 }

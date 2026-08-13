@@ -82,9 +82,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                 runtime.spawn(async move {
                     if gu.take_dirty() {
                         let open_id = gu.detail_genre_id();
-                        if let Err(e) =
-                            genres_ui_mod::fetch_grid(&s, &gu, weak.clone()).await
-                        {
+                        if let Err(e) = genres_ui_mod::fetch_grid(&s, &gu, weak.clone()).await {
                             log::warn!("genres::section_enter fetch_grid: {e}");
                         }
                         if open_id >= 0
@@ -148,8 +146,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                     let s = s.clone();
                     let gu = gu.clone();
                     let weak = weak.clone();
-                    spawn_logged!(s, "genres::library_changed",
-                        genres_ui_mod::fetch_grid(&s, &gu, weak));
+                    spawn_logged!(
+                        s,
+                        "genres::library_changed",
+                        genres_ui_mod::fetch_grid(&s, &gu, weak)
+                    );
                 }
                 if open_id >= 0 {
                     let s = s.clone();
@@ -157,8 +158,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                     let weak = weak.clone();
                     // `refresh_detail`, not `open_genre` — a watcher
                     // tick must preserve the user's sort + selection.
-                    spawn_logged!(s, "genres::library_changed_detail",
-                        genres_ui_mod::refresh_detail(&s, &gu, weak, open_id));
+                    spawn_logged!(
+                        s,
+                        "genres::library_changed_detail",
+                        genres_ui_mod::refresh_detail(&s, &gu, weak, open_id)
+                    );
                 }
             }
         }));

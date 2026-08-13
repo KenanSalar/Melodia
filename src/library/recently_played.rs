@@ -29,8 +29,6 @@ pub async fn get_recently_played(state: &AppState) -> Result<Vec<track::TrackLis
 /// **the two sets are not comparable**: that one is a strict subset of its own
 /// Songs tab, this one is everything ever played. See the query's own doc
 /// comment for what that costs per `stats_changed` tick.
-pub async fn get_most_played(
-    state: &AppState,
-) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
+pub async fn get_most_played(state: &AppState) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
     queries::track::get_most_played(&state.db).await
 }

@@ -22,9 +22,8 @@ fn the_toast_kind_matches_its_dispatcher_branch() {
 /// button reaches; otherwise the toast opens nothing.
 #[test]
 fn the_support_branch_and_the_card_open_the_same_page() {
-    let (_, after_branch) = DISPATCHER
-        .split_once(&format!("kind == \"{SUPPORT_TOAST_KIND}\""))
-        .unwrap_or_default();
+    let (_, after_branch) =
+        DISPATCHER.split_once(&format!("kind == \"{SUPPORT_TOAST_KIND}\"")).unwrap_or_default();
     let body = after_branch.split_once('}').map(|(body, _)| body).unwrap_or_default();
 
     assert!(
@@ -44,19 +43,14 @@ fn the_support_branch_and_the_card_open_the_same_page() {
 /// and the wrong thing to do to someone else's logo.
 #[test]
 fn the_kofi_mark_is_an_unrecoloured_image() {
-    let (_, after) = SECTION
-        .split_once("leading-image:")
-        .unwrap_or_default();
+    let (_, after) = SECTION.split_once("leading-image:").unwrap_or_default();
     let mount = after.split_once(';').map(|(value, _)| value).unwrap_or_default();
 
     assert!(
         mount.contains("assets/icons/kofi-symbol.svg"),
         "the About card's support button no longer mounts the Ko-fi mark"
     );
-    assert!(
-        !SECTION.contains("colorize"),
-        "the Ko-fi mark must keep its own colours"
-    );
+    assert!(!SECTION.contains("colorize"), "the Ko-fi mark must keep its own colours");
 }
 
 /// A typo here is a support link that quietly goes nowhere, and nothing else in the

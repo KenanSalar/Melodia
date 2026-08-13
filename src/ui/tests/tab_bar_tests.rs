@@ -127,12 +127,9 @@ const CURATED_PAGES: [CuratedPage; 2] = [
 /// Bounded at the next `export global` rather than at a closing brace: the
 /// globals carry nested blocks, and matching braces here would be a parser.
 fn global_body<'a>(source: &'a str, name: &str) -> &'a str {
-    let after_header = source
-        .split_once(&format!("export global {name} {{"))
-        .map_or("", |(_, body)| body);
-    after_header
-        .split_once("\nexport global")
-        .map_or(after_header, |(body, _)| body)
+    let after_header =
+        source.split_once(&format!("export global {name} {{")).map_or("", |(_, body)| body);
+    after_header.split_once("\nexport global").map_or(after_header, |(body, _)| body)
 }
 
 /// Every count is declared at the sentinel and rewound to it on section leave.
@@ -410,7 +407,8 @@ fn the_bar_clips_what_the_width_split_lets_it_overdraw() {
     // Anchored past `TabBarCell`, which is declared above the bar in the same
     // file and clips its own label slot — an unanchored search would pass on
     // that one and never notice the root's going missing.
-    let bar = TAB_BAR.split_once("export component TabBar").map(|(_, body)| body).unwrap_or_default();
+    let bar =
+        TAB_BAR.split_once("export component TabBar").map(|(_, body)| body).unwrap_or_default();
 
     assert!(
         bar.contains("clip: true"),
@@ -438,7 +436,8 @@ fn every_painted_brush_is_an_input() {
     // The cells and the underline must read those inputs, not the tokens
     // directly. `Theme.*` still appears in the file for geometry, durations and
     // the defaults themselves, so anchor on the two paint sites that regressed.
-    let bar = TAB_BAR.split_once("export component TabBar").map(|(_, body)| body).unwrap_or_default();
+    let bar =
+        TAB_BAR.split_once("export component TabBar").map(|(_, body)| body).unwrap_or_default();
     assert!(
         !bar.contains("background: Theme.surface1"),
         "the divider must paint `divider-color`, not `Theme.surface1` directly"

@@ -39,7 +39,9 @@ pub(super) fn wire_callbacks(
     {
         let s = state.clone();
         queue.on_reorder(move |from, to| {
-            let Ok(from) = usize::try_from(from) else { return };
+            let Ok(from) = usize::try_from(from) else {
+                return;
+            };
             let Ok(to) = usize::try_from(to) else { return };
             if from == to {
                 return;
@@ -56,7 +58,9 @@ pub(super) fn wire_callbacks(
     {
         let s = state.clone();
         queue.on_remove(move |idx| {
-            let Ok(idx) = usize::try_from(idx) else { return };
+            let Ok(idx) = usize::try_from(idx) else {
+                return;
+            };
             let s_inner = s.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::queue::queue_remove(&s_inner, idx) {
@@ -91,7 +95,9 @@ pub(super) fn wire_callbacks(
     {
         let s = state.clone();
         queue.on_skip_to(move |idx| {
-            let Ok(idx) = usize::try_from(idx) else { return };
+            let Ok(idx) = usize::try_from(idx) else {
+                return;
+            };
             let s_inner = s.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::queue::queue_skip_to_index(&s_inner, idx) {
@@ -168,7 +174,9 @@ pub(super) fn wire_callbacks(
         let anchor = anchor.clone();
         let weak = weak.clone();
         queue.on_toggle_select(move |idx, ctrl, shift| {
-            let Ok(idx) = usize::try_from(idx) else { return };
+            let Ok(idx) = usize::try_from(idx) else {
+                return;
+            };
             apply_select(&queue_model, &shadow, &anchor, idx, ctrl, shift);
             push_selected_count(&weak, &shadow.lock());
         });
@@ -288,16 +296,13 @@ pub(super) fn wire_callbacks(
                 let is_open = is_open.clone();
                 state.runtime.clone().spawn(async move {
                     let covers = queue_covers.clone();
-                    let _ =
-                        tokio::task::spawn_blocking(move || covers.prewarm(&paths)).await;
+                    let _ = tokio::task::spawn_blocking(move || covers.prewarm(&paths)).await;
                     let _ = weak.upgrade_in_event_loop(move |ui| {
                         if !is_open.load(Ordering::Relaxed) {
                             return; // closed during warmup
                         }
                         let queue = ui.global::<Queue>();
-                        queue.set_covers_generation(
-                            queue.get_covers_generation().wrapping_add(1),
-                        );
+                        queue.set_covers_generation(queue.get_covers_generation().wrapping_add(1));
                     });
                 });
             } else {
@@ -329,10 +334,8 @@ pub(super) fn wire_callbacks(
                         // they do hold four `SharedString`s each, and the
                         // queue is as long as whatever was played into it.
                         let queue = ui.global::<Queue>();
-                        if let Some(vm) = queue
-                            .get_rows()
-                            .as_any()
-                            .downcast_ref::<VecModel<QueueRow>>()
+                        if let Some(vm) =
+                            queue.get_rows().as_any().downcast_ref::<VecModel<QueueRow>>()
                         {
                             vm.set_vec(Vec::new());
                         }

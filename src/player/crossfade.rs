@@ -41,7 +41,7 @@
 //! [`EqSource`]: super::equalizer::EqSource
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 
 use super::dsp::Generation;
 use crate::entities::track::TrackSummary;
@@ -216,8 +216,7 @@ impl FadeShared {
 
     /// Arm a ramp. Replaces any ramp already in flight on this deck.
     pub fn arm(&self, start: Option<f32>, target: f32, ramp_ms: u64, end_on_complete: bool) {
-        self.start_bits
-            .store(start.unwrap_or(f32::NAN).to_bits(), Ordering::Relaxed);
+        self.start_bits.store(start.unwrap_or(f32::NAN).to_bits(), Ordering::Relaxed);
         self.target_bits.store(target.to_bits(), Ordering::Relaxed);
         self.ramp_ms.store(ramp_ms, Ordering::Relaxed);
         self.end_on_complete.store(end_on_complete, Ordering::Relaxed);

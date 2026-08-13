@@ -43,8 +43,8 @@ const LOOKBACK: usize = 3;
 /// its own `below`. Nothing spells that today; it is here so the predicate says
 /// which half of the toggle it means.
 fn mounts_a_view(line: &str) -> bool {
-    let flips_index = line.starts_with("Nav.selected-index =")
-        && !line.starts_with("Nav.selected-index ==");
+    let flips_index =
+        line.starts_with("Nav.selected-index =") && !line.starts_with("Nav.selected-index ==");
     let closes_now_playing = line.starts_with("Nav.now-playing-open =")
         && !line.starts_with("Nav.now-playing-open ==")
         && !line.starts_with("Nav.now-playing-open = true");
@@ -59,11 +59,7 @@ fn every_slint_side_mount_writes_its_own_enter_edge() {
         // Comment-stripped leaves the line structure with blank tails, so the
         // lookback counts *code* lines — otherwise a long comment block above a
         // write pushes its own mark out of the window.
-        let code: Vec<&str> = src
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .collect();
+        let code: Vec<&str> = src.lines().map(str::trim).filter(|line| !line.is_empty()).collect();
 
         for (i, line) in code.iter().enumerate() {
             if !mounts_a_view(line) {

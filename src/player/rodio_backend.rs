@@ -59,20 +59,50 @@ impl<T: std::ops::Deref + Send + Sync> PlayerBackend for T
 where
     T::Target: PlayerBackend,
 {
-    fn play_media(&self, file_path: &str, volume: f64, speed: f64, start_position_ms: Option<u64>, baked_rg: TrackReplayGain) -> Result<(), AppError> {
+    fn play_media(
+        &self,
+        file_path: &str,
+        volume: f64,
+        speed: f64,
+        start_position_ms: Option<u64>,
+        baked_rg: TrackReplayGain,
+    ) -> Result<(), AppError> {
         (**self).play_media(file_path, volume, speed, start_position_ms, baked_rg)
     }
-    fn begin_crossfade(&self, file_path: &str, baked_rg: TrackReplayGain, fade_ms: u64, volume: f64, speed: f64) -> Result<(), AppError> {
+    fn begin_crossfade(
+        &self,
+        file_path: &str,
+        baked_rg: TrackReplayGain,
+        fade_ms: u64,
+        volume: f64,
+        speed: f64,
+    ) -> Result<(), AppError> {
         (**self).begin_crossfade(file_path, baked_rg, fade_ms, volume, speed)
     }
-    fn resume(&self) { (**self).resume(); }
-    fn pause_with_fade(&self, fade_ms: u64) { (**self).pause_with_fade(fade_ms); }
-    fn stop(&self) { (**self).stop(); }
-    fn stop_with_fade(&self, fade_ms: u64) { (**self).stop_with_fade(fade_ms); }
-    fn seek(&self, position_ms: u64) { (**self).seek(position_ms); }
-    fn set_volume(&self, volume: f64) { (**self).set_volume(volume); }
-    fn set_speed(&self, speed: f64) { (**self).set_speed(speed); }
-    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) { (**self).preload_gapless(file_path, baked_rg); }
+    fn resume(&self) {
+        (**self).resume();
+    }
+    fn pause_with_fade(&self, fade_ms: u64) {
+        (**self).pause_with_fade(fade_ms);
+    }
+    fn stop(&self) {
+        (**self).stop();
+    }
+    fn stop_with_fade(&self, fade_ms: u64) {
+        (**self).stop_with_fade(fade_ms);
+    }
+    fn seek(&self, position_ms: u64) {
+        (**self).seek(position_ms);
+    }
+    fn set_volume(&self, volume: f64) {
+        (**self).set_volume(volume);
+    }
+    fn set_speed(&self, speed: f64) {
+        (**self).set_speed(speed);
+    }
+    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
+        (**self).preload_gapless(file_path, baked_rg);
+    }
 }
 
 impl PlayerBackend for RodioPlayer {
@@ -86,17 +116,40 @@ impl PlayerBackend for RodioPlayer {
     ) -> Result<(), AppError> {
         self.play_media(file_path, volume, speed, start_position_ms, baked_rg)
     }
-    fn begin_crossfade(&self, file_path: &str, baked_rg: TrackReplayGain, fade_ms: u64, volume: f64, speed: f64) -> Result<(), AppError> {
+    fn begin_crossfade(
+        &self,
+        file_path: &str,
+        baked_rg: TrackReplayGain,
+        fade_ms: u64,
+        volume: f64,
+        speed: f64,
+    ) -> Result<(), AppError> {
         self.begin_crossfade(file_path, baked_rg, fade_ms, volume, speed)
     }
-    fn resume(&self) { self.resume(); }
-    fn pause_with_fade(&self, fade_ms: u64) { self.pause_with_fade(fade_ms); }
-    fn stop(&self) { self.stop(); }
-    fn stop_with_fade(&self, fade_ms: u64) { self.stop_with_fade(fade_ms); }
-    fn seek(&self, position_ms: u64) { self.seek(position_ms); }
-    fn set_volume(&self, volume: f64) { self.set_volume(volume); }
-    fn set_speed(&self, speed: f64) { self.set_speed(speed); }
-    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) { self.preload_gapless(file_path, baked_rg); }
+    fn resume(&self) {
+        self.resume();
+    }
+    fn pause_with_fade(&self, fade_ms: u64) {
+        self.pause_with_fade(fade_ms);
+    }
+    fn stop(&self) {
+        self.stop();
+    }
+    fn stop_with_fade(&self, fade_ms: u64) {
+        self.stop_with_fade(fade_ms);
+    }
+    fn seek(&self, position_ms: u64) {
+        self.seek(position_ms);
+    }
+    fn set_volume(&self, volume: f64) {
+        self.set_volume(volume);
+    }
+    fn set_speed(&self, speed: f64) {
+        self.set_speed(speed);
+    }
+    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
+        self.preload_gapless(file_path, baked_rg);
+    }
 }
 
 /// Result of checking the Rodio player queue in a single lock acquisition.
@@ -112,7 +165,11 @@ pub enum PlaybackCheck {
 
 /// Pure decision logic for playback state detection.
 /// Separated from `RodioPlayer::check_playback_state` for testability.
-pub fn evaluate_playback_check(was_gapless: bool, queue_len: usize, is_empty: bool) -> PlaybackCheck {
+pub fn evaluate_playback_check(
+    was_gapless: bool,
+    queue_len: usize,
+    is_empty: bool,
+) -> PlaybackCheck {
     if was_gapless && queue_len <= 1 {
         return PlaybackCheck::GaplessTransition;
     }
@@ -334,7 +391,11 @@ impl RodioPlayer {
         // `gapless_pending` while holding this same lock, so a preload that
         // landed during the decode above is visible here. Downgrading to a hard
         // cut is always safe — it clears both decks, staged source included.
-        let fade_ms = if self.gapless_pending.load(Ordering::Acquire) { 0 } else { fade_ms };
+        let fade_ms = if self.gapless_pending.load(Ordering::Acquire) {
+            0
+        } else {
+            fade_ms
+        };
         // The source is built by a closure the deck primitives hand the *target*
         // deck, under the one lock they then append through — so the ramp cell it
         // carries always belongs to the deck it lands on. `EqSource::new` does no
@@ -413,13 +474,7 @@ impl RodioPlayer {
         deck: &Deck,
     ) -> VisualizerTap<EqSource<Decoder<BufReader<File>>>> {
         VisualizerTap::new(
-            EqSource::new(
-                decoded,
-                self.eq.clone(),
-                self.rg.clone(),
-                baked_rg,
-                deck.fade.clone(),
-            ),
+            EqSource::new(decoded, self.eq.clone(), self.rg.clone(), baked_rg, deck.fade.clone()),
             &self.viz,
             deck.viz_slot,
         )
@@ -483,7 +538,11 @@ impl RodioPlayer {
             // Unconditional, not gated on the setting: a faded pause leaves the
             // deck holding silence, and the user may have turned the setting off
             // in between. A zero-length ramp just snaps back to unity.
-            let ramp = if self.xf.fade_on_pause() { crossfade::PAUSE_FADE_MS } else { 0 };
+            let ramp = if self.xf.fade_on_pause() {
+                crossfade::PAUSE_FADE_MS
+            } else {
+                0
+            };
             decks.active().fade.arm(None, 1.0, ramp, false);
         }
     }
@@ -807,10 +866,7 @@ fn decode_file(path: &str) -> Result<Decoder<BufReader<File>>, AppError> {
         File::open(path).map_err(|e| AppError::Player(format!("Cannot open {path}: {e}")))?;
     let file_len = file.metadata().map(|m| m.len()).ok();
 
-    let ext = std::path::Path::new(path)
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
+    let ext = std::path::Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
 
     // 64 KB BufReader (8× the std default of 8 KB) cuts read syscalls during
     // decode by the same factor. Symphonia pulls frames in chunks well above
@@ -827,9 +883,7 @@ fn decode_file(path: &str) -> Result<Decoder<BufReader<File>>, AppError> {
         builder = builder.with_byte_len(len);
     }
 
-    builder
-        .build()
-        .map_err(|e| AppError::Player(format!("Decode error for {path}: {e}")))
+    builder.build().map_err(|e| AppError::Player(format!("Decode error for {path}: {e}")))
 }
 
 /// Load persisted queue from disk (synchronous — safe for use in startup).

@@ -53,9 +53,8 @@ fn validate_duplicate_folder_returns_error() -> Result<(), AppError> {
     std::fs::create_dir(&dir)?;
 
     let canonical = crate::utils::canonicalize_path(&dir)?;
-    let canonical_str = canonical
-        .to_str()
-        .ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
+    let canonical_str =
+        canonical.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
     let existing = make_folder(1, canonical_str);
 
     let result = validate_folder_path(&dir, &[existing]);
@@ -72,9 +71,8 @@ fn validate_child_of_existing_returns_error() -> Result<(), AppError> {
     std::fs::create_dir_all(&child)?;
 
     let canonical_parent = crate::utils::canonicalize_path(&parent)?;
-    let canonical_str = canonical_parent
-        .to_str()
-        .ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
+    let canonical_str =
+        canonical_parent.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
     let existing = make_folder(1, canonical_str);
 
     let result = validate_folder_path(&child, &[existing]);
@@ -95,16 +93,8 @@ fn validate_parent_of_existing_returns_children_to_remove() -> Result<(), AppErr
     let c1 = crate::utils::canonicalize_path(&child1)?;
     let c2 = crate::utils::canonicalize_path(&child2)?;
     let existing = vec![
-        make_folder(
-            10,
-            c1.to_str()
-                .ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
-        ),
-        make_folder(
-            20,
-            c2.to_str()
-                .ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
-        ),
+        make_folder(10, c1.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?),
+        make_folder(20, c2.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?),
     ];
 
     let result = validate_folder_path(&parent, &existing)?;
@@ -125,9 +115,7 @@ fn validate_unrelated_path_returns_empty() -> Result<(), AppError> {
     let canonical_a = crate::utils::canonicalize_path(&dir_a)?;
     let existing = make_folder(
         1,
-        canonical_a
-            .to_str()
-            .ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
+        canonical_a.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
     );
 
     let result = validate_folder_path(&dir_b, &[existing])?;
@@ -159,9 +147,8 @@ fn validate_canonicalizes_symlinks() -> Result<(), AppError> {
     symlink(&real_dir, &link_path)?;
 
     let canonical = crate::utils::canonicalize_path(&real_dir)?;
-    let canonical_str = canonical
-        .to_str()
-        .ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
+    let canonical_str =
+        canonical.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
     let existing = make_folder(1, canonical_str);
 
     let result = validate_folder_path(&link_path, &[existing]);

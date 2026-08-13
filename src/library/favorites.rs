@@ -8,11 +8,7 @@ use crate::services::scrobble::LoveTarget;
 use crate::services::toast::{self, ToastKind};
 use crate::state::AppState;
 
-pub async fn set_favorite(
-    state: &AppState,
-    ids: Vec<i64>,
-    favorite: bool,
-) -> Result<(), AppError> {
+pub async fn set_favorite(state: &AppState, ids: Vec<i64>, favorite: bool) -> Result<(), AppError> {
     queries::track::set_favorite(&state.db, &ids, favorite).await?;
     // After the write, so the line means it landed rather than was attempted.
     log::debug!("favorite: {} track(s) → {favorite}", ids.len());
@@ -20,9 +16,7 @@ pub async fn set_favorite(
     // flag onto `current_track` so the Now-Playing heart updates without waiting
     // for the next track load (parity with `toggle_current_favorite`).
     sync_current_track_favorite(state, &ids, favorite);
-    state
-        .library_changed_tx
-        .send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
     sync_love(state, &ids, favorite).await;
     Ok(())
 }
@@ -108,9 +102,7 @@ fn sync_current_track_favorite(state: &AppState, ids: &[i64], favorite: bool) {
 /// rebuilds the view-model with the new value), and returns the affected
 /// `(id, new_fav)` so callers can mirror the change into other UI surfaces
 /// (e.g. the tracks list) without re-locking.
-pub async fn toggle_current_favorite(
-    state: &AppState,
-) -> Result<Option<(i64, bool)>, AppError> {
+pub async fn toggle_current_favorite(state: &AppState) -> Result<Option<(i64, bool)>, AppError> {
     let Some((id, new_fav)) = ({
         let g = lock_state(&state.player_state);
         g.current_track.as_ref().map(|t| (t.id, !t.is_favorite))
@@ -132,9 +124,7 @@ pub async fn toggle_current_favorite(
         Vec::<PlayerAction>::new()
     });
 
-    state
-        .library_changed_tx
-        .send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
 
     sync_love(state, &[id], new_fav).await;
 

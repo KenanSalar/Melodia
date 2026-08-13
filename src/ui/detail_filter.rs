@@ -24,10 +24,10 @@ use std::collections::HashSet;
 use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
+use crate::TrackListRow as UiTrackListRow;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::ui::detail_selection::DetailSelectionView;
 use crate::ui::row_match::{Needle, track_matches};
-use crate::TrackListRow as UiTrackListRow;
 
 /// Re-apply selection from the view's `selected-ids` onto freshly-built
 /// rows before they're swapped into the Slint model —
@@ -78,15 +78,10 @@ pub fn apply_filtered_detail<V: DetailSelectionView>(view: &V, refs: &FilterRefs
 
     let displayed: Vec<RsTrackListRow> = {
         let all = refs.all_tracks.lock();
-        all.iter()
-            .filter(|r| track_matches(r, &needle))
-            .cloned()
-            .collect()
+        all.iter().filter(|r| track_matches(r, &needle)).cloned().collect()
     };
-    let mut rows: Vec<UiTrackListRow> = displayed
-        .iter()
-        .map(crate::ui::tracks::to_slint_track_list_row)
-        .collect();
+    let mut rows: Vec<UiTrackListRow> =
+        displayed.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
     restamp_selection(view, &mut rows);
     *refs.tracks.lock() = displayed;
     install_tracks(view, rows);

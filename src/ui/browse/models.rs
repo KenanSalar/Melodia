@@ -4,7 +4,7 @@
 use slint::{Model, ModelRc, VecModel};
 
 use crate::{
-    Browse, BreadcrumbRow as UiBreadcrumbRow, BrowseFolderRow as UiBrowseFolderRow,
+    BreadcrumbRow as UiBreadcrumbRow, Browse, BrowseFolderRow as UiBrowseFolderRow,
     TrackListRow as UiTrackListRow,
 };
 

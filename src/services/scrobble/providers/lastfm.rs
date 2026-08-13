@@ -304,11 +304,8 @@ async fn send<K: Serialize>(
         .await
         .map_err(|e| AppError::network("Failed to parse Last.fm response", e))?;
     if let Some(code) = body.get("error").and_then(serde_json::Value::as_u64) {
-        let message = body
-            .get("message")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
+        let message =
+            body.get("message").and_then(serde_json::Value::as_str).unwrap_or_default().to_owned();
         return Err(classify(u32::try_from(code).unwrap_or(u32::MAX), message));
     }
     Ok(body)

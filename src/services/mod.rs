@@ -38,10 +38,7 @@ pub fn load_json_or_default_sync<T: DeserializeOwned + Default>(path: &Path) -> 
     }
     let content = std::fs::read_to_string(path)?;
     Ok(serde_json::from_str::<T>(&content).unwrap_or_else(|e| {
-        log::warn!(
-            "Failed to parse {}, using defaults: {e}",
-            path.display()
-        );
+        log::warn!("Failed to parse {}, using defaults: {e}", path.display());
         T::default()
     }))
 }
@@ -53,10 +50,7 @@ pub async fn load_json_or_default<T: DeserializeOwned + Default>(path: &Path) ->
         return Ok(T::default());
     };
     Ok(serde_json::from_str::<T>(&content).unwrap_or_else(|e| {
-        log::warn!(
-            "Failed to parse {}, using defaults: {e}",
-            path.display()
-        );
+        log::warn!("Failed to parse {}, using defaults: {e}", path.display());
         T::default()
     }))
 }
@@ -73,8 +67,7 @@ pub fn write_json_atomic_sync<T: Serialize>(path: &Path, value: &T) -> AppResult
     let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
     {
         let mut writer = BufWriter::new(tmp.as_file_mut());
-        serde_json::to_writer_pretty(&mut writer, value)
-            .map_err(AppError::io_source)?;
+        serde_json::to_writer_pretty(&mut writer, value).map_err(AppError::io_source)?;
         writer.flush()?;
     }
     tmp.persist(path).map_err(|e| AppError::Io(e.error))?;

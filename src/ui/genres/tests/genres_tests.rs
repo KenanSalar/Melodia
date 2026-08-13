@@ -24,10 +24,7 @@ fn grid_data_precomputes_the_lowercased_sort_key() {
 
 #[test]
 fn compute_indices_with_empty_filter_keeps_all_genres() {
-    let data = GridData::new(vec![
-        genre(1, "Alpha", 1, 0),
-        genre(2, "Bravo", 1, 0),
-    ]);
+    let data = GridData::new(vec![genre(1, "Alpha", 1, 0), genre(2, "Bravo", 1, 0)]);
     let idx = compute_indices(&data, "name", "asc", "");
     assert_eq!(names(&data, &idx), ["Alpha", "Bravo"]);
 }
@@ -49,10 +46,7 @@ fn compute_indices_filter_ignores_accents_the_way_the_search_view_does() {
     // entity-side arm is an unfolded `name LIKE`, so an accented genre never
     // surfaces as a genre result there. This grid is where an ASCII query has
     // to find one.
-    let data = GridData::new(vec![
-        genre(1, "Musique concrète", 1, 0),
-        genre(2, "Blues", 1, 0),
-    ]);
+    let data = GridData::new(vec![genre(1, "Musique concrète", 1, 0), genre(2, "Blues", 1, 0)]);
     let by_name = compute_indices(&data, "name", "asc", "concrete");
     assert_eq!(names(&data, &by_name), ["Musique concrète"]);
 }

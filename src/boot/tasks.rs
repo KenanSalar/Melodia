@@ -28,11 +28,7 @@ pub fn spawn_background_tasks(
     // Batches `play_count` / `skip_count` UPDATEs every 2 s so a fast skip
     // burst becomes one write instead of N. Must be spawned before any
     // playback can fire `UpdatePlayCount` actions.
-    tasks::play_count_flusher::spawn(
-        spawner,
-        state.db.clone(),
-        state.stats_changed_tx.clone(),
-    );
+    tasks::play_count_flusher::spawn(spawner, state.db.clone(), state.stats_changed_tx.clone());
     // Scrobble detector + submitter: watch the player view-model/position seam,
     // enqueue qualifying plays, and drain the durable queue to Last.fm /
     // ListenBrainz. Inert until a provider is connected + enabled.
@@ -87,12 +83,8 @@ pub fn maybe_resume_on_startup(
     // *before* calling `player_play()` — that fn re-enters the same
     // lock via `with_state_emit`, so holding the guard across the
     // call would deadlock.
-    let has_track = melodia::player::state::lock_state(&state.player_state)
-        .current_track
-        .is_some();
-    if has_track
-        && let Err(e) = library::playback::player_play(&state.playback_ctx())
-    {
+    let has_track = melodia::player::state::lock_state(&state.player_state).current_track.is_some();
+    if has_track && let Err(e) = library::playback::player_play(&state.playback_ctx()) {
         log::warn!("resume_on_startup: player_play failed: {e}");
     }
 }

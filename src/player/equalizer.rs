@@ -100,15 +100,42 @@ pub struct EqPreset {
 /// Built-in presets. `Flat` (index 0) is the neutral default; the UI appends a
 /// synthetic "Custom" entry after these for hand-tuned curves.
 pub const PRESETS: [EqPreset; 9] = [
-    EqPreset { name: "Flat", gains: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
-    EqPreset { name: "Rock", gains: [4.0, 3.0, 2.0, 0.0, -1.0, -1.0, 1.0, 3.0, 4.0, 4.0] },
-    EqPreset { name: "Pop", gains: [-1.0, 0.0, 1.0, 2.0, 3.0, 3.0, 2.0, 1.0, 0.0, -1.0] },
-    EqPreset { name: "Jazz", gains: [3.0, 2.0, 1.0, 2.0, -1.0, -1.0, 0.0, 1.0, 2.0, 3.0] },
-    EqPreset { name: "Classical", gains: [4.0, 3.0, 2.0, 1.0, -1.0, -1.0, 0.0, 2.0, 3.0, 4.0] },
-    EqPreset { name: "Bass Boost", gains: [6.0, 5.0, 4.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
-    EqPreset { name: "Treble Boost", gains: [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 4.0, 5.0, 6.0] },
-    EqPreset { name: "Vocal", gains: [-2.0, -1.0, 0.0, 2.0, 4.0, 4.0, 3.0, 1.0, 0.0, -1.0] },
-    EqPreset { name: "Electronic", gains: [5.0, 4.0, 1.0, 0.0, -2.0, 1.0, 0.0, 1.0, 3.0, 5.0] },
+    EqPreset {
+        name: "Flat",
+        gains: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    },
+    EqPreset {
+        name: "Rock",
+        gains: [4.0, 3.0, 2.0, 0.0, -1.0, -1.0, 1.0, 3.0, 4.0, 4.0],
+    },
+    EqPreset {
+        name: "Pop",
+        gains: [-1.0, 0.0, 1.0, 2.0, 3.0, 3.0, 2.0, 1.0, 0.0, -1.0],
+    },
+    EqPreset {
+        name: "Jazz",
+        gains: [3.0, 2.0, 1.0, 2.0, -1.0, -1.0, 0.0, 1.0, 2.0, 3.0],
+    },
+    EqPreset {
+        name: "Classical",
+        gains: [4.0, 3.0, 2.0, 1.0, -1.0, -1.0, 0.0, 2.0, 3.0, 4.0],
+    },
+    EqPreset {
+        name: "Bass Boost",
+        gains: [6.0, 5.0, 4.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    },
+    EqPreset {
+        name: "Treble Boost",
+        gains: [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 4.0, 5.0, 6.0],
+    },
+    EqPreset {
+        name: "Vocal",
+        gains: [-2.0, -1.0, 0.0, 2.0, 4.0, 4.0, 3.0, 1.0, 0.0, -1.0],
+    },
+    EqPreset {
+        name: "Electronic",
+        gains: [5.0, 4.0, 1.0, 0.0, -2.0, 1.0, 0.0, 1.0, 3.0, 5.0],
+    },
 ];
 
 /// Number of built-in presets. The UI's synthetic "Custom" dropdown entry
@@ -219,9 +246,7 @@ impl EqShared {
 
     #[must_use]
     pub fn gain(&self, index: usize) -> f32 {
-        self.gains_bits
-            .get(index)
-            .map_or(0.0, |c| f32::from_bits(c.load(Ordering::Relaxed)))
+        self.gains_bits.get(index).map_or(0.0, |c| f32::from_bits(c.load(Ordering::Relaxed)))
     }
 
     #[must_use]
@@ -244,7 +269,13 @@ impl EqShared {
 /// construct the filter banks; [`EqSource::rebuild`] overwrites a band's
 /// coefficients before that band is ever run.
 fn identity_coeffs() -> Coefficients<f32> {
-    Coefficients { a1: 0.0, a2: 0.0, b0: 1.0, b1: 0.0, b2: 0.0 }
+    Coefficients {
+        a1: 0.0,
+        a2: 0.0,
+        b0: 1.0,
+        b1: 0.0,
+        b2: 0.0,
+    }
 }
 
 /// One-pole smoothing coefficient for a time constant at a given update rate:
@@ -318,7 +349,11 @@ impl Limiter {
     /// slow release (gain recovers gently).
     fn process(&mut self, peak: f32) -> f32 {
         let target = self.target_gain(peak);
-        let coeff = if target < self.gain { self.attack_coeff } else { self.release_coeff };
+        let coeff = if target < self.gain {
+            self.attack_coeff
+        } else {
+            self.release_coeff
+        };
         self.gain = coeff.mul_add(self.gain, (1.0 - coeff) * target);
         self.gain
     }
@@ -498,11 +533,8 @@ impl<S: Source> EqSource<S> {
         // Media milliseconds → this source's interleaved sample count. The
         // controller can't precompute this: the two decks may hold tracks at
         // different sample rates, and it doesn't know the outgoing source's.
-        self.fade_total = cmd
-            .ramp_ms
-            .saturating_mul(self.sample_rate_hz)
-            .saturating_mul(self.channels)
-            / 1000;
+        self.fade_total =
+            cmd.ramp_ms.saturating_mul(self.sample_rate_hz).saturating_mul(self.channels) / 1000;
         self.fade_end_on_complete = cmd.end_on_complete;
         self.fade_engaged = true;
         self.fade_ramping = true;
@@ -534,7 +566,8 @@ impl<S: Source> EqSource<S> {
         if !self.fade_ramping {
             return self.fade_gain;
         }
-        let g = crossfade::ramp_gain(self.fade_start, self.fade_target, self.fade_pos, self.fade_total);
+        let g =
+            crossfade::ramp_gain(self.fade_start, self.fade_target, self.fade_pos, self.fade_total);
         self.fade_gain = g;
         self.fade_pos = self.fade_pos.saturating_add(samples);
         if self.fade_pos >= self.fade_total {

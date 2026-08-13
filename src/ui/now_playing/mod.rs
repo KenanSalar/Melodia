@@ -180,8 +180,7 @@ pub fn install(
     np_artwork: &Arc<NowPlayingArtwork>,
 ) -> Result<Rc<NowPlayingState>, slint::EventLoopError> {
     let up_next_model: Rc<VecModel<QueueRow>> = Rc::new(VecModel::default());
-    ui.global::<NowPlaying>()
-        .set_up_next_rows(ModelRc::from(up_next_model.clone()));
+    ui.global::<NowPlaying>().set_up_next_rows(ModelRc::from(up_next_model.clone()));
 
     // Lazy row covers against the shared row tier — the same `RowCovers`
     // shape `boot::ui_setup` wires for the track lists. `QueueRow` carries
@@ -237,13 +236,7 @@ pub fn install(
         initial_track_id,
     )?;
     spawn_up_next_subscriber(ui, state, up_next_model.clone(), np_state.clone())?;
-    wire_now_playing_open(
-        ui,
-        state,
-        np_artwork.clone(),
-        up_next_model.clone(),
-        np_state.clone(),
-    );
+    wire_now_playing_open(ui, state, np_artwork.clone(), up_next_model.clone(), np_state.clone());
 
     // Chip-strip width sync. `MetaChipStrip` reports its width on mount and
     // on every resize; we cache it on `chip_last_width` so the track-change
@@ -286,7 +279,9 @@ pub fn install(
         let weak_np = Rc::downgrade(&np_state);
         *np_state.up_next_seeder.borrow_mut() = Some(Box::new(move || {
             let Some(ui) = weak_ui.upgrade() else { return };
-            let Some(np_state) = weak_np.upgrade() else { return };
+            let Some(np_state) = weak_np.upgrade() else {
+                return;
+            };
             up_next::seed_from_stash(&ui, &up_next_model, &np_state);
         }));
     }
@@ -302,7 +297,9 @@ pub fn install(
         let np_artwork = np_artwork.clone();
         let weak_np = Rc::downgrade(&np_state);
         *np_state.artwork_seeder.borrow_mut() = Some(Box::new(move || {
-            let Some(np_state) = weak_np.upgrade() else { return };
+            let Some(np_state) = weak_np.upgrade() else {
+                return;
+            };
             let current_track = np_state.current_track.borrow().clone();
             let current_id = current_track.as_ref().map(|t| t.id);
             if current_id == np_state.applied_track_id.get() {
@@ -312,15 +309,8 @@ pub fn install(
             let state = state.clone();
             let np_artwork = np_artwork.clone();
             let res = slint::spawn_local(Compat::new(async move {
-                apply_track_change(
-                    &weak_ui,
-                    &state,
-                    &np_artwork,
-                    &np_state,
-                    current_track,
-                    false,
-                )
-                .await;
+                apply_track_change(&weak_ui, &state, &np_artwork, &np_state, current_track, false)
+                    .await;
             }));
             if let Err(e) = res {
                 log::warn!("ui::now_playing artwork seeder task spawn_local: {e}");

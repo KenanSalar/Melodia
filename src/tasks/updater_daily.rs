@@ -139,7 +139,9 @@ async fn run_one_iteration(
 
     let now = Utc::now();
     match result {
-        Ok(outcome) => handle_outcome(state, weak, event_tx, &snapshot.skipped_release, outcome, now),
+        Ok(outcome) => {
+            handle_outcome(state, weak, event_tx, &snapshot.skipped_release, outcome, now);
+        }
         Err(e) => {
             log::warn!("updater_daily: check failed: {e}");
             if let Err(persist_err) = library::settings::updates::record_check_failure(state, now) {
@@ -181,12 +183,18 @@ fn handle_outcome(
             log::info!("updater_daily: unsupported manifest schema {schema}");
             persist_success(state, now, None, etag);
         }
-        CheckOutcome::Available { manifest, asset, etag } => {
+        CheckOutcome::Available {
+            manifest,
+            asset,
+            etag,
+        } => {
             let version = manifest.version.clone();
             let notes_short = manifest.notes_short.clone();
             let critical = manifest.critical;
-            log::info!("updater_daily: update available: {version}{}",
-                if critical { " (critical)" } else { "" });
+            log::info!(
+                "updater_daily: update available: {version}{}",
+                if critical { " (critical)" } else { "" }
+            );
 
             // Cache the (version, asset) pair so a subsequent
             // `Updater.install` click can use it even if the
@@ -259,8 +267,7 @@ fn persist_success(
 }
 
 fn pick_next_delay(state: &AppState) -> Duration {
-    let count = settings::read_settings(&state.paths)
-        .map_or(0, |s| s.updates.consecutive_failures);
+    let count = settings::read_settings(&state.paths).map_or(0, |s| s.updates.consecutive_failures);
     let delay = backoff_delay_for(count);
     if count >= 2 {
         log::info!(
@@ -281,9 +288,7 @@ fn backoff_delay_for(count: u8) -> Duration {
     }
     // 2nd failure → ladder[0] = 12h; 3rd → ladder[1] = 24h;
     // 4th+ → ladder[last] = 7d cap.
-    let idx = (count as usize)
-        .saturating_sub(2)
-        .min(BACKOFF_LADDER.len() - 1);
+    let idx = (count as usize).saturating_sub(2).min(BACKOFF_LADDER.len() - 1);
     BACKOFF_LADDER[idx]
 }
 
@@ -401,4 +406,3 @@ mod tests {
         assert_eq!(backoff_delay_for(100), Duration::from_hours(7 * 24));
     }
 }
-

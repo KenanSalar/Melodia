@@ -144,9 +144,8 @@ fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiGenr
 /// genre. Each sort uses `name_lc` as the deterministic tie-breaker.
 fn sort_genre_indices(indices: &mut [usize], data: &GridData, field: &str, dir: &str) {
     match field {
-        "track_count" => indices.sort_by_cached_key(|&i| {
-            (data.genres[i].track_count, data.keys[i].name_lc.as_str())
-        }),
+        "track_count" => indices
+            .sort_by_cached_key(|&i| (data.genres[i].track_count, data.keys[i].name_lc.as_str())),
         "duration" => indices.sort_by_cached_key(|&i| {
             (data.genres[i].total_duration_ms, data.keys[i].name_lc.as_str())
         }),

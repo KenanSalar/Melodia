@@ -160,10 +160,8 @@ async fn matching_by_name_still_works_alongside_the_track_arm() -> Result<(), Ap
 async fn a_name_match_outranks_one_found_through_its_tracks() -> Result<(), AppError> {
     let db = DbPool::test_pool().await;
     queries::folder::insert_folder(&db, "/music", true).await?;
-    insert_test_track(&db, "/music/a.mp3", "Zebra Dance", "Kite", "Alpha Records", "Rock")
-        .await?;
-    insert_test_track(&db, "/music/b.mp3", "Quiet Hours", "Wren", "Zebra Sessions", "Rock")
-        .await?;
+    insert_test_track(&db, "/music/a.mp3", "Zebra Dance", "Kite", "Alpha Records", "Rock").await?;
+    insert_test_track(&db, "/music/b.mp3", "Quiet Hours", "Wren", "Zebra Sessions", "Rock").await?;
 
     let results = queries::search::search_all(&db, "Zebra").await?;
 
@@ -182,14 +180,12 @@ async fn a_name_match_outranks_one_found_through_its_tracks() -> Result<(), AppE
 /// the query; "Kite" and "Wren" are reachable through their tracks alone
 /// and sort after it alphabetically.
 #[tokio::test]
-async fn an_artist_named_for_the_query_outranks_ones_found_through_tracks()
--> Result<(), AppError> {
+async fn an_artist_named_for_the_query_outranks_ones_found_through_tracks() -> Result<(), AppError>
+{
     let db = DbPool::test_pool().await;
     queries::folder::insert_folder(&db, "/music", true).await?;
-    insert_test_track(&db, "/music/a.mp3", "Zebra Dance", "Kite", "Alpha Records", "Rock")
-        .await?;
-    insert_test_track(&db, "/music/b.mp3", "Quiet Hours", "Wren", "Zebra Sessions", "Rock")
-        .await?;
+    insert_test_track(&db, "/music/a.mp3", "Zebra Dance", "Kite", "Alpha Records", "Rock").await?;
+    insert_test_track(&db, "/music/b.mp3", "Quiet Hours", "Wren", "Zebra Sessions", "Rock").await?;
     insert_test_track(&db, "/music/c.mp3", "Hush", "Zebra Quartet", "Quiet Records", "Rock")
         .await?;
 
@@ -220,8 +216,9 @@ async fn a_narrow_retag_reindexes_the_new_fts_columns() -> Result<(), AppError> 
     .execute(db.write())
     .await?;
 
-    let hit =
-        |r: &crate::entities::search::SearchResults| r.tracks.iter().any(|t| t.title == "Alpha Song");
+    let hit = |r: &crate::entities::search::SearchResults| {
+        r.tracks.iter().any(|t| t.title == "Alpha Song")
+    };
 
     assert!(
         !hit(&queries::search::search_all(&db, "Rock").await?),
@@ -268,17 +265,10 @@ async fn bm25_weights_cover_every_indexed_column() -> Result<(), AppError> {
     // A config that isn't a `bm25(…)` expression at all parses to zero
     // weights, so the arity assertion below covers that too — and prints the
     // raw value either way.
-    let args = rank
-        .strip_prefix("bm25(")
-        .and_then(|s| s.strip_suffix(')'))
-        .unwrap_or_default();
+    let args = rank.strip_prefix("bm25(").and_then(|s| s.strip_suffix(')')).unwrap_or_default();
     let weights: Vec<f64> = args.split(',').filter_map(|w| w.trim().parse().ok()).collect();
 
-    assert_eq!(
-        weights.len(),
-        INDEXED.len(),
-        "one bm25 weight per indexed column, got {rank}"
-    );
+    assert_eq!(weights.len(), INDEXED.len(), "one bm25 weight per indexed column, got {rank}");
 
     // Which way the ranking leans is the whole point of setting them at all:
     // the title is what people search for, the filename carries whatever the
@@ -296,10 +286,7 @@ async fn bm25_weights_cover_every_indexed_column() -> Result<(), AppError> {
     );
     // Both bounds above hold for a uniform list, which is the fts5 default
     // and the one thing this migration exists to replace.
-    assert!(
-        file_name_weight < title_weight,
-        "the weights must not be uniform, got {rank}"
-    );
+    assert!(file_name_weight < title_weight, "the weights must not be uniform, got {rank}");
     Ok(())
 }
 
@@ -328,11 +315,8 @@ async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result
         sqlx::query_scalar("SELECT name FROM pragma_table_info('tracks_fts')")
             .fetch_all(db.read())
             .await?;
-    let expected: Vec<&str> = indexed
-        .iter()
-        .map(String::as_str)
-        .filter(|c| !NOT_TEXT_SEARCHED.contains(c))
-        .collect();
+    let expected: Vec<&str> =
+        indexed.iter().map(String::as_str).filter(|c| !NOT_TEXT_SEARCHED.contains(c)).collect();
 
     // Every searchable field holds its own column name, so `search_fields`
     // hands back the list it claims to mirror and a failure names the column
@@ -388,8 +372,7 @@ async fn a_title_match_outranks_a_filename_only_match() -> Result<(), AppError> 
         "Ambient",
     )
     .await?;
-    insert_test_track(&db, "/music/b.mp3", "Kestrel", "Wren", "Dusk Sessions", "Ambient")
-        .await?;
+    insert_test_track(&db, "/music/b.mp3", "Kestrel", "Wren", "Dusk Sessions", "Ambient").await?;
 
     let results = queries::search::search_all(&db, "Kestrel").await?;
 
@@ -441,8 +424,8 @@ async fn punctuation_only_queries_return_no_rows_instead_of_erroring() -> Result
 /// and a hard `unterminated string` at step time. Asserting the *hit* rather
 /// than the absence of an error is what keeps this from passing vacuously.
 #[tokio::test]
-async fn a_word_carrying_a_quote_still_matches_instead_of_failing_to_parse()
--> Result<(), AppError> {
+async fn a_word_carrying_a_quote_still_matches_instead_of_failing_to_parse() -> Result<(), AppError>
+{
     let db = setup_seeded_db().await?;
 
     let results = queries::search::search_all(&db, "Alpha\"").await?;

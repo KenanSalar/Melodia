@@ -38,8 +38,15 @@ use crate::{AppWindow, Settings};
 
 /// Native-name labels for [`services::settings::SUPPORTED_LOCALES`]. Indices
 /// match 1:1 — adding a locale means appending to both arrays.
-const LOCALE_NATIVE_NAMES: &[&str] =
-    &["English", "Deutsch", "Français", "Español", "Türkçe", "Ελληνικά", "Italiano"];
+const LOCALE_NATIVE_NAMES: &[&str] = &[
+    "English",
+    "Deutsch",
+    "Français",
+    "Español",
+    "Türkçe",
+    "Ελληνικά",
+    "Italiano",
+];
 
 /// Synchronous in-memory shadow of `settings.locale`. Updated by the
 /// language-changed callback before it spawns the async disk write.
@@ -74,19 +81,13 @@ pub fn install_locale(ui: &AppWindow, state: &AppState) {
         |s| s.locale,
     );
 
-    let names: Vec<SharedString> = LOCALE_NATIVE_NAMES
-        .iter()
-        .map(|n| SharedString::from(*n))
-        .collect();
-    let codes: Vec<SharedString> = services::settings::SUPPORTED_LOCALES
-        .iter()
-        .map(|c| SharedString::from(*c))
-        .collect();
+    let names: Vec<SharedString> =
+        LOCALE_NATIVE_NAMES.iter().map(|n| SharedString::from(*n)).collect();
+    let codes: Vec<SharedString> =
+        services::settings::SUPPORTED_LOCALES.iter().map(|c| SharedString::from(*c)).collect();
 
-    let idx = services::settings::SUPPORTED_LOCALES
-        .iter()
-        .position(|c| *c == persisted)
-        .unwrap_or(0);
+    let idx =
+        services::settings::SUPPORTED_LOCALES.iter().position(|c| *c == persisted).unwrap_or(0);
 
     {
         let g = ui.global::<Settings>();
@@ -121,17 +122,14 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
         // Keep `language-idx` in sync defensively — the dropdown's two-way
         // bind already writes it, but a future code path could call the
         // callback programmatically without touching the dropdown.
-        ui.global::<Settings>()
-            .set_language_idx(i32::try_from(idx).unwrap_or(0));
+        ui.global::<Settings>().set_language_idx(i32::try_from(idx).unwrap_or(0));
 
         // Synchronous shadow update before the async write so any sibling
         // reader sees the new code before the disk catches up.
         code.clone_into(&mut *shadow.lock());
 
         let code_owned = code.to_owned();
-        s.persist_blocking("persist locale", move |s| {
-            library::settings::set_locale(s, code_owned)
-        });
+        s.persist_blocking("persist locale", move |s| library::settings::set_locale(s, code_owned));
     });
 }
 

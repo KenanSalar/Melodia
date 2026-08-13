@@ -74,7 +74,11 @@ fn test_play_track_inner_with_resume_position() -> Result<(), AppError> {
     let actions = play_track_inner(
         &mut state,
         track,
-        if resume_pos > 0 { Some(resume_pos) } else { None },
+        if resume_pos > 0 {
+            Some(resume_pos)
+        } else {
+            None
+        },
     );
 
     assert_eq!(state.status, PlaybackStatus::Playing);
@@ -106,7 +110,11 @@ fn test_resume_from_stopped_at_zero_starts_fresh() -> Result<(), AppError> {
     let actions = play_track_inner(
         &mut state,
         track,
-        if resume_pos > 0 { Some(resume_pos) } else { None },
+        if resume_pos > 0 {
+            Some(resume_pos)
+        } else {
+            None
+        },
     );
 
     assert_eq!(state.position_ms, 0);
@@ -158,7 +166,10 @@ fn test_play_track_some_zero_filtered_to_none() {
 
 #[test]
 fn test_play_track_with_resume_does_not_eager_preload() {
-    let mut state = PlayerState { gapless_enabled: true, ..Default::default() };
+    let mut state = PlayerState {
+        gapless_enabled: true,
+        ..Default::default()
+    };
 
     let track1 = make_summary(1, "Song 1", 180_000);
     let track2 = make_summary(2, "Song 2", 180_000);
@@ -235,7 +246,10 @@ fn test_resume_from_stopped_helper() {
 
 #[test]
 fn test_resume_from_stopped_no_track() {
-    let mut state = PlayerState { status: PlaybackStatus::Stopped, ..Default::default() };
+    let mut state = PlayerState {
+        status: PlaybackStatus::Stopped,
+        ..Default::default()
+    };
 
     let actions = resume_from_stopped(&mut state);
     assert!(actions.is_empty());
@@ -253,7 +267,10 @@ fn test_resume_from_stopped_not_stopped() {
 
 #[test]
 fn test_pause_and_resume() {
-    let mut state = PlayerState { status: PlaybackStatus::Playing, ..Default::default() };
+    let mut state = PlayerState {
+        status: PlaybackStatus::Playing,
+        ..Default::default()
+    };
 
     state.status = PlaybackStatus::Paused;
     assert_eq!(state.status, PlaybackStatus::Paused);
@@ -328,7 +345,10 @@ fn test_set_volume_clamps() {
 
 #[test]
 fn test_toggle_mute() {
-    let mut state = PlayerState { volume: 80, ..Default::default() };
+    let mut state = PlayerState {
+        volume: 80,
+        ..Default::default()
+    };
 
     // Mute
     state.pre_mute_volume = state.volume;
@@ -343,7 +363,10 @@ fn test_toggle_mute() {
 
 #[test]
 fn test_set_playback_speed_clamps() {
-    let mut state = PlayerState { playback_speed: 0.1f64.clamp(0.25, 2.0), ..Default::default() };
+    let mut state = PlayerState {
+        playback_speed: 0.1f64.clamp(0.25, 2.0),
+        ..Default::default()
+    };
     assert!((state.playback_speed - 0.25).abs() < f64::EPSILON);
 
     state.playback_speed = 5.0f64.clamp(0.25, 2.0);
@@ -368,8 +391,7 @@ fn test_next_skips_when_under_50_percent() {
     state.position_ms = 20_000; // 20% - should count as skip
 
     // Simulate Next: check skip condition then advance
-    let should_skip =
-        state.duration_ms > 0 && state.position_ms < state.duration_ms / 2;
+    let should_skip = state.duration_ms > 0 && state.position_ms < state.duration_ms / 2;
     assert!(should_skip);
 
     let next_track = state.queue.advance().cloned();
@@ -523,7 +545,10 @@ fn test_volume_is_capped_at_max_and_converts_to_amplitude() {
 
 #[test]
 fn test_play_track_inner_includes_speed() {
-    let mut state = PlayerState { playback_speed: 1.5, ..Default::default() };
+    let mut state = PlayerState {
+        playback_speed: 1.5,
+        ..Default::default()
+    };
 
     let track = make_summary(1, "Song", 100_000);
     let actions = play_track_inner(&mut state, track, None);
@@ -853,7 +878,11 @@ fn view_model_light_carries_sleep_at_track_end() {
 /// coherent one, then perturb the *state* to model a control op winning the race
 /// between the decision and the emit lock.
 fn decision(fade_ms: u64, track_id: i64, position_ms: u64) -> CrossfadeDecision {
-    CrossfadeDecision { fade_ms, track_id: Some(track_id), position_ms }
+    CrossfadeDecision {
+        fade_ms,
+        track_id: Some(track_id),
+        position_ms,
+    }
 }
 
 #[test]
@@ -1080,10 +1109,7 @@ fn sync_track_summaries_patches_current_queue_and_republishes() {
             "a queue patch must bump the version so the queue VM republishes"
         );
     }
-    assert!(
-        matches!(q_rx.has_changed(), Ok(true)),
-        "the queue view-model must be republished"
-    );
+    assert!(matches!(q_rx.has_changed(), Ok(true)), "the queue view-model must be republished");
 
     // An edit touching nothing queued/playing is a no-op: no version bump, no publish.
     drop(q_rx.borrow_and_update());

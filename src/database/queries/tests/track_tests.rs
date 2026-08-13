@@ -1,7 +1,7 @@
-#[allow(clippy::wildcard_imports)]
-use crate::database::queries::tests::helpers::*;
 use crate::database::DbPool;
 use crate::database::queries;
+#[allow(clippy::wildcard_imports)]
+use crate::database::queries::tests::helpers::*;
 use crate::error::AppError;
 
 async fn seed_db() -> Result<DbPool, AppError> {
@@ -66,10 +66,9 @@ async fn get_tracks_by_album() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_tracks_by_artist() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let artist_id: i64 =
-        sqlx::query_scalar("SELECT id FROM artists WHERE name = 'Alpha Artist'")
-            .fetch_one(db.read())
-            .await?;
+    let artist_id: i64 = sqlx::query_scalar("SELECT id FROM artists WHERE name = 'Alpha Artist'")
+        .fetch_one(db.read())
+        .await?;
     let tracks = queries::track::get_tracks_by_artist(&db, artist_id).await?;
     assert_eq!(tracks.len(), 2);
     Ok(())
@@ -89,9 +88,7 @@ async fn get_tracks_by_genre() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_track_by_id_happy_path() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1")
-        .fetch_one(db.read())
-        .await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1").fetch_one(db.read()).await?;
     let t = queries::track::get_track_by_id(&db, id).await?;
     assert_eq!(t.id, id);
     Ok(())
@@ -131,9 +128,7 @@ async fn get_tracks_by_ids_skips_missing() -> Result<(), AppError> {
 #[tokio::test]
 async fn update_play_count_increments() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1")
-        .fetch_one(db.read())
-        .await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1").fetch_one(db.read()).await?;
 
     queries::track::update_play_count(&db, id).await?;
     queries::track::update_play_count(&db, id).await?;
@@ -147,9 +142,7 @@ async fn update_play_count_increments() -> Result<(), AppError> {
 #[tokio::test]
 async fn update_skip_count_increments() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1")
-        .fetch_one(db.read())
-        .await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1").fetch_one(db.read()).await?;
 
     queries::track::update_skip_count(&db, id).await?;
 
@@ -161,9 +154,7 @@ async fn update_skip_count_increments() -> Result<(), AppError> {
 #[tokio::test]
 async fn update_last_position() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1")
-        .fetch_one(db.read())
-        .await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1").fetch_one(db.read()).await?;
 
     queries::track::update_last_position(&db, id, 45_000).await?;
 
@@ -230,8 +221,8 @@ async fn get_track_ids_by_hashes() -> Result<(), AppError> {
     assert!(!map.contains_key(&unknown));
 
     // The alpha hash resolves to the same id as the alpha path.
-    let by_path = queries::track::get_track_ids_by_paths(&db, &["/music/alpha.mp3".to_owned()])
-        .await?;
+    let by_path =
+        queries::track::get_track_ids_by_paths(&db, &["/music/alpha.mp3".to_owned()]).await?;
     assert_eq!(map.get(&alpha), by_path.get("/music/alpha.mp3"));
     Ok(())
 }
@@ -323,9 +314,7 @@ async fn get_unhashed_track_paths_finds_null_hashes() -> Result<(), AppError> {
 #[tokio::test]
 async fn set_favorite_flips_flag() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1")
-        .fetch_one(db.read())
-        .await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1").fetch_one(db.read()).await?;
 
     // Initially not favorite
     let t = queries::track::get_track_by_id(&db, id).await?;
@@ -386,9 +375,7 @@ async fn set_favorite_empty_ids_is_noop() -> Result<(), AppError> {
 #[tokio::test]
 async fn set_rating_updates_value() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1")
-        .fetch_one(db.read())
-        .await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1").fetch_one(db.read()).await?;
 
     // Default rating is 0 (unrated).
     let t = queries::track::get_track_by_id(&db, id).await?;
@@ -439,12 +426,21 @@ async fn get_favorite_stats_orders_artwork_by_play_count() -> Result<(), AppErro
     queries::track::set_favorite(&db, &ids, true).await?;
 
     // Distinct artworks — first pass returns these in play_count DESC order.
-    sqlx::query("UPDATE tracks SET artwork_path = '/art/alpha.jpg', play_count = 1 WHERE title = 'Alpha'")
-        .execute(db.write()).await?;
-    sqlx::query("UPDATE tracks SET artwork_path = '/art/beta.jpg', play_count = 9 WHERE title = 'Beta'")
-        .execute(db.write()).await?;
-    sqlx::query("UPDATE tracks SET artwork_path = '/art/gamma.jpg', play_count = 5 WHERE title = 'Gamma'")
-        .execute(db.write()).await?;
+    sqlx::query(
+        "UPDATE tracks SET artwork_path = '/art/alpha.jpg', play_count = 1 WHERE title = 'Alpha'",
+    )
+    .execute(db.write())
+    .await?;
+    sqlx::query(
+        "UPDATE tracks SET artwork_path = '/art/beta.jpg', play_count = 9 WHERE title = 'Beta'",
+    )
+    .execute(db.write())
+    .await?;
+    sqlx::query(
+        "UPDATE tracks SET artwork_path = '/art/gamma.jpg', play_count = 5 WHERE title = 'Gamma'",
+    )
+    .execute(db.write())
+    .await?;
 
     let stats = queries::track::get_favorite_stats(&db).await?;
     assert_eq!(stats.count, 3);
@@ -527,8 +523,7 @@ async fn get_favorite_stats_empty_when_favorites_have_no_artwork() -> Result<(),
 /// ties not at all — so on a tie they picked different winners, and the grid's
 /// own order could move between refreshes. Both now read `MOST_PLAYED_ORDER`.
 #[tokio::test]
-async fn the_hero_mosaic_leads_with_the_covers_the_most_played_tab_shows()
--> Result<(), AppError> {
+async fn the_hero_mosaic_leads_with_the_covers_the_most_played_tab_shows() -> Result<(), AppError> {
     let db = seed_db().await?;
     let all = queries::track::get_all_tracks(&db).await?;
     let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
@@ -593,9 +588,11 @@ async fn get_recently_played_orders_newest_first_and_excludes_null() -> Result<(
 
     // Distinct, lexically-ordered RFC-3339 timestamps on two tracks; leave
     // Gamma's `last_played` NULL (never played) so it must be excluded.
-    sqlx::query("UPDATE tracks SET last_played = '2026-01-01T00:00:00+00:00' WHERE title = 'Alpha'")
-        .execute(db.write())
-        .await?;
+    sqlx::query(
+        "UPDATE tracks SET last_played = '2026-01-01T00:00:00+00:00' WHERE title = 'Alpha'",
+    )
+    .execute(db.write())
+    .await?;
     sqlx::query("UPDATE tracks SET last_played = '2026-06-01T00:00:00+00:00' WHERE title = 'Beta'")
         .execute(db.write())
         .await?;
@@ -613,9 +610,11 @@ async fn get_recently_played_orders_newest_first_and_excludes_null() -> Result<(
 #[tokio::test]
 async fn get_recently_played_respects_limit() -> Result<(), AppError> {
     let db = seed_db().await?;
-    sqlx::query("UPDATE tracks SET last_played = '2026-01-01T00:00:00+00:00' WHERE title = 'Alpha'")
-        .execute(db.write())
-        .await?;
+    sqlx::query(
+        "UPDATE tracks SET last_played = '2026-01-01T00:00:00+00:00' WHERE title = 'Alpha'",
+    )
+    .execute(db.write())
+    .await?;
     sqlx::query("UPDATE tracks SET last_played = '2026-06-01T00:00:00+00:00' WHERE title = 'Beta'")
         .execute(db.write())
         .await?;
@@ -747,9 +746,8 @@ async fn both_most_played_queries_project_what_the_filter_searches() -> Result<(
 async fn get_tag_edit_rows_by_ids_projects_and_preserves_order() -> Result<(), AppError> {
     let db = seed_db().await?;
     // ids ascending == insert order: Alpha, Beta, Gamma.
-    let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM tracks ORDER BY id")
-        .fetch_all(db.read())
-        .await?;
+    let ids: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM tracks ORDER BY id").fetch_all(db.read()).await?;
 
     // Patch the fields `make_test_metadata` leaves empty so the projection is exercised.
     sqlx::query(
@@ -785,9 +783,8 @@ async fn get_tag_edit_rows_by_ids_projects_and_preserves_order() -> Result<(), A
 #[tokio::test]
 async fn get_track_paths_by_ids_returns_pairs_in_input_order() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM tracks ORDER BY id")
-        .fetch_all(db.read())
-        .await?;
+    let ids: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM tracks ORDER BY id").fetch_all(db.read()).await?;
 
     let pairs = queries::track::get_track_paths_by_ids(&db, &[ids[2], ids[0]]).await?;
     assert_eq!(pairs.len(), 2);
@@ -802,9 +799,7 @@ async fn get_track_paths_by_ids_returns_pairs_in_input_order() -> Result<(), App
 #[tokio::test]
 async fn set_track_artwork_overwrites_and_nulls() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1")
-        .fetch_one(db.read())
-        .await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1").fetch_one(db.read()).await?;
 
     // Set an authoritative path within a transaction.
     let mut tx = db.write().begin().await?;
@@ -833,9 +828,8 @@ async fn set_track_artwork_overwrites_and_nulls() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_tracks_missing_mbid_filters_tagged_and_metadata_less_rows() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM tracks ORDER BY file_path")
-        .fetch_all(db.read())
-        .await?;
+    let ids: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM tracks ORDER BY file_path").fetch_all(db.read()).await?;
     // alpha/beta/gamma all start eligible (NULL mbid, non-empty artist + title).
     // Tag one, and blank another's artist — both must drop out of the work-list.
     sqlx::query("UPDATE tracks SET musicbrainz_track_id = 'rec-1' WHERE id = ?")

@@ -16,10 +16,7 @@ fn render_desktop_substitutes_exec_placeholder_with_absolute_path() {
         rendered.contains("Exec=/home/user/.local/share/Melodia/Melodia"),
         "Exec= line must carry the absolute path; got:\n{rendered}"
     );
-    assert!(
-        !rendered.contains("@EXEC@"),
-        "placeholder must be substituted; got:\n{rendered}"
-    );
+    assert!(!rendered.contains("@EXEC@"), "placeholder must be substituted; got:\n{rendered}");
 }
 
 #[test]
@@ -101,10 +98,7 @@ fn write_if_changed_skips_when_content_matches() -> TestResult {
 
     assert!(!wrote, "should skip when on-disk bytes match payload");
     let mtime_after = std::fs::metadata(&target)?.modified()?;
-    assert_eq!(
-        mtime_before, mtime_after,
-        "skip path must not touch the file at all"
-    );
+    assert_eq!(mtime_before, mtime_after, "skip path must not touch the file at all");
     Ok(())
 }
 
@@ -112,16 +106,9 @@ fn write_if_changed_skips_when_content_matches() -> TestResult {
 fn icon_svg_is_non_empty() {
     // Defends against an empty `include_bytes!` resolving to an
     // unreadable / moved asset path at build time.
-    assert!(
-        !TEST_ICON_SVG.is_empty(),
-        "compiled-in icon payload must not be empty"
-    );
+    assert!(!TEST_ICON_SVG.is_empty(), "compiled-in icon payload must not be empty");
     // SVG files start with `<` (XML declaration or root element).
-    assert_eq!(
-        TEST_ICON_SVG.first(),
-        Some(&b'<'),
-        "compiled-in icon must look like an SVG"
-    );
+    assert_eq!(TEST_ICON_SVG.first(), Some(&b'<'), "compiled-in icon must look like an SVG");
 }
 
 #[test]

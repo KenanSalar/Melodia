@@ -84,22 +84,18 @@ async fn reconcile_once(
 
     // Step 2: ask the DB which of those ids still exist. The chunked helper
     // stays within SQLite's 999-bind cap for very long queues.
-    let surviving_rows: Vec<IdRow> = crate::database::chunked_in_query(
-        db.read(),
-        &queued_ids,
-        |placeholders| format!("SELECT id FROM tracks WHERE id IN ({placeholders})"),
-    )
-    .await?;
+    let surviving_rows: Vec<IdRow> =
+        crate::database::chunked_in_query(db.read(), &queued_ids, |placeholders| {
+            format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
+        })
+        .await?;
     let surviving: HashSet<i64> = surviving_rows.into_iter().map(|r| r.id).collect();
 
     // Step 3: compute the casualties. The snapshot can hold the same id
     // more than once (a track queued twice) — the set is the right shape
     // for the prune call regardless.
-    let to_remove: HashSet<i64> = queued_ids
-        .iter()
-        .copied()
-        .filter(|id| !surviving.contains(id))
-        .collect();
+    let to_remove: HashSet<i64> =
+        queued_ids.iter().copied().filter(|id| !surviving.contains(id)).collect();
 
     if to_remove.is_empty() {
         return Ok(());

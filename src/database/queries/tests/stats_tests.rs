@@ -1,6 +1,6 @@
+use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::tests::helpers::*;
-use crate::database::DbPool;
 use crate::error::AppError;
 
 #[tokio::test]
@@ -50,11 +50,10 @@ async fn recalculate_stats_produces_correct_counts() -> Result<(), AppError> {
     assert_eq!(artist_y.2, 1);
 
     // Verify album stats
-    let album_p: (i64, i64) = sqlx::query_as(
-        "SELECT track_count, total_duration_ms FROM albums WHERE name = 'Album P'",
-    )
-    .fetch_one(db.read())
-    .await?;
+    let album_p: (i64, i64) =
+        sqlx::query_as("SELECT track_count, total_duration_ms FROM albums WHERE name = 'Album P'")
+            .fetch_one(db.read())
+            .await?;
     assert_eq!(album_p.0, 2, "Album P should have 2 tracks");
     assert_eq!(album_p.1, 360_000);
 

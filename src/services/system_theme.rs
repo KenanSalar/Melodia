@@ -56,7 +56,8 @@ pub async fn get_system_theme() -> String {
         .await
         .ok()
         .flatten()
-        .map(color_scheme_to_str).map_or_else(|| "dark".to_owned(), str::to_owned)
+        .map(color_scheme_to_str)
+        .map_or_else(|| "dark".to_owned(), str::to_owned)
 }
 
 /// Synchronous variant of [`get_system_theme`] for startup paths that run
@@ -192,9 +193,7 @@ pub struct KdeColorPalette {
 }
 
 fn kdeglobals_path() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.config"))
-        .join("kdeglobals")
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from("~/.config")).join("kdeglobals")
 }
 
 /// Parse an "R,G,B" string into (u8, u8, u8).
@@ -315,8 +314,7 @@ pub(crate) fn kde_palette_from_sections(
     // to a 30% darken of `window_bg` when the scheme omits the alt.
     let window_bg_alt = get_color(sections, "Colors:Window", "BackgroundAlternate")
         .unwrap_or_else(|| blend(window_bg, (0, 0, 0), 0.3));
-    let button_bg =
-        get_color(sections, "Colors:Button", "BackgroundNormal").unwrap_or(window_bg);
+    let button_bg = get_color(sections, "Colors:Button", "BackgroundNormal").unwrap_or(window_bg);
     let header_bg = get_color(sections, "Colors:Header", "BackgroundNormal")
         .or_else(|| get_color(sections, "WM", "activeBackground"))
         .unwrap_or(window_bg);
@@ -354,12 +352,9 @@ pub(crate) fn kde_palette_from_sections(
     // Fallbacks are Breeze's own defaults, matching the static `themes::kde`
     // palette so a scheme that omits them lands where the Dark/Light variants
     // already sit rather than on a grey.
-    let red = get_color(sections, "Colors:View", "ForegroundNegative")
-        .unwrap_or((218, 68, 83));
-    let green = get_color(sections, "Colors:View", "ForegroundPositive")
-        .unwrap_or((39, 174, 96));
-    let yellow = get_color(sections, "Colors:View", "ForegroundNeutral")
-        .unwrap_or((246, 116, 0));
+    let red = get_color(sections, "Colors:View", "ForegroundNegative").unwrap_or((218, 68, 83));
+    let green = get_color(sections, "Colors:View", "ForegroundPositive").unwrap_or((39, 174, 96));
+    let yellow = get_color(sections, "Colors:View", "ForegroundNeutral").unwrap_or((246, 116, 0));
 
     // Surface ramp from `button_bg` (= surface0 in Catppuccin) toward
     // `text` at the ratios that match Catppuccin Mocha exactly when
@@ -378,24 +373,15 @@ pub(crate) fn kde_palette_from_sections(
         "mantle_unfocused".into(),
         rgb_to_hex(inactive_titlebar.0, inactive_titlebar.1, inactive_titlebar.2),
     );
-    colors.insert(
-        "crust".into(),
-        rgb_to_hex(window_bg_alt.0, window_bg_alt.1, window_bg_alt.2),
-    );
-    colors.insert(
-        "surface0".into(),
-        rgb_to_hex(button_bg.0, button_bg.1, button_bg.2),
-    );
+    colors.insert("crust".into(), rgb_to_hex(window_bg_alt.0, window_bg_alt.1, window_bg_alt.2));
+    colors.insert("surface0".into(), rgb_to_hex(button_bg.0, button_bg.1, button_bg.2));
     colors.insert("surface1".into(), rgb_to_hex(surface1.0, surface1.1, surface1.2));
     colors.insert("surface2".into(), rgb_to_hex(surface2.0, surface2.1, surface2.2));
     colors.insert("overlay0".into(), rgb_to_hex(overlay0.0, overlay0.1, overlay0.2));
     colors.insert("overlay1".into(), rgb_to_hex(overlay1.0, overlay1.1, overlay1.2));
     colors.insert("overlay2".into(), rgb_to_hex(overlay2.0, overlay2.1, overlay2.2));
     colors.insert("text".into(), rgb_to_hex(text.0, text.1, text.2));
-    colors.insert(
-        "subtext0".into(),
-        rgb_to_hex(text_inactive.0, text_inactive.1, text_inactive.2),
-    );
+    colors.insert("subtext0".into(), rgb_to_hex(text_inactive.0, text_inactive.1, text_inactive.2));
     colors.insert("subtext1".into(), rgb_to_hex(subtext1.0, subtext1.1, subtext1.2));
     // `border == surface0` matches Catppuccin's intent — one fewer
     // free parameter, one fewer place to drift on non-Catppuccin schemes.

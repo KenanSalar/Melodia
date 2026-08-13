@@ -21,11 +21,9 @@ async fn only_an_empty_result_set_is_a_definitive_miss() {
     // Every failure shape a provider can report — a refused status, a transport
     // error, a body that didn't decode — arrives as one of `AppError`'s network
     // variants, and none of them says the album has no cover.
-    let refused = run_lookup(
-        ready(Err(AppError::network_msg("iTunes album search returned HTTP 403"))),
-        "t",
-    )
-    .await;
+    let refused =
+        run_lookup(ready(Err(AppError::network_msg("iTunes album search returned HTTP 403"))), "t")
+            .await;
     assert!(matches!(refused, Lookup::Unavailable));
 }
 

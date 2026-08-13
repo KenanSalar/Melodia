@@ -2,9 +2,9 @@ use std::collections::HashSet;
 
 #[allow(clippy::wildcard_imports)]
 use super::*;
+use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::tests::helpers::insert_test_track;
-use crate::database::DbPool;
 use crate::error::AppError;
 
 fn entry(path: &str, hash: Option<&str>) -> m3u::ParsedEntry {
@@ -22,9 +22,11 @@ fn entry(path: &str, hash: Option<&str>) -> m3u::ParsedEntry {
 async fn seed() -> Result<(DbPool, i64, i64, i64), AppError> {
     let db = DbPool::test_pool().await;
     queries::folder::insert_folder(&db, "/music", true).await?;
-    let a = insert_test_track(&db, "/music/a.mp3", "Alpha Song", "Artist A", "Album", "Rock").await?;
+    let a =
+        insert_test_track(&db, "/music/a.mp3", "Alpha Song", "Artist A", "Album", "Rock").await?;
     let b = insert_test_track(&db, "/music/b.mp3", "Beta Song", "Artist B", "Album", "Pop").await?;
-    let c = insert_test_track(&db, "/music/c.mp3", "Gamma Song", "Artist A", "Album", "Rock").await?;
+    let c =
+        insert_test_track(&db, "/music/c.mp3", "Gamma Song", "Artist A", "Album", "Rock").await?;
     Ok((db, a, b, c))
 }
 

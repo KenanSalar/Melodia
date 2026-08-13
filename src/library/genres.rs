@@ -19,10 +19,7 @@ pub async fn get_genres(state: &AppState) -> Result<Vec<genre::GenreStats>, AppE
 /// Stats for a single genre, or `AppError::NotFound` if the id is gone
 /// (e.g. the last track tagged with this genre was removed between grid
 /// render and click).
-pub async fn get_genre_detail(
-    state: &AppState,
-    id: i64,
-) -> Result<genre::GenreStats, AppError> {
+pub async fn get_genre_detail(state: &AppState, id: i64) -> Result<genre::GenreStats, AppError> {
     queries::genre::get_genre_by_id(&state.db, id).await
 }
 

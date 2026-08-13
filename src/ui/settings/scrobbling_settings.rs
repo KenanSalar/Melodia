@@ -165,8 +165,7 @@ fn finish_connected(weak: &slint::Weak<AppWindow>, state: &AppState, target: Lov
 }
 
 pub fn install_scrobbling(ui: &AppWindow, state: &AppState) {
-    ui.global::<Settings>()
-        .set_scrobble_lastfm_configured(lastfm::is_configured());
+    ui.global::<Settings>().set_scrobble_lastfm_configured(lastfm::is_configured());
 
     // Seed once, then subscribe. Subscribing *before* the seed paint closes the
     // window where a change could land between the two and be missed — a fresh
@@ -253,12 +252,16 @@ fn wire_enable_toggles(ui: &AppWindow, state: &AppState) {
 fn wire_disconnect(ui: &AppWindow, state: &AppState) {
     let settings = ui.global::<Settings>();
 
-    settings.on_scrobble_lastfm_disconnect(spawn_disconnect(state, "Last.fm", |s: Arc<ScrobbleService>| async move {
-        s.set_lastfm_credentials(None).await
-    }));
-    settings.on_scrobble_listenbrainz_disconnect(spawn_disconnect(state, "ListenBrainz", |s: Arc<ScrobbleService>| async move {
-        s.set_listenbrainz_credentials(None).await
-    }));
+    settings.on_scrobble_lastfm_disconnect(spawn_disconnect(
+        state,
+        "Last.fm",
+        |s: Arc<ScrobbleService>| async move { s.set_lastfm_credentials(None).await },
+    ));
+    settings.on_scrobble_listenbrainz_disconnect(spawn_disconnect(
+        state,
+        "ListenBrainz",
+        |s: Arc<ScrobbleService>| async move { s.set_listenbrainz_credentials(None).await },
+    ));
 }
 
 /// The three login callbacks on `ScrobbleUi`. Each sets `busy` on entry (UI
@@ -324,8 +327,9 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
             rt.spawn(async move {
                 match lastfm::get_token(state.http_client(), api_key, secret).await {
                     Ok(token) => {
-                        let url =
-                            format!("https://www.last.fm/api/auth/?api_key={api_key}&token={token}");
+                        let url = format!(
+                            "https://www.last.fm/api/auth/?api_key={api_key}&token={token}"
+                        );
                         launcher::open_target(url, "Last.fm auth").await;
                         let _ = weak.upgrade_in_event_loop(move |ui| {
                             let su = ui.global::<ScrobbleUi>();
@@ -360,14 +364,12 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
             let weak = weak.clone();
             rt.spawn(async move {
                 match lastfm::get_session(state.http_client(), api_key, secret, &token).await {
-                    Ok(credentials) => match state
-                        .scrobble
-                        .set_lastfm_credentials(Some(credentials))
-                        .await
-                    {
-                        Ok(()) => finish_connected(&weak, &state, LoveTarget::Lastfm),
-                        Err(e) => save_failed(&weak, "Last.fm", &e),
-                    },
+                    Ok(credentials) => {
+                        match state.scrobble.set_lastfm_credentials(Some(credentials)).await {
+                            Ok(()) => finish_connected(&weak, &state, LoveTarget::Lastfm),
+                            Err(e) => save_failed(&weak, "Last.fm", &e),
+                        }
+                    }
                     // Usually "not approved yet" — surface inline, keep the
                     // dialog open so the user can approve and click Finish again.
                     Err(e) => {

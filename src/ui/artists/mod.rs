@@ -84,10 +84,7 @@ pub(super) use selection::{clear_selection, handle_select_row};
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>, albums_ui: &Arc<AlbumsUi>) -> Arc<ArtistsUi> {
     install_models(cx.app);
-    let artists_ui = Arc::new(ArtistsUi::new(
-        cx.cover_thumbs.clone(),
-        albums_ui.grid_thumbs(),
-    ));
+    let artists_ui = Arc::new(ArtistsUi::new(cx.cover_thumbs.clone(), albums_ui.grid_thumbs()));
     callbacks::wire(cx.app, cx.state, &artists_ui, albums_ui);
     artists_ui
 }
@@ -274,8 +271,7 @@ impl ArtistsUi {
     /// `Artists.request-cover`. Resolves against the grid-tier
     /// (`GRID_COVER_SIZE`) cache.
     pub fn grid_cover(&self, image_path: &str) -> slint::Image {
-        self.grid_covers
-            .get_or_load_opt(Some(image_path).filter(|s| !s.is_empty()))
+        self.grid_covers.get_or_load_opt(Some(image_path).filter(|s| !s.is_empty()))
     }
 }
 
@@ -306,10 +302,8 @@ pub fn to_slint_artist_row(a: &ArtistStats) -> UiArtistRow {
         image_path: SharedString::from(a.image_path.as_deref().unwrap_or("")),
         track_count: a.track_count,
         album_count: a.album_count,
-        total_duration_ms: i32::try_from(
-            a.total_duration_ms.clamp(0, i64::from(i32::MAX)),
-        )
-        .unwrap_or(i32::MAX),
+        total_duration_ms: i32::try_from(a.total_duration_ms.clamp(0, i64::from(i32::MAX)))
+            .unwrap_or(i32::MAX),
     }
 }
 

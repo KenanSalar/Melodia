@@ -92,15 +92,9 @@ fn common_by_collapses_display_equal_values() {
         ("5".to_owned(), false)
     );
     // Some(0) and None both render empty ⇒ they must agree (not disagree).
-    assert_eq!(
-        common_by([Some(0), None].into_iter(), int_key, fmt_int),
-        (String::new(), false)
-    );
+    assert_eq!(common_by([Some(0), None].into_iter(), int_key, fmt_int), (String::new(), false));
     // Genuinely different values disagree.
-    assert_eq!(
-        common_by([Some(5), Some(6)].into_iter(), int_key, fmt_int),
-        (String::new(), true)
-    );
+    assert_eq!(common_by([Some(5), Some(6)].into_iter(), int_key, fmt_int), (String::new(), true));
     // BPM: NaN and None both render empty ⇒ agree; distinct finite values disagree.
     assert_eq!(
         common_by([Some(f64::NAN), None].into_iter(), bpm_key, fmt_bpm),

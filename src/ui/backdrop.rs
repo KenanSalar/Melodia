@@ -172,10 +172,7 @@ fn pixel_lstar(r: u8, g: u8, b: u8) -> f64 {
     // branch, and this runs three times a pixel across the whole buffer.
     let table = &*LINEARIZED;
     let linear = |channel: u8| table[usize::from(channel)];
-    let y = 0.0722f64.mul_add(
-        linear(b),
-        0.2126f64.mul_add(linear(r), 0.7152 * linear(g)),
-    );
+    let y = 0.0722f64.mul_add(linear(b), 0.2126f64.mul_add(linear(r), 0.7152 * linear(g)));
     lstar_from_y(y)
 }
 
@@ -331,10 +328,7 @@ impl BackdropSample {
     /// guess, and the artwork-less path runs through the same solve as every
     /// cover.
     pub(crate) fn solve(self, theme_accent: u32) -> BackdropColors {
-        solve(
-            self.accent_argb.unwrap_or(theme_accent),
-            self.luma.unwrap_or_else(floor_luma),
-        )
+        solve(self.accent_argb.unwrap_or(theme_accent), self.luma.unwrap_or_else(floor_luma))
     }
 }
 

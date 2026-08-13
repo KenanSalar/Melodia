@@ -119,8 +119,7 @@ pub fn restore(app: &AppWindow, geom: PersistedGeometry) {
     // `WindowChrome.is-maximized`; seeding it here means a window
     // restored maximized paints square from the first frame instead of
     // briefly flashing the rounded chrome until the first `Resized`.
-    app.global::<crate::WindowChrome>()
-        .set_is_maximized(geom.maximized);
+    app.global::<crate::WindowChrome>().set_is_maximized(geom.maximized);
 }
 
 /// Live-mirror payload: the geometry plus whether winit ever reported a
@@ -236,10 +235,7 @@ pub fn ensure_on_screen(w: &WinitWindow) {
         return;
     }
 
-    let Some(target) = w
-        .primary_monitor()
-        .or_else(|| w.available_monitors().next())
-    else {
+    let Some(target) = w.primary_monitor().or_else(|| w.available_monitors().next()) else {
         return;
     };
     let mp = target.position();

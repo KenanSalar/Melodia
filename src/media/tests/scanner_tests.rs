@@ -27,7 +27,14 @@ fn collects_audio_files() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     create_test_files(
         tmp.path(),
-        &["song.mp3", "track.flac", "audio.m4a", "clip.aac", "voice.ogg", "pcm.wav"],
+        &[
+            "song.mp3",
+            "track.flac",
+            "audio.m4a",
+            "clip.aac",
+            "voice.ogg",
+            "pcm.wav",
+        ],
     )?;
     let files = collect_media_files(tmp.path());
     assert_eq!(files.len(), 6);
@@ -64,10 +71,8 @@ fn follows_nested_directories() -> Result<(), AppError> {
 #[test]
 fn collects_all_supported_extensions() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
-    let audio_files: Vec<String> = AUDIO_EXTENSIONS
-        .iter()
-        .map(|ext| format!("file.{ext}"))
-        .collect();
+    let audio_files: Vec<String> =
+        AUDIO_EXTENSIONS.iter().map(|ext| format!("file.{ext}")).collect();
     let names: Vec<&str> = audio_files.iter().map(std::string::String::as_str).collect();
     create_test_files(tmp.path(), &names)?;
     let files = collect_media_files(tmp.path());
@@ -82,7 +87,13 @@ fn extension_match_is_case_insensitive() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     create_test_files(
         tmp.path(),
-        &["Track.FLAC", "Song.Mp3", "clip.AAC", "cover.JPG", "notes.TXT"],
+        &[
+            "Track.FLAC",
+            "Song.Mp3",
+            "clip.AAC",
+            "cover.JPG",
+            "notes.TXT",
+        ],
     )?;
     let mut names: Vec<String> = collect_media_files(tmp.path())
         .iter()
@@ -170,14 +181,9 @@ fn scan_files_parallel_calls_progress_callback() -> Result<(), AppError> {
     let callback_count = Arc::new(AtomicU32::new(0));
     let counter = callback_count.clone();
 
-    scan_files_parallel(
-        &files,
-        &artwork_dir,
-        &test_cover_cache(),
-        &move |_, _| {
-            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        },
-    );
+    scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &move |_, _| {
+        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    });
 
     // With 10 files, callback fires at file 10 (every 10 files)
     assert!(callback_count.load(std::sync::atomic::Ordering::Relaxed) >= 1);
@@ -195,7 +201,10 @@ fn existing_for(path: &Path) -> Result<HashMap<String, ExistingTrackSummary>, Ap
     let mut map = HashMap::new();
     map.insert(
         path.to_string_lossy().into_owned(),
-        ExistingTrackSummary { file_size: Some(size), date_modified: mtime },
+        ExistingTrackSummary {
+            file_size: Some(size),
+            date_modified: mtime,
+        },
     );
     Ok(map)
 }

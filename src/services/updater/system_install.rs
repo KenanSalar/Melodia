@@ -110,10 +110,7 @@ fn probe() -> bool {
     // hatch above has already filtered out hand-extracted Windows
     // binaries, so reaching this branch on Windows implies a real
     // Program Files install.)
-    if matches!(
-        current_target_key(),
-        Some("windows-x86_64-msi" | "windows-aarch64-msi")
-    ) {
+    if matches!(current_target_key(), Some("windows-x86_64-msi" | "windows-aarch64-msi")) {
         return false;
     }
     // Root-owned and not package-owned (hand-installed tarball under

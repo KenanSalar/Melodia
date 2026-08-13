@@ -60,8 +60,7 @@ fn theme_accent(ui: &AppWindow) -> u32 {
 
 /// `floor_override` keeps a caller-supplied gradient instead of the solved one.
 fn write(ui: &AppWindow, colors: &BackdropColors, floor_override: Option<(u32, u32)>) {
-    let (floor_start, floor_end) =
-        floor_override.unwrap_or((colors.floor_start, colors.floor_end));
+    let (floor_start, floor_end) = floor_override.unwrap_or((colors.floor_start, colors.floor_end));
 
     let g = ui.global::<HeroBackdrop>();
     g.set_floor_start(color(floor_start));

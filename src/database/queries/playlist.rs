@@ -78,7 +78,7 @@ pub async fn update_smart_criteria(
 
 pub async fn get_all_playlists(db: &DbPool) -> Result<Vec<playlist::PlaylistStats>, AppError> {
     let playlists = sqlx::query_as::<_, playlist::PlaylistStats>(
-        "SELECT * FROM playlist_stats ORDER BY updated_at DESC"
+        "SELECT * FROM playlist_stats ORDER BY updated_at DESC",
     )
     .fetch_all(db.read())
     .await?;
@@ -112,7 +112,7 @@ pub async fn update_playlist(
             "UPDATE playlists SET name = ?, description = ?,
                 thumbnail_path = NULL,
                 custom_thumbnail = TRUE, updated_at = ?
-            WHERE id = ? RETURNING *"
+            WHERE id = ? RETURNING *",
         )
         .bind(name)
         .bind(description)
@@ -139,10 +139,7 @@ pub async fn update_playlist(
 
 pub async fn delete_playlist(db: &DbPool, id: i64) -> Result<(), AppError> {
     // Cascade will handle playlist_items
-    sqlx::query("DELETE FROM playlists WHERE id = ?")
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    sqlx::query("DELETE FROM playlists WHERE id = ?").bind(id).execute(db.write()).await?;
     Ok(())
 }
 
@@ -155,7 +152,7 @@ pub async fn get_playlist_tracks(
         "SELECT t.* FROM tracks t
          JOIN playlist_items pi ON pi.track_id = t.id
          WHERE pi.playlist_id = ?
-         ORDER BY pi.position ASC"
+         ORDER BY pi.position ASC",
     )
     .bind(playlist_id)
     .fetch_all(db.read())
@@ -220,7 +217,7 @@ pub async fn add_tracks_to_playlist(
 
     // Get current max position within the transaction
     let max_pos: Option<i32> = sqlx::query_scalar::<_, Option<i32>>(
-        "SELECT MAX(position) FROM playlist_items WHERE playlist_id = ?"
+        "SELECT MAX(position) FROM playlist_items WHERE playlist_id = ?",
     )
     .bind(playlist_id)
     .fetch_one(&mut *tx)
@@ -234,25 +231,15 @@ pub async fn add_tracks_to_playlist(
             .checked_add(i32::try_from(chunk_idx * CHUNK_SIZE).map_err(|_| {
                 AppError::Validation("playlist chunk offset overflows i32".to_owned())
             })?)
-            .ok_or_else(|| {
-                AppError::Validation("playlist position overflows i32".to_owned())
-            })?;
+            .ok_or_else(|| AppError::Validation("playlist position overflows i32".to_owned()))?;
         let mut query_builder = sqlx::QueryBuilder::new(
-            "INSERT OR IGNORE INTO playlist_items (playlist_id, track_id, position, added_at) "
+            "INSERT OR IGNORE INTO playlist_items (playlist_id, track_id, position, added_at) ",
         );
         query_builder.push_values(chunk.iter().enumerate(), |mut b, (i, track_id)| {
-            let position = chunk_offset.saturating_add(
-                i32::try_from(i).unwrap_or(i32::MAX),
-            );
-            b.push_bind(playlist_id)
-             .push_bind(*track_id)
-             .push_bind(position)
-             .push_bind(&now);
+            let position = chunk_offset.saturating_add(i32::try_from(i).unwrap_or(i32::MAX));
+            b.push_bind(playlist_id).push_bind(*track_id).push_bind(position).push_bind(&now);
         });
-        query_builder.build()
-            .persistent(false)
-            .execute(&mut *tx)
-            .await?;
+        query_builder.build().persistent(false).execute(&mut *tx).await?;
     }
 
     // Renumber positions to close gaps from ignored duplicates
@@ -322,7 +309,7 @@ pub async fn reorder_playlist_track(
     let mut tx = db.write().begin().await?;
 
     let items = sqlx::query_as::<_, playlist_item::PlaylistItem>(
-        "SELECT * FROM playlist_items WHERE playlist_id = ? ORDER BY position ASC"
+        "SELECT * FROM playlist_items WHERE playlist_id = ? ORDER BY position ASC",
     )
     .bind(playlist_id)
     .fetch_all(&mut *tx)
@@ -330,8 +317,8 @@ pub async fn reorder_playlist_track(
 
     let from_idx = usize::try_from(from)
         .map_err(|_| AppError::Validation("negative `from` index".to_owned()))?;
-    let to_idx = usize::try_from(to)
-        .map_err(|_| AppError::Validation("negative `to` index".to_owned()))?;
+    let to_idx =
+        usize::try_from(to).map_err(|_| AppError::Validation("negative `to` index".to_owned()))?;
 
     if from_idx >= items.len() || to_idx >= items.len() {
         return Err(AppError::NotFound("Invalid position index".to_owned()));
@@ -361,7 +348,7 @@ async fn renumber_playlist_positions_tx(
         )
         UPDATE playlist_items SET position = (
             SELECT new_pos FROM numbered WHERE numbered.id = playlist_items.id
-        ) WHERE playlist_id = ?1"
+        ) WHERE playlist_id = ?1",
     )
     .bind(playlist_id)
     .execute(&mut **tx)
@@ -431,18 +418,15 @@ pub async fn count_tracks_in_playlists_for_selection(
         return Ok(HashMap::new());
     }
 
-    let rows: Vec<(i64, i64)> = crate::database::chunked_in_query(
-        db.read(),
-        track_ids,
-        |placeholders| {
+    let rows: Vec<(i64, i64)> =
+        crate::database::chunked_in_query(db.read(), track_ids, |placeholders| {
             format!(
                 "SELECT playlist_id, COUNT(*) FROM playlist_items \
                  WHERE track_id IN ({placeholders}) \
                  GROUP BY playlist_id"
             )
-        },
-    )
-    .await?;
+        })
+        .await?;
 
     let mut map: HashMap<i64, i64> = HashMap::with_capacity(rows.len());
     for (pl_id, count) in rows {
@@ -464,7 +448,7 @@ pub async fn get_playlist_artwork_paths(
          WHERE pi.playlist_id = ? AND t.artwork_path IS NOT NULL AND t.artwork_path != ''
          GROUP BY t.artwork_path
          ORDER BY MIN(pi.position) ASC
-         LIMIT ?"
+         LIMIT ?",
     )
     .bind(playlist_id)
     .bind(limit)
@@ -483,7 +467,7 @@ pub async fn set_playlist_custom_thumbnail(
 
     sqlx::query_as::<_, playlist::Playlist>(
         "UPDATE playlists SET thumbnail_path = ?, custom_thumbnail = TRUE, updated_at = ?
-         WHERE id = ? RETURNING *"
+         WHERE id = ? RETURNING *",
     )
     .bind(path)
     .bind(&now)

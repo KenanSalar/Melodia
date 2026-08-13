@@ -23,10 +23,7 @@ fn entry_names(dir: &Path) -> Result<Vec<String>, AppError> {
 /// A local timestamp `n` seconds past an arbitrary fixed instant, so the tests
 /// order reports without depending on the wall clock.
 fn stamp(offset_secs: i64) -> chrono::DateTime<Local> {
-    let base = Local
-        .with_ymd_and_hms(2026, 8, 6, 14, 30, 0)
-        .single()
-        .unwrap_or_else(Local::now);
+    let base = Local.with_ymd_and_hms(2026, 8, 6, 14, 30, 0).single().unwrap_or_else(Local::now);
     base + chrono::TimeDelta::seconds(offset_secs)
 }
 
@@ -117,10 +114,7 @@ fn prune_keeps_the_newest_and_deletes_the_rest() -> Result<(), AppError> {
     assert_eq!(kept.len(), MAX_CRASH_REPORTS);
     // The three oldest are the ones that go.
     for offset in &offsets[..3] {
-        assert!(
-            !kept.contains(&file_name(stamp(*offset))),
-            "prune kept an old report"
-        );
+        assert!(!kept.contains(&file_name(stamp(*offset))), "prune kept an old report");
     }
     Ok(())
 }
@@ -168,10 +162,8 @@ fn recent_returns_the_newest_first() -> Result<(), AppError> {
 
     let newest = recent(tmp.path(), 2);
 
-    let names: Vec<String> = newest
-        .iter()
-        .filter_map(|p| p.file_name()?.to_str().map(str::to_owned))
-        .collect();
+    let names: Vec<String> =
+        newest.iter().filter_map(|p| p.file_name()?.to_str().map(str::to_owned)).collect();
     assert_eq!(names, [file_name(stamp(4)), file_name(stamp(3))]);
     Ok(())
 }

@@ -85,10 +85,7 @@ fn non_prehashed_signature_is_rejected() -> TestResult {
     let Err(MinisignError::StreamSetup(msg)) = result else {
         return Err(format!("expected StreamSetup error, got {result:?}").into());
     };
-    assert!(
-        msg.contains("prehashed"),
-        "rejection message should mention prehashed: {msg}",
-    );
+    assert!(msg.contains("prehashed"), "rejection message should mention prehashed: {msg}");
     Ok(())
 }
 
@@ -134,12 +131,7 @@ fn versioned_signature_verifies_when_version_matches() -> TestResult {
     // trusted comment carries `version=0.42.0` and the caller asserts
     // the same.
     let pk = PublicKey::decode(TEST_PUBKEY_VERSIONED)?;
-    verify_stream(
-        Cursor::new(TEST_DATA_VERSIONED),
-        TEST_SIG_VERSIONED,
-        &pk,
-        Some("0.42.0"),
-    )?;
+    verify_stream(Cursor::new(TEST_DATA_VERSIONED), TEST_SIG_VERSIONED, &pk, Some("0.42.0"))?;
     Ok(())
 }
 
@@ -150,12 +142,8 @@ fn versioned_signature_rejected_when_version_differs() -> TestResult {
     // the caller is trying to install version 9.9.9 — the cross-check
     // must catch the mismatch.
     let pk = PublicKey::decode(TEST_PUBKEY_VERSIONED)?;
-    let result = verify_stream(
-        Cursor::new(TEST_DATA_VERSIONED),
-        TEST_SIG_VERSIONED,
-        &pk,
-        Some("9.9.9"),
-    );
+    let result =
+        verify_stream(Cursor::new(TEST_DATA_VERSIONED), TEST_SIG_VERSIONED, &pk, Some("9.9.9"));
     let Err(MinisignError::VersionMismatch(msg)) = result else {
         return Err(format!("expected VersionMismatch error, got {result:?}").into());
     };
@@ -186,8 +174,7 @@ fn manifest_signature_rejected_when_manifest_tag_missing() -> TestResult {
     // assertion is what we want to test, so we feed the manifest fixture
     // signed by the manifest key but assert manifest_tag=wrong.
     let pk = PublicKey::decode(TEST_PUBKEY_MANIFEST)?;
-    let result =
-        verify_manifest_bytes(TEST_MANIFEST, TEST_SIG_MANIFEST, &pk, None, Some("wrong"));
+    let result = verify_manifest_bytes(TEST_MANIFEST, TEST_SIG_MANIFEST, &pk, None, Some("wrong"));
     let Err(MinisignError::VersionMismatch(msg)) = result else {
         return Err(format!("expected VersionMismatch error, got {result:?}").into());
     };
@@ -207,13 +194,8 @@ fn manifest_signature_rejects_artifact_sig_cross_paste() -> TestResult {
     // separation check that prevents an attacker from cross-pasting
     // a legitimately-signed artifact .minisig into the manifest slot.
     let pk = PublicKey::decode(TEST_PUBKEY_VERSIONED)?;
-    let result = verify_manifest_bytes(
-        TEST_DATA_VERSIONED,
-        TEST_SIG_VERSIONED,
-        &pk,
-        None,
-        Some("true"),
-    );
+    let result =
+        verify_manifest_bytes(TEST_DATA_VERSIONED, TEST_SIG_VERSIONED, &pk, None, Some("true"));
     let Err(MinisignError::VersionMismatch(msg)) = result else {
         return Err(format!("expected VersionMismatch error, got {result:?}").into());
     };
@@ -231,8 +213,7 @@ fn manifest_signature_rejects_tampered_body() -> TestResult {
     if let Some(b) = tampered.first_mut() {
         *b ^= 0xff;
     }
-    let result =
-        verify_manifest_bytes(&tampered, TEST_SIG_MANIFEST, &pk, None, Some("true"));
+    let result = verify_manifest_bytes(&tampered, TEST_SIG_MANIFEST, &pk, None, Some("true"));
     assert!(
         matches!(result, Err(MinisignError::Verify(_))),
         "tampered manifest body must surface as Verify error, got {result:?}",
@@ -251,9 +232,6 @@ fn legacy_signature_rejected_when_version_required() -> TestResult {
     let Err(MinisignError::VersionMismatch(msg)) = result else {
         return Err(format!("expected VersionMismatch error, got {result:?}").into());
     };
-    assert!(
-        msg.contains("no `version=` field"),
-        "msg should explain the missing field: {msg}",
-    );
+    assert!(msg.contains("no `version=` field"), "msg should explain the missing field: {msg}");
     Ok(())
 }

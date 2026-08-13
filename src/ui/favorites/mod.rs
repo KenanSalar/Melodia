@@ -82,8 +82,8 @@ pub(super) use songs::{
     apply_filtered_tracks, apply_filtered_tracks_now, apply_row_rating, refresh_tracks,
     resort_and_apply, set_filter, set_sort,
 };
-pub(super) use tabs::{seed_tab, tab_from_index};
 pub use tabs::FavoritesTab;
+pub(super) use tabs::{seed_tab, tab_from_index};
 
 /// Install the Favorites models, build the handle, wire every `Favorites.*`
 /// callback, and seed the persisted tab.
@@ -163,10 +163,7 @@ impl FavoritesUi {
         Self {
             inner: FavoritesUiState::new(),
             cover_thumbs,
-            mosaic_thumbs: Arc::new(CoverThumbs::with_config(
-                MOSAIC_THUMB_SIZE,
-                MOSAIC_THUMB_CAP,
-            )),
+            mosaic_thumbs: Arc::new(CoverThumbs::with_config(MOSAIC_THUMB_SIZE, MOSAIC_THUMB_CAP)),
             most_played_thumbs: Arc::new(CoverThumbs::with_config(
                 crate::ui::grid_prewarm::GRID_COVER_SIZE,
                 GRID_THUMB_CAP,

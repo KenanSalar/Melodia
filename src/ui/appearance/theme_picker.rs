@@ -27,7 +27,11 @@ use super::{
 /// scheme rather than the static Light/Dark tables. The Settings
 /// UI reads this via the `Settings.kde-system-active` property to hide
 /// the Accent Color row (Plasma already picked the accent).
-pub(super) fn kde_system_active(theme_id: &str, variant_id: &str, system: &SystemColorState) -> bool {
+pub(super) fn kde_system_active(
+    theme_id: &str,
+    variant_id: &str,
+    system: &SystemColorState,
+) -> bool {
     if theme_id != "kde-breeze" || variant_id != themes::SYSTEM_VARIANT_ID {
         return false;
     }
@@ -62,7 +66,9 @@ pub(super) fn wire_theme_changed(
     let s = state.clone();
     ui.global::<Settings>().on_theme_changed(move |idx| {
         let Some(ui) = weak.upgrade() else { return };
-        let Some(theme) = registry_get(idx) else { return };
+        let Some(theme) = registry_get(idx) else {
+            return;
+        };
 
         // Per-theme memory: each theme remembers its last (variant,
         // accent) pair across switches. Tauri's `theme_preferences`
@@ -151,7 +157,9 @@ pub(super) fn wire_variant_changed(
         let g = ui.global::<Settings>();
         let theme_idx = g.get_theme_idx();
         let accent_idx = g.get_accent_idx();
-        let Some(theme) = registry_get(theme_idx) else { return };
+        let Some(theme) = registry_get(theme_idx) else {
+            return;
+        };
 
         let i = usize_from(idx);
         // The synthetic "System" chip sits at index `theme.variants.len()`

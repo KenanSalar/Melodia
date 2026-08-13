@@ -50,9 +50,7 @@ fn wrapping_constructors_preserve_source_chain() {
     let wrapped = AppError::network("Deezer API request failed", cause);
     assert_eq!(format!("{wrapped}"), "Network error: Deezer API request failed");
     assert!(
-        wrapped
-            .source()
-            .is_some_and(|s| s.to_string().contains("connection timed out")),
+        wrapped.source().is_some_and(|s| s.to_string().contains("connection timed out")),
         "wrapped error must expose the underlying cause via .source()"
     );
 

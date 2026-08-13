@@ -21,9 +21,7 @@ fn code() -> String {
 /// own, and the first pin then reads the bindings it was looking for out of the
 /// element it was checking hadn't swallowed them.
 fn block(code: &str, opener: &str) -> String {
-    let rest = code
-        .split_once(opener)
-        .map_or(String::new(), |(_, rest)| rest.to_owned());
+    let rest = code.split_once(opener).map_or(String::new(), |(_, rest)| rest.to_owned());
     assert!(
         !rest.is_empty(),
         "`icon-button.slint` no longer declares `{opener}` — every assertion over that body \

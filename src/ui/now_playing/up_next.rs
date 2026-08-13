@@ -263,9 +263,7 @@ pub(super) fn upcoming_indices(qvm: &QueueViewModel) -> (Vec<usize>, usize) {
     let base = usize::try_from(qvm.queue_index + 1).unwrap_or(0);
     let wrap = qvm.repeat_mode.wraps() && qvm.queue_index >= 0;
     let indices: Vec<usize> = if wrap && len > 0 {
-        (0..(len - 1).min(UP_NEXT_N))
-            .map(|n| (base + n) % len)
-            .collect()
+        (0..(len - 1).min(UP_NEXT_N)).map(|n| (base + n) % len).collect()
     } else {
         (base..len.min(base + UP_NEXT_N)).collect()
     };
@@ -304,4 +302,3 @@ pub(super) fn rebuild_up_next(
     np.set_queue_length(len_as_i32(qvm.queue_tracks.len()));
     ids
 }
-

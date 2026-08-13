@@ -21,8 +21,8 @@ use std::sync::Arc;
 
 use crate::AppWindow;
 use crate::state::AppState;
-use crate::ui::shell::notifications::NotificationsUi;
 use crate::ui::playlists::PlaylistsUi;
+use crate::ui::shell::notifications::NotificationsUi;
 
 /// Wire every `Playlists.*` / `PlaylistDetail.*` callback to its
 /// `library::*` counterpart and the `playlists_ui` shared state, plus a

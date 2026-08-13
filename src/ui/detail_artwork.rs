@@ -89,11 +89,7 @@ pub(crate) async fn decode_detail_pair(
     let Some(path) = path.filter(|p| !p.is_empty()) else {
         return DetailPair::default();
     };
-    match state
-        .runtime
-        .spawn_blocking(move || artwork.get_or_decode(Path::new(&path)))
-        .await
-    {
+    match state.runtime.spawn_blocking(move || artwork.get_or_decode(Path::new(&path))).await {
         Ok(Some(pair)) => DetailPair {
             cover: Some(pair.cover),
             blur: Some(pair.blur),

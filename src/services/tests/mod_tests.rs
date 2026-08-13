@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use super::redact_home;
 use super::{describe, redact_prefix, undeleted_exe};
 use crate::error::AppError;
-use crate::test_support::{REPO_ROOT, SRC_DIR, font_sources, rel_path, stripped_sources};
 #[cfg(unix)]
 use crate::test_support::with_env_var;
+use crate::test_support::{REPO_ROOT, SRC_DIR, font_sources, rel_path, stripped_sources};
 
 /// A Windows home directory, spelled the way `Path::display` spells it. The
 /// resolution used to go through `$HOME`, which Windows does not set — so every
@@ -16,10 +16,8 @@ use crate::test_support::with_env_var;
 /// `dirs::home_dir`'s Windows arm, so the *shape* is pinned here instead.
 #[test]
 fn a_windows_home_is_redacted_like_a_unix_one() {
-    let redacted = redact_prefix(
-        r"WARN scan failed for C:\Users\Alice\Music\x.flac",
-        r"C:\Users\Alice",
-    );
+    let redacted =
+        redact_prefix(r"WARN scan failed for C:\Users\Alice\Music\x.flac", r"C:\Users\Alice");
 
     assert_eq!(redacted, r"WARN scan failed for ~\Music\x.flac");
 }
@@ -28,10 +26,7 @@ fn a_windows_home_is_redacted_like_a_unix_one() {
 /// a destination, and a backtrace names the home once per frame.
 #[test]
 fn every_occurrence_goes() {
-    let redacted = redact_prefix(
-        "moved /home/alice/a.flac to /home/alice/b.flac",
-        "/home/alice",
-    );
+    let redacted = redact_prefix("moved /home/alice/a.flac to /home/alice/b.flac", "/home/alice");
 
     assert_eq!(redacted, "moved ~/a.flac to ~/b.flac");
 }
@@ -99,10 +94,7 @@ fn a_live_file_named_deleted_keeps_its_own_path() {
 fn an_unlinked_binary_resolves_to_the_file_that_replaced_it() {
     let replacement = Path::new("/usr/bin/Melodia");
 
-    let resolved = undeleted_exe(
-        PathBuf::from("/usr/bin/Melodia (deleted)"),
-        |p| p == replacement,
-    );
+    let resolved = undeleted_exe(PathBuf::from("/usr/bin/Melodia (deleted)"), |p| p == replacement);
 
     assert_eq!(resolved, replacement);
 }
@@ -462,8 +454,8 @@ fn as_dep5_field_body(text: &str) -> String {
 #[test]
 fn the_debian_copyright_quotes_the_licences_it_ships() {
     let root = Path::new(REPO_ROOT);
-    let copyright = std::fs::read_to_string(root.join("packaging/debian-copyright"))
-        .unwrap_or_default();
+    let copyright =
+        std::fs::read_to_string(root.join("packaging/debian-copyright")).unwrap_or_default();
 
     assert!(
         !copyright.is_empty(),
@@ -478,7 +470,10 @@ fn the_debian_copyright_quotes_the_licences_it_ships() {
          second, contradictory declaration"
     );
 
-    for (source, licence) in [("LICENSE", "AGPL-3.0-or-later"), ("licenses/Vazirmatn-OFL-1.1.txt", "OFL-1.1")] {
+    for (source, licence) in [
+        ("LICENSE", "AGPL-3.0-or-later"),
+        ("licenses/Vazirmatn-OFL-1.1.txt", "OFL-1.1"),
+    ] {
         let text = std::fs::read_to_string(root.join(source)).unwrap_or_default();
         assert!(!text.is_empty(), "{source} won't read");
         assert!(

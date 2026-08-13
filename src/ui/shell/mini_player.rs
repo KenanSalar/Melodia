@@ -37,9 +37,7 @@ use crate::{AppWindow, MiniPlayer};
 /// skipped on entry. Called from `on_active_changed` on entry.
 fn sync_mini_square(weak: &slint::Weak<AppWindow>, np_state: &NowPlayingState) {
     let Some(ui) = weak.upgrade() else { return };
-    np_state
-        .mini_square
-        .set(ui.global::<MiniPlayer>().get_square());
+    np_state.mini_square.set(ui.global::<MiniPlayer>().get_square());
 }
 
 /// Off-thread release of the [`NowPlayingArtwork`] LRU + a glibc

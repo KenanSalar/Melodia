@@ -122,11 +122,7 @@ fn wire_request_edit(
             // single selection (the Lyrics tab isn't mounted otherwise).
             let lyrics = if single {
                 let path = PathBuf::from(&rows[0].file_path);
-                match s
-                    .runtime
-                    .spawn_blocking(move || tag_writer::read_lyrics(&path))
-                    .await
-                {
+                match s.runtime.spawn_blocking(move || tag_writer::read_lyrics(&path)).await {
                     Ok(Ok(Some(l))) => l,
                     _ => String::new(),
                 }
@@ -137,18 +133,12 @@ fn wire_request_edit(
             // Cover preview from the first row that has one (decode off the
             // UI thread — a full-res source could jank it).
             let cover_path = rows.iter().find_map(|r| {
-                r.artwork_path
-                    .as_deref()
-                    .filter(|p| !p.is_empty())
-                    .map(PathBuf::from)
+                r.artwork_path.as_deref().filter(|p| !p.is_empty()).map(PathBuf::from)
             });
             let cover = match cover_path {
-                Some(p) => s
-                    .runtime
-                    .spawn_blocking(move || decode_cover_preview(&p))
-                    .await
-                    .ok()
-                    .flatten(),
+                Some(p) => {
+                    s.runtime.spawn_blocking(move || decode_cover_preview(&p)).await.ok().flatten()
+                }
                 None => None,
             };
 
@@ -176,10 +166,8 @@ fn wire_pick_artwork(
         let _ = slint::spawn_local(Compat::new(async move {
             // Filter broadly — the orchestrator normalizes on write (lofty's
             // accepted set and MP4's differ; no single filter expresses it).
-            let dialog = file_dialog::parented(&weak, "Choose Cover Image").add_filter(
-                "Images",
-                &["jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff"],
-            );
+            let dialog = file_dialog::parented(&weak, "Choose Cover Image")
+                .add_filter("Images", &["jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff"]);
             let Some(handle) = dialog.pick_file().await else {
                 return;
             };
@@ -332,7 +320,11 @@ fn populate(
         set_genre,
         set_genre_placeholder
     );
-    field!(common_by(rows.iter().map(|r| r.year), int_key, fmt_int), set_year, set_year_placeholder);
+    field!(
+        common_by(rows.iter().map(|r| r.year), int_key, fmt_int),
+        set_year,
+        set_year_placeholder
+    );
     field!(
         common_by(rows.iter().map(|r| r.original_year), int_key, fmt_int),
         set_original_year,
@@ -412,7 +404,9 @@ fn set_summary(te: &TagEditor, row: Option<&TagEditRow>) {
     te.set_summary_codec(s(row, |r| r.codec.as_deref().unwrap_or_default().to_uppercase()));
     te.set_summary_bitrate(s(row, |r| r.bitrate.map(|b| format!("{b} kbps")).unwrap_or_default()));
     te.set_summary_sample_rate(s(row, |r| r.sample_rate.map(fmt_sample_rate).unwrap_or_default()));
-    te.set_summary_bit_depth(s(row, |r| r.bit_depth.map(|d| format!("{d}-bit")).unwrap_or_default()));
+    te.set_summary_bit_depth(s(row, |r| {
+        r.bit_depth.map(|d| format!("{d}-bit")).unwrap_or_default()
+    }));
     te.set_summary_channels(s(row, |r| r.channels.map(fmt_channels).unwrap_or_default()));
     te.set_summary_size(s(row, |r| r.file_size.map(fmt_size).unwrap_or_default()));
     te.set_summary_duration(s(row, |r| crate::ui::tracks::format_duration_ms(r.duration_ms)));
@@ -651,10 +645,7 @@ fn clamp_i32(n: usize) -> i32 {
 fn decode_cover_preview(path: &Path) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
     // The dialog tile renders at 160 px, so the shared 384 px cover tier keeps
     // it crisp on HiDPI while staying a small bounded buffer.
-    let rgb = decode_capped(path, MAX_SOURCE_DIM)
-        .ok()?
-        .thumbnail(COVER_SIZE, COVER_SIZE)
-        .to_rgb8();
+    let rgb = decode_capped(path, MAX_SOURCE_DIM).ok()?.thumbnail(COVER_SIZE, COVER_SIZE).to_rgb8();
     Some(buffer_from_rgb(&rgb))
 }
 

@@ -228,9 +228,8 @@ fn test_theme_preference_roundtrip() -> Result<(), AppError> {
     assert_eq!(deserialized.accent, "mauve");
     assert_eq!(deserialized.last_static_accent.as_deref(), Some("mauve"));
     // Backward compat: older settings.json without `last_static_accent` deserializes to None.
-    let legacy: ThemePreference =
-        serde_json::from_str(r#"{"variant":"mocha","accent":"mauve"}"#)
-            .map_err(|e| json_err(&e))?;
+    let legacy: ThemePreference = serde_json::from_str(r#"{"variant":"mocha","accent":"mauve"}"#)
+        .map_err(|e| json_err(&e))?;
     assert!(legacy.last_static_accent.is_none());
     Ok(())
 }
@@ -359,11 +358,7 @@ fn corner_radius_by_desktop_environment() {
     let radius_under = |desktop| with_env_var("XDG_CURRENT_DESKTOP", desktop, get_os_corner_radius);
 
     assert_eq!(radius_under(Some("GNOME")), 15, "GNOME should return 15");
-    assert_eq!(
-        radius_under(Some("ubuntu:GNOME")),
-        15,
-        "ubuntu:GNOME should return 15"
-    );
+    assert_eq!(radius_under(Some("ubuntu:GNOME")), 15, "ubuntu:GNOME should return 15");
     assert_eq!(radius_under(Some("KDE")), 6, "KDE should return 6");
     assert_eq!(radius_under(Some("i3")), 6, "unknown DE should return 6");
     assert_eq!(radius_under(None), 6, "missing env should return 6");

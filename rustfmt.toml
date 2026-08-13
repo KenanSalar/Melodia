@@ -1,0 +1,8 @@
+# Sub-widths, not line lengths — `max_width` stays at its 100 default. These gate
+# when a call's arguments or a chain get broken up, and their 60% defaults split
+# code that already fits the 100 columns this tree was hand-written to.
+#
+# 91 rather than 100 because `cargo fmt` warns twice per target above it. The two
+# settings disagree at seven sites tree-wide, so the noise costs nothing to dodge.
+fn_call_width = 91
+chain_width = 91

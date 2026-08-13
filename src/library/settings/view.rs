@@ -16,9 +16,7 @@ use crate::state::AppState;
 /// across the next process boot.
 pub fn set_locale(state: &AppState, code: String) -> Result<(), AppError> {
     if !services::settings::SUPPORTED_LOCALES.contains(&code.as_str()) {
-        return Err(AppError::Validation(format!(
-            "Unsupported locale: {code}"
-        )));
+        return Err(AppError::Validation(format!("Unsupported locale: {code}")));
     }
     services::settings::mutate_settings(&state.paths, move |settings| {
         settings.locale = code;
@@ -127,10 +125,7 @@ pub fn set_last_detail_id(
 /// next launch reopens the sub-section in the same state. No runtime
 /// kick: the Slint property is updated synchronously by the toggle
 /// callback before this write runs.
-pub fn set_artist_albums_collapsed(
-    state: &AppState,
-    collapsed: bool,
-) -> Result<(), AppError> {
+pub fn set_artist_albums_collapsed(state: &AppState, collapsed: bool) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.artist_albums_collapsed = collapsed;
     })
@@ -208,10 +203,7 @@ pub fn set_view_sort(
 /// fails to load (a fresh launch or a corrupt write — the caller's
 /// default keeps the view usable either way).
 #[must_use]
-pub fn get_view_sort(
-    state: &AppState,
-    view_id: &str,
-) -> Option<services::settings::ViewSort> {
+pub fn get_view_sort(state: &AppState, view_id: &str) -> Option<services::settings::ViewSort> {
     services::view_state::read_view_state(&state.paths)
         .ok()
         .and_then(|s| s.view_sort.get(view_id).cloned())

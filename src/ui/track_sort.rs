@@ -220,14 +220,7 @@ pub fn sort_track_list_rows(rows: &mut [RsTrackListRow], field: &str, dir: &str)
 /// key are the same string, so only one is built.
 pub fn compute_track_order<F: TrackSortFields>(rows: &[F], field: &str, dir: &str) -> Vec<usize> {
     let mut indexed: Vec<(usize, &F)> = rows.iter().enumerate().collect();
-    sort_rows(
-        &mut indexed,
-        field,
-        dir,
-        |t| t.1,
-        |t| t.1.sort_key().to_ascii_lowercase(),
-        true,
-    );
+    sort_rows(&mut indexed, field, dir, |t| t.1, |t| t.1.sort_key().to_ascii_lowercase(), true);
     indexed.into_iter().map(|(i, _)| i).collect()
 }
 

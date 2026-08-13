@@ -304,8 +304,13 @@ impl ScrobbleService {
                     clear_lb.push(i); // no MBID for LB to key on → nothing to do
                     continue;
                 };
-                match listenbrainz::submit_feedback(&client, &creds.token, mbid, i8::from(love.loved))
-                    .await
+                match listenbrainz::submit_feedback(
+                    &client,
+                    &creds.token,
+                    mbid,
+                    i8::from(love.loved),
+                )
+                .await
                 {
                     Ok(()) => clear_lb.push(i),
                     Err(ListenBrainzError::InvalidToken) => {
@@ -364,13 +369,7 @@ fn merge_opt(a: Option<Duration>, b: Option<Duration>) -> Option<Duration> {
 /// mark done for a provider that can't be submitted to right now. Generic over
 /// the queued type, shared by the scrobble and love drains.
 fn drop_flags<T>(snapshot: &[T], flag: impl Fn(&T) -> bool, out: &mut Vec<usize>) {
-    out.extend(
-        snapshot
-            .iter()
-            .enumerate()
-            .filter(|(_, it)| flag(it))
-            .map(|(i, _)| i),
-    );
+    out.extend(snapshot.iter().enumerate().filter(|(_, it)| flag(it)).map(|(i, _)| i));
 }
 
 /// Build a `≤ SCROBBLE_BATCH_MAX` batch of `(&track, timestamp)` from the items

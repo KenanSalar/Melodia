@@ -170,15 +170,9 @@ END
 pub async fn disable_stats_triggers(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
-    sqlx::query("DROP TRIGGER IF EXISTS tracks_stats_insert")
-        .execute(&mut **tx)
-        .await?;
-    sqlx::query("DROP TRIGGER IF EXISTS tracks_stats_delete")
-        .execute(&mut **tx)
-        .await?;
-    sqlx::query("DROP TRIGGER IF EXISTS tracks_stats_update")
-        .execute(&mut **tx)
-        .await?;
+    sqlx::query("DROP TRIGGER IF EXISTS tracks_stats_insert").execute(&mut **tx).await?;
+    sqlx::query("DROP TRIGGER IF EXISTS tracks_stats_delete").execute(&mut **tx).await?;
+    sqlx::query("DROP TRIGGER IF EXISTS tracks_stats_update").execute(&mut **tx).await?;
     Ok(())
 }
 
@@ -187,15 +181,9 @@ pub async fn disable_stats_triggers(
 pub async fn enable_stats_triggers(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
-    sqlx::query(CREATE_TRACKS_STATS_INSERT)
-        .execute(&mut **tx)
-        .await?;
-    sqlx::query(CREATE_TRACKS_STATS_DELETE)
-        .execute(&mut **tx)
-        .await?;
-    sqlx::query(CREATE_TRACKS_STATS_UPDATE)
-        .execute(&mut **tx)
-        .await?;
+    sqlx::query(CREATE_TRACKS_STATS_INSERT).execute(&mut **tx).await?;
+    sqlx::query(CREATE_TRACKS_STATS_DELETE).execute(&mut **tx).await?;
+    sqlx::query(CREATE_TRACKS_STATS_UPDATE).execute(&mut **tx).await?;
     Ok(())
 }
 

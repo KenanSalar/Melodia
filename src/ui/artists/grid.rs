@@ -6,9 +6,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
-use super::state::{
-    DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache,
-};
+use super::state::{DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{ArtistsUi, to_slint_artist_row};
 use crate::error::AppResult;
 use crate::library;
@@ -129,12 +127,10 @@ fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiArti
 /// lowercased `data.keys`.
 fn sort_artist_indices(indices: &mut [usize], data: &GridData, field: &str, dir: &str) {
     match field {
-        "track_count" => indices.sort_by_cached_key(|&i| {
-            (data.artists[i].track_count, data.keys[i].name_lc.as_str())
-        }),
-        "album_count" => indices.sort_by_cached_key(|&i| {
-            (data.artists[i].album_count, data.keys[i].name_lc.as_str())
-        }),
+        "track_count" => indices
+            .sort_by_cached_key(|&i| (data.artists[i].track_count, data.keys[i].name_lc.as_str())),
+        "album_count" => indices
+            .sort_by_cached_key(|&i| (data.artists[i].album_count, data.keys[i].name_lc.as_str())),
         _ => indices.sort_by_cached_key(|&i| data.keys[i].name_lc.as_str()),
     }
     if dir == "desc" {

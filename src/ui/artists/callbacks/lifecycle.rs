@@ -86,9 +86,7 @@ pub(super) fn wire(
                 runtime.spawn(async move {
                     if au.take_dirty() {
                         let open_id = au.detail_artist_id();
-                        if let Err(e) =
-                            artists_ui_mod::fetch_grid(&s, &au, weak.clone()).await
-                        {
+                        if let Err(e) = artists_ui_mod::fetch_grid(&s, &au, weak.clone()).await {
                             log::warn!("artists::section_enter fetch_grid: {e}");
                         }
                         if open_id >= 0
@@ -157,15 +155,21 @@ pub(super) fn wire(
                     let s = s.clone();
                     let au = au.clone();
                     let weak = weak.clone();
-                    spawn_logged!(s, "artists::library_changed",
-                        artists_ui_mod::fetch_grid(&s, &au, weak));
+                    spawn_logged!(
+                        s,
+                        "artists::library_changed",
+                        artists_ui_mod::fetch_grid(&s, &au, weak)
+                    );
                 }
                 if open_id >= 0 {
                     let s = s.clone();
                     let au = au.clone();
                     let weak = weak.clone();
-                    spawn_logged!(s, "artists::library_changed_detail",
-                        artists_ui_mod::refresh_detail(&s, &au, weak, open_id));
+                    spawn_logged!(
+                        s,
+                        "artists::library_changed_detail",
+                        artists_ui_mod::refresh_detail(&s, &au, weak, open_id)
+                    );
                 }
             }
         }));

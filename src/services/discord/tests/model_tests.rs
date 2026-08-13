@@ -70,11 +70,8 @@ fn flags(hide_when_paused: bool) -> DiscordFlags {
 fn first_play_sets_the_card() {
     let mut ps = PresenceState::new();
     let song = track(1, "Song", Some("Artist"), Some("Album"), 200_000);
-    let update = ps.on_view_model(
-        Some(&vm("playing", Some(song), 30_000, 200_000)),
-        NOW,
-        &flags(false),
-    );
+    let update =
+        ps.on_view_model(Some(&vm("playing", Some(song), 30_000, 200_000)), NOW, &flags(false));
     assert!(matches!(update, Some(Update::Set(_))));
 }
 
@@ -91,11 +88,8 @@ fn volume_republish_sends_nothing() {
 
     // 5 s later playback has advanced 5 s (only volume actually changed) — the
     // anchor `now - position` is invariant, so nothing new should be sent.
-    let second = ps.on_view_model(
-        Some(&vm("playing", Some(song), 35_000, 200_000)),
-        NOW + 5,
-        &flags(false),
-    );
+    let second =
+        ps.on_view_model(Some(&vm("playing", Some(song), 35_000, 200_000)), NOW + 5, &flags(false));
     assert!(second.is_none());
 }
 
@@ -103,19 +97,12 @@ fn volume_republish_sends_nothing() {
 fn seek_re_anchors() {
     let mut ps = PresenceState::new();
     let song = track(1, "Song", Some("Artist"), Some("Album"), 200_000);
-    ps.on_view_model(
-        Some(&vm("playing", Some(song.clone()), 30_000, 200_000)),
-        NOW,
-        &flags(false),
-    );
+    ps.on_view_model(Some(&vm("playing", Some(song.clone()), 30_000, 200_000)), NOW, &flags(false));
 
     // Same instant, position jumps forward — the anchor moves well past the 2 s
     // tolerance, so this is a fresh update.
-    let after_seek = ps.on_view_model(
-        Some(&vm("playing", Some(song), 120_000, 200_000)),
-        NOW,
-        &flags(false),
-    );
+    let after_seek =
+        ps.on_view_model(Some(&vm("playing", Some(song), 120_000, 200_000)), NOW, &flags(false));
     assert!(matches!(after_seek, Some(Update::Set(_))));
 }
 
@@ -123,11 +110,7 @@ fn seek_re_anchors() {
 fn pause_drops_timestamps_then_resume_re_anchors() {
     let mut ps = PresenceState::new();
     let song = track(1, "Song", Some("Artist"), Some("Album"), 200_000);
-    ps.on_view_model(
-        Some(&vm("playing", Some(song.clone()), 30_000, 200_000)),
-        NOW,
-        &flags(false),
-    );
+    ps.on_view_model(Some(&vm("playing", Some(song.clone()), 30_000, 200_000)), NOW, &flags(false));
 
     let paused = ps.on_view_model(
         Some(&vm("paused", Some(song.clone()), 30_000, 200_000)),
@@ -157,17 +140,10 @@ fn pause_drops_timestamps_then_resume_re_anchors() {
 fn seek_while_paused_sends_nothing() {
     let mut ps = PresenceState::new();
     let song = track(1, "Song", Some("Artist"), Some("Album"), 200_000);
-    ps.on_view_model(
-        Some(&vm("paused", Some(song.clone()), 30_000, 200_000)),
-        NOW,
-        &flags(false),
-    );
+    ps.on_view_model(Some(&vm("paused", Some(song.clone()), 30_000, 200_000)), NOW, &flags(false));
     // Paused identity ignores position, so a paused seek changes nothing.
-    let after = ps.on_view_model(
-        Some(&vm("paused", Some(song), 90_000, 200_000)),
-        NOW,
-        &flags(false),
-    );
+    let after =
+        ps.on_view_model(Some(&vm("paused", Some(song), 90_000, 200_000)), NOW, &flags(false));
     assert!(after.is_none());
 }
 
@@ -175,11 +151,7 @@ fn seek_while_paused_sends_nothing() {
 fn stop_clears_once() {
     let mut ps = PresenceState::new();
     let song = track(1, "Song", Some("Artist"), Some("Album"), 200_000);
-    ps.on_view_model(
-        Some(&vm("playing", Some(song), 30_000, 200_000)),
-        NOW,
-        &flags(false),
-    );
+    ps.on_view_model(Some(&vm("playing", Some(song), 30_000, 200_000)), NOW, &flags(false));
 
     let stopped = ps.on_view_model(Some(&vm("stopped", None, 0, 0)), NOW, &flags(false));
     assert_eq!(stopped, Some(Update::Clear));
@@ -193,11 +165,7 @@ fn stop_clears_once() {
 fn loading_holds_previous_card() {
     let mut ps = PresenceState::new();
     let song = track(1, "Song", Some("Artist"), Some("Album"), 200_000);
-    ps.on_view_model(
-        Some(&vm("playing", Some(song.clone()), 30_000, 200_000)),
-        NOW,
-        &flags(false),
-    );
+    ps.on_view_model(Some(&vm("playing", Some(song.clone()), 30_000, 200_000)), NOW, &flags(false));
 
     let loading = ps.on_view_model(Some(&vm("loading", Some(song), 0, 0)), NOW + 1, &flags(false));
     assert!(loading.is_none());
@@ -207,17 +175,10 @@ fn loading_holds_previous_card() {
 fn hide_when_paused_clears() {
     let mut ps = PresenceState::new();
     let song = track(1, "Song", Some("Artist"), Some("Album"), 200_000);
-    ps.on_view_model(
-        Some(&vm("playing", Some(song.clone()), 30_000, 200_000)),
-        NOW,
-        &flags(true),
-    );
+    ps.on_view_model(Some(&vm("playing", Some(song.clone()), 30_000, 200_000)), NOW, &flags(true));
 
-    let paused = ps.on_view_model(
-        Some(&vm("paused", Some(song), 30_000, 200_000)),
-        NOW + 1,
-        &flags(true),
-    );
+    let paused =
+        ps.on_view_model(Some(&vm("paused", Some(song), 30_000, 200_000)), NOW + 1, &flags(true));
     assert_eq!(paused, Some(Update::Clear));
 }
 
@@ -225,11 +186,7 @@ fn hide_when_paused_clears() {
 fn reset_forces_repaint() {
     let mut ps = PresenceState::new();
     let song = track(1, "Song", Some("Artist"), Some("Album"), 200_000);
-    ps.on_view_model(
-        Some(&vm("playing", Some(song.clone()), 30_000, 200_000)),
-        NOW,
-        &flags(false),
-    );
+    ps.on_view_model(Some(&vm("playing", Some(song.clone()), 30_000, 200_000)), NOW, &flags(false));
 
     // Without a reset the identical view-model dedupes; after a reset it repaints
     // (the disabled→enabled edge the task uses).
@@ -241,11 +198,8 @@ fn reset_forces_repaint() {
     assert!(deduped.is_none());
 
     ps.reset();
-    let repainted = ps.on_view_model(
-        Some(&vm("playing", Some(song), 30_000, 200_000)),
-        NOW,
-        &flags(false),
-    );
+    let repainted =
+        ps.on_view_model(Some(&vm("playing", Some(song), 30_000, 200_000)), NOW, &flags(false));
     assert!(matches!(repainted, Some(Update::Set(_))));
 }
 

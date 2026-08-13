@@ -43,8 +43,8 @@ use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::ui::view_ctx::ViewCtx;
 use crate::{
-    AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow,
-    PlaylistRow as UiPlaylistRow, Playlists, TrackListRow as UiTrackListRow,
+    AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow,
+    Playlists, TrackListRow as UiTrackListRow,
 };
 
 use crate::ui::grid_prewarm::GRID_COVER_SIZE;
@@ -267,8 +267,7 @@ impl PlaylistsUi {
     /// Lazy cover lookup for a Playlists **grid card** — backs
     /// `Playlists.request-cover`. Resolves against the grid-tier cache.
     pub fn grid_cover(&self, artwork_path: &str) -> slint::Image {
-        self.grid_covers
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+        self.grid_covers.get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 
     /// Lookup of a playlist's canonical stats by id, against the cached
@@ -288,8 +287,7 @@ impl PlaylistsUi {
     /// track-list artwork column uses), so the dialog doesn't pay for
     /// a full-size grid-tier decode for a 64 px tile.
     pub fn row_cover(&self, artwork_path: &str) -> slint::Image {
-        self.cover_thumbs
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+        self.cover_thumbs.get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 }
 
@@ -304,12 +302,10 @@ fn install_models(ui: &AppWindow) {
     ui.global::<Playlists>().set_rows(ModelRc::from(flat));
 
     let tracks: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
-    ui.global::<PlaylistDetail>()
-        .set_tracks(ModelRc::from(tracks));
+    ui.global::<PlaylistDetail>().set_tracks(ModelRc::from(tracks));
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
-    ui.global::<PlaylistDetail>()
-        .set_selected_ids(ModelRc::from(sel));
+    ui.global::<PlaylistDetail>().set_selected_ids(ModelRc::from(sel));
 }
 
 /// Convert a `PlaylistStats` into the Slint `PlaylistRow` an `EntityCard`
@@ -322,10 +318,8 @@ pub fn to_slint_playlist_row(p: &PlaylistStats) -> UiPlaylistRow {
         description: SharedString::from(p.description.as_deref().unwrap_or("")),
         artwork_path: SharedString::from(p.thumbnail_path.as_deref().unwrap_or("")),
         track_count: p.track_count,
-        total_duration_ms: i32::try_from(
-            p.total_duration_ms.clamp(0, i64::from(i32::MAX)),
-        )
-        .unwrap_or(i32::MAX),
+        total_duration_ms: i32::try_from(p.total_duration_ms.clamp(0, i64::from(i32::MAX)))
+            .unwrap_or(i32::MAX),
         is_smart: p.is_smart,
     }
 }

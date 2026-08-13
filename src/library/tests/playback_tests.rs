@@ -53,11 +53,7 @@ fn play_tracks_clears_queue_and_starts_at_index() {
         let actions = play_track_inner(&mut state, track, None);
         assert_eq!(state.status, PlaybackStatus::Playing);
         assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(3));
-        assert!(
-            actions
-                .iter()
-                .any(|a| matches!(a, PlayerAction::PlayMedia { .. }))
-        );
+        assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
     }
 }
 
@@ -76,10 +72,7 @@ fn start_slot_follows_the_picked_track() {
 #[test]
 fn start_slot_survives_a_track_missing_from_the_fetch() {
     let ids = vec![1, 2, 3, 4, 5];
-    let summaries: Vec<_> = [1, 3, 4, 5]
-        .into_iter()
-        .map(|i| make_summary(i, 180_000))
-        .collect();
+    let summaries: Vec<_> = [1, 3, 4, 5].into_iter().map(|i| make_summary(i, 180_000)).collect();
 
     // The user clicked track 4, which the displayed list holds at index 3.
     // Track 2 vanished before the fetch, so slot 3 is now track 5 — taking
@@ -122,19 +115,12 @@ fn play_tracks_with_shuffle_on_anchors_the_clicked_track() {
     state.queue.clear();
     state.queue.add_tracks(summaries);
     state.queue.current_index = Some(5);
-    state
-        .queue
-        .shuffle_play_order_in_place(&mut rand::rng(), /* anchor_to_current */ true);
+    state.queue.shuffle_play_order_in_place(&mut rand::rng(), /* anchor_to_current */ true);
 
     assert_eq!(state.queue.current_index, Some(0));
     assert_eq!(state.queue.get_current().map(|t| t.id), Some(6));
 
-    let mut queued: Vec<i64> = state
-        .queue
-        .tracks_in_play_order()
-        .iter()
-        .map(|t| t.id)
-        .collect();
+    let mut queued: Vec<i64> = state.queue.tracks_in_play_order().iter().map(|t| t.id).collect();
     queued.sort_unstable();
     assert_eq!(queued, (1..=8).collect::<Vec<_>>());
 }
@@ -244,16 +230,8 @@ fn next_advances_queue() {
     let actions = state.build_next_actions();
 
     assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(2));
-    assert!(
-        actions
-            .iter()
-            .any(|a| matches!(a, PlayerAction::PlayMedia { .. }))
-    );
-    assert!(
-        !actions
-            .iter()
-            .any(|a| matches!(a, PlayerAction::UpdateSkipCount(_)))
-    );
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
+    assert!(!actions.iter().any(|a| matches!(a, PlayerAction::UpdateSkipCount(_))));
 }
 
 #[test]
@@ -265,11 +243,7 @@ fn next_tracks_skip_count_under_50pct() {
 
     let actions = state.build_next_actions();
 
-    assert!(
-        actions
-            .iter()
-            .any(|a| matches!(a, PlayerAction::UpdateSkipCount(1)))
-    );
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::UpdateSkipCount(1))));
 }
 
 #[test]
@@ -281,11 +255,7 @@ fn next_no_skip_count_over_50pct() {
 
     let actions = state.build_next_actions();
 
-    assert!(
-        !actions
-            .iter()
-            .any(|a| matches!(a, PlayerAction::UpdateSkipCount(_)))
-    );
+    assert!(!actions.iter().any(|a| matches!(a, PlayerAction::UpdateSkipCount(_))));
 }
 
 #[test]
@@ -314,9 +284,7 @@ fn next_while_paused_stays_paused_without_fading() {
     // fade here would ramp the incoming track down from full volume instead of
     // pausing it — its first quarter-second would be audible.
     assert!(
-        actions
-            .iter()
-            .any(|a| matches!(a, PlayerAction::Pause { fade_ms: 0 })),
+        actions.iter().any(|a| matches!(a, PlayerAction::Pause { fade_ms: 0 })),
         "next-while-paused must restore the pause without a fade, got {actions:?}"
     );
 }
@@ -362,10 +330,7 @@ fn set_volume_clamps_and_unmutes() {
 
     assert_eq!(state.volume, MAX_VOLUME);
     assert!(!state.is_muted);
-    assert_eq!(
-        actions,
-        vec![PlayerAction::SetVolume(state.effective_volume())]
-    );
+    assert_eq!(actions, vec![PlayerAction::SetVolume(state.effective_volume())]);
 }
 
 // --- mute ---
@@ -523,11 +488,7 @@ fn toggle_from_stopped_with_current_track_resumes() {
 
     let actions = toggle(&mut state);
     assert_eq!(state.status, PlaybackStatus::Playing);
-    assert!(
-        actions
-            .iter()
-            .any(|a| matches!(a, PlayerAction::PlayMedia { .. }))
-    );
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
 }
 
 #[test]

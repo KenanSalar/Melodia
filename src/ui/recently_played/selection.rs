@@ -31,9 +31,7 @@ pub fn handle_select_row(
         // already in the same order as the Slint `tracks` model).
         || {
             let rows = g.get_tracks();
-            (0..rows.row_count())
-                .filter_map(|i| rows.row_data(i).map(|r| r.id))
-                .collect()
+            (0..rows.row_count()).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect()
         },
         idx,
         id,

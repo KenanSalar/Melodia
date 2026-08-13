@@ -104,10 +104,7 @@ fn get_color_found() {
     window.insert("BackgroundNormal".to_owned(), "255,0,128".to_owned());
     sections.insert("Colors:Window".to_owned(), window);
 
-    assert_eq!(
-        get_color(&sections, "Colors:Window", "BackgroundNormal"),
-        Some((255, 0, 128))
-    );
+    assert_eq!(get_color(&sections, "Colors:Window", "BackgroundNormal"), Some((255, 0, 128)));
 }
 
 #[test]
@@ -163,7 +160,10 @@ fn build_sections(rows: &[(&str, &str, &str)]) -> HashMap<String, HashMap<String
 /// hex values byte-for-byte. Each blended slot below was hand-computed
 /// from the inputs and lands exactly on the Catppuccin target with no
 /// rounding drift.
-#[expect(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
+#[expect(
+    clippy::expect_used,
+    reason = "test fixture is fully populated; Some is invariant"
+)]
 #[test]
 fn kde_palette_matches_catppuccin_mocha_sapphire() {
     let sections = build_sections(&[
@@ -228,7 +228,10 @@ fn kde_palette_matches_catppuccin_mocha_sapphire() {
 /// A scheme that omits the status foregrounds has to land on Breeze's own
 /// defaults, not on a neutral — the macOS-style traffic lights, the success /
 /// warning toasts and the star rating all read `green` / `yellow`.
-#[expect(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
+#[expect(
+    clippy::expect_used,
+    reason = "test fixture is fully populated; Some is invariant"
+)]
 #[test]
 fn kde_palette_semantics_fall_back_to_breeze_defaults() {
     let sections = build_sections(&[
@@ -244,7 +247,10 @@ fn kde_palette_semantics_fall_back_to_breeze_defaults() {
     assert_eq!(p.yellow, "#f67400", "yellow ← Breeze ForegroundNeutral default");
 }
 
-#[expect(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
+#[expect(
+    clippy::expect_used,
+    reason = "test fixture is fully populated; Some is invariant"
+)]
 #[test]
 fn kde_palette_falls_back_when_button_section_missing() {
     // Same scheme minus [Colors:Button] — surface0 should fall back

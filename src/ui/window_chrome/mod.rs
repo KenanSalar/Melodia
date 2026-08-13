@@ -46,8 +46,7 @@ pub mod geometry;
 mod winit_filter;
 
 pub use drop_coalescer::{
-    is_playlist_detail_open, is_queue_sheet_open, set_current_playlist_id,
-    set_queue_sheet_open,
+    is_playlist_detail_open, is_queue_sheet_open, set_current_playlist_id, set_queue_sheet_open,
 };
 
 use std::path::PathBuf;

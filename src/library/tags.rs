@@ -53,10 +53,7 @@ pub struct TagEditReport {
 /// Sits here rather than being called straight off `queries::track` by the
 /// dialog's own wiring: the UI layer reaches the database through this module,
 /// and [`apply_tag_edit`] below is the write half of the same feature.
-pub async fn get_tag_edit_rows(
-    state: &AppState,
-    ids: &[i64],
-) -> Result<Vec<TagEditRow>, AppError> {
+pub async fn get_tag_edit_rows(state: &AppState, ids: &[i64]) -> Result<Vec<TagEditRow>, AppError> {
     queries::track::get_tag_edit_rows_by_ids(&state.db, ids).await
 }
 
@@ -104,9 +101,7 @@ pub async fn apply_tag_edit(
             crate::player::state::sync_track_summaries(&state.player_state, &state.sinks, &map);
         }
 
-        state
-            .library_changed_tx
-            .send_modify(|n| *n = n.wrapping_add(1));
+        state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
     }
 
     Ok(report)
@@ -164,19 +159,19 @@ pub(crate) async fn write_tag_edit(
         .map_err(|e| AppError::metadata_msg(format!("tag write task panicked: {e}")))??
     };
 
-    let updated_ids = match run_commit(db, &files, edit, cached_artwork.as_deref(), &mut report).await
-    {
-        Ok(ids) => ids,
-        Err(e) => {
-            // Only on the (rare) tx failure: unmark every path we marked before
-            // writing, so the watcher re-ingests instead of leaving the DB
-            // permanently stale. Built here, not on the happy path, to avoid N
-            // `PathBuf` allocations per successful commit.
-            let marked: Vec<PathBuf> = files.iter().map(|f| PathBuf::from(&f.path)).collect();
-            self_writes.unmark(&marked);
-            return Err(e);
-        }
-    };
+    let updated_ids =
+        match run_commit(db, &files, edit, cached_artwork.as_deref(), &mut report).await {
+            Ok(ids) => ids,
+            Err(e) => {
+                // Only on the (rare) tx failure: unmark every path we marked before
+                // writing, so the watcher re-ingests instead of leaving the DB
+                // permanently stale. Built here, not on the happy path, to avoid N
+                // `PathBuf` allocations per successful commit.
+                let marked: Vec<PathBuf> = files.iter().map(|f| PathBuf::from(&f.path)).collect();
+                self_writes.unmark(&marked);
+                return Err(e);
+            }
+        };
 
     report.updated = updated_ids.len();
     Ok((report, updated_ids))
@@ -242,10 +237,12 @@ fn run_write_pass(
                 // (the set keys on exact `PathBuf` equality).
                 self_writes.mark(p);
                 let outcome = match tag_writer::apply_to_file(p, edit, picture) {
-                    Ok(unsupported) => match extract_metadata(p, artwork_dir, cover_cache, skip_artwork) {
-                        Ok(meta) => Ok((meta, unsupported.0)),
-                        Err(e) => Err(e.to_string()),
-                    },
+                    Ok(unsupported) => {
+                        match extract_metadata(p, artwork_dir, cover_cache, skip_artwork) {
+                            Ok(meta) => Ok((meta, unsupported.0)),
+                            Err(e) => Err(e.to_string()),
+                        }
+                    }
                     Err(e) => Err(e.to_string()),
                 };
                 FileWrite {
@@ -257,10 +254,7 @@ fn run_write_pass(
             .collect::<Vec<FileWrite>>()
     };
 
-    match rayon::ThreadPoolBuilder::new()
-        .num_threads(TAG_WRITE_THREADS)
-        .build()
-    {
+    match rayon::ThreadPoolBuilder::new().num_threads(TAG_WRITE_THREADS).build() {
         Ok(pool) => pool.install(map_files),
         Err(e) => {
             // Extremely unlikely; fall back to the global pool rather than
@@ -330,11 +324,10 @@ async fn run_commit(
             *cached
         } else {
             let Some(resolved) =
-                queries::scan::resolve_track_context(&mut tx, path, &f.path, meta, "Tag edit").await?
+                queries::scan::resolve_track_context(&mut tx, path, &f.path, meta, "Tag edit")
+                    .await?
             else {
-                report
-                    .failures
-                    .push((f.path.clone(), "not in a library folder".to_owned()));
+                report.failures.push((f.path.clone(), "not in a library folder".to_owned()));
                 continue;
             };
             resolve_cache.insert(key, resolved);

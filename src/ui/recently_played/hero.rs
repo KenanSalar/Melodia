@@ -34,13 +34,10 @@ impl_mosaic_hero!(RecentlyPlayed, RecentlyPlayedUi);
 /// one every cover prewarm in the tree uses; only the `String` shape the
 /// Slint model wants is this function's own.
 pub fn mosaic_paths_from(rows: &[RsTrackListRow], n: usize) -> Vec<String> {
-    crate::ui::grid_prewarm::unique_artwork_paths(
-        rows.iter().map(|r| r.artwork_path.as_deref()),
-        n,
-    )
-    .into_iter()
-    .map(|p| p.to_string_lossy().into_owned())
-    .collect()
+    crate::ui::grid_prewarm::unique_artwork_paths(rows.iter().map(|r| r.artwork_path.as_deref()), n)
+        .into_iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
 }
 
 /// Push the hero count + mosaic-path list into the Slint global, and the band's

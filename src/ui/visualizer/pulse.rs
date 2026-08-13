@@ -77,7 +77,5 @@ pub(super) fn install(ui: &AppWindow) {
 /// there is nothing to infer from and the caller should assume the window is
 /// being painted.
 pub(super) fn frames() -> Option<u64> {
-    COUNTING
-        .load(Ordering::Relaxed)
-        .then(|| FRAMES.load(Ordering::Relaxed))
+    COUNTING.load(Ordering::Relaxed).then(|| FRAMES.load(Ordering::Relaxed))
 }

@@ -39,9 +39,10 @@ const NOW_PLAYING: &str = include_str!("../../../melodia-ui/ui/views/now-playing
 /// isn't true.
 #[test]
 fn both_backdrop_floors_ease_with_the_layers_above_them() {
-    for (file, source) in
-        [("hero-blur-backdrop.slint", HERO_BLUR), ("now-playing-view.slint", NOW_PLAYING)]
-    {
+    for (file, source) in [
+        ("hero-blur-backdrop.slint", HERO_BLUR),
+        ("now-playing-view.slint", NOW_PLAYING),
+    ] {
         // Anchored on the gradient and then on the end of its own statement, rather than
         // on the line under `background:` — the shared floor swaps its stops for a
         // transparent pair while its host paints no hero, so that binding now spans three

@@ -106,10 +106,7 @@ pub fn handle_select_row<V: DetailSelectionView>(
             let last = i32::try_from(tracks.len() - 1).unwrap_or(i32::MAX);
             let lo = usize::try_from(cur_anchor.min(idx).clamp(0, last)).unwrap_or(0);
             let hi = usize::try_from(cur_anchor.max(idx).clamp(0, last)).unwrap_or(0);
-            let range: Vec<i32> = tracks[lo..=hi]
-                .iter()
-                .map(|t| clamp_i64_to_i32(t.id))
-                .collect();
+            let range: Vec<i32> = tracks[lo..=hi].iter().map(|t| clamp_i64_to_i32(t.id)).collect();
             (range, cur_anchor)
         }
     } else if ctrl {
@@ -159,13 +156,8 @@ pub fn apply_selection_to_rows<V: DetailSelectionView>(view: &V, refs: &Selectio
     let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
         return;
     };
-    let index_of: HashMap<i32, usize> = refs
-        .tracks
-        .lock()
-        .iter()
-        .enumerate()
-        .map(|(i, t)| (clamp_i64_to_i32(t.id), i))
-        .collect();
+    let index_of: HashMap<i32, usize> =
+        refs.tracks.lock().iter().enumerate().map(|(i, t)| (clamp_i64_to_i32(t.id), i)).collect();
 
     for id in flipped {
         let Some(&i) = index_of.get(&id) else {
