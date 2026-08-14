@@ -95,8 +95,20 @@ The other way paths arrive from outside, and the one that can arrive before ther
   winit `focus_window`, a documented no-op on Wayland). Raised either way — an empty forward is
   someone launching Melodia to get at the window.
 
+- **"The name is taken" has two spellings and `interprocess` normalises neither.** Unix `bind`
+  says `EADDRINUSE`; a Windows named pipe is created under `FILE_FLAG_FIRST_PIPE_INSTANCE`, whose
+  second instance fails `ERROR_ACCESS_DENIED` — `PermissionDenied`, nowhere near `AddrInUse`.
+  Matching only the first left *every* Windows relaunch `Claim::Unenforced`: a second window and a
+  second writer over one database, on the platform the MSI registers associations for.
+  `name_is_taken` is the single place that decides, and no Linux runner can see the half that
+  bit — `a_taken_name_is_recognised_in_both_spellings` pins it as an assertion rather than an
+  observation. A genuine ACL denial takes the same arm and fails at the connect, landing back on
+  `Unenforced`, which is where it belonged anyway.
+
 - **The accept loop is a detached `std::thread`, not `spawn_blocking`**, as `discord/ipc.rs` runs
-  its transport: a parked blocking-pool tenant is what the 32-slot cap exists to prevent.
+  its transport: a parked blocking-pool tenant is what the 32-slot cap exists to prevent. Its
+  read-failure arm still calls `on_launch` with no paths: the connection is proof of a launch, and
+  a selection past `MAX_PAYLOAD_LEN` should cost the user their file list, not their window.
 
 - **The frame declares its length, and that is not decoration.** Reading to EOF instead means the
   receiver waits on the sender's close while the sender waits to know the payload landed — **both

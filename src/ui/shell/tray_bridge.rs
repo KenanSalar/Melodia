@@ -176,14 +176,6 @@ fn show_window(ui: &AppWindow) {
     set_window_visible(ui, true);
 }
 
-/// Re-assert `size` + `position` on the window from a 16 ms single-shot timer,
-/// rescheduling itself until the window's size matches (or `tries` is
-/// exhausted). The winit window is recreated asynchronously after `show()`, so
-/// the geometry has to be re-applied once it settles — and from a timer,
-/// between frames, so the renderer stays in sync (a resize inside event
-/// dispatch stretches the UI). Position is re-applied alongside size on every
-/// tick; it is idempotent, and only the size has the layout-snap race that
-/// drives the "settled" check.
 /// Bring the window to the user, whatever put it out of reach.
 ///
 /// Hidden — tray or minimize — goes through [`show_window`], the only path that
@@ -200,6 +192,14 @@ pub fn raise_window(ui: &AppWindow) {
     ui.window().with_winit_window(WinitWindow::focus_window);
 }
 
+/// Re-assert `size` + `position` on the window from a 16 ms single-shot timer,
+/// rescheduling itself until the window's size matches (or `tries` is
+/// exhausted). The winit window is recreated asynchronously after `show()`, so
+/// the geometry has to be re-applied once it settles — and from a timer,
+/// between frames, so the renderer stays in sync (a resize inside event
+/// dispatch stretches the UI). Position is re-applied alongside size on every
+/// tick; it is idempotent, and only the size has the layout-snap race that
+/// drives the "settled" check.
 fn reschedule_geometry_restore(
     weak: slint::Weak<AppWindow>,
     size: slint::PhysicalSize,

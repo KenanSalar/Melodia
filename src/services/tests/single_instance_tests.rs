@@ -5,8 +5,8 @@ use std::time::Duration;
 use tempfile::tempdir;
 
 use super::{
-    Claim, LENGTH_PREFIX_LEN, MAX_PAYLOAD_LEN, claim, decode_paths, encode_frame, serve,
-    socket_name,
+    Claim, LENGTH_PREFIX_LEN, MAX_PAYLOAD_LEN, claim, decode_paths, encode_frame, name_is_taken,
+    serve, socket_name,
 };
 use crate::test_support::reading_env;
 
@@ -80,6 +80,20 @@ fn the_payload_cap_leaves_room_for_a_realistic_selection() {
         .collect();
 
     assert!(u64::from(split_frame(&encode_frame(&files)).0) < MAX_PAYLOAD_LEN);
+}
+
+/// The socket test below only ever exercises the Unix answer, and the platform
+/// with the other one has no runner — so the two spellings are pinned here
+/// rather than left to the one that can be observed.
+#[test]
+fn a_taken_name_is_recognised_in_both_spellings() {
+    assert!(name_is_taken(&std::io::Error::from(std::io::ErrorKind::AddrInUse)));
+    assert_eq!(
+        name_is_taken(&std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
+        cfg!(windows),
+        "a second named-pipe instance is `ERROR_ACCESS_DENIED`, and nothing else is"
+    );
+    assert!(!name_is_taken(&std::io::Error::from(std::io::ErrorKind::NotFound)));
 }
 
 /// Keyed on the data directory, that being what two Melodias would corrupt.

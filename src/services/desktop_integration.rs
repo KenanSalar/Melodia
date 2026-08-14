@@ -164,9 +164,9 @@ fn is_dev_build() -> bool {
         .is_some_and(|p| p.file_name().is_some_and(|n| n == "target"))
 }
 
-/// Substitute `@EXEC@` in the template with the binary's absolute path. A
-/// literal substring, not a regex, so nothing needs escaping; `Path::display()`
-/// keeps UTF-8 paths verbatim, which is the case on every distro targeted.
+/// Substitute `@EXEC@` in the template with the binary's absolute path, quoted
+/// for `Exec=` where [`quote_exec`] says it must be. `Path::display()` keeps
+/// UTF-8 paths verbatim, which is the case on every distro targeted.
 pub(crate) fn render_desktop(template: &str, exec: &Path) -> String {
     template.replace("@EXEC@", &quote_exec(&exec.display().to_string()))
 }
@@ -190,10 +190,18 @@ fn quote_exec(command: &str) -> String {
     let mut quoted = String::with_capacity(command.len() + 2);
     quoted.push('"');
     for ch in command.chars() {
-        if matches!(ch, '"' | '\\' | '$' | '`') {
-            quoted.push('\\');
+        match ch {
+            // Two layers unescape this value — the desktop-entry `string` type
+            // (`\\` → `\`) runs before the shell-like quoting — so a literal
+            // backslash owes an escape to each and lands as four in the file.
+            // The spec spells that out; nothing else here needs the second one.
+            '\\' => quoted.push_str(r"\\\\"),
+            '"' | '$' | '`' => {
+                quoted.push('\\');
+                quoted.push(ch);
+            }
+            _ => quoted.push(ch),
         }
-        quoted.push(ch);
     }
     quoted.push('"');
     quoted

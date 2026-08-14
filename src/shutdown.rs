@@ -163,7 +163,7 @@ pub fn respawn_if_requested() {
         use std::os::unix::process::CommandExt;
         // `exec` only returns on failure — successful invocation
         // replaces this process in place and never resumes here.
-        let err = std::process::Command::new(&exe).env(RESPAWN_ENV, "1").exec();
+        let err = std::process::Command::new(&exe).exec();
         log::warn!(
             "respawn exec failed for {}: {err}; falling back to detached spawn",
             exe.display()
@@ -182,8 +182,9 @@ pub fn respawn_if_requested() {
 fn spawn_detached(exe: &std::path::Path) -> std::io::Result<std::process::Child> {
     let mut cmd = std::process::Command::new(exe);
     // Marks the child a restart, so it waits for the single-instance name
-    // rather than forwarding to a parent that is about to exit. Both are alive
-    // at once on this path, unlike the `exec` above.
+    // rather than forwarding to a parent that is about to exit — both being
+    // alive at once is what separates this path from the `exec` above, which
+    // frees the name at the image replace and so is deliberately left unmarked.
     cmd.env(RESPAWN_ENV, "1");
     cmd.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

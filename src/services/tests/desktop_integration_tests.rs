@@ -61,6 +61,19 @@ fn render_desktop_leaves_an_ordinary_path_unquoted() {
     assert!(!rendered.contains('"'), "no quoting was called for; got:\n{rendered}");
 }
 
+/// The odd-looking count, pinned so it can't be "simplified" back to two: the
+/// desktop-entry `string` unescape halves it before the shell-like quoting sees
+/// it, so each layer needs its own.
+#[test]
+fn render_desktop_escapes_a_backslash_for_both_unescaping_layers() {
+    let exec = PathBuf::from(r"/home/od\d/Melodia");
+    let rendered = render_desktop(TEST_DESKTOP_TEMPLATE, &exec);
+    assert!(
+        rendered.contains(r#"Exec="/home/od\\\\d/Melodia" %F"#),
+        "a literal backslash must survive both layers as four; got:\n{rendered}"
+    );
+}
+
 #[test]
 fn write_if_changed_writes_when_missing() -> TestResult {
     let dir = tempdir()?;
@@ -256,24 +269,27 @@ fn all_desktop_sources_agree_on_mime_and_wmclass() {
         // The MIME block makes Melodia offerable; the field code is what makes
         // it work — without one the spec passes no filenames, so the app opens
         // and plays nothing. `%F` over `%U` (no `file://` to percent-decode) and
-        // over `%f` (one process per selected file). A missing line defaults to
-        // `""` and fails the same assertion, which wants the same message.
-        let exec = exec_line(body).unwrap_or_default();
-        assert!(
-            exec.ends_with(" %F"),
-            "{name}'s Exec line is `{exec}`, which carries no `%F` — the desktop environment \
-             hands it no paths and the MimeType list above is decorative"
-        );
+        // over `%f` (one process per selected file).
+        let mut execs = exec_lines(body).peekable();
+        assert!(execs.peek().is_some(), "{name} declares no `Exec=` at all");
+        for exec in execs {
+            assert!(
+                exec.ends_with(" %F"),
+                "{name}'s Exec line is `{exec}`, which carries no `%F` — the desktop environment \
+                 hands it no paths and the MimeType list above is decorative"
+            );
+        }
     }
 }
 
-/// The `Exec=` line of a desktop-entry body, wherever it sits.
+/// Every `Exec=` line of a desktop-entry body, wherever they sit.
 ///
-/// Two of the four sources are whole shell scripts, where a `contains` can be
-/// satisfied by a comment about the line — the hole `strip_xml_comments` closes
-/// for the MSI.
-fn exec_line(body: &str) -> Option<&str> {
-    body.lines().find(|line| line.starts_with("Exec="))
+/// Extracted rather than `contains`d because two of the four sources are whole
+/// shell scripts, where a comment about the line reads exactly like the line —
+/// the hole `strip_xml_comments` closes for the MSI. All of them rather than the
+/// first, because a second heredoc is what a fixed index walks past.
+fn exec_lines(body: &str) -> impl Iterator<Item = &str> {
+    body.lines().filter(|line| line.starts_with("Exec="))
 }
 
 /// The fifth source is a rewriter, not a body, so the guard above can't see it:

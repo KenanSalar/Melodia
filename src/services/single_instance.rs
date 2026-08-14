@@ -37,12 +37,14 @@ const IO_TIMEOUT: Duration = Duration::from_secs(2);
 /// give up rather than spin.
 const MAX_CONSECUTIVE_ACCEPT_FAILURES: u32 = 16;
 
-/// Set on the child of every restart, which then waits for the name instead of
-/// forwarding to it.
+/// Set on the child of a *detached* restart, which then waits for the name
+/// instead of forwarding to it: `shutdown::spawn_detached` leaves parent and
+/// child alive together, and a child that forwarded and exited there would go
+/// down with the parent behind it.
 ///
-/// `Command::exec` frees the name itself (CLOEXEC on the image replace), but
-/// `shutdown::spawn_detached` leaves parent and child alive together — a child
-/// that forwarded and exited there would go down with the parent behind it.
+/// Not set on the `exec` arm, which needs no wait — CLOEXEC frees the name at
+/// the image replace — and where it would outlive its purpose, inherited by
+/// every process the restarted Melodia goes on to spawn.
 pub const RESPAWN_ENV: &str = "MELODIA_RESPAWN";
 
 /// Generous against a slow shutdown, short enough not to read as a hang.
@@ -88,7 +90,7 @@ pub fn claim(data_dir: &Path, files: &[PathBuf]) -> Claim {
     loop {
         let taken = match ListenerOptions::new().name(name.borrow()).create_sync() {
             Ok(listener) => return Claim::Primary(listener),
-            Err(e) if e.kind() == io::ErrorKind::AddrInUse => e,
+            Err(e) if name_is_taken(&e) => e,
             Err(e) => return Claim::Unenforced(e),
         };
 
@@ -103,6 +105,23 @@ pub fn claim(data_dir: &Path, files: &[PathBuf]) -> Claim {
         }
         std::thread::sleep(RESPAWN_POLL);
     }
+}
+
+/// Whether a bind failed because another Melodia already holds the name.
+///
+/// Two spellings, because `interprocess` hands both back as it found them. Unix
+/// `bind` says `EADDRINUSE`; a Windows named pipe is created under
+/// `FILE_FLAG_FIRST_PIPE_INSTANCE`, whose second instance fails with
+/// `ERROR_ACCESS_DENIED` — `PermissionDenied` to std, and nowhere near
+/// `AddrInUse`. Reading only the first left *every* Windows launch
+/// [`Claim::Unenforced`], on the one platform the MSI registers file
+/// associations for, and no Linux runner can see it.
+///
+/// A real ACL denial takes the same arm and fails at the connect instead,
+/// landing back on `Unenforced` — the graceful outcome either way.
+fn name_is_taken(e: &io::Error) -> bool {
+    e.kind() == io::ErrorKind::AddrInUse
+        || (cfg!(windows) && e.kind() == io::ErrorKind::PermissionDenied)
 }
 
 /// Accept forwarded launches for the rest of the process's life. `on_launch`
@@ -142,7 +161,14 @@ fn accept_loop(listener: &Listener, on_launch: impl Fn(Vec<String>)) {
 
         match read_payload(stream) {
             Ok(paths) => on_launch(paths),
-            Err(e) => log::warn!("single_instance: forwarded launch unreadable: {e}"),
+            Err(e) => {
+                // The connection is itself proof of a launch, so raise anyway:
+                // a selection past `MAX_PAYLOAD_LEN` or a peer that stalled past
+                // `IO_TIMEOUT` should still land the user in a window rather
+                // than in nothing at all.
+                log::warn!("single_instance: forwarded launch unreadable: {e}");
+                on_launch(Vec::new());
+            }
         }
     }
 }

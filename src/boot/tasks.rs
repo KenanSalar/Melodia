@@ -1,4 +1,5 @@
-//! Background-task spawning + queue restore + resume-on-startup.
+//! Background-task spawning, queue restore, and what the two ways of starting
+//! resolve to: resume-on-startup, or the files this launch was handed.
 
 use std::sync::Arc;
 

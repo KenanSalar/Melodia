@@ -32,9 +32,10 @@ fn main() -> AppResult<()> {
     // `--version` is the updater's post-swap smoke test
     // (`updater::install::verify_swapped_binary`), which spawns the freshly
     // renamed binary to confirm it boots before offering Restart. It asserts
-    // exit 0 *and* non-empty stdout within 3 s, so this must print something and
-    // return promptly — and must **stay here forever**: removing it breaks
-    // in-place updates for every older client that smoke-tests against it.
+    // exit 0 within 5 s and stdout starting `Melodia ` and carrying the expected
+    // version, so this must print exactly that and return promptly — and must
+    // **stay here forever**: removing it, or the prefix, breaks in-place updates
+    // for every older client that smoke-tests against it.
     //
     // Ahead of `mallopt`, which only shapes steady-state RSS of a long-lived
     // process and would cost the verifier latency for nothing.
@@ -43,7 +44,7 @@ fn main() -> AppResult<()> {
         // Locked handle to dodge `clippy::print_stdout`, which guards against
         // accidental GUI-app stdout; this is a deliberate CLI contract. A write
         // failure is swallowed because the binary still *works* — and the
-        // verifier's empty-stdout check reports it as a failure anyway.
+        // verifier's prefix check fails on the empty stdout regardless.
         let _ = writeln!(std::io::stdout().lock(), "Melodia {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
