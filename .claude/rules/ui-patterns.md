@@ -505,11 +505,12 @@ silently miss the other.
     `boot::ui_setup` before `app.show()` and handed back by the first mount that settles — so the
     window opens on its content and every later navigation still slides. Three things about the
     shape, each the obvious alternative: it is a **live read inside `settled`**, not an `init`
-    capture, because the branch for the declared nav index is created inside `AppWindow::new()`,
-    before Rust has read `settings.json`; the hand-back sits **one statement after `shown` flips**,
-    a clear landing on a frame where `shown` is still false fading the settled page straight back
-    out, which is why it can't be Rust's; and it is gated on **`enabled`**, since a nested body
-    mounted at boot runs the same `Timer` and would otherwise drop the flag for the page above it.
+    capture, `init` running after the bindings resolve — captured, `opacity` settles on its
+    unsuppressed `0.0` and then animates up to the suppressed value, which is the entrance the
+    setting exists to skip; the hand-back sits **one statement after `shown` flips**, a clear
+    landing on a frame where `shown` is still false fading the settled page straight back out,
+    which is why it can't be Rust's; and it is gated on **`enabled`**, since a nested body mounted
+    at boot runs the same `Timer` and would otherwise drop the flag for the page above it.
     Pinned by `ui::startup_motion_tests`.
   - **A page with sub-views nests a second one and must disarm it at mount**, the page's own enter
     still playing when the first tab body mounts and a horizontal slide composed with a fade-up
@@ -576,15 +577,17 @@ silently miss the other.
     self-corrects**, while a section seeded `true` against a `false` baseline **stays wrongly
     active all session** — not a cosmetic stale tier, `install_library_changed_refresher` then
     taking its ungated arm and re-fetching the whole library per song.
-  - **That same 0×0 pass is a size reading to `MiniPlayerSwitch` itself, and it may only be one
-    once.** `active` has to keep answering `true` there — the baseline above is built on it — so
-    the first real layout arrives at `changed watched-active` looking exactly like a swap out of
-    miniplayer mode, and ran the shell's 100 ms fade-out → swap → fade-in on every launch with
-    nothing mounted to fade *to*. The guard is a `seeded` latch on the swap rather than anything
-    on the predicate: the handler and the seed `Timer` both set it, whichever reaches the boot
-    reading first adopts it into `render-active` silently, and the other is a value-compared
-    no-op — so it doesn't depend on which of the two the event loop runs first. Pinned by
-    `ui::startup_motion_tests`.
+  - **That same 0×0 pass is a size reading to `MiniPlayerSwitch` itself.** `active` has to keep
+    answering `true` there — the baseline above is built on it — so the first real layout arrives
+    at `changed watched-active` looking exactly like a swap out of miniplayer mode, and ran the
+    shell's 100 ms fade-out → swap → fade-in on every launch with nothing mounted to fade *to*.
+    The guard is **`render-active != watched-active` on the swap**, not a latch and not anything
+    on the predicate: `update_timers_and_animations` runs `maybe_activate_timers` *before*
+    `run_change_handlers`, and the geometry restore lands before `app.show()`, so on the loop's
+    first pump the seed `Timer` has already settled `render-active` by the time this handler
+    fires — any latch either of them sets, this handler finds closed. Asking whether the mounted
+    branch has to change is the same question the fade exists to answer, and it holds either way
+    round. Pinned by `ui::startup_motion_tests`.
 
 - **Nav state persistence keyed by view-id**, all in `views.json`. Sidebar nav does **not** reset
   detail ids; only the back button does. Adding a detail = a `view_id::*` const + open/close

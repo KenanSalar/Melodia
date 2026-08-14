@@ -5,8 +5,8 @@
 //! "Skip Startup Animation" turns off; `MiniPlayerSwitch` used to fade the *whole shell*
 //! out and back, having read the construction-time 0×0 window as miniplayer size and the
 //! first real layout as a swap out of it. They are pinned together because they were one
-//! symptom — an empty window for the better part of a second — and a later edit that
-//! restores either half puts that symptom back on its own.
+//! symptom — a window that spends its first moments dark — and a later edit that restores
+//! either half puts that symptom back on its own.
 
 use crate::test_support::strip_line_comments;
 
@@ -39,13 +39,14 @@ fn following(lines: &[String], from: usize, n: usize) -> Vec<&str> {
 
 /// The launch mount reads the suppression and hands it back once it has settled.
 ///
-/// Both halves are load-bearing and a later edit would separate them. Reading it in
-/// `settled` rather than capturing it at `init` is what makes the flag reach a branch
-/// created inside `AppWindow::new()`, before Rust has read `settings.json`. Clearing it
-/// one statement *after* `shown` is what stops the clear fading the settled page back
-/// out. And the `enabled` gate is what keeps a nested body that never animates — My
-/// Library's tab bodies mount at boot with `enabled: false` — from dropping the flag for
-/// the page above it.
+/// Both halves are load-bearing and a later edit would separate them. It has to be read in
+/// `settled` rather than captured at `init`, `init` running after the bindings resolve — a
+/// capture would let `opacity` evaluate its unsuppressed `0.0` first and then animate up to
+/// the suppressed value, which is the entrance the setting exists to skip. Clearing it one
+/// statement *after* `shown` is what stops the clear fading the settled page back out. And
+/// the `enabled` gate is what keeps a nested body that never animates — My Library's tab
+/// bodies mount at boot with `enabled: false` — from dropping the flag for the page above
+/// it.
 #[test]
 fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
     let lines = code_lines(VIEW_TRANSITION);
@@ -58,8 +59,8 @@ fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
     assert!(
         settled.contains("Nav.suppress-enter-animation"),
         "`settled` no longer reads the suppression: {settled}\n\
-         Captured at `init` instead, it would miss the mount created inside \
-         `AppWindow::new()`, which is the launch mount on every restored nav index of 3."
+         Captured at `init` instead, `opacity` settles on its unsuppressed 0.0 first and \
+         animates up from there — the entrance the setting exists to skip."
     );
 
     let shown = index_of(&lines, "root.shown = true;");
@@ -77,37 +78,24 @@ fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
     );
 }
 
-/// The first settle of the window's size is adopted, not faded through.
+/// The swap fade runs only when the mounted branch actually has to change.
 ///
 /// `active` reads `true` at construction because the host has no size yet, and it has to
-/// keep doing so — `SectionActiveGate` baselines on that pass. So the guard belongs on
-/// the swap, and both the handler and the seed timer have to set it: whichever reaches
-/// the boot reading first is the one that adopts it, and the other is then a no-op.
+/// keep doing so — `SectionActiveGate` baselines on that pass — so the first real layout
+/// reaches the handler looking exactly like a swap out of miniplayer mode. The guard
+/// therefore belongs on the *swap*, and it has to ask about `render-active` rather than
+/// about who got there first: the seed timer and this handler both run on the loop's first
+/// pump, timers ahead of change handlers, so any latch either of them sets is a latch this
+/// handler always finds already closed.
 #[test]
-fn the_first_settle_is_adopted_rather_than_faded() {
+fn the_swap_fade_is_gated_on_the_branch_actually_changing() {
     let lines = code_lines(MINI_SWITCH);
 
-    let guard = index_of(&lines, "if (root.seeded) {");
+    let guard = index_of(&lines, "if (root.render-active != root.watched-active) {");
     assert_eq!(
         following(&lines, guard + 1, 2),
         ["root.fade-opacity = 0.0;", "swap-timer.running = true;"],
         "the swap fade escaped its guard — ungated it plays on the first real layout of \
-         every launch, with no outgoing branch to fade out"
-    );
-    assert_eq!(
-        following(&lines, guard + 4, 2),
-        [
-            "root.seeded = true;",
-            "root.render-active = root.watched-active;"
-        ],
-        "the adopt arm is gone, so the boot reading is never taken and `render-active` \
-         waits on the seed timer instead"
-    );
-
-    let seed = index_of(&lines, "seed-timer := Timer {");
-    assert!(
-        following(&lines, seed, 10).contains(&"root.seeded = true;"),
-        "the seed timer stopped marking the reading as taken — a settle that lands after \
-         it then reads as a swap and fades the shell"
+         every launch, fading the whole shell out and back with nothing to cross to"
     );
 }
