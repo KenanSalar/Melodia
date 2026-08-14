@@ -60,6 +60,7 @@ jobs:
               - '**'
               - '!**/*.md'
               - '!.claude/**'
+              - '!.github/workflows/close-linked-issues.yml'
               - '!.github/workflows/deploy-coverage.yml'
               - '!.github/workflows/enforce-pr-source.yml'
               - '!.github/workflows/refresh-manifest.yml'

@@ -1,0 +1,66 @@
+name: Close Linked Issues
+
+# GitHub honours `Fixes #N` only on PRs into the *default* branch, so work that
+# lands in `dev` leaves its issue open until the release PR. This closes it at
+# the merge that actually finished it.
+#
+# The board move is not done here: the project's built-in "Item closed" workflow
+# sets Status to Done. That runs server-side, so GITHUB_TOKEN closing the issue
+# still trips it — no PAT, and no project scope this token cannot be granted.
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - dev
+
+jobs:
+  close-linked-issues:
+    if: github.event.pull_request.merged
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Close issues linked to the merged PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # `closingIssuesReferences` is populated by the Development sidebar as
+          # well as by keywords, and by both regardless of base branch — it is
+          # only the auto-close that the default-branch rule gates.
+          issues=$(gh api graphql \
+            -f query='
+              query($owner: String!, $repo: String!, $pr: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $pr) {
+                    closingIssuesReferences(first: 50) {
+                      nodes { number state repository { nameWithOwner } }
+                    }
+                  }
+                }
+              }' \
+            -f owner="${GITHUB_REPOSITORY_OWNER}" \
+            -f repo="${GITHUB_REPOSITORY#*/}" \
+            -F pr="${PR_NUMBER}" \
+            --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[]
+                  | select(.state == "OPEN" and .repository.nameWithOwner == $ENV.GITHUB_REPOSITORY)
+                  | .number')
+
+          if [ -z "$issues" ]; then
+            echo "::notice::No open linked issues on #${PR_NUMBER}"
+            exit 0
+          fi
+
+          # Not `--reason not planned`: a merge is the work landing.
+          while read -r number; do
+            echo "Closing #${number}"
+            gh issue close "$number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --reason completed \
+              --comment "Closed by #${PR_NUMBER}, merged into \`dev\`."
+          done <<< "$issues"
