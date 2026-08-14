@@ -18,9 +18,14 @@ export component SettingRow inherits Rectangle {
     // whole card. The large default is a sentinel for "unbounded".
     in property <length> description-max-width: 100000px;
 
+    // Folded into each brush rather than spent on the root's `opacity`: a row stays
+    // disabled for as long as the setting it depends on is off, and an opacity layer
+    // is sized to child geometry, so it would crop glyph ink outside the line box for
+    // that whole time. Only the control has no brush to reach, being `@children`.
+    property <float> dim: root.disabled ? Theme.dim-disabled : 0.0;
+    animate dim { duration: Theme.dur-fast; easing: ease-in-out; }
+
     background: transparent;
-    opacity: root.disabled ? 0.4 : 1.0;
-    animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
 
     HorizontalLayout {
         padding: Theme.pad-lg;
@@ -34,6 +39,7 @@ export component SettingRow inherits Rectangle {
                 name: root.icon;
                 icon-size: SettingsPage.row-icon-w;
                 icon-color: Theme.text;
+                fade: 1.0 - root.dim;
             }
         }
 
@@ -49,23 +55,25 @@ export component SettingRow inherits Rectangle {
             // the minimum is the longest single word.
             Text {
                 text: root.label;
-                color: Theme.text;
+                color: Theme.text.transparentize(root.dim);
                 font-size: Theme.font-size-md;
                 wrap: word-wrap;
             }
             if root.description != "": Text {
                 text: root.description;
-                color: Theme.subtext0;
+                color: Theme.text-muted.transparentize(root.dim);
                 font-size: Theme.font-size-sm;
                 wrap: word-wrap;
                 max-width: root.description-max-width;
             }
         }
 
-        // The consumer's element sizes itself; this only centres it.
+        // The consumer's element sizes itself; this only centres it — and carries the
+        // disabled dim, having no brush of ours to fold it into.
         VerticalLayout {
             alignment: center;
             spacing: Theme.pad-sm;
+            opacity: 1.0 - root.dim;
             @children
         }
     }

@@ -11,9 +11,12 @@ export component SettingRowStacked inherits Rectangle {
     in property <string> description;
     in property <bool>   disabled: false;
 
+    // `setting-row.slint`'s split, for its reason: the copy dims through its brushes so
+    // no layer crops the glyphs, and only the `@children` strip spends `opacity`.
+    property <float> dim: root.disabled ? Theme.dim-disabled : 0.0;
+    animate dim { duration: Theme.dur-fast; easing: ease-in-out; }
+
     background: transparent;
-    opacity: root.disabled ? 0.4 : 1.0;
-    animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
 
     HorizontalLayout {
         padding: Theme.pad-lg;
@@ -33,6 +36,7 @@ export component SettingRowStacked inherits Rectangle {
                 name: root.icon;
                 icon-size: SettingsPage.row-icon-w;
                 icon-color: Theme.text;
+                fade: 1.0 - root.dim;
             }
         }
 
@@ -44,13 +48,13 @@ export component SettingRowStacked inherits Rectangle {
             // minimum is its full width, which no narrowing can negotiate.
             Text {
                 text: root.label;
-                color: Theme.text;
+                color: Theme.text.transparentize(root.dim);
                 font-size: Theme.font-size-md;
                 wrap: word-wrap;
             }
             if root.description != "": Text {
                 text: root.description;
-                color: Theme.subtext0;
+                color: Theme.text-muted.transparentize(root.dim);
                 font-size: Theme.font-size-sm;
                 wrap: word-wrap;
             }
@@ -62,6 +66,7 @@ export component SettingRowStacked inherits Rectangle {
                 VerticalLayout {
                     padding-top: Theme.pad-sm;
                     spacing: Theme.pad-sm;
+                    opacity: 1.0 - root.dim;
                     @children
                 }
             }

@@ -27,6 +27,18 @@ export global Theme {
     in-out property <brush> subtext1: #bac2de;
     in-out property <brush> border: #313244;
 
+    // `text` stepped back, for a settings row's description under its label. `subtext0`
+    // is a palette slot of its own and reads as a second colour beside the label, where
+    // a multiplied alpha keeps the hue and only drops the weight — and drops it toward
+    // whatever is behind, so it dims on a dark theme and lightens on a light one.
+    out property <brush> text-muted: root.text.transparentize(0.2);
+
+    // How far a disabled settings row steps its copy and its control back — an alpha to
+    // multiply in, so the two rows state it once. Far enough to read as unavailable and
+    // no further: the description under a greyed-out label is where the row says *why*
+    // it is off, and it starts from `text-muted`, so the two dims compound.
+    out property <float> dim-disabled: 0.4;
+
     // Accent (default mauve) + colour on accent
     in-out property <brush> accent: #cba6f7;
     in-out property <brush> accent-text: #1e1e2e;
