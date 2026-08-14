@@ -77,7 +77,8 @@ export global CompositeScroll {
     // event delta then bumps the tick; the mounted `CompositeScrollbars` mirrors it,
     // applies one step and zeroes `wheel-dy`. Accumulating rather than overwriting
     // survives Slint coalescing several events into one `changed` firing, so no delta
-    // is dropped on a fast flick.
+    // is dropped on a fast flick. Nothing paints either, so the filter also has to
+    // request the frame that firing runs on.
     in-out property <length> wheel-dy: 0px;
     in-out property <int> wheel-tick: 0;
 

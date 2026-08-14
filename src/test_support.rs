@@ -272,6 +272,35 @@ pub(crate) fn strip_line_comments(src: &str) -> String {
     out
 }
 
+/// The body of the block whose `{` sits at `open`, braces excluded.
+///
+/// Quote-aware, and pair it with [`strip_line_comments`] — an unbalanced `{` throws the
+/// count whether it sits in a string or in prose. Shared because a `.slint` element body
+/// and a Rust match arm are the same question, and a pin that greps flat instead lets a
+/// nested block answer for its parent.
+pub(crate) fn block_body(src: &str, open: usize) -> Option<&str> {
+    let bytes = src.as_bytes();
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut i = open;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' if in_string => i += 1,
+            b'"' => in_string = !in_string,
+            b'{' if !in_string => depth += 1,
+            b'}' if !in_string => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&src[open + 1..i]);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
 /// Runs of whitespace collapsed to one space, so a pin reads a token sequence rather
 /// than one file's indentation.
 ///

@@ -96,6 +96,12 @@ this file is what builds, looks right, and is wrong.
   `PixelDelta.to_logical`), and drives the split via `CompositeScroll.wheel-{dy,tick}`. The Slint
   half lives once in `components/composite-scrollbars.slint`, mounted as the last root child
   (`x/y: 0`, `100%×100%`; contract in its header).
+  **That arm also owes `ui.window().request_redraw()`** — `run_change_handlers` is reached only
+  from `new_events`, and what schedules that frame is `WindowRedrawTracker`, over the properties
+  the **render** pass read. Nothing paints `wheel-{dy,tick}`, so the loop slept on each delta
+  until the next notch woke it: every notch one late (#64). **A Rust write watched only by a
+  `changed` handler owes the frame; one that also moves something rendered gets it free.** Pinned
+  by `winit_filter::tests::the_composite_wheel_arm_asks_for_a_frame`, a source walk.
   **Every content-view switch owes a `CompositeScroll.reset()`** — a `public function` (a
   callback's single handler slot must not be clobberable, as with `Dialog.closed-teardown()`)
   clearing `hovered` *and* any un-applied `wheel-dy`. Called from five `changed` handlers on the

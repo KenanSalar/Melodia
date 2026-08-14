@@ -375,6 +375,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                         // this only ever sums deltas within one un-applied frame.
                         cs.set_wheel_dy(cs.get_wheel_dy() + dy);
                         cs.set_wheel_tick(cs.get_wheel_tick().wrapping_add(1));
+                        // Nothing paints either property, so nothing else asks for the
+                        // frame whose `new_events` runs the handler that applies them.
+                        ui.window().request_redraw();
                         slint::winit_030::EventResult::PreventDefault
                     }
                     // `PointerScrolled` arrives as a one-shot

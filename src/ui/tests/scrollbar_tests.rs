@@ -17,7 +17,7 @@
 //! arrangement every composite view has.
 
 use crate::test_support::{
-    MIN_SLINT_SOURCES, UI_DIR, normalize_ws as normalized, stripped_sources,
+    MIN_SLINT_SOURCES, UI_DIR, block_body, normalize_ws as normalized, stripped_sources,
 };
 
 /// The elements that own a scrollbar-policy pair. `Flickable` is deliberately
@@ -62,34 +62,6 @@ fn sources() -> Vec<(String, String)> {
 /// The first index at or after `from` holding a non-whitespace byte.
 fn next_non_ws(bytes: &[u8], from: usize) -> Option<usize> {
     (from..bytes.len()).find(|i| !bytes[*i].is_ascii_whitespace())
-}
-
-/// The body of the block whose `{` sits at `open`, braces excluded.
-///
-/// Quote-aware so a brace inside a string literal can't unbalance the count —
-/// `"\{album.year}"` interpolation is balanced anyway, but nothing guarantees the
-/// next one is. The caller strips comments first, which is the other half.
-fn block_body(src: &str, open: usize) -> Option<&str> {
-    let bytes = src.as_bytes();
-    let mut depth = 0usize;
-    let mut in_string = false;
-    let mut i = open;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\\' if in_string => i += 1,
-            b'"' => in_string = !in_string,
-            b'{' if !in_string => depth += 1,
-            b'}' if !in_string => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(&src[open + 1..i]);
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    None
 }
 
 /// Every scroller declared in `src`, as `(element, body)`.
