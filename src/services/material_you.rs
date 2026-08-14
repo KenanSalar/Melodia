@@ -352,25 +352,23 @@ pub fn generate_palette(source_argb: u32, is_dark: bool, style: SchemeStyle) -> 
     (palette, primary)
 }
 
+/// Covers the immediate skip-around window. An entry is a path and a `u32`,
+/// so the whole cache is smaller than one decoded cover — and caching the
+/// palette instead buys nothing, generation from a known seed being sub-ms.
+const SEED_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(32) {
+    Some(n) => n,
+    None => panic!("SEED_CACHE_CAP > 0"),
+};
+
 /// Bounded LRU cache for source ARGB seeds keyed on the artwork path.
-/// Cap = 32 covers immediate skip-around windows; ~3 KiB peak memory.
-/// The seed is a `u32` so storage is tiny and we don't bother caching
-/// the full palette (scheme generation from a known seed is sub-ms).
 pub struct SeedCache {
     inner: LruCache<PathBuf, u32>,
 }
 
 impl SeedCache {
-    /// Cap matches the `lru::LruCache::new` `NonZeroUsize` requirement —
-    /// 32 hard-coded because a stalled `from(32)` would force a result
-    /// type and we'd lose the const guarantee.
     pub fn new() -> Self {
         Self {
-            // SAFETY-equivalent: 32 is non-zero. Using `new_unchecked`
-            // would buy us nothing here — `unwrap` is collapsed at compile
-            // time on a `const` non-zero literal.
-            #[allow(clippy::unwrap_used, reason = "32 is a const non-zero literal")]
-            inner: LruCache::new(NonZeroUsize::new(32).unwrap()),
+            inner: LruCache::new(SEED_CACHE_CAP),
         }
     }
 
