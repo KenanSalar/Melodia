@@ -162,6 +162,10 @@ export component CustomTitleBar inherits Rectangle {
                     horizontal-stretch: 0;
                     Image {
                         source: @image-url("../assets/icons/logo-without-background.svg");
+                        // The asset's gradient is Mocha's, so the mark is the one thing in the
+                        // bar not tracking the palette. A brush rather than a second asset:
+                        // `colorize` composites it through the alpha, so the ramp survives.
+                        colorize: Theme.brand-mark;
                         width: 18px;
                         height: 18px;
                         image-fit: contain;

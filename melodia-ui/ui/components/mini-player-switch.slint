@@ -51,8 +51,15 @@ export component MiniPlayerSwitch {
         if (root.watched-active && Nav.now-playing-open) {
             Nav.now-playing-open = false;
         }
-        root.fade-opacity = 0.0;
-        swap-timer.running = true;
+        // The host has no size at construction, so `active` reads `true` for a window about
+        // to lay out full-size, and the first settle then arrives here looking like a swap.
+        // It isn't one while `render-active` already agrees, and a fade with no incoming
+        // branch to cross to is the whole-shell flicker that used to open every launch.
+        // `active` itself keeps its 0×0 answer: `SectionActiveGate` baselines on it.
+        if (root.render-active != root.watched-active) {
+            root.fade-opacity = 0.0;
+            swap-timer.running = true;
+        }
         MiniPlayer.active-changed(root.watched-active);
     }
 
@@ -80,8 +87,9 @@ export component MiniPlayerSwitch {
         }
     }
 
-    // Flips the render shadow and eases the opacity back. Single-shot and re-armed on
-    // each flip, so a fast wiggle just restarts the same timer.
+    // Flips the render shadow and eases the opacity back. Single-shot, armed only by a
+    // crossing the guard above let through — a wiggle back inside the 100 ms doesn't re-arm
+    // it and doesn't need to, the body landing on whichever branch `active` ended on.
     swap-timer := Timer {
         interval: 100ms;
         running: false;

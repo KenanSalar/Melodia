@@ -11,6 +11,7 @@
 //!   section-collapse toggles — plus the `snap_to_preset` helper.
 //! - [`folders`]: library folder CRUD, watcher toggle, and `scan_folder*`.
 //! - [`diagnostics`]: the Verbose Logging switch.
+//! - [`motion`]: the Skip Startup Animation switch.
 //! - [`support`]: the launch counter behind the one-time Ko-fi prompt.
 //!
 //! `settings.json` setters funnel through
@@ -26,6 +27,7 @@ pub mod diagnostics;
 pub mod discord;
 pub mod equalizer;
 pub mod folders;
+pub mod motion;
 pub mod playback;
 pub mod replaygain;
 pub mod scrobble;
@@ -51,6 +53,7 @@ pub use folders::{
     add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
     scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
 };
+pub use motion::set_skip_startup_animation;
 pub use playback::{
     set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
 };

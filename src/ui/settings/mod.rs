@@ -1,6 +1,6 @@
-//! The Settings page: its chrome, and the nine section cards it owns.
+//! The Settings page: its chrome, and the ten section cards it owns.
 //!
-//! Nine of the page's twelve. The other three are [`crate::ui::appearance`]'s,
+//! Ten of the page's thirteen. The other three are [`crate::ui::appearance`]'s,
 //! and only two of them for the same reason: Appearance and Window Chrome write
 //! `Theme` brushes and the window-chrome globals rather than a settings row.
 //! **Overflow Menu is a plain persisted toggle set** — `Settings.overflow-*`
@@ -31,6 +31,7 @@ pub mod discord_settings;
 pub mod file_watching;
 pub mod library_settings;
 pub mod locale;
+pub mod motion;
 pub mod playback_settings;
 pub mod scrobbling_settings;
 pub mod settings_page;

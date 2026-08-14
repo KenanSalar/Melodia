@@ -106,9 +106,10 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Volume control (0–100%) with mute
 - Resume playback on startup
 - OS media-key support
-- Configurable play-button animation (none, ripple, or animated equalizer bars)
+- Configurable play-button animation (none, or animated equalizer bars)
 - Customizable player bar — relocate secondary controls into a compact overflow menu
 - Responsive mini-player — shrinking the window past a threshold collapses the full UI into a compact horizontal strip or a square widget (the square grows an up-next list when tall enough); restore the full window from the mini-player's expand button
+- Skippable startup animation — the view Melodia opens on fades and slides into place by default; a Motion switch under Settings ▸ Interface turns that off so the window comes up with the library already on screen, leaving navigation animated as usual
 
 ### Themes
 Six theme families, each with light and dark variants and configurable accent colors:

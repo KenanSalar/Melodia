@@ -402,6 +402,17 @@ msgstr "Neutre"
 msgid "Monochrome"
 msgstr "Monochrome"
 
+# ---- Motion section ---------------------------------------------------------
+
+msgid "Motion"
+msgstr "Animations"
+
+msgid "Skip Startup Animation"
+msgstr "Ignorer l'animation de démarrage"
+
+msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
+msgstr "Ouvrir avec la bibliothèque déjà affichée, au lieu de la faire apparaître en fondu et en glissement. Une page de détail que tu as laissée ouverte se déploie toujours une fois chargée."
+
 # Title of the window-chrome settings card.
 msgid "Window"
 msgstr "Fenêtre"

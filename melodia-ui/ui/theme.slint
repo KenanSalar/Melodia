@@ -27,24 +27,41 @@ export global Theme {
     in-out property <brush> subtext1: #bac2de;
     in-out property <brush> border: #313244;
 
+    // `text` stepped back, for a settings row's description under its label. `subtext0`
+    // is a palette slot of its own and reads as a second colour beside the label, where
+    // a multiplied alpha keeps the hue and only drops the weight — and drops it toward
+    // whatever is behind, so it dims on a dark theme and lightens on a light one.
+    out property <brush> text-muted: root.text.transparentize(0.2);
+
+    // How far a disabled settings row steps its copy and its control back — an alpha to
+    // multiply in, so the two rows state it once. Far enough to read as unavailable and
+    // no further: the description under a greyed-out label is where the row says *why*
+    // it is off, and it starts from `text-muted`, so the two dims compound.
+    out property <float> dim-disabled: 0.4;
+
     // Accent (default mauve) + colour on accent
     in-out property <brush> accent: #cba6f7;
     in-out property <brush> accent-text: #1e1e2e;
 
-    // Ink for a glyph or label painted directly on `fill`. sRGB luma — weights over the
-    // gamma-encoded channels, not linearized ones, so this is *not* the relative
-    // luminance `ui/backdrop.rs` solves scrims against. A hand-copy of
-    // `themes::apply::on_accent_hex`, pinned from both ends by
-    // `themes::tests::theme_slint_ink_on_matches_on_accent_hex`.
+    // sRGB luma — weights over the gamma-encoded channels, not linearized ones, so this is
+    // *not* the relative luminance `ui/backdrop.rs` solves scrims against. A hand-copy of
+    // `themes::apply::on_accent_hex`'s maths, pinned from both ends by
+    // `themes::tests::theme_slint_is_light_matches_on_accent_hex`. It answers the polarity
+    // question the palette itself can't: `Palette` carries no light/dark flag, and the two
+    // *generated* palettes (Material You, KDE-from-`kdeglobals`) have no variant id to match
+    // on either, so measuring the brush is the only form correct for all of them.
+    public pure function is-light(fill: brush) -> bool {
+        return (0.2126 * fill.red + 0.7152 * fill.green + 0.0722 * fill.blue) / 255 > 0.5;
+    }
+
+    // Ink for a glyph or label painted directly on `fill`.
     //
     // **Reach for this wherever the surface underneath isn't the accent.**
     // `accent-text` answers a question about the *accent*, so on a light theme with a
     // light accent it puts near-black on a dark red. The two colours stay literals
     // rather than palette slots: they're absolute ink for a fill of known lightness.
     public pure function ink-on(fill: brush) -> brush {
-        return (0.2126 * fill.red + 0.7152 * fill.green + 0.0722 * fill.blue) / 255 > 0.5
-            ? #1e1e2e
-            : #ffffff;
+        return root.is-light(fill) ? #1e1e2e : #ffffff;
     }
 
     // Semantic colours (Mocha palette). Three, and every theme defines all
@@ -82,6 +99,17 @@ export global Theme {
     // reason `danger` is one — five dialog scrollbars take it, and the argument for
     // *why* belongs in one place rather than in five comments.
     out property <brush> scrollbar-track-on-card: root.crust;
+
+    // The Melodia mark, painted over the logo SVG's alpha via `colorize`. The asset carries
+    // the dark arm's two stops itself and the OS-facing copies (tray, launcher, Discord
+    // assets) keep them, but those sit on someone else's surface — in the titlebar the mark
+    // sits on `mantle`, where Mocha's pastels land near 1.2:1 on a light palette and simply
+    // wash out. Latte's own blue and teal rather than a darkened Mocha pair: `darker()`
+    // divides HSV value and leaves saturation alone, so a pastel goes grey where Catppuccin
+    // takes it the other way. 135deg reproduces the asset's own 0,0 → 48,48 ramp.
+    out property <brush> brand-mark: root.is-light(root.mantle)
+        ? @linear-gradient(135deg, #1e66f5 0%, #179299 100%)
+        : @linear-gradient(135deg, #89b4fa 0%, #94e2d5 100%);
 
     // Layout
     out property <length> sidebar-collapsed-w: 46px;

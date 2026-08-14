@@ -196,7 +196,11 @@ export component SearchBar inherits Rectangle {
                 MaterialIcon {
                     name: "search";
                     icon-size: root.icon-size;
-                    icon-color: input.has-focus ? Theme.accent : Theme.subtext0;
+                    // Rest matches the placeholder beside it, so the two halves of
+                    // an empty bar sit on one rung.
+                    icon-color: input.has-focus
+                        ? Theme.accent
+                        : Theme.text.transparentize(0.3);
                     animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
                 }
             }
@@ -216,14 +220,11 @@ export component SearchBar inherits Rectangle {
                         placeholder-text := Text {
                             visible: root.text == "";
                             text: root.placeholder;
-                            // **`overlay2`, not `overlay0`**: outside Catppuccin the
-                            // palettes use `overlay0` as a low-elevation *surface*
-                            // rung, so it lands within a shade of this bar's own fill
-                            // on every light theme — macOS Light is 1.05:1 — and the
-                            // placeholder all but vanishes. `overlay2` is the strongest
-                            // decoration rung in all twelve palettes while still
-                            // reading weaker than the typed text below.
-                            color: Theme.overlay2;
+                            // `PillButton`'s label brush, so a bar and the pills beside
+                            // it read as one family; dimmed just enough to stay a hint
+                            // rather than typed text. Alpha in the brush rather than
+                            // `opacity`, which would layer and crop the ink.
+                            color: Theme.text.transparentize(0.3);
                             font-size: Theme.font-size-md;
                             vertical-alignment: center;
                             x: 0;

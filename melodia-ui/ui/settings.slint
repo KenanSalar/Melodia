@@ -68,6 +68,12 @@ export global Settings {
     in-out property <bool> close-to-tray: false;
     callback close-to-tray-changed(bool);
 
+    // Persist-only from here — what applies it is `boot::ui_setup`, which turns it into
+    // `Nav.suppress-enter-animation` before the window is shown. Off by default, so the
+    // launch a release already ships is the one that keeps playing.
+    in-out property <bool> skip-startup-animation: false;
+    callback skip-startup-animation-changed(bool);
+
     // Applied to `PlayerState.gapless_enabled` synchronously — the next 500 ms monitor
     // tick picks it up — then persisted on the blocking pool.
     in-out property <bool> gapless-playback: true;

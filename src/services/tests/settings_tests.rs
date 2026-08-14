@@ -142,6 +142,20 @@ fn test_resume_on_startup_defaults_false() -> Result<(), AppError> {
     Ok(())
 }
 
+/// `MotionFlags` is `#[serde(flatten)]`ed like every other substruct, so its key sits at
+/// the top level of `settings.json` — a nested object here would be a shape change on
+/// installs that already have a file.
+#[test]
+fn test_skip_startup_animation_defaults_false_and_reads_a_top_level_key() -> Result<(), AppError> {
+    let absent: SettingsData = serde_json::from_str("{}").map_err(|e| json_err(&e))?;
+    assert!(!absent.motion.skip_startup_animation);
+
+    let present: SettingsData =
+        serde_json::from_str(r#"{"skip_startup_animation": true}"#).map_err(|e| json_err(&e))?;
+    assert!(present.motion.skip_startup_animation);
+    Ok(())
+}
+
 #[test]
 fn test_view_sort_roundtrip() -> Result<(), AppError> {
     let sort = ViewSort {

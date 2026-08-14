@@ -552,6 +552,20 @@ fn default_match_unfocused_to_system_bg() -> bool {
     is_kde_desktop()
 }
 
+/// Motion the shell plays for its own sake. Its own struct rather than a fourth
+/// `LayoutFlags` bool, which sits at clippy's `struct_excessive_bools` cap; see
+/// `PlaybackFlags` for the substruct rationale.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MotionFlags {
+    /// Drops the entrance animation of the view mounted at launch, so the window opens
+    /// with its content already in place. `boot::ui_setup` turns it into
+    /// `Nav.suppress-enter-animation` before the window is shown, and the mount hands
+    /// that back once it has settled — later navigation animates either way. Off by
+    /// default, so an existing install keeps the launch it already has.
+    pub skip_startup_animation: bool,
+}
+
 // ----- OS / desktop-environment helpers -----
 //
 // These read process env vars (Linux) or evaluate compile-time `cfg` flags
@@ -660,6 +674,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub layout: LayoutFlags,
     #[serde(flatten)]
+    pub motion: MotionFlags,
+    #[serde(flatten)]
     pub updates: UpdateFlags,
     #[serde(flatten)]
     pub diagnostics: DiagnosticsFlags,
@@ -705,6 +721,7 @@ impl Default for SettingsData {
             discord: DiscordFlags::default(),
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
+            motion: MotionFlags::default(),
             updates: UpdateFlags::default(),
             diagnostics: DiagnosticsFlags::default(),
             support: SupportFlags::default(),
