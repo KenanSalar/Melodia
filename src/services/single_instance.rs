@@ -1,8 +1,9 @@
 //! The single-instance claim, and the socket a second launch hands its file
 //! paths down.
 //!
-//! **Binding the name *is* the claim** — `AddrInUse` is how a second process
+//! **Binding the name *is* the claim** — a failed bind is how a second process
 //! learns it is second, atomic where a probe-then-bind races two cold starts.
+//! [`name_is_taken`] holds the two spellings that failure has.
 //!
 //! **Claim early, accept late.** `main()` binds before the logger opens its
 //! file; [`serve`] starts accepting only once there is a window to raise.
@@ -119,9 +120,20 @@ pub fn claim(data_dir: &Path, files: &[PathBuf]) -> Claim {
 ///
 /// A real ACL denial takes the same arm and fails at the connect instead,
 /// landing back on `Unenforced` — the graceful outcome either way.
+///
+/// Spells `cfg!(windows)` once, over [`name_is_taken_on`]; the split is what
+/// makes the Windows answer reachable from the only runner that runs tests.
 fn name_is_taken(e: &io::Error) -> bool {
-    e.kind() == io::ErrorKind::AddrInUse
-        || (cfg!(windows) && e.kind() == io::ErrorKind::PermissionDenied)
+    name_is_taken_on(e, cfg!(windows))
+}
+
+/// The pure half of [`name_is_taken`], as `services::redact_prefix` is
+/// `redact_home`'s. A `cfg!` inside the predicate is a branch CI compiles out
+/// and can never exercise, so the platform arrives as an argument instead —
+/// otherwise a "simplification" back to one spelling merges green on a
+/// Linux-only gate, which is exactly how the bug shipped.
+fn name_is_taken_on(e: &io::Error, windows: bool) -> bool {
+    e.kind() == io::ErrorKind::AddrInUse || (windows && e.kind() == io::ErrorKind::PermissionDenied)
 }
 
 /// Accept forwarded launches for the rest of the process's life. `on_launch`

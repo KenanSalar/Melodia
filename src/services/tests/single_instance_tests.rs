@@ -5,7 +5,7 @@ use std::time::Duration;
 use tempfile::tempdir;
 
 use super::{
-    Claim, LENGTH_PREFIX_LEN, MAX_PAYLOAD_LEN, claim, decode_paths, encode_frame, name_is_taken,
+    Claim, LENGTH_PREFIX_LEN, MAX_PAYLOAD_LEN, claim, decode_paths, encode_frame, name_is_taken_on,
     serve, socket_name,
 };
 use crate::test_support::reading_env;
@@ -83,17 +83,24 @@ fn the_payload_cap_leaves_room_for_a_realistic_selection() {
 }
 
 /// The socket test below only ever exercises the Unix answer, and the platform
-/// with the other one has no runner — so the two spellings are pinned here
-/// rather than left to the one that can be observed.
+/// with the other one has no runner — so both are asked of the pure half, which
+/// takes the platform as an argument precisely so a Linux gate can reach them.
 #[test]
 fn a_taken_name_is_recognised_in_both_spellings() {
-    assert!(name_is_taken(&std::io::Error::from(std::io::ErrorKind::AddrInUse)));
-    assert_eq!(
-        name_is_taken(&std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
-        cfg!(windows),
-        "a second named-pipe instance is `ERROR_ACCESS_DENIED`, and nothing else is"
+    let taken_on = |kind, windows| name_is_taken_on(&std::io::Error::from(kind), windows);
+
+    assert!(taken_on(std::io::ErrorKind::AddrInUse, false), "`bind` says `EADDRINUSE`");
+    assert!(
+        taken_on(std::io::ErrorKind::PermissionDenied, true),
+        "a second named-pipe instance under `FILE_FLAG_FIRST_PIPE_INSTANCE` says \
+         `ERROR_ACCESS_DENIED`, which is the whole reason this predicate has two arms"
     );
-    assert!(!name_is_taken(&std::io::Error::from(std::io::ErrorKind::NotFound)));
+    assert!(
+        !taken_on(std::io::ErrorKind::PermissionDenied, false),
+        "off Windows a permission failure is a real one, and `bind` never reports it for a \
+         name that is merely held"
+    );
+    assert!(!taken_on(std::io::ErrorKind::NotFound, true));
 }
 
 /// Keyed on the data directory, that being what two Melodias would corrupt.

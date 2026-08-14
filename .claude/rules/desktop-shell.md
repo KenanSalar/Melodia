@@ -100,10 +100,13 @@ The other way paths arrive from outside, and the one that can arrive before ther
   second instance fails `ERROR_ACCESS_DENIED` — `PermissionDenied`, nowhere near `AddrInUse`.
   Matching only the first left *every* Windows relaunch `Claim::Unenforced`: a second window and a
   second writer over one database, on the platform the MSI registers associations for.
-  `name_is_taken` is the single place that decides, and no Linux runner can see the half that
-  bit — `a_taken_name_is_recognised_in_both_spellings` pins it as an assertion rather than an
-  observation. A genuine ACL denial takes the same arm and fails at the connect, landing back on
-  `Unenforced`, which is where it belonged anyway.
+  `name_is_taken` is the single place that decides, and **its pure half takes the platform as an
+  argument** — `services::redact_prefix`'s shape, for the same reason. A `cfg!` inside the
+  predicate is a branch the Linux gate compiles out and can never exercise, so a
+  "simplification" back to one spelling merges green; `name_is_taken_on` is what
+  `a_taken_name_is_recognised_in_both_spellings` can ask both ways. A genuine ACL denial takes the
+  same arm and fails at the connect, landing back on `Unenforced`, which is where it belonged
+  anyway.
 
 - **The accept loop is a detached `std::thread`, not `spawn_blocking`**, as `discord/ipc.rs` runs
   its transport: a parked blocking-pool tenant is what the 32-slot cap exists to prevent. Its
