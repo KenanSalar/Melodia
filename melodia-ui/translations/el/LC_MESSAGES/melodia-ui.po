@@ -412,8 +412,8 @@ msgstr "Κίνηση"
 msgid "Skip Startup Animation"
 msgstr "Παράλειψη κίνησης εκκίνησης"
 
-msgid "Open with the library already on screen, instead of fading and sliding it into place."
-msgstr "Άνοιγμα με τη βιβλιοθήκη ήδη στην οθόνη, αντί να εμφανίζεται σταδιακά και να κυλά στη θέση της."
+msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
+msgstr "Άνοιγμα με τη βιβλιοθήκη ήδη στην οθόνη, αντί να εμφανίζεται σταδιακά και να κυλά στη θέση της. Μια σελίδα λεπτομερειών που άφησες ανοιχτή εξακολουθεί να αναπτύσσεται μόλις φορτωθεί."
 
 # Title of the window-chrome settings card.
 msgid "Window"

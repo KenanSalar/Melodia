@@ -23,7 +23,7 @@ export component MotionSection inherits Rectangle {
     }
 
     property <bool> show-skip-startup: row-visible(@tr("Skip Startup Animation"),
-        @tr("Open with the library already on screen, instead of fading and sliding it into place."));
+        @tr("Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."));
 
     out property <bool> has-matches: show-skip-startup;
 
@@ -35,10 +35,13 @@ export component MotionSection inherits Rectangle {
             // Read at launch only: `boot::ui_setup` turns it into
             // `Nav.suppress-enter-animation` before the window is shown, and the first
             // settled view hands that back, so navigation keeps its transition either way.
+            // The description names the detail-page exception because the flag cannot reach
+            // it — a restored detail id arrives from a query long after the band mounted, so
+            // the band morphs rather than taking the settled mount `hero-t` is seeded for.
             if root.show-skip-startup: SettingRow {
                 icon: "animation";
                 label: @tr("Skip Startup Animation");
-                description: @tr("Open with the library already on screen, instead of fading and sliding it into place.");
+                description: @tr("Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads.");
                 ToggleSwitch {
                     checked <=> Settings.skip-startup-animation;
                     toggled(v) => { Settings.skip-startup-animation-changed(v); }

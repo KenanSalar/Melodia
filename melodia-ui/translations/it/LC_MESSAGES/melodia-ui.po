@@ -410,8 +410,8 @@ msgstr "Animazioni"
 msgid "Skip Startup Animation"
 msgstr "Salta l'animazione di avvio"
 
-msgid "Open with the library already on screen, instead of fading and sliding it into place."
-msgstr "Apri con la libreria già visibile, invece di mostrarla con una dissolvenza e uno scorrimento."
+msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
+msgstr "Apri con la libreria già visibile, invece di mostrarla con una dissolvenza e uno scorrimento. Una pagina di dettaglio che hai lasciato aperta si espande comunque al caricamento."
 
 # Title of the window-chrome settings card.
 msgid "Window"
