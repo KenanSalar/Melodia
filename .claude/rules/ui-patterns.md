@@ -503,15 +503,15 @@ silently miss the other.
   - **The launch mount has a third off-switch, and it is a global rather than an input.**
     `Nav.suppress-enter-animation` carries the "Skip Startup Animation" setting, raised by
     `boot::ui_setup` before `app.show()` and handed back by the first mount that settles — so the
-    window opens on its content and every later navigation still slides. Three things about the
-    shape, each the obvious alternative: it is a **live read inside `settled`**, not an `init`
-    capture, `init` running after the bindings resolve — captured, `opacity` settles on its
-    unsuppressed `0.0` and then animates up to the suppressed value, which is the entrance the
-    setting exists to skip; the hand-back sits **one statement after `shown` flips**, a clear
-    landing on a frame where `shown` is still false fading the settled page straight back out,
-    which is why it can't be Rust's; and it is gated on **`enabled`**, since a nested body mounted
-    at boot runs the same `Timer` and would otherwise drop the flag for the page above it.
-    Pinned by `ui::startup_motion_tests`.
+    window opens on its content and every later navigation still slides. A **live read inside
+    `settled`** rather than a property captured at `init`, and the capture would work — no branch
+    exists until the first layout pass, which is inside `app.show()` and long after
+    `hydrate_ui_from_settings` — but it spends a property and a handler to dodge the one thing the
+    live read owes: **the hand-back sits one statement after `shown` flips**, a clear landing on a
+    frame where `shown` is still false fading the settled page straight back out. That is also why
+    the hand-back can't be Rust's. Gated on **`enabled`**, since a nested body mounted at boot runs
+    the same `Timer` and would otherwise drop the flag for the page above it. Pinned by
+    `ui::startup_motion_tests`.
   - **A page with sub-views nests a second one and must disarm it at mount**, the page's own enter
     still playing when the first tab body mounts and a horizontal slide composed with a fade-up
     reading as a diagonal. The host arms it in the tab bar's `selected` handler; starting `false`

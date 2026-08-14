@@ -39,14 +39,13 @@ fn following(lines: &[String], from: usize, n: usize) -> Vec<&str> {
 
 /// The launch mount reads the suppression and hands it back once it has settled.
 ///
-/// Both halves are load-bearing and a later edit would separate them. It has to be read in
-/// `settled` rather than captured at `init`, `init` running after the bindings resolve — a
-/// capture would let `opacity` evaluate its unsuppressed `0.0` first and then animate up to
-/// the suppressed value, which is the entrance the setting exists to skip. Clearing it one
-/// statement *after* `shown` is what stops the clear fading the settled page back out. And
-/// the `enabled` gate is what keeps a nested body that never animates — My Library's tab
-/// bodies mount at boot with `enabled: false` — from dropping the flag for the page above
-/// it.
+/// Both halves are load-bearing and a later edit would separate them. `settled` is where the
+/// flag has to be read because that is where the entrance is decided and nothing else
+/// consults it, so a mount that stops reading it animates as though the setting were off.
+/// Clearing it one statement *after* `shown` is what stops the clear fading the settled page
+/// back out. And the `enabled` gate is what keeps a nested body that never animates — My
+/// Library's tab bodies mount at boot with `enabled: false` — from dropping the flag for the
+/// page above it.
 #[test]
 fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
     let lines = code_lines(VIEW_TRANSITION);
@@ -59,8 +58,8 @@ fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
     assert!(
         settled.contains("Nav.suppress-enter-animation"),
         "`settled` no longer reads the suppression: {settled}\n\
-         Captured at `init` instead, `opacity` settles on its unsuppressed 0.0 first and \
-         animates up from there — the entrance the setting exists to skip."
+         Nothing else consults the flag, so the launch mount animates as though the \
+         setting were off."
     );
 
     let shown = index_of(&lines, "root.shown = true;");
@@ -87,6 +86,11 @@ fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
 /// about who got there first: the seed timer and this handler both run on the loop's first
 /// pump, timers ahead of change handlers, so any latch either of them sets is a latch this
 /// handler always finds already closed.
+///
+/// Which leaves the seed `Timer` as the only thing that ever mounts a branch without a
+/// threshold crossing, so it is pinned here too: a launch already below the threshold
+/// produces no `changed` at all, and without that write `render-active` sits at its declared
+/// `false` and the miniplayer never appears.
 #[test]
 fn the_swap_fade_is_gated_on_the_branch_actually_changing() {
     let lines = code_lines(MINI_SWITCH);
@@ -97,5 +101,17 @@ fn the_swap_fade_is_gated_on_the_branch_actually_changing() {
         ["root.fade-opacity = 0.0;", "swap-timer.running = true;"],
         "the swap fade escaped its guard — ungated it plays on the first real layout of \
          every launch, fading the whole shell out and back with nothing to cross to"
+    );
+
+    // Bounded by the next declaration rather than a line count: `swap-timer`'s body writes
+    // `render-active` the same way, so a window that overran the seed timer would keep
+    // passing on that copy with the write this pins deleted.
+    let seed = index_of(&lines, "seed-timer := Timer {");
+    let swap = index_of(&lines, "swap-timer := Timer {");
+    assert!(swap > seed, "the two timers changed places; this walk reads them in order");
+    assert!(
+        following(&lines, seed, swap - seed).contains(&"root.render-active = root.active;"),
+        "the seed timer stopped adopting the first reading — a window launched below the \
+         threshold never transitions, so nothing else would ever mount the miniplayer"
     );
 }

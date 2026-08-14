@@ -87,8 +87,9 @@ export component MiniPlayerSwitch {
         }
     }
 
-    // Flips the render shadow and eases the opacity back. Single-shot and re-armed on
-    // each flip, so a fast wiggle just restarts the same timer.
+    // Flips the render shadow and eases the opacity back. Single-shot, armed only by a
+    // crossing the guard above let through — a wiggle back inside the 100 ms doesn't re-arm
+    // it and doesn't need to, the body landing on whichever branch `active` ended on.
     swap-timer := Timer {
         interval: 100ms;
         running: false;
