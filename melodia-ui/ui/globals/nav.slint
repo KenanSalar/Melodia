@@ -39,6 +39,11 @@ export global Nav {
     // that triggers the new mount. Typed rather than a string, so a Rust typo is a
     // compile error; `ui/nav_transition.rs` has the `mark_*` helpers.
     in-out property <NavEnterFrom> pending-enter-from: NavEnterFrom.below;
+    // Raised before `app.show()` when "Skip Startup Animation" is on, so the launch mount
+    // is simply *there* rather than easing in over an empty window. The mount hands it back
+    // itself once it has settled — `view-transition.slint` says why Rust can't — after
+    // which navigation animates as usual.
+    in-out property <bool> suppress-enter-animation: false;
     in-out property <bool> sidebar-collapsed: false;
     in-out property <length> sidebar-width: 180px;
     // Set while the resize handle is being dragged, and read by the rows to disable

@@ -402,6 +402,17 @@ msgstr "Neutral"
 msgid "Monochrome"
 msgstr "Monocromo"
 
+# ---- Motion section ---------------------------------------------------------
+
+msgid "Motion"
+msgstr "Movimiento"
+
+msgid "Skip Startup Animation"
+msgstr "Omitir la animación de inicio"
+
+msgid "Open with the library already on screen, instead of fading and sliding it into place."
+msgstr "Abrir con la biblioteca ya en pantalla, en lugar de mostrarla con un fundido y un deslizamiento."
+
 # Title of the window-chrome settings card.
 msgid "Window"
 msgstr "Ventana"

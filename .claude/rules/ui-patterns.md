@@ -500,6 +500,17 @@ silently miss the other.
   - **Two inputs turn parts of it off and answer different questions**: `enabled: false` is "does
     this view animate at all", `slide: false` is "is anything *else* already translating it" —
     fade, don't move. Both default on, so a mount that owns its motion says nothing.
+  - **The launch mount has a third off-switch, and it is a global rather than an input.**
+    `Nav.suppress-enter-animation` carries the "Skip Startup Animation" setting, raised by
+    `boot::ui_setup` before `app.show()` and handed back by the first mount that settles — so the
+    window opens on its content and every later navigation still slides. Three things about the
+    shape, each the obvious alternative: it is a **live read inside `settled`**, not an `init`
+    capture, because the branch for the declared nav index is created inside `AppWindow::new()`,
+    before Rust has read `settings.json`; the hand-back sits **one statement after `shown` flips**,
+    a clear landing on a frame where `shown` is still false fading the settled page straight back
+    out, which is why it can't be Rust's; and it is gated on **`enabled`**, since a nested body
+    mounted at boot runs the same `Timer` and would otherwise drop the flag for the page above it.
+    Pinned by `ui::startup_motion_tests`.
   - **A page with sub-views nests a second one and must disarm it at mount**, the page's own enter
     still playing when the first tab body mounts and a horizontal slide composed with a fade-up
     reading as a diagonal. The host arms it in the tab bar's `selected` handler; starting `false`
@@ -565,6 +576,15 @@ silently miss the other.
     self-corrects**, while a section seeded `true` against a `false` baseline **stays wrongly
     active all session** — not a cosmetic stale tier, `install_library_changed_refresher` then
     taking its ungated arm and re-fetching the whole library per song.
+  - **That same 0×0 pass is a size reading to `MiniPlayerSwitch` itself, and it may only be one
+    once.** `active` has to keep answering `true` there — the baseline above is built on it — so
+    the first real layout arrives at `changed watched-active` looking exactly like a swap out of
+    miniplayer mode, and ran the shell's 100 ms fade-out → swap → fade-in on every launch with
+    nothing mounted to fade *to*. The guard is a `seeded` latch on the swap rather than anything
+    on the predicate: the handler and the seed `Timer` both set it, whichever reaches the boot
+    reading first adopts it into `render-active` silently, and the other is a value-compared
+    no-op — so it doesn't depend on which of the two the event loop runs first. Pinned by
+    `ui::startup_motion_tests`.
 
 - **Nav state persistence keyed by view-id**, all in `views.json`. Sidebar nav does **not** reset
   detail ids; only the back button does. Adding a detail = a `view_id::*` const + open/close
@@ -782,7 +802,7 @@ edit would otherwise reverse.
 
 ## The Settings page
 
-- **The page is tabbed** — 5 tabs over the same 12 section cards. `settings-view.slint` is page
+- **The page is tabbed** — 5 tabs over the same 13 section cards. `settings-view.slint` is page
   chrome only, `settings-tabs.slint` the router, `views/settings/pages/*.slint` the five pages,
   each owning its section list *and* an aggregate `has-matches`. **Search escapes the tabs**: a
   non-empty query mounts all five pages at once, which is how the cross-tab flat list comes back

@@ -68,6 +68,8 @@ pub mod window_chrome;
 // published an anchor — and `nav_transition_tests`, which asks every mount whether it wrote
 // its own enter edge. That last one has a Rust module (`nav_transition`), but what it pins
 // is the Slint half of the same contract, so it sits with the other tree walks.
+// `startup_motion_tests` pins two components across that same seam: what the shell and the
+// view mounted inside it do on the frame the window opens.
 #[cfg(test)]
 #[path = "tests/hero_blur_backdrop_tests.rs"]
 mod hero_blur_backdrop_tests;
@@ -89,6 +91,9 @@ mod placeholder_tests;
 #[cfg(test)]
 #[path = "tests/scrollbar_tests.rs"]
 mod scrollbar_tests;
+#[cfg(test)]
+#[path = "tests/startup_motion_tests.rs"]
+mod startup_motion_tests;
 #[cfg(test)]
 #[path = "tests/tab_search_header_tests.rs"]
 mod tab_search_header_tests;

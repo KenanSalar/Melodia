@@ -32,6 +32,13 @@ export component MiniPlayerSwitch {
     // Internal: nothing outside needs the variant, it only feeds the global.
     private property <bool> square: root.host-height >= root.host-width * 0.8;
 
+    // The host has no size at construction, so `active` reads `true` for a window that is
+    // about to lay out full-size, and the first settle arrives looking like a swap — fading
+    // the whole shell out and back on every launch. Whichever of the seed timer and the
+    // handler below reaches it first adopts that reading instead. `active` itself keeps its
+    // 0×0 answer: `SectionActiveGate` baselines on it.
+    private property <bool> seeded: false;
+
     // Mirrored locally because a `changed` handler can't watch a global's property.
     //
     // It publishes to the global so children see the new value, schedules
@@ -51,8 +58,13 @@ export component MiniPlayerSwitch {
         if (root.watched-active && Nav.now-playing-open) {
             Nav.now-playing-open = false;
         }
-        root.fade-opacity = 0.0;
-        swap-timer.running = true;
+        if (root.seeded) {
+            root.fade-opacity = 0.0;
+            swap-timer.running = true;
+        } else {
+            root.seeded = true;
+            root.render-active = root.watched-active;
+        }
         MiniPlayer.active-changed(root.watched-active);
     }
 
@@ -75,6 +87,7 @@ export component MiniPlayerSwitch {
             MiniPlayer.active = root.active;
             MiniPlayer.square = root.square;
             root.render-active = root.active;
+            root.seeded = true;
             MiniPlayer.active-changed(root.active);
             self.running = false;
         }

@@ -1,5 +1,5 @@
 import { Theme } from "../theme.slint";
-import { NavEnterFrom } from "../globals/nav.slint";
+import { Nav, NavEnterFrom } from "../globals/nav.slint";
 
 // Enter-only wrapper, re-instantiated on every branch mount so the flip and the
 // animation replay per nav. There is no exit half — Slint's `if` destroys the
@@ -29,9 +29,10 @@ export component ViewTransition inherits Rectangle {
     // reason. My Library's band is the one such container here.
     in property <bool> slide: true;
     private property <bool> shown: false;
-    // Disabled, this is `true` from the first evaluation, so the three bindings
-    // below never transition and the Timer's flip is a write nothing reads.
-    private property <bool> settled: !root.enabled || root.shown;
+    // Disabled — or suppressed, for the mount the window launches on — this is `true`
+    // from the first evaluation, so the three bindings below never transition and the
+    // Timer's flip is a write nothing reads.
+    private property <bool> settled: !root.enabled || root.shown || Nav.suppress-enter-animation;
 
     Timer {
         interval: 1ms;
@@ -39,6 +40,16 @@ export component ViewTransition inherits Rectangle {
         triggered() => {
             self.running = false;
             root.shown = true;
+            // **The launch mount hands the suppression back, not Rust.** The branch is
+            // created inside `AppWindow::new()`, before Rust has read `settings.json`, so
+            // there is nothing to capture at `init`; and a clear from outside can land on a
+            // frame where `shown` is still false and fade the settled page back out. Gated on
+            // `enabled` because a nested body that never animates — My Library's tab bodies
+            // mount at boot with `enabled: false` — runs this same Timer. A window launched at
+            // miniplayer size mounts no such branch and keeps the flag until it grows back.
+            if (root.enabled) {
+                Nav.suppress-enter-animation = false;
+            }
         }
     }
 

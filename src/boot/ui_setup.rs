@@ -316,6 +316,7 @@ pub fn install_library_settings_and_friends(
     let notifications = ui::shell::notifications::install(app);
     ui::settings::file_watching::install(app, state, &notifications);
     ui::settings::updater_settings::install(app, state);
+    ui::settings::motion::install(app, state);
     ui::settings::about::install(app, state);
     // Takes the stack because it both toasts and, on the launch after a panic,
     // pushes the "crashed last time" notice itself.
@@ -406,6 +407,7 @@ pub fn hydrate_ui_from_settings(
     };
     apply_sidebar_width(app, settings);
     apply_sidebar_collapsed(app, settings);
+    apply_startup_animation_suppression(app, settings);
     ui::track_list_view::hydrate_tracks_view(app, vs);
     ui::track_list_view::hydrate_browse_view(app, vs);
     ui::track_list_view::hydrate_album_detail_view(app, vs);
@@ -435,6 +437,19 @@ fn apply_sidebar_width(app: &AppWindow, settings: &services::settings::SettingsD
 
 fn apply_sidebar_collapsed(app: &AppWindow, settings: &services::settings::SettingsData) {
     app.global::<Nav>().set_sidebar_collapsed(settings.layout.sidebar_collapsed);
+}
+
+/// Raise the entrance-animation suppression for the launch mount.
+///
+/// The flag only has to be up before the first painted frame, which is why it can be
+/// written here rather than back when the branch was created; `ViewTransition` reads it
+/// live and hands it back once it has settled, so this reaches exactly the view the window
+/// opens on. A settings read that failed leaves it down and the animation plays.
+fn apply_startup_animation_suppression(
+    app: &AppWindow,
+    settings: &services::settings::SettingsData,
+) {
+    app.global::<Nav>().set_suppress_enter_animation(settings.motion.skip_startup_animation);
 }
 
 /// Kick off initial Tracks fetch so the list is populated by the time the
