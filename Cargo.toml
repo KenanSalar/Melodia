@@ -30,7 +30,7 @@ exclude = ["winit"]
 # Inherited by both packages, so `melodia-ui` can't drift from the app. The
 # three toolchain-less scrapes (`release.yml`, `build-rpm.sh`,
 # `build-appimage.sh`) anchor on this table by name, not by position.
-version = "0.10.0"
+version = "0.11.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
@@ -239,6 +239,14 @@ rfd = "0.17.2"
 # Hands a path to the OS default handler — used by the track-row
 # "Open Containing Folder" context-menu action.
 open = "5.4.0"
+
+# The single-instance socket (`services::single_instance`). One abstraction over
+# a Linux abstract unix socket and a Windows named pipe, which is the whole
+# reason for the dependency: `discord::ipc` hand-rolls the *client* half in std,
+# but a named-pipe **server** means `CreateNamedPipeW` — an eighth FFI site no
+# Linux runner ever compiles. Default features only; `tokio` would pull in
+# `tokio/net`, which the runtime above deliberately leaves off.
+interprocess = "2.4.3"
 
 # Auto-updater — see `src/services/updater/`. `minisign-verify` is zero-dep and
 # verify-only. `semver` powers `is_upgrade()`, so an older-or-equal manifest

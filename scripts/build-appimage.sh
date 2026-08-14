@@ -7,15 +7,13 @@
 #   ./scripts/build-appimage.sh /tmp/Custom.AppImage  # x86_64, specific output path
 #   ARCH=aarch64 ./scripts/build-appimage.sh          # aarch64, Melodia-<ver>-aarch64.AppImage
 #
-# Arch defaults to the runner's `uname -m` so a developer on
-# Apple-Silicon-on-Linux or a Raspberry Pi builds a native ARM64 image
-# without ceremony. CI sets ARCH explicitly per matrix slot.
+# Arch defaults to the runner's `uname -m`, so a developer on ARM64 Linux
+# builds natively without ceremony; CI sets it per matrix slot.
 #
-# Bundling strategy: linuxdeploy's default exclude list is honoured —
-# libGL / libEGL / libvulkan must come from the host driver, NOT the
-# AppImage, or accelerated rendering breaks on every machine whose GPU
-# driver differs from the build runner's. linuxdeploy's defaults handle
-# this correctly; we only override AppImageKit version + output filename.
+# linuxdeploy's default exclude list is honoured: libGL / libEGL / libvulkan
+# must come from the host driver, not the bundle, or accelerated rendering
+# breaks wherever the GPU driver differs from the build runner's. Only the
+# AppImageKit version and the output filename are overridden.
 
 set -euo pipefail
 
@@ -42,12 +40,10 @@ OUTPUT="${1:-Melodia-${VERSION}-${ARCH}.AppImage}"
 
 # Fetch linuxdeploy + the AppImage plugin if not cached.
 #
-# Tags are pinned (not "continuous") for reproducibility: a CI re-run two
-# weeks apart must produce a byte-identical AppImage modulo our own
-# binary's content. The continuous channel rolls forward whenever
-# upstream lands a commit on master, so a re-run silently swaps the
-# bundled runtime + plugin SHAs. Bump these when adopting a new upstream
-# release; update the SHA256s (BOTH archs) in lockstep.
+# Pinned tags, not "continuous": a re-run two weeks later must produce a
+# byte-identical AppImage modulo our own binary. The continuous channel rolls
+# forward on every upstream commit, silently swapping the bundled runtime and
+# plugin. Bump deliberately, and move the SHA256s for BOTH archs with it.
 LINUXDEPLOY_TAG="1-alpha-20251107-1"
 PLUGIN_TAG="1-alpha-20250213-1"
 case "$ARCH" in
@@ -119,9 +115,10 @@ cp "$REPO_ROOT/assets/icons/logo-with-background.svg" "$APPDIR/melodia.svg"
 # Drift here means AppImage users can't open audio files via "Open with…"
 # and KDE shows two taskbar entries (no StartupWMClass to merge them).
 # The MIME drift-guard test in `src/services/tests/desktop_integration_tests.rs`
-# covers the four sources — keep this body byte-identical (mod the
-# `Exec=` line: AppImage binaries live at the AppDir root so `Exec=Melodia`
-# is the relative name; RPM/DEB resolve via PATH as `Exec=melodia`).
+# covers the four sources — keep this body byte-identical bar the `Exec=`
+# command: AppImage binaries sit at the AppDir root so `Melodia` is the relative
+# name, RPM/DEB resolve `melodia` via PATH. The ` %F` is not optional; without it
+# the MimeType list above is unusable.
 # Desktop file named after the reverse-DNS app id so its desktop-id
 # matches the AppStream component id `com.github.kenansalar.melodia`.
 cat > "$APPDIR/com.github.kenansalar.melodia.desktop" <<'EOF'
@@ -130,7 +127,7 @@ Type=Application
 Name=Melodia
 GenericName=Music Player
 Comment=Cross-platform desktop music player
-Exec=Melodia
+Exec=Melodia %F
 Icon=melodia
 Categories=AudioVideo;Audio;Player;Music;
 Keywords=music;audio;player;library;sound;songs;tracks;mp3;flac;ogg;

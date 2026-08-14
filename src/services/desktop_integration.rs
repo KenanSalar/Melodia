@@ -49,40 +49,25 @@ const ICON_SVG: &[u8] = include_bytes!("../../assets/icons/logo-with-background.
 const METAINFO_XML: &str =
     include_str!("../../packaging/com.github.kenansalar.melodia.metainfo.xml");
 
-/// Idempotently deploy `.desktop` + icon to the user's `XDG_DATA_HOME`.
+/// Idempotently deploy `.desktop` + icon to the user's `XDG_DATA_HOME`. No-op
+/// on `AppImage`, a development build, or a package-manager-owned binary — each
+/// argued at its gate below.
 ///
-/// No-op when:
-/// - the binary is running from an `AppImage` (`$APPIMAGE` set),
-/// - the binary is a development build (`cargo run`, or running out of
-///   a Cargo `target/{debug,release}` directory) — its `Exec=` path
-///   would clobber the user's installed launcher entry, or
-/// - the binary is owned by `rpm`/`dpkg` (the package manager already
-///   deploys the system-wide copies via its own manifest).
-///
-/// Errors from any single write are logged and the function continues
-/// to the next file — a half-deployed launcher (e.g. desktop entry
-/// written, icon not) is still better than a fully-failed deploy.
-/// Returns `Ok(())` if at least the gate evaluation succeeded; the
-/// only `Err` path is "couldn't resolve `$XDG_DATA_HOME`", which on a
-/// real Linux session shouldn't happen.
+/// A failed write is logged and the next file still attempted: a desktop entry
+/// without its icon beats neither. The one `Err` is an unresolvable
+/// `$XDG_DATA_HOME`, which a real session doesn't have.
 pub fn refresh_user_install() -> AppResult<()> {
-    // `$APPIMAGE` gate first — it's free and short-circuits before we
-    // spawn an `rpm -qf` subprocess. linux_pkg::detect()'s probe is
-    // memoised after first call, so the second access from the
-    // gating below is essentially free.
+    // First because it is free, short-circuiting ahead of the `rpm -qf`
+    // subprocess below (whose probe memoises after the first call anyway).
     if std::env::var("APPIMAGE").is_ok_and(|p| !p.is_empty()) {
         log::info!("desktop_integration: skipping — running from AppImage (bundled .desktop/icon)");
         return Ok(());
     }
 
-    // Dev-build gate, before the `rpm -qf`/`dpkg -S` probe — it's free
-    // (a `cfg!` check plus a path inspection), so by the same reasoning
-    // as the `$APPIMAGE` gate above it short-circuits ahead of the
-    // subprocess spawn. When launched via `cargo run` the binary lives
-    // at `…/target/debug/Melodia` (or `…/target/release/` for `cargo run
-    // --release`). Deploying a `.desktop` whose `Exec=` points there
-    // would hijack the user's installed launcher entry. An installed
-    // tarball / RPM / DEB binary never matches.
+    // Also free (a `cfg!` and a path inspection), so also ahead of the probe.
+    // Under `cargo run` the binary sits in `target/{debug,release}/`, and a
+    // `.desktop` pointing `Exec=` there would hijack the installed entry. No
+    // installed tarball / RPM / DEB binary matches.
     if is_dev_build() {
         log::info!(
             "desktop_integration: skipping — running a development build \
@@ -107,16 +92,13 @@ pub fn refresh_user_install() -> AppResult<()> {
 
     let exec_path = install_target()?;
     let apps_dir = data_home.join("applications");
-    // Desktop entry named after the reverse-DNS app id so its
-    // desktop-id matches the AppStream component
-    // `com.github.kenansalar.melodia` — software centres need that
-    // match to merge the launcher with the MetaInfo component.
+    // Reverse-DNS name so the desktop-id matches the AppStream component id,
+    // which is what makes software centres merge the two rather than list them
+    // separately.
     let desktop_path = apps_dir.join("com.github.kenansalar.melodia.desktop");
-    // Legacy launcher filenames from earlier releases: `Melodia.desktop`
-    // (capital M), then `melodia.desktop`. XDG only overrides a system
-    // entry with a user entry of the *same* filename, so a stale
-    // sibling shows up as a duplicate launcher tile. Best-effort
-    // cleanup; a missing file is not an error.
+    // Earlier releases' filenames. XDG overrides a system entry only with a user
+    // entry of the *same* name, so a stale sibling shows as a duplicate tile.
+    // Best-effort; a missing file is not an error.
     for legacy in ["Melodia.desktop", "melodia.desktop"] {
         let legacy_path = apps_dir.join(legacy);
         if let Err(e) = std::fs::remove_file(&legacy_path)
@@ -127,17 +109,14 @@ pub fn refresh_user_install() -> AppResult<()> {
     }
     let icon_path =
         data_home.join("icons").join("hicolor").join("scalable").join("apps").join("melodia.svg");
-    // AppStream MetaInfo — software centres read it from the per-user
-    // metainfo dir, mirroring the system-wide copy the RPM/DEB land in
-    // `/usr/share/metainfo/`.
+    // Per-user mirror of the copy RPM/DEB land in `/usr/share/metainfo/`.
     let metainfo_path =
         data_home.join("metainfo").join("com.github.kenansalar.melodia.metainfo.xml");
 
     let desktop_body = render_desktop(DESKTOP_TEMPLATE, &exec_path);
 
-    // Each write is independent: a failure on one payload shouldn't
-    // suppress the others. Errors are logged and the function continues
-    // — per the docstring. `None` ⇒ this write errored.
+    // Independent writes, so one failure doesn't suppress the rest. `None` is
+    // an errored write, `Some(changed)` a successful one.
     let write = |path: &Path, payload: &[u8]| -> Option<bool> {
         match write_if_changed(path, payload) {
             Ok(changed) => Some(changed),
@@ -185,23 +164,44 @@ fn is_dev_build() -> bool {
         .is_some_and(|p| p.file_name().is_some_and(|n| n == "target"))
 }
 
-/// Substitute `@EXEC@` in the template with the binary's absolute path.
-/// The placeholder is a literal substring, not regex — no escaping
-/// concerns. Path is rendered via `Path::display()` which preserves
-/// UTF-8 paths verbatim (the canonical case on every distro Melodia
-/// targets).
+/// Substitute `@EXEC@` in the template with the binary's absolute path. A
+/// literal substring, not a regex, so nothing needs escaping; `Path::display()`
+/// keeps UTF-8 paths verbatim, which is the case on every distro targeted.
 pub(crate) fn render_desktop(template: &str, exec: &Path) -> String {
-    template.replace("@EXEC@", &exec.display().to_string())
+    template.replace("@EXEC@", &quote_exec(&exec.display().to_string()))
 }
 
-/// Write `payload` to `path` if and only if the on-disk content's
-/// BLAKE3 hash differs from the payload's. Returns whether a write
-/// happened.
+/// Quote the command for an `Exec=` line, but only when it needs it.
 ///
-/// Creates parent dirs on demand. Uses [`crate::services::write_json_atomic_sync`]'s
-/// temp-file-then-rename pattern by virtue of going through
-/// `tempfile::NamedTempFile::persist` to dodge a half-written file
-/// outliving a crash mid-write.
+/// The value is parsed with shell-like quoting, so a home directory with a space
+/// in it splits into two arguments and the launcher runs neither. Only when
+/// needed, an unquoted command being what the four packaged sources ship;
+/// `scripts/install-linux.sh` makes the same call for the same reason.
+fn quote_exec(command: &str) -> String {
+    const RESERVED: &[char] = &[
+        ' ', '\t', '\n', '"', '\'', '\\', '>', '<', '~', '|', '&', ';', '$', '*', '?', '#', '(',
+        ')', '`',
+    ];
+
+    if !command.contains(RESERVED) {
+        return command.to_owned();
+    }
+
+    let mut quoted = String::with_capacity(command.len() + 2);
+    quoted.push('"');
+    for ch in command.chars() {
+        if matches!(ch, '"' | '\\' | '$' | '`') {
+            quoted.push('\\');
+        }
+        quoted.push(ch);
+    }
+    quoted.push('"');
+    quoted
+}
+
+/// Write `payload` to `path` only when the on-disk BLAKE3 differs, returning
+/// whether it did. Creates parent dirs, and persists through a temp file so a
+/// crash mid-write can't leave a half-written launcher behind.
 fn write_if_changed(path: &Path, payload: &[u8]) -> AppResult<bool> {
     if let Ok(existing) = std::fs::read(path)
         && blake3::hash(&existing) == blake3::hash(payload)
@@ -222,11 +222,9 @@ fn write_if_changed(path: &Path, payload: &[u8]) -> AppResult<bool> {
     Ok(true)
 }
 
-/// Best-effort `update-desktop-database` + `gtk-update-icon-cache`
-/// invocations so the new files show up in the user's launcher
-/// without a logout. Both binaries may be absent on minimal installs;
-/// errors are silenced because the underlying file writes succeeded
-/// and the user's session will pick them up on next start regardless.
+/// Best-effort cache refresh so the new files appear without a logout. Both
+/// binaries may be absent on minimal installs, and errors are silent: the writes
+/// already succeeded and the session picks them up on next start anyway.
 fn refresh_caches(data_home: &Path) {
     let apps = data_home.join("applications");
     let icons = data_home.join("icons").join("hicolor");
@@ -242,8 +240,7 @@ fn refresh_caches(data_home: &Path) {
 #[path = "tests/desktop_integration_tests.rs"]
 mod tests;
 
-/// Re-export for tests that need to assert against the bundled payloads
-/// without going through the runtime probe gating.
+/// The bundled payloads, reachable by tests without the runtime probe gating.
 #[cfg(test)]
 pub(crate) const TEST_DESKTOP_TEMPLATE: &str = DESKTOP_TEMPLATE;
 #[cfg(test)]
