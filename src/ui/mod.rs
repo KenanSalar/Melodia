@@ -69,7 +69,9 @@ pub mod window_chrome;
 // its own enter edge. That last one has a Rust module (`nav_transition`), but what it pins
 // is the Slint half of the same contract, so it sits with the other tree walks.
 // `startup_motion_tests` pins two components across that same seam: what the shell and the
-// view mounted inside it do on the frame the window opens.
+// view mounted inside it do on the frame the window opens. `titlebar_tests` reaches a third
+// tree — it holds the brand mark's theme brush to the asset it is painted over, the only
+// thing here a dark-palette reviewer cannot see going wrong.
 #[cfg(test)]
 #[path = "tests/hero_blur_backdrop_tests.rs"]
 mod hero_blur_backdrop_tests;
@@ -97,3 +99,6 @@ mod startup_motion_tests;
 #[cfg(test)]
 #[path = "tests/tab_search_header_tests.rs"]
 mod tab_search_header_tests;
+#[cfg(test)]
+#[path = "tests/titlebar_tests.rs"]
+mod titlebar_tests;
