@@ -177,6 +177,10 @@ fn main() -> AppResult<()> {
     // threads on a typical desktop, each with a 2 MB stack.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
+        // A burst ceiling, not an idle-cost one — blocking threads spawn on
+        // demand and get reaped, so tokio's 512 default never sits resident.
+        // `system_theme::spawn_color_watcher` is the one permanent tenant.
+        .max_blocking_threads(32)
         .enable_all()
         .thread_name("melodia-bg")
         .build()
