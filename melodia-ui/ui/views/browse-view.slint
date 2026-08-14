@@ -224,6 +224,10 @@ export component BrowseView inherits Rectangle {
                             visible: !root.card-mode && Browse.current-path != "";
                             horizontal-stretch: 1;
                             vertical-stretch: 0;
+                            // See `artist-detail.slint`: the composite's hbar rides this
+                            // list's x and width, so the lane belongs here too — in the
+                            // content-fit arm as much as in the list.
+                            reserve-scrollbar-lane: true;
                             height: (root.card-mode || Browse.current-path == "")
                                 ? 0px
                                 : min(
@@ -231,7 +235,7 @@ export component BrowseView inherits Rectangle {
                                         * (Browse.show-artwork
                                             ? Theme.row-h
                                             : Theme.row-h-compact)
-                                        + 32px + Theme.pad-xs,
+                                        + 32px + Theme.pad-xs + Theme.scrollbar-slot,
                                     below-sv.visible-height);
 
                             rows: Browse.rows;

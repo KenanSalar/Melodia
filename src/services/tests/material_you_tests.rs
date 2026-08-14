@@ -1,9 +1,11 @@
+use std::path::Path;
+
 use image::{ImageBuffer, Rgb};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use tempfile::NamedTempFile;
 
 use crate::services::material_you::{
-    SchemeStyle, clamp_to_tone_band, extract_source_argb, extract_source_argb_from_rgb8,
+    SchemeStyle, SeedCache, clamp_to_tone_band, extract_source_argb, extract_source_argb_from_rgb8,
     generate_palette, to_tone_capped_chroma,
 };
 
@@ -403,4 +405,33 @@ fn to_tone_capped_chroma_leaves_an_already_muted_seed_alone() {
         channel_spread(toned) <= channel_spread(muted) + 4,
         "cap should not saturate a neutral seed, got 0x{toned:06X}"
     );
+}
+
+// --- SeedCache ---------------------------------------------------------------
+
+#[test]
+fn seed_cache_serves_a_hit_without_re_extracting() {
+    let mut cache = SeedCache::default();
+    let cover = Path::new("/covers/album.jpg");
+    assert_eq!(cache.get_or_insert_with(cover, || Some(0x00AA_BBCC)), Some(0x00AA_BBCC));
+
+    let mut re_extracted = false;
+    let seed = cache.get_or_insert_with(cover, || {
+        re_extracted = true;
+        Some(0x0000_0000)
+    });
+
+    assert_eq!(seed, Some(0x00AA_BBCC));
+    assert!(!re_extracted, "a cached path must not re-run the decode");
+}
+
+#[test]
+fn seed_cache_does_not_memoize_a_failed_extraction() {
+    // The cover caches store their misses; this one deliberately doesn't, so a
+    // decode that lost to a half-written file gets another go on the next play.
+    let mut cache = SeedCache::default();
+    let cover = Path::new("/covers/half-written.jpg");
+    assert_eq!(cache.get_or_insert_with(cover, || None), None);
+
+    assert_eq!(cache.get_or_insert_with(cover, || Some(0x0011_2233)), Some(0x0011_2233));
 }

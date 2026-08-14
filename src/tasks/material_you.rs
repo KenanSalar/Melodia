@@ -10,9 +10,9 @@
 //!    whether to generate or clear Material You — view-model wakes (the
 //!    per-emit playback hot path) never touch the filesystem.
 //! 3. CPU-bound extraction + palette generation runs on
-//!    `tokio::task::spawn_blocking`. Source ARGB is cached in a
-//!    bounded `SeedCache` (cap 32) so prev/next/prev round-trips don't
-//!    re-quantize the same artwork.
+//!    `tokio::task::spawn_blocking`. Source ARGB is cached in a bounded
+//!    `SeedCache` so prev/next/prev round-trips don't re-quantize the
+//!    same artwork.
 //! 4. Writes `(Palette, accent_hex)` back into `os_state.material_you`
 //!    and triggers a repaint via `slint::invoke_from_event_loop`.
 //!

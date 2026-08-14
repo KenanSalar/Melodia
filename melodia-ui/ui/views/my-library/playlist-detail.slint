@@ -40,6 +40,7 @@ export component PlaylistDetailBody inherits Rectangle {
             tl := DraggableTrackList {
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
+                reserve-scrollbar-lane: true;
 
                 rows: PlaylistDetail.tracks;
                 // Reorder only in insertion order: any other sort makes it ambiguous, a

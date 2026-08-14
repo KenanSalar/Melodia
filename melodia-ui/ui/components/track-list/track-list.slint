@@ -56,6 +56,14 @@ export component TrackList inherits Rectangle {
     // Now-playing highlight.
     in property <int> playing-track-id;
 
+    // Set by a host that pins a horizontal `OverlayScrollbar` over this list's bottom edge,
+    // which would otherwise paint across the last row. Reserving the bar's slot inside the
+    // scroller keeps the row clear without a bottom pad on the page root — the dead strip.
+    // Unconditional rather than gated on the overflow, for `songs-section.slint`'s reason:
+    // a reserve measured off the width it changes closes a binding loop. With the columns
+    // fitting it costs a transparent lane.
+    in property <bool> reserve-scrollbar-lane: false;
+
     // Padding, plus the visible column widths, plus one resize handle between each pair.
     // Title and length are always visible, so the floor is two columns and one handle.
     // The outer `ScrollView` reads it to decide whether to pan.
@@ -126,6 +134,7 @@ export component TrackList inherits Rectangle {
 
         VerticalLayout {
             spacing: Theme.pad-xs;
+            padding-bottom: root.reserve-scrollbar-lane ? Theme.scrollbar-slot : 0px;
 
             TrackListHeader {
                 w-number <=> root.w-number;

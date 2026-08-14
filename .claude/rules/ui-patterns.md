@@ -300,7 +300,13 @@ silently miss the other.
   grid page — **Album and Genre do; Artist and Playlist can't**, Artist's `below-hero` being the
   region `CompositeScrollbars` measures and Playlist's empty state and drop banner filling `body`.
   Overlay scrollbars stay at `parent.width - self.width` either way; bottom padding is never on the
-  root (the dead-strip pitfall).
+  root (the dead-strip pitfall). **The horizontal bar's clearance is a lane inside the list
+  instead** — `reserve-scrollbar-lane` on `TrackList` / `DraggableTrackList`, which pads the column
+  *inside* `outer-scroll` by `Theme.scrollbar-slot`. **All eight bar-pair hosts set it, composite
+  ones included** — that bar takes the list's `x`/`width` and the view's bottom, which is the list's
+  own edge the moment it hits the `below-sv.visible-height` cap. A composite host owes the lane a
+  second time as a term in that cap's content-fit arm, which hand-sums rows + header + spacing.
+  Search's songs section is the one opt-out, its bar being a layout sibling with a slot already.
 
 ### Dialogs, pickers, toasts
 

@@ -1,3 +1,4 @@
+import { Theme } from "../theme.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 
 // The vertical + horizontal `OverlayScrollbar` pair every plain `TrackList` page mounts.
@@ -20,10 +21,11 @@ import { OverlayScrollbar } from "overlay-scrollbar.slint";
 // wrap theirs — and the short one silently stops being right the moment a wrapper appears
 // above it. The general form is the one that survives either, so every host now passes it.
 //
-// The `10px` thickness is stated once here for the same reason. It is not one number but a
-// *pair*: the horizontal bar's width subtracts exactly the vertical bar's, so the two never
-// overlap in the corner. Spelled per site, that coupling is invisible and getting it wrong
-// leaves a bar the corner eats.
+// The thickness comes off `Theme.scrollbar-slot` for the same reason. It is not one number
+// but a *pair*: the horizontal bar's width subtracts exactly the vertical bar's, so the two
+// never overlap in the corner. Spelled per site, that coupling is invisible and getting it
+// wrong leaves a bar the corner eats. The host's list reserves the same slot as a lane, so
+// it reads the token too rather than a matching literal.
 export component TrackListScrollbars inherits Rectangle {
     // The list's origin in the *page's* coordinates. Pass
     // `tl.absolute-position.x - root.absolute-position.x` (and the `y` twin) — correct at
@@ -50,7 +52,7 @@ export component TrackListScrollbars inherits Rectangle {
     callback set-h-offset(length);
 
     // Thickness of both bars, and the gutter each leaves the other in the corner.
-    private property <length> thickness: 10px;
+    private property <length> thickness: Theme.scrollbar-slot;
 
     OverlayScrollbar {
         horizontal: false;

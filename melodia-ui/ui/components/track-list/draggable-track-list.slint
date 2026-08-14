@@ -20,6 +20,11 @@ import { TrackListRowItem } from "track-list-row.slint";
 // binds both onto its global; see that view. Gated on `reorder-enabled`, since
 // a reorder is ambiguous in any sort but the insertion one.
 export component DraggableTrackList inherits Rectangle {
+    // The drop line runs the full column width, which overruns the visible list once the
+    // columns do. Same reason `queue-sheet.slint` draws its line inside a clip; the root is
+    // square and borderless, so this is a scissor rather than an offscreen layer.
+    clip: true;
+
     in property <[TrackListRow]> rows;
 
     in-out property <length> w-number: 56px;
@@ -46,6 +51,11 @@ export component DraggableTrackList inherits Rectangle {
     in property <int> playing-track-id;
 
     in property <bool> reorder-enabled: false;
+
+    // See `TrackList`. Sharper here: the after-the-last-row drop line pins to exactly the
+    // bottom edge the host's horizontal bar covers, so without the lane that slot has no
+    // indicator at all.
+    in property <bool> reserve-scrollbar-lane: false;
 
     out property <length> total-w: 16px
         + (root.show-number ? root.w-number + 8px : 0px)
@@ -132,6 +142,7 @@ export component DraggableTrackList inherits Rectangle {
 
         VerticalLayout {
             spacing: Theme.pad-xs;
+            padding-bottom: root.reserve-scrollbar-lane ? Theme.scrollbar-slot : 0px;
 
             TrackListHeader {
                 w-number <=> root.w-number;

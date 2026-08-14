@@ -18,6 +18,7 @@ export component FavoritesSongsTab inherits Rectangle {
         tl := TrackList {
             horizontal-stretch: 1;
             vertical-stretch: 1;
+            reserve-scrollbar-lane: true;
 
             rows: Favorites.tracks;
 

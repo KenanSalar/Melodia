@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::{block_body, strip_line_comments};
 
 // Every mouse wheel on every platform, and a touchpad on X11 and Win32.
 #[test]
@@ -36,4 +37,26 @@ fn an_overlay_releases_the_composite_arm_without_releasing_the_gesture() {
 fn a_horizontal_wheel_is_not_composite() {
     assert_eq!(route_wheel(true, false, TouchPhase::Moved, -60.0, 0.0), WheelRoute::Native);
     assert_eq!(route_wheel(true, false, TouchPhase::Moved, -60.0, 20.0), WheelRoute::Native);
+}
+
+/// Nothing paints the two properties the arm writes, so without the request no frame is
+/// scheduled and the `changed` handler that applies them waits for an unrelated event —
+/// every notch landing one notch late (#64). A source walk because scheduling is what a
+/// unit test can't reach; `route_wheel` beside it is the half that can.
+#[test]
+fn the_composite_wheel_arm_asks_for_a_frame() {
+    const ARM: &str = "WheelRoute::Composite =>";
+    let code = strip_line_comments(include_str!("../winit_filter.rs"));
+    let arm = code
+        .find(ARM)
+        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
+        .and_then(|open| block_body(&code, open))
+        .unwrap_or_default();
+
+    assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
+    assert!(
+        arm.contains("request_redraw()"),
+        "the composite arm writes only properties nothing paints, so it must ask for the \
+         frame its `changed` handler runs on:\n{arm}"
+    );
 }

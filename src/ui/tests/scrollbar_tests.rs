@@ -17,7 +17,7 @@
 //! arrangement every composite view has.
 
 use crate::test_support::{
-    MIN_SLINT_SOURCES, UI_DIR, normalize_ws as normalized, stripped_sources,
+    MIN_SLINT_SOURCES, UI_DIR, block_body, normalize_ws as normalized, stripped_sources,
 };
 
 /// The elements that own a scrollbar-policy pair. `Flickable` is deliberately
@@ -54,6 +54,11 @@ const SCROLLBAR_COMPONENTS: [&str; 2] = [
 /// separates.
 const TRACK_LIST_V_METRICS: [&str; 2] = ["body-y", "body-height"];
 
+/// The two bar pairs a `TrackList` page can mount, and the lane the list reserves under
+/// itself for either one's horizontal half.
+const BAR_PAIRS: [&str; 2] = ["TrackListScrollbars", "CompositeScrollbars"];
+const LANE_OPT_IN: &str = "reserve-scrollbar-lane: true;";
+
 /// The whole tree, comment-stripped, paired with the file it came from.
 fn sources() -> Vec<(String, String)> {
     stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES)
@@ -64,32 +69,19 @@ fn next_non_ws(bytes: &[u8], from: usize) -> Option<usize> {
     (from..bytes.len()).find(|i| !bytes[*i].is_ascii_whitespace())
 }
 
-/// The body of the block whose `{` sits at `open`, braces excluded.
-///
-/// Quote-aware so a brace inside a string literal can't unbalance the count —
-/// `"\{album.year}"` interpolation is balanced anyway, but nothing guarantees the
-/// next one is. The caller strips comments first, which is the other half.
-fn block_body(src: &str, open: usize) -> Option<&str> {
-    let bytes = src.as_bytes();
-    let mut depth = 0usize;
-    let mut in_string = false;
-    let mut i = open;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\\' if in_string => i += 1,
-            b'"' => in_string = !in_string,
-            b'{' if !in_string => depth += 1,
-            b'}' if !in_string => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(&src[open + 1..i]);
-                }
-            }
-            _ => {}
+/// Whether `src` mounts `component` — the name followed by `{`, which is what separates a
+/// mount from the `import { … }` line and from the component's own `inherits` declaration.
+fn mounts(src: &str, component: &str) -> bool {
+    let mut from = 0;
+    while let Some(at) = src[from..].find(component).map(|rel| rel + from) {
+        from = at + component.len();
+        if let Some(open) = next_non_ws(src.as_bytes(), from)
+            && src.as_bytes()[open] == b'{'
+        {
+            return true;
         }
-        i += 1;
     }
-    None
+    false
 }
 
 /// Every scroller declared in `src`, as `(element, body)`.
@@ -323,6 +315,52 @@ fn no_page_hand_rolls_a_track_lists_scrollbars() {
          height: 100%` — never a hand-rolled pair, which drifts on the anchor and hides \
          the two bars' shared thickness. A list nested *under* another scroller wants \
          `CompositeScrollbars` instead:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// **A page that mounts a bar pair reserves the horizontal bar's lane.**
+///
+/// Both pairs put that bar on the list's own bottom edge, by different routes.
+/// `TrackListScrollbars` pins it to the page's bottom, which on a plain page *is* where
+/// the list ends. `CompositeScrollbars` takes the list's `x` and `width` and pins the bar
+/// to the view's bottom — which reads as somewhere else entirely, and is the same place
+/// the moment the list hits its `below-sv.visible-height` cap, i.e. exactly when there are
+/// enough rows to care. Either way it paints across the last row, and across Playlist
+/// Detail's after-the-last-row drop indicator, which pins to that edge.
+///
+/// `reserve-scrollbar-lane` clears it, and the two halves sit in different files with
+/// nothing connecting them: an eighth host reads correct and regresses silently.
+///
+/// `views/search/songs-section.slint` is the one list under a horizontal bar that must not
+/// opt in — its bar is a real layout sibling already holding a slot. It mounts neither
+/// pair, so it falls outside the walk without being named.
+#[test]
+fn every_track_list_under_an_overlay_bar_reserves_its_lane() {
+    let sources = sources();
+    let mut hosts = 0usize;
+    let mut offenders = Vec::new();
+
+    for (path, src) in &sources {
+        if SCROLLBAR_COMPONENTS.iter().any(|owner| path.ends_with(owner)) {
+            continue;
+        }
+        let Some(pair) = BAR_PAIRS.iter().find(|pair| mounts(src, pair)) else {
+            continue;
+        };
+        hosts += 1;
+        if !normalized(src).contains(LANE_OPT_IN) {
+            offenders.push(format!("{path}: mounts {pair}, no {LANE_OPT_IN}"));
+        }
+    }
+
+    assert!(hosts >= 8, "only {hosts} bar-pair hosts found — the walk is broken");
+    assert!(
+        offenders.is_empty(),
+        "a page mounting either bar pair sets `reserve-scrollbar-lane: true` on its list, \
+         so the horizontal bar gets a lane of its own instead of painting over the last \
+         row. A composite host owes it in its height cap's content-fit arm too, that arm \
+         being a hand-sum of what the list holds:\n{}",
         offenders.join("\n")
     );
 }
