@@ -157,6 +157,13 @@ export global Theme {
     out property <length> resize-border: 4px;
     out property <length> resize-corner: 8px;
 
+    // The `OverlayScrollbar` *element's* slot, as distinct from the 8 px it paints inside
+    // it (`bar-thickness`, the component's own default). Three sides have to agree on this
+    // one: both bar pairs size their elements by it, the horizontal bar subtracts it at its
+    // right end so the two don't meet in the corner, and a `TrackList` under one reserves
+    // it as a lane rather than let the bar paint over its bottom row.
+    out property <length> scrollbar-slot: 10px;
+
     out property <length> pad-xs: 4px;
     out property <length> pad-sm: 8px;
     out property <length> pad-md: 12px;

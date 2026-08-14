@@ -1,3 +1,4 @@
+import { Theme } from "../theme.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 import { CompositeScroll } from "../globals/shell.slint";
 
@@ -48,7 +49,7 @@ export component CompositeScrollbars inherits Rectangle {
 
     // Both bars' hit thickness; the horizontal one reserves this much at its right end
     // so it never runs under the vertical one.
-    property <length> bar-thickness: 10px;
+    property <length> bar-thickness: Theme.scrollbar-slot;
 
     // The outer travel covers the sections, the inner one the rows, and the bar spans
     // both — a drag splits its offset at the boundary.

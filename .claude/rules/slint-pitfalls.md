@@ -255,7 +255,8 @@ this file is what builds, looks right, and is wrong.
   the horizontal `OverlayScrollbar` at the same `y` — the tell is colour: that track is `surface0`
   at half alpha, rounded and inset, where the strip is flat full-bleed `base`. Inset
   **left/right/top only**; for clearance at the end, put `padding-bottom` on the column *inside*
-  the viewport. Artist and Playlist can't inset on the root at all — Artist's `below-hero` must
+  the viewport — which is exactly what `reserve-scrollbar-lane` does for the horizontal bar's own
+  slot, so the two read alike on screen and are opposite in the tree. Artist and Playlist can't inset on the root at all — Artist's `below-hero` must
   run full-bleed for `CompositeScrollbars` and the hover sentinel, and Playlist's empty state and
   drop banner deliberately fill `body`.
 
