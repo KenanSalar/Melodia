@@ -25,6 +25,7 @@ use crate::media::artwork::CoverCache;
 use crate::media::metadata::{ExtractedMetadata, extract_metadata};
 use crate::media::self_writes::SelfWrites;
 use crate::media::tag_writer::{self, FieldEdit, TagEdit};
+use crate::services::describe;
 use crate::state::AppState;
 
 /// Same bound as the tag editor's fan-out ([`crate::library::tags`]): the write
@@ -93,7 +94,7 @@ pub(crate) async fn write_mbids(
 /// Per-file result carried out of the blocking pass.
 struct FileWrite {
     path: String,
-    outcome: Result<ExtractedMetadata, String>,
+    outcome: Result<ExtractedMetadata, AppError>,
 }
 
 /// Rewrite each file's Recording ID on a bounded Rayon pool, then re-extract.
@@ -119,11 +120,7 @@ fn run_write_pass(
                 // existing value.
                 self_writes.mark(p);
                 let outcome = tag_writer::apply_to_file(p, &edit, None)
-                    .map_err(|e| e.to_string())
-                    .and_then(|_| {
-                        extract_metadata(p, artwork_dir, cover_cache, true)
-                            .map_err(|e| e.to_string())
-                    });
+                    .and_then(|_| extract_metadata(p, artwork_dir, cover_cache, true));
                 FileWrite {
                     path: path.clone(),
                     outcome,
@@ -155,8 +152,8 @@ async fn run_commit(db: &DbPool, files: &[FileWrite]) -> Result<usize, AppError>
     for f in files {
         let meta = match &f.outcome {
             Ok(meta) => meta,
-            Err(msg) => {
-                log::warn!("mbid write failed for {}: {msg}", f.path);
+            Err(e) => {
+                log::warn!("mbid write failed for {}: {}", f.path, describe(e));
                 continue;
             }
         };

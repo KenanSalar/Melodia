@@ -392,35 +392,13 @@ pub(crate) fn write_test_png(
 /// [`Paths::resolve`] creates already in place — so a test that writes into one
 /// doesn't have to know which of the fields is a directory.
 ///
-/// Shared rather than hand-rolled per test file because the struct literal names
-/// every field, so each copy is one more site to fix when `Paths` grows.
 /// Directory creation is best-effort: the caller passed a `TempDir` it just
 /// created, and a failure here surfaces as a plain missing-file error in the
 /// test body.
 pub(crate) fn paths_in(dir: &Path) -> Paths {
-    let artwork_dir = dir.join("artwork");
-    let artists_dir = dir.join("artists");
-    let backups_dir = dir.join("backups");
-    let logs_dir = dir.join("logs");
-    for sub in [&artwork_dir, &artists_dir, &backups_dir, &logs_dir] {
-        let _ = std::fs::create_dir_all(sub);
-    }
-
-    Paths {
-        data_dir: dir.to_path_buf(),
-        db_path: dir.join("melodia.db"),
-        settings_path: dir.join("settings.json"),
-        view_state_path: dir.join("views.json"),
-        queue_path: dir.join("queue.json"),
-        search_history_path: dir.join("search_history.json"),
-        scrobble_credentials_path: dir.join("scrobble_credentials.json"),
-        scrobble_queue_path: dir.join("scrobble_queue.json"),
-        scrobble_mbid_state_path: dir.join("scrobble_mbid_attempted.json"),
-        artwork_dir,
-        artists_dir,
-        backups_dir,
-        logs_dir,
-    }
+    let paths = Paths::rooted_at(dir.to_path_buf());
+    let _ = paths.create_dirs();
+    paths
 }
 
 /// Serialises every test in this binary that mutates the process environment,

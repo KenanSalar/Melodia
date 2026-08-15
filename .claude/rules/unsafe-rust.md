@@ -76,10 +76,10 @@ is safe, and so is every `*mut c_void` that is only *stored* — `media_controls
 - **Build raw pointers with `std::ptr::from_ref(&x).cast()`**, never
   `&x as *const _ as *const c_void`. The chained `as` silently accepts a reference that
   was never the type you meant.
-- **Prefer `windows-sys`** — already a dependency — over a hand-rolled
-  `unsafe extern "system"` block. `settings/data.rs` is the one hand-rolled declaration
-  in the tree and shouldn't grow a second: a mistyped signature there is UB the compiler
-  will happily agree with.
+- **Take the declaration from `windows-sys`** — already a dependency — never a hand-rolled
+  `unsafe extern "system"` block. There are none left in the tree, so a second would be the
+  first: a mistyped signature is UB the compiler will happily agree with, and it is the one
+  half of an FFI site no `// SAFETY:` comment can make checkable.
 - **`cfg`-gate at the call site *and* check the manifest.** `libc` is declared under
   `[target.'cfg(target_os = "linux")']`, so a `cfg(unix)` call site compiles on Linux
   and fails to resolve on macOS. That exact mismatch shipped once in a test.
@@ -95,7 +95,7 @@ and it is written once, in **`test_support::with_env_set`** (`src/test_support.r
 Call it. Don't re-roll it — each of those seven steps has been missing from a hand-rolled
 copy at some point, and the restore is the one that goes first.
 
-- **The helpers are safe to call, and no test file in the crate contains `unsafe` any
+- **The helpers are safe to call, and no test file contains `unsafe` any
   more.** That is encapsulation, not a hole: `with_env_set` is the only place in the test
   binary that mutates the environment, so "every mutation is under `ENV_LOCK`" is a
   property of that one module rather than something each caller re-argues in a `// SAFETY:`
@@ -132,20 +132,16 @@ copy at some point, and the restore is the one that goes first.
   `linux_pkg_tests::with_path_env` are the four worked examples, each one line over
   `with_env_set`. A wrapper that needs its own lock is a wrapper in the wrong place.
 
-A file-level `#![allow(unsafe_code, reason = "…")]` used to be the norm here and there
-are none left in the unit tests, because the mutation moved behind the safe helpers.
+A file-level `#![allow(unsafe_code, reason = "…")]` used to be the norm here and there are
+none left anywhere, because the mutation moved behind the safe helpers.
 **Delete the allow when the last `unsafe` goes**; a stale one silently pre-authorises the
 next, and one sat in `library/settings/tests/folders_tests.rs` over a file with no
 `unsafe` in it at all. Routing a file through the shared helper is exactly the edit that
-strands one, and it has now retired four (`target_tests.rs`, `system_install_tests.rs`,
-`linux_pkg_tests.rs`, `settings_tests.rs`). The one that remains is on
-`with_env_set` itself — on the function, not the file, per the narrowest-item rule above.
-
-`tests/headless.rs` is the one env mutation that takes no lock, and that is correct
-rather than an oversight: an integration test is its own binary with its own
-environment, and that file holds a single test which sets `XDG_DATA_HOME` before
-anything spawns. Its allow says so, which is what keeps it from reading as the fourth
-mutex nobody consolidated.
+strands one, and it has retired four (`target_tests.rs`, `system_install_tests.rs`,
+`linux_pkg_tests.rs`, `settings_tests.rs`). `tests/headless.rs` is the fifth and got there
+the other way — `Paths::rooted_at` left it no reason to touch the environment at all. The
+one that remains is on `with_env_set` itself — on the function, not the file, per the
+narrowest-item rule above.
 
 ## What to reach for instead
 

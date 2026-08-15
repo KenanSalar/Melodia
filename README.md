@@ -135,6 +135,7 @@ MP3, FLAC, M4A/AAC, OGG/Vorbis, WAV, ALAC, AIFF
 - Optional **MusicBrainz auto-tagging** (opt-in, ListenBrainz-driven) — resolves each track's MusicBrainz Recording ID and writes it into your files, so "loved" favorites work on ListenBrainz even for an untagged library; runs automatically on new imports and on demand from Settings
 - **Discord Rich Presence** (opt-in, off by default) — shows **Listening to \<song\>** on your Discord profile with artist, album cover, a live progress bar, and a link button; updates on track change, pause, resume, seek and stop, and clears when playback stops or you quit. A **Hide while paused** option and an album-cover toggle live in Settings → Services → Discord
 - OS media controls (Linux: MPRIS2, Windows: SMTC)
+- **Set Melodia as your default music player** and double-click a track to play it — select several and they open together, in order. Melodia runs as a single instance, so opening a file while it's already running plays it in the window you have, rather than starting a second copy. On Linux it appears under "Open with…" once installed; on Windows, under Settings → Apps → Default apps
 - Always-on-top support (Linux: KDE via KWin D-Bus, GNOME via shell extension)
 - Window state persistence (size, position, maximized)
 - Queue and navigation state persistence across sessions

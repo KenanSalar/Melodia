@@ -40,18 +40,38 @@ fn render_desktop_preserves_mime_block() {
     );
 }
 
+/// Shell-like quoting: an unquoted path with a space is two arguments and the
+/// launcher runs neither.
 #[test]
-fn render_desktop_handles_path_with_spaces() {
-    // Slint patches `Exec=` lines on a single line in the .desktop
-    // spec; spaces in the path are NOT escaped in the rendered
-    // output. Freedesktop's spec says Exec lines with spaces in the
-    // command path need shell-style quoting — but the common case
-    // (no spaces) is fine, and the AppImage/tarball install paths
-    // we target don't usually have spaces. This test documents the
-    // current behavior so a future fix is intentional.
+fn render_desktop_quotes_a_path_with_spaces() {
     let exec = PathBuf::from("/home/User Name/.local/share/Melodia/Melodia");
     let rendered = render_desktop(TEST_DESKTOP_TEMPLATE, &exec);
-    assert!(rendered.contains("Exec=/home/User Name/.local/share/Melodia/Melodia"));
+    assert!(
+        rendered.contains("Exec=\"/home/User Name/.local/share/Melodia/Melodia\" %F"),
+        "a path with a space must be quoted with the field code left outside; got:\n{rendered}"
+    );
+}
+
+/// The common case has to stay unquoted — it is what the four packaged sources
+/// ship, and the drift guard compares against them.
+#[test]
+fn render_desktop_leaves_an_ordinary_path_unquoted() {
+    let exec = PathBuf::from("/home/user/.local/share/Melodia/Melodia");
+    let rendered = render_desktop(TEST_DESKTOP_TEMPLATE, &exec);
+    assert!(!rendered.contains('"'), "no quoting was called for; got:\n{rendered}");
+}
+
+/// The odd-looking count, pinned so it can't be "simplified" back to two: the
+/// desktop-entry `string` unescape halves it before the shell-like quoting sees
+/// it, so each layer needs its own.
+#[test]
+fn render_desktop_escapes_a_backslash_for_both_unescaping_layers() {
+    let exec = PathBuf::from(r"/home/od\d/Melodia");
+    let rendered = render_desktop(TEST_DESKTOP_TEMPLATE, &exec);
+    assert!(
+        rendered.contains(r#"Exec="/home/od\\\\d/Melodia" %F"#),
+        "a literal backslash must survive both layers as four; got:\n{rendered}"
+    );
 }
 
 #[test]
@@ -90,8 +110,7 @@ fn write_if_changed_skips_when_content_matches() -> TestResult {
     std::fs::write(&target, payload)?;
     let mtime_before = std::fs::metadata(&target)?.modified()?;
 
-    // Sleep briefly so a buggy "always write" would produce a
-    // distinguishable mtime change.
+    // Long enough that an "always write" bug moves the mtime measurably.
     std::thread::sleep(std::time::Duration::from_millis(50));
 
     let wrote = test_write_if_changed(&target, payload)?;
@@ -104,30 +123,21 @@ fn write_if_changed_skips_when_content_matches() -> TestResult {
 
 #[test]
 fn icon_svg_is_non_empty() {
-    // Defends against an empty `include_bytes!` resolving to an
-    // unreadable / moved asset path at build time.
+    // Against an `include_bytes!` resolving to a moved or unreadable asset.
     assert!(!TEST_ICON_SVG.is_empty(), "compiled-in icon payload must not be empty");
-    // SVG files start with `<` (XML declaration or root element).
     assert_eq!(TEST_ICON_SVG.first(), Some(&b'<'), "compiled-in icon must look like an SVG");
 }
 
 #[test]
 fn scripts_melodia_desktop_preserves_mime_block() {
-    // The `scripts/Melodia.desktop` file ships verbatim to .deb
-    // installs (per `Cargo.toml`'s `[package.metadata.deb] assets`)
-    // and to the tarball staging in CI. The in-app self-deploy uses
-    // a different file (`assets/desktop/Melodia.desktop.tmpl`)
-    // covered by `render_desktop_preserves_mime_block`. Both need
-    // to agree on the MIME block, or the same release on RPM vs DEB
-    // vs tarball produces inconsistent audio-file associations.
+    // This file ships verbatim to DEB and to the tarball staging, while the
+    // self-deploy renders the template `render_desktop_preserves_mime_block`
+    // covers. They must agree, or one release gives three package formats three
+    // different sets of audio associations.
     //
-    // Beyond MIME coverage, this test guards three other regressions
-    // that have bitten us before: (1) duplicate keys — the FreeDesktop
-    // Desktop Entry Specification forbids the same key appearing
-    // twice in a group and `desktop-file-validate` rejects it;
-    // (2) accidental removal of `Exec`/`Icon`/`StartupWMClass`, any
-    // of which silently breaks the launcher; (3) `Keywords=` drift —
-    // the launcher search ergonomics depend on it.
+    // Three other regressions have bitten here: a duplicate key (which the spec
+    // forbids and `desktop-file-validate` rejects), a dropped
+    // `Exec`/`Icon`/`StartupWMClass`, and `Keywords=` drift.
     const SCRIPTS_DESKTOP: &str = include_str!("../../../scripts/Melodia.desktop");
 
     for mime in &[
@@ -146,7 +156,7 @@ fn scripts_melodia_desktop_preserves_mime_block() {
 
     for key in &[
         "Type=Application",
-        "Exec=melodia",
+        "Exec=melodia %F",
         "Icon=melodia",
         "StartupWMClass=Melodia",
         "Keywords=",
@@ -157,12 +167,9 @@ fn scripts_melodia_desktop_preserves_mime_block() {
         );
     }
 
-    // Per the Desktop Entry Spec, a key may appear at most once per
-    // group. Counting line-starts of `MimeType=` catches the exact
-    // bug shipped (and reverted) on 2026-05-18: a copy-paste that
-    // duplicated the entire MIME line. `\nMimeType=` skips any
-    // appearance of `MimeType=` inside the file's header comments
-    // (none today, but cheap defense).
+    // A key may appear at most once per group, and a copy-paste duplicating the
+    // whole MIME line has shipped once. Anchored at a line start so a mention in
+    // a header comment can't count.
     let mime_keys = SCRIPTS_DESKTOP.match_indices("\nMimeType=").count();
     assert_eq!(
         mime_keys, 1,
@@ -172,8 +179,8 @@ fn scripts_melodia_desktop_preserves_mime_block() {
 
 #[test]
 fn desktop_template_contains_expected_keys() {
-    // Same defence as the icon test: an accidentally-blanked
-    // template file would render but produce a useless .desktop.
+    // Same defence as the icon test: a blanked template still renders, into a
+    // useless `.desktop`.
     for key in &[
         "Type=Application",
         "Name=Melodia",
@@ -191,13 +198,9 @@ fn desktop_template_contains_expected_keys() {
 
 #[test]
 fn metainfo_declares_expected_component() {
-    // The compiled-in AppStream MetaInfo is deployed for per-user
-    // tarball installs and shipped verbatim by the RPM, DEB and
-    // AppImage. Guard the identity fields software centres key on, and
-    // the `launchable` that must match the installed desktop file's id
-    // (`com.github.kenansalar.melodia.desktop`) — a drift there breaks
-    // the desktop-entry ↔ component merge and the app renders with no
-    // name / developer / licence in KDE Discover and GNOME Software.
+    // The identity fields software centres key on, plus the `launchable` that
+    // must match the installed desktop-id: drift there breaks the entry ↔
+    // component merge, and the app lists with no name, developer or licence.
     for needle in &[
         "<id>com.github.kenansalar.melodia</id>",
         "<name>Melodia</name>",
@@ -214,22 +217,15 @@ fn metainfo_declares_expected_component() {
 
 #[test]
 fn all_desktop_sources_agree_on_mime_and_wmclass() {
-    // Four sources independently materialise a `.desktop` body — the
-    // template compiled into the binary (self-deploy + DEB),
-    // `scripts/Melodia.desktop` (verbatim DEB asset + tarball),
-    // and two heredocs inside the AppImage + RPM build scripts.
-    // Drift between them is silent at build time and corrosive at
-    // runtime: a user on AppImage can't open audio files from a file
-    // manager, KDE shows two taskbar entries, "Open with…" lists
-    // a different set of apps depending on which package format the
-    // user installed from. This test fails the build if any source
-    // diverges from the canonical MIME + WMClass invariants.
+    // Four sources materialise a `.desktop` body independently, and drift
+    // between them is silent at build time and corrosive after: an AppImage user
+    // can't open audio files from a file manager, KDE shows two taskbar entries,
+    // and "Open with…" offers a different set per package format.
     const APPIMAGE_SCRIPT: &str = include_str!("../../../scripts/build-appimage.sh");
     const RPM_SCRIPT: &str = include_str!("../../../scripts/build-rpm.sh");
     const SCRIPTS_DESKTOP: &str = include_str!("../../../scripts/Melodia.desktop");
-    // Full 13-MIME-type set the production template carries. Every
-    // packaged form must declare the same set or "Open with…"
-    // associations diverge across formats.
+    // The full set the production template carries; every format declares it or
+    // the associations diverge.
     const CANONICAL_MIME_TYPES: &[&str] = &[
         "audio/mpeg",
         "audio/flac",
@@ -269,5 +265,47 @@ fn all_desktop_sources_agree_on_mime_and_wmclass() {
             body.contains("Keywords="),
             "{name} missing `Keywords=` — launcher search loses fuzzy matches",
         );
+
+        // The MIME block makes Melodia offerable; the field code is what makes
+        // it work — without one the spec passes no filenames, so the app opens
+        // and plays nothing. `%F` over `%U` (no `file://` to percent-decode) and
+        // over `%f` (one process per selected file).
+        let mut execs = exec_lines(body).peekable();
+        assert!(execs.peek().is_some(), "{name} declares no `Exec=` at all");
+        for exec in execs {
+            assert!(
+                exec.ends_with(" %F"),
+                "{name}'s Exec line is `{exec}`, which carries no `%F` — the desktop environment \
+                 hands it no paths and the MimeType list above is decorative"
+            );
+        }
     }
+}
+
+/// Every `Exec=` line of a desktop-entry body, wherever they sit.
+///
+/// Extracted rather than `contains`d because two of the four sources are whole
+/// shell scripts, where a comment about the line reads exactly like the line —
+/// the hole `strip_xml_comments` closes for the MSI. All of them rather than the
+/// first, because a second heredoc is what a fixed index walks past.
+fn exec_lines(body: &str) -> impl Iterator<Item = &str> {
+    body.lines().filter(|line| line.starts_with("Exec="))
+}
+
+/// The fifth source is a rewriter, not a body, so the guard above can't see it:
+/// `install-linux.sh` seds the `Exec=` of the *same file* the DEB ships verbatim
+/// to make the command absolute. Anchored at `.*` it ate the field code too, so
+/// `%F` lived in the DEB and died in the tarball with nothing able to tell.
+#[test]
+fn the_tarball_installer_rewrite_keeps_the_field_code() {
+    const INSTALLER: &str = include_str!("../../../scripts/install-linux.sh");
+
+    assert!(
+        INSTALLER.contains("s|^Exec=[^ ]*|"),
+        "install-linux.sh must replace only the command token; got:\n{INSTALLER}"
+    );
+    assert!(
+        !INSTALLER.contains("s|^Exec=.*|"),
+        "install-linux.sh's `.*` swallows everything after the command, field code included"
+    );
 }

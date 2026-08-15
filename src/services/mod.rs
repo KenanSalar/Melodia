@@ -13,6 +13,7 @@ pub mod media_controls;
 pub mod scrobble;
 pub mod search_history;
 pub mod settings;
+pub mod single_instance;
 #[cfg(target_os = "linux")]
 pub mod system_theme;
 pub mod toast;

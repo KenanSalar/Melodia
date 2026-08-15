@@ -73,6 +73,54 @@ the OS owns has to be attached late or not at all on at least one platform.
   `HoveredFile{,Cancelled}` toggle `Queue.is-drop-hovered`. Don't bump winit without a rebase +
   re-sync — the root `CLAUDE.md`'s Known Gaps has what retires it.
 
+## Opening a file from the file manager
+
+The other way paths arrive from outside, and the one that can arrive before there is a window.
+`main()`'s ordering constraints are the root `CLAUDE.md`'s; this is the shape.
+
+- **Two verbs, and they are not one.** A drop appends (`queue_import_files`, routed by
+  `drop_coalescer`, *discarded* when neither the queue sheet nor a playlist is open); an open
+  **replaces the queue and plays** (`queue::open_files`), as VLC, foobar2000 and Strawberry all
+  default to. They share `sort_for_queue` and nothing else. **Neither existing fn was the whole
+  answer**: `queue_import_files` never sets `current_index`, and `player_play_tracks` wants ids in
+  order where `ImportFilesResult::track_ids` is partly `HashMap` order.
+
+- **A cold start with files skips resume-on-startup** — `open_startup_files` runs synchronously
+  after `restore_persisted_queue`, so resume would only be visible for the moment it takes them to
+  land. It is also **too early to toast**: that bridge installs with the UI and drops rather than
+  queues, so a cold-start failure can only log.
+
+- **A warm one raises through `tray_bridge::raise_window`**, the only thing that knows whether the
+  window is hidden (tray or minimize → `show_window` + `SAVED_WINDOW_GEOM`) or merely buried (→
+  winit `focus_window`, a documented no-op on Wayland). Raised either way — an empty forward is
+  someone launching Melodia to get at the window.
+
+- **"The name is taken" has two spellings and `interprocess` normalises neither.** Unix `bind`
+  says `EADDRINUSE`; a Windows named pipe is created under `FILE_FLAG_FIRST_PIPE_INSTANCE`, whose
+  second instance fails `ERROR_ACCESS_DENIED` — `PermissionDenied`, nowhere near `AddrInUse`.
+  Matching only the first left *every* Windows relaunch `Claim::Unenforced`: a second window and a
+  second writer over one database, on the platform the MSI registers associations for.
+  `name_is_taken` is the single place that decides, and **its pure half takes the platform as an
+  argument** — `services::redact_prefix`'s shape, for the same reason. A `cfg!` inside the
+  predicate is a branch the Linux gate compiles out and can never exercise, so a
+  "simplification" back to one spelling merges green; `name_is_taken_on` is what
+  `a_taken_name_is_recognised_in_both_spellings` can ask both ways. A genuine ACL denial takes the
+  same arm and fails at the connect, landing back on `Unenforced`, which is where it belonged
+  anyway.
+
+- **The accept loop is a detached `std::thread`, not `spawn_blocking`**, as `discord/ipc.rs` runs
+  its transport: a parked blocking-pool tenant is what the 32-slot cap exists to prevent. Its
+  read-failure arm still calls `on_launch` with no paths: the connection is proof of a launch, and
+  a selection past `MAX_PAYLOAD_LEN` should cost the user their file list, not their window.
+
+- **The frame declares its length, and that is not decoration.** Reading to EOF instead means the
+  receiver waits on the sender's close while the sender waits to know the payload landed — **both
+  block to their 2 s timeouts and the paths are dropped**, which every codec test passes straight
+  through. `a_second_launch_hands_its_paths_to_the_first_and_stands_down` is why a real socket
+  earns its setup. The sender *does* wait for the close, deliberately: exiting straight after the
+  write leaves the payload in a pipe buffer with its own handle the last one open, on the platform
+  no Linux runner covers.
+
 ## Tray and media keys
 
 - **OS media controls** — souvlaki 0.8. Bounded `mpsc` (cap 32) decouples the callback thread from

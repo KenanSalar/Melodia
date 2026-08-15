@@ -216,20 +216,18 @@ const ATTRIBUTION: &str = include_str!("../../../licenses/ATTRIBUTION.txt");
 
 /// The floor for the font walk: the five faces that ship today.
 ///
-/// A floor rather than an exact set, and the asymmetry is the point — it blocks
-/// the silent *loss* the walk can't otherwise see while still permitting the
-/// *addition* this pin exists to catch. Retiring a face is a deliberate act that
-/// moves this number; a subdirectory dropping out of the walk is not, and three
-/// of the five sit in one. Tight rather than loose, unlike the source-tree floors
-/// in `test_support`: the corpus is five files that change about once a release
-/// cycle, so a number that only catches *most* of a loss buys nothing.
+/// A floor rather than an exact set, and the asymmetry is the point: it blocks
+/// the silent *loss* the walk can't see while permitting the *addition* the pin
+/// exists to catch. Retiring a face moves this number deliberately; a
+/// subdirectory dropping out of the walk does not, and three of the five sit in
+/// one. Tight rather than loose, unlike `test_support`'s source-tree floors —
+/// five files changing once a release cycle, where catching *most* of a loss
+/// buys nothing.
 ///
-/// Here rather than beside `FONTS_DIR`, which is the opposite placement from those
-/// three. What put them there was duplication — four pins walked one corpus and
-/// each carried its own copy of the number. This has one caller, and being tight
-/// it is an assertion about the corpus rather than a vacuity guard on the walk, so
-/// it belongs with the pin that makes the claim. Move it the day a second pin
-/// walks the font tree.
+/// Beside the pin rather than `FONTS_DIR`, the opposite of those three: what put
+/// them there was four pins duplicating one number. This has one caller and,
+/// being tight, asserts about the corpus rather than guarding the walk against
+/// vacuity. Move it the day a second pin walks the font tree.
 const MIN_FONTS: usize = 5;
 
 /// A face imported by a `.slint` file is `include_bytes!`d into the binary, so it
@@ -239,17 +237,16 @@ const MIN_FONTS: usize = 5;
 /// licence delivered to recipients, and Material Symbols carries no licence
 /// string in its name table at all.
 ///
-/// Asks the *directory* rather than the imports, which over-approximates on
-/// purpose: a face committed under `melodia-ui/ui/assets/fonts/` is redistributed
-/// by the repo whether or not anything imports it yet, and the import is the edit
-/// most likely to arrive in a later commit than the file. [`font_sources`] holds
-/// the one carve-out that needs one.
+/// Asks the *directory* rather than the imports, over-approximating on purpose:
+/// a committed face is redistributed by the repo whether or not anything imports
+/// it yet, and the import is the edit likeliest to land in a later commit than
+/// the file. [`font_sources`] holds the one carve-out.
 ///
-/// Keyed on each face's repo-relative path rather than on a family name, because
-/// the family is not derivable from the file: `MaterialSymbolsRoundedFilled.ttf`
-/// declares "Material Symbols Rounded Filled", and no split of the stem gets there
-/// without knowing the answer. The path is exact, and the `Files:` list it checks
-/// is what a packager reads anyway.
+/// Keyed on the repo-relative path, not a family name, the family not being
+/// derivable from the file — `MaterialSymbolsRoundedFilled.ttf` declares
+/// "Material Symbols Rounded Filled" and no split of the stem gets there without
+/// already knowing. The path is exact, and the `Files:` list it checks is what a
+/// packager reads anyway.
 ///
 /// **Walk, don't list.** A sixth face is precisely the regression, and a fixed
 /// list of the five is what it walks past.
@@ -286,12 +283,11 @@ fn every_bundled_font_is_named_in_the_attribution() {
 /// mention the directory in a comment, and a pin that accepts a mention is a pin
 /// that goes green on a format which stopped shipping it.
 ///
-/// The RPM is the one where staging and shipping are separate statements, so the
-/// needle has to be the second. `build-rpm.sh` copies `licenses/` into the source
-/// tarball and `%license` is what pulls it out of the unpacked tree into the
-/// package; drop the `%files` line and the staged copy simply goes unread, in the
-/// *build* directory, which `check-files` never looks at — no warning, no package,
-/// and a pin on the `cp` still green.
+/// The RPM stages and ships in separate statements, so the needle has to be the
+/// second: `build-rpm.sh` copies `licenses/` into the source tarball, and
+/// `%license` is what pulls it out of the unpacked tree. Drop the `%files` line
+/// and the staged copy goes unread in the *build* directory, which `check-files`
+/// never looks at — no warning, and a pin on the `cp` still green.
 const LICENSE_SHIPPERS: [(&str, &str); 5] = [
     ("scripts/build-rpm.sh", "%license LICENSE licenses/"),
     ("Cargo.toml", "[\"licenses/*\""),
@@ -305,17 +301,15 @@ const LICENSE_SHIPPERS: [(&str, &str); 5] = [
 /// all. That is exactly the shape where one format quietly stops shipping the
 /// licence text and nothing says so until a distro packager files it.
 ///
-/// A `%license` line, an asset triple, a `cp` and an MSI `File` have nothing in
-/// common but their effect, so this is a named list rather than a walk — the
-/// opposite call from the font pin above, and for the opposite reason: the set of
-/// package formats is closed and changing it is a deliberate act, where the set of
-/// fonts is open and adding to it is not.
+/// A `%license` line, an asset triple, a `cp` and an MSI `File` share nothing
+/// but their effect, so a named list rather than a walk — the opposite call from
+/// the font pin above and for the opposite reason: the set of formats is closed
+/// and changing it is deliberate, where the set of fonts is open.
 ///
-/// `.github/workflows/release.yml` is why that file is no longer on
-/// `pr-validation.yml`'s skip denylist. It was excluded there on the grounds that
-/// it compiles nothing, which is true and beside the point now that it is an input
-/// to this test: a PR touching only that file skipped the `test` job, and the gate
-/// counts `skipped` as a pass.
+/// Naming `release.yml` is why it left `pr-validation.yml`'s skip denylist: it
+/// compiles nothing, which was true and became beside the point once it was an
+/// input here. A PR touching only that file skipped `test`, and the gate counts
+/// `skipped` as a pass.
 #[test]
 fn every_package_format_ships_the_licenses_dir() {
     let root = Path::new(REPO_ROOT);
@@ -410,6 +404,33 @@ fn the_msi_names_every_licence_file() {
         "{unnamed:?} ship in every other package format but are not `<File>` elements in \
          wix/main.wxs. WiX has no glob, so each file costs an edit there — add one beside \
          the others under `LicenseDir`."
+    );
+}
+
+/// Windows offers a file type only where `main.wxs` writes the rows for it, and
+/// there is no glob there any more than for the licences — so a ninth entry in
+/// [`crate::media::AUDIO_EXTENSIONS`] is one the app imports happily and Explorer
+/// never offers.
+///
+/// A walk rather than a list, and comment-stripped first, both for
+/// [`the_msi_names_every_licence_file`]'s reasons — the wxs comment names the
+/// constant while explaining the pin, satisfying a raw needle by itself.
+#[test]
+fn the_msi_offers_every_audio_extension() {
+    let raw =
+        std::fs::read_to_string(Path::new(REPO_ROOT).join("wix/main.wxs")).unwrap_or_default();
+    assert!(!raw.is_empty(), "wix/main.wxs won't read — did the MSI source move?");
+    let wxs = strip_xml_comments(&raw);
+
+    let unoffered: Vec<_> = crate::media::AUDIO_EXTENSIONS
+        .iter()
+        .filter(|ext| !wxs.contains(&format!("Name=\".{ext}\"")))
+        .collect();
+    assert!(
+        unoffered.is_empty(),
+        "{unoffered:?} are scanned into the library but named nowhere in wix/main.wxs, so \
+         Windows never lists Melodia for them in Open with or Default apps. Each needs a row \
+         under both `Applications\\Melodia.exe\\SupportedTypes` and `Capabilities\\FileAssociations`."
     );
 }
 

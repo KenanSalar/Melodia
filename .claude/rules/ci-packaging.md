@@ -107,6 +107,36 @@ results. No coverage on this path.
   components belong in the file's `components` list, else clippy and `llvm-tools-preview` silently
   go missing.
 
+## File associations — five Linux spellings and one Windows one, all pinned
+
+The `MimeType=` list makes Melodia *offerable*; the `Exec=` field code is what makes the handoff
+work, and the two shipped apart for a whole release.
+
+- **All four `.desktop` sources end `Exec=` with ` %F`** (`scripts/Melodia.desktop`, the two build
+  heredocs, `assets/desktop/Melodia.desktop.tmpl`). Not `%U`, a list of *URLs* the spec lets arrive
+  as `file://` and so obliges percent-decoding; not `%f`, one process per selected file.
+  `all_desktop_sources_agree_on_mime_and_wmclass` matches **extracted lines**, every one of them —
+  two sources are whole shell scripts, where a comment about the line reads exactly like the line,
+  and a second heredoc is what checking only the first would walk past.
+
+- **`scripts/install-linux.sh` is the fifth, and it is a rewriter.** It seds the `Exec=` of the
+  same file the DEB ships verbatim; anchored at `.*` it ate the field code too, so `%F` lived in
+  the DEB and died in the tarball. `s|^Exec=[^ ]*|` takes the command token only, pinned both ways
+  by `the_tarball_installer_rewrite_keeps_the_field_code`. Its quoting arm answers the same
+  question as `desktop_integration::render_desktop`'s — Exec is parsed with shell-like quoting, so
+  a path with a space needs them, **only when it does** — but not with the same predicate: the
+  shell `case` tests for a space, `quote_exec` for the spec's whole reserved set and its two
+  unescaping layers. Deliberate; a `$` or a backtick in `$HOME` doesn't earn shell-quoting
+  gymnastics in an installer.
+
+- **Windows is `wix/main.wxs`'s `FileAssociations` component, plain `RegistryValue` rows.** WiX's
+  `ProgId`/`Extension`/`Verb` predate Vista: no `Capabilities` + `RegisteredApplications` (what
+  Win10/11 reads for Default apps), and `Extension` claims `HKCR\.mp3`'s default outright.
+  **`ApplicationDescription` is required** — without it the app is absent from that list and every
+  key under it unreachable. `MultiSelectModel=Player` hands a whole selection to one invocation.
+  `the_msi_offers_every_audio_extension` walks `media::AUDIO_EXTENSIONS` against the
+  comment-stripped wxs, the one format no Linux runner builds.
+
 ## Licences — every format ships `licenses/`, and the five spellings are pinned by name
 
 The two fonts and the vendored winit fork compile *into* the binary, so each artifact redistributes

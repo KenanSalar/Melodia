@@ -1,9 +1,12 @@
-//! Background-task spawning + queue restore + resume-on-startup.
+//! Background-task spawning, queue restore, and what the two ways of starting
+//! resolve to: resume-on-startup, or the files this launch was handed.
 
 use std::sync::Arc;
 
+use slint::ComponentHandle;
+
 use melodia::{
-    library,
+    AppWindow, library,
     player::event_sink::EventSink,
     services,
     state::{AppState, StartupChannels},
@@ -25,28 +28,23 @@ pub fn spawn_background_tasks(
     // Folds the output device's fault counters into one line per window, and is
     // the only thing watching for a device that goes away mid-session.
     tasks::audio_health::spawn(spawner, state);
-    // Batches `play_count` / `skip_count` UPDATEs every 2 s so a fast skip
-    // burst becomes one write instead of N. Must be spawned before any
-    // playback can fire `UpdatePlayCount` actions.
+    // Batches `play_count` / `skip_count` UPDATEs so a fast skip burst is one
+    // write. Before any playback can fire an `UpdatePlayCount`.
     tasks::play_count_flusher::spawn(spawner, state.db.clone(), state.stats_changed_tx.clone());
-    // Scrobble detector + submitter: watch the player view-model/position seam,
-    // enqueue qualifying plays, and drain the durable queue to Last.fm /
-    // ListenBrainz. Inert until a provider is connected + enabled.
+    // Watches the view-model/position seam, enqueues qualifying plays and
+    // drains the durable queue. Inert until a provider is connected.
     tasks::scrobble::spawn(spawner, state);
-    // Auto-tag scanned tracks with their MusicBrainz Recording ID via
-    // ListenBrainz so loves work on untagged libraries. Inert until the user
-    // enables it + ListenBrainz is connected.
+    // Auto-tags Recording IDs so loves work on an untagged library. Inert until
+    // enabled and ListenBrainz is connected.
     tasks::mbid_backfill::spawn(spawner, state);
-    // Discord Rich Presence: project the player view-model into a Discord
-    // activity card over a hand-rolled IPC transport. Inert until the user
-    // enables it in Settings. Start the worker now if it's already enabled
-    // from a previous session, so the card/status connects while idle rather
-    // than waiting for the first track to play.
+    // Projects the view-model into a Discord activity card. Inert until enabled;
+    // started here when it already is, so the card connects while idle rather
+    // than on the first track.
     tasks::discord_presence::spawn(spawner, state);
     state.discord.start_if_enabled();
 
-    // OS media controls → SlintEventSink: souvlaki events drive the same
-    // library::* paths the UI does, so MPRIS / SMTC stays in lockstep.
+    // souvlaki events drive the same `library::*` paths the UI does, keeping
+    // MPRIS / SMTC in lockstep with it.
     if let Some(rx) = channels.media_control_rx.take() {
         let sink: Arc<dyn EventSink> = Arc::new(ui::shell::event_sink::SlintEventSink {
             state: state.clone(),
@@ -68,9 +66,8 @@ pub fn restore_persisted_queue(runtime: &tokio::runtime::Runtime, state: &AppSta
     }
 }
 
-/// If the user enabled "Resume on Startup" AND the restored queue has a
-/// current track, kick `player_play()` here so the very first frame paints
-/// with `status=Playing` and the rodio thread is already decoding.
+/// With "Resume on Startup" on and a restored current track, play here so the
+/// first frame paints `Playing` and rodio is already decoding.
 pub fn maybe_resume_on_startup(
     state: &AppState,
     startup_settings: Option<&services::settings::SettingsData>,
@@ -79,14 +76,60 @@ pub fn maybe_resume_on_startup(
     if !resume_enabled {
         return;
     }
-    // Bind the bool out and drop the `std::sync::Mutex` guard
-    // *before* calling `player_play()` — that fn re-enters the same
-    // lock via `with_state_emit`, so holding the guard across the
-    // call would deadlock.
+    // Bind the bool out so the guard drops *before* `player_play()`, which
+    // re-enters the same lock through `with_state_emit`.
     let has_track = melodia::player::state::lock_state(&state.player_state).current_track.is_some();
     if has_track && let Err(e) = library::playback::player_play(&state.playback_ctx()) {
         log::warn!("resume_on_startup: player_play failed: {e}");
     }
+}
+
+/// Play the files this launch was handed on the command line.
+///
+/// After [`restore_persisted_queue`] so an opened track wins over the queue the
+/// last session left; `main()` skips [`maybe_resume_on_startup`] when there are
+/// files, resuming being visible for the moment it takes this to replace it.
+/// Synchronous like the restore — the first frame should paint what was
+/// double-clicked.
+pub fn open_startup_files(
+    runtime: &tokio::runtime::Runtime,
+    state: &AppState,
+    files: &[std::path::PathBuf],
+) {
+    let paths: Vec<String> = files.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    // Too early to toast: that bridge installs with the UI and drops rather
+    // than queues what arrives before it.
+    if let Err(e) = runtime.block_on(library::queue::open_files(state, paths)) {
+        log::warn!("Failed to open the files given on the command line: {e}");
+    }
+}
+
+/// Start accepting forwarded launches. The listener has been bound since before
+/// the logger opened, so what waited in the backlog is delivered from here.
+pub fn serve_file_opens(
+    state: &AppState,
+    app: &AppWindow,
+    listener: services::single_instance::Listener,
+) {
+    let state = state.clone();
+    let weak = app.as_weak();
+
+    services::single_instance::serve(listener, move |paths| {
+        // Raise either way — an empty forward is someone launching Melodia
+        // again to get at the window.
+        let _ = weak.upgrade_in_event_loop(|ui| ui::shell::tray_bridge::raise_window(&ui));
+
+        if paths.is_empty() {
+            return;
+        }
+        let state = state.clone();
+        state.runtime.clone().spawn(async move {
+            if let Err(e) = library::queue::open_files(&state, paths).await {
+                log::warn!("Failed to open forwarded files: {e}");
+                services::toast::notify(services::toast::ToastKind::OperationFailed, e.to_string());
+            }
+        });
+    });
 }
 
 /// First-launch auto-add + folder-watcher restart (off-thread, tracked so

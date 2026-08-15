@@ -27,6 +27,7 @@ use crate::media::artwork::{self, CoverCache};
 use crate::media::metadata::{ExtractedMetadata, extract_metadata};
 use crate::media::self_writes::SelfWrites;
 use crate::media::tag_writer::{self, ArtworkEdit, TagEdit};
+use crate::services::describe;
 use crate::state::AppState;
 
 /// Width cap for the tag-write fan-out. The MP4 save clones the embedded cover,
@@ -202,12 +203,13 @@ fn prepare_artwork(
 }
 
 /// Per-file result carried out of the blocking pass. `Ok((meta, unsupported))`
-/// on a successful write + re-extract; `Err(msg)` for a write or re-extract
-/// failure (collected, never fatal).
+/// on a successful write + re-extract; a write or re-extract failure is
+/// collected here rather than being fatal, and flattens to report text at the
+/// point it is read.
 struct FileWrite {
     id: i64,
     path: String,
-    outcome: Result<(ExtractedMetadata, Vec<&'static str>), String>,
+    outcome: Result<(ExtractedMetadata, Vec<&'static str>), AppError>,
 }
 
 /// Rewrite each file's tags on a bounded Rayon pool, then re-extract. Mirrors
@@ -236,15 +238,10 @@ fn run_write_pass(
                 // event this write is about to fire — and with the DB `file_path`
                 // (the set keys on exact `PathBuf` equality).
                 self_writes.mark(p);
-                let outcome = match tag_writer::apply_to_file(p, edit, picture) {
-                    Ok(unsupported) => {
-                        match extract_metadata(p, artwork_dir, cover_cache, skip_artwork) {
-                            Ok(meta) => Ok((meta, unsupported.0)),
-                            Err(e) => Err(e.to_string()),
-                        }
-                    }
-                    Err(e) => Err(e.to_string()),
-                };
+                let outcome = tag_writer::apply_to_file(p, edit, picture).and_then(|unsupported| {
+                    extract_metadata(p, artwork_dir, cover_cache, skip_artwork)
+                        .map(|meta| (meta, unsupported.0))
+                });
                 FileWrite {
                     id: *id,
                     path: path.clone(),
@@ -303,8 +300,10 @@ async fn run_commit(
     for f in files {
         let (meta, unsupported) = match &f.outcome {
             Ok(ok) => ok,
-            Err(msg) => {
-                report.failures.push((f.path.clone(), msg.clone()));
+            Err(e) => {
+                let reason = describe(e);
+                log::warn!("tag write failed for {}: {reason}", f.path);
+                report.failures.push((f.path.clone(), reason));
                 continue;
             }
         };
