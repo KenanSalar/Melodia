@@ -8,16 +8,14 @@ import { Checkbox } from "../components/checkbox.slint";
 
 // One fixed-height queue row: number-or-checkbox, artwork, title, duration, delete.
 //
-// **Selection is driven by the checkbox only** — a click on the row body is a no-op for it,
-// the whole-row TouchArea being reserved for drag-to-reorder past a 4 px threshold and
-// double-click skip-to.
+// **Selection is driven by the checkbox only** — a click on the row body is a no-op for it, the
+// whole-row TouchArea being reserved for drag-to-reorder past a 4 px threshold and double-click
+// skip-to.
 //
-// **The drag is hand-rolled rather than built on `DragArea` / `DropArea`.** Those negotiate a
-// drop onto a whole element: no insertion-slot granularity, no edge auto-scroll, and what they
-// add is a mime-typed payload a reorder has nothing to put in. 1.16's `DragArea` doesn't
-// expose `dragging` either, so it couldn't drive the source-row ghost.
-//
-// `moved` keeps firing after the pointer leaves the TouchArea's bounds — implicit pointer
+// **The drag is hand-rolled rather than built on `DragArea` / `DropArea`.** Those negotiate a drop
+// onto a whole element: no insertion-slot granularity, no edge auto-scroll, and what they add is a
+// mime-typed payload a reorder has nothing to put in; 1.16's `DragArea` doesn't expose `dragging`
+// either. `moved` keeps firing after the pointer leaves the TouchArea's bounds — implicit pointer
 // capture — which is what makes `absolute-position.y + mouse-y` → row index reliable.
 export component QueueRowItem inherits Rectangle {
     in property <QueueRow> row-data;

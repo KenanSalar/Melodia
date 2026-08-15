@@ -38,20 +38,17 @@ component MosaicSlot inherits Rectangle {
     }
 }
 
-// Reusable 1/2/3/4-tile artwork mosaic. Pure layout — the caller owns the outer
-// chrome, and only the inner tiles are drawn here, so an effective count of 0
-// draws nothing and the caller's own empty state shows through. Every tile
-// resolves through `request-cover`, so each consumer keeps its own LRU tier.
+// Reusable 1/2/3/4-tile artwork mosaic. Pure layout — the caller owns the outer chrome and only the
+// inner tiles are drawn here, so an effective count of 0 draws nothing and the caller's own empty
+// state shows through. Every tile resolves through `request-cover`, so each consumer keeps its own
+// LRU tier. The layouts mirror the canonical playlist composition: 1 = full bleed, 2 = left/right,
+// 3 = left full-height + right split, 4 = 2×2.
 //
-// The layouts mirror the canonical playlist composition: 1 = full bleed,
-// 2 = left/right, 3 = left full-height + right split, 4 = 2×2.
-//
-// **`tile-count` versus `artwork-paths.length` is what separates the two
-// consumers.** The picker leaves it 0 and takes the path count, since its shape
-// follows a selection where every slot has real artwork. A hero sets it from the
-// *entity* count, so slots past the distinct covers fall back to placeholders —
-// five favorites over two covers give a 2×2 of two covers and two placeholders,
-// not the two duplicated.
+// **`tile-count` versus `artwork-paths.length` is what separates the two consumers.** The picker
+// leaves it 0 and takes the path count, its shape following a selection where every slot has real
+// artwork. A hero sets it from the *entity* count, so slots past the distinct covers fall back to
+// placeholders — five favorites over two covers give two covers and two placeholders, not two
+// duplicated.
 export component CoverMosaic inherits Rectangle {
     in property <[string]> artwork-paths;
     in property <length>   gutter-size: 3px;

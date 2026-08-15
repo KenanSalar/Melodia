@@ -1,8 +1,7 @@
 import { PlayerVm, QueueVm, TrackMetaRow } from "../models.slint";
 
 // Bound to the backend through watch channels (push) and `library::*` (pull); cross-cutting
-// callbacks are wired in `src/ui/callbacks/`, each view slice owning its own under
-// `src/ui/<view>/callbacks/`.
+// callbacks are wired in `src/ui/callbacks/`, each view slice owning its own under `<view>/`.
 export global Player {
     in-out property <PlayerVm> vm;
     in-out property <QueueVm> queue;
@@ -13,9 +12,8 @@ export global Player {
     in-out property <int> duration-ms;
     in-out property <float> progress;
 
-    // A seek target held until the reported position lands within ±2 s or the track changes.
-    // While ≥ 0 the slider prefers it over `position-ms`, so the thumb doesn't snap back for a
-    // frame before the next view-model push.
+    // A seek target held until the reported position lands within ±2 s or the track changes. While
+    // ≥ 0 the slider prefers it over `position-ms`, so the thumb doesn't snap back for a frame.
     in-out property <int> seek_pending_ms: -1;
 
     // The dual-slot cross-fade: Rust writes the fresh blur into the *inactive* slot then flips
@@ -46,16 +44,12 @@ export global Player {
     // View → Rust: the strip's available width. `MetaChipStrip` owns the mirror and mount seed.
     callback recompute-chip-rows(length);
 
-    // The Now Playing backdrop colour set, written together by the `track_change` subscriber
-    // from `ui::now_playing::backdrop::solve`.
-    //
-    // **None of these can be a theme constant.** They take their *hue* from the accent
-    // quantized out of the cover (`Theme.accent` when art-less) and their *tone* from a solve
-    // against how bright the backdrop measured — the theme lends its colour, never its
-    // polarity. Don't reach for `Theme.text` / `subtext0` / `crust` / `base` on anything
-    // painting on the blur; on a light theme they land light-on-light. The defaults are
-    // literals for the same reason: a theme binding would make the pre-solve frame the broken
-    // case.
+    // The Now Playing backdrop colour set, written together by the `track_change` subscriber from
+    // `ui::now_playing::backdrop::solve`. **None of these can be a theme constant**: they take their
+    // *hue* from the accent quantized out of the cover (`Theme.accent` when art-less) and their
+    // *tone* from a solve against how bright the backdrop measured — the theme lends its colour,
+    // never its polarity. Don't reach for `Theme.text` / `subtext0` / `crust` / `base` on anything
+    // painting on the blur; the literal defaults are for the same reason.
 
     // Alpha baked in. Solved so the *composited* backdrop lands in a known dark band whatever
     // the cover, which is what lets one light foreground be correct on all of them.
@@ -66,10 +60,10 @@ export global Player {
     in-out property <color> np-floor-start: #2b2135;
     in-out property <color> np-floor-end: #14101a;
 
-    // The hue-carrying tier — visualizer, stars, heart, back button, chips, Up-Next chrome.
-    // Solved for the 3:1 non-text bar then floored, so a brighter accent keeps its own tone.
-    // One brush serves solid and translucent surfaces alike. **Never `.brighter()`** — that
-    // scales HSV value and can't lift a near-black accent at all.
+    // The hue-carrying tier — visualizer, stars, heart, back button, chips, Up-Next chrome. Solved
+    // for the 3:1 non-text bar then floored, so a brighter accent keeps its own tone; one brush
+    // serves solid and translucent alike. **Never `.brighter()`** — that scales HSV value and
+    // can't lift a near-black accent at all.
     in-out property <brush> np-accent-bright: #cba6f7;
 
     // Derived here so surfaces meant to match can't drift. Genuine one-offs stay inline;
@@ -91,8 +85,7 @@ export global Player {
     callback seek(int);          // position in ms
     callback set-volume(int);    // 0..100, fires continuously during drag
     callback commit-volume();    // fires on slider release; persists to settings.json
-    // Applies to the live player immediately *and* persists. Reads back through
-    // `vm.playback_speed`.
+    // Applies to the live player immediately *and* persists; reads back through `vm.playback_speed`.
     callback set-playback-speed(float);
     callback toggle-mute();
     callback toggle-shuffle();

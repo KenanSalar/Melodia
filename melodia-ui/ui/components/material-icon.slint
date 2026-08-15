@@ -2,16 +2,14 @@ import "../assets/fonts/MaterialSymbolsRounded.ttf";
 import "../assets/fonts/MaterialSymbolsRoundedFilled.ttf";
 import { Theme } from "../theme.slint";
 
-// A Material Symbols Rounded glyph by ligature name — the font's GSUB
-// substitutes the outline for the literal. `filled` swaps to a FILL=1 static
-// instance shipped under its own family, because FILL is a variation axis and
-// Slint 1.16's `Text` exposes only `font-weight`.
+// A Material Symbols Rounded glyph by ligature name — the font's GSUB substitutes the outline for
+// the literal. `filled` swaps to a FILL=1 static instance shipped under its own family, FILL being
+// a variation axis where Slint 1.16's `Text` exposes only `font-weight`.
 //
-// **The fixed square is the point.** It collapses the layout box from the font's
-// natural ~1.2× line height down to the em box, so `vertical-alignment: center`
-// centres the glyph in *that* rather than in an inflated line box. Without it
-// the icon's centreline sits a pixel or two below adjacent text — invisible on
-// an asymmetric glyph and glaring on a circular one.
+// **The fixed square is the point.** It collapses the layout box from the font's natural ~1.2× line
+// height down to the em box, so `vertical-alignment: center` centres the glyph in *that* rather
+// than in an inflated line box. Without it the icon's centreline sits a pixel or two below adjacent
+// text — invisible on an asymmetric glyph and glaring on a circular one.
 export component MaterialIcon {
     in property <string> name;
     in property <length> icon-size: 22px;

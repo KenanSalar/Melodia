@@ -4,21 +4,16 @@ import { TrackListRow } from "../../models.slint";
 import { TrackListHeader } from "track-list-header.slint";
 import { TrackListRowItem } from "track-list-row.slint";
 
-// Drag-reorderable sibling of `TrackList` — same external contract plus a
-// `reorder(from, to)` fired on a successful drop. **The shared `TrackList`
-// stays drag-free**; Playlist Detail is this one's only consumer.
+// Drag-reorderable sibling of `TrackList` — same external contract plus a `reorder(from, to)` fired
+// on a successful drop. **The shared `TrackList` stays drag-free**; Playlist Detail is the only
+// consumer. The drag itself lives inside `TrackListRowItem`, behind its `enable-drag`: wrapping the
+// row in an outer TouchArea does not work, the row's own `touch` capturing press and up exclusively
+// under Slint's deepest-wins routing, so an outer one sees `moved` but never `pointer-event(up)`.
 //
-// The drag itself lives inside `TrackListRowItem`, behind its `enable-drag`.
-// Wrapping the row in an outer TouchArea does not work: the row's own `touch`
-// captures press and up exclusively under Slint's deepest-wins routing, so an
-// outer one sees `moved` but never `pointer-event(up)` and the ghost and drop
-// line stay stuck after every drop.
-//
-// The state (`drag-source` / `drop-slot`) sits at list level and every row
-// `<=>`s into it. Rust drives none of it — only the final `reorder` crosses the
-// boundary — but it does have to *abort* a drag, which is why Playlist Detail
-// binds both onto its global; see that view. Gated on `reorder-enabled`, since
-// a reorder is ambiguous in any sort but the insertion one.
+// The state (`drag-source` / `drop-slot`) sits at list level and every row `<=>`s into it. Rust
+// drives none of it — only the final `reorder` crosses the boundary — but it does have to *abort* a
+// drag, which is why Playlist Detail binds both onto its global. Gated on `reorder-enabled`, a
+// reorder being ambiguous in any sort but the insertion one.
 export component DraggableTrackList inherits Rectangle {
     // The drop line runs the full column width, which overruns the visible list once the
     // columns do. Same reason `queue-sheet.slint` draws its line inside a clip; the root is

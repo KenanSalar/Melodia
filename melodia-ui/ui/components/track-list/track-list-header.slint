@@ -5,12 +5,9 @@ import { MaterialIcon } from "../material-icon.slint";
 // the body row's own spacing, which is what keeps header and row cells in lockstep. A
 // hairline sits in its middle, brightening on hover and again while dragging.
 //
-// **Pure natural drag**: right grows the target column, left shrinks it, and no other
-// column is touched. Grown past the visible area, the parent's horizontal `ScrollView`
-// picks up the overflow; shrunk past it, trailing whitespace appears.
-//
-// Works in **absolute** coordinates, so the handle doesn't trail the cursor as the cell
-// it lives in resizes.
+// **Pure natural drag**: right grows the target column, left shrinks it, and no other column is
+// touched. Grown past the visible area, the parent's horizontal `ScrollView` picks up the overflow.
+// Works in **absolute** coordinates, so the handle doesn't trail the cursor as its cell resizes.
 component ResizeHandle inherits Rectangle {
     in property <length> start-w;
     in property <length> min-w;

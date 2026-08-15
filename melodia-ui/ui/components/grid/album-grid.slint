@@ -2,19 +2,14 @@ import { ListView } from "std-widgets.slint";
 import { AlbumGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 
-// Virtualized album-card grid. Rust chunks the flat list into rows of `columns`
-// cards, so the inner `ListView` virtualizes by row and only on-screen rows
-// build their cards.
+// Virtualized album-card grid. Rust chunks the flat list into rows of `columns` cards, so the inner
+// `ListView` virtualizes by row and only on-screen rows build their cards. Covers come lazily off
+// that same virtualization: only a mounted card evaluates its binding, so nothing is decoded for an
+// album the user hasn't scrolled to. Rust prewarms the first screenful or two
+// (`GRID_PREWARM_AHEAD`) and the rest decode on scroll-in, bounded by the `CoverThumbs` LRU.
 //
-// Covers come lazily off that same virtualization: only a mounted card evaluates
-// its binding, so nothing is decoded for an album the user hasn't scrolled to
-// and the row model stays pure data. Rust prewarms the first screenful or two
-// (`GRID_PREWARM_AHEAD`) and the rest decode on scroll-in, bounded by the
-// `CoverThumbs` LRU.
-//
-// Same host-mounted-scrollbar contract as `TrackList`: the `v-*` properties and
-// `set-v-offset` let the host place its `OverlayScrollbar` flush with the
-// content-panel edge, outside its own padding.
+// Same host-mounted-scrollbar contract as `TrackList`: the `v-*` properties and `set-v-offset` let
+// the host place its `OverlayScrollbar` flush with the content-panel edge.
 export component AlbumGrid inherits Rectangle {
     in property <[AlbumGridRow]> rows;
     in property <length> card-width: 180px;

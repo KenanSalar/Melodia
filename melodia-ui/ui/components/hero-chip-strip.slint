@@ -3,29 +3,23 @@ import { HeroBackdrop } from "../globals/hero-backdrop.slint";
 import { HeroChips } from "../globals/hero-chips.slint";
 import { MetaChipStrip } from "meta-chip-strip.slint";
 
-// The hero half of `MetaChipStrip`, wired once instead of six times — all six hero-bearing
-// views mount it against the same four bindings and only one hero is ever on screen.
-//
-// It makes the *wrong* mount unspellable rather than merely tested against. `MetaChip`'s
-// theme-token defaults are correct nowhere and never taken; they exist so the component
-// imports neither `Player` nor `HeroBackdrop`, which is what lets one strip sit on a blurred
-// cover *and* a blurred banner. Only this wrapper knows the hero tiers.
+// The hero half of `MetaChipStrip`, wired once instead of six times — all six hero-bearing views
+// mount it against the same four bindings and only one hero is ever on screen. It makes the *wrong*
+// mount unspellable rather than merely tested against: `MetaChip`'s theme-token defaults are correct
+// nowhere and never taken, existing so the component imports neither `Player` nor `HeroBackdrop`,
+// which is what lets one strip sit on a blurred cover *and* a blurred banner.
 export component HeroChipStrip inherits MetaChipStrip {
-    // How much of the hero is on screen, for a band that morphs into one. Multiplying both
-    // brushes is the *only* way this strip can fade: it carries `MetaChipStrip`'s
-    // `changed watched-w` tracker, so a band wanting a fade-out must keep it mounted, and an
-    // `opacity` under 1 on a mounted subtree with children costs a layer every frame. The five
-    // fixed heroes take the default.
+    // How much of the hero is on screen, for a band that morphs into one. Multiplying both brushes
+    // is the *only* way this strip can fade: it carries `MetaChipStrip`'s `changed watched-w`
+    // tracker, so a band wanting a fade-out must keep it mounted, and an `opacity` under 1 on a
+    // mounted subtree with children costs a layer every frame. The five fixed heroes take default.
     in property <float> fade: 1.0;
 
-    // **How much of the row has arrived.** The chips are the one hero fact that can land after
-    // the banner: a tab re-entered onto an open detail morphs open on held artwork and colours
-    // while these are still behind the re-fetch. `dur-med`, matching the blur crossfade and
-    // the palette mirrors, so the band settles as one thing.
-    //
-    // A float into the same two brushes `fade` is, for the reasons above. Safe to `animate` as
-    // a binding — its only dependency is the row model, which Rust writes discretely, so a
-    // morph re-flowing the strip can't restart it.
+    // **How much of the row has arrived.** The chips are the one hero fact that can land after the
+    // banner: a tab re-entered onto an open detail morphs open on held artwork and colours while
+    // these are still behind the re-fetch. `dur-med`, matching the blur crossfade and the palette
+    // mirrors. A float into the same two brushes `fade` is, and safe to `animate` as a binding —
+    // its only dependency is the row model, which Rust writes discretely.
     property <float> arrive-t: root.rows.length > 0 ? 1.0 : 0.0;
     animate arrive-t {
         duration: Theme.dur-med;
@@ -34,7 +28,7 @@ export component HeroChipStrip inherits MetaChipStrip {
 
     rows: HeroChips.rows;
     // `chrome` is the 3:1 tier, solved against the composited band. The pill goes through the
-    // global's own function so its weight stays stated once.
+    // global's own function so its weight is stated once.
     chip-fill: HeroBackdrop.chip-fill-at(root.fade * root.arrive-t);
     chip-label-color: HeroBackdrop.chrome.with-alpha(root.fade * root.arrive-t);
     vertical-stretch: 0;

@@ -4,15 +4,13 @@ import { PillButton, PillDivider, PillLabel } from "action-pill.slint";
 // The multi-select trailer every list view's `ActionPill` grows once rows are selected.
 //
 // **Mount it behind the host's own `if`, not with a count of zero** — the three slots are
-// unconditional inside, so a component hiding its own children would still claim a `pad-xs`
-// of the pill's spacing and widen the chip permanently.
+// unconditional inside, so a component hiding its own children would still claim a `pad-xs` of the
+// pill's spacing and widen the chip permanently. `divider-trails` follows position, not taste: the
+// divider always sits between this group and whatever shares the pill with it.
 //
-// `divider-trails` follows position, not taste: the divider always sits between this group
-// and whatever shares the pill with it. The two mounts that put the group first set it.
-//
-// **Playlist Detail's row stays hand-rolled**, its destructive pill sitting *between* the
-// count and the close. Absorbing it costs a children slot plus a `has-action` bool restating
-// the `is_smart` predicate at the mount — a worse trade for one caller.
+// **Playlist Detail's row stays hand-rolled**, its destructive pill sitting *between* the count and
+// the close. Absorbing it costs a children slot plus a `has-action` bool restating the `is_smart`
+// predicate at the mount — a worse trade for one caller.
 export component SelectionPills inherits HorizontalLayout {
     in property <int> count;
     in property <bool> divider-trails: false;

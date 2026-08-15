@@ -1,14 +1,14 @@
-// Catppuccin Mocha tokens. The 19 theme-dependent brushes are `in-out` so `themes::apply()`
-// can swap palettes at runtime; the values here are the defaults that paint correctly before
-// settings load. Layout, typography and motion stay `out` — design system, not user choice.
+// Catppuccin Mocha tokens. The 19 theme-dependent brushes are `in-out` so `themes::apply()` can
+// swap palettes at runtime, the values here painting correctly before settings load; layout,
+// typography and motion stay `out` — design system, not user choice.
 
 export global Theme {
     // Surfaces / structure
     in-out property <brush> base: #1e1e2e;
     in-out property <brush> mantle: #181825;
     // The sidebar and now-playing bar when the window is unfocused *and* the KDE-only "Match
-    // Unfocused Window Background" toggle is on; sourced from `[WM] inactiveBackground` under
-    // KDE Breeze + System, falling back to `base` everywhere else.
+    // Unfocused Window Background" toggle is on; from `[WM] inactiveBackground` under KDE Breeze
+    // and System, falling back to `base` everywhere else.
     in-out property <brush> mantle-unfocused: #1e1e2e;
     in-out property <brush> crust: #11111b;
     in-out property <brush> surface0: #313244;
@@ -28,9 +28,8 @@ export global Theme {
     // and reads as a second colour beside the label, where a multiplied alpha keeps the hue.
     out property <brush> text-muted: root.text.transparentize(0.2);
 
-    // How far a disabled settings row steps its copy and control back, as an alpha so the two
-    // rows state it once. No further than unavailable — the description says *why* the row is
-    // off, and starting from `text-muted` the two dims compound.
+    // How far a disabled settings row steps its copy and control back, as an alpha so the two rows
+    // state it once. No further than unavailable — starting from `text-muted` the two dims compound.
     out property <float> dim-disabled: 0.4;
 
     // Accent (default mauve) + colour on accent
@@ -38,19 +37,18 @@ export global Theme {
     in-out property <brush> accent-text: #1e1e2e;
 
     // sRGB luma over gamma-encoded channels — **not** the relative luminance `ui/backdrop.rs`
-    // solves scrims against. A hand-copy of `themes::apply::on_accent_hex`, pinned from both
-    // ends by `themes::tests::theme_slint_is_light_matches_on_accent_hex`. It answers the
-    // polarity question the palette can't: `Palette` carries no light/dark flag and the two
-    // *generated* palettes have no variant id, so measuring the brush is the only form
-    // correct for all of them.
+    // solves scrims against. A hand-copy of `themes::apply::on_accent_hex`, pinned from both ends
+    // by `themes::tests::theme_slint_is_light_matches_on_accent_hex`. It answers the polarity
+    // question the palette can't, `Palette` carrying no light/dark flag and the two *generated*
+    // palettes no variant id to match on.
     public pure function is-light(fill: brush) -> bool {
         return (0.2126 * fill.red + 0.7152 * fill.green + 0.0722 * fill.blue) / 255 > 0.5;
     }
 
-    // Ink for a glyph or label painted directly on `fill`. **Reach for this wherever the
-    // surface underneath isn't the accent** — `accent-text` answers a question about the
-    // *accent*, so a light theme with a light accent puts near-black on dark red. The two
-    // colours stay literals: absolute ink for a fill of known lightness.
+    // Ink for a glyph or label painted directly on `fill`. **Reach for this wherever the surface
+    // underneath isn't the accent** — `accent-text` answers a question about the *accent*, so a
+    // light theme with a light accent puts near-black on dark red. Literals, not tokens: absolute
+    // ink for a fill of known lightness.
     public pure function ink-on(fill: brush) -> brush {
         return root.is-light(fill) ? #1e1e2e : #ffffff;
     }
@@ -62,28 +60,24 @@ export global Theme {
     in-out property <brush> yellow: #f9e2af;
 
     // Destructive-action aliases, so call sites read `danger` rather than `red`. **Hover is
-    // deliberately not a token** — the destructive `SectionButton` brightens its own fill,
-    // which reads as one colour intensifying rather than a second hue.
+    // deliberately not a token** — the destructive `SectionButton` brightens its own fill.
     out property <brush> danger: root.red;
     out property <brush> danger-text: root.ink-on(root.danger);
 
-    // Chrome floating over busy content. **Nearly opaque on purpose**: softer and the artwork
-    // reads through, leaving the control looking like a watermark. This close to opaque it is
-    // its own surface, so glyphs contrast against `surface0`, and the residual translucency is
-    // what keeps `IconButton`'s hover swap to solid `surface0` legible as a transition.
+    // Chrome floating over busy content. **Nearly opaque on purpose**: softer and the artwork reads
+    // through, leaving the control looking like a watermark. The residual translucency is what
+    // keeps `IconButton`'s hover swap to solid `surface0` legible as a transition.
     out property <brush> floating-chrome-bg: root.surface0.with-alpha(0.75);
 
     // `OverlayScrollbar`'s track for a bar on a **card** rather than the page. The default is
-    // `surface0` at half alpha — a groove over `base`, but over a `surface0` dialog it
-    // composites to exactly `surface0` and leaves the thumb nothing to gauge extent against.
-    // `crust` is "further from the content" under every palette, a recess either way.
+    // `surface0` at half alpha, which over a `surface0` dialog composites to exactly `surface0` and
+    // leaves the thumb nothing to gauge extent against. `crust` is a recess under every palette.
     out property <brush> scrollbar-track-on-card: root.crust;
 
     // The Melodia mark, painted over the logo SVG's alpha via `colorize`. The asset carries the
-    // dark arm's stops and the OS-facing copies keep them, but in the titlebar the mark sits on
-    // `mantle`, where Mocha's pastels wash out on a light palette. Latte's own blue and teal
-    // rather than a darkened Mocha pair — `darker()` divides HSV value and leaves saturation
-    // alone, so a pastel goes grey. 135deg reproduces the asset's own 0,0 → 48,48 ramp.
+    // dark arm's stops, but in the titlebar the mark sits on `mantle`, where Mocha's pastels wash
+    // out on a light palette — Latte's own blue and teal rather than a darkened Mocha pair,
+    // `darker()` dividing HSV value alone and sending a pastel grey.
     out property <brush> brand-mark: root.is-light(root.mantle)
         ? @linear-gradient(135deg, #1e66f5 0%, #179299 100%)
         : @linear-gradient(135deg, #89b4fa 0%, #94e2d5 100%);
@@ -96,8 +90,7 @@ export global Theme {
     out property <length> now-playing-h: 72px;
     // Track-row content height; the header's is independent, pinned in its own file.
     out property <length> row-h: 46px;
-    // Compact height when the thumbnail is hidden, sized to clear the hover swap-in so the row
-    // reads dense rather than cramped.
+    // Compact height when the thumbnail is hidden, sized to clear the hover swap-in.
     out property <length> row-h-compact: 34px;
     out property <length> row-gap: 0px;
 
@@ -112,22 +105,21 @@ export global Theme {
     // this, keeping the 1 px ring even around each corner.
     out property <length> shell-radius-inner: max(0px, shell-radius - 1px);
     // The content panel's left-side rounding under a native titlebar, seeded once from
-    // `get_os_corner_radius()` so it matches the host desktop regardless of the persisted pick
-    // — that pick governs custom mode, which the user opted into. Hence the greyed-out
-    // "Managed by the operating system" row in Settings; an environment switch needs a restart.
+    // `get_os_corner_radius()` so it matches the host desktop regardless of the persisted pick —
+    // that pick governs custom mode, which the user opted into. Hence the greyed-out "Managed by
+    // the operating system" row in Settings.
     in-out property <length> native-content-radius: 6px;
     out property <length> native-content-radius-inner: max(0px, native-content-radius - 1px);
 
-    // Read by **both** the `Window`'s `resize-border-width` and the `ResizeRing` overlays
-    // setting the cursor over it, so a drift leaves a band that resizes with no cursor or the
-    // reverse. Corners are deliberately larger for a forgiving diagonal grab.
+    // Read by **both** the `Window`'s `resize-border-width` and the `ResizeRing` overlays setting
+    // the cursor over it, so a drift leaves a band that resizes with no cursor or the reverse.
+    // Corners are deliberately larger for a forgiving diagonal grab.
     out property <length> resize-border: 4px;
     out property <length> resize-corner: 8px;
 
-    // The `OverlayScrollbar` *element's* slot, distinct from the 8 px it paints inside it.
-    // Three sides agree on it: both bar pairs size their elements by it, the horizontal bar
-    // subtracts it at its right end so the two don't meet in the corner, and a `TrackList`
-    // under one reserves it as a lane.
+    // The `OverlayScrollbar` *element's* slot, distinct from the 8 px it paints inside it. Three
+    // sides agree on it: both bar pairs size their elements by it, the horizontal bar subtracts it
+    // at its right end so the two don't meet in the corner, and a `TrackList` reserves it as a lane.
     out property <length> scrollbar-slot: 10px;
 
     out property <length> pad-xs: 4px;
@@ -135,11 +127,10 @@ export global Theme {
     out property <length> pad-md: 12px;
     out property <length> pad-lg: 16px;
 
-    // The artwork tile every hero band leads with. **One number rather than six** — the banners
-    // are the same band under different content, and a tile changing size between them reads as
-    // the page shifting under a nav. It sets each band's *height* too, being the tallest thing
-    // in all of them, so shrinking it costs the detail heroes first, whose right column barely
-    // clears the tile once the chips wrap (`ui::hero_chips::HERO_MAX_ROWS`).
+    // The artwork tile every hero band leads with. **One number rather than six** — the banners are
+    // the same band under different content, and a tile changing size between them reads as the
+    // page shifting under a nav. It sets each band's *height* too, so shrinking it costs the detail
+    // heroes first, whose right column barely clears the tile once the chips wrap.
     out property <length> hero-artwork: 140px;
 
     // Typography
@@ -153,10 +144,9 @@ export global Theme {
     out property <int> page-title-weight: 600;
     out property <brush> page-title-color: root.text;
 
-    // The hero banners' title, a step above a page heading because it sits on a blurred band
-    // beside the tile rather than a flat header row. **It has a ceiling**: the two heroes
-    // carrying a second text line nest it inside the title row, where only the `SearchBar`'s
-    // leftover height is free, so raising this spends the slack a wrapped chip row needs.
+    // The hero banners' title, a step above a page heading because it sits on a blurred band beside
+    // the tile rather than a flat header row. **It has a ceiling**: the two heroes carrying a second
+    // text line nest it inside the title row, so raising this spends the slack a chip row needs.
     out property <length> hero-title-size: 22px;
 
     // Easing is inlined at each `animate` site: Slint 1.16 can't expose an `easing` property
@@ -165,29 +155,26 @@ export global Theme {
     out property <duration> dur-med: 250ms;
     out property <duration> dur-spatial: 400ms;
 
-    // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.run()`** — Slint
-    // reads `Window.no-frame` once at first show. Defaults false, matching
-    // `WindowFlags::default()`.
+    // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.run()`** — Slint reads
+    // `Window.no-frame` once at first show. Defaults false, matching `WindowFlags::default()`.
     in-out property <bool> use-native-titlebar: false;
 
-    // 0 = Standard (Material bar icons), 1 = macOS (traffic lights). `custom-titlebar.slint`
-    // reads it through `Theme` rather than reaching into `Settings`, the `shell-radius`
-    // precedent.
+    // 0 = Standard (Material bar icons), 1 = macOS (traffic lights). `custom-titlebar.slint` reads
+    // it through `Theme` rather than reaching into `Settings`, the `shell-radius` precedent.
     in-out property <int> titlebar-button-style: 0;
 
     // 0 = Right, 1 = Left. Same hydration shape.
     in-out property <int> titlebar-button-side: 0;
 
-    // Raw mirror of winit's `WindowEvent::Focused(bool)`. The KDE-only unfocused tint gates on
-    // `match-unfocused-bg && use-native-titlebar && !window-focused` — the titlebar term being
-    // required because the toggle defaults on under KDE and survives a native-titlebar disable.
+    // Raw mirror of winit's `WindowEvent::Focused(bool)`. The KDE-only unfocused tint also gates on
+    // `use-native-titlebar`, the toggle defaulting on under KDE and surviving a titlebar disable.
     in-out property <bool> window-focused: true;
 
     // Integer arithmetic, so no float rounding; anything ≤ 0 collapses to "0:00", which lets
     // the now-playing bar format a mid-transition position safely.
     public pure function format-duration(ms: int) -> string {
-        // **Must stay byte-identical to `format_duration_ms`** — the track rows use the
-        // Rust-precomputed string while the now-playing bar calls this.
+        // **Must stay byte-identical to `format_duration_ms`** — the rows use the Rust-precomputed
+        // string while the now-playing bar calls this.
         ms <= 0
             ? "0:00"
             : Math.floor(ms / 3600000) > 0

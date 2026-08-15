@@ -9,58 +9,47 @@ import { SettingsTabs } from "settings/settings-tabs.slint";
 
 // A pinned header over a vertically scrolling, width-clamped body.
 //
-// **Page chrome only** — the search bar, the tab bar, the scroll body and its overlay
-// scrollbar. Which cards live on which tab is `settings/settings-tabs.slint`'s job.
-//
-// The scrollbar follows the Tracks view: both inner policies off and an `OverlayScrollbar`
-// at the root, so it sits flush with the content panel's right edge rather than beside the
-// centred card column.
+// **Page chrome only** — the search bar, the tab bar, the scroll body and its overlay scrollbar.
+// Which cards live on which tab is `settings/settings-tabs.slint`'s job. The scrollbar follows the
+// Tracks view: both inner policies off and an `OverlayScrollbar` at the root, so it sits flush with
+// the content panel's right edge rather than beside the centred card column.
 export component SettingsView inherits Rectangle {
-    // No background of its own, so the parent panel's `Theme.base` shows through at the
-    // rounded corner cells.
+    // No background of its own, so the panel's `Theme.base` shows through at the rounded corners.
 
-    // Bumps the blur counter for any click no inner widget consumes — Slint's `TextInput` has
-    // no click-outside behaviour of its own. Declared first, so everything in front of it gets
-    // first crack at the click.
+    // Bumps the blur counter for any click no inner widget consumes — Slint's `TextInput` has no
+    // click-outside behaviour of its own. Declared first, so everything in front gets first crack.
     TouchArea {
         clicked => { SettingsPage.blur-search-tick += 1; }
     }
 
-    // The throttle every filterable view mounts. Expensive here despite driving only
-    // visibility: a query mounts all five tab pages and fans out to three Rust round-trips
-    // per row.
+    // The throttle every filterable view mounts. Expensive here despite driving only visibility: a
+    // query mounts all five tab pages and fans out to three Rust round-trips per row.
     property <int> filter-tick-pending;
     FilterThrottle {
         pending: root.filter-tick-pending;
         fire() => { SettingsPage.search-query = SettingsPage.search-input; }
     }
 
-    // Reads the **settled** query, not the input. The two-column flip is suppressed
-    // while searching, and flipping a frame before the five pages mount is the one
-    // ordering that shows.
+    // Reads the **settled** query, not the input. The two-column flip is suppressed while
+    // searching, and flipping a frame before the five pages mount is the one ordering that shows.
     property <bool> searching: SettingsPage.search-query != "";
 
-    // Mirrored imperatively rather than read live: a binding reading `root.width` and feeding
-    // a child's size re-enters the shell's layout pass, surfacing as a `RefCell already
-    // borrowed` panic in parley's text measurement. Same fix as `now-playing-bar.slint`'s
-    // `bar-w`.
-    //
-    // **The mirror costs a frame, so the seed is a real decision**: seeded wide, the bar draws
-    // five full-width tabs into a panel that can't seat them and they spill under the search
-    // bar; seeded at the header row's own floor it draws the icons it would have drawn anyway
-    // and widens once. The floor comes off the row rather than being respelled here. (The
-    // forward reference is fine — ids scope to the whole component.)
+    // Mirrored imperatively rather than read live: a binding reading `root.width` and feeding a
+    // child's size re-enters the shell's layout pass, surfacing as a `RefCell already borrowed`
+    // panic in parley's text measurement. **The mirror costs a frame, so the seed is a real
+    // decision**: seeded wide, the bar draws five full-width tabs into a panel that can't seat them;
+    // seeded at the header row's own floor it draws the icons it would have drawn anyway and widens
+    // once. The floor comes off the row rather than being respelled here.
     property <length> page-w: 2 * Theme.pad-lg + header.row-floor;
     changed width => {
         self.page-w = self.width;
         SettingsPage.page-w = self.width;
     }
 
-    // **The seed obliges this**: `changed` doesn't fire when the first layout settles directly
-    // on the final value, and a window opened straight into Settings is never *resized*. It
-    // lands inside the tab bar's ease arming, so the correction snaps rather than morphing,
-    // and it publishes the column count, which `changed watched-two-col` can't — `SettingsPage`
-    // outlives this page, so a wide visit leaves `body-cols` at 2.
+    // **The seed obliges this**: `changed` doesn't fire when the first layout settles directly on
+    // the final value, and a window opened straight into Settings is never *resized*. It also
+    // publishes the column count, which `changed watched-two-col` can't — `SettingsPage` outlives
+    // this page, so a wide visit leaves `body-cols` at 2.
     Timer {
         interval: 1ms;
         triggered => {
@@ -72,24 +61,17 @@ export component SettingsView inherits Rectangle {
     }
 
     // The page less its own padding — what the header row divides up and the body fills.
-    //
-    // **`SettingsPage.body-avail` computes the same subtraction and is not the same number**,
-    // so don't collapse this onto it: that one reads the *global* `page-w` and this the local
-    // mirror, and they differ for the one frame before the mount Timer runs — which is the
-    // frame the tab bar's floor seed exists for.
+    // **`SettingsPage.body-avail` computes the same subtraction and is not the same number**, so
+    // don't collapse this onto it: that one reads the *global* `page-w` and this the local mirror,
+    // and they differ for the one frame the tab bar's floor seed exists for.
     property <length> content-w: root.page-w - 2 * Theme.pad-lg;
 
-    // A second column appears exactly when two cards **at `card-cap`** fit beside each other,
-    // not a pixel sooner — that is what makes a card's width monotonic, so the flip adds a
-    // column without resizing anything. A threshold under the cap divides the card before it
-    // gets there, reading as one column growing without limit and then halving.
-    //
-    // **Search is single-column regardless**: it mounts all five pages and hides the
-    // non-matching cards, and a hidden card still claims its grid cell.
-    //
-    // Measured against the raw `content-w` and deliberately *not* `SettingsPage.body-w`, which
-    // is a function of this verdict and would close a cycle. Latched for the `tab-bar.slint`
-    // reason — a slow drag jitters over the threshold, and here a whole column blinks.
+    // A second column appears exactly when two cards **at `card-cap`** fit beside each other, not a
+    // pixel sooner — that is what makes a card's width monotonic, so the flip adds a column without
+    // resizing anything. **Search is single-column regardless**: it mounts all five pages and hides
+    // the non-matching cards, and a hidden card still claims its grid cell. Measured against the raw
+    // `content-w` and deliberately *not* `SettingsPage.body-w`, which is a function of this verdict
+    // and would close a cycle. Latched for the `tab-bar.slint` reason — here a whole column blinks.
     property <bool> two-col-latched: false;
     property <bool> two-col: !root.searching
         && root.content-w >= 2 * SettingsPage.card-cap + Theme.pad-lg
@@ -104,9 +86,9 @@ export component SettingsView inherits Rectangle {
         sv.viewport-y = 0px;
     }
 
-    // A fresh tab, or entering or leaving search, starts at the top — a tall tab to a short
-    // one otherwise leaves the viewport parked past the new content. Written **imperatively**:
-    // a `<=>` on `viewport-y` disables Slint's own out-of-bounds correction.
+    // A fresh tab, or entering or leaving search, starts at the top — a tall tab to a short one
+    // otherwise leaves the viewport parked past the new content. Written **imperatively**: a `<=>`
+    // on `viewport-y` disables Slint's own out-of-bounds correction.
     property <int> watched-tab: SettingsPage.tab-idx;
     changed watched-tab => { sv.viewport-y = 0px; }
     property <bool> watched-searching: root.searching;
@@ -116,21 +98,17 @@ export component SettingsView inherits Rectangle {
         padding-top: Theme.pad-lg;
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
-        // **No `padding-bottom`** — reserved out here it sits *outside* the viewport and
-        // reads as a dead strip between the last card and the panel border. It belongs to the
-        // scrolling column below. The spacing is the header's clearance, deliberately clear of
-        // the gaps *inside* the header row so the bar reads as the page's lid.
+        // **No `padding-bottom`** — reserved out here it sits *outside* the viewport and reads as a
+        // dead strip between the last card and the panel border; it belongs to the scrolling column
+        // below. The spacing is the header's clearance, clear of the gaps *inside* the header row.
         spacing: 2 * Theme.pad-lg;
 
-        // **The same row the two hero bands wear**, on a flat page — so this is the mount
-        // taking its `Theme.*` brush defaults, there being no blur under it. The page hands it
-        // no leading slot and reads back none of its animation outputs, only the width floor
-        // and the tooltip anchor. **The title is gone rather than moved**: the five tab names
-        // name the page better than the word above them did.
-        //
-        // **The label array must stay an inline literal** so `@tr` registers the msgids at
-        // codegen, in `tab-*` order. The bar stays mounted while searching — hiding it would
-        // shift the body on the first keystroke, and picking a tab is the way out of a search.
+        // **The same row the two hero bands wear**, on a flat page — so this is the mount taking
+        // its `Theme.*` brush defaults, there being no blur under it. The page hands it no leading
+        // slot and reads back only the width floor and the tooltip anchor. **The title is gone
+        // rather than moved**: the five tab names name the page better than the word above them.
+        // **The label array must stay an inline literal** so `@tr` registers the msgids at codegen,
+        // in `tab-*` order. The bar stays mounted while searching — picking a tab is the way out.
         header := TabSearchHeader {
             tab-labels: [@tr("Library"), @tr("Playback"), @tr("Interface"),
                          @tr("Services"), @tr("About")];
@@ -151,14 +129,11 @@ export component SettingsView inherits Rectangle {
             search-edited => { root.filter-tick-pending += 1; }
         }
 
-        // The body is centred between elastic spacers and capped at one card column, or two
-        // plus their gap, off `SettingsPage` so the width the columns are sized to and the
-        // width the body is drawn at can't be two numbers.
-        //
-        // **It has no floor**: below the cap it shrinks with the panel down to whatever its
-        // cards report, which is what lets the page fit the narrowest panel and why there is
-        // no horizontal scrollbar. Pinned at a `min-width`, a narrower panel stops shrinking
-        // and the ScrollView pans through it instead.
+        // The body is centred between elastic spacers and capped at one card column, or two plus
+        // their gap, off `SettingsPage` so the width the columns are sized to and the width the body
+        // is drawn at can't be two numbers. **It has no floor**: below the cap it shrinks with the
+        // panel down to whatever its cards report, which is what lets the page fit the narrowest
+        // panel and why there is no horizontal scrollbar.
         sv := ScrollView {
             horizontal-stretch: 1;
             vertical-stretch: 1;
@@ -183,9 +158,8 @@ export component SettingsView inherits Rectangle {
                             searching: root.searching;
                         }
 
-                        // Collects the surplus when the mounted tab is shorter than the
-                        // viewport; without it the column divides that surplus across its
-                        // children and stretches the cards themselves.
+                        // Collects the surplus when the mounted tab is shorter than the viewport;
+                        // without it the column stretches the cards themselves instead.
                         Rectangle {
                             vertical-stretch: 1;
                         }
@@ -197,10 +171,8 @@ export component SettingsView inherits Rectangle {
 
     // A sibling of the padded layout, pinned to the view's right edge so it lines up with the
     // content panel border; the absolute-position subtraction puts it in this view's frame.
-    //
-    // **Vertical only** — nothing overflows sideways now the content column has no width
-    // floor. Don't reintroduce the horizontal bar: a settings page needing one is a page with
-    // a row that has stopped being able to wrap.
+    // **Vertical only** — nothing overflows sideways now the content column has no width floor.
+    // Don't reintroduce the horizontal bar: a page needing one is a page with a row that can't wrap.
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
@@ -213,11 +185,9 @@ export component SettingsView inherits Rectangle {
         scroll-to(o) => { sv.viewport-y = -o; }
     }
 
-    // Declared last so it paints above the scroll body — left on the tab, a below-anchored
-    // tooltip lands in the body's band and the first card covers it. The
-    // frame-tracks-the-host idiom, as in `my-library-view.slint`'s `header-tip`; the rect
-    // derives from the hovered *index* rather than a snapshot, which the equal-width cells
-    // make possible.
+    // Declared last so it paints above the scroll body — left on the tab, a below-anchored tooltip
+    // lands in the body's band and the first card covers it. The frame-tracks-the-host idiom; the
+    // rect derives from the hovered *index*, which the equal-width cells make possible.
     TooltipFrame {
         x: header.absolute-position.x - root.absolute-position.x + header.tip-x;
         y: header.absolute-position.y - root.absolute-position.y + header.tip-y;

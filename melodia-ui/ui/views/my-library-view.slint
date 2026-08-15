@@ -23,13 +23,13 @@ import { ArtistDetailBody } from "my-library/artist-detail.slint";
 import { GenreDetailBody } from "my-library/genre-detail.slint";
 import { PlaylistDetailBody } from "my-library/playlist-detail.slint";
 
-// My Library: five tabs over the views that used to be five sidebar entries. This file is
-// the mount sheet — the band, the grid geometry the four card tabs share, which body is on
-// screen, and the two tooltip frames the band and the pills publish anchors for.
+// My Library: five tabs over the views that used to be five sidebar entries. This file is the mount
+// sheet — the band, the grid geometry the four card tabs share, which body is on screen, and the
+// two tooltip frames the band and the pills publish anchors for.
 //
-// **The tab index is what routes, not the detail id.** `seed_detail_from_settings` runs
-// for all four detail views at boot whichever section is restored, so more than one
-// `*Detail.*-id` can be `>= 0` at once; splitting on the id alone would mount two.
+// **The tab index is what routes, not the detail id.** `seed_detail_from_settings` runs for all
+// four detail views at boot whichever section is restored, so more than one `*Detail.*-id` can be
+// `>= 0` at once and splitting on the id alone would mount two.
 export component MyLibraryView inherits Rectangle {
     // Bumped by the band's `SearchBar`, settled 130 ms later — the list-view shape, where
     // the cost being debounced is a model rebuild in Rust rather than Slint's own
@@ -72,14 +72,12 @@ export component MyLibraryView inherits Rectangle {
         self.hero-playlist = root.playlist-open;
     }
 
-    // **The idle band's sentence, held across an open** — `hero-*`'s mirror image, guard
-    // included. The band eases it out over the first half of the morph, so a drill has to fade
-    // the sentence that was on screen; bound live it re-reads the arriving tab, whose count is
-    // mid-rewind and then mid-fetch, so the line blanks and repopulates inside the fade.
-    //
-    // Seeded by the binding, owned by `latch-count`, which is unguarded so `init` can take
-    // ownership on a page mounting straight onto a grid. The guard is at the two call sites
-    // and is `!detail-open`: the hero half holds across a *close*, this across an *open*.
+    // **The idle band's sentence, held across an open** — `hero-*`'s mirror image, guard included.
+    // The band eases it out over the first half of the morph, so a drill has to fade the sentence
+    // that was on screen; bound live it re-reads the arriving tab, whose count is mid-rewind and
+    // then mid-fetch, so the line blanks and repopulates inside the fade. Seeded by the binding,
+    // owned by `latch-count`, which is unguarded so `init` can take ownership on a page mounting
+    // straight onto a grid. The guard is at the two call sites and is `!detail-open`.
     property <string> live-count:
         MyLibrary.tab-idx == MyLibrary.tab-songs
             ? (Tracks.total-count >= 0
@@ -101,28 +99,24 @@ export component MyLibraryView inherits Rectangle {
         if (!root.detail-open) { root.latch-count(); }
     }
 
-    // **Both latches need a *write* to own their binding, and neither guard fires on a page
-    // that mounts already in the state it holds for.** A view entered straight onto a detail
-    // has never run `latch-hero` — `detail-open` is false on exactly the close that needs
-    // the hold — so the first back would follow the live binding through the whole collapse;
-    // `latch-count`'s complement guard strands a page mounted onto a grid the same way. Every
-    // re-entry is reachable, the content-area `if` handing this view fresh bindings. Writing
-    // here moves nothing: `init` runs after the bindings resolve.
+    // **Both latches need a *write* to own their binding, and neither guard fires on a page that
+    // mounts already in the state it holds for.** A view entered straight onto a detail has never
+    // run `latch-hero` — `detail-open` is false on exactly the close that needs the hold — so the
+    // first back would follow the live binding through the whole collapse; `latch-count`'s
+    // complement guard strands a page mounted onto a grid the same way. Writing here moves
+    // nothing: `init` runs after the bindings resolve.
     init => {
         root.latch-hero();
         root.latch-count();
     }
 
-    // **May a mounting body animate at all.** The page's own `ViewTransition` is still in
-    // flight when its first body mounts, so a body moving into it is the same diagonal one
-    // level up. `tab-anim-armed` covers every arrival through the bar; the two that didn't
-    // are armed by the handlers below — the first drill out of the tab the page opened on,
-    // and a tab move that isn't a pick, which `detail-open` can't cover because it lands the
-    // id and the tab in **one** tick.
-    //
-    // Seeded by the binding and owned by the handlers, `hero-t`'s idiom. It re-disarms for
-    // free on the next entry, and `changed` skips a first evaluation, so the page's own
-    // entrance keeps the first frame.
+    // **May a mounting body animate at all.** The page's own `ViewTransition` is still in flight
+    // when its first body mounts, so a body moving into it is the same diagonal one level up.
+    // `tab-anim-armed` covers every arrival through the bar; the two that don't are armed by the
+    // handlers below — the first drill out of the tab the page opened on, and a tab move that isn't
+    // a pick, which `detail-open` can't cover because it lands the id and the tab in **one** tick.
+    // Seeded by the binding and owned by the handlers, `hero-t`'s idiom; it re-disarms for free on
+    // the next entry, and `changed` skips a first evaluation.
     property <bool> body-anim-armed: band.tab-anim-armed;
     changed detail-open => {
         root.body-anim-armed = true;

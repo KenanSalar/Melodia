@@ -4,21 +4,18 @@ import { TrackListRow } from "../../models.slint";
 import { TrackListHeader } from "track-list-header.slint";
 import { TrackListRowItem } from "track-list-row.slint";
 
-// The reusable, **globals-free** track table: a column header over a virtualized list
-// body inside a horizontal `ScrollView`, so growing the columns past the visible width
-// pans the table. Every view with a track list embeds it, each owning its own column
-// state and persistence.
+// The reusable, **globals-free** track table: a column header over a virtualized list body inside a
+// horizontal `ScrollView`, so growing the columns past the visible width pans the table. Every view
+// with a track list embeds it, each owning its own column state and persistence.
 //
-// **Overlay scrollbars are not mounted inside it.** The viewport metrics are exposed as
-// `out` properties with clamping setters, so a host can mount its own at its root and
-// have them sit flush against the panel's rounded edges rather than inside whatever
-// padding it applies here.
+// **Overlay scrollbars are not mounted inside it.** The viewport metrics are exposed as `out`
+// properties with clamping setters, so a host can mount its own at its root and have them sit flush
+// against the panel's rounded edges rather than inside whatever padding it applies here.
 //
-// The contract: `rows` is the model to swap; `w-*` / `show-*` are `in-out`, so a resize
-// drag or the column popup writes host state synchronously; the sort pair is a pure
-// input driving the header chevron, with clicks emitting `request-sort`; and
-// `playing-track-id` flips that row's cells to accent — usually bound to the player, but
-// this file imports no globals, so it stays reusable outside a player context.
+// The contract: `rows` is the model to swap; `w-*` / `show-*` are `in-out`, so a resize drag or the
+// column popup writes host state synchronously; the sort pair is a pure input driving the header
+// chevron, with clicks emitting `request-sort`; and `playing-track-id` flips that row's cells to
+// accent — usually the player's, but this file imports no globals.
 export component TrackList inherits Rectangle {
     in property <[TrackListRow]> rows;
 

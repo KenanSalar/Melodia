@@ -54,18 +54,15 @@ component ColorDot inherits Rectangle {
     }
 }
 
-// A grid of accent swatches; `labels` is read by index alongside `colors` so
-// each dot names its accent in a tooltip.
+// A grid of accent swatches; `labels` is read by index alongside `colors` so each dot names its
+// accent in a tooltip. It wraps, and it has to: Catppuccin ships fourteen accents, fifteen with
+// Material You prepended, which on one row was the widest incompressible thing on the settings
+// page. The dots are fixed-size, so unlike `ChipGroup` this needs no ruler — how many fit is
+// arithmetic, and `SettingsPage.chunk-indices` splits the swatches into rows of that many.
 //
-// It wraps, and it has to: Catppuccin ships fourteen accents, fifteen with
-// Material You prepended, which on one row was the widest incompressible thing
-// on the settings page by some margin. The dots are fixed-size, so unlike
-// `ChipGroup` this needs no ruler — how many fit is arithmetic, and
-// `SettingsPage.chunk-indices` splits the swatches into rows of that many.
-//
-// `first-is-dynamic` marks index 0 as the dynamic swatch. The host wires it from
-// `Settings.material-you-active`; that Material You is always prepended at index
-// 0 when active is `accent_picker.rs::accent_swatches_with_my`'s invariant.
+// `first-is-dynamic` marks index 0 as the dynamic swatch, wired from
+// `Settings.material-you-active`; Material You always being prepended at index 0 when active is
+// `accent_picker.rs::accent_swatches_with_my`'s invariant.
 export component ColorDotGrid inherits Rectangle {
     in property <[brush]> colors;
     in property <[string]> labels;

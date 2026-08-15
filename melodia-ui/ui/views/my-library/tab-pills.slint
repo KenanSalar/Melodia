@@ -11,19 +11,17 @@ import { SelectionPills } from "../../components/selection-pills.slint";
 import { SortPillRow } from "../../components/sort-pill-row.slint";
 import { ColumnTogglePopup } from "../../components/track-list/column-toggle-popup.slint";
 
-// The per-tab and per-detail action pills, handed to `LibraryTabBand` as its whole
-// `@children`. Nine mutually exclusive rows matching the sheet's nine body branches — the four
-// detail predicates arrive as `in` properties rather than being re-derived, since spelled
-// twice the pills and the body could disagree about which branch is up.
+// The per-tab and per-detail action pills, handed to `LibraryTabBand` as its whole `@children`.
+// Nine mutually exclusive rows matching the sheet's nine body branches — the four detail predicates
+// arrive as `in` properties rather than being re-derived, since spelled twice the pills and the
+// body could disagree about which branch is up.
 //
 // **A component rather than rows written into the mount sheet, and the Playlists row is the
 // reason**: its pills carry `tooltip-overlay: true`, so the pill is drawn by a frame the host
-// declares *after* the scroll body. That frame reaches the pills by id, and an id declared
-// inside an `if` can't be read from outside it — so the ids live at a root the host can see
-// and this file publishes their rect, as `MosaicTabHero` does for the tab bar.
-//
-// One component holding all five rows: the band's slot spaces its cells, so a second
-// always-mounted child would offset every other tab's row from the band's right edge.
+// declares *after* the scroll body. That frame reaches the pills by id, and an id declared inside
+// an `if` can't be read from outside it — so the ids live at a root the host can see and this file
+// publishes their rect. One component holds all five rows: the band's slot spaces its cells, so a
+// second always-mounted child would offset every other tab's row from the band's right edge.
 export component MyLibraryTabPills inherits Rectangle {
     // Which of the sheet's nine branches is mounted. See the file header.
     in property <bool> album-open;

@@ -5,17 +5,14 @@ import { OverlayScrollbar } from "overlay-scrollbar.slint";
 // `CompositeScrollbars` is the sibling for a list nested *under* another scroller.
 //
 // **Mount contract**, the same as `CompositeScrollbars`': last child of the view root at
-// `x: 0; y: 0; width: 100%; height: 100%`, so `parent` inside resolves to the page.
-// Everything else the host mirrors off its `TrackList`, Slint having no way to hand an
-// element over.
+// `x: 0; y: 0; width: 100%; height: 100%`, so `parent` inside resolves to the page. Everything else
+// the host mirrors off its `TrackList`, Slint having no way to hand an element over.
 //
-// **`list-x` / `list-y` are the reason this is a component rather than a snippet** — the bar
-// is placed in the *page's* coordinates, and the six copies had drifted into two spellings,
-// each right only at its own nesting depth. The general form survives either.
-//
-// The thickness comes off `Theme.scrollbar-slot` for the same reason: it is a *pair*, the
-// horizontal bar's width subtracting exactly the vertical bar's so the two don't overlap in
-// the corner. The host's list reserves the same slot as a lane and reads the same token.
+// **`list-x` / `list-y` are the reason this is a component rather than a snippet** — the bar is
+// placed in the *page's* coordinates, and the six copies had drifted into two spellings, each right
+// only at its own nesting depth. The thickness comes off `Theme.scrollbar-slot` for the same
+// reason: it is a *pair*, the horizontal bar's width subtracting exactly the vertical bar's so the
+// two don't overlap in the corner, and the host's list reserves the same slot as a lane.
 export component TrackListScrollbars inherits Rectangle {
     // The list's origin in the *page's* coordinates. Pass
     // `tl.absolute-position.x - root.absolute-position.x` (and the `y` twin) — correct at

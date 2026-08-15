@@ -1,15 +1,13 @@
 // Which edge the next `ViewTransition` mount slides in from: lateral sidebar nav fades up from
-// `below`, a drill comes from the `right`, the back button from the `left`. **The mount it
-// steers is a *page***; no sub-page mount reads it, so a drill that doesn't move
-// `Nav.selected-index` steers nothing.
+// `below`, a drill comes from the `right`, the back button from the `left`. **The mount it steers
+// is a *page***, so a drill that doesn't move `Nav.selected-index` steers nothing.
 export enum NavEnterFrom { below, right, left }
 
 // Which content view the shell shows:
 //   0=search, 1=browse, 2=favorites, 3=my-library, 8=recently-played, 9=settings
 // **4–7 are retired** — they and Tracks are My Library's five tabs, told apart by
-// `MyLibrary.tab-idx`, and `boot::ui_setup` folds a persisted 4–7 onto 3. The gaps stay: 8 and
-// 9 are already in `views.json` on every install. **Sidebar order is source order** — Recently
-// Played renders under Favorites at index 8.
+// `MyLibrary.tab-idx`, and `boot::ui_setup` folds a persisted 4–7 onto 3. The gaps stay: 8 and 9
+// are already in `views.json` on every install. **Sidebar order is source order.**
 export global Nav {
     in-out property <int> selected-index: 3;
     // The full-screen Now Playing view. Toggled from the bar's track-info card, which stays
@@ -35,10 +33,9 @@ export global Nav {
     in-out property <bool> sidebar-dragging: false;
     // The collapsed rail's tooltip channel; `app-window.slint` paints one pill beside the rail.
     // **It can't be mounted on the row** — `nav-scroll` clips its viewport, and the Sidebar is
-    // declared before the content panel, which paints over anything past the rail's edge.
-    //
-    // -1 is nothing hovered, and **only the row owning the hover may clear it**: a leave
-    // arriving after the next row's enter would blank a live tooltip.
+    // declared before the content panel, which paints over anything past the rail's edge. -1 is
+    // nothing hovered, and **only the row owning the hover may clear it**: a leave arriving after
+    // the next row's enter would blank a live tooltip.
     in-out property <int> sidebar-tip-idx: -1;
     // The Collapse toggle loses its label like any nav row but owns no nav index, so it takes
     // a slot outside `selected-index`'s range.

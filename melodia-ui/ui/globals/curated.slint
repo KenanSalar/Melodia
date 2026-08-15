@@ -1,16 +1,13 @@
 import { TrackListRow, EntityStripRow, EntityGridRow } from "../models.slint";
 
-// The two hero-mosaic pages, both wearing `MosaicTabHero` over their sub-views. Two globals
-// rather than one because a Slint component can't be parameterised over a global — the wall
-// `impl_mosaic_hero!` works around in Rust; what the pages genuinely share is in the
-// component, not here.
+// The two hero-mosaic pages, both wearing `MosaicTabHero` over their sub-views. Two globals rather
+// than one because a Slint component can't be parameterised over a global — the wall
+// `impl_mosaic_hero!` works around in Rust; what the pages genuinely share is in the component.
 
-// Three mutually exclusive sub-views: Songs (a sortable, filterable `TrackList`), Most Played
-// and Favorite Artists (both virtualized `EntityCardGrid`s). No Favorite Albums tab by
-// design — albums are reachable through the Albums tab.
-//
-// **The filter is shared across all three; sort is per-tab**, and only Songs and Favorite
-// Artists have one, Most Played being ranked by play count by definition.
+// Three mutually exclusive sub-views: Songs (a sortable, filterable `TrackList`), Most Played and
+// Favorite Artists (both virtualized `EntityCardGrid`s). No Favorite Albums tab by design — albums
+// are reachable through the Albums tab. **The filter is shared across all three; sort is per-tab**,
+// and only Songs and Favorite Artists have one, Most Played being ranked by play count.
 export global Favorites {
     // **`tab-count` is the sole definition of how many there are** — Rust clamps the persisted
     // index against it, so a build with fewer tabs can't restore onto an unmounted branch.
@@ -31,12 +28,10 @@ export global Favorites {
     // The top-4 cover paths by play count; an empty list renders the empty state. The running
     // time isn't here — it reaches the band as a chip built by `ui::hero_chips`.
     in-out property <[string]> mosaic-paths;
-    // **`-1` is "not fetched yet", and every count on both curated globals carries it.** A
-    // section leave empties the models these number, so a count left at its last real value
-    // outlives its source and suppresses an empty state over an emptied model; resetting to
-    // `0` asserts "No favorites yet" for the length of the fetch. The sentinel matches neither
-    // `== 0` nor `> 0`, so every gate below reads as written. `MosaicHeroTile` is the one
-    // reader splitting on both comparisons, and clamps with `max`.
+    // **`-1` is "not fetched yet", and every count on both curated globals carries it.** A section
+    // leave empties the models these number, so a count left at its last real value outlives its
+    // source and suppresses an empty state; resetting to `0` asserts "No favorites yet" for the
+    // length of the fetch. Neither `== 0` nor `> 0` matches, so every gate below reads as written.
     in-out property <int>      track-count: -1;
 
     // Two slots, never cleared, so the outgoing one stays painted through the fade and
@@ -50,15 +45,15 @@ export global Favorites {
     // fills only the mounted tab's model**, so the hidden one costs nothing.
     in-out property <[EntityGridRow]> most-played-rows;
     in-out property <[EntityGridRow]> artist-rows;
-    // Pre-chunk counts gating the two `GridEmptyState`s — `rows.length` is a row count, not a
-    // card count. Not the band's, which takes its facts from the `FavoritesUiState` folds.
-    // `-1` until fetched; see `track-count` above.
+    // Pre-chunk counts gating the two `GridEmptyState`s — `rows.length` is a row count, not a card
+    // count. Not the band's, which takes its facts from the `FavoritesUiState` folds. `-1` until
+    // fetched; see `track-count` above.
     in-out property <int> most-played-count: -1;
     in-out property <int> artist-count: -1;
 
-    // Its own pair rather than the Songs tab's below, which name track columns this grid has
-    // no notion of. **Applied to the Rust-side cache, not to the filtered copy** — the cover
-    // prewarm reads that cache to pick its first screenful.
+    // Its own pair rather than the Songs tab's below, which name track columns this grid has no
+    // notion of. **Applied to the Rust-side cache, not the filtered copy** — the cover prewarm
+    // reads that cache to pick its first screenful.
     in-out property <string> artist-sort-field: "favorite_count";  // name | favorite_count
     in-out property <string> artist-sort-dir: "desc";
     callback request-artist-sort(string /*field*/);
@@ -92,13 +87,10 @@ export global Favorites {
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;
 
-    // One callback per cache tier, so Rust routes each surface into the right LRU; Songs-tab
-    // rows go through the shared `RowCovers` global.
-    //
-    // The two grid lookups take `covers-generation` as a second argument, doing both halves of
-    // the queue sheet's trick — reading it makes a `pure` binding re-evaluate once the tier is
-    // warmed behind an already-mounted grid, and its *value* is the is-it-warm flag. At 0 the
-    // answer is cache-only, a tab switch having cleared the entering tier.
+    // One callback per cache tier, so Rust routes each surface into the right LRU; Songs-tab rows
+    // go through the shared `RowCovers` global. The two grid lookups take `covers-generation` for
+    // the queue sheet's two reasons — reading it makes a `pure` binding re-evaluate once the tier
+    // warms behind a mounted grid, and its *value* is the is-it-warm flag. At 0, cache-only.
     in-out property <int> covers-generation: 0;
     pure callback request-mosaic-cover(string)           -> image;
     pure callback request-most-played-cover(string, int) -> image;
@@ -134,23 +126,19 @@ export global Favorites {
     // `FavoritesUi.section_active` to drive the cache release / re-fetch.
     callback section-active-changed(bool);
 
-    // The Favorite-Artist card subtitle. Slint 1.16 exposes no Rust-callable `tr`, so Rust
-    // resolves the plural through this at row-build time. Shares its msgid with the hero
-    // count line, so adding it to a locale covers both surfaces.
+    // The Favorite-Artist card subtitle. Slint 1.16 exposes no Rust-callable `tr`, so Rust resolves
+    // the plural through this at row-build time; shares its msgid with the hero count line.
     pure callback artist-favorite-subtitle(int /*count*/) -> string;
     artist-favorite-subtitle(count) => {
         return @tr("{n} favorite" | "{n} favorites" % count);
     }
 }
 
-// The shared hero over two mutually exclusive sub-views — Songs (a filterable `TrackList` of
-// the most-recently-played tracks) and Most Played (a virtualized `EntityCardGrid` ranked by
-// play count). One scroller per tab, which keeps this page off the `CompositeScrollbars`
-// wheel routing.
-//
-// **The filter is shared across both tabs, and neither has a sort.** Songs mounts
-// `sortable: false` — recency *is* the page, and the filter re-walks the cache in memory,
-// never re-ordering. Most Played's title names its own ordering.
+// The shared hero over two mutually exclusive sub-views — Songs (a filterable `TrackList` of the
+// most-recently-played tracks) and Most Played (a virtualized `EntityCardGrid` ranked by play
+// count). One scroller per tab, which keeps this page off the `CompositeScrollbars` wheel routing.
+// **The filter is shared across both tabs, and neither has a sort**: Songs mounts `sortable: false`
+// — recency *is* the page — and Most Played's title names its own ordering.
 export global RecentlyPlayed {
     // **`tab-count` is the sole definition of how many there are** — Rust clamps the persisted
     // index against it, so a build with fewer tabs can't restore onto an unmounted branch.
@@ -167,8 +155,7 @@ export global RecentlyPlayed {
     in-out property <int> columns: 4;
     callback columns-changed(int);
 
-    // Up to four distinct most-recently-played covers; an empty list renders the
-    // empty-state tile.
+    // Up to four distinct most-recently-played covers; an empty list renders the empty-state tile.
     in-out property <[string]> mosaic-paths;
 
     // The `Favorites` dual-slot contract.
@@ -180,10 +167,9 @@ export global RecentlyPlayed {
     // Library-wide tracks by play count, chunked into grid rows. **Rust fills this only
     // while Most Played is the mounted tab**, so the hidden one costs nothing.
     in-out property <[EntityGridRow]> most-played-rows;
-    // Pre-chunk card count gating the `GridEmptyState` — `rows.length` is a row count, not a
-    // card count. Not the band's, which takes its facts from `most_played_totals`. `-1` until
-    // fetched (see `Favorites.track-count`), which is also what a tab pick writes back when
-    // the cache it walked was left empty by a skipped refresh tick.
+    // Pre-chunk card count gating the `GridEmptyState` — `rows.length` is a row count, not a card
+    // count. Not the band's, which takes its facts from `most_played_totals`. `-1` until fetched,
+    // which is also what a tab pick writes back when the cache it walked was left empty.
     in-out property <int> most-played-count: -1;
 
     // The post-filter view Rust writes, always in fetch (recency) order. **There is no
@@ -192,13 +178,11 @@ export global RecentlyPlayed {
     in-out property <string>         filter;
     in-out property <int>            blur-search-tick: 0;
 
-    // Over the full recency set, not the filter. The running time isn't here — it reaches the
-    // band as a chip, a property only Rust wrote and read back being a round trip through
-    // Slint for a string Rust had already formatted. `-1` until fetched.
+    // Over the full recency set, not the filter. The running time isn't here — it reaches the band
+    // as a chip, Rust having already formatted the string. `-1` until fetched.
     in-out property <int> track-count: -1;
 
-    // The `Favorites` / `Tracks` column shape, hydrated from `views.json` under its own
-    // key.
+    // The `Favorites` / `Tracks` column shape, hydrated from `views.json` under its own key.
     in-out property <length> w-number: 56px;
     in-out property <length> w-title: 320px;
     in-out property <length> w-artist: 200px;
@@ -246,7 +230,6 @@ export global RecentlyPlayed {
     callback go-to-artist(int /*artist_id*/);
     callback go-to-genre(int /*genre_id*/);
 
-    // Section-visible signal — driven by `watched-recently-active` in
-    // `app-window.slint`.
+    // Section-visible signal — driven by `watched-recently-active` in `app-window.slint`.
     callback section-active-changed(bool);
 }

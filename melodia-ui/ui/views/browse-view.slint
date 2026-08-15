@@ -18,21 +18,19 @@ import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { BreadcrumbBar } from "browse/breadcrumb-bar.slint";
 import { BrowseFolderRowItem } from "browse/folder-row.slint";
 
-// A header strip over a body stacking a folder section above the shared `TrackList`, with
-// one of three `GridEmptyState`s replacing it. **A mount sheet** — the rows and breadcrumb
-// trail are `views/browse/*.slint`; what can't leave is anything the scrollbars reach *by
-// id* (`below-sv`, `tl`, `grid`, `view-toggle`), Slint having no way to read an id across a
-// component boundary.
+// A header strip over a body stacking a folder section above the shared `TrackList`, with one of
+// three `GridEmptyState`s replacing it. **A mount sheet** — the rows and breadcrumb trail are
+// `views/browse/*.slint`; what can't leave is anything the scrollbars reach *by id*, Slint having
+// no way to read an id across a component boundary.
 //
-// **A composite view**: folders and list share one outer `ScrollView`, the list capped at the
-// outer viewport height so its inner `ListView` still virtualizes. The wheel doesn't hand off
-// between nested scrollers, so a `hover-catch` sentinel reports region hover to the winit
-// filter. The folder `ListView` is sized to its row count rather than virtualizing, folder
-// rows being light and a directory listing bounded.
+// **A composite view**: folders and list share one outer `ScrollView`, the list capped at the outer
+// viewport height so its inner `ListView` still virtualizes. The wheel doesn't hand off between
+// nested scrollers, so a `hover-catch` sentinel reports region hover to the winit filter. The
+// folder `ListView` is sized to its row count rather than virtualizing, a listing being bounded.
 //
 // **The card view is a second body in that same scroller, mounted unconditionally rather than
-// behind an `if`** — an id declared inside an `if` is unreadable from outside, so both bodies
-// take a `visible:` gate plus a `0px` height arm, which is what removes them from the layout.
+// behind an `if`** — an id declared inside an `if` is unreadable from outside, so both bodies take
+// a `visible:` gate plus a `0px` height arm, which is what removes them from the layout.
 export component BrowseView inherits Rectangle {
     // No background of its own — the parent panel owns the rounded fill, and a
     // transparent root lets it show through at the corner cells.

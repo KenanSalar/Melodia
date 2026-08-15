@@ -1,12 +1,12 @@
 import { PlaylistRow, PlaylistGridRow, TrackListRow } from "../models.slint";
 
-// The Playlist grid view, on the `Albums` / `Artists` ownership contract: Rust owns the
-// flat list and `apply-filter` re-derives `grid-rows` with no DB hit. Sorted by
-// most-recently-updated and staying that way — the view exposes no sort UI.
+// The Playlist grid view, on the `Albums` / `Artists` ownership contract: Rust owns the flat list
+// and `apply-filter` re-derives `grid-rows` with no DB hit. Sorted by most-recently-updated and
+// staying that way — the view exposes no sort UI.
 export global Playlists {
     in-out property <[PlaylistGridRow]> grid-rows;
-    // The flat list behind the Add-to-Playlist submenu, kept in step with `grid-rows`
-    // so the submenu always lists every playlist in display order.
+    // The flat list behind the Add-to-Playlist submenu, kept in step with `grid-rows` so the
+    // submenu always lists every playlist in display order.
     in-out property <[PlaylistRow]> rows;
     // `-1` until fetched; see `Albums.total-count`.
     in-out property <int> total-count: -1;      // pre-filter playlist count
@@ -26,9 +26,9 @@ export global Playlists {
     pure callback request-row-cover(string /*artwork_path*/) -> image;
     callback section-active-changed(bool);
 
-    // Fired by the `Dialog.accepted` dispatcher on confirm. **The dialogs themselves are
-    // populated inline in Slint markup**, not through Rust callbacks: a synchronous
-    // `set_open(true)` inside a click handler trips Slint's property-recursion guard.
+    // Fired by the `Dialog.accepted` dispatcher on confirm. **The dialogs themselves are populated
+    // inline in Slint markup**, a synchronous `set_open(true)` inside a click handler tripping
+    // Slint's property-recursion guard.
     callback create-playlist(
         string /*name*/,
         string /*description (empty ⇒ no description)*/,
@@ -54,13 +54,11 @@ export global Playlists {
     // Rust reads the ticked enabled rows and adds `Dialog.pending-track-ids` into each.
     callback add-tracks-to-selected();
 
-    // Rust owns the array mutation for the same reason, caps the selection at four and
-    // silently no-ops past it.
+    // Rust owns the array mutation for the same reason, capping the selection at four.
     callback toggle-mosaic-candidate(string /*artwork_path*/);
 
     // For the grid card's Rename overlay, which carries only the id — `PlaylistGridRow` has no
-    // description. Resolved from the cached `PlaylistStats` with no DB hop, so it is safe to
-    // call straight from a click handler.
+    // description. Resolved from the cached `PlaylistStats`, so it is safe from a click handler.
     pure callback row-name(int /*playlist_id*/) -> string;
     pure callback row-description(int /*playlist_id*/) -> string;
 
@@ -68,10 +66,9 @@ export global Playlists {
     // overlay: the detail isn't necessarily open, so `PlaylistDetail.cover` would be stale.
     callback request-edit-artwork-for(int /*playlist_id*/);
 
-    // Rust runs the list and the per-playlist overlap counts in parallel, fills the rows, and
-    // only then flips `Dialog.open`, so it appears already populated. `exclude-playlist-id
-    // >= 0` filters that one out, so Playlist Detail can't offer the open playlist; -1 shows
-    // all.
+    // Rust runs the list and the per-playlist overlap counts in parallel, fills the rows, and only
+    // then flips `Dialog.open`, so it appears already populated. `exclude-playlist-id >= 0` filters
+    // that one out, so Playlist Detail can't offer the open playlist; -1 shows all.
     callback request-add-to-playlist(
         [int] /*track_ids*/,
         int /*exclude_playlist_id*/,
@@ -95,29 +92,25 @@ export global Playlists {
     callback set-all-export-picks(bool /*selected*/);
 }
 
-// The full Playlist Detail view: `playlist-id == -1` shows the grid, `>= 0` swaps in the
-// detail, the `Nav.now-playing-open` shape. Rust owns `tracks`; `playlist` is the header data.
+// The full Playlist Detail view: `playlist-id == -1` shows the grid, `>= 0` swaps in the detail,
+// the `Nav.now-playing-open` shape. Rust owns `tracks`; `playlist` is the header data. The table is
+// the shared `TrackList`, so the column / sort / selection shape mirrors the `Tracks` / `Browse` /
+// `AlbumDetail` globals under its own persistence key.
 //
-// The table is the shared `TrackList`, so the column / sort / selection shape mirrors the
-// `Tracks` / `Browse` / `AlbumDetail` globals under its own persistence key.
 // **Drag-to-reorder is gated to an ascending `"position"` sort** — reordering a list sorted by
-// something else means nothing. No header cell asks for that field, so the third click on a
-// column hands it back (`ui::callbacks::next_sort_with_natural`); without one, a single click
-// on Title retires reordering for the whole install.
-//
-// `drag-source` / `drop-slot` mirror `Queue`'s reorder state, which lives on
-// `DraggableTrackList` and is two-way bound here. Rust never writes them mid-drag — the
-// indicator and source dim are pure Slint feedback — only clearing them when it rebuilds
-// `tracks` under an in-flight drag. The view clears them on its own `init` too, they outlive
-// it and a nav-away mid-drag leaves them set.
+// something else means nothing. No header cell asks for that field, so the third click on a column
+// hands it back (`ui::callbacks::next_sort_with_natural`); without one, one click on Title retires
+// reordering for the whole install. `drag-source` / `drop-slot` mirror `Queue`'s reorder state,
+// living on `DraggableTrackList` and two-way bound here. Rust never writes them mid-drag, only
+// clearing them when it rebuilds `tracks` under one; the view clears them on `init` too.
 export global PlaylistDetail {
     in-out property <int> playlist-id: -1;
     in-out property <PlaylistRow> playlist;
     in-out property <[TrackListRow]> tracks;
 
-    // What the band's search box means while this detail is open; drag-reorder is disabled
-    // while one is active. Cleared on a fresh open, preserved across library-changed refreshes
-    // so a typed needle survives a scan finishing.
+    // What the band's search box means while this detail is open; drag-reorder is disabled while
+    // one is active. Cleared on a fresh open, preserved across a library-changed refresh so a
+    // typed needle survives a scan finishing.
     in-out property <string> filter;
 
     // Per-column widths, edited by the resize handles.
@@ -155,9 +148,8 @@ export global PlaylistDetail {
     in-out property <int> drag-source: -1;
     in-out property <int> drop-slot: -1;
 
-    // Mirrored from Rust on an OS file-hover so the detail can paint its drop banner.
-    // Set **only** when the queue sheet is closed and this detail is open, the queue
-    // taking priority; cleared on cancel or drop.
+    // Mirrored from Rust on an OS file-hover so the detail can paint its drop banner. Set **only**
+    // when the queue sheet is closed and this detail is open, the queue taking priority.
     in property <bool> is-drop-hovered: false;
 
     callback close-detail();
@@ -180,8 +172,8 @@ export global PlaylistDetail {
     // is still `"position"`, ascending.
     callback reorder(int /*from*/, int /*to*/);
 
-    // The one action needing a Rust hop before its dialog mounts, the mosaic picker having to
-    // query the playlist's track artworks first. The handler writes `Dialog` through
+    // The one action needing a Rust hop before its dialog mounts, the mosaic picker having to query
+    // the playlist's track artworks first. The handler writes `Dialog` through
     // `upgrade_in_event_loop`, landing on a fresh tick and so dodging the recursion guard.
     callback request-edit-artwork();
 
@@ -190,7 +182,6 @@ export global PlaylistDetail {
     callback remove-selected();
     callback remove-track([int] /*track_ids*/);
 
-    // Rust re-walks the cached tracks through the new needle in memory — no DB
-    // round-trip — and pushes a filtered model.
+    // Rust re-walks the cached tracks through the new needle in memory, no DB round-trip.
     callback filter-changed(string);
 }

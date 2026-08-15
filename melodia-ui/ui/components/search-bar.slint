@@ -2,29 +2,26 @@ import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 
 // The reusable compact filter input: an `ActionPill`-matching outline over a fill that
-// **solidifies the moment the bar is engaged** — half its mounts sit over a detail hero, so
-// at rest it lets a little blur through like the pill beside it.
+// **solidifies the moment the bar is engaged** — half its mounts sit over a detail hero, so at rest
+// it lets a little blur through like the pill beside it. The outer slot asks for `input-width` and
+// never stretches past it; the visible chrome is an inner Rectangle scaling from its own centre, so
+// neighbours don't shift on focus.
 //
-// The outer slot asks for `input-width` and never stretches past it; the visible chrome is an
-// inner Rectangle scaling from its own centre, so neighbours don't shift on focus.
-//
-// A named instance exposes `clear-input-focus()` for a backdrop or pill. **`blur-trigger` is
-// for the case that can't reach the instance**: a descendant in another file bumps an int on
-// the view's global. Omit it when nothing outside the view file triggers a blur.
+// A named instance exposes `clear-input-focus()` for a backdrop or pill. **`blur-trigger` is for
+// the case that can't reach the instance**: a descendant in another file bumps an int on the view's
+// global. Omit it when nothing outside the view file triggers a blur.
 export component SearchBar inherits Rectangle {
     in-out property <string> text;
     in property <string> placeholder: @tr("Search…");
 
-    // **The default fits the placeholder the bar was actually handed**, a flat number being
-    // unable to: several catalogues need noticeably more room than English. Capped so a
-    // verbose locale can't take a whole header row; past the cap the placeholder elides. The
-    // three hosts that budget their row set this outright.
+    // **The default fits the placeholder the bar was actually handed**, a flat number being unable
+    // to: several catalogues need noticeably more room than English. Capped so a verbose locale
+    // can't take a whole header row; past the cap the placeholder elides.
     in property <length> input-width:
         clamp(root.natural-width, 220px, 320px);
 
-    // Published so a host budgeting its row reserves against it rather than restating the
-    // number — the `TabBar.compact-w` contract. What the host leaves behind is exactly what
-    // this shrinks to, so the two can't drift.
+    // Published so a host budgeting its row reserves against it rather than restating the number —
+    // the `TabBar.compact-w` contract. What the host leaves behind is exactly what this shrinks to.
     out property <length> min-w: 140px;
 
     // Named because `chrome-overhead` has to add the same number the layout does.
@@ -33,9 +30,8 @@ export component SearchBar inherits Rectangle {
     // once there's text, by which point the placeholder is gone.
     property <length> chrome-overhead:
         Theme.pad-sm + root.icon-size + 2 * Theme.pad-xs;
-    // Measured off the Text the bar actually draws, so measured and drawn can't drift. A
-    // Text's *horizontal* layout info is intrinsic to the string and never reads back the
-    // width it was handed, so this is a derivation and not a cycle.
+    // Measured off the Text the bar actually draws, so measured and drawn can't drift. A Text's
+    // *horizontal* layout info is intrinsic to the string, so this is a derivation and not a cycle.
     property <length> natural-width:
         placeholder-text.preferred-width + root.chrome-overhead;
 
@@ -46,21 +42,17 @@ export component SearchBar inherits Rectangle {
 
     callback edited(string);
 
-    // Most consumers don't wire this, their `edited` already refiltering per keystroke.
-    // **The Search view does**: it skips the debounce and commits synchronously, so a user
-    // can re-trigger the same query after navigating away and back — the leave released the
-    // results but kept `Search.query`.
+    // Most consumers don't wire this, their `edited` already refiltering per keystroke. **The
+    // Search view does**: it skips the debounce and commits synchronously, so a user can re-trigger
+    // the same query after navigating away and back — the leave released the results, not the query.
     callback accepted();
 
-    // **`has-hover` is not continuous, so the fill can't read it raw.** Slint drops the flag
-    // on a wheel event the bar doesn't handle, and its exit dispatch compares an item's stack
-    // *position* rather than its membership, so an item the pointer never left can still be
-    // handed an `Exit`. Either way it blinks off for a frame, and the rest fill is translucent
-    // — invisible over a flat panel, a visible flicker over the Search results this floats on.
-    // So `engaged` arms on the raw flag and releases only once the pointer has stayed gone,
-    // the rail tooltip's `held` shape. **`hover-held` sits beside the raw flag rather than
-    // replacing it**: `changed` doesn't fire on a first evaluation, so a bar mounted under the
-    // pointer would never engage.
+    // **`has-hover` is not continuous, so the fill can't read it raw.** Slint drops the flag on a
+    // wheel event the bar doesn't handle, and its exit dispatch compares an item's stack *position*
+    // rather than its membership. Either way it blinks off for a frame, invisible over a flat panel
+    // and a visible flicker over the Search results this floats on. So `engaged` arms on the raw
+    // flag and releases only once the pointer has stayed gone, the rail tooltip's `held` shape —
+    // **beside the raw flag, not replacing it**, `changed` not firing on a first evaluation.
     property <bool> pointer-inside: chrome-touch.has-hover;
     property <bool> hover-held;
     property <bool> engaged:
@@ -97,21 +89,18 @@ export component SearchBar inherits Rectangle {
         input.focus();
     }
 
-    // The slot still doesn't stretch — `preferred` and `max` are the same number, so the
-    // bar is handed exactly `input-width` and the focus swell happens *inside* it.
-    // **What the split buys over a bound `width` is the other end**: Slint reports a
-    // root's bound `width` as both `min` and `max`, so a locale-sized default would drag
-    // the window's own resize floor out with it. Under `min-w` the bar compresses and
-    // the placeholder elides, where before it drew across its neighbours.
+    // The slot still doesn't stretch — `preferred` and `max` are the same number, so the bar is
+    // handed exactly `input-width` and the focus swell happens *inside* it. **What the split buys
+    // over a bound `width` is the other end**: Slint reports a root's bound `width` as both `min`
+    // and `max`, so a locale-sized default would drag the window's own resize floor out with it.
     min-width: root.min-w;
     preferred-width: input-width;
     max-width: input-width;
     height: 32px;
     background: transparent;
 
-    // Holds all the visible styling and scales from the *centre* by binding `x`/`y` to a
-    // half-delta against the outer slot — Slint Rectangles have no scale transform, so
-    // the width and height grow and the position is recomputed.
+    // Holds all the visible styling and scales from the *centre* by binding `x`/`y` to a half-delta
+    // against the outer slot — Slint Rectangles have no scale transform.
     chrome := Rectangle {
         property <float> focus-scale: input.has-focus ? 1.015 : 1.0;
         animate focus-scale { duration: Theme.dur-fast; easing: ease-in-out; }
@@ -139,27 +128,23 @@ export component SearchBar inherits Rectangle {
             : Theme.crust.with-alpha(0.15);
         drop-shadow-blur: input.has-focus ? 16px : 2px;
         drop-shadow-offset-y: input.has-focus ? 4px : 1px;
-        // **The ease belongs on the scale, not on the dimensions.** Animating a binding
-        // derived from another animating property phase-lags, and `width`/`height`
-        // derive from this while `x`/`y` derive from those. There is a second reason
-        // too: `width` also multiplies `root.width`, which the Settings header drives off
-        // the live window width, and Slint restarts an animated binding on dependency
-        // *dirtiness* rather than on a value change — so an eased `width` restarted its
-        // curve on every event of a resize drag and the chrome lagged inside its own
-        // slot. `focus-scale` reads nothing but `has-focus`, so it only sees the toggle.
+        // **The ease belongs on the scale, not on the dimensions.** Animating a binding derived
+        // from another animating property phase-lags, and `width`/`height` derive from this while
+        // `x`/`y` derive from those. Second reason: `width` also multiplies `root.width`, which the
+        // Settings header drives off the live window width, and Slint restarts an animated binding
+        // on dependency *dirtiness* — so an eased `width` re-based on every event of a resize drag.
+        // `focus-scale` reads nothing but `has-focus`, so it only ever sees the toggle.
         animate background, border-color, drop-shadow-color,
                 drop-shadow-blur, drop-shadow-offset-y {
             duration: Theme.dur-fast;
             easing: ease-in-out;
         }
 
-        // **Wraps the content rather than sitting beside it.** As a sibling its
-        // `has-hover` only reported the padding and border: `TextInput` consumes the hit
-        // test, so the pointer vanished the moment it crossed into the text and the fill
-        // dropped back to rest. An ancestor TouchArea gets `has-hover` on the top-down
-        // filter pass and still forwards the event, so the clear button and the
-        // `TextInput` keep their clicks, drags and caret placement — the same wrapping
-        // fix, for the same reason, as `touch` in `track-list-row.slint`.
+        // **Wraps the content rather than sitting beside it.** As a sibling its `has-hover` only
+        // reported the padding and border: `TextInput` consumes the hit test, so the pointer
+        // vanished the moment it crossed into the text. An ancestor TouchArea gets `has-hover` on
+        // the top-down filter pass and still forwards the event, so the clear button and the
+        // `TextInput` keep their clicks — the same fix as `touch` in `track-list-row.slint`.
         chrome-touch := TouchArea {
             width: 100%;
             height: 100%;
@@ -194,30 +179,25 @@ export component SearchBar inherits Rectangle {
                     alignment: center;
                     Rectangle {
                         height: 20px;
-                        // Both children fill this box, so their `vertical-alignment`
-                        // actually centres the glyph line-box inside it — without an
-                        // explicit height they auto-size to the line-box and pin to the
-                        // top, reading a pixel high.
+                        // Both children fill this box, so their `vertical-alignment` actually
+                        // centres the glyph line-box inside it — without an explicit height they
+                        // auto-size to the line-box and pin to the top, reading a pixel high.
                         placeholder-text := Text {
                             visible: root.text == "";
                             text: root.placeholder;
-                            // `PillButton`'s label brush, so a bar and the pills beside
-                            // it read as one family; dimmed just enough to stay a hint
-                            // rather than typed text. Alpha in the brush rather than
-                            // `opacity`, which would layer and crop the ink.
+                            // `PillButton`'s label brush, so a bar and the pills beside it read as
+                            // one family, dimmed just enough to stay a hint rather than typed
+                            // text. Alpha in the brush, never `opacity`, which crops the ink.
                             color: Theme.text.transparentize(0.3);
                             font-size: Theme.font-size-md;
                             vertical-alignment: center;
                             x: 0;
-                            // **Bounded, and only then elided.** The parent is a plain
-                            // Rectangle rather than a layout, so without a width of its
-                            // own this Text takes its *implicit* size — the untruncated
-                            // string — and paints straight through the pill's right
-                            // edge. Eliding alone doesn't save it: elide lowers a Text's
-                            // layout *minimum* to one ellipsis and leaves `preferred` at
-                            // the full string, and the implicit size is the larger of
-                            // the two. The `TextInput` below never had the bug, already
-                            // carrying this same width and clipping itself besides.
+                            // **Bounded, and only then elided.** The parent is a plain Rectangle
+                            // rather than a layout, so without a width of its own this Text takes
+                            // its *implicit* size — the untruncated string — and paints straight
+                            // through the pill's right edge. Eliding alone doesn't save it: elide
+                            // lowers a Text's layout *minimum* to one ellipsis and leaves
+                            // `preferred` at the full string, and the implicit size is the larger.
                             width: 100%;
                             height: 100%;
                             overflow: elide;

@@ -1,14 +1,13 @@
 import { SmartRuleRow } from "../models.slint";
 
-// The form-shaped dialogs' state. Each is populated by its own entry-point
-// callback and read back by the `Dialog.accepted` dispatcher — which is why
-// they sit apart from `Dialog`: the dispatcher imports them, never the reverse.
+// The form-shaped dialogs' state. Each is populated by its own entry-point callback and read back
+// by the `Dialog.accepted` dispatcher — which is why they sit apart from `Dialog`: the dispatcher
+// imports them, never the reverse.
 
 // The Smart-Playlist rule builder (`kind == "smart-playlist-editor"`), owned by
-// `src/ui/playlists/callbacks/smart.rs`. The entry points populate everything
-// and open the dialog from a fresh event-loop tick — a synchronous
-// `Dialog.open = true` off a click trips the recursion guard. `commit`
-// reconstructs a `SmartCriteria` from the model plus the scalars.
+// `src/ui/playlists/callbacks/smart.rs`. The entry points populate everything and open the dialog
+// from a fresh event-loop tick — a synchronous `Dialog.open = true` off a click trips the recursion
+// guard. `commit` reconstructs a `SmartCriteria` from the model plus the scalars.
 export global SmartEditor {
     in-out property <[SmartRuleRow]> rules;
     // 0 = match all (AND), 1 = match any (OR).
@@ -34,15 +33,14 @@ export global SmartEditor {
     callback commit();
 }
 
-// The Edit-Track-Information dialog (`kind == "edit-tags"`), opened from a track
-// row's context menu over one *or many* rows and owned by
-// `src/ui/callbacks/tags.rs`. `request-edit` fetches, populates and opens on the
-// same fresh tick `SmartEditor` uses, for the same reason. `commit` diffs each
-// field against the populate-time snapshot into a Keep / Clear / Set tri-state,
-// so only touched fields reach the file.
+// The Edit-Track-Information dialog (`kind == "edit-tags"`), opened from a track row's context menu
+// over one *or many* rows and owned by `src/ui/callbacks/tags.rs`. `request-edit` fetches,
+// populates and opens on the same fresh tick `SmartEditor` uses. `commit` diffs each field against
+// the populate-time snapshot into a Keep / Clear / Set tri-state, so only touched fields reach the
+// file.
 //
-// Batch editing is the point: a field that disagrees across the selection starts
-// empty behind the Rust-set ‹multiple values› sentinel. Lyrics and Summary are
+// Batch editing is the point: a field that disagrees across the selection starts empty behind the
+// Rust-set ‹multiple values› sentinel. Lyrics and Summary are
 // single-selection only, and `tag-editor-body.slint` leaves those tabs unmounted
 // in multi mode rather than merely disabling them.
 export global TagEditor {

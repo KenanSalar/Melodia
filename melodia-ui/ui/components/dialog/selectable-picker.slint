@@ -4,18 +4,15 @@ import { ArtworkImage } from "../artwork-image.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
-// Data-agnostic building blocks for the selectable-list dialogs
-// (Add-to-Playlist, Export-playlists). Everything arrives as plain `in`
-// properties, so neither picker's globals reach in here and both share one
-// implementation.
+// Data-agnostic building blocks for the selectable-list dialogs (Add-to-Playlist,
+// Export-playlists). Everything arrives as plain `in` properties, so neither picker's globals reach
+// in here and both share one implementation.
 //
-// **Load-bearing: nothing containing the rows carries a `border` or a
-// `clip`.** Either one promotes that subtree to a FemtoVG compositing layer
-// whose offscreen texture is allocated at logical size and upscaled by the
-// display scale on blit, so the row text reads blurry and oversized beside the
-// directly-rendered header. The tonal fill and the filled indicator carry the
-// selection on their own, and `PickerListCard` paints its border with a
-// childless overlay, which needs no layer.
+// **Load-bearing: nothing containing the rows carries a `border` or a `clip`.** Either one promotes
+// that subtree to a FemtoVG compositing layer whose offscreen texture is allocated at logical size
+// and upscaled by the display scale on blit, so the row text reads blurry beside the header. The
+// tonal fill and the filled indicator carry the selection, and `PickerListCard` paints its border
+// with a childless overlay, which needs no layer.
 
 // Tri-state M3 indicator: a filled disc with a check when checked, with a dash
 // for the header's some-but-not-all state, a hollow ring otherwise.

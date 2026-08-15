@@ -3,12 +3,12 @@ import { Player } from "../../globals/player.slint";
 import { SpectrumBars } from "spectrum-bars.slint";
 import { WaveformTrace } from "waveform-trace.slint";
 
-// The strip's footprint plus the one Timer driving whichever style is showing. The Timer is
-// here rather than in each style because its `running` gate is easy to get subtly wrong, and
-// three copies would be three chances to. Styles are pure render.
+// The strip's footprint plus the one Timer driving whichever style is showing. The Timer is here
+// rather than in each style because its `running` gate is easy to get subtly wrong, and three
+// copies would be three chances to. Styles are pure render.
 export component VisualizerStrip inherits Rectangle {
-    // The host's to decide, it following the panel and a component root not reaching `parent`.
-    // The default is the old pinned height, so a call site that forgets still gets a strip.
+    // The host's to decide, it following the panel and a component root not reaching `parent`. The
+    // default is the old pinned height, so a call site that forgets still gets a strip.
     in property <length> strip-height: 56px;
 
     min-height: root.strip-height;
@@ -25,26 +25,21 @@ export component VisualizerStrip inherits Rectangle {
         centred: Visualizer.style == "mirrored";
     }
 
-    // One shared Timer, running a full snapshot → analysis → property pass in Rust; the
-    // only thing that reads the sample ring.
+    // One shared Timer, running a full snapshot → analysis → property pass in Rust; the only thing
+    // that reads the sample ring. **30 Hz for every style**: at vsync the bars' rounded-rect
+    // re-tessellation dominated the process's allocation calls for as long as Now Playing stayed
+    // open, and a trace has no decay to keep smooth, so a high rate only makes it frantic.
+    // `dormant` overrides both, the tick then only still here to notice frames coming back.
     //
-    // **30 Hz for every style.** At vsync the bars' rounded-rect re-tessellation dominated
-    // the process's allocation calls for as long as Now Playing stayed open, and a trace has
-    // no decay to keep smooth, so a high rate only makes it frantic. `dormant` overrides
-    // both — nothing is drawn and nothing is arriving, so the tick is only still here to
-    // notice frames coming back.
-    //
-    // **`running` is deliberately not just `is_playing`**: a pause stops the tap but leaves
-    // the last window of samples in the ring, so freezing the Timer would strand the drawing
-    // on a stale shape. The tick fires past the pause, feeding the analyzers silence, until
-    // Rust reports everything settled. An off-screen window leaves through `window-shown` the
-    // same way.
+    // **`running` is deliberately not just `is_playing`**: a pause stops the tap but leaves the
+    // last window of samples in the ring, so freezing the Timer would strand the drawing on a stale
+    // shape. The tick fires past the pause, feeding the analyzers silence, until Rust reports
+    // everything settled. An off-screen window leaves through `window-shown` the same way.
     Timer {
         interval: Visualizer.dormant ? 500ms : 33ms;
         running: (Player.vm.is_playing && Visualizer.window-shown) || !Visualizer.idle;
         triggered() => {
-            // The width rides along because the trace's column count follows
-            // the strip; the bars ignore it.
+            // The width rides along because the trace's column count follows the strip.
             Visualizer.tick(Player.vm.is_playing, root.width / 1px);
         }
     }

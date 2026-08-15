@@ -1,18 +1,14 @@
 import { Theme } from "../../theme.slint";
 
-// One text cell in the track table — the shape the artist, album and genre
-// columns share. The leading U+200E it prepends is what keeps `overflow: elide`
-// putting its ellipsis at the right edge whatever the script's direction.
+// One text cell in the track table — the shape the artist, album and genre columns share. The
+// leading U+200E it prepends is what keeps `overflow: elide` putting its ellipsis at the right edge
+// whatever the script's direction. Title, number, year and length are structurally different and
+// stay inline in `track-list-row.slint`.
 //
-// Title, number, year and length are structurally different and stay inline in
-// `track-list-row.slint`.
-//
-// **Two things here are load-bearing.** Visibility is gated at the *call site*,
-// matching the header: a cell hidden from inside is still a child of the row's
-// layout and reserves a `spacing` slot that `total-w` doesn't account for, so
-// every cell after it drifts off the header. And the wrapper must bind
-// `width: cell-width` — without it the parent layout doesn't pin the slot, and
-// resizing a sibling column bleeds this cell's text over its neighbour.
+// **Two things here are load-bearing.** Visibility is gated at the *call site*, matching the
+// header: a cell hidden from inside is still a child of the row's layout and reserves a `spacing`
+// slot `total-w` doesn't account for, so every cell after it drifts off the header. And the wrapper
+// must bind `width: cell-width`, or resizing a sibling column bleeds this text over its neighbour.
 export component DataCell inherits Rectangle {
     in property <length> cell-width;
     in property <string> text-content;

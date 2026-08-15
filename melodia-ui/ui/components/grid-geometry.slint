@@ -1,12 +1,9 @@
-// Responsive card-grid geometry, derived once instead of once per view: every
-// grid page answers the same three questions from its body width, and the
-// arithmetic had been copied verbatim into each. `GridColumnsSync` beside it
-// owns *when* the column count reaches Rust, so the two split along
-// what-versus-when. Non-visual, so it costs a property evaluation and no layout.
+// Responsive card-grid geometry, derived once instead of once per view: every grid page answers the
+// same three questions from its body width, and the arithmetic had been copied verbatim into each.
+// `GridColumnsSync` beside it owns *when* the column count reaches Rust. Non-visual.
 //
-// **`avail-width` must come from the element the grid fills**, whose width the
-// layout fixes independently of the grid's children — so a card sizing itself
-// from it is a derivation and not a cycle.
+// **`avail-width` must come from the element the grid fills**, whose width the layout fixes
+// independently of the grid's children — so a card sizing itself from it is not a cycle.
 export component GridGeometry {
     in property <length> avail-width;
     // Columns are packed until one more would take every card below this.

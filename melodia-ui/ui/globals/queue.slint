@@ -7,41 +7,36 @@ import { QueueRow } from "../models.slint";
 // `current-index` from a subscriber on the same `sinks.queue` watch `Player.queue` reads.
 //
 // **The drag plumbing is bespoke rather than `DragArea` / `DropArea`** — `queue-row-item.slint`
-// says why those don't fit a reorder. The sheet flips `drag-source` and `drop-slot` from
-// row-level `pointer-event` handlers and fires `reorder` only on pointer-up. Two things clear
-// the pair out from under a drag the pressed row can no longer finish: Rust when it rebuilds
-// `rows`, and the sheet on either `open` transition and at mount.
+// says why. The sheet flips `drag-source`/`drop-slot` from row-level `pointer-event` handlers and
+// fires `reorder` on pointer-up only; both clear out from under a drag the pressed row can no
+// longer finish — Rust on a `rows` rebuild, the sheet on either `open` transition and at mount.
 //
-// `open` is mirrored to a Rust atomic through `open-changed`, which the winit `DroppedFile`
-// filter consults before forwarding paths; a global can't watch its own property.
+// `open` is mirrored to a Rust atomic through `open-changed`, which the winit `DroppedFile` filter
+// consults before forwarding paths; a global can't watch its own property.
 export global Queue {
     in-out property <[QueueRow]> rows;
     // -1 when nothing is playing. Rows derive `playing: idx == current-index`, so the
     // highlight flips without a model rewrite.
     in property <int> current-index: -1;
-    // A Slint expression can't iterate a model, so Rust maintains this and the header swaps
-    // its label off it rather than walking `rows`.
+    // A Slint expression can't iterate a model, so Rust maintains this for the header's label.
     in property <int> selected-count: 0;
-    // The close animation needs the overlay mounted past `open == false`, so the sheet never
-    // gates on `if Queue.open` — it stays in the tree and fades.
+    // The close animation outlives `open == false`, so the sheet never gates on `if Queue.open`.
     in-out property <bool> open;
     // -1 when idle, else the play-order index being dragged.
     in-out property <int> drag-source: -1;
-    // Where the dragged row would land, in `[0, rows.length]`. **Slot semantics, not
-    // row-index**: slot K is the *gap* between rows K-1 and K, which is what makes "just above
-    // source" and "just below source" recognisable no-ops the sheet hides. -1 is no candidate.
+    // Where the dragged row would land, in `[0, rows.length]`. **Slot semantics, not row-index**:
+    // slot K is the *gap* between rows K-1 and K, which is what makes the two neighbouring slots
+    // recognisable no-ops the sheet hides. -1 is no candidate.
     in-out property <int> drop-slot: -1;
     // Mirrored from Rust on an OS file-hover for the drop banner, gated in markup on
     // `is-drop-hovered && open`. Wayland needs the vendored winit patch.
     in property <bool> is-drop-hovered: false;
 
     // Lazy row cover against the sheet's *own* tier, so closing releases every buffer.
-    //
-    // **`generation` does two jobs**: reading it makes the binding depend on the counter, a
-    // `pure` callback's result being cached until a dependency is dirtied; its *value* is
-    // whether the tier is warm. The sheet can't prewarm-then-set like every other surface, its
-    // rows having to land synchronously for the slide-up to have text on frame one — so at 0
-    // the lookup is cache-only and rows paint placeholders. Closing rewinds to 0.
+    // **`generation` does two jobs**: reading it makes the binding depend on the counter, a `pure`
+    // callback's result being cached until a dependency is dirtied; its *value* is whether the tier
+    // is warm. The sheet can't prewarm-then-set, its rows having to land synchronously for the
+    // slide-up to have text on frame one — so at 0 the lookup is cache-only. Closing rewinds to 0.
     pure callback request-cover(/* artwork-path */ string, /* generation */ int) -> image;
     in property <int> covers-generation: 0;
 
@@ -83,11 +78,10 @@ export global NowPlaying {
     // index is `mod(base-index + idx, queue-length)`.
     in property <int> queue-length: 0;
 
-    // Drives the one-shot Up Next slide; anything at or past `slide-frames` is at rest. Reset
-    // to 0 **only** on a real current-track change, not on a reorder that keeps the same track.
-    // On the global so the reset lands on the *same* render as the model swap — through a
-    // `changed` handler it queues to the next loop iteration and paints the post-advance list
-    // at rest once first.
+    // Drives the one-shot Up Next slide; anything at or past `slide-frames` is at rest. Reset to 0
+    // **only** on a real current-track change, not on a reorder keeping the same track. On the
+    // global so the reset lands on the *same* render as the model swap — through a `changed`
+    // handler it queues to the next iteration and paints the post-advance list at rest once first.
     in-out property <int> slide-phase: 18;
 
     // 1 = advanced forward, -1 = rewound. Written **before** `slide-phase` is reset, so one

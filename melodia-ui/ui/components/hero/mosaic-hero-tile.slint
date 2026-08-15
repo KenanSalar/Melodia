@@ -13,17 +13,15 @@ import { MaterialIcon } from "../material-icon.slint";
 // theme's accent lands dark-on-dark, and the populated fill matters as much, the placeholder
 // slots being translucent. The edge follows the fill for the same reason.
 export component MosaicHeroTile inherits Rectangle {
-    // Tiles to draw, before the 4-slot cap. Zero means an empty *set*, not
-    // "entries with no artwork" — an entry lacking a cover still contributes a
-    // tile, which `CoverMosaic` paints as a placeholder.
+    // Tiles to draw, before the 4-slot cap. Zero means an empty *set*, not "entries with no
+    // artwork" — an entry lacking a cover still contributes a tile, painted as a placeholder.
     in property <int> count;
     in property <[string]> paths;
     // Each view passes its own sidebar entry's glyph.
     in property <string> empty-glyph;
     in property <bool> empty-glyph-filled: false;
 
-    // `pure` because `CoverMosaic`'s is, and Slint won't call an impure
-    // callback from a pure one.
+    // `pure` because `CoverMosaic`'s is, Slint not calling an impure callback from a pure one.
     pure callback request-cover(string) -> image;
 
     width: Theme.hero-artwork;

@@ -6,46 +6,39 @@ import { EntityCard } from "entity-card.slint";
 // `HorizontalCardStrip`. Rust chunks the flat list into rows of `columns` cards, so the inner
 // `ListView` virtualizes by row.
 //
-// That is why a strip and a grid aren't one component: a strip walks its rows in a plain
-// `for`, affordable for a capped carousel and not for an uncapped page, where every card would
-// be built and every cover requested. All three grid tabs are uncapped.
-//
-// Covers come lazily — only a mounted card evaluates its binding, so the model stays pure
-// data. The binding's second argument is what makes a cold tier safe; see below.
-//
-// Same host-mounted-scrollbar contract as `AlbumGrid`, so the host can place its
-// `OverlayScrollbar` flush with the content-panel edge rather than inside its own padding.
+// That is why a strip and a grid aren't one component: a strip walks its rows in a plain `for`,
+// affordable for a capped carousel and not for an uncapped page, where every card would be built
+// and every cover requested. All three grid tabs are uncapped. Covers come lazily — only a mounted
+// card evaluates its binding, so the model stays pure data. Same host-mounted-scrollbar contract as
+// `AlbumGrid`, so the host places its `OverlayScrollbar` flush with the content-panel edge.
 export component EntityCardGrid inherits Rectangle {
     in property <[EntityGridRow]> rows;
     in property <length> card-width: 180px;
     in property <length> card-height: 226px;
-    // The gap is baked into the slot height because a `ListView` lays its
-    // delegates back-to-back and has no `spacing`.
+    // The gap is baked into the slot height because a `ListView` lays its delegates back-to-back
+    // and has no `spacing`.
     in property <length> row-height: 246px;
     in property <length> gap: 20px;
     // Circular artwork, for the artist flavour.
     in property <bool> circular: false;
-    // An `ArtworkImage` placeholder key, not a Material ligature — the same
-    // vocabulary `EntityCard` and `HorizontalCardStrip` take.
+    // An `ArtworkImage` placeholder key, not a Material ligature — the same vocabulary
+    // `EntityCard` and `HorizontalCardStrip` take.
     in property <string> fallback-icon: "music-note";
-    // Reveals the play-count badge where a row carries one; an unplayed row
-    // stays bare either way.
+    // Reveals the play-count badge where a row carries one; an unplayed row stays bare either way.
     in property <bool> show-play-count: false;
 
-    // Bumped by the host once the tier behind `request-cover` is warm. The
-    // card's binding *reads* it, which is the only thing making the bump re-run
-    // a `pure` callback whose result is otherwise cached until a dependency
-    // dirties; the host forwards the value too, so Rust can answer cache-only
-    // while the tier is still cold.
+    // Bumped by the host once the tier behind `request-cover` is warm. The card's binding *reads*
+    // it, which is the only thing making the bump re-run a `pure` callback whose result is
+    // otherwise cached until a dependency dirties; the host forwards the value too, so Rust can
+    // answer cache-only while the tier is still cold.
     in property <int> covers-generation: 0;
 
     callback row-clicked(int /*entity_id*/);
     // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
-    // Same sign convention as `TrackList` and `AlbumGrid` — a positive
-    // `v-offset` is N px scrolled, where the inner `ListView` holds that as a
-    // non-positive `viewport-y`, so the boundary negates.
+    // Same sign convention as `TrackList` and `AlbumGrid` — a positive `v-offset` is N px
+    // scrolled, where the inner `ListView` holds that as a non-positive `viewport-y`.
     out property <length> v-visible-height: list.visible-height;
     out property <length> v-viewport-height: list.viewport-height;
     out property <length> v-offset: -list.viewport-y;
@@ -57,8 +50,7 @@ export component EntityCardGrid inherits Rectangle {
         horizontal-scrollbar-policy: always-off;
 
         for grid-row in root.rows: Rectangle {
-            // A `ListView` delegate needs a fixed height or the virtualization
-            // math breaks.
+            // A `ListView` delegate needs a fixed height or the virtualization math breaks.
             min-height: root.row-height;
             max-height: root.row-height;
 
@@ -75,9 +67,8 @@ export component EntityCardGrid inherits Rectangle {
                     cover: root.request-cover(entity.artwork_path, root.covers-generation);
                     circular: root.circular;
                     fallback-icon: root.fallback-icon;
-                    // A pronounced zoom on the placeholder, as on the other
-                    // grids; real artwork stays gentle so a cover doesn't
-                    // jitter inside the tile clip on hover.
+                    // A pronounced zoom on the placeholder, as on the other grids; real artwork
+                    // stays gentle so a cover doesn't jitter inside the tile clip on hover.
                     cover-scale-hover: entity.artwork_path == "" ? 1.15 : 1.04;
                     title: entity.title;
                     subtitle: entity.subtitle;

@@ -15,22 +15,19 @@ import { Checkbox } from "../checkbox.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
-// One body row in a track table. The outer Rectangle is the virtualizer slot the
-// ListView measures — `Theme.row-h` plus `Theme.row-gap` of transparent space, so a row
-// leaves a gap under itself without painting over the next one. **Anything deriving a
-// row pitch has to sum both.** The inner `chrome` Rectangle is the visible pill and owns
-// the TouchArea, the cell layout and the context popup.
+// One body row in a track table. The outer Rectangle is the virtualizer slot the ListView measures
+// — `Theme.row-h` plus `Theme.row-gap` of transparent space, so a row leaves a gap under itself
+// without painting over the next one. **Anything deriving a row pitch has to sum both.** The inner
+// `chrome` Rectangle is the visible pill and owns the TouchArea, cell layout and context popup.
 //
-// Globals-free: column widths, visibility and the playing track id arrive as `in`
-// properties; user actions emit callbacks the host wires up.
+// Globals-free: column widths, visibility and the playing track id arrive as `in` properties.
 export component TrackListRowItem inherits Rectangle {
     in property <TrackListRow> row-data;
     in property <int> row-index;
 
-    // `row-data.id` snapshotted at right-click, so a ListView row recycle — a data swap
-    // behind the same instance during a scroll — can't unmount the FocusLossWatcher
-    // mid-popup. Reset by the same close path that clears `PopupHighlight.row-ctx-id`,
-    // else a stale value keeps this row's gate true after the popup is gone.
+    // `row-data.id` snapshotted at right-click, so a ListView row recycle — a data swap behind the
+    // same instance during a scroll — can't unmount the FocusLossWatcher mid-popup. Reset by the
+    // same close path that clears `PopupHighlight.row-ctx-id`, else the gate stays true.
     property <int> right-click-row-id: -1;
 
     // Column widths — must match the header so cell boundaries align.
@@ -51,10 +48,9 @@ export component TrackListRowItem inherits Rectangle {
     in property <bool> show-genre;
     in property <bool> show-year;
 
-    // `"track_number"` shows the real album track number (Album Detail only); `"index"`
-    // the 1-based position in the current view, counting down N..1 under a descending
-    // `#` sort so the column reads as sorted — which is why the row needs the sort state
-    // and the list length.
+    // `"track_number"` shows the real album track number (Album Detail only); `"index"` the 1-based
+    // position in the current view, counting down N..1 under a descending `#` sort so the column
+    // reads as sorted — which is why the row needs the sort state and the list length.
     in property <string> number-mode: "index";
     in property <string> sort-field;
     in property <string> sort-dir;
@@ -79,19 +75,17 @@ export component TrackListRowItem inherits Rectangle {
     // interaction: row body, # checkbox, favourite button and right-click menu alike.
     property <bool> enabled: root.row-data.enabled;
 
-    // Drives context-menu entry visibility (no "Go to Album" inside Album Detail,
-    // "Remove from Playlist" only in Playlist Detail) and the current-playlist exclusion
-    // in the Add-to-Playlist sub-list. One of "tracks", "album-detail",
-    // "artist-detail", "genre-detail", "playlist-detail", "browse", "favorites",
-    // "search"; empty means no view-specific suppression.
+    // Drives context-menu entry visibility (no "Go to Album" inside Album Detail, "Remove from
+    // Playlist" only in Playlist Detail) and the current-playlist exclusion in the Add-to-Playlist
+    // sub-list. One of "tracks", "album-detail", "artist-detail", "genre-detail",
+    // "playlist-detail", "browse", "favorites", "search"; empty means no suppression.
     in property <string> view-context;
-    // Set only under `view-context == "playlist-detail"`; the Add-to-Playlist sub-list
-    // filters it out so "add to the playlist you're looking at" never appears. 0 = none.
+    // Set only under `view-context == "playlist-detail"`; the Add-to-Playlist sub-list filters it
+    // out so "add to the playlist you're looking at" never appears. 0 = none.
     in property <int> current-playlist-id: 0;
-    // Mirror of the per-view global's `selected-ids`, which is how the menu decides
-    // between the right-clicked row and the whole selection. Multi-mode needs this row
-    // selected *and* more than one entry — right-clicking an unselected row always
-    // falls back to that row alone.
+    // Mirror of the per-view global's `selected-ids`, which is how the menu decides between the
+    // right-clicked row and the whole selection. Multi-mode needs this row selected *and* more
+    // than one entry — right-clicking an unselected row falls back to that row alone.
     in property <[int]> view-selected-ids;
     property <bool> multi-active:
         root.row-data.selected && root.view-selected-ids.length > 1;
@@ -112,13 +106,11 @@ export component TrackListRowItem inherits Rectangle {
     property <bool> any-cross-tab-visible:
         show-go-to-album || show-go-to-artist || show-go-to-genre;
 
-    // Drag-reorder, opt-in via `enable-drag`; `TrackList` and every other consumer
-    // leave it off and pay nothing. On, the row's own `touch` also tracks
-    // press → move → release. A wrapping or sibling TouchArea can't: Slint's
-    // deepest-wins routing delivers press/up exclusively to `touch` and the outer one
-    // only sees `moved`, so a drag started and never cleaned up. The shared state lives
-    // on the host `DraggableTrackList` through two-way `drag-source` / `drop-slot`
-    // bindings, and the host also passes the geometry the slot math needs.
+    // Drag-reorder, opt-in via `enable-drag`; `TrackList` and every other consumer leave it off and
+    // pay nothing. On, the row's own `touch` also tracks press → move → release — a wrapping or
+    // sibling TouchArea can't, Slint's deepest-wins routing delivering press/up exclusively to
+    // `touch` while the outer one sees only `moved`, so a drag started and never cleaned up. The
+    // shared state lives on `DraggableTrackList` through two-way `drag-source` / `drop-slot`.
     in property <bool> enable-drag: false;
     in property <int> row-count: 0;
     in property <length> list-y0: 0px;
@@ -167,42 +159,40 @@ export component TrackListRowItem inherits Rectangle {
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     // Only emitted under `view-context == "playlist-detail"`.
     callback request-remove-from-playlist([int] /*track_ids*/);
-    // The id is the row's own album/artist/genre linkage, already non-zero — the menu
-    // hides the entry when the row carries none.
+    // The id is the row's own album/artist/genre linkage, already non-zero — the menu hides the
+    // entry when the row carries none.
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
     callback go-to-genre(int /*genre_id*/);
-    // Bumped by anything that should make the host's filter input give up the keyboard:
-    // row clicks, checkbox clicks, right-click. Slint doesn't blur a TextInput on an
-    // outside click, so the host watches this counter and clears focus itself.
+    // Bumped by anything that should make the host's filter input give up the keyboard: row
+    // clicks, checkbox clicks, right-click. Slint doesn't blur a TextInput on an outside click, so
+    // the host watches this counter and clears focus itself.
     callback request-blur-search();
-    // Fires on pointer-up only when a drag really started (4 px threshold) and the slot
-    // would move this row. `DraggableTrackList` routes it to `reorder_playlist`.
+    // Fires on pointer-up only when a drag really started (4 px threshold) and the slot would move
+    // this row. `DraggableTrackList` routes it to `reorder_playlist`.
     callback drag-reorder(int /*from*/, int /*to*/);
-    // Requested viewport delta while dragging near a list edge, negative being up. The
-    // host re-clamps and applies it.
+    // Requested viewport delta while dragging near a list edge, negative being up; the host
+    // re-clamps and applies it.
     callback request-scroll-by(length /*delta-y*/);
 
-    // `width: root.total-w` makes the row exactly as wide as the header so cell
-    // boundaries align, and lets the parent view's horizontal ScrollView see a content
-    // size past its own width once columns grow — which is what raises the scrollbar.
-    // **No `horizontal-stretch: 1`**: that would force every row to fill the ListView
-    // viewport and defeat the fixed width.
+    // `width: root.total-w` makes the row exactly as wide as the header so cell boundaries align,
+    // and lets the parent view's horizontal ScrollView see a content size past its own width once
+    // columns grow — which is what raises the scrollbar. **No `horizontal-stretch: 1`**: that would
+    // force every row to fill the ListView viewport and defeat the fixed width.
     //
     // Pinning min- and max-height equal is what lets the virtualizer measure rows, and
-    // `vertical-stretch: 0` stops them sharing leftover space. The `show-artwork`
-    // ternary collapses the row to `row-h-compact` when the 36 px tile unmounts;
-    // without it, thumbnail-less rows keep full-height chrome and read as low-density.
+    // `vertical-stretch: 0` stops them sharing leftover space. The `show-artwork` ternary collapses
+    // the row to `row-h-compact` when the 36 px tile unmounts, thumbnail-less rows otherwise
+    // keeping full-height chrome and reading as low-density.
     min-height: (root.show-artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
     max-height: (root.show-artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
     width: root.total-w;
     vertical-stretch: 0;
     background: transparent;
 
-    // Owns the cross-axis sizing of `chrome`, with `padding-bottom` carving off the
-    // inter-row gap. Without the layout, a free-positioned `width: 100%` chrome under a
-    // free Rectangle forms the height-100%-vs-Npx cycle and the ListView hands every row
-    // ~0 height, stacking them all at y=0.
+    // Owns the cross-axis sizing of `chrome`, with `padding-bottom` carving off the inter-row gap.
+    // Without the layout, a free-positioned `width: 100%` chrome under a free Rectangle forms the
+    // height-100%-vs-Npx cycle and the ListView hands every row ~0 height, stacking them at y=0.
     VerticalLayout {
         padding-bottom: Theme.row-gap;
 
@@ -214,15 +204,13 @@ export component TrackListRowItem inherits Rectangle {
             border-top-right-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
             border-bottom-left-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
             border-bottom-right-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
-            // Pinned so the pill always fills the slot. Left to size from its content,
-            // chrome grows on hover as the checkbox and fav button swap in, which reads
-            // as a row expanding under the cursor. Mirrors the outer slot's
-            // `show-artwork` ternary; same convention as `TrackListHeader`'s pin.
+            // Pinned so the pill always fills the slot. Left to size from its content, chrome grows
+            // on hover as the checkbox and fav button swap in, reading as a row expanding under the
+            // cursor. Mirrors the outer slot's `show-artwork` ternary.
             min-height: root.show-artwork ? Theme.row-h : Theme.row-h-compact;
             max-height: root.show-artwork ? Theme.row-h : Theme.row-h-compact;
-        // Disk-only Browse rows dim; a drag source fades further so it reads as lifted
-        // out of position. The second arm is inert without `enable-drag`, since
-        // `drag-source` stays -1.
+        // Disk-only Browse rows dim; a drag source fades further so it reads as lifted out of
+        // position. The second arm is inert without `enable-drag`, `drag-source` staying -1.
         opacity: !root.enabled
             ? 0.45
             : ((root.enable-drag && root.drag-source == root.row-index) ? 0.4 : 1.0);
@@ -236,16 +224,14 @@ export component TrackListRowItem inherits Rectangle {
             : (touch.has-hover ? Theme.surface0 : transparent);
         clip: true;
 
-        // `touch` **wraps** the cell layout so `cb-touch` and `fav-touch` are real
-        // descendants. Slint propagates `has-hover` up to a TouchArea's ancestors but
-        // not across cousins, so with the layout outside `touch`, moving onto `cb-touch`
-        // flipped `touch.has-hover` false, unmounted the checkbox mid-move and lost the
-        // click. Wrapping fixes hover and hit-testing at once: the deepest TouchArea
-        // wins, and plain Rectangles pass clicks through so empty cell area still drops
-        // filter focus.
+        // `touch` **wraps** the cell layout so `cb-touch` and `fav-touch` are real descendants.
+        // Slint propagates `has-hover` up to a TouchArea's ancestors but not across cousins, so
+        // with the layout outside `touch`, moving onto `cb-touch` flipped `touch.has-hover` false,
+        // unmounted the checkbox mid-move and lost the click. Wrapping fixes hover and hit-testing
+        // at once: the deepest TouchArea wins, and plain Rectangles pass clicks through.
         touch := TouchArea {
-            // A disabled TouchArea processes nothing, so disk-only rows get no hover
-            // background, no checkbox swap-in and no double-click.
+            // A disabled TouchArea processes nothing, so disk-only rows get no hover background,
+            // no checkbox swap-in and no double-click.
             enabled: root.enabled;
             // Grabbing only once a real drag is in flight; hover and idle press stay
             // `default` so inner cell cursors aren't overridden when drag is off.
@@ -254,20 +240,18 @@ export component TrackListRowItem inherits Rectangle {
                     ? grabbing
                     : default;
             double-clicked => { root.double-clicked-row(); }
-            // A row-body left-click is a no-op — only the # checkbox drives selection —
-            // but it still bumps the blur request, so clicking anywhere on a row drops
-            // filter focus. Drag press/up tracking shares this handler because `touch`
-            // is where Slint actually delivers those events.
+            // A row-body left-click is a no-op — only the # checkbox drives selection — but it
+            // still bumps the blur request, so clicking anywhere on a row drops filter focus. Drag
+            // press/up tracking shares this handler, `touch` being where Slint delivers them.
             pointer-event(ev) => {
                 if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
                     root.request-blur-search();
                 }
                 if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right && root.enabled) {
-                    // Records which row owns the open menu, so the popup's
-                    // `FocusLossWatcher` mounts on this row alone and focus-loss
-                    // dispatch stays O(1) however many rows are visible. **Both writes
-                    // must precede `show()`**, or the `if` gate inside the popup body
-                    // is still false when the watcher would mount.
+                    // Records which row owns the open menu, so the popup's `FocusLossWatcher`
+                    // mounts on this row alone and focus-loss dispatch stays O(1). **Both writes
+                    // must precede `show()`**, or the popup body's `if` gate is still false when
+                    // the watcher would mount.
                     root.right-click-row-id = root.row-data.id;
                     PopupHighlight.row-ctx-id = root.row-data.id;
                     ctx-popup.show();
@@ -281,11 +265,10 @@ export component TrackListRowItem inherits Rectangle {
                         root.drop-slot = -1;
                     }
                     if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
-                        // Slot → `to` index; removing the source shifts higher
-                        // indices down by one. `drag-source == row-index` ties the
-                        // commit to state nobody reset behind our back — that pair
-                        // lives on a global outliving this view, where `drag-started`
-                        // is per-row. `queue-row-item.slint` carries the same guard.
+                        // Slot → `to` index; removing the source shifts higher indices down by
+                        // one. `drag-source == row-index` ties the commit to state nobody reset
+                        // behind our back — that pair lives on a global outliving this view, where
+                        // `drag-started` is per-row. `queue-row-item.slint` carries the same guard.
                         if (root.drag-started
                             && root.drag-source == root.row-index
                             && root.drop-slot >= 0
@@ -324,8 +307,7 @@ export component TrackListRowItem inherits Rectangle {
                     if (root.drag-started && root.drag-source == root.row-index) {
                         root.drag-cur-abs-y = self.absolute-position.y + self.mouse-y;
                         root.drop-slot = root.drag-computed-slot;
-                        // Edge auto-scroll — the 40 px band / 6 px nudge
-                        // `queue-row-item.slint` uses.
+                        // Edge auto-scroll — the band and nudge `queue-row-item.slint` uses.
                         if (root.list-height > 0px) {
                             if ((self.absolute-position.y + self.mouse-y) - root.list-y0 < 40px) {
                                 root.request-scroll-by(-6px);
@@ -343,12 +325,10 @@ export component TrackListRowItem inherits Rectangle {
             padding-right: Theme.pad-sm;
             spacing: Theme.pad-sm;
 
-            // A playing row flips every cell to accent and keeps the weight — no
-            // bold-on-play.
+            // A playing row flips every cell to accent and keeps the weight — no bold-on-play.
 
-            // `if` rather than `visible` so a hidden cell vacates its layout space,
-            // mirroring the header. The number swaps to a checkbox on hover or
-            // selection.
+            // `if` rather than `visible` so a hidden cell vacates its layout space, mirroring the
+            // header. The number swaps to a checkbox on hover or selection.
             if root.show-number: Rectangle {
                 width: root.w-number;
                 clip: true;
@@ -400,14 +380,11 @@ export component TrackListRowItem inherits Rectangle {
                 }
             }
 
-            // Title cell: artwork, title, favourite, rating strip.
-            //
-            // `horizontal-stretch: 1` on the text column is what makes `overflow: elide`
-            // fire at all — without it, under `alignment: start` the column takes its
-            // intrinsic width (the full string) and the Text never learns it should
-            // elide, which RTL scripts make visible by overflowing left into the #
-            // column. The cell's `clip` guards whatever still escapes: RTL combining
-            // marks, oversized emoji.
+            // Title cell: artwork, title, favourite, rating strip. `horizontal-stretch: 1` on the
+            // text column is what makes `overflow: elide` fire at all — without it, under
+            // `alignment: start` the column takes its intrinsic width (the full string) and the
+            // Text never learns it should elide, which RTL scripts make visible by overflowing left
+            // into the # column. The cell's `clip` guards whatever still escapes.
             Rectangle {
                 width: root.w-title;
                 clip: true;
@@ -418,9 +395,8 @@ export component TrackListRowItem inherits Rectangle {
                         alignment: center;
                         ArtworkImage {
                             artwork-path: root.row-data.artwork_path;
-                            // Lazy per-instantiated-row lookup, so only the visible
-                            // rows of a virtualized list reach the shared row-tier
-                            // LRU, decoding on a miss.
+                            // Lazy per-instantiated-row lookup, so only the visible rows of a
+                            // virtualized list reach the shared row-tier LRU, decoding on a miss.
                             cover: RowCovers.request(root.row-data.artwork_path);
                             tile-size: 36px;
                             tile-radius: Theme.radius-sm;
@@ -452,11 +428,10 @@ export component TrackListRowItem inherits Rectangle {
                             filled: true;
                         }
                     }
-                    // Revealed on hover to the right of the title, which elides to make
-                    // room rather than being swapped out the way the Length cell's
-                    // duration is. Gated on `enabled` so disk-only Browse rows can't be
-                    // rated. The per-star TouchAreas descend from `touch`, so hovering a
-                    // star keeps the row hovered and this strip mounted.
+                    // Revealed on hover to the right of the title, which elides to make room rather
+                    // than being swapped out the way the Length cell's duration is. Gated on
+                    // `enabled` so disk-only Browse rows can't be rated. The per-star TouchAreas
+                    // descend from `touch`, so hovering a star keeps this strip mounted.
                     if touch.has-hover && root.enabled: VerticalLayout {
                         alignment: center;
                         StarRating {
@@ -468,8 +443,8 @@ export component TrackListRowItem inherits Rectangle {
                 }
             }
 
-            // Uniform elide-with-LRM cells. Year and length are structurally different
-            // and stay inline below.
+            // Uniform elide-with-LRM cells; year and length are structurally different and stay
+            // inline below.
             if root.show-artist: DataCell {
                 cell-width: root.w-artist;
                 text-content: root.row-data.artist != "" ? root.row-data.artist : "Unknown Artist";
@@ -544,32 +519,30 @@ export component TrackListRowItem inherits Rectangle {
         }
         }
 
-        // One PopupWindow per row instance — the ListView only instantiates visible
-        // rows, so this stays a screenful of popups whatever the library size. Height
-        // is content-driven; Add-to-Playlist hands off to a picker dialog so the menu
-        // itself stays one row per action with no inline scrolling.
+        // One PopupWindow per row instance — the ListView only instantiates visible rows, so this
+        // stays a screenful of popups whatever the library size. Height is content-driven;
+        // Add-to-Playlist hands off to a picker dialog rather than scrolling inline.
         ctx-popup := PopupWindow {
             x: touch.mouse-x;
             y: touch.mouse-y;
             width: 220px;
             close-policy: close-on-click;
 
-            // This row alone in single mode, the whole view selection in multi.
-            // Computed once so every `clicked` handler reads the same list.
+            // This row alone in single mode, the whole view selection in multi. Computed once so
+            // every `clicked` handler reads the same list.
             property <[int]> effective-ids:
                 root.multi-active ? root.view-selected-ids : [root.row-data.id];
-            // Gates the Add-to-Playlist entry. On Playlist Detail the current playlist
-            // is filtered out, since adding to itself is a no-op. It's assumed to be in
-            // `Playlists.rows`; if it isn't, this overcounts by one, harmlessly.
+            // Gates the Add-to-Playlist entry. On Playlist Detail the current playlist is filtered
+            // out, adding to itself being a no-op; assumed to be in `Playlists.rows`, and if it
+            // isn't this overcounts by one, harmlessly.
             property <int> visible-playlist-count:
                 root.current-playlist-id > 0
                     ? max(0, Playlists.rows.length - 1)
                     : Playlists.rows.length;
 
-            // Live only on the row whose menu is open. The gate keys off the right-click
-            // *snapshot* rather than the live `row-data.id`, so a row recycle behind an
-            // open popup can't unmount the watcher mid-popup — which keeps this to one
-            // watcher per focus-loss event however many rows are visible.
+            // Live only on the row whose menu is open. The gate keys off the right-click *snapshot*
+            // rather than the live `row-data.id`, so a row recycle behind an open popup can't
+            // unmount the watcher mid-popup — one watcher per focus-loss event, however many rows.
             if root.right-click-row-id != -1
                 && root.right-click-row-id == PopupHighlight.row-ctx-id: FocusLossWatcher {
                 close => {
@@ -584,10 +557,9 @@ export component TrackListRowItem inherits Rectangle {
                     padding: Theme.pad-xs;
                     spacing: 0;
 
-                    // Single-row mode keeps "Play", matching double-click. Over a
-                    // selection the verb is ambiguous — queue it, or replace the queue
-                    // with it — so it's dropped. Play Next and Add to Queue read the
-                    // same either way and stay.
+                    // Single-row mode keeps "Play", matching double-click. Over a selection the
+                    // verb is ambiguous — queue it, or replace the queue with it — so it's
+                    // dropped; Play Next and Add to Queue read the same either way and stay.
                     if !root.multi-active: MenuItem {
                         label: @tr("Play");
                         icon: "play_arrow";
@@ -621,9 +593,8 @@ export component TrackListRowItem inherits Rectangle {
                             Dialog.open-create-playlist(ctx-popup.effective-ids);
                         }
                     }
-                    // Hidden when there is nothing to add to. The chrome is set here so
-                    // the `@tr` literals sit at the call site and a locale switch
-                    // re-resolves them on the next open; the rows arrive async.
+                    // Hidden when there is nothing to add to. The chrome is set here so the `@tr`
+                    // literals sit at the call site and a locale switch re-resolves them.
                     if ctx-popup.visible-playlist-count > 0: MenuItem {
                         label: root.multi-active
                             ? @tr("Add {} to Playlist", root.multi-count)
@@ -665,11 +636,10 @@ export component TrackListRowItem inherits Rectangle {
                         }
                     }
 
-                    // Opens the tag editor over the right-clicked row or the whole
-                    // selection — batch editing is the point. **Don't set
-                    // `Dialog.open` here**: `request-edit` fetches the rows, fills
-                    // `TagEditor` and flips it on a fresh tick, the recursion-guard hop
-                    // `SmartEditor.request-edit` also takes.
+                    // Opens the tag editor over the right-clicked row or the whole selection —
+                    // batch editing is the point. **Don't set `Dialog.open` here**: `request-edit`
+                    // fetches the rows, fills `TagEditor` and flips it on a fresh tick, the
+                    // recursion-guard hop `SmartEditor.request-edit` also takes.
                     MenuItem {
                         label: root.multi-active
                             ? @tr("Edit Tags for {}", root.multi-count)
@@ -688,9 +658,8 @@ export component TrackListRowItem inherits Rectangle {
                         }
                     }
 
-                    // Single-target by nature, so hidden over a selection like the
-                    // cross-tab entries below. Straight to `Nav` — Rust resolves the
-                    // path — with the separator on the same gate so it never dangles.
+                    // Single-target by nature, so hidden over a selection like the cross-tab entries
+                    // below. Straight to `Nav`, with the separator on the same gate.
                     if !root.multi-active: MenuSeparator {}
                     if !root.multi-active: MenuItem {
                         label: @tr("Open Containing Folder");
@@ -698,11 +667,10 @@ export component TrackListRowItem inherits Rectangle {
                         clicked => { Nav.reveal-in-folder(root.row-data.id); }
                     }
 
-                    // Hidden over a selection, which may span several albums, and on the
-                    // detail view already showing the target. The separator tracks
-                    // `any-cross-tab-visible` rather than the album entry alone, so it
-                    // neither appears by itself nor vanishes when a row is merely
-                    // missing its album linkage.
+                    // Hidden over a selection, which may span several albums, and on the detail view
+                    // already showing the target. The separator tracks `any-cross-tab-visible`
+                    // rather than the album entry alone, so it neither appears by itself nor
+                    // vanishes when a row is merely missing its album linkage.
                     if root.any-cross-tab-visible: MenuSeparator {}
                     if root.show-go-to-album: MenuItem {
                         label: @tr("Go to Album");

@@ -1,20 +1,18 @@
 import { Tooltip, TooltipSide } from "tooltip.slint";
 
-// The top-layer mount shape for a tooltip whose host is somewhere Slint paints *later*.
-// `Tooltip` normally sits inside the element it annotates, but paint order is declaration
-// order, so a pill anchored on a band lands in the page's scroll body and the first row
-// covers it. The fix is a frame declared at the end of the page tracking the host's rect.
+// The top-layer mount shape for a tooltip whose host is somewhere Slint paints *later*. `Tooltip`
+// normally sits inside the element it annotates, but paint order is declaration order, so a pill
+// anchored on a band lands in the page's scroll body and the first row covers it. The fix is a
+// frame declared at the end of the page tracking the host's rect.
 //
-// **The host publishes the rect, this places it** — a component's ids aren't readable from
-// outside it, so a band hands over `tip-*`, derived from the hovered *index* rather than
-// snapshotted. The two `absolute-position` deltas stay at the call site, being the page's own
-// geometry and `parent` not being reachable from a component's root binding.
-//
-// A plain `Rectangle`, so it captures no input and the host keeps its hover.
+// **The host publishes the rect, this places it** — a component's ids aren't readable from outside
+// it, so a band hands over `tip-*`, derived from the hovered *index* rather than snapshotted. The
+// two `absolute-position` deltas stay at the call site, being the page's own geometry. A plain
+// `Rectangle`, so it captures no input and the host keeps its hover.
 //
 // **Not every top-layer tooltip belongs here.** `app-window.slint`'s `sidebar-tip` is the
-// deliberate exception: its `x` rides the live rail width, it owns a `held` latch across the
-// gaps between rail rows, and it is the only *frame* passing `gap`.
+// deliberate exception: its `x` rides the live rail width, it owns a `held` latch across the gaps
+// between rail rows, and it is the only *frame* passing `gap`.
 export component TooltipFrame inherits Rectangle {
     in property <string> label;
     in property <bool> shown;

@@ -31,18 +31,15 @@ export component ActionPill inherits Rectangle {
     }
 }
 
-// The pill-styled button: text-only, icon-only or both. The default home for any
-// interactive segment inside an `ActionPill`, and for any standalone secondary action
-// wanting the same chip chrome. **The hover fill is fully opaque on purpose** — lifting
-// out of a translucent pill is what makes the hover read.
+// The pill-styled button: text-only, icon-only or both. The default home for any interactive
+// segment inside an `ActionPill`, and for any standalone secondary action wanting the same chip
+// chrome. **The hover fill is fully opaque on purpose** — lifting out of a translucent pill is what
+// makes the hover read.
 //
-// **`danger: true` keeps the same chrome as any other pill.** A permanent red fill read
-// as over-prominent for an inline action row, so at rest it looks identical and only the
-// hover tints the icon *and* label to `Theme.danger` — "this is destructive" surfaces
-// exactly when the user is about to act on it.
-//
-// `icon-size` corrects a glyph whose optical weight is off at the default, and
-// `icon-filled` selects the filled Material Symbols variant.
+// **`danger: true` keeps the same chrome as any other pill.** A permanent red fill read as
+// over-prominent for an inline action row, so at rest it looks identical and only the hover tints
+// the icon *and* label to `Theme.danger`. `icon-size` corrects a glyph whose optical weight is off
+// at the default, and `icon-filled` selects the filled Material Symbols variant.
 export component PillButton inherits Rectangle {
     in property <string> text: "";
     in property <string> icon: "";

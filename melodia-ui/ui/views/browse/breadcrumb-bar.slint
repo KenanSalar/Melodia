@@ -42,20 +42,15 @@ component BreadcrumbPill inherits Rectangle {
 
 // The whole breadcrumb trail, chevrons included, in its clipping container.
 //
-// **The clip is what keeps a deep path from shoving the header's action pill off screen**
-// — the segments carry bound (incompressible) widths, so a trail wider than the slot
-// spills rather than eliding, and the container cuts it.
+// **The clip is what keeps a deep path from shoving the header's action pill off screen** — the
+// segments carry bound (incompressible) widths, so a trail wider than the slot spills rather than
+// eliding, and the container cuts it. It cuts at the **right**, i.e. the current folder is what a
+// deep path loses first, `alignment: start` packing from the left edge. Hiding the *head* instead
+// means `alignment: end`, which also right-aligns every short trail — a look to choose rather than
+// a one-line correction.
 //
-// It cuts at the **right**, i.e. the current folder is what a deep path loses first:
-// `alignment: start` packs from the left edge. Hiding the *head* instead — which is the
-// less useful end — means `alignment: end`, and that also right-aligns every short trail,
-// so it is a look to choose rather than a one-line correction. This comment used to claim
-// the left, and was wrong about it for as long as the trail lived inline in
-// `browse-view.slint`.
-//
-// The segment and the loop that interleaves its separators are one file because the pill
-// has no other consumer — splitting them would put a component and its only call site in
-// two places for nothing.
+// The segment and the loop that interleaves its separators are one file, the pill having no other
+// consumer.
 export component BreadcrumbBar inherits Rectangle {
     in property <[BreadcrumbRow]> segments;
     callback segment-clicked(string);

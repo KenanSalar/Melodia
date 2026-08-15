@@ -4,8 +4,7 @@ import { TrackListRow, BrowseFolderRow, BrowseCardGridRow, BreadcrumbRow } from 
 // `TrackListRow` consumer in the tree resolves its thumbnail through.
 
 // The Tracks view. Rust owns `rows` and the full unfiltered set behind it
-// (`ui::track_list_cache`): `apply-filter` and `request-sort` both re-derive
-// `rows` in memory, and neither goes near the DB.
+// (`ui::track_list_cache`): `apply-filter` and `request-sort` re-derive `rows` in memory.
 export global Tracks {
     in-out property <[TrackListRow]> rows;
     // `-1` until fetched; see `Albums.total-count`.
@@ -16,9 +15,9 @@ export global Tracks {
     in-out property <[int]> selected-ids;
     in-out property <int> selection-anchor: -1;
 
-    // **Every column is fixed-width** — the GTK-TreeView model, as Audacious,
-    // foobar2000 and file managers use: each independently resizable, with a horizontal
-    // scrollbar once the cumulative width passes the container. Not flex-with-cap.
+    // **Every column is fixed-width** — the GTK-TreeView model, as Audacious, foobar2000 and file
+    // managers use: each independently resizable, with a horizontal scrollbar once the cumulative
+    // width passes the container. Not flex-with-cap.
     in-out property <length> w-number: 56px;
     in-out property <length> w-title: 320px;
     in-out property <length> w-artist: 200px;
@@ -52,29 +51,25 @@ export global Tracks {
     callback go-to-artist(int /*artist_id*/);
     callback go-to-genre(int /*genre_id*/);
 
-    // Modifiers come off the row's pointer-event as bools; Rust does the work and walks
-    // the model to flip the per-row `selected` flags, a Slint expression not being able
-    // to iterate one.
+    // Modifiers come off the row's pointer-event as bools; Rust does the work and walks the model
+    // to flip the per-row `selected` flags, a Slint expression not being able to iterate one.
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
 
-    // Slint flips the matching `show-*` synchronously, then Rust persists the new
-    // visible-column list.
+    // Slint flips the matching `show-*` synchronously, then Rust persists the visible-column list.
     callback toggle-column(string /*column_id*/);
 }
 
 // The Browse view — the Slint side of three Rust-owned models; `src/ui/browse/` documents the
-// ownership and fetch rules. `rows` renders through the shared `TrackList`, so the column /
-// sort / selection shape mirrors `Tracks`. **Disk-only files** — inside a library folder but
-// not in the DB — arrive with `id == 0` and `enabled == false`, rendering dimmed and inert.
+// ownership and fetch rules. `rows` renders through the shared `TrackList`, so the column / sort /
+// selection shape mirrors `Tracks`. **Disk-only files** — inside a library folder but not in the
+// DB — arrive with `id == 0` and `enabled == false`, rendering dimmed and inert.
 //
 // An empty `current-path` is the root state; `has-library-folders` going false paints the CTA
-// instead. `loading` gates the empty state so a stale "Empty folder" can't flash mid-drill,
-// and a non-empty `error-message` replaces the rows outright.
-//
-// **Two presentations over the same three models** — the list, and a card grid whose rows are
-// `card-rows`. `folders` and `rows` stay populated in both, so the empty states count what
-// they always counted; only `card-rows` is mode-gated.
+// instead. `loading` gates the empty state so a stale "Empty folder" can't flash mid-drill, and a
+// non-empty `error-message` replaces the rows outright. **Two presentations over the same three
+// models** — the list, and a card grid whose rows are `card-rows`; `folders` and `rows` stay
+// populated in both, so only `card-rows` is mode-gated.
 export global Browse {
     in-out property <string> current-path;             // "" = root (library list)
     in-out property <[BrowseFolderRow]> folders;
@@ -85,8 +80,7 @@ export global Browse {
     in-out property <string> error-message;            // "" = no error
     in-out property <bool> has-library-folders;        // false → root empty-state CTA
 
-    // Separate from `Tracks` so Browse keeps its own column layout, under its own
-    // `views.json` key.
+    // Separate from `Tracks` so Browse keeps its own column layout, under its own `views.json` key.
     in-out property <length> w-number: 56px;
     in-out property <length> w-title: 320px;
     in-out property <length> w-artist: 200px;
@@ -107,15 +101,13 @@ export global Browse {
     in-out property <string> sort-field: "title";
     in-out property <string> sort-dir: "asc";
 
-    // The `Tracks` shape. Disk-only rows are never selectable — the Rust handler ignores
-    // them.
+    // The `Tracks` shape. Disk-only rows are never selectable — the Rust handler ignores them.
     in-out property <[int]> selected-ids;
     in-out property <int> selection-anchor: -1;
 
-    // Which presentation is up. Persisted as `views.json`'s `browse_view_mode`; Rust
-    // clamps the persisted value against `view-mode-count`, which is the sole definition
-    // of how many presentations there are — the `tab-count` contract, through the same
-    // `ui::tab_bar::clamp_tab`.
+    // Which presentation is up. Persisted as `views.json`'s `browse_view_mode`; Rust clamps it
+    // against `view-mode-count`, the sole definition of how many presentations there are — the
+    // `tab-count` contract, through the same `ui::tab_bar::clamp_tab`.
     in-out property <int> view-mode: 0;
     out property <int> mode-list: 0;
     out property <int> mode-card: 1;
@@ -125,9 +117,8 @@ export global Browse {
     // `ListView` virtualizes by row. `columns` is written by `GridColumnsSync`.
     in-out property <[BrowseCardGridRow]> card-rows;
     in-out property <int> columns: 1;
-    // Bumped once the card tier behind `request-card-cover` is warm. A mode toggle has
-    // no fetch to await before the grid mounts, so the cards ask cache-only until then —
-    // see the "Covers" section of `.claude/rules/ui-patterns.md`.
+    // Bumped once the card tier behind `request-card-cover` is warm. A mode toggle has no fetch to
+    // await before the grid mounts, so the cards ask cache-only until then.
     in-out property <int> covers-generation: 0;
 
     callback open-folder(string /*path*/);
@@ -146,11 +137,10 @@ export global Browse {
     // persists, so there is one place that knows which surface is mounted.
     callback toggle-view-mode();
     callback columns-changed(int /*columns*/);
-    // As `RowCovers.request`, but against Browse's own 448 px card tier and gated on the
-    // generation above. `pure` so a card binding can call it.
+    // As `RowCovers.request`, but against Browse's own card tier and gated on the generation
+    // above. `pure` so a card binding can call it.
     pure callback request-card-cover(string /*artwork_path*/, int /*generation*/) -> image;
-    // As `Tracks.section-active-changed` — skip refreshes while hidden, one deferred
-    // re-fetch on re-enter.
+    // As `Tracks.section-active-changed` — skip refreshes while hidden, one re-fetch on re-enter.
     callback section-active-changed(bool);
     // Cross-tab navigation from a row's right-click "Go to …" entry.
     callback go-to-album(int /*album_id*/);
@@ -158,11 +148,10 @@ export global Browse {
     callback go-to-genre(int /*genre_id*/);
 }
 
-// The lazy thumbnail lookup **every** `TrackListRowItem` in the tree resolves through —
-// they all render the same row component. One global rather than per-view forwarding,
-// wired once to the shared row-tier LRU. Rows carry only `artwork_path` and the decode
-// happens here, per *instantiated* row: a virtualized list pays for the visible ones,
-// and no model row pins a buffer the LRU has already evicted.
+// The lazy thumbnail lookup **every** `TrackListRowItem` in the tree resolves through — they all
+// render the same row component. One global rather than per-view forwarding, wired once to the
+// shared row-tier LRU. Rows carry only `artwork_path` and the decode happens here, per
+// *instantiated* row, so no model row pins a buffer the LRU has already evicted.
 export global RowCovers {
     pure callback request(string /*artwork_path*/) -> image;
 }

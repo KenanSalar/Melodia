@@ -1,12 +1,12 @@
 import { Theme } from "../theme.slint";
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
 
-// Enter-only wrapper, re-instantiated on every branch mount so the flip and the animation
-// replay per nav. There is no exit half — Slint's `if` destroys the outgoing view instantly.
+// Enter-only wrapper, re-instantiated on every branch mount so the flip and the animation replay
+// per nav. There is no exit half — Slint's `if` destroys the outgoing view instantly.
 //
-// **A single-shot Timer, not `init`.** `init` runs *after* bindings resolve to their final
-// values, so flipping `shown` there makes `true` the initial value and the view appears
-// instantly. The Timer fires once the first `shown: false` frame has painted.
+// **A single-shot Timer, not `init`.** `init` runs *after* bindings resolve to their final values,
+// so flipping `shown` there makes `true` the initial value and the view appears instantly; the
+// Timer fires once the first `shown: false` frame has painted.
 export component ViewTransition inherits Rectangle {
     in property <NavEnterFrom> enter-from: NavEnterFrom.below;
     // Off, the view is simply *there*. For the nested case: a page wrapping each tab body in

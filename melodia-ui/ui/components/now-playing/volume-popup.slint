@@ -6,13 +6,11 @@ import { PopupSurface } from "../popup-surface.slint";
 import { Tooltip, TooltipSide } from "../tooltip.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
-// An icon button and a popup holding a Material 3 vertical slider, plus the shared `Tooltip`
-// pill reading the percentage out to its left.
-//
-// **The popup is wider than the slider chrome**: slider right, readout left, transparent gap
-// between, so the two read as separate floating chromes rather than one wide bar. A
-// `PopupWindow`'s content can't render outside its own rectangle, so the gap is how that is
-// spelled — not a second popup or negative coordinates.
+// An icon button and a popup holding a Material 3 vertical slider, plus the shared `Tooltip` pill
+// reading the percentage out to its left. **The popup is wider than the slider chrome**: slider
+// right, readout left, transparent gap between, so the two read as separate floating chromes rather
+// than one wide bar. A `PopupWindow`'s content can't render outside its own rectangle, so the gap
+// is how that is spelled — not a second popup or negative coordinates.
 export component VolumePopup inherits Rectangle {
     in property <length> diameter: 36px;
     in property <length> icon-size: 22px;
@@ -107,14 +105,11 @@ export component VolumePopup inherits Rectangle {
                 height: parent.height - 2 * Theme.pad-md;
 
                 property <float> frac: clamp(Player.vm.volume / 100, 0, 1);
-                // **Two bars meeting exactly at the thumb's centre, with no gap** — the
-                // thumb pill blankets the seam, so it reads as one continuous track.
-                // No minimum-size threshold and no opacity gate: they're two halves of
-                // one visual track with the split always hidden, and at either extreme
-                // one half shrinks to a couple of pixels and is fully covered.
-                //
-                // The thumb halves along the value axis while pressed, as Compose
-                // Material 3's slider does.
+                // **Two bars meeting exactly at the thumb's centre, with no gap** — the thumb pill
+                // blankets the seam, so it reads as one continuous track. No minimum-size
+                // threshold and no opacity gate: at either extreme one half shrinks to a couple of
+                // pixels and is fully covered. The thumb halves along the value axis while
+                // pressed, as Compose Material 3's slider does.
                 property <length> track-w: 8px;
                 property <length> thumb-w: 24px;
                 property <length> thumb-h: vol-touch.pressed ? 2px : 4px;

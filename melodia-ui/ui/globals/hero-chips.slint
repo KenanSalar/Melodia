@@ -1,16 +1,13 @@
-// The hero band's metadata chips, written by `src/ui/hero_chips.rs`. **One global for six
-// views**, only one hero being mountable at a time — the `globals/hero-backdrop.slint`
-// argument.
+// The hero band's metadata chips, written by `src/ui/hero_chips.rs`. **One global for six views**,
+// only one hero being mountable at a time — the `globals/hero-backdrop.slint` argument.
 //
 // **The chips are built in Rust rather than composed here.** The facts already live there —
-// `AlbumStats.disc_count` and `.is_compilation` never reach `AlbumRow` — so it costs no new
-// query, and it makes "which chips, in what order, omitted when" a tested pure function
-// instead of six ternary chains. What Rust cannot do is translate, `@tr` folding only
-// literals at codegen; hence the trampolines below.
+// `AlbumStats.disc_count` and `.is_compilation` never reach `AlbumRow` — so it costs no new query,
+// and it makes "which chips, in what order, omitted when" a tested pure function instead of six
+// ternary chains. What Rust cannot do is translate; hence the trampolines below.
 export global HeroChips {
     // Rows of chips — the `MetaChipStrip` contract. A hero wraps into at most
-    // `ui::hero_chips::HERO_MAX_ROWS` and drops the overflow. Empty means no chips: no hero
-    // mounted, or an entity with nothing worth stating.
+    // `ui::hero_chips::HERO_MAX_ROWS` and drops the overflow. Empty means no chips at all.
     in-out property <[[string]]> rows;
 
     // Strip → Rust: the width to chunk against. `MetaChipStrip` owns the width mirror and the
