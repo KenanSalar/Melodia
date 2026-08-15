@@ -30,7 +30,8 @@ pub struct Paths {
 }
 
 impl Paths {
-    /// The user's real data directory, with every subdirectory on disk.
+    /// Resolves every path Melodia owns under the user's data directory,
+    /// creating the directories it names.
     pub fn resolve() -> AppResult<Self> {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| AppError::Settings("could not resolve user data directory".into()))?
@@ -40,7 +41,7 @@ impl Paths {
         Ok(paths)
     }
 
-    /// Every path Melodia owns, derived from `data_dir`. Touches no disk —
+    /// Derives every path Melodia owns from `data_dir`, touching no disk —
     /// [`create_dirs`](Self::create_dirs) is the half that does.
     ///
     /// Split out so a test can root the tree in a `TempDir` directly. Steering
@@ -65,7 +66,7 @@ impl Paths {
         }
     }
 
-    /// Create the data directory and every subdirectory under it.
+    /// Creates the data directory and every subdirectory under it.
     pub fn create_dirs(&self) -> AppResult<()> {
         for dir in [
             &self.data_dir,

@@ -3,9 +3,9 @@
 //!
 //! Notes:
 //! - Roots `Paths` in the tempdir through `Paths::rooted_at`. Redirecting
-//!   `dirs::data_dir()` with `XDG_DATA_HOME` would cover the one `join` that
-//!   `resolve` adds on top, at the price of a process-global mutation this
-//!   binary would need `unsafe` for.
+//!   `dirs::data_dir()` with `XDG_DATA_HOME` would also cover that lookup and
+//!   the `Melodia` join `resolve` adds on top, at the price of a process-global
+//!   mutation this binary would need `unsafe` for.
 //! - `AppState::init` opens the default audio device (rodio); machines without
 //!   audio will fail here. CI points ALSA's default PCM at the userspace `null`
 //!   device (see the `test` job in `.github/workflows/pr-validation.yml`), so
@@ -22,7 +22,7 @@ use melodia::state::AppState;
 async fn headless_scan_persists_track() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
 
-    let paths = Paths::rooted_at(tmp.path().join("Melodia"));
+    let paths = Paths::rooted_at(tmp.path().to_path_buf());
     paths.create_dirs()?;
     let runtime = tokio::runtime::Handle::current();
     let (state, _channels) = AppState::init(paths, runtime).await?;

@@ -780,7 +780,7 @@ fn detect_system_locale_raw() -> Option<String> {
 #[cfg(target_os = "windows")]
 #[allow(
     unsafe_code,
-    reason = "FFI call to GetUserDefaultLocaleName; writes into a stack-sized [u16] buffer, length-bounded by its i32 return"
+    reason = "FFI call to GetUserDefaultLocaleName; writes into a stack-sized [u16] buffer, bounded by the cchLocaleName it is handed"
 )]
 fn detect_windows_locale() -> Option<String> {
     use std::ffi::OsString;
@@ -788,12 +788,13 @@ fn detect_windows_locale() -> Option<String> {
 
     use windows_sys::Win32::Globalization::GetUserDefaultLocaleName;
 
-    // Buffer is `[u16; 85]` — `i32::try_from(85)` is infallible; the
-    // `unwrap_or` keeps the call lint-clean without an `unwrap()`.
+    // `i32::try_from(85)` is infallible; the `unwrap_or` keeps the call
+    // lint-clean without an `unwrap()`, and saturates to 0 rather than
+    // `i32::MAX` so the unreachable arm claims a *smaller* buffer than there is.
     let mut buf = [0u16; 85];
-    let buf_len = i32::try_from(buf.len()).unwrap_or(i32::MAX);
-    // SAFETY: `buf` is 85 `u16`s and `buf_len` cannot exceed that, so the pointer
-    // is valid for every `u16` the call may write.
+    let buf_len = i32::try_from(buf.len()).unwrap_or(0);
+    // SAFETY: `buf_len` never exceeds `buf`'s length, so the pointer is valid for
+    // every `u16` the call may write.
     let len = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf_len) };
     if len > 0 {
         // `len` is positive here, so `usize::try_from` succeeds; the
