@@ -4,18 +4,15 @@ import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
 
-// The app's global keyboard shortcuts, and the focus scope catching them.
+// The app's global keyboard shortcuts, and the focus scope catching them. It takes the whole
+// main layout as its children, so it sits between any nested scope and the Window's key
+// dispatch. **It is the only `FocusScope` in the tree** — a second one takes focus on mouse
+// press and steals Esc. Text inputs consume their typed keys naturally, so an alphabetic
+// shortcut never fires while the user is typing.
 //
-// It takes the whole main layout as its children, so it sits between any nested scope
-// and the Window's key dispatch. **It is the only `FocusScope` in the tree** — the queue
-// sheet's used to catch Esc / Ctrl+A before this one, and those two bindings now live
-// below. Text inputs consume their typed keys naturally, Slint routing key events to the
-// focused element first, so an alphabetic shortcut never fires while the user is typing.
-//
-// The handler runs even under `Dialog.open`, so Escape can route through to
-// `Dialog.cancelled()` — the dialog has no Esc binding of its own. **Every non-Escape
-// shortcut early-outs there**, so a confirm-only kind, which has no input to swallow
-// Space, doesn't leak a playback toggle through the backdrop.
+// The handler runs even under `Dialog.open`, so Escape routes through to `Dialog.cancelled()`
+// — the dialog has no Esc binding of its own. **Every non-Escape shortcut early-outs there**,
+// so a confirm-only kind with no input to swallow Space doesn't leak a playback toggle.
 export component ShortcutScope inherits FocusScope {
     // **Slint doesn't return focus to an ancestor scope when the focused item is
     // destroyed**, so a view unmounting with focus inside it leaves shortcuts dead until

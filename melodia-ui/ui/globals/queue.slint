@@ -6,16 +6,14 @@ import { QueueRow } from "../models.slint";
 // The bottom-sheet inspector. Rust owns the `rows` model and writes both it and
 // `current-index` from a subscriber on the same `sinks.queue` watch `Player.queue` reads.
 //
-// **The drag plumbing is bespoke rather than `DragArea` / `DropArea`** — see
-// `queue-row-item.slint` for why those don't fit a reorder. The sheet flips `drag-source` and
-// `drop-slot` from row-level `pointer-event` handlers and fires `reorder` only on pointer-up,
-// so no Rust round-trip happens mid-drag. Two things clear the pair out from under a drag the
-// pressed row can no longer finish: Rust when it rebuilds `rows`, and the sheet on either
-// `open` transition and at mount.
+// **The drag plumbing is bespoke rather than `DragArea` / `DropArea`** — `queue-row-item.slint`
+// says why those don't fit a reorder. The sheet flips `drag-source` and `drop-slot` from
+// row-level `pointer-event` handlers and fires `reorder` only on pointer-up. Two things clear
+// the pair out from under a drag the pressed row can no longer finish: Rust when it rebuilds
+// `rows`, and the sheet on either `open` transition and at mount.
 //
 // `open` is mirrored to a Rust atomic through `open-changed`, which the winit `DroppedFile`
-// filter consults before forwarding paths. A global can't watch its own property, so the sheet
-// mirrors `Queue.open` locally.
+// filter consults before forwarding paths; a global can't watch its own property.
 export global Queue {
     in-out property <[QueueRow]> rows;
     // -1 when nothing is playing. Rows derive `playing: idx == current-index`, so the
@@ -39,12 +37,11 @@ export global Queue {
 
     // Lazy row cover against the sheet's *own* tier, so closing releases every buffer.
     //
-    // **`generation` does two jobs**: reading it makes the binding depend on
-    // `covers-generation`, a `pure` callback's result being cached until a dependency is
-    // dirtied; its *value* is whether the tier is warm. Every other lazy-cover surface prewarms
-    // and awaits before setting rows — the sheet can't, its rows having to land synchronously
-    // for the slide-up to have text on frame one. At 0 the lookup is cache-only, so rows paint
-    // placeholders rather than dragging a decode onto the UI thread. Closing rewinds to 0.
+    // **`generation` does two jobs**: reading it makes the binding depend on the counter, a
+    // `pure` callback's result being cached until a dependency is dirtied; its *value* is
+    // whether the tier is warm. The sheet can't prewarm-then-set like every other surface, its
+    // rows having to land synchronously for the slide-up to have text on frame one — so at 0
+    // the lookup is cache-only and rows paint placeholders. Closing rewinds to 0.
     pure callback request-cover(/* artwork-path */ string, /* generation */ int) -> image;
     in property <int> covers-generation: 0;
 
@@ -86,13 +83,11 @@ export global NowPlaying {
     // index is `mod(base-index + idx, queue-length)`.
     in property <int> queue-length: 0;
 
-    // Drives the one-shot Up Next slide; anything at or past `slide-frames` is at rest. Rust
-    // resets it to 0 **only** on a real current-track change, not on a reorder that keeps the
-    // same track.
-    //
-    // On the global rather than inside the view so Rust's reset lands on the *same* render as
-    // the model swap — through a `changed` handler it would be queued for the next loop
-    // iteration, painting the post-advance list at rest once first.
+    // Drives the one-shot Up Next slide; anything at or past `slide-frames` is at rest. Reset
+    // to 0 **only** on a real current-track change, not on a reorder that keeps the same track.
+    // On the global so the reset lands on the *same* render as the model swap — through a
+    // `changed` handler it queues to the next loop iteration and paints the post-advance list
+    // at rest once first.
     in-out property <int> slide-phase: 18;
 
     // 1 = advanced forward, -1 = rewound. Written **before** `slide-phase` is reset, so one

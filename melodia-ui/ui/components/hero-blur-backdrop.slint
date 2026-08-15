@@ -1,23 +1,17 @@
 import { Theme } from "../theme.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
 
-// Full-bleed hero blur: a gradient floor, two cross-fading `Image` slots, and a
-// scrim. The Slint half of the dual-slot contract `write_crossfade_slot` drives
-// — the outgoing slot is never cleared, so a refresh fades A↔B without flashing,
-// and with no blur both fade to 0 and the floor shows through.
+// Full-bleed hero blur: a gradient floor, two cross-fading `Image` slots, and a scrim. The
+// Slint half of the dual-slot contract `write_crossfade_slot` drives — the outgoing slot is
+// never cleared, so a refresh fades A↔B without flashing. Mounted by both shared bands; the
+// caller sizes it, the children fill it.
 //
-// Mounted by both shared bands — `LibraryTabBand` over its whole morphing hero
-// and `MosaicTabHero` over its top band. The caller sizes it; the children fill it.
+// **Every colour comes from `HeroBackdrop`, solved per artwork, and none may be a `Theme.*`
+// brush** — theme brushes flip polarity with the variant, so the same cover would paint a
+// dark banner under one and a near-white one under another.
 //
-// **Every colour here comes from `HeroBackdrop`, solved per artwork, and none of
-// it may be a `Theme.*` brush.** Theme brushes flip polarity with the variant,
-// so the same cover painted a dark banner under one and a near-white one under
-// another, and the foreground solved for either was wrong on the other. Pass a
-// solved value through the global instead.
-//
-// `width/height: 100%` on the children is mandatory: an `Image` does not
-// auto-fill its parent, and without them the blur draws at its native buffer
-// size, centred.
+// `width/height: 100%` on the children is mandatory: an `Image` does not auto-fill its
+// parent, and without them the blur draws centred at its native buffer size.
 export component HeroBlurBackdrop inherits Rectangle {
     in property <image> blur-a;
     in property <image> blur-b;

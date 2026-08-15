@@ -6,15 +6,13 @@ import { PopupSurface } from "../popup-surface.slint";
 import { Tooltip, TooltipSide } from "../tooltip.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
-// An icon button and a popup holding a Material 3 vertical slider — two rounded bars
-// with a thin pill thumb between them and a stop-indicator dot near the max end — plus
-// the shared `Tooltip` pill reading the percentage out to its left.
+// An icon button and a popup holding a Material 3 vertical slider, plus the shared `Tooltip`
+// pill reading the percentage out to its left.
 //
-// **The popup is wider than the slider chrome**: the slider sits in the right strip and
-// the readout in the left, with a transparent gap between, so the two read as separate
-// floating chromes rather than one wide bar. A `PopupWindow`'s content can't render
-// outside its own rectangle, so the gap is how that's spelled — not a second popup or
-// negative coordinates.
+// **The popup is wider than the slider chrome**: slider right, readout left, transparent gap
+// between, so the two read as separate floating chromes rather than one wide bar. A
+// `PopupWindow`'s content can't render outside its own rectangle, so the gap is how that is
+// spelled — not a second popup or negative coordinates.
 export component VolumePopup inherits Rectangle {
     in property <length> diameter: 36px;
     in property <length> icon-size: 22px;

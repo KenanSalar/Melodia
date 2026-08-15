@@ -18,10 +18,9 @@ export global Player {
     // frame before the next view-model push.
     in-out property <int> seek_pending_ms: -1;
 
-    // The Now Playing backdrop's dual-slot cross-fade: Rust writes the fresh blur into the
-    // *inactive* slot then flips `blur-use-a`. **Neither slot is ever cleared** — the outgoing
-    // layer stays painted for the whole fade. Written only on track change, so unlike the
-    // position scalars these don't re-invalidate per tick.
+    // The dual-slot cross-fade: Rust writes the fresh blur into the *inactive* slot then flips
+    // `blur-use-a`. **Neither slot is ever cleared** — the outgoing layer stays painted for the
+    // whole fade. Written only on track change, so these don't re-invalidate per tick.
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool> blur-use-a: true;
@@ -48,15 +47,15 @@ export global Player {
     callback recompute-chip-rows(length);
 
     // The Now Playing backdrop colour set, written together by the `track_change` subscriber
-    // from `ui::now_playing::backdrop::solve`, where the reasoning lives.
+    // from `ui::now_playing::backdrop::solve`.
     //
-    // **None of these can be a theme constant.** The view floats its chrome on a blurred
-    // cover, so they take their *hue* from the accent quantized out of it (`Theme.accent` when
-    // art-less) and their *tone* from a solve against how bright the backdrop measured — the
-    // theme lends its colour, never its polarity. Don't reach for `Theme.text` / `subtext0` /
-    // `crust` / `base` on anything painting on the blur; on a light theme they land
-    // light-on-light. The defaults are literals for the same reason: they paint before the
-    // first solve lands, and a theme binding would make *that* frame the broken case.
+    // **None of these can be a theme constant.** They take their *hue* from the accent
+    // quantized out of the cover (`Theme.accent` when art-less) and their *tone* from a solve
+    // against how bright the backdrop measured — the theme lends its colour, never its
+    // polarity. Don't reach for `Theme.text` / `subtext0` / `crust` / `base` on anything
+    // painting on the blur; on a light theme they land light-on-light. The defaults are
+    // literals for the same reason: a theme binding would make the pre-solve frame the broken
+    // case.
 
     // Alpha baked in. Solved so the *composited* backdrop lands in a known dark band whatever
     // the cover, which is what lets one light foreground be correct on all of them.
@@ -68,10 +67,9 @@ export global Player {
     in-out property <color> np-floor-end: #14101a;
 
     // The hue-carrying tier — visualizer, stars, heart, back button, chips, Up-Next chrome.
-    // Solved for the 3:1 non-text bar then floored, so a cover whose accent is already brighter
-    // keeps its own tone. One brush serves solid and translucent surfaces alike, which keeps
-    // the view one colour family. **Never `.brighter()`** — that scales HSV value and can't
-    // lift a near-black accent at all.
+    // Solved for the 3:1 non-text bar then floored, so a brighter accent keeps its own tone.
+    // One brush serves solid and translucent surfaces alike. **Never `.brighter()`** — that
+    // scales HSV value and can't lift a near-black accent at all.
     in-out property <brush> np-accent-bright: #cba6f7;
 
     // Derived here so surfaces meant to match can't drift. Genuine one-offs stay inline;

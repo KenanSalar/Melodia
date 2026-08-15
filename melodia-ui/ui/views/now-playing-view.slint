@@ -46,37 +46,28 @@ export component NowPlayingView inherits Rectangle {
     // `Player.recompute-chip-rows` chunks against, and what the strip takes its share of.
     property <length> content-width: root.width - Theme.pad-lg - Theme.pad-md - root.up-next-width;
 
-    // **A band no wider than a quarter of the strip is tall.** The DSP always draws the
-    // same number of them, so a strip that widens without getting taller divides them
-    // into ever-fatter columns — and since a resting band is drawn as a dot of its own
-    // column's width, the row of beads becomes a row of slabs. Reading the model's own
-    // length beats restating `spectrum::NUM_BANDS`; the `max` covers the frame before
-    // Rust seeds it.
+    // **A band no wider than a quarter of the strip is tall.** The band count is fixed, so a
+    // strip that widens without getting taller turns a row of beads into a row of slabs.
+    // Reading the model's length beats restating `spectrum::NUM_BANDS`; the `max` covers the
+    // frame before Rust seeds it.
     property <length> strip-w-max: root.strip-h / 4 * max(1, Visualizer.bars.length);
 
     // Three quarters of that column, so the strip reads as the base of the whole
-    // cover → title → chips group rather than of the cover alone. **The floor is not
-    // cosmetic**: at the window's own minimum `content-width` goes negative, and
-    // flooring at the cover keeps the strip from ever being narrower than the artwork.
+    // cover → title → chips group. **The floor is not cosmetic**: at the window's own minimum
+    // `content-width` goes negative.
     property <length> strip-w: max(root.cover-size, min(root.content-width * 0.75, root.strip-w-max));
 
-    // The gradient floor is always painted: with artwork the blur slots fade in over it,
-    // and for an art-less track both fade to 0 and leave it visible. Either way there is
-    // never an empty frame.
+    // Always painted, so there is never an empty frame: with artwork the blur slots fade in
+    // over it, without it they fade to 0 and leave it visible.
     //
-    // **Both stops come from Rust**, not from a `Theme.accent` mix, because this is the
-    // surface an art-less track's title sits on and the foreground here is solved light —
-    // a theme-derived floor would be bright on a light theme. The stops keep the theme's
-    // hue and drop its polarity.
+    // **Both stops come from Rust**, not a `Theme.accent` mix — this is the surface an
+    // art-less track's title sits on and the foreground is solved light, so a theme-derived
+    // floor would be bright on a light theme. The stops keep the hue and drop the polarity.
     //
-    // Eased on the slots' own duration, like the scrim below them — this was the one layer
-    // here that hard-cut, and it is the layer that *is* the backdrop whenever both slots
-    // are at 0, so two art-less tracks in a row stepped the whole view. Safe to `animate`
-    // where a leaf's brush is not: `Brush::interpolate` handles gradient↔gradient
-    // stop-for-stop and both sides are two stops at 135deg, and `track_change.rs` writes
-    // the two stops discretely, so nothing can restart the binding mid-flight.
-    // `hero-blur-backdrop.slint` carries the same three-layer arrangement and the same
-    // three animations.
+    // Eased on the slots' own duration: it *is* the backdrop whenever both slots are at 0, so
+    // two art-less tracks in a row would step the whole view. Safe to `animate` where a leaf's
+    // brush is not — `Brush::interpolate` handles gradient↔gradient stop-for-stop, and
+    // `track_change.rs` writes the stops discretely, so nothing restarts it mid-flight.
     Rectangle {
         width: 100%;
         height: 100%;
@@ -109,15 +100,11 @@ export component NowPlayingView inherits Rectangle {
         animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
     }
 
-    // Drives the *composited* backdrop into a known dark band, so the foreground stays
-    // legible whatever the cover looks like. The opacity is solved per artwork in Rust
-    // and baked into the brush, which is why there is no `with-alpha` here: a fixed
-    // alpha of a theme colour can't do this job — on a light theme `Theme.crust` is
-    // near-white, so raising it *brightens* the backdrop — and a white sleeve needs
-    // roughly twice the opacity a black one does.
-    //
-    // Animated on the blur slots' duration so the two ride one curve; a scrim snapping
-    // mid-cross-fade reads as a glitch.
+    // Drives the *composited* backdrop into a known dark band. The opacity is solved per
+    // artwork in Rust and baked into the brush, hence no `with-alpha`: a fixed alpha of a
+    // theme colour can't do this — on a light theme `Theme.crust` is near-white, so raising
+    // it *brightens* the backdrop, and a white sleeve needs about twice a black one's.
+    // Animated on the blur slots' duration so the two ride one curve.
     Rectangle {
         width: 100%;
         height: 100%;
@@ -215,19 +202,15 @@ export component NowPlayingView inherits Rectangle {
                 padding-bottom: Theme.pad-lg;
                 spacing: Theme.pad-md;
 
-                // The high-res foreground cover, cross-fading on a track change through
-                // the dual-slot pattern.
+                // The high-res foreground cover, cross-fading through the dual-slot pattern.
                 //
-                // **The slot is a plain Rectangle rather than a centring layout, and the
-                // tile inside spells out `x` and `y`** — that combination is what makes
-                // the artwork the only child of this column with any slack. A non-layout
-                // element folds its children's constraints into its own *except* for
-                // children carrying an `x` or `y` binding, so the slot reports a min of
-                // 0 against a preferred and max of `cover-size`. Every other child here
-                // has min == preferred, and Slint's shrink pass can only take height off
-                // a cell with room between the two. Without this the column had none, so
-                // a short — or merely wide, since the tile grows with the width — window
-                // pushed the last child, the visualizer, straight out of the panel.
+                // **The slot is a plain Rectangle rather than a centring layout, and the tile
+                // inside spells out `x` and `y`** — that pair is what makes the artwork the
+                // only child of this column with slack, a non-layout element folding its
+                // children's constraints *except* those carrying an `x`/`y` binding. Every
+                // other child has min == preferred and Slint's shrink pass can only take
+                // height off a cell with room between the two, so without this a short or
+                // merely wide window pushes the visualizer out of the panel.
                 cover-slot := Rectangle {
                     preferred-height: root.cover-size;
                     max-height: root.cover-size;

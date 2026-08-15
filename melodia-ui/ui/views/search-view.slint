@@ -11,24 +11,18 @@ import { SongsSection } from "search/songs-section.slint";
 
 // One full-height scroll container holding every state branch, with an autofocused
 // `SearchBar` floating over it and no page title. **A mount sheet**: this file owns the
-// timers, the branch conditions and the two scroll chromes, and `views/search/*.slint`
-// own the bodies — the `views/settings/pages/` and `views/favorites/` precedent. Each
+// timers, branch conditions and scroll chromes, `views/search/*.slint` own the bodies. Each
 // section reads `Search` directly and takes no inputs, so a branch here is one line.
 //
-// **The bar is not a band.** It used to head a 96 px row inside the view's column, which
-// clipped the scroller at that row's floor: the panel's own `Theme.base` showed through
-// above it and the first card and list header were cut off behind an opaque-reading
-// strip. Out of the flow it costs nothing but the inset the body reserves, the results
-// pass behind it, and — since the row carries no `TouchArea` of its own — everything
-// beside the pill stays clickable.
+// **The bar is out of the flow, not a band** — heading a row inside the view's column clips
+// the scroller at that row's floor, cutting off the first card behind a strip of `Theme.base`.
+// Floating, it costs only the inset the body reserves, and with no `TouchArea` of its own
+// everything beside the pill stays clickable.
 //
-// Both strips match through their own tracks as well as by name, so a query reaching
-// only track metadata still fills them — and with them the Top Result, which ranks over
-// those two lists plus genres.
-//
-// **There is no Genres strip**: a genre is a *route*, not something to browse a row of,
-// so a genre match surfaces as the Top Result card and clicking it goes through the same
-// `go-to-genre` a track row's context entry uses.
+// Both strips match through their own tracks as well as by name, so a query reaching only
+// track metadata still fills them — and with them the Top Result, which ranks over those two
+// lists plus genres. **There is no Genres strip**: a genre is a *route*, so a genre match
+// surfaces as the Top Result card and goes through `go-to-genre`.
 //
 // An album or artist card stamps `*Detail.origin-nav-index` **before** flipping
 // `Nav.selected-index`, so the detail's back arrow returns here.

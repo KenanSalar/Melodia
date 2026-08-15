@@ -21,13 +21,11 @@ export global SettingsPage {
     in-out property <int> tab-idx: 0;
     callback tab-changed(int);
 
-    // What the user is typing, and what the page is filtered by. **Two properties**, the
-    // filter being expensive here in a way no other view's is: `row-visible` is three
-    // `matches` round-trips into Rust across dozens of call sites, and a non-empty query
-    // mounts *all five* tab pages at once. A `FilterThrottle` joins them.
-    //
-    // Cleared together on nav-away and on a tab pick; clearing only the settled one leaves the
-    // box holding text the page is no longer filtered by.
+    // What the user is typing, and what the page is filtered by. **Two properties**, joined by
+    // a `FilterThrottle`: `row-visible` is three `matches` round-trips into Rust across dozens
+    // of call sites, and a non-empty query mounts *all five* tab pages at once. Cleared
+    // together on nav-away and on a tab pick — clearing only the settled one leaves the box
+    // holding text the page is no longer filtered by.
     in-out property <string> search-input;
     in-out property <string> search-query;
 
@@ -35,29 +33,23 @@ export global SettingsPage {
     in-out property <int> blur-search-tick: 0;
 
     // The two facts the view writes imperatively — a global can't be bound from a view, and
-    // the page can't read its own live width into a binding feeding a child's size without
-    // re-entering layout. **Everything below derives from them.**
-    //
-    // The seed is a plausible narrow page rather than nothing: the view corrects it on its
-    // mount `Timer`, and a frame drawn slightly too narrow costs an extra chip row where a
-    // frame drawn at zero collapses the strips outright.
+    // the page can't read its live width into a binding feeding a child's size without
+    // re-entering layout. **Everything below derives from them.** The seed is a plausible
+    // narrow page: a frame drawn slightly too narrow costs an extra chip row where one drawn
+    // at zero collapses the strips outright.
     in-out property <length> page-w: 440px;
     // 1 or 2. Also what `grid-row`/`grid-col` key off.
     in-out property <int> body-cols: 1;
 
     // How wide one card column may grow — **one number, and both layouts obey it**: a card
-    // grows with the panel to the cap, then stops and takes margins, and a second column
-    // appears exactly when two *capped* cards fit beside each other. So a card's width only
-    // ever grows and the flip resizes nothing. A threshold undercutting the cap is the failure
-    // to avoid — the column then divides before reaching it, reading as a card that grows
-    // without limit and then halves.
-    //
-    // The value is a reading measure, and it also decides which displays ever see two columns:
-    // two capped cards plus gap, sidebar and padding needs roughly an 1830 px window.
+    // grows to the cap, then takes margins, and a second column appears exactly when two
+    // *capped* cards fit beside each other, so the flip resizes nothing. A threshold
+    // undercutting the cap is the failure to avoid — the column divides before reaching it,
+    // reading as a card that grows without limit and then halves. It is also a reading
+    // measure, and it decides which displays ever see two columns.
     out property <length> card-cap: 800px;
 
-    // What the centred body may grow to — a function of the layout, not the panel; the layout
-    // around it clamps to what's available.
+    // What the centred body may grow to — a function of the layout, not the panel.
     out property <length> body-w: root.body-cols == 2
         ? 2 * root.card-cap + Theme.pad-lg
         : root.card-cap;
@@ -76,20 +68,19 @@ export global SettingsPage {
     out property <length> row-icon-w: 22px;
 
     // What a `SettingRowStacked` leaves its content column. Derived rather than measured,
-    // every card spanning a full column — which is what lets the chip and swatch strips size
-    // their wrap off it with no width mirror of their own.
+    // every card spanning a full column — which is what lets the strips size their wrap off it
+    // with no width mirror of their own.
     out property <length> row-content-w:
         max(0px, root.card-w - (3 * Theme.pad-lg + root.row-icon-w));
 
-    // Where a page's **column** sits in the body grid — not a card. A page hands the grid one
-    // cell per column, each a `VerticalLayout` of cards, so the two sides flow independently;
-    // cards placed as cells would be row-aligned, and a grid row is as tall as its taller cell,
-    // so a short card left a hole down to the next row. Columns are **contiguous halves** of
-    // the card list, so stacked they read in source order.
+    // Where a page's **column** sits in the body grid — not a card. Cards placed as cells are
+    // row-aligned and a grid row is as tall as its taller cell, so a short card leaves a hole;
+    // one cell per column lets the two sides flow independently. Columns are **contiguous
+    // halves** of the card list, so stacked they read in source order.
     //
-    // The pages mount their sections exactly once and place them through these — they have to:
-    // a page reads `has-matches` back off its section instances, and an element inside an `if`
-    // can't be read from outside it.
+    // The pages mount their sections exactly once and place them through these — they have to,
+    // a page reading `has-matches` back off its section instances and an element inside an
+    // `if` being unreadable from outside.
     public pure function grid-row(i: int) -> int {
         return root.body-cols == 2 ? Math.floor(i / 2) : i;
     }
@@ -101,11 +92,9 @@ export global SettingsPage {
     // nested array**, and indices rather than items so a chip still knows which option it is.
     pure callback chunk-indices(int /*count*/, int /*per-row*/) -> [[int]];
 
-    // The half of that wrap which *is* expressible here. `ChipGroup` and `ColorDotGrid`
-    // derived both identically and differ only in where the item width comes from.
-    //
-    // Floored at one: a row of zero items never terminates, where one item too wide for its
-    // slot is a visible overflow rather than a hang.
+    // The half of that wrap expressible here; `ChipGroup` and `ColorDotGrid` derived both
+    // identically. Floored at one — a row of zero items never terminates, where one item too
+    // wide for its slot is a visible overflow rather than a hang.
     public pure function wrap-per-row(avail: length, item-w: length, gap: length) -> int {
         return max(1, Math.floor((avail + gap) / (item-w + gap)));
     }
@@ -119,14 +108,13 @@ export global SettingsPage {
     // Slint 1.16 has no `.contains()` on string, so the test is wired in Rust.
     pure callback matches(string /*haystack*/, string /*needle*/) -> bool;
 
-    // Whether a row survives the filter. Shared rather than copied into ten sections, which
-    // each carried a byte-identical version. **Reading `search-query` at the call site is what
-    // makes the result reactive** — Slint tracks the property read; `matches` is opaque to it.
+    // Whether a row survives the filter, shared rather than copied into ten sections.
+    // **Reading `search-query` at the call site is what makes the result reactive** — Slint
+    // tracks the property read; `matches` is opaque to it.
     //
-    // `tab` is a term of its own, not a prefix each section splices onto its title, so no card
-    // can match a substring spanning the seam. Search escapes the tabs, so a tab name is
-    // exactly what a user types — without it "Interface" and "Services" appear in no haystack
-    // and answer "No matching settings" while sitting in plain view on the bar.
+    // `tab` is a term of its own, not a prefix spliced onto each title, so no card can match a
+    // substring spanning the seam. Search escapes the tabs, so a tab name is what a user types
+    // — without it "Interface" and "Services" appear in no haystack.
     public pure function row-visible(tab: string, section: string, haystack: string,
                                      query: string) -> bool {
         return query == ""

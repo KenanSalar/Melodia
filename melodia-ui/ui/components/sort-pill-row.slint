@@ -2,22 +2,16 @@ import { Theme } from "../theme.slint";
 import { ActionPill, PillButton, PillDivider } from "action-pill.slint";
 
 // A row of sort pills: one per field, dividers between, the active field carrying the
-// direction arrow.
+// direction arrow. **The `TabBar` shape** — parallel `labels` / `fields` arrays plus one
+// callback — for the same reason: the sortable globals are distinct generated types, so a
+// component cannot be parameterised over which one it sorts.
 //
-// **The `TabBar` shape** — parallel `labels` / `fields` arrays plus one callback carrying
-// the pick — and for the same reason `TabBar` has it: `Albums` / `Artists` / `Genres` /
-// `Favorites` are distinct generated globals with nothing between them, so a component
-// cannot be parameterised over which one it sorts. Every fact arrives as a property and
-// the pick leaves as a callback.
+// **Keep `labels` an inline `[@tr("Name"), …]` literal at the mount**, `@tr` folding msgids at
+// codegen; forwarding one through here is fine, the literal still sitting in a `.slint` file.
 //
-// **Keep `labels` an inline `[@tr("Name"), …]` literal at the mount.** `@tr` folds msgids
-// at codegen, so an array populated from Rust renders untranslated; forwarding one through
-// here is fine, the literal still sitting in a `.slint` file.
-//
-// What this makes unspellable is the point of it existing. Every pill reserves the arrow
-// slot and binds `sort-direction` to the active field — spelled out per pill, either could
-// go missing at one of eleven sites and the row would look right until the sort moved,
-// with only the labels jumping sideways to show it. There is now one copy to get right.
+// What it makes unspellable is the point: every pill reserves the arrow slot and binds
+// `sort-direction` to the active field, and spelled per pill either could go missing at one of
+// eleven sites and look right until the sort moved.
 export component SortPillRow inherits ActionPill {
     in property <[string]> labels;
     // Parallel to `labels`. These are the bare tokens Rust's comparator matches on, so a

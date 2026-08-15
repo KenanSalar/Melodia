@@ -12,22 +12,18 @@ import { SortPillRow } from "../../components/sort-pill-row.slint";
 import { ColumnTogglePopup } from "../../components/track-list/column-toggle-popup.slint";
 
 // The per-tab and per-detail action pills, handed to `LibraryTabBand` as its whole
-// `@children`. Nine rows, mutually exclusive, matching the sheet's nine body branches —
-// which is why the four detail predicates arrive as `in` properties rather than being
-// re-derived here: spelled twice, the pills and the body could disagree about which
-// branch is up, and the band would carry one entity's actions over another's list.
+// `@children`. Nine mutually exclusive rows matching the sheet's nine body branches — the four
+// detail predicates arrive as `in` properties rather than being re-derived, since spelled
+// twice the pills and the body could disagree about which branch is up.
 //
-// **A component rather than five rows written straight into the mount sheet, and the
-// Playlists row is the reason.** Its four pills carry `tooltip-overlay: true`, so the
-// tooltip is drawn by a frame the host declares *after* the scroll body — Slint paints in
-// declaration order, and a `below` tooltip on a pill sitting in the band lands under the
-// grid (the band clips besides). That frame reaches the pills by id, and an id declared
-// inside an `if` can't be read from outside it. So the ids live at a root the host can
-// see, and this file publishes their rect the way `MosaicTabHero` publishes the tab bar's.
+// **A component rather than rows written into the mount sheet, and the Playlists row is the
+// reason**: its pills carry `tooltip-overlay: true`, so the pill is drawn by a frame the host
+// declares *after* the scroll body. That frame reaches the pills by id, and an id declared
+// inside an `if` can't be read from outside it — so the ids live at a root the host can see
+// and this file publishes their rect, as `MosaicTabHero` does for the tab bar.
 //
-// One component holding all five rows rather than four inline plus one: the band's slot
-// spaces its cells, and a second always-mounted child would offset every other tab's row
-// from the band's right edge.
+// One component holding all five rows: the band's slot spaces its cells, so a second
+// always-mounted child would offset every other tab's row from the band's right edge.
 export component MyLibraryTabPills inherits Rectangle {
     // Which of the sheet's nine branches is mounted. See the file header.
     in property <bool> album-open;

@@ -6,25 +6,19 @@ import { ArtworkImage } from "../components/artwork-image.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { Checkbox } from "../components/checkbox.slint";
 
-// One fixed-height queue row: number-or-checkbox, artwork, title, duration, delete. The
-// number swaps to a checkbox on hover or selection, and the delete button fades in on
-// hover rather than mounting.
+// One fixed-height queue row: number-or-checkbox, artwork, title, duration, delete.
 //
-// **Selection is driven by the checkbox only** — a click on the row body is a no-op for
-// it. The whole-row TouchArea is reserved for drag-to-reorder, past a 4 px threshold,
-// and double-click skip-to.
+// **Selection is driven by the checkbox only** — a click on the row body is a no-op for it,
+// the whole-row TouchArea being reserved for drag-to-reorder past a 4 px threshold and
+// double-click skip-to.
 //
-// **The drag is hand-rolled rather than built on `DragArea` / `DropArea`.** Those
-// negotiate a drop onto a whole element: no insertion-slot granularity — the line has to
-// land in the *gap* between rows, picked from which half of a row the pointer is in —
-// and no edge auto-scroll. What they add over a TouchArea is a mime-typed payload for a
-// `can-drop` / `dropped` pair, in-process only on this stack, and a reorder has no
-// payload to carry. 1.16's `DragArea` doesn't even expose `dragging`, so it couldn't
-// drive the source-row ghost below.
+// **The drag is hand-rolled rather than built on `DragArea` / `DropArea`.** Those negotiate a
+// drop onto a whole element: no insertion-slot granularity, no edge auto-scroll, and what they
+// add is a mime-typed payload a reorder has nothing to put in. 1.16's `DragArea` doesn't
+// expose `dragging` either, so it couldn't drive the source-row ghost.
 //
-// `moved` keeps firing after the pointer leaves the TouchArea's bounds — implicit
-// pointer capture, the same thing `track-list-header.slint`'s ResizeHandle relies on —
-// which is what makes `absolute-position.y + mouse-y` → row index reliable.
+// `moved` keeps firing after the pointer leaves the TouchArea's bounds — implicit pointer
+// capture — which is what makes `absolute-position.y + mouse-y` → row index reliable.
 export component QueueRowItem inherits Rectangle {
     in property <QueueRow> row-data;
     in property <int> row-index;

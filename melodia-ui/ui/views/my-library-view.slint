@@ -52,13 +52,11 @@ export component MyLibraryView inherits Rectangle {
     property <bool> detail-open:
         root.album-open || root.artist-open || root.genre-open || root.playlist-open;
 
-    // **The arm the band's hero half paints, lagging the four above by one close.** They
-    // flip on the frame the id clears, which is the frame the exit morph starts, so the
-    // hero ternaries below would spend the whole collapse on their last arm rather than on
-    // the banner being collapsed. Seeded by the binding and owned by the handler, `hero-t`'s
-    // idiom: the seed is what leaves a page entered straight onto a detail already painting
-    // it. The guard is `detail-open` rather than each arm's own value, which is what lets a
-    // cross-tab drill move them and a close leave all four alone.
+    // **The arm the band's hero half paints, lagging the four above by one close.** Those flip
+    // on the frame the id clears, which is the frame the exit morph starts, so the ternaries
+    // below would spend the whole collapse on their last arm. Seeded by the binding and owned
+    // by the handler, `hero-t`'s idiom; the guard is `detail-open` rather than each arm's own
+    // value, which lets a cross-tab drill move them and a close leave all four alone.
     property <bool> hero-album: root.album-open;
     property <bool> hero-artist: root.artist-open;
     property <bool> hero-genre: root.genre-open;
@@ -74,11 +72,10 @@ export component MyLibraryView inherits Rectangle {
         self.hero-playlist = root.playlist-open;
     }
 
-    // **The idle band's sentence, held across an open** — the mirror image of `hero-*`,
-    // guard included. The band eases this out over the first half of the morph, so a drill
-    // has to fade the sentence that was on screen; bound live it re-reads the arriving tab
-    // instead, and that tab's count is mid-rewind and then mid-fetch, so the line blanks and
-    // repopulates inside the fade.
+    // **The idle band's sentence, held across an open** — `hero-*`'s mirror image, guard
+    // included. The band eases it out over the first half of the morph, so a drill has to fade
+    // the sentence that was on screen; bound live it re-reads the arriving tab, whose count is
+    // mid-rewind and then mid-fetch, so the line blanks and repopulates inside the fade.
     //
     // Seeded by the binding, owned by `latch-count`, which is unguarded so `init` can take
     // ownership on a page mounting straight onto a grid. The guard is at the two call sites
@@ -117,18 +114,15 @@ export component MyLibraryView inherits Rectangle {
     }
 
     // **May a mounting body animate at all.** The page's own `ViewTransition` is still in
-    // flight when its first body mounts, and on a cross-section drill that entrance slides
-    // sideways — so a body moving into it is the same diagonal one level up.
+    // flight when its first body mounts, so a body moving into it is the same diagonal one
+    // level up. `tab-anim-armed` covers every arrival through the bar; the two that didn't
+    // are armed by the handlers below — the first drill out of the tab the page opened on,
+    // and a tab move that isn't a pick, which `detail-open` can't cover because it lands the
+    // id and the tab in **one** tick.
     //
-    // `tab-anim-armed` covers every arrival that came through the bar. The two that didn't
-    // are armed by the handlers below: the first drill out of the tab the page opened on,
-    // and a tab move that isn't a pick (a cross-tab drill, a Mouse-4/5 walk). `detail-open`
-    // can't cover the second — it lands the id and the tab in **one** tick, so nothing
-    // transitions.
-    //
-    // Seeded by the binding and owned by the handlers, `hero-t`'s idiom; the orphaning is
-    // harmless, this only ever going true. It re-disarms for free on the next entry, and
-    // `changed` skips a first evaluation, so the page's own entrance keeps the first frame.
+    // Seeded by the binding and owned by the handlers, `hero-t`'s idiom. It re-disarms for
+    // free on the next entry, and `changed` skips a first evaluation, so the page's own
+    // entrance keeps the first frame.
     property <bool> body-anim-armed: band.tab-anim-armed;
     changed detail-open => {
         root.body-anim-armed = true;
@@ -251,15 +245,10 @@ export component MyLibraryView inherits Rectangle {
                 : MyLibrary.tab-idx == MyLibrary.tab-genres ? @tr("Filter genres…")
                 : @tr("Filter playlists…");
 
-            // --- The hero half -----------------------------------------------
-            //
-            // The band morphs into the open detail's banner, so every fact below is a
-            // four-arm ternary over the predicates above and no detail body owns a title,
-            // tile or chip strip of its own.
-            //
-            // **The hero facts read `hero-*`, everything else reads `*-open`.** Which banner
-            // is painted has to survive the id clear; which body is mounted, which pills
-            // show and what the filter box describes must not.
+            // The band morphs into the open detail's banner, so every fact below is a four-arm
+            // ternary and no detail body owns a title, tile or chip strip of its own.
+            // **The hero facts read `hero-*`, everything else reads `*-open`**: which banner is
+            // painted has to survive the id clear; which body is mounted must not.
             detail-open: root.detail-open;
             back-clicked => { MyLibrary.back(); }
             // The teardown the band's collapse defers — see its `hero-collapsed`.
@@ -349,17 +338,14 @@ export component MyLibraryView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            // The band above is this page's spatial transition — a morph moves `body.y`
-            // by the whole 100 px between its two floors — so nothing here may move while
-            // it does. Not even on the same axis: the morph's entry curve is slow off the
-            // mark where `ViewTransition`'s is not, so the sum runs briefly the wrong way.
-            // That is `slide: !band.morphing`, leaving the cross-fade Material 3 wants
-            // inside a container transform.
+            // The band above is this page's spatial transition, so nothing here may move while
+            // it morphs — not even on the same axis, the two curves disagreeing enough that
+            // the sum briefly runs the wrong way. That is `slide: !band.morphing`, leaving the
+            // cross-fade Material 3 wants inside a container transform.
             //
-            // Where the band stands still — a tab pick with no banner either side — the
-            // five tab bodies take the bar's left/right like the sibling pages; a detail
-            // is not a move along the bar, so the four keep `below`. `body-anim-armed`
-            // holds all nine still while the page's own entrance is in flight.
+            // Where the band stands still, the five tab bodies take the bar's left/right like
+            // the sibling pages; a detail is not a move along the bar, so the four keep
+            // `below`. `body-anim-armed` holds all nine still during the page's own entrance.
             if MyLibrary.tab-idx == MyLibrary.tab-songs: ViewTransition {
                 width: parent.width;
                 height: parent.height;

@@ -42,12 +42,10 @@ export global MiniPlayer {
 }
 
 // Bridges the winit `MouseWheel` filter to whichever *composite* view is mounted — Artist
-// Detail and Browse. Slint's inner `ListView` swallows the vertical wheel at its scroll edge
-// rather than bubbling, and pure Slint can't fix it without breaking row clicks, so the winit
-// layer intercepts vertical-dominant wheel over the region and drives the scroll math here.
-//
-// **A page whose sections become tabs needs none of this** — reach for tabs before the
-// composite when a new page wants a list under a band of cards.
+// Detail and Browse. Slint's inner `ListView` swallows the vertical wheel at its scroll edge,
+// and pure Slint can't fix it without breaking row clicks, so the winit layer intercepts
+// vertical-dominant wheel over the region and drives the scroll math here. **A page whose
+// sections become tabs needs none of this** — reach for tabs first.
 export global CompositeScroll {
     // Set by the mounted view's hover sentinel, cleared by `reset()` on any view switch.
     in-out property <bool> hovered: false;
@@ -72,9 +70,7 @@ export global CompositeScroll {
 // Lets a popup trigger keep its hover background painted while its `PopupWindow` is open:
 // Slint 1.16 has no `closed` callback, `has-hover` flips false the moment the popup steals
 // input, and main-window items stop receiving mouse events, so no scrim can catch the
-// dismissing click either.
-//
-// The contract:
+// dismissing click either. The contract:
 //   - a trigger writes its own discriminator to `id` right before `show()` and binds
 //     `force-bg: PopupHighlight.id == "<my-id>"`. A string, not a bool, so distinct triggers
 //     can't cross-talk
@@ -83,9 +79,9 @@ export global CompositeScroll {
 //   - popup-internal areas that *don't* close the popup re-set `id` from `pointer-event(up)`
 //   - areas that *do* close it clear `id` beside `close()`, belt-and-braces with winit
 //
-// `row-ctx-id` is the track id of the row whose right-click menu is open, -1 for none. It
-// gates the `FocusLossWatcher` inside `TrackListRowItem` so only that row carries a live
-// watcher; the same Release path clears it, else a click-outside blocks re-opening the row.
+// `row-ctx-id` is the track id of the row whose right-click menu is open, -1 for none, gating
+// the `FocusLossWatcher` inside `TrackListRowItem`. The same Release path clears it, else a
+// click-outside blocks re-opening the row.
 export global PopupHighlight {
     in-out property <string> id: "";
     in-out property <int> row-ctx-id: -1;

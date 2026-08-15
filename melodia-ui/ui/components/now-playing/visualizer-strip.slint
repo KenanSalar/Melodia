@@ -3,55 +3,42 @@ import { Player } from "../../globals/player.slint";
 import { SpectrumBars } from "spectrum-bars.slint";
 import { WaveformTrace } from "waveform-trace.slint";
 
-// The Now-Playing visualizer: the strip's footprint plus the one Timer driving
-// whichever style is showing. The Timer lives here rather than in each style
-// because its `running` gate below is easy to get subtly wrong, and three copies
-// would be three chances to. Styles are pure render.
+// The strip's footprint plus the one Timer driving whichever style is showing. The Timer is
+// here rather than in each style because its `running` gate is easy to get subtly wrong, and
+// three copies would be three chances to. Styles are pure render.
 export component VisualizerStrip inherits Rectangle {
-    // The host's to decide — it follows the panel, and a component root cannot
-    // reach `parent`. The default is what the strip was pinned to before it
-    // became responsive, so a call site that forgets still gets a strip.
+    // The host's to decide, it following the panel and a component root not reaching `parent`.
+    // The default is the old pinned height, so a call site that forgets still gets a strip.
     in property <length> strip-height: 56px;
 
     min-height: root.strip-height;
     max-height: root.strip-height;
-    // A fixed slot in an `alignment: center` column; what absorbs a short window
-    // is the cover slot above, the one child there with room to shrink.
+    // A fixed slot in an `alignment: center` column; the cover slot above is what absorbs a
+    // short window, being the one child there with room to shrink.
     vertical-stretch: 0;
 
-    // Matched on the key rather than an index, so reordering the pickers can't
-    // repoint an install's saved style. The `!=` makes bars the catch-all: a key
-    // from a newer build, or a hand-edited one, degrades to the default instead
-    // of drawing nothing. Mirrored is those same bars under a different anchor.
+    // Matched on the key rather than an index, so reordering the pickers can't repoint an
+    // install's saved style. The `!=` makes bars the catch-all, so an unknown key degrades to
+    // the default instead of drawing nothing; Mirrored is those same bars, re-anchored.
     if Visualizer.style == "waveform": WaveformTrace { }
     if Visualizer.style != "waveform": SpectrumBars {
         centred: Visualizer.style == "mirrored";
     }
 
-    // One shared Timer, running a full snapshot → analysis → property pass in
-    // Rust; the only thing that reads the sample ring.
+    // One shared Timer, running a full snapshot → analysis → property pass in Rust; the
+    // only thing that reads the sample ring.
     //
-    // 30 Hz for every style. The bars ticked at 60 Hz on the theory that their
-    // decay needs every frame to read smoothly; what that bought was a
-    // full-window repaint every 16 ms, each re-tessellating every rounded
-    // rectangle in the view into a fresh heap-allocated vertex buffer. With the
-    // strip up, that dominated the process's allocation calls — churn rather
-    // than retention, and enough of it to walk RSS upward for as long as Now
-    // Playing stayed open. A trace never wanted 60 Hz either: it has no decay to
-    // keep smooth, so a high rate only makes it frantic (`foobar2000`'s scope
-    // caps at 20 Hz), and 30 Hz thirds its per-frame path string besides.
+    // **30 Hz for every style.** At vsync the bars' rounded-rect re-tessellation dominated
+    // the process's allocation calls for as long as Now Playing stayed open, and a trace has
+    // no decay to keep smooth, so a high rate only makes it frantic. `dormant` overrides
+    // both — nothing is drawn and nothing is arriving, so the tick is only still here to
+    // notice frames coming back.
     //
-    // `dormant` overrides both. Nothing is drawn and nothing is arriving, so the
-    // tick is only still here to notice frames coming back — half a second is
-    // the worst case for that, and only for a window that was covered rather
-    // than minimized: anything the OS reports clears `dormant` on the way in.
-    //
-    // `running` is deliberately not just `is_playing`. A pause stops the tap but
-    // leaves the last window of samples in the ring, so freezing the Timer would
-    // strand the drawing on a stale shape. Instead the tick fires past the pause
-    // — feeding the analyzers silence rather than the ring — until Rust reports
-    // everything settled. An off-screen window leaves through `window-shown` the
-    // same way, so it falls before it stops rather than freezing mid-shape.
+    // **`running` is deliberately not just `is_playing`**: a pause stops the tap but leaves
+    // the last window of samples in the ring, so freezing the Timer would strand the drawing
+    // on a stale shape. The tick fires past the pause, feeding the analyzers silence, until
+    // Rust reports everything settled. An off-screen window leaves through `window-shown` the
+    // same way.
     Timer {
         interval: Visualizer.dormant ? 500ms : 33ms;
         running: (Player.vm.is_playing && Visualizer.window-shown) || !Visualizer.idle;

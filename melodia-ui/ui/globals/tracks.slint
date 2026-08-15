@@ -63,22 +63,18 @@ export global Tracks {
     callback toggle-column(string /*column_id*/);
 }
 
-// The Browse view — the Slint-side surface of three Rust-owned models;
-// `src/ui/browse/` documents the ownership and fetch rules.
+// The Browse view — the Slint side of three Rust-owned models; `src/ui/browse/` documents the
+// ownership and fetch rules. `rows` renders through the shared `TrackList`, so the column /
+// sort / selection shape mirrors `Tracks`. **Disk-only files** — inside a library folder but
+// not in the DB — arrive with `id == 0` and `enabled == false`, rendering dimmed and inert.
 //
-// `rows` renders through the shared `TrackList`, so the column / sort / selection shape
-// mirrors `Tracks`. **Disk-only files** — on disk inside a library folder but not in the
-// DB — arrive with `id == 0` and `enabled == false`, so they render dimmed and inert.
+// An empty `current-path` is the root state; `has-library-folders` going false paints the CTA
+// instead. `loading` gates the empty state so a stale "Empty folder" can't flash mid-drill,
+// and a non-empty `error-message` replaces the rows outright.
 //
-// An empty `current-path` is the root state: Rust lists the library folders as drillable
-// rows, and `has-library-folders` going false is what paints the CTA instead. `loading`
-// gates the empty state so a stale "Empty folder" can't flash mid-drill-down, and a
-// non-empty `error-message` replaces the rows outright.
-//
-// The view has **two presentations over the same three models** — the list, and a
-// virtualized card grid whose rows are `card-rows`. `folders` and `rows` stay populated
-// in both, so the three empty states count what they always counted; only `card-rows` is
-// mode-gated, since building the unmounted surface's rows reaches nothing.
+// **Two presentations over the same three models** — the list, and a card grid whose rows are
+// `card-rows`. `folders` and `rows` stay populated in both, so the empty states count what
+// they always counted; only `card-rows` is mode-gated.
 export global Browse {
     in-out property <string> current-path;             // "" = root (library list)
     in-out property <[BrowseFolderRow]> folders;

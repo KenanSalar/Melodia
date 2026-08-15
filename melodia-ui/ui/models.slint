@@ -154,16 +154,13 @@ export struct PlaylistExportPickRow {
     selected: bool,
 }
 
-// One rule row in the Smart-Playlist editor. The model is Rust-owned; the editor
-// mutates it through `SmartEditor.set-rule-*` and Rust rebuilds a `SmartCriteria` from
-// it on commit. **Every value is an index or code**, so no translated string ever
-// round-trips: the dropdown labels are inline `@tr` arrays in the editor body,
-// mirrored by position to `entities::smart_criteria::{FIELDS, ops_for}`.
-//   * field-index — into the field-name dropdown (Rust `FIELDS`)
-//   * op-index    — into this field-kind's operator array
-//   * field-kind  — 0 text · 1 number · 2 bool · 3 date; picks the op array
-//   * input-kind  — 0 none · 1 text · 2 number; picks the value widget
-//   * value-text  — the raw input, empty for none/bool operators
+// One rule row in the Smart-Playlist editor. Rust-owned; the editor mutates it through
+// `SmartEditor.set-rule-*` and Rust rebuilds a `SmartCriteria` on commit. **Every value is an
+// index or code**, so no translated string round-trips — the dropdown labels are inline `@tr`
+// arrays in the editor body, mirrored by position to
+// `entities::smart_criteria::{FIELDS, ops_for}`.
+//   * field-kind — 0 text · 1 number · 2 bool · 3 date; picks the op array
+//   * input-kind — 0 none · 1 text · 2 number; picks the value widget
 export struct SmartRuleRow {
     field-index: int,
     op-index: int,
@@ -172,14 +169,11 @@ export struct SmartRuleRow {
     value-text: string,
 }
 
-// **`position_ms`, `duration_ms` and `progress` deliberately live on the `Player`
-// global as separate scalars, not here.** The monitor publishes a tick every 500 ms,
-// and bundling those in meant each one invalidated the whole `Player.vm` and
-// dirty-marked every binding reading *any* field — title, artist, artwork, favorite,
-// has-next. Slint allocates a `BindingHolder` per binding and `mark_dirty` walks the
-// dependency list recursively, so that produced a monotonic RSS climb that only
-// stopped when playback did. Kept out, a tick's dirty set is the three readers that
-// care.
+// **`position_ms`, `duration_ms` and `progress` deliberately live on the `Player` global as
+// separate scalars, not here.** Bundled in, each 500 ms monitor tick invalidated the whole
+// `Player.vm` and dirty-marked every binding reading *any* field — a recursive walk of the
+// dependency list twice a second, for as long as playback lasted. Kept out, a tick's dirty
+// set is the three readers that care.
 export struct PlayerVm {
     has_track: bool,
     track: TrackSummaryRow,
@@ -258,14 +252,10 @@ export struct BrowseFolderRow {
     name: string,
 }
 
-// One card in Browse's card view, which draws subfolders and files in one grid —
-// folders first, then files in the list's own display order. Deliberately *not*
-// `EntityStripRow`: a browse card carries three things no entity card has, and
-// widening that struct would tax the four grids sharing it for a case none of them
-// has. `is_folder` picks the fallback glyph and the click target; `row_index` is the
-// index into `Browse.rows`, so a card activation reaches `play-row` with exactly the
-// index the `TrackList` would have passed; `enabled` is false for a disk-only file,
-// which renders dimmed and inert here as it does in the list.
+// One card in Browse's card view — folders first, then files in display order. Deliberately
+// *not* `EntityStripRow`: a browse card carries three fields no entity card has, and widening
+// that struct would tax the four grids sharing it. `row_index` indexes `Browse.rows`, so a
+// card activation reaches `play-row` with exactly the index the `TrackList` would have passed.
 export struct BrowseCardRow {
     id: int,             // track id; 0 for a folder and for a disk-only file
     row_index: int,      // index into `Browse.rows`; -1 for a folder
@@ -281,13 +271,9 @@ export struct BrowseCardGridRow {
     cards: [BrowseCardRow],
 }
 
-// One card in a `HorizontalCardStrip` or an `EntityCardGrid`. Deliberately one shape
-// across every flavour, so a single card component renders all of them:
-//   * Most Played      → id = track id,  play_count > 0 reveals the badge
-//   * Favorite Artists → id = artist id, subtitle = "{n} favorites"
-//   * Search albums    → id = album id,  subtitle = artist name
-//   * Search artists   → id = artist id, subtitle = "{n} albums"
-// `play_count` is only consulted under `show-play-count`, so its 0 default silently
+// One card in a `HorizontalCardStrip` or an `EntityCardGrid`, deliberately one shape across
+// every flavour so a single component renders all of them — `id` is whichever entity the host
+// deals in. `play_count` is only consulted under `show-play-count`, so its 0 default
 // suppresses the badge everywhere else.
 export struct EntityStripRow {
     id: int,
@@ -309,15 +295,10 @@ export struct BreadcrumbRow {
     path: string,
 }
 
-// One row in the bottom-right notification stack.
-//   * id           — monotonic handle assigned at push, so callers can
-//                    `Notifications.dismiss(id)` later
-//   * variant      — icon and left-accent colour: "info" → accent, "success" → green,
-//                    "warning" → yellow, "error" → danger
-//   * action-label — empty renders no action button; the close X is always there, so
-//                    every notification is dismissible
-//   * action-kind  — routing key for `Notifications.action(id, kind)`, mirroring
-//                    `Dialog.kind` + `accepted`
+// One row in the bottom-right notification stack. `id` is a monotonic handle for
+// `Notifications.dismiss`; `variant` picks icon and left-accent colour; an empty
+// `action-label` renders no button (the close X is always there); `action-kind` routes
+// `Notifications.action`, mirroring `Dialog.kind` + `accepted`.
 export struct NotificationRow {
     id: int,
     variant: string,

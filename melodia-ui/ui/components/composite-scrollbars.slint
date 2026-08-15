@@ -2,25 +2,21 @@ import { Theme } from "../theme.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 import { CompositeScroll } from "../globals/shell.slint";
 
-// The unified scrollbar pair and wheel routing every composite view mounts: an outer
-// `ScrollView` scrolls the sections while a height-capped, still-virtualizing inner
-// `TrackList` scrolls the rows, and **one vertical bar spans both travels**, splitting
-// drags at the boundary. The horizontal bar drives the list's column pan.
+// The scrollbar pair and wheel routing every composite view mounts: an outer `ScrollView`
+// scrolls the sections while a height-capped, still-virtualizing inner `TrackList` scrolls
+// the rows, and **one vertical bar spans both travels**, splitting drags at the boundary.
 //
-// It also owns the `CompositeScroll` wheel-tick watch — the global being a singleton,
-// the mirror can live here, and only one composite view is mounted at a time, so there
-// is exactly one live watcher. The winit filter bumps the tick after accumulating a
-// delta, and the handler applies one composite step through the same split the drag
-// uses, leaving the host's height cap and the inner virtualization untouched.
+// It also owns the `CompositeScroll` wheel-tick watch — one composite view is mounted at a
+// time, so there is exactly one live watcher. The handler applies one composite step through
+// the same split the drag uses, leaving the height cap and virtualization untouched.
 //
-// Slint can't pass element handles into a component, so the host mirrors its named
-// elements through plain properties plus two setters that forward to the list's own
-// clamping ones. `outer-viewport-y` is two-way, so drags write back — an identity
-// binding, so the sign-flip pitfall from the `OverlayScrollbar` round-trip doesn't apply.
+// Slint can't pass element handles into a component, so the host mirrors its named elements
+// through properties plus two setters forwarding to the list's own clamping ones.
+// `outer-viewport-y` is two-way so drags write back — an identity binding, so the
+// `OverlayScrollbar` sign-flip pitfall doesn't apply.
 //
-// **Mount contract**: the *last* child of the view root, at full size and zero offset.
-// The bars pin to this component's own right and bottom edges and the band coordinates
-// are host-root-relative, so the two must be congruent for them to line up.
+// **Mount contract**: the *last* child of the view root, at full size and zero offset — the
+// bars pin to this component's edges while the band coordinates are host-root-relative.
 export component CompositeScrollbars inherits Rectangle {
     // Outer ScrollView mirror (`below-sv`).
     in-out property <length> outer-viewport-y;
