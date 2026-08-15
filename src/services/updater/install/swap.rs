@@ -395,6 +395,9 @@ fn windows_swap(target: &Path, staged: &Path) -> AppResult<()> {
     // Best-effort: returns 0 on failure but the binary swap already
     // succeeded — the user keeps a stale `.old` until reboot or the
     // next launch's `remove_file` cleanup. Logged, not failed.
+    // SAFETY: `wide` is NUL-terminated by `wide_with_nul` and outlives the call.
+    // The null `lpNewFileName` is not an omission — it is what
+    // `MOVEFILE_DELAY_UNTIL_REBOOT` documents as delete-on-reboot.
     let ok = unsafe { MoveFileExW(wide.as_ptr(), std::ptr::null(), MOVEFILE_DELAY_UNTIL_REBOOT) };
     if ok == 0 {
         log::warn!(

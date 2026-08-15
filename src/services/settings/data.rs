@@ -786,6 +786,9 @@ fn detect_windows_locale() -> Option<String> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
+    // SAFETY: the declaration must match kernel32's export, which the Win32 docs
+    // give as `int GetUserDefaultLocaleName(LPWSTR, int)` — a mismatch here is UB
+    // the compiler would agree with.
     unsafe extern "system" {
         fn GetUserDefaultLocaleName(lpLocaleName: *mut u16, cchLocaleName: i32) -> i32;
     }
@@ -794,6 +797,8 @@ fn detect_windows_locale() -> Option<String> {
     // `unwrap_or` keeps the call lint-clean without an `unwrap()`.
     let mut buf = [0u16; 85];
     let buf_len = i32::try_from(buf.len()).unwrap_or(i32::MAX);
+    // SAFETY: `buf` is 85 `u16`s and `buf_len` cannot exceed that, so the pointer
+    // is valid for every `u16` the call may write.
     let len = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf_len) };
     if len > 0 {
         // `len` is positive here, so `usize::try_from` succeeds; the

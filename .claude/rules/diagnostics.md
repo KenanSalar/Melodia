@@ -52,8 +52,9 @@ share a folder with `flexi_logger`'s local-stamped lines and get read together.
    `to_string()` reports a permissions failure and a full disk identically. `describe` lives on
    `services/mod.rs` beside `redact_home` because `AppError`'s four I/O-boundary variants share
    that shape by construction — **any** `log::` call handed one with a bare `{e}` names the
-   operation and drops the reason (`artist_images` is the second caller; a third belongs there, not
-   on a local copy). It walks `.source()` once and **skips a cause the `Display` already printed**:
+   operation and drops the reason (`artist_images`, `media_controls`, `library::mbid` and
+   `library::tags` are the other callers; the next belongs there too, not on a local copy). It
+   walks `.source()` once and **skips a cause the `Display` already printed**:
    `AppError`'s three `#[from]` variants spell `#[error("… {0}")]` over the field `#[from]` also
    makes the source, and sqlx nests the same shape, so an unconditional walk reports one constraint
    failure three times. Pinned both directions by

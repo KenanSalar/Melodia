@@ -49,6 +49,8 @@ pub fn trim() {
         unsafe_code,
         reason = "FFI to glibc malloc_trim, well-defined no-op when nothing to release"
     )]
+    // SAFETY: no pointers cross the boundary, and `malloc_trim` takes the arena
+    // locks itself, so any thread may call it at any time.
     unsafe {
         libc::malloc_trim(0);
     }

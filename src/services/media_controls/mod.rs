@@ -88,7 +88,7 @@ fn try_create_controls(
     match create_controls(hwnd, tx) {
         Ok(controls) => Some(controls),
         Err(e) => {
-            log::warn!("Failed to initialize OS media controls: {e}");
+            log::warn!("Failed to initialize OS media controls: {}", super::describe(&e));
             None
         }
     }
@@ -137,22 +137,20 @@ impl MediaControlsHandle {
 fn create_controls(
     hwnd: Option<*mut std::ffi::c_void>,
     tx: mpsc::Sender<MediaControlEvent>,
-) -> Result<MediaControls, String> {
+) -> Result<MediaControls, souvlaki::Error> {
     let config = PlatformConfig {
         dbus_name: "melodia",
         display_name: "Melodia",
         hwnd,
     };
 
-    let mut controls = MediaControls::new(config).map_err(|e| format!("{e}"))?;
+    let mut controls = MediaControls::new(config)?;
 
-    controls
-        .attach(move |event: MediaControlEvent| {
-            if let Err(e) = tx.try_send(event) {
-                log::warn!("Dropped media control event due to full channel: {e}");
-            }
-        })
-        .map_err(|e| format!("{e}"))?;
+    controls.attach(move |event: MediaControlEvent| {
+        if let Err(e) = tx.try_send(event) {
+            log::warn!("Dropped media control event due to full channel: {e}");
+        }
+    })?;
 
     Ok(controls)
 }

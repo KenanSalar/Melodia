@@ -98,10 +98,10 @@ fn main() -> AppResult<()> {
     // `M_TRIM_THRESHOLD = -1`, `M_MMAP_THRESHOLD = -3`, `M_ARENA_MAX = -8` per
     // glibc's `malloc.h`.
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
-    #[allow(
-        unsafe_code,
-        reason = "FFI to glibc mallopt with constant args; no thread safety concerns before runtime spawn"
-    )]
+    #[allow(unsafe_code, reason = "FFI to glibc mallopt with constant args")]
+    // SAFETY: no pointers cross the boundary — `int` in, `int` out. `mallopt` is
+    // MT-Unsafe during init and nothing has spawned a thread yet, so no
+    // concurrent allocation can observe a half-applied set.
     unsafe {
         libc::mallopt(-8, 2);
         libc::mallopt(-3, 128 * 1024);
@@ -114,13 +114,13 @@ fn main() -> AppResult<()> {
     // verbatim. pipewire-alsa reads `PIPEWIRE_ALSA` (SPA-JSON) when the PCM
     // opens; `node.name` overrides the auto-name and `application.name` fills
     // those mixers' app column, so the stream reads simply "Melodia". Ignored on
-    // bare ALSA and non-PipeWire systems. Before any thread spawns, both for
-    // `set_var` soundness and so `AppState::init`'s device inherits it.
+    // bare ALSA and non-PipeWire systems. Before any thread spawns, so
+    // `AppState::init`'s device inherits it.
     #[cfg(target_os = "linux")]
-    #[allow(
-        unsafe_code,
-        reason = "set_var before any thread spawns; main() is single-threaded here"
-    )]
+    #[allow(unsafe_code, reason = "env::set_var is unsafe in Rust 2024")]
+    // SAFETY: `set_var` requires that no other thread is reading or writing the
+    // environment. Nothing has spawned one yet — the logger, the runtime and
+    // Slint all come later.
     unsafe {
         std::env::set_var(
             "PIPEWIRE_ALSA",
