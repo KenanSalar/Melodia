@@ -8,28 +8,19 @@ import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { TabSearchHeader } from "tab-search-header.slint";
 
-// The My Library page's pinned band, in two states. Idle it is a flat pane carrying the
-// tab bar, the shared filter box and the mounted tab's count; with a detail open it
-// **morphs** into that entity's hero — blur backdrop, artwork tile, title, chips — with
-// the tabs still in it and a back button to their left.
+// The My Library page's pinned band, in two states. Idle it is a flat pane carrying the tab
+// bar, the shared filter box and the mounted tab's count; with a detail open it **morphs**
+// into that entity's hero — blur backdrop, artwork tile, title, chips — tabs still in it and
+// a back button to their left.
 //
-// **A sibling of `MosaicTabHero`, not a fork of it.** The two share `HeroBlurBackdrop` /
-// `HeroChipStrip` and — since the header row became `TabSearchHeader` — the whole top of
-// the band, and differ in everything below it: a mosaic square against an artwork tile, a
-// fixed height against a morph.
-//
-// That row used to be *ported verbatim* between them, and this comment used to say so:
-// five separately paid-for fixes (the floor seed, the budget against two published
-// floors, the row's own zero spacing, the direction off `previous-index`, the published
-// tooltip anchor), each invisible in review, each duplicated a third time in
-// `settings-view.slint`. They are one component now, pinned once by
-// `ui::tab_search_header_tests`; what stays here is the band's own — the morph, the
+// **A sibling of `MosaicTabHero`, not a fork of it.** The two share `HeroBlurBackdrop`,
+// `HeroChipStrip` and `TabSearchHeader`, and differ below: a mosaic square against an artwork
+// tile, a fixed height against a morph. What stays here is the band's own — the morph, the
 // palette crossing it drives, and the back slot it hands the row as `lead-w`.
 //
-// Data-agnostic for the same reason `MosaicTabHero` is: `Tracks` / `Albums` / … and the
-// four `*Detail` globals are distinct generated types with nothing between them, so every
+// Data-agnostic, the globals being distinct generated types with nothing between them: every
 // fact arrives as a property and every write leaves as a callback. **No string is spelled
-// here** — `@tr` folds literals at codegen, and the host is where the literals belong.
+// here** — `@tr` folds literals at codegen, so they belong at the host.
 export component LibraryTabBand inherits Rectangle {
     // Inline `[@tr("…"), …]` literals at the call site; an array populated from Rust
     // renders untranslated. Forwarding one through here is fine — the literal still sits
@@ -83,18 +74,12 @@ export component LibraryTabBand inherits Rectangle {
     callback tab-selected(int);
     callback search-edited(string);
 
-    // Fires once the collapse has finished — the `Dialog.closed()` shape, and here for the
-    // same reason: **the hero's facts have to outlive the detail id.** Every one of them
-    // is a ternary over that id at the host, so a teardown run when the id clears leaves
-    // the band spending the whole 400 ms painting a fallback glyph over a reset backdrop —
-    // an exit morph *from* a placeholder rather than from the banner it is collapsing. The
-    // host clears the chip row when this lands instead, plus the cover and blur pair of
-    // whichever details actually *closed* — the band also collapses when a tab switch takes
-    // a still-open detail off screen, and picking that tab again morphs the same banner
-    // straight back open, so it splits on the ids. The shared backdrop tiers are not in
-    // reach here at all: the colour set belongs to the page and is reset when the page is
-    // left. Cancelled by a re-open, so a re-drill inside the window can't have the previous
-    // hero's teardown land on the new one.
+    // Fires once the collapse has finished — the `Dialog.closed()` shape, because **the
+    // hero's facts have to outlive the detail id**: every one is a ternary over that id at
+    // the host, so a teardown at the id clear spends the whole morph collapsing a placeholder.
+    // The host splits on the ids, a tab switch also collapsing the band with a detail still
+    // open. Cancelled by a re-open, so a re-drill can't land the previous hero's teardown on
+    // the new one.
     callback hero-collapsed();
 
     // --- The morph ----------------------------------------------------------
@@ -111,28 +96,20 @@ export component LibraryTabBand inherits Rectangle {
         self.hero-t = self.detail-open ? 1.0 : 0.0;
         collapse.running = !self.detail-open;
     }
-    // **One duration, two curves, and the second one is a correction rather than a
-    // flourish.** `cubic-bezier(0.2, 0, 0, 1)` spends 61 % of its travel in the first
-    // quarter, so the band is 88 % grown 200 ms in and the back half of the morph is
-    // imperceptible at *both* ends. Leaving still reads as a movement anyway, because it
-    // has a tail the entry never had: the count line's alpha is biased into the morph's
-    // second half, so a collapse finishes with 320 ms of sentence arriving. Nothing
-    // occupies the entry's tail, so one curve read as a snap going in and as a gesture
-    // coming back. The entry therefore takes the standard container-transform curve —
-    // 24 % in that first quarter instead of 61 %, which roughly doubles how long the
-    // entry *reads* without moving a single duration — and the collapse keeps the one it
-    // has always had. Everything hanging off `hero-t` inherits it, the count's own exit
-    // included.
+    // **One duration, two curves.** The collapse curve front-loads most of its travel, which
+    // leaving carries because it has a tail the entry never had — the count line's alpha is
+    // biased into the morph's second half, so a collapse finishes with the sentence still
+    // arriving. Nothing occupies the entry's tail, so the same curve read as a snap going in;
+    // the entry takes the standard container-transform curve instead. Everything hanging off
+    // `hero-t` inherits both.
     //
-    // **The duration deliberately does not move with it.** The collapse `Timer` below and
-    // the detail body's own `ViewTransition` are both `dur-spatial`, and a second number
-    // here is one that can drift from them.
+    // **The duration deliberately does not move with it** — the collapse `Timer` below and the
+    // detail body's `ViewTransition` are both `dur-spatial`, and a second number here can drift.
     //
-    // Evaluated at *write* time rather than per frame: the struct `set_animated_value`
-    // takes is built in the handler above, where `detail-open` already holds the direction
-    // being started. And spelled out at both sites rather than named once — `Theme` cannot
-    // carry an easing (see the note above `dur-fast`), so the palette's `in` transition
-    // below repeats this curve and `library_tab_band_tests` is what holds the two together.
+    // Evaluated at *write* time, the struct `set_animated_value` takes being built in the
+    // handler above where `detail-open` already holds the direction. Spelled out rather than
+    // named, `Theme` being unable to carry an easing, so the palette's `in` transition below
+    // repeats this curve and `library_tab_band_tests` holds the two together.
     animate hero-t {
         duration: Theme.dur-spatial;
         easing: root.detail-open
@@ -153,41 +130,30 @@ export component LibraryTabBand inherits Rectangle {
         }
     }
 
-    // **Is any of the hero on screen** — true from the frame the detail id lands until the
-    // morph has finished collapsing, which is one frame longer at *each* end than
-    // `detail-open` and one frame longer at the start than `hero-t > 0`. Both ends were
-    // bugs. The handler above *writes* `hero-t`, so the morph genuinely starts at 0 and a
-    // branch gated on the detail mounted a frame before one gated on the morph: for that
-    // frame the title block laid out as its row's only child, hard left, under the count
-    // line that paints over it, then jumped a tile's width right. And gated on the detail
-    // alone it left on the frame the id cleared, while the tile beside it faded on for the
-    // full 400 ms.
+    // **Is any of the hero on screen** — one frame longer at each end than `detail-open`, and
+    // one longer at the start than `hero-t > 0`. Both ends were bugs, so mount the two halves
+    // together off this rather than off either.
     //
-    // **What may hang off it is decided by the chip strip's change tracker, and the strip
-    // is why the meta column below has no `if` at all.** A dropped repeater instance keeps
-    // its memory alive for weak refs, so a `ChangeTracker` inside it stays registered, and
-    // `ChangeTracker::evaluate` upgrades its weak handle with an `unwrap`. `MetaChipStrip`'s
-    // `changed watched-w` watches a *layout* property, so the surviving parent re-dirties
-    // it whenever it re-flows — which during a morph is every single frame, the easing back
-    // slot moving the column's width under it. Drop that branch on the frame the ease ends
-    // and the queued tracker fires against a dead handle: `Option::unwrap()` on `None`,
-    // 400 ms after a back click. A timer's `triggered` is no safer than an animated
-    // predicate here, and neither is a Rust write — the queue is what matters, not the
-    // writer. So the strip is mounted for the life of the band and fades by **brush alpha**
-    // instead, and only the tracker-free pieces ride this. See
-    // `.claude/rules/slint-pitfalls.md`.
+    // **What may hang off it is decided by the chip strip's change tracker, and the strip is
+    // why the meta column below has no `if` at all.** A dropped repeater instance keeps its
+    // allocation alive for weak refs, so a `ChangeTracker` inside it stays registered and
+    // `evaluate` upgrades with an `unwrap`. `MetaChipStrip`'s `changed watched-w` watches a
+    // *layout* property, which the surviving parent re-dirties on every frame of a morph — so
+    // dropping that branch panics, and neither a timer's `triggered` nor a Rust write is
+    // safer, the queue being what matters rather than the writer. The strip stays mounted for
+    // the life of the band and fades by **brush alpha**; only tracker-free pieces ride this.
+    // See `.claude/rules/slint-pitfalls.md`.
     property <bool> hero-shown: root.detail-open || root.hero-t > 0;
 
-    // **Is the band's own height still travelling.** The page's body is the stretchy
-    // sibling under this band, so a morph moves that body's `y` by the whole 100 px
-    // between the two floors — which is this page's spatial transition, and the reason a
-    // body mounting into one may not slide on its own. See `slide` on `ViewTransition`.
+    // **Is the band's own height still travelling.** The page's body is the stretchy sibling
+    // under this band, so a morph moves that body's `y` by the whole distance between the two
+    // floors — this page's spatial transition, and the reason a body mounting into one may not
+    // slide on its own (`slide` on `ViewTransition`).
     //
-    // Reliable on the mount frame without depending on where `changed detail-open` falls
-    // relative to the repeater that mounts the body: `hero-t` is *written* and never
-    // bound, so until that handler lands it still holds the departing floor's value and
-    // the two disagree either way. **`hero-t > 0` is the wrong spelling** — it is `0` on
-    // a drill-in's first frame, which is the one frame the answer has to be `true`.
+    // Reliable on the mount frame wherever `changed detail-open` falls relative to the
+    // repeater, `hero-t` being written and never bound. **`hero-t > 0` is the wrong
+    // spelling** — it is `0` on a drill-in's first frame, the one frame the answer must be
+    // `true`.
     out property <bool> morphing: root.hero-t != (root.detail-open ? 1.0 : 0.0);
 
     // --- The bar's palette ---------------------------------------------------
@@ -211,27 +177,20 @@ export component LibraryTabBand inherits Rectangle {
     property <brush> hover-brush: Theme.surface0;
     property <brush> divider-brush: Theme.surface1;
 
-    // The hero half, mirrored locally so a late solve *moves* rather than steps. The
-    // emphasized curve spends most of its travel in the first quarter, so by the time a
-    // decode lands the crossing above is nearly settled and would adopt the new tier in one
-    // frame. These carry the re-tint instead, on a curve short enough to finish inside the
-    // morph when the decode is quick and to stay smooth when it isn't.
+    // The hero half, mirrored locally so a late solve *moves* rather than steps — the
+    // crossing above is nearly settled by the time a decode lands and would adopt the new
+    // tier in one frame.
     //
     // **Each falls back to its own idle half while no detail is open, and that is what makes
-    // the mirror safe on a *tabbed* page.** `HeroBackdrop` is held across a tab leave — the
-    // detail id is never cleared, so the band is one pick away from morphing that banner back
-    // open — which means the globals routinely describe a hero this band stopped painting
-    // several tabs ago. Bound to them unconditionally these settle on it, and the transition
-    // below then crosses *from* the departed entity's tone: leave a genre for a detail-less
-    // tab, open a playlist there, and the bar spends the first quarter of the morph rushing
-    // toward a mirror still most of the way through its own ease off the genre's pink.
-    // Reading the tier only on the arm that paints it is also what keeps a write to the
-    // global from dirtying these at all while the band is flat — Slint registers a dependency
-    // as it is *evaluated*, so the untaken arm never subscribes.
+    // the mirror safe on a *tabbed* page.** `HeroBackdrop` is held across a tab leave, so the
+    // globals routinely describe a hero this band stopped painting several tabs ago; bound
+    // unconditionally these settle on it and the transition below crosses *from* the departed
+    // entity's tone. Reading the tier only on the arm that paints it also keeps a write to the
+    // global from dirtying these while the band is flat, Slint registering a dependency as it
+    // is *evaluated*.
     //
-    // `detail-open` and not `hero-shown`: gated on the latter they would drain toward the
-    // token for `dur-med` *after* the collapse ends, so a detail opened in that window would
-    // start from a part-stale value — the same bug, smaller and harder to see.
+    // `detail-open` and not `hero-shown`: gated on the latter they drain toward the token for
+    // `dur-med` *after* the collapse ends, so a detail opened in that window starts part-stale.
     property <brush> hero-label: root.detail-open ? HeroBackdrop.on-backdrop : Theme.text;
     property <brush> hero-active: root.detail-open ? HeroBackdrop.chrome : Theme.accent;
     property <brush> hero-hover:
@@ -270,14 +229,11 @@ export component LibraryTabBand inherits Rectangle {
 
     // --- The header width budget --------------------------------------------
     //
-    // `page-w` is a **mirror**, written imperatively because a live `root.width` read
-    // feeding a child's size re-enters layout, and seeded at the header row's own
-    // **floor**, which that component publishes rather than this one restating: seeded
-    // wide, the bar believes it can afford full-width tabs and draws them into a panel
-    // that can't seat them, which is exactly what a miniplayer → full swap produces. The
-    // mount Timer beside it is mandatory — `changed` doesn't fire when the first layout
-    // settles directly on the final value, and a window opened at its final size is that
-    // case.
+    // `page-w` is a **mirror**, written imperatively because a live `root.width` read feeding
+    // a child's size re-enters layout, and seeded at the header row's own **floor**, which
+    // that component publishes: seeded wide, the bar draws full-width tabs into a panel that
+    // can't seat them — what a miniplayer → full swap produces. The mount Timer is mandatory,
+    // `changed` not firing when the first layout settles directly on the final value.
     property <length> page-w: 2 * Theme.pad-lg + header.row-floor;
     changed width => { self.page-w = self.width; }
 
@@ -289,15 +245,12 @@ export component LibraryTabBand inherits Rectangle {
         }
     }
 
-    // The back button's slot, **with its trailing gap folded into its own width** — which
-    // is what lets the header row carry `spacing: 0` and the whole inset ease to zero.
-    // Spelled as an eased width beside a stepped gap it could not: the row loses a full
-    // `pad-md` of layout spacing on the frame the slot unmounts, and on the way *out* that
-    // frame is the last one, after the height and every brush have settled. A 12 px step
-    // there is the tab bar visibly jumping left. Opening, the same step lands on frame one
-    // and is buried under 400 ms of movement, which is why it only ever showed one way.
-    // It collapses to zero in idle, so the seed above stays the *idle* floor — the state
-    // the page is in whenever a mount can surprise it.
+    // The back button's slot, **with its trailing gap folded into its own width** — which is
+    // what lets the header row carry `spacing: 0` and the whole inset ease to zero. Beside a
+    // stepped gap it could not: the row loses a full `pad-md` of layout spacing on the frame
+    // the slot unmounts, which on the way *out* is the last frame, after the height and every
+    // brush have settled — the tab bar visibly jumping left. It collapses to zero in idle, so
+    // the seed above stays the *idle* floor.
     property <length> back-slot-w:
         (root.pill-h + Theme.pad-sm + Theme.pad-md) * root.hero-t;
 
@@ -329,13 +282,12 @@ export component LibraryTabBand inherits Rectangle {
 
     // --- Forwarded from the shared header ------------------------------------
     //
-    // Re-published under the names `my-library-view.slint` already reads, so the
-    // extraction is invisible to it. What each one is for is argued in
-    // `tab-search-header.slint`.
+    // Re-published under the names `my-library-view.slint` already reads; what each is for is
+    // argued in `tab-search-header.slint`.
     //
-    // Forwarded despite the diagonal this band caused (#45): whether a body may move is
-    // a question about the morph, not about the direction, and the page answers that one
-    // on `slide`, where it can see both. This is only ever the bar's left/right.
+    // Forwarded despite the diagonal this band caused (#45): whether a body may move is a
+    // question about the morph, not the direction, and the page answers that on `slide`. This
+    // is only ever the bar's left/right.
     out property <NavEnterFrom> tab-enter-from <=> header.tab-enter-from;
     out property <bool> tab-anim-armed <=> header.tab-anim-armed;
 
@@ -365,13 +317,11 @@ export component LibraryTabBand inherits Rectangle {
         hero-open: root.detail-open;
     }
 
-    // The idle pane, over the backdrop rather than instead of it. **The alpha is folded
-    // into the brush** — `opacity` on an element costs a layer, and this one is full-bleed
-    // and animating for the whole morph. `base` rather than `mantle`: the band is the top
-    // of the page and not chrome pinned above it, so it takes the content panel's own
-    // fill and the tabs sit *in* the view. A step darker read as a separate slab, since
-    // nothing separates the two — no border, no gap, and the grid starts immediately
-    // under it.
+    // The idle pane, over the backdrop rather than instead of it. **The alpha is folded into
+    // the brush**, `opacity` costing a layer on an element that is full-bleed and animating
+    // for the whole morph. `base` rather than `mantle`: the band is the top of the page, not
+    // chrome pinned above it, so it takes the content panel's fill and the tabs sit *in* the
+    // view — nothing separates the two, so a step darker reads as a separate slab.
     idle-pane := Rectangle {
         x: 0; y: 0;
         width: 100%; height: 100%;
@@ -397,13 +347,12 @@ export component LibraryTabBand inherits Rectangle {
             filter-placeholder: root.filter-placeholder;
             blur-tick: root.blur-tick;
 
-            // **All four cross from a theme token to a solved hero tier**, because the
-            // band paints on `Theme.base` in one state and on the entity's own blur in
-            // the other, and neither answer is right for both. `active-color` is the one
-            // that matters most — it drives the selected label, its FILL=1 icon and the
-            // underline from one input, and `Theme.accent` carries no contrast floor
-            // against a blur (Latte's mauve lands near 1.7:1, under even the 3:1 non-text
-            // bar) where `chrome` is solved to clear it.
+            // **All four cross from a theme token to a solved hero tier**, the band painting
+            // on `Theme.base` in one state and the entity's blur in the other. `active-color`
+            // matters most, driving the selected label, its FILL=1 icon and the underline
+            // from one input: `Theme.accent` carries no contrast floor against a blur — under
+            // Latte it lands below even the 3:1 non-text bar — where `chrome` is solved to
+            // clear it.
             label-color: root.label-brush;
             active-color: root.active-brush;
             hover-fill: root.hover-brush;
@@ -421,52 +370,36 @@ export component LibraryTabBand inherits Rectangle {
                     x: 0;
                     y: (parent.height - self.height) / 2;
                     icon: "arrow_back";
-                    // **The disc scales with its slot rather than sitting at full size
-                    // inside it.** The slot eases to `pill-h + pad-sm + pad-md` and the
-                    // disc wants `pill-h` of that, so pinned at its final size it does not
-                    // fit until the morph is some 60 % through — and until then the clip
-                    // below cuts a straight edge down the middle of a circle. That reads as
-                    // broken where the artwork tile beside it, cropped by the growing band
-                    // on the very same schedule, reads as a photograph. Both dimensions
-                    // take the same `hero-t`, so every frame is a *uniform scale* of the
-                    // settled row: the disc keeps its exact share of the slot and of the
-                    // trailing gap throughout, which leaves nothing to clip at any
-                    // progress and for any value of the three tokens. The clip stays as
-                    // the guard it always was — it is what stops an incompressible disc
-                    // drawing over the first tab — and this is what stops it ever having
-                    // to do that job.
+                    // **The disc scales with its slot rather than sitting at full size inside
+                    // it**, which pinned would leave the clip below cutting a straight edge
+                    // down the middle of a circle until the morph is most of the way through.
+                    // Both dimensions take the same `hero-t`, so every frame is a uniform
+                    // scale of the settled row and there is nothing to clip at any progress.
+                    // The clip stays as the guard it always was, stopping an incompressible
+                    // disc drawing over the first tab.
                     icon-size: 20px * root.hero-t;
                     diameter: root.pill-h * root.hero-t;
-                    // The `MetaChip` pair, and `AccentDiscButton`'s ladder for the hover —
-                    // the Now Playing back button is this same control on the other
-                    // backdrop. `hover-bg` has to be named beside `idle-bg`: the component
-                    // defaults it to an opaque `Theme.surface0`, which paints the theme's
-                    // grey over the blur the moment the pointer lands. The retired
-                    // `DetailHeader`'s button took `Theme.floating-chrome-bg`, which is
-                    // right for a disc floating over a full-bleed hero and wrong for one
-                    // sitting in the tab row beside labels that are already on hero tiers.
+                    // The `MetaChip` pair, and `AccentDiscButton`'s ladder for the hover, the
+                    // Now Playing back button being this same control on the other backdrop.
+                    // `hover-bg` must be named beside `idle-bg`: the component defaults it to
+                    // an opaque `Theme.surface0`, which paints grey over the blur the moment
+                    // the pointer lands. Not `Theme.floating-chrome-bg` — right for a disc
+                    // floating over a full-bleed hero, wrong for one sitting in the tab row
+                    // beside labels already on hero tiers.
                     idle-bg: HeroBackdrop.chip-fill;
                     hover-bg: HeroBackdrop.disc-hover;
                     idle-fg: HeroBackdrop.chrome;
-                    // **A bias off the morph, not the morph itself** — the `tab-bar.slint`
-                    // idiom, and the count line's, for a reason particular to this one
-                    // element: it is the only piece of the hero whose *size* also rides
-                    // `hero-t`, so a plain alpha multiplied into a scaling disc left its
-                    // presence going as `hero-t` **squared**. Half size at half alpha is a
-                    // quarter of a button, at the point where the emphasized curve has the
-                    // band all but finished growing — so an entry that animates throughout
-                    // read as one that pops at the end. Leaving is immune to the same
-                    // arithmetic, opening at full presence and receding, which is why only
-                    // one direction ever looked wrong. Doubling the alpha lets the scale
-                    // carry the motion and leaves the fade to lead it in.
+                    // **A bias off the morph, not the morph itself.** This is the only piece
+                    // of the hero whose *size* also rides `hero-t`, so a plain alpha put its
+                    // presence at `hero-t` squared — half size at half alpha is a quarter of
+                    // a button, right where the curve has the band all but finished growing.
+                    // Doubling lets the scale carry the motion and the fade lead it in.
                     //
-                    // **Through the component's `fade`, not an `opacity` here**, the
-                    // artwork tile's reason one column over: `IconButton`'s root has
-                    // children, so a fade from outside rendered the disc to an offscreen
-                    // texture — and this band clips against an animating height, which put
-                    // that texture on `render_layer`'s allocate-a-fresh-one branch for the
-                    // first half of every morph. The bias is unchanged; only where it is
-                    // applied moved.
+                    // **Through the component's `fade`, not an `opacity` here** — the artwork
+                    // tile's reason one column over: `IconButton`'s root has children, so an
+                    // outside fade renders the disc to an offscreen texture, and this band
+                    // clips against an animating height, which puts that texture on
+                    // `render_layer`'s allocate-a-fresh-one branch every frame.
                     fade: clamp(root.hero-t * 2.0, 0.0, 1.0);
                     clicked => { root.back-clicked(); }
                 }
@@ -487,12 +420,11 @@ export component LibraryTabBand inherits Rectangle {
                 ArtworkImage {
                     artwork-path: root.artwork-path;
                     cover: root.cover;
-                    // **The host can't withhold `cover`, so it says so here instead.**
-                    // Slint has no empty-`image` literal, and the sheet picks one of four
-                    // globals' covers — Genre Detail owning none, its tile being a
-                    // name-hashed gradient. Without this the genre hero paints whichever
-                    // *other* detail happens to be open, which boot makes routine: a
-                    // detail id is restored per view whichever tab is resumed.
+                    // **The host can't withhold `cover`, so it says so here instead.** Slint
+                    // has no empty-`image` literal and the sheet picks one of four globals'
+                    // covers, Genre Detail owning none. Without this the genre hero paints
+                    // whichever *other* detail is open — routine, boot restoring a detail id
+                    // per view whichever tab is resumed.
                     has-cover: root.artwork-path != "";
                     tile-size: Theme.hero-artwork;
                     tile-radius: root.circular-artwork
@@ -501,33 +433,22 @@ export component LibraryTabBand inherits Rectangle {
                     fallback-icon: root.fallback-icon;
                     tile-bg: root.tile-bg;
                     tile-icon-color: root.tile-icon-color;
-                    // **The tile fades through the component, not under an `opacity`
-                    // here**, which is the same rule the rest of the band follows and the
-                    // last half of it still spelling the exception. Wrapping this in an
-                    // `opacity` was safe on *ink* — an image fills its box, so the layer
-                    // had nothing to crop the way the title block's had — and that
-                    // argument was never the whole cost. `need_layer` bails at exactly 1.0
-                    // and on a lone childless child, and `ArtworkImage`'s root has
-                    // children, so the wrapper rendered the 140 px square to an offscreen
-                    // texture for the whole morph; and because this band clips against an
-                    // animating height, the layer's bounding rect rode a clip that moved
-                    // every frame, which is the branch in `render_layer` that allocates a
-                    // fresh GPU texture rather than reusing one. The float lands on the
-                    // fill and on the mounted `Image`, both of which take a canvas alpha
-                    // multiply instead. See `artwork-image.slint`'s `fade`.
+                    // **The tile fades through the component, not under an `opacity` here.**
+                    // An `opacity` is safe on *ink* — an image fills its box — but
+                    // `need_layer` bails only at exactly 1.0 and on a lone childless child,
+                    // and `ArtworkImage`'s root has children, so a wrapper renders the square
+                    // to an offscreen texture for the whole morph. Clipping against an
+                    // animating height then puts it on `render_layer`'s allocate-a-fresh-one
+                    // branch. The float lands on the fill and the `Image` as a canvas alpha
+                    // multiply instead — see `artwork-image.slint`'s `fade`.
                     fade: root.hero-t;
                 }
             }
 
-            // **The one column with no `if` on it**, because the chip strip at the bottom
-            // carries the change tracker and nothing may drop it — see the note beside
-            // `hero-shown`. In idle it is an empty strip and a spacer inside a clipped
-            // 40 px row: no layer, no glyph, and the rows `hero_chips::clear` emptied at
-            // the end of the last collapse are what make it draw nothing at all.
-            //
-            // The idle count line is not this column's opposite number any more and doesn't
-            // live here: it rides the band's lower edge with the pill row, which is the
-            // line it already shared.
+            // **The one column with no `if` on it**, the chip strip at the bottom carrying
+            // the change tracker nothing may drop — see the note beside `hero-shown`. In idle
+            // it is an empty strip and a spacer: no layer, no glyph, the rows having been
+            // emptied by the last collapse's teardown.
             VerticalLayout {
                 horizontal-stretch: 1;
                 alignment: stretch;
@@ -537,16 +458,12 @@ export component LibraryTabBand inherits Rectangle {
                 // when the pill row was a child of this column.
                 padding-bottom: root.pill-h + Theme.pad-xs;
 
-                // **Alpha in the brushes like the rest of the band — and here the reason is
-                // the glyphs rather than the cost.** `Opacity::need_layer` bails at exactly
-                // 1.0, so a fade of this block was a layer for the length of the morph and
-                // nothing at rest; the layer is a texture sized to its children's
-                // *geometry*, and a `Text`'s geometry is its line box, not its ink. The
-                // faces are patched to a 1.05 em box while their outlines still reach well
-                // past it, so every Arabic mark that leaves the box — a hamza above an
-                // alif, the dots under a final ya — was cropped for 400 ms and popped back
-                // on the frame `hero-t` landed on the literal 1.0. Nothing here overlaps,
-                // so per-element alpha paints identically to the group opacity it replaced.
+                // **Alpha in the brushes like the rest of the band — here for the glyphs
+                // rather than the cost.** A layer is sized to its children's *geometry*, and
+                // a `Text`'s geometry is its line box, not its ink: the patched faces reach
+                // well past theirs, so a fade of this block crops every Arabic mark that
+                // leaves the box for the length of the morph. Nothing here overlaps, so
+                // per-element alpha paints identically to the group opacity.
                 if root.hero-shown: VerticalLayout {
                     vertical-stretch: 0;
                     spacing: Theme.pad-xs;
@@ -599,59 +516,39 @@ export component LibraryTabBand inherits Rectangle {
         }
     }
 
-    // The idle count line. **Anchored to the *compact* band's floor, not to the root's** —
-    // which is the whole difference between it and the pill row below. A detail's pills
-    // belong on whichever floor is current, so they follow the height; this sentence
-    // belongs where it already sits, and riding the height dragged it down out of the page
-    // and shoved it back in. So the anchor holds still and the travel is an *offset* off
-    // it: `root.height` moves 100 px over a morph, `count-drop` moves twelve.
+    // The idle count line. **Anchored to the *compact* band's floor, not the root's** — the
+    // whole difference between it and the pill row below, which belongs on whichever floor is
+    // current and so follows the height. The anchor holds still and the travel is an *offset*
+    // off it.
     //
-    // **It does not leave the way it comes back, and `detail-open` is what tells the two
-    // apart** — it flips on the edge, where `hero-t` only knows how far along the morph is.
-    // Out is *down*; back is the slide in from the left, unchanged. The sideways exit that
-    // shape replaced crossed the back button on its way out: the slot beside it eases open
-    // from zero to `pill-h + pad-sm + pad-md` on the same clock, so two things travelled in
-    // opposite directions through the same sixteen pixels for the whole time the sentence
-    // was still legible. Down is the one axis with nothing arriving on it.
+    // **It does not leave the way it comes back, and `detail-open` tells the two apart**,
+    // flipping on the edge where `hero-t` only knows how far along the morph is. Out is
+    // *down*, the one axis with nothing arriving on it; back is the slide in from the left.
+    // A sideways exit crosses the back slot easing open on the same clock.
     //
-    // Both directions still ride `hero-t`, the morph's own clock — no second animation to
-    // keep in step, and no `states` entry, which would animate on its *first* evaluation
-    // and flash the count on a page mounted straight into a detail. The alpha is a *bias*
-    // off that clock rather than its plain complement, the `tab-bar.slint` idiom: the
-    // artwork tile fading in behind it takes the same curve, and at equal weights the two
-    // read over each other for the first frames. `count-t` is that bias named, since the
-    // drop takes it too. Folded into the brush, never `opacity`, which would cost a layer
-    // for the whole length of every detail.
+    // Both directions ride `hero-t` — no second clock, and no `states` entry, which would
+    // animate on its *first* evaluation and flash the count on a page mounted straight into a
+    // detail. The alpha is a *bias* off that clock rather than its complement (the
+    // `tab-bar.slint` idiom), the artwork tile fading in behind it taking the same curve;
+    // `count-t` is that bias named, the drop taking it too. Folded into the brush, never
+    // `opacity`, which would cost a layer for the length of every detail.
     //
-    // **The drop is linear in that float, which is what puts it in step with the floor
-    // moving under it.** The pill row is anchored to `root.height`, so it starts travelling
-    // on frame one of the morph and covers its 100 px in exact proportion to `hero-t`;
-    // `count-t` is twice `hero-t` over the window the line is visible for, so a linear drop
-    // holds a constant ratio to that and the two leave together. The sentence holding still
-    // while everything sharing its floor moves is the thing you see.
+    // **The drop is linear in that float, which puts it in step with the floor moving under
+    // it** — the pill row covers its travel in exact proportion to `hero-t`, so a linear drop
+    // against a `count-t` of twice `hero-t` holds a constant ratio and the two leave together.
     //
-    // It was squared for a while, to hand back the frames the old `cubic-bezier(0.2, 0, 0, 1)`
-    // spent in a rush — 61 % of its travel inside the first quarter, which turned any travel
-    // read straight off it into a flick. That was the *curve*'s problem and it is fixed at
-    // the curve now (see the morph above), so the shaping became one compensation too many:
-    // it bought a gentle start by keeping the line still for the first frames of a band that
-    // had already begun to grow.
+    // `count-drop` fits inside the slack the compact floor already leaves under this box, so
+    // the drop never depends on the band having grown to stay unclipped. Deliberately not
+    // `ViewTransition`'s 32 px — that token is a page changing, this is a sentence leaving a
+    // band.
     //
-    // Twelve pixels because the compact floor leaves sixteen under this box, so the whole
-    // drop fits inside the band it started in and never depends on the band having grown to
-    // stay unclipped. Deliberately not `ViewTransition`'s 32 px — that token is a page
-    // changing, this is a sentence leaving a 132 px band.
+    // The seam left is a detail re-opened *inside* a collapse: the axis flips mid-flight and
+    // the line steps back to its anchor. It lands at no more than the return's own alpha, and
+    // the alternative is the second animated clock everything above avoids.
     //
-    // The one seam left is a detail re-opened *inside* a collapse: the axis flips
-    // mid-flight, so the line steps back to its anchor rather than gliding there. It lands
-    // at no more than the return's own alpha and the exit takes it to zero within a few
-    // frames — and the alternative is a second animated float carrying the axis, which is
-    // the second clock everything above is written to avoid.
-    //
-    // A bare `Text` with a bound width, per the faked-placeholder pitfall: elide alone
-    // doesn't hold a Text inside a non-layout parent, since its `preferred-width` stays the
-    // untruncated string. The width stops short of the pills so a long count can't paint
-    // through them — `space-between` used to negotiate that, and squeezed the pills to do it.
+    // A bare `Text` with a bound width, per the faked-placeholder pitfall: elide alone doesn't
+    // hold a Text inside a non-layout parent, its `preferred-width` staying the untruncated
+    // string. The width stops short of the pills so a long count can't paint through them.
     property <length> count-slide: 32px;
     property <length> count-drop: 12px;
     property <float> count-t: clamp(root.hero-t * 2.0, 0.0, 1.0);
@@ -673,16 +570,14 @@ export component LibraryTabBand inherits Rectangle {
     }
 
     // The action pills — the tab's, or the open detail's. **A floating slot rather than
-    // children of the meta column**, because Slint allows one `@children` and the two
-    // states need it in different places; the column reserves the band above and this rides
-    // the root's own lower edge, which is the meta row's floor in both states — so no
-    // anchor has to be interpolated and the slot simply follows the height. A
-    // `HorizontalLayout` rather than a bare `Rectangle`: the pill rows are `if`-conditional
-    // and a Rectangle reports 0×0 over conditional children.
+    // children of the meta column**, Slint allowing one `@children` and the two states
+    // needing it in different places; riding the root's lower edge is the meta row's floor in
+    // both states, so no anchor has to be interpolated. A `HorizontalLayout` rather than a
+    // bare `Rectangle`, the pill rows being `if`-conditional and a Rectangle reporting 0×0
+    // over conditional children.
     //
     // `pills` is a cell of its own so the count line can reserve against it: under
-    // `alignment: end` it is handed exactly the width the host's row asks for, and nothing
-    // in that width reads back the count's.
+    // `alignment: end` it is handed exactly the width the host's row asks for.
     HorizontalLayout {
         x: Theme.pad-lg;
         y: root.height - Theme.pad-lg - root.pill-h;

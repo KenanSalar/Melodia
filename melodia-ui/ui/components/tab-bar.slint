@@ -1,13 +1,12 @@
 import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 
-// One tab. Unexported — it is only useful as a child of the bar.
+// One tab. Unexported — only useful as a child of the bar.
 //
-// **No fill marks the selected tab**, per Material 3: the accent label, the FILL=1 icon
-// and the bar's sliding underline carry it three ways, and hover keeps a state layer so
-// the cell still reads as a target. A deliberate break from the ChipGroups *inside* the
-// settings rows, which do fill — the bar navigates, the chips configure, and a page
-// showing both needs them to read as different things.
+// **No fill marks the selected tab**, per Material 3: the accent label, the FILL=1 icon and
+// the sliding underline carry it three ways, and hover keeps a state layer so the cell still
+// reads as a target. A deliberate break from the ChipGroups *inside* the settings rows, which
+// do fill — the bar navigates, the chips configure.
 component TabBarCell inherits Rectangle {
     in property <string> label;
     in property <string> icon;
@@ -40,19 +39,11 @@ component TabBarCell inherits Rectangle {
     property <float> label-alpha: clamp(1.0 - root.compact-t * 2.0, 0.0, 1.0);
 
     // **The cell eases floats and never a brush**, and the two below are the whole of it.
-    // Every colour it paints is a brush its host hands down, and a host on a hero band
-    // crosses those for the length of a morph — an animated binding restarts on
-    // *dirtiness* rather than on a value change, so a leaf easing one re-bases every frame
-    // and sits still until the source settles. The icon lost its `animate` to that; these
-    // two carry the motion the cell is entitled to.
-    //
-    // How far into the hover this cell is. The fill used to be an `animate background`
-    // over `has-hover ? hover-fill : transparent`, exempted on the grounds that the
-    // unhovered arm reads no input so a morph with no pointer on the bar never dirties it
-    // — true, and beside the point: the tab you are *pointing at* while you click it is
-    // the hovered arm, and it read the crossing brush every frame. So the fill parked on
-    // whatever it held when the crossing began (the theme's own `surface0` on the way into
-    // a hero) and snapped at the end.
+    // Every colour it paints comes from its host, and a host on a hero band crosses those
+    // for the length of a morph — an animated binding restarts on *dirtiness* rather than on
+    // a value change, so a leaf easing one re-bases every frame and sits still until the
+    // source settles. `touch.has-hover ? fill : transparent` is no escape: the tab you point
+    // at while clicking *is* the hovered arm, and it reads the crossing brush every frame.
     property <float> hover-t: touch.has-hover ? 1.0 : 0.0;
     animate hover-t { duration: Theme.dur-fast; easing: ease-in-out; }
 
@@ -73,13 +64,12 @@ component TabBarCell inherits Rectangle {
         easing: cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
-    // What the bar's ruler measures, spelled out rather than left to the root's own
-    // child-merge. Slint merges a `Rectangle` root's constraints with its children's but
-    // **drops any child carrying explicit geometry** — and `cell` binds its width, so
-    // with the content row inside it the root would report the bare `Rectangle` default,
-    // `natural-tab-w` would measure zero, and the bar would never go compact.
-    // `SidebarItem` has this exact shape and does report nothing horizontally; it gets
-    // away with it because its rows stretch to the sidebar.
+    // What the bar's ruler measures, spelled out rather than left to the root's child-merge.
+    // Slint merges a `Rectangle` root's constraints with its children's but **drops any child
+    // carrying explicit geometry** — `cell` binds its width, so the root would report the
+    // bare `Rectangle` default, `natural-tab-w` would measure zero and the bar would never go
+    // compact. `SidebarItem` has the same shape and gets away with it, its rows stretching to
+    // the sidebar.
     preferred-width: content.preferred-width;
 
     // The root keeps the whole layout slot, so a press never reflows the row or moves
@@ -111,22 +101,18 @@ component TabBarCell inherits Rectangle {
             spacing: Theme.pad-sm * root.open;
             alignment: center;
 
-            // **Two glyphs rather than one eased brush.** `mix()` takes `color` operands
-            // and both of these are `brush`, and the cell may not `animate` either — so a
-            // blend between them is a stack, and `sel-t` decides how much of the top shows.
+            // **Two glyphs rather than one eased brush.** `mix()` takes `color` operands and
+            // both of these are `brush`, and the cell may not `animate` either, so a blend
+            // between them is a stack with `sel-t` deciding how much of the top shows.
             //
-            // The idle one paints at **full alpha underneath** and the selected one fades
-            // in over it, which is what keeps the ink constant in both directions: two
-            // layers at `t` and `1 - t` composite to three quarters coverage at the
-            // midpoint and the glyph visibly thins. A full bottom also reverses for free —
-            // deselecting simply uncovers it.
+            // The idle one paints at **full alpha underneath** with the selected one fading in
+            // over it: layers at `t` and `1 - t` composite to three quarters coverage at the
+            // midpoint and the glyph visibly thins. A full bottom reverses for free. Both take
+            // the same `filled`, so this crossfades colour only — divergence in anything but
+            // colour is a ghost.
             //
-            // Both take the same `filled`, so this crossfades colour only and the FILL=1
-            // face swap stays the single frame it always was. Divergence between the two
-            // mounts in anything but colour is a ghost, so they are kept identical.
-            //
-            // The wrapper needs its own geometry: `MaterialIcon` binds `width`/`height`, so
-            // a container merges nothing from it and would report 0×0.
+            // The wrapper needs its own geometry: `MaterialIcon` binds `width`/`height`, so a
+            // container merges nothing from it and would report 0×0.
             VerticalLayout {
                 alignment: center;
                 Rectangle {
@@ -163,13 +149,9 @@ component TabBarCell inherits Rectangle {
                 horizontal-stretch: 0;
                 width: root.label-w * root.open;
 
-                // The pair the glyph above is, for the same reasons — idle underneath at
-                // full alpha, selected fading in over it. Everything but the colour is
-                // identical between the two, and has to be: a divergent size or weight
-                // reads as a ghost for the length of the crossing.
-                //
-                // Alpha on the brush throughout, never `opacity` on the element: `opacity`
-                // costs a layer, and there are two per tab now.
+                // The pair the glyph above is, for the same reasons. Alpha on the brush
+                // throughout, never `opacity` on the element — that costs a layer, and there
+                // are two per tab.
                 lbl := Text {
                     text: root.label;
                     color: root.label-color-idle.transparentize(1.0 - root.label-alpha);
@@ -211,35 +193,29 @@ component TabBarCell inherits Rectangle {
     changed is-hovered => { root.hover-changed(root.is-hovered); }
 }
 
-// Material 3 tab bar. Data-agnostic — parallel label/icon arrays in, picked index out,
-// the `ChipGroup` / `Dropdown` / `ColorDotGrid` shape — and it knows nothing about which
-// tabs exist. Two hosts: the Settings page header and the shared mosaic hero band, which
-// Favorites and Recently Played both wear.
+// Material 3 tab bar. Data-agnostic — parallel label/icon arrays in, picked index out, the
+// `ChipGroup` / `Dropdown` / `ColorDotGrid` shape.
 //
-// **`labels` must arrive as an inline `[@tr("…"), …]` literal at the call site.** `@tr`
-// registers msgids at codegen, so an array populated from Rust renders untranslated.
+// **`labels` must arrive as an inline `[@tr("…"), …]` literal at the call site**, `@tr`
+// registering msgids at codegen, so an array populated from Rust renders untranslated.
 //
-// The cells are equal width, sized to the widest tab, as M3's fixed tabs are — and that
-// is what makes the underline pure arithmetic. A `for` loop exposes no per-tab element
-// to read a position off, so a content-sized row would have to snapshot each tab's
-// geometry on selection and go stale the moment anything resized it.
+// The cells are equal width, sized to the widest tab, and that is what makes the underline
+// pure arithmetic: a `for` loop exposes no per-tab element to read a position off, so a
+// content-sized row would snapshot each tab's geometry on selection and go stale on resize.
 export component TabBar inherits Rectangle {
     in property <[string]> labels;
     in property <[string]> icons;
 
-    // **Every brush the bar paints with is an input.** The defaults are the Settings
-    // page's plain case, a bar on `Theme.base`; a bar mounted on a hero blur hands over
-    // `HeroBackdrop` tiers instead, since a `Theme.*` brush answers a question about the
-    // *page* background and under a hero there isn't one. `active-color` drives the
-    // selected label, its FILL=1 icon and the underline together — M3 gives all three
-    // one colour.
+    // **Every brush the bar paints with is an input.** The defaults are the Settings page's
+    // plain case, a bar on `Theme.base`; a bar on a hero blur hands over `HeroBackdrop` tiers
+    // instead, a `Theme.*` brush answering a question about the *page* background and under a
+    // hero there being none. `active-color` drives the selected label, its FILL=1 icon and
+    // the underline together.
     in property <brush> label-color: Theme.text;
     in property <brush> active-color: Theme.accent;
     in property <brush> hover-fill: Theme.surface0;
-    // `surface1` rather than `Theme.border`, because the line has to stay legible *over*
-    // the hover rung and only the surface ladder guarantees that in every theme: all
-    // four Catppuccin flavours set `border` to exactly `surface0`, so the line would
-    // vanish under whichever cell the pointer is on.
+    // `surface1` rather than `Theme.border`: all four Catppuccin flavours set `border` to
+    // exactly `surface0`, so the line would vanish under whichever cell the pointer is on.
     in property <brush> divider-color: Theme.surface1;
     // How much room the host has. Feed it a **mirrored** width, never a live
     // `parent.width` read — see the host's `page-w`.
@@ -247,30 +223,27 @@ export component TabBar inherits Rectangle {
     // Two-way, per the "a component writing its own `in-out` orphans a one-way binding"
     // pitfall.
     in-out property <int> selected-index;
-    // The tab that was active when the pick was made. A cell writes `selected-index`
-    // before it emits `selected` — it has to, that binding being what carries the pick
-    // out — so by the time a host's handler runs, anything derived from `selected-index`
-    // already reads the *new* tab. Publishing the old one here is what lets a host tell
-    // a forward pick from a back one without a mirror of its own and a mount seed.
+    // The tab active when the pick was made. A cell writes `selected-index` before it emits
+    // `selected` — it has to, that binding being what carries the pick out — so a host's
+    // handler already reads the *new* tab. Publishing the old one lets a host tell a forward
+    // pick from a back one without a mirror and a mount seed.
     out property <int> previous-index;
 
     callback selected(int);
 
-    // Which tab the pointer is over, -1 for none, plus its label — enough for the host
-    // to draw the compact-mode tooltip on a layer of its own. **It can't live on the
-    // tab**: it anchors below the bar, the bar sits in the page header, and Slint paints
-    // in declaration order, so anything the header owns is covered by the scroll body.
-    // Equal-width cells are what let the host derive the rect from the index rather than
-    // snapshotting one that goes stale.
+    // Which tab the pointer is over, -1 for none, plus its label — enough for the host to
+    // draw the compact-mode tooltip on a layer of its own. **It can't live on the tab**: the
+    // pill anchors below the bar, and Slint paints in declaration order, so anything the
+    // header owns is covered by the scroll body. Equal-width cells let the host derive the
+    // rect from the index rather than snapshotting one that goes stale.
     out property <int> hovered-idx: -1;
     out property <string> hovered-label:
         root.hovered-idx >= 0 ? root.labels[root.hovered-idx] : "";
 
-    // **Measured, not thresholded against a literal**: the labels are translated, so
-    // the width that matters is the running locale's, not the one someone sized a
-    // constant against. The threshold can't chase the flip either — `natural-tab-w`
-    // comes off an always-expanded column, so it doesn't move when `compact` flips or
-    // while the flip plays out. Holding still under a jittering drag is the latch's job.
+    // **Measured, not thresholded against a literal**: the labels are translated, so the
+    // width that matters is the running locale's. It also can't chase the flip —
+    // `natural-tab-w` comes off an always-expanded column, so it doesn't move when `compact`
+    // flips or while the flip plays out.
     property <length> natural-tab-w: measure.preferred-width;
     // What's left of a cell once its label closes: the glyph in the minimum touch target.
     property <length> compact-tab-w: 48px;
@@ -281,11 +254,10 @@ export component TabBar inherits Rectangle {
     // The width below which the labels no longer fit.
     property <length> expand-w: root.labels.length * root.natural-tab-w;
 
-    // Going compact and coming back out are separated by a band. A slow resize drag
-    // delivers a stream of one-pixel widths and a hand jitters over the last of them, so
-    // a bare comparison flips on every one that straddles the line — invisible while the
-    // flip was instant, a hunt once eased. Only the *latch* is stateful; the threshold
-    // is re-derived each time, so a locale switch still moves it.
+    // Going compact and coming back out are separated by a band: a slow resize drag delivers
+    // a stream of one-pixel widths and a hand jitters over the last of them, so a bare
+    // comparison flips on every one that straddles the line. Only the *latch* is stateful —
+    // the threshold is re-derived each time, so a locale switch still moves it.
     property <length> hysteresis: 24px;
     property <bool> latched: false;
     out property <bool> compact:
@@ -295,47 +267,37 @@ export component TabBar inherits Rectangle {
         root.compact-t = root.compact ? 1.0 : 0.0;
     }
 
-    // **Two sources, and everything geometric derives from them unanimated** — the
-    // cells, the bar's width, the pill, both divider segments, the tooltip rect the host
-    // builds. Easing a *derived* geometry would phase-lag it, and easing `ind-x` or the
-    // pill's width in particular was wrong for a second reason: both read `tab-w`, so
-    // one `animate` there conflated picking a tab with the cells resizing under a
-    // compact flip, and the pill flew in from one side, its two edges travelling
-    // different distances. Split, cell `i`'s left edge is `i * tab-w` and the pill's is
-    // `anim-index * tab-w`, both off the same easing `tab-w`, so the pill sits under its
-    // tab in every frame of the morph instead of chasing a resize that already happened.
+    // **Two sources, and everything geometric derives from them unanimated** — the cells, the
+    // bar's width, the pill, both divider segments, the host's tooltip rect. Easing a
+    // *derived* geometry phase-lags it, and easing `ind-x` or the pill's width conflates
+    // picking a tab with the cells resizing under a compact flip: the pill then flies in from
+    // one side, its two edges travelling different distances. Split, cell `i`'s left edge is
+    // `i * tab-w` and the pill's `anim-index * tab-w`, both off the same easing `tab-w`.
     property <float> anim-index: root.selected-index;
     animate anim-index { duration: Theme.dur-med; easing: ease-in-out; }
 
     // `compact` stays an instant bool — it is the decision; this is that decision
     // rendered over time.
     //
-    // **The binding below is only a seed**; `changed compact` above owns the property
-    // from the first flip on, and that split is why the morph plays at one speed however
-    // slowly the window is dragged. Slint restarts an animated binding whenever a
-    // dependency is marked *dirty* — `mark_dirty` resets the start time and the next
-    // evaluation re-bases the from-value, with no check that the value changed — and
-    // `compact` reads `avail-width`, which a resize drag rewrites on every pointer
-    // motion. Left bound, the curve was torn down every few milliseconds: the bar crawled
-    // toward its target at whatever rate the drag delivered events and stalled when the
-    // hand paused. Throwing the window in one fast motion hid it completely, which is
-    // what made it look like an easing problem.
+    // **The binding below is only a seed**; `changed compact` above owns the property from
+    // the first flip on, which is why the morph plays at one speed however slowly the window
+    // is dragged. Slint restarts an animated binding whenever a dependency is marked *dirty*,
+    // and `compact` reads `avail-width`, which a resize drag rewrites on every pointer motion
+    // — left bound, the curve is torn down every few milliseconds and convergence tracks the
+    // event rate rather than the clock.
     //
-    // Writing routes through `set_animated_value`, which replaces that binding outright,
-    // so afterwards only a real flip touches it; keeping the binding as the seed is what
-    // leaves mount alone, since it is still live for the first evaluation and that lands
-    // in `NotAnimating`. `mini-player-switch.slint`'s `fade-opacity` is the same shape.
+    // Writing routes through `set_animated_value`, replacing the binding outright; keeping it
+    // as the seed is what leaves mount in `NotAnimating`.
+    // `mini-player-switch.slint`'s `fade-opacity` is the same shape.
     property <float> compact-t: root.compact ? 1.0 : 0.0;
-    // M3's emphasized-decelerate, inlined rather than taking `Theme.dur-spatial`: this
-    // fires under the user's hand on a resize drag, where the spatial token's longer
-    // tail reads as the bar lagging the window rather than as a gesture. Both y control
-    // points sit inside [0, 1], so `compact-t` can't overshoot and no derived width goes
-    // negative — a back-out curve here would need clamping.
+    // M3's emphasized-decelerate, inlined rather than taking `Theme.dur-spatial`: this fires
+    // under the user's hand on a resize drag, where the spatial token's longer tail reads as
+    // the bar lagging the window. Both y control points sit inside [0, 1], so `compact-t`
+    // can't overshoot and no derived width goes negative.
     //
-    // Gated on `eased`, because the first resolution isn't a change: it is the bar
-    // learning how much room it has. The host seeds `avail-width` at its header row's
-    // floor, so every mount settles compact and a roomy panel corrects to expanded a
-    // frame later — easing *that* plays an unasked-for morph on every entry.
+    // Gated on `eased`, the first resolution not being a change but the bar learning how much
+    // room it has: the host seeds `avail-width` at its header row's floor, so every mount
+    // settles compact and a roomy panel corrects a frame later.
     animate compact-t {
         duration: root.eased ? 350ms : 0ms;
         easing: cubic-bezier(0.2, 0, 0, 1);
@@ -357,43 +319,35 @@ export component TabBar inherits Rectangle {
         root.natural-tab-w + (root.compact-tab-w - root.natural-tab-w) * root.compact-t;
     property <length> ind-x: root.tab-w * root.anim-index;
 
-    // Rectangular and only rectangular — this root carries no border and no radius, so
-    // it lowers to a scissor rather than the offscreen layer a *rounded* clip over text
-    // would cost, which is why the cells clip their label slots the same way.
+    // Rectangular and only rectangular — no border, no radius, so it lowers to a scissor
+    // rather than the offscreen layer a *rounded* clip over text would cost.
     //
     // What it contains is the shrink leg of the morph: `compact` flips the instant the
-    // threshold is crossed but `tab-w` takes the full duration to follow, so for that
-    // window `preferred-width` is still a row of natural cells against a header that can
-    // no longer seat them. The layout squeezes the bar toward its `min-width` floor and
-    // the cells, incompressible with their bound widths, draw past the right edge and
-    // under the search input — the spill the host's `page-w` seed prevents from the
-    // other direction.
+    // threshold is crossed but `tab-w` takes the full duration to follow, so for that window
+    // `preferred-width` is a row of natural cells against a header that can no longer seat
+    // them, and the incompressible cells draw past the right edge under the search input.
     clip: true;
     height: 48px;
     horizontal-stretch: 0;
 
-    // **Three constraints rather than one bound `width`**, so the floor stays at the
-    // compact width even while the bar draws expanded. Slint reports a component root's
-    // bound `width` as both `min` and `max` — and rejects a `min-width` beside it — so a
-    // bound `width` puts the bar's minimum on `tab-w`, and that minimum climbs the header
-    // row into the page and out to the window, easing the *window's* own minimum along
-    // with the morph. Dragging the edge inward then chases a wall that is still moving,
-    // which stutters. Worse, the bar was routinely the constraint stopping the window
-    // from reaching the very width its own threshold waited for, so whether the flip
-    // tripped came down to whether the title and search row happened to be wider.
+    // **Three constraints rather than one bound `width`**, so the floor stays at the compact
+    // width while the bar draws expanded. Slint reports a component root's bound `width` as
+    // both `min` and `max` — and rejects a `min-width` beside it — so a bound `width` puts
+    // the bar's minimum on `tab-w`, and that climbs the header row out to the window, easing
+    // the *window's* own minimum along with the morph: dragging inward then chases a moving
+    // wall, and the bar becomes the constraint stopping the window reaching the width its own
+    // threshold waits for.
     //
-    // `preferred` still tracks the animated cells, so a centring host draws the bar
-    // exactly as a bound `width` did, and `max` keeps the half of that which mattered:
-    // the bar still can't stretch.
+    // `preferred` still tracks the animated cells, so a centring host draws the bar exactly as
+    // a bound `width` did, and `max` keeps the half that mattered — the bar can't stretch.
     min-width: root.compact-w;
     preferred-width: root.labels.length * root.tab-w;
     max-width: root.labels.length * root.tab-w;
 
-    // The ruler: **real `TabBarCell`s**, not a stripped-down copy, so the shape measured
-    // and the shape drawn can't drift. `visible: false` lowers to a 0×0 clip around the
-    // column — nothing paints, the hidden TouchAreas are unreachable, and the layout
-    // info the whole thing exists for is still computed. Palette left at the defaults,
-    // since no brush moves a width.
+    // The ruler: **real `TabBarCell`s**, not a stripped-down copy, so measured and drawn
+    // shapes can't drift. `visible: false` lowers to a 0×0 clip — nothing paints, the hidden
+    // TouchAreas are unreachable, and the layout info it exists for is still computed.
+    // Palette left at the defaults, no brush moving a width.
     measure := VerticalLayout {
         visible: false;
         for tab-label[i] in root.labels: TabBarCell {

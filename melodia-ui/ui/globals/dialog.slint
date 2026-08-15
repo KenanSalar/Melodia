@@ -5,21 +5,17 @@ import { Playlists, PlaylistDetail } from "playlists.slint";
 import { Queue } from "queue.slint";
 import { WindowChrome } from "shell.slint";
 
-// One root-level overlay serving both info ("OK"-only) and confirmation modals.
+// One root-level overlay serving both info ("OK"-only) and confirmation modals. A caller sets
+// the chrome plus a routing payload — `kind` and `target-id` — and flips `open`; the default
+// `accepted` handler reads `kind` and forwards, so no boxed closure is retained on the Rust
+// side between open and confirm. An empty `cancel-label` is info-only mode, the button
+// dropping out of the layout tree so the primary stays flush right.
 //
-// A caller sets the chrome plus a routing payload — `kind` and `target-id` — and flips
-// `open`; the default `accepted` handler below reads `kind` and forwards to the
-// matching action. That keeps the whole confirmation flow declarative, with no boxed
-// closure retained on the Rust side between open and confirm. Leaving `cancel-label`
-// empty is the info-only mode: the Cancel button drops out of the layout tree entirely
-// so the primary button stays flush right.
-//
-// The overlay is always rendered rather than gated on `open`, so the close animation
-// can play after `open` flips back. One `t: float` drives the backdrop alpha and the
-// card derives a faster `card-t` off it, so its small-area fade keeps perceptual pace
-// with the backdrop's large-area dim — plain derivations, not a second `animate`, which
-// would phase-lag. For input safety the backdrop TouchArea is `enabled: Dialog.open` and
-// the card is `visible: t > 0.01`, so no stale click reaches a button mid-fade.
+// Always rendered rather than gated on `open`, so the close animation can play after `open`
+// flips back. One `t: float` drives the backdrop alpha and the card derives a faster `card-t`
+// off it — a plain derivation, not a second `animate`, which would phase-lag. The backdrop
+// TouchArea is `enabled: Dialog.open` and the card `visible: t > 0.01`, so no stale click
+// reaches a button mid-fade.
 export global Dialog {
     in-out property <bool> open;
     in-out property <string> title;
@@ -54,11 +50,9 @@ export global Dialog {
     // `PlaylistDetail.cover` when that view is open, else a sync grid-tier lookup.
     in-out property <image> current-artwork;
 
-    // Whether the user has touched the picker at all — set by any candidate toggle and
-    // by Clear. The preview reads it to switch from "saved artwork" to "what Apply
-    // would save", and the dispatcher uses it as a guard: an empty selection that was
-    // never touched is a no-op, so opening the dialog and confirming can't silently
-    // wipe a playlist's artwork.
+    // Set by any candidate toggle and by Clear. The preview reads it to switch from "saved
+    // artwork" to "what Apply would save", and the dispatcher guards on it: an untouched empty
+    // selection is a no-op, so opening and confirming can't silently wipe saved artwork.
     in-out property <bool> mosaic-touched;
 
     // Stashed when the user picks "New Playlist…" from a row's Add-to-Playlist submenu,
@@ -66,10 +60,9 @@ export global Dialog {
     // The `add-to-playlist` picker reuses it as the canonical list being added.
     in-out property <[int]> pending-track-ids;
 
-    // The Add-to-Playlist picker's rows, populated by Rust *before* `open` flips, so
-    // the dialog opens already filled. Rust also maintains the count on every toggle,
-    // counting only enabled rows, so the footer button can disable itself without
-    // iterating the model in Slint. All three are cleared in the teardown.
+    // Populated by Rust *before* `open` flips, so the dialog opens already filled. Rust also
+    // maintains the count over enabled rows only, so the footer button can disable itself
+    // without iterating the model in Slint. All three are cleared in the teardown.
     in-out property <[PlaylistPickRow]> playlist-pick-rows;
     in-out property <bool> add-select-all: false;
     in-out property <int> add-selected-count: 0;
@@ -87,15 +80,13 @@ export global Dialog {
     callback accepted();
     callback cancelled();
 
-    // The dispatcher lives on the global because Slint rejects
-    // `Dialog.accepted => { … }` at component scope but accepts a default body here —
-    // which gives exactly one of it, in one place. A new confirm flow is one `else if`
-    // plus a populate block in the calling view; no Rust, no retained closure.
+    // On the global because Slint rejects `Dialog.accepted => { … }` at component scope but
+    // accepts a default body here, giving exactly one of it. A new confirm flow is one
+    // `else if` plus a populate block in the calling view; no Rust, no retained closure.
     //
-    // **Never clear state in these handlers.** Clearing `kind` here unmounts whichever
-    // body branch is gated on it — the text-input form, the mosaic picker — before the
-    // card's close animation plays, giving a frame of empty card still fading out.
-    // Teardown belongs in `closed-teardown` below, which fires once the fade completes.
+    // **Never clear state in these handlers** — clearing `kind` unmounts whichever body branch
+    // is gated on it before the close animation plays, leaving an empty card fading out.
+    // Teardown belongs in `closed-teardown` below.
     accepted => {
         if (root.kind == "remove-folder") {
             LibrarySettings.remove-folder(root.target-id);
@@ -166,21 +157,17 @@ export global Dialog {
     }
     cancelled => { }
 
-    // Fired by `DialogOverlay` once the close animation reaches t ≈ 0. It has exactly
-    // **one** handler, registered in Rust, which tears down in two halves: this global's
-    // `closed-teardown()` for every scalar and list, and the `image`-typed
-    // `current-artwork` from Rust — that one has no Slint default literal, and resetting
-    // it is what releases the `SharedPixelBuffer` Arc taken at open.
+    // Fired by `DialogOverlay` once the close animation reaches t ≈ 0, with exactly **one**
+    // handler registered in Rust. It tears down in two halves: this global's
+    // `closed-teardown()` for every scalar and list, and the `image`-typed `current-artwork`
+    // from Rust, which has no Slint default literal and pins a `SharedPixelBuffer` Arc.
     //
     // **The teardown is a `public function`, not a second callback**, and that is
-    // load-bearing. A callback has one handler slot, so a default `closed => { … }` body
-    // here is installed during `InnerDialog::new()` and then silently replaced by the
-    // Rust `on_closed` — dead code, leaving `kind` and the picker models uncleared and
-    // every row's cover Arc pinned for the life of the process. A `public function` has
-    // no slot to clobber.
+    // load-bearing: a callback has one handler slot, so a default `closed => { … }` body here
+    // is installed at construction and then silently replaced by the Rust `on_closed`.
     //
-    // Don't re-register `closed` from inside its own handler: `Callback::call` `take()`s
-    // the handler for the duration and asserts. Invoking a *different* item is safe.
+    // Don't re-register `closed` from inside its own handler — `Callback::call` `take()`s the
+    // handler for the duration and asserts. Invoking a *different* item is safe.
     callback closed();
 
     public function closed-teardown() {
@@ -195,9 +182,9 @@ export global Dialog {
         root.mosaic-candidates = [];
         root.mosaic-touched = false;
         root.pending-track-ids = [];
-        // Add-to-Playlist picker. Clearing the rows unmounts the picker's `for` loop,
-        // which drops every row's cover binding and with it the row-tier LRU's
-        // `SharedPixelBuffer` Arcs — paired with the Rust-side `heap_trim::trim()`.
+        // Clearing the rows unmounts the picker's `for` loop, dropping every row's cover
+        // binding and with it the row-tier LRU's `SharedPixelBuffer` Arcs — paired with the
+        // Rust-side `heap_trim::trim()`.
         root.playlist-pick-rows = [];
         root.add-select-all = false;
         root.add-selected-count = 0;
@@ -206,10 +193,9 @@ export global Dialog {
         root.export-pick-rows = [];
         root.export-select-all = false;
         root.export-selected-count = 0;
-        // Clearing the chrome lets the conditional message Text and Cancel button
-        // unmount between uses instead of sitting mounted with stale strings inside an
-        // invisible card. `confirm-label` is **restored** to `"OK"` rather than cleared,
-        // so a caller that flips `open` without setting it still gets a labelled button.
+        // Lets the conditional message Text and Cancel button unmount between uses rather than
+        // sitting mounted with stale strings. `confirm-label` is **restored** to `"OK"` rather
+        // than cleared, so a caller that flips `open` without setting it still gets a label.
         root.title = "";
         root.message = "";
         root.confirm-label = "OK";
@@ -217,37 +203,22 @@ export global Dialog {
         root.destructive = false;
     }
 
-    // --- Openers -----------------------------------------------------------------
-    //
-    // The symmetric half of the `accepted` dispatcher above: that one owns where a
-    // confirmed dialog *goes*, these own what it *says*. Both live here for the same
-    // reason — one copy, in one place — and they are `public function`s rather than
-    // callbacks for the `closed-teardown()` reason, a callback's single handler slot
-    // being clobberable by any Rust `on_*` registration.
-    //
-    // They take their payload as parameters, so this file still imports no sibling
-    // global on their account and the globals DAG stays as shallow as it was.
+    // Openers — the symmetric half of the `accepted` dispatcher: that owns where a confirmed
+    // dialog *goes*, these own what it *says*. `public function`s rather than callbacks for
+    // the `closed-teardown()` reason, and they take their payload as parameters, so this file
+    // imports no sibling global on their account.
     //
     // **Only the kinds opened from more than one place are here.** The two
-    // `smart-playlist-editor` sites read alike and are deliberately left alone: one is
-    // Edit Rules / Save over an existing list, the other New Smart Playlist / Create,
-    // so they share a `kind` and nothing else. A kind with one caller earns nothing by
-    // moving — the populate block is already stated once, where it is used.
-    //
+    // `smart-playlist-editor` sites share a `kind` and nothing else, and a kind with one
+    // caller earns nothing by moving.
     // `ui::playlists::tests::every_multi_caller_playlist_dialog_opens_through_its_own_function`
-    // holds the three folded kinds to this file. It walks the tree rather than naming the
-    // six call sites, because what it guards against is the *seventh* — and because the
-    // failure it guards against is silent: a re-spelled populate block opens the right
-    // dialog and is simply free to drift on the title, which is exactly what Ctrl+N did.
+    // walks the tree rather than naming the six call sites, what it guards against being the
+    // *seventh* — a re-spelled populate block opens the right dialog and is free to drift on
+    // the title.
 
     // Three call sites: the Playlists tab's New pill, Ctrl+N, and a track row's
-    // Add-to-Playlist → "New Playlist…". The last passes the ids it wants added the
-    // moment the row exists; the other two pass `[]`, which is a plain Create.
-    //
-    // The title used to be spelled at each of them, and the shortcut's copy had drifted
-    // to `@tr("Create Playlist")` under a comment claiming it matched the other two —
-    // one dialog, two headings, and two msgids translated separately in all six
-    // catalogues. That is the class of bug a shared opener makes unspellable.
+    // Add-to-Playlist → "New Playlist…". The last passes the ids to add once the row exists;
+    // the other two pass `[]`.
     public function open-create-playlist(track-ids: [int]) {
         root.title = @tr("New Playlist");
         root.message = "";
@@ -262,9 +233,8 @@ export global Dialog {
         root.open = true;
     }
 
-    // Two call sites — the Playlists grid card's overflow and the open playlist's own
-    // pill row — differing only in where they read the current name and description
-    // from, which is what the parameters carry.
+    // Two call sites — the Playlists grid card's overflow and the open playlist's pill row —
+    // differing only in where they read the current name and description from.
     public function open-rename-playlist(id: int, name: string, description: string) {
         root.title = @tr("Rename Playlist");
         root.message = "";
@@ -278,9 +248,7 @@ export global Dialog {
         root.open = true;
     }
 
-    // Same two call sites as the rename above, and these two were already byte-identical
-    // — including both `@tr` literals, which is two msgids' worth of copy to keep in
-    // step by hand.
+    // Same two call sites as the rename above.
     public function open-delete-playlist(id: int) {
         root.title = @tr("Delete playlist?");
         root.message = @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");

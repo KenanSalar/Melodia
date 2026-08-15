@@ -1,30 +1,20 @@
 import { Tooltip, TooltipSide } from "tooltip.slint";
 
 // The top-layer mount shape for a tooltip whose host is somewhere Slint paints *later*.
+// `Tooltip` normally sits inside the element it annotates, but paint order is declaration
+// order, so a pill anchored on a band lands in the page's scroll body and the first row
+// covers it. The fix is a frame declared at the end of the page tracking the host's rect.
 //
-// `Tooltip` normally sits inside the element it annotates, which works wherever nothing
-// clips or overpaints that element. A band does neither of those things to itself — it is
-// the *page* that paints its scroll body afterwards, and paint order is declaration order,
-// so a below-anchored pill anchored on the band lands in the body's band and the first row
-// or card covers it. The fix is to declare a frame at the end of the page tracking the
-// host's rect, and put the pill in that; six frames across five pages had spelled it out,
-// identically.
+// **The host publishes the rect, this places it** — a component's ids aren't readable from
+// outside it, so a band hands over `tip-*`, derived from the hovered *index* rather than
+// snapshotted. The two `absolute-position` deltas stay at the call site, being the page's own
+// geometry and `parent` not being reachable from a component's root binding.
 //
-// **The host publishes the rect, this places it.** A component's ids aren't readable from
-// outside it, so a band hands over `tip-x` / `tip-y` / `tip-w` / `tip-h` / `tip-label` /
-// `tip-visible` — derived from the hovered *index* rather than snapshotted, so a tab moving
-// under a parked pointer keeps its anchor — and the page passes them through here. The two
-// `absolute-position` deltas stay at the call site: they are the page's own geometry, and
-// `parent` is not reachable from a component's root binding.
-//
-// A plain `Rectangle`, so it captures no input and the host underneath keeps its hover.
+// A plain `Rectangle`, so it captures no input and the host keeps its hover.
 //
 // **Not every top-layer tooltip belongs here.** `app-window.slint`'s `sidebar-tip` is the
-// deliberate exception: its `x` comes off the live rail width so the frame rides the
-// collapse animation, it owns a `held` latch across the gaps between rail rows, and it is
-// the only *frame* passing `gap` — the two volume readouts pass one too, but they anchor
-// to a point rather than to a box and are not frames at all. All three are real behaviour
-// rather than boilerplate, and none of the six that route through here has any of them.
+// deliberate exception: its `x` rides the live rail width, it owns a `held` latch across the
+// gaps between rail rows, and it is the only *frame* passing `gap`.
 export component TooltipFrame inherits Rectangle {
     in property <string> label;
     in property <bool> shown;

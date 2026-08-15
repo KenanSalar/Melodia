@@ -28,8 +28,7 @@ export global Playlists {
 
     // Fired by the `Dialog.accepted` dispatcher on confirm. **The dialogs themselves are
     // populated inline in Slint markup**, not through Rust callbacks: a synchronous
-    // Rust-side `set_open(true)` inside a click handler trips Slint's property-recursion
-    // guard.
+    // `set_open(true)` inside a click handler trips Slint's property-recursion guard.
     callback create-playlist(
         string /*name*/,
         string /*description (empty ⇒ no description)*/,
@@ -42,15 +41,13 @@ export global Playlists {
     );
     callback delete-playlist(int /*id*/);
 
-    // 1–4 paths drawn from the playlist's own tracks; Rust composes the collage and
-    // persists it. An empty selection clears the custom thumbnail and reverts to the
-    // auto first-track behaviour.
+    // 1–4 paths from the playlist's own tracks; Rust composes the collage and persists it. An
+    // empty selection clears the custom thumbnail and reverts to auto first-track.
     callback apply-mosaic(int /*id*/, [string] /*paths*/);
     callback clear-artwork(int /*id*/);
 
-    // Rust mutates the model through `set_row_data`, Slint having no ergonomic
-    // push/remove. `toggle-add-pick` no-ops on a fully-contained row; `set-all` flips
-    // only the enabled ones.
+    // Rust mutates the model through `set_row_data`, Slint having no ergonomic push/remove.
+    // `toggle-add-pick` no-ops on a fully-contained row; `set-all` flips only enabled ones.
     callback toggle-add-pick(int /*playlist_id*/);
     callback set-all-add-picks(bool /*selected*/);
 
@@ -61,35 +58,33 @@ export global Playlists {
     // silently no-ops past it.
     callback toggle-mosaic-candidate(string /*artwork_path*/);
 
-    // For the grid card's hover-revealed Rename overlay, which carries only the id —
-    // `PlaylistGridRow` has no description. Resolved from the cached `PlaylistStats`
-    // with no DB hop, so it's safe to call straight from a click handler.
+    // For the grid card's Rename overlay, which carries only the id — `PlaylistGridRow` has no
+    // description. Resolved from the cached `PlaylistStats` with no DB hop, so it is safe to
+    // call straight from a click handler.
     pure callback row-name(int /*playlist_id*/) -> string;
     pure callback row-description(int /*playlist_id*/) -> string;
 
-    // `PlaylistDetail.request-edit-artwork` against an explicit id rather than the open
-    // detail, for the grid card's overlay — the detail isn't necessarily open, so
-    // `PlaylistDetail.cover` would be stale or empty and Rust seeds the preview inline.
+    // `PlaylistDetail.request-edit-artwork` against an explicit id, for the grid card's
+    // overlay: the detail isn't necessarily open, so `PlaylistDetail.cover` would be stale.
     callback request-edit-artwork-for(int /*playlist_id*/);
 
-    // Rust runs the playlist list and the per-playlist overlap counts in parallel, fills
-    // the rows, and only then flips `Dialog.open` — so the dialog appears already
-    // populated. `exclude-playlist-id >= 0` filters that one out, which is how Playlist
-    // Detail avoids offering the open playlist as a target; -1 shows all.
+    // Rust runs the list and the per-playlist overlap counts in parallel, fills the rows, and
+    // only then flips `Dialog.open`, so it appears already populated. `exclude-playlist-id
+    // >= 0` filters that one out, so Playlist Detail can't offer the open playlist; -1 shows
+    // all.
     callback request-add-to-playlist(
         [int] /*track_ids*/,
         int /*exclude_playlist_id*/,
     );
 
-    // M3U8 import / export, two of the Playlists tab's four action pills. Both are pure Rust
-    // flows over native dialogs, so unlike create/rename they never write `Dialog.*`
-    // synchronously from a click handler and don't risk the recursion guard.
+    // M3U8 import / export. Both are pure Rust flows over native dialogs, so unlike
+    // create/rename they never write `Dialog.*` synchronously from a click handler.
 
     // Picks files, imports each into a new playlist, toasts a summary.
     callback import-playlists();
 
-    // The same populate-then-open shape as `request-add-to-playlist`, with every row
-    // starting unticked — exporting is opt-in.
+    // The `request-add-to-playlist` populate-then-open shape, every row starting unticked —
+    // exporting is opt-in.
     callback request-export-playlists();
 
     // Rust reads the ticked rows, opens a folder picker, writes one file per playlist.
@@ -101,31 +96,28 @@ export global Playlists {
 }
 
 // The full Playlist Detail view: `playlist-id == -1` shows the grid, `>= 0` swaps in the
-// detail, the `Nav.now-playing-open` shape. Rust owns `tracks`; `playlist` is the header
-// data.
+// detail, the `Nav.now-playing-open` shape. Rust owns `tracks`; `playlist` is the header data.
 //
-// The table is the shared `TrackList`, so the column / sort / selection shape mirrors
-// the `Tracks` / `Browse` / `AlbumDetail` globals, under its own persistence key.
-// **Drag-to-reorder is gated to an ascending `"position"` sort** — the persisted
-// insertion order — since reordering a list sorted by something else means nothing.
-// No header cell asks for that field, so the third click on a column is what hands it
-// back (`ui::callbacks::next_sort_with_natural`); without one, a single click on Title
-// used to retire reordering for the whole install.
+// The table is the shared `TrackList`, so the column / sort / selection shape mirrors the
+// `Tracks` / `Browse` / `AlbumDetail` globals under its own persistence key.
+// **Drag-to-reorder is gated to an ascending `"position"` sort** — reordering a list sorted by
+// something else means nothing. No header cell asks for that field, so the third click on a
+// column hands it back (`ui::callbacks::next_sort_with_natural`); without one, a single click
+// on Title retires reordering for the whole install.
 //
-// `drag-source` / `drop-slot` mirror `Queue`'s reorder state, and the state itself lives
-// on `DraggableTrackList`, which this view two-way binds into them. Rust never writes
-// them mid-drag — the indicator and the source dim are pure Slint feedback — it only
-// clears them when it rebuilds `tracks` out from under an in-flight drag. The view
-// clears them on its own `init` too, since they outlive it and a nav-away mid-drag
-// leaves them set.
+// `drag-source` / `drop-slot` mirror `Queue`'s reorder state, which lives on
+// `DraggableTrackList` and is two-way bound here. Rust never writes them mid-drag — the
+// indicator and source dim are pure Slint feedback — only clearing them when it rebuilds
+// `tracks` under an in-flight drag. The view clears them on its own `init` too, they outlive
+// it and a nav-away mid-drag leaves them set.
 export global PlaylistDetail {
     in-out property <int> playlist-id: -1;
     in-out property <PlaylistRow> playlist;
     in-out property <[TrackListRow]> tracks;
 
     // What the band's search box means while this detail is open; drag-reorder is disabled
-    // while one is active. Cleared on a fresh open, but preserved across library-changed
-    // refreshes so a typed needle survives a scan finishing.
+    // while one is active. Cleared on a fresh open, preserved across library-changed refreshes
+    // so a typed needle survives a scan finishing.
     in-out property <string> filter;
 
     // Per-column widths, edited by the resize handles.
@@ -188,10 +180,9 @@ export global PlaylistDetail {
     // is still `"position"`, ascending.
     callback reorder(int /*from*/, int /*to*/);
 
-    // The one action needing a Rust hop before its dialog mounts: the mosaic picker has
-    // to query the playlist's track artworks first. The handler writes `Dialog` through
-    // `upgrade_in_event_loop`, which lands on a fresh tick and so dodges the recursion
-    // guard. Rename and Delete populate the dialog inline and need no callback.
+    // The one action needing a Rust hop before its dialog mounts, the mosaic picker having to
+    // query the playlist's track artworks first. The handler writes `Dialog` through
+    // `upgrade_in_event_loop`, landing on a fresh tick and so dodging the recursion guard.
     callback request-edit-artwork();
 
     // The band's pill row reads `selected-ids`; the row context menu passes either the
