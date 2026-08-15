@@ -1,14 +1,11 @@
-#![allow(
-    unsafe_code,
-    reason = "env::set_var is unsafe in Rust 2024; an integration test is its own binary with its own environment, and this file holds one test that sets XDG_DATA_HOME before anything spawns — so it needs no lock, unlike the unit tests behind `test_support::with_env_vars`."
-)]
-
 //! End-to-end smoke test: boot the full backend in a tempdir, ingest a
 //! fixture audio file via the library API, and assert the row lands in the DB.
 //!
 //! Notes:
-//! - Uses `XDG_DATA_HOME` to redirect `dirs::data_dir()` so the prod path code
-//!   is exercised verbatim.
+//! - Roots `Paths` in the tempdir through `Paths::rooted_at`. Redirecting
+//!   `dirs::data_dir()` with `XDG_DATA_HOME` would cover the one `join` that
+//!   `resolve` adds on top, at the price of a process-global mutation this
+//!   binary would need `unsafe` for.
 //! - `AppState::init` opens the default audio device (rodio); machines without
 //!   audio will fail here. CI points ALSA's default PCM at the userspace `null`
 //!   device (see the `test` job in `.github/workflows/pr-validation.yml`), so
@@ -25,12 +22,8 @@ use melodia::state::AppState;
 async fn headless_scan_persists_track() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
 
-    // Redirect dirs::data_dir() into our tempdir for the duration of this test.
-    // SAFETY: tests in this file are single-instance because the env mutation is
-    // per-process; no other test modifies XDG_DATA_HOME concurrently.
-    unsafe { std::env::set_var("XDG_DATA_HOME", tmp.path()) };
-
-    let paths = Paths::resolve()?;
+    let paths = Paths::rooted_at(tmp.path().join("Melodia"));
+    paths.create_dirs()?;
     let runtime = tokio::runtime::Handle::current();
     let (state, _channels) = AppState::init(paths, runtime).await?;
 

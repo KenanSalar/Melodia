@@ -780,18 +780,13 @@ fn detect_system_locale_raw() -> Option<String> {
 #[cfg(target_os = "windows")]
 #[allow(
     unsafe_code,
-    reason = "FFI declaration + call for GetUserDefaultLocaleName; writes into a stack-sized [u16] buffer, length-bounded by GetUserDefaultLocaleName's i32 return"
+    reason = "FFI call to GetUserDefaultLocaleName; writes into a stack-sized [u16] buffer, length-bounded by its i32 return"
 )]
 fn detect_windows_locale() -> Option<String> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
-    // SAFETY: the declaration must match kernel32's export, which the Win32 docs
-    // give as `int GetUserDefaultLocaleName(LPWSTR, int)` — a mismatch here is UB
-    // the compiler would agree with.
-    unsafe extern "system" {
-        fn GetUserDefaultLocaleName(lpLocaleName: *mut u16, cchLocaleName: i32) -> i32;
-    }
+    use windows_sys::Win32::Globalization::GetUserDefaultLocaleName;
 
     // Buffer is `[u16; 85]` — `i32::try_from(85)` is infallible; the
     // `unwrap_or` keeps the call lint-clean without an `unwrap()`.

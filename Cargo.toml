@@ -285,7 +285,10 @@ libc = "0.2.189"
 # `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, the
 # fallback for when `Melodia.exe.old` is still loaded (a second window open at
 # quit). `main()`'s early `remove_file` clears the stale rename otherwise.
-windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem", "Win32_Graphics_Dwm", "Win32_Foundation"] }
+# `Win32_Globalization` covers `GetUserDefaultLocaleName`: the declaration is the
+# half of an FFI site nothing checks, so it comes from here rather than a
+# hand-rolled `extern` block whose signature only review can keep true.
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem", "Win32_Graphics_Dwm", "Win32_Foundation", "Win32_Globalization"] }
 
 # `std::fs::canonicalize` returns the extended-length form (`\\?\C:\...`) on
 # Windows, which lands in `folders.path` / `tracks.file_path` and then fails to
