@@ -209,9 +209,14 @@ fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
 }
 
 /// How many hue-separated seeds a backdrop asks the quantizer for — one per aurora wash, so
-/// `ui::aurora` has to agree. Three because `Score` typically still holds 60–90° of separation
-/// there, where six forces it toward its 15° floor and hands back near-duplicates.
-pub(crate) const SEED_COUNT: usize = 3;
+/// `ui::aurora` has to agree.
+///
+/// Four is where `Score` still answers with colours worth telling apart. It walks its required
+/// separation down from 90° until it can supply this many, so the ask sets how close the set is
+/// allowed to get: measured across three covers, four keeps the nearest pair 25–44° apart where
+/// five drops it to 19–31° and six is forced toward the 15° floor, returning near-duplicates by
+/// construction.
+pub(crate) const SEED_COUNT: usize = 4;
 
 /// Everything a solve needs off a decoded cover. All are `None` when there is none — no artwork,
 /// or a failed decode — and the publisher falls back to the live `Theme.accent` and

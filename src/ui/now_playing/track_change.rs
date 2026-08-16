@@ -171,10 +171,11 @@ pub(super) async fn apply_track_change(
 
     // Weight rides in the alpha channel, which the Slint side's falloff *multiplies* — so how
     // strongly a wash is laid on stays independent of the shape it is laid on with.
-    let [tint_1, tint_2, tint_3] = aurora::tints(sample.seeds, sample.chroma, theme_accent);
+    let [tint_1, tint_2, tint_3, tint_4] = aurora::tints(sample.seeds, sample.chroma, theme_accent);
     player.set_np_tint_1(color_with_alpha(tint_1.rgb, tint_1.weight));
     player.set_np_tint_2(color_with_alpha(tint_2.rgb, tint_2.weight));
     player.set_np_tint_3(color_with_alpha(tint_3.rgb, tint_3.weight));
+    player.set_np_tint_4(color_with_alpha(tint_4.rgb, tint_4.weight));
 
     write_crossfade_slot(
         blurred,

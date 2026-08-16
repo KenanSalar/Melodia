@@ -9,15 +9,19 @@ use crate::ui::backdrop::SEED_COUNT;
 /// The default accent, standing in for "no artwork" wherever a fallback is exercised.
 const THEME_ACCENT: u32 = 0x00cb_a6f7;
 
-/// A cover whose quantize separated three hues.
-const THREE_HUES: [Option<u32>; SEED_COUNT] =
-    [Some(0x00c0_3030), Some(0x0030_c030), Some(0x0030_30c0)];
+/// A cover whose quantize separated a full set of hues — the real seeds off `Real for Me`.
+const MANY_HUES: [Option<u32>; SEED_COUNT] = [
+    Some(0x0038_718b),
+    Some(0x00cc_2841),
+    Some(0x0030_3446),
+    Some(0x007d_5c79),
+];
 
 /// Mean chroma of a cover with real colour in it — measured, two ordinary sleeves sit at 22–24.
 const COLOURFUL: f64 = 22.0;
 
-/// A monochrome sleeve: one seed, two tints owed to the filling rule.
-const ONE_HUE: [Option<u32>; SEED_COUNT] = [Some(0x00c0_3030), None, None];
+/// A monochrome sleeve: one seed, the rest owed to the filling rule.
+const ONE_HUE: [Option<u32>; SEED_COUNT] = [Some(0x00c0_3030), None, None, None];
 
 fn hct_of(rgb: u32) -> Hct {
     Hct::new(Argb::from_u32(rgb))
@@ -90,7 +94,7 @@ fn a_monochrome_sleeve_seeds_from_its_own_grey() {
 /// produced.
 #[test]
 fn every_tint_lands_on_one_tone() {
-    for seeds in [THREE_HUES, ONE_HUE, [None; SEED_COUNT]] {
+    for seeds in [MANY_HUES, ONE_HUE, [None; SEED_COUNT]] {
         for tint in tints(seeds, COLOURFUL, THEME_ACCENT) {
             let tone = hct_of(tint.rgb).get_tone();
             assert!(
@@ -109,7 +113,12 @@ fn every_tint_lands_on_one_tone() {
 #[test]
 fn a_washed_out_seed_is_lifted_to_carry_colour() {
     // Tone 96 and tone 3: the shapes `Score` actually returns beside a vivid dominant.
-    let washed_out = [Some(0x00c0_3030), Some(0x00f2_efee), Some(0x0005_0408)];
+    let washed_out = [
+        Some(0x00c0_3030),
+        Some(0x00f2_efee),
+        Some(0x0005_0408),
+        Some(0x00ee_ecef),
+    ];
 
     for tint in tints(washed_out, COLOURFUL, THEME_ACCENT) {
         let chroma = hct_of(tint.rgb).get_chroma();
@@ -119,16 +128,17 @@ fn a_washed_out_seed_is_lifted_to_carry_colour() {
 
 /// The rule that keeps a monochrome record looking monochrome: a rotated hue is a guess, and on a
 /// low-chroma sleeve it survives gamut mapping as almost nothing, so washing it on at full
-/// strength would stack three near-identical ramps into a lightness gradient the record never had.
+/// strength would stack near-identical ramps into a lightness gradient the record never had.
 #[test]
 fn a_synthesized_tint_is_washed_on_more_faintly_than_a_real_one() {
-    let real = tints(THREE_HUES, COLOURFUL, THEME_ACCENT);
+    let real = tints(MANY_HUES, COLOURFUL, THEME_ACCENT);
     assert!(real.iter().all(|t| t.weight >= 1.0), "a separated cover washes every tint in full");
 
-    let [first, second, third] = tints(ONE_HUE, COLOURFUL, THEME_ACCENT);
-    assert!(first.weight >= 1.0, "the seed the artwork gave is not a guess");
-    assert!(second.weight < first.weight, "the fills must not match the seed's weight");
-    assert!(third.weight < first.weight, "the fills must not match the seed's weight");
+    let [seeded, fills @ ..] = tints(ONE_HUE, COLOURFUL, THEME_ACCENT);
+    assert!(seeded.weight >= 1.0, "the seed the artwork gave is not a guess");
+    for fill in fills {
+        assert!(fill.weight < seeded.weight, "a fill matched the seed's weight");
+    }
 }
 
 /// `Score` returns fewer than asked rather than reaching for near-duplicates, and never pads. A
@@ -141,31 +151,34 @@ fn a_short_list_is_filled_from_its_own_hue_and_not_the_theme() {
     for tint in tints(ONE_HUE, COLOURFUL, THEME_ACCENT) {
         let gap_from_seed = hue_gap(hct_of(tint.rgb).get_hue(), seed_hue);
         let gap_from_accent = hue_gap(hct_of(tint.rgb).get_hue(), accent_hue);
+        // The fan reaches two analogous steps at its far end, which is what four of them costs
+        // over three — still nearer the album than the app's own accent by a wide margin.
         assert!(
-            gap_from_seed <= 30.0,
+            gap_from_seed <= 55.0,
             "fill {:#08x} drifted {gap_from_seed}° from the album; accent is {gap_from_accent}° away",
             tint.rgb
         );
     }
 }
 
-/// Two fills rotating the same way would stack into a near-duplicate pair; either side of the
-/// source is what keeps three washes reading as three.
+/// Fills rotating the same way by the same step would stack into near-duplicates; a fan either
+/// side of the source is what keeps four washes reading as four.
 #[test]
-fn the_two_fills_land_either_side_of_the_seed() {
-    let [first, second, third] = tints(ONE_HUE, COLOURFUL, THEME_ACCENT);
+fn the_fills_fan_out_around_the_seed() {
+    let painted = tints(ONE_HUE, COLOURFUL, THEME_ACCENT);
+    let hues: Vec<f64> = painted.iter().map(|tint| hct_of(tint.rgb).get_hue()).collect();
 
     assert!(
-        hue_gap(hct_of(first.rgb).get_hue(), hct_of(0x00c0_3030).get_hue()) < 5.0,
+        hue_gap(hues[0], hct_of(0x00c0_3030).get_hue()) < 5.0,
         "tint 0 is the seed's own hue, got {:#08x}",
-        first.rgb
+        painted[0].rgb
     );
-    assert!(
-        hue_gap(hct_of(second.rgb).get_hue(), hct_of(third.rgb).get_hue()) > 30.0,
-        "the two fills collapsed together: {:#08x} / {:#08x}",
-        second.rgb,
-        third.rgb
-    );
+    for (index, hue) in hues.iter().enumerate() {
+        for other in hues.iter().skip(index + 1) {
+            let gap = hue_gap(*hue, *other);
+            assert!(gap > 15.0, "two tints collapsed to {gap}° apart");
+        }
+    }
 }
 
 /// A black-and-white record gets a black-and-white backdrop.
@@ -179,7 +192,12 @@ fn the_two_fills_land_either_side_of_the_seed() {
 #[test]
 fn a_greyscale_cover_stays_grey() {
     // The real seeds off `Fade Into Darkness`, whose mean chroma measures ~5.
-    let greyscale = [Some(0x0005_0103), Some(0x0069_94a0), Some(0x001d_1d23)];
+    let greyscale = [
+        Some(0x0005_0103),
+        Some(0x0069_94a0),
+        Some(0x005b_84a4),
+        Some(0x0003_0611),
+    ];
 
     for tint in tints(greyscale, 5.1, THEME_ACCENT) {
         let chroma = hct_of(tint.rgb).get_chroma();
@@ -203,7 +221,12 @@ fn a_greyscale_cover_stays_grey() {
 /// giving each blob a region; the solve's job is to hand over what the artwork had.
 #[test]
 fn a_multi_coloured_cover_keeps_its_colours_apart() {
-    let blue_and_red = [Some(0x0038_718b), Some(0x00cc_2841), Some(0x0024_1e2e)];
+    let blue_and_red = [
+        Some(0x0038_718b),
+        Some(0x00cc_2841),
+        Some(0x0030_3446),
+        Some(0x007d_5c79),
+    ];
     let painted = tints(blue_and_red, COLOURFUL, THEME_ACCENT);
 
     for (tint, seed) in painted.iter().zip(blue_and_red) {
@@ -216,11 +239,11 @@ fn a_multi_coloured_cover_keeps_its_colours_apart() {
     assert!(spread > 90.0, "blue and red collapsed to {spread}° apart");
 }
 
-/// No artwork at all is the only path that may reach for the theme, and it still owes three
-/// distinguishable tints rather than one colour washed on three times.
+/// No artwork at all is the only path that may reach for the theme, and it still owes a set of
+/// distinguishable tints rather than one colour washed on repeatedly.
 #[test]
 fn no_seeds_at_all_falls_back_to_the_theme_accent() {
-    let [first, second, third] = tints([None; SEED_COUNT], COLOURFUL, THEME_ACCENT);
+    let [first, fills @ ..] = tints([None; SEED_COUNT], COLOURFUL, THEME_ACCENT);
 
     let accent_hue = hct_of(THEME_ACCENT).get_hue();
     assert!(
@@ -228,7 +251,9 @@ fn no_seeds_at_all_falls_back_to_the_theme_accent() {
         "tint 0 must be the accent's own hue, got {:#08x}",
         first.rgb
     );
-    assert!(second.rgb != first.rgb && third.rgb != first.rgb, "the fills duplicated the accent");
+    for fill in fills {
+        assert!(fill.rgb != first.rgb, "a fill duplicated the accent");
+    }
 }
 
 // --- the dither tile -----------------------------------------------------------

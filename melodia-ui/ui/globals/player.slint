@@ -60,13 +60,14 @@ export global Player {
     in-out property <color> np-floor-start: #2b2135;
     in-out property <color> np-floor-end: #14101a;
 
-    // The aurora's three washes, solved by `ui::aurora` off the same quantize as everything above.
+    // The aurora's washes, solved by `ui::aurora` off the same quantize as everything above.
     // `color` for the floor's gradient-stop reason, each carrying its own weight in the alpha.
-    // **Three on both sides** — a brush animates stop-for-stop only against one of the same type
-    // and length, so a varying count would cross through a flat solid mid-fade.
+    // **The count matches `SEED_COUNT`** — a brush animates stop-for-stop only against one of the
+    // same type and length, so a varying count would cross through a flat solid mid-fade.
     in-out property <color> np-tint-1: #3a2d4a;
     in-out property <color> np-tint-2: #2d3a4a;
     in-out property <color> np-tint-3: #4a2d3a;
+    in-out property <color> np-tint-4: #2d4a3a;
 
     // The aurora's grain, written once at boot. Here rather than beside the tints because it
     // answers to the renderer rather than to the artwork; `ui::aurora::dither_tile` argues it.

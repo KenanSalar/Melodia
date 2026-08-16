@@ -5,7 +5,7 @@
 //! be targeted against a backdrop whose brightest point is known, and stating that point is the
 //! whole job here.
 //!
-//! Three tints, always. `Score` returns fewer when the artwork can't separate that many hues and
+//! A fixed set, always. `Score` returns fewer when the artwork can't separate that many hues and
 //! never pads, so the filling rule below is load-bearing rather than defensive — and the count
 //! reaching Slint has to be fixed either way, `Brush::interpolate` blending gradients only at a
 //! matching stop and element count.
@@ -15,7 +15,7 @@ use slint::{Rgba8Pixel, SharedPixelBuffer};
 use crate::services::material_you::{rotate_hue, to_tone_with_chroma};
 use crate::ui::backdrop::SEED_COUNT;
 
-/// Tone every tint is driven to — one for all three, so hue is the only axis they differ on. A
+/// Tone every tint is driven to — one for all of them, so hue is the only axis they differ on. A
 /// tint brighter than its neighbours turns its wash into a lightness ramp, which reads as light
 /// falling on the surface rather than as the surface's own colour.
 ///
@@ -68,18 +68,18 @@ fn chroma_band(artwork_chroma: f64) -> (f64, f64) {
 }
 
 /// Hue rotation for tint *n* when the quantizer had no seed for it, applied to the first colour
-/// that does exist — rotating from the previous tint instead would let two fills walk away from
-/// the album. 25° sits inside the analogous band, so an invented pair is harmonious by
-/// construction where a measured one has to be pulled there. Tint 0's entry is the identity:
-/// reaching it means no artwork at all, and the fallback hue is already the answer.
-const FILL_HUES: [f64; SEED_COUNT] = [0.0, 25.0, -25.0];
+/// that does exist — rotating from the previous tint instead would let the fills walk away from
+/// the album. A fan either side of the source at 25°, the analogous step, so an invented set is
+/// harmonious by construction; the fourth continues it rather than opening a second gap. Tint 0's
+/// entry is the identity: reaching it means no artwork at all, and the fallback hue is the answer.
+const FILL_HUES: [f64; SEED_COUNT] = [0.0, 25.0, -25.0, 50.0];
 
 /// How faintly a synthesized tint is laid on, against 1.0 for one the artwork offered.
 ///
 /// **A backdrop may not invent variation the record doesn't have.** On a sleeve that quantized to
-/// one hue the rotated fills differ only in *direction*, and at full strength three of those stack
-/// into a lightness gradient the record never had. Weighted down, a monochrome sleeve settles onto
-/// its own base — which is what its blur looked like — while a three-hue cover still gets three.
+/// one hue the rotated fills differ only in *direction*, and at full strength a stack of those is
+/// a lightness gradient the record never had. Weighted down, a monochrome sleeve settles onto its
+/// own base — which is what its blur looked like — while a many-hued cover still gets the full set.
 const FILL_WEIGHT: f32 = 0.3;
 
 /// One wash's colour and how strongly it is laid on.
@@ -90,7 +90,7 @@ pub(crate) struct Tint {
     pub weight: f32,
 }
 
-/// The three washes, in paint order.
+/// The washes, in paint order.
 ///
 /// **A measured seed keeps its own hue.** An earlier pass pulled the set into an analogous arc,
 /// on the reasoning that overlapping washes composite in sRGB and its midpoint between distant
@@ -105,7 +105,7 @@ pub(crate) struct Tint {
 ///
 /// `fallback` supplies the hue when the artwork gave nothing — the theme accent, as everywhere
 /// else on this surface. It is never used to *pad* a short list: a cover that quantized to one
-/// hue gets three of its own colours, not two of its own and a lick of the app's.
+/// hue gets a full set of its own colours, not a short one padded with the app's.
 pub(crate) fn tints(
     seeds: [Option<u32>; SEED_COUNT],
     artwork_chroma: f64,
