@@ -2,9 +2,11 @@ use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast::ratio_of_tones;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
+use crate::ui::aurora;
 use crate::ui::backdrop::{
-    BackdropColors, BackdropSample, CHROME_MAX_TONE, CHROME_RATIO, chrome_tone, composited_tone,
-    floor_luma, gradient_luma, luma_p90, muted_tone, rgb_lstar, scrim_alpha, solve, text_tone,
+    BackdropColors, BackdropKind, BackdropSample, CHROME_MAX_TONE, CHROME_RATIO, TEXT_RATIO,
+    chrome_tone, composited_tone, floor_luma, gradient_luma, luma_p90, muted_tone, rgb_lstar,
+    scrim_alpha, solve, text_tone,
 };
 
 /// A Catppuccin-Mocha-ish mauve, the default accent — a realistic seed for the
@@ -184,8 +186,8 @@ fn a_measured_cover_hue_outranks_the_theme_accent() {
     let seed = sample.accent_argb.unwrap_or(SEED);
     let luma = sample.luma.unwrap_or(f64::NAN);
     assert_ne!(
-        solve(seed, luma).chrome,
-        solve(SEED, luma).chrome,
+        solve(seed, luma, BackdropKind::Blur).chrome,
+        solve(SEED, luma, BackdropKind::Blur).chrome,
         "a red cover must not solve to the mauve accent's colour set"
     );
 }
@@ -203,7 +205,7 @@ fn channel_spread(rgb: u32) -> u8 {
 /// banner has to solve grey chrome.
 #[test]
 fn a_greyscale_blur_solves_neutral_chrome() {
-    let chrome = BackdropSample::measure(&solid(32, 0x80)).solve(SEED).chrome;
+    let chrome = BackdropSample::measure(&solid(32, 0x80)).solve(SEED, BackdropKind::Blur).chrome;
     assert!(
         channel_spread(chrome) <= 8,
         "a grey blur must solve neutral chrome, got 0x{chrome:06X}"
@@ -217,7 +219,7 @@ fn a_greyscale_blur_solves_neutral_chrome() {
 fn a_black_and_a_white_blur_both_solve_legible_chrome() {
     for value in [0x00_u8, 0xff] {
         let sample = BackdropSample::measure(&solid(32, value));
-        let colors = sample.solve(SEED);
+        let colors = sample.solve(SEED, BackdropKind::Blur);
         let band = composited_tone(sample.luma.unwrap_or(f64::NAN), colors.scrim_alpha);
 
         let ratio = ratio_against_tone(colors.chrome, band);
@@ -240,7 +242,7 @@ fn a_black_and_a_white_blur_both_solve_legible_chrome() {
 /// not just the solve.
 #[test]
 fn the_chrome_tier_stays_inside_its_band() {
-    let chrome = BackdropSample::measure(&solid(32, 0xff)).solve(SEED).chrome;
+    let chrome = BackdropSample::measure(&solid(32, 0xff)).solve(SEED, BackdropKind::Blur).chrome;
     let tone = rgb_lstar(chrome);
     assert!(
         tone <= CHROME_MAX_TONE + 0.5,
@@ -373,7 +375,7 @@ fn solve_keeps_the_scrim_and_floor_dark_whatever_the_seed() {
             floor_start,
             floor_end,
             ..
-        } = solve(seed, 100.0);
+        } = solve(seed, 100.0, BackdropKind::Blur);
         for (name, rgb) in [
             ("scrim", scrim),
             ("floor_start", floor_start),
@@ -388,8 +390,8 @@ fn solve_keeps_the_scrim_and_floor_dark_whatever_the_seed() {
 
 #[test]
 fn solve_gives_a_bright_cover_a_heavier_scrim_than_a_dark_one() {
-    let bright = solve(SEED, 95.0);
-    let dark = solve(SEED, 5.0);
+    let bright = solve(SEED, 95.0, BackdropKind::Blur);
+    let dark = solve(SEED, 5.0, BackdropKind::Blur);
     assert!(
         bright.scrim_alpha > dark.scrim_alpha,
         "bright {} should out-scrim dark {}",
@@ -402,7 +404,7 @@ fn solve_gives_a_bright_cover_a_heavier_scrim_than_a_dark_one() {
 /// replaces — the artwork gets to show more than it used to.
 #[test]
 fn solve_relaxes_the_scrim_below_the_old_fixed_alpha_on_a_dark_cover() {
-    assert!(solve(SEED, 5.0).scrim_alpha < 0.45);
+    assert!(solve(SEED, 5.0, BackdropKind::Blur).scrim_alpha < 0.45);
 }
 
 #[test]
@@ -418,7 +420,7 @@ fn solve_text_tiers_are_less_saturated_than_the_chrome_tier() {
         r.max(g).max(b) - r.min(g).min(b)
     };
     // A vivid seed, so the chrome tier has real saturation to lose.
-    let colors = solve(0x0000_66ff, 95.0);
+    let colors = solve(0x0000_66ff, 95.0, BackdropKind::Blur);
     assert!(
         spread(colors.text) < spread(colors.chrome),
         "text spread {} should be under chrome spread {}",
@@ -439,6 +441,50 @@ fn a_white_cover_now_clears_the_non_text_bar() {
         "a white sleeve still fails the 3:1 bar (backdrop L*{tone})"
     );
     assert!(ratio_of_tones(text_tone(tone), tone) >= 4.5);
+}
+
+// --- the aurora's stated peak -----------------------------------------------
+//
+// The peak's own bounds are `const _: () = assert!(…)` in `ui::aurora`, since both sides are
+// constants and a build failure beats a test failure. What is left here is what they can't
+// reach: that the tiers solved against it actually clear their targets.
+
+/// What `a_white_cover_now_clears_the_non_text_bar` does for the blur, on the surface whose
+/// brightest point is stated rather than measured.
+#[test]
+fn every_tier_clears_its_target_on_the_aurora() {
+    let colors = solve(SEED, 100.0, BackdropKind::Aurora);
+
+    for (name, rgb, target) in [
+        ("chrome", colors.chrome, CHROME_RATIO),
+        ("text", colors.text, TEXT_RATIO),
+        ("muted", colors.muted, CHROME_RATIO),
+    ] {
+        let ratio = ratio_against_tone(rgb, aurora::PEAK_TONE);
+        assert!(
+            ratio >= target,
+            "{name} 0x{rgb:06X} reads {ratio:.2}:1 on the aurora's peak, under {target}:1"
+        );
+    }
+}
+
+/// The foreground answers to the stack that paints it, never to a cover that stack never draws.
+/// The scrim keeps answering to the cover — it belongs to the blur — which is also what makes
+/// the equality below mean something rather than comparing one input with itself.
+#[test]
+fn the_aurora_foreground_ignores_what_the_cover_measured() {
+    let dark = solve(SEED, 5.0, BackdropKind::Aurora);
+    let bright = solve(SEED, 100.0, BackdropKind::Aurora);
+
+    assert!(
+        dark.scrim_alpha < bright.scrim_alpha,
+        "the two measurements have to differ, or the tiers prove nothing"
+    );
+    assert_eq!(
+        (dark.chrome, dark.text, dark.muted),
+        (bright.chrome, bright.text, bright.muted),
+        "a black and a white cover must solve one foreground on the aurora"
+    );
 }
 
 // --- gradient_luma ----------------------------------------------------------
@@ -483,7 +529,7 @@ fn gradient_luma_outranks_the_plain_lstar_midpoint() {
 #[test]
 fn floor_luma_matches_the_gradient_the_solve_paints() {
     for seed in [SEED, 0x00ff_ffff, 0x0000_0000, 0x0000_66ff] {
-        let colors = solve(seed, 100.0);
+        let colors = solve(seed, 100.0, BackdropKind::Blur);
         let painted = gradient_luma(colors.floor_start, colors.floor_end);
         let claimed = floor_luma();
         assert!(

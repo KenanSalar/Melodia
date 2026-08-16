@@ -73,10 +73,6 @@ export global Player {
     // answers to the renderer rather than to the artwork; `ui::aurora::dither_tile` argues it.
     in-out property <image> np-dither;
 
-    // **Temporary**: swaps the aurora for the blur it replaces, so both can be judged against one
-    // track. Goes with the blur, along with the `ShortcutScope` binding that flips it.
-    in-out property <bool> np-aurora: true;
-
     // The hue-carrying tier — visualizer, stars, heart, back button, chips, Up-Next chrome. Solved
     // for the 3:1 non-text bar then floored, so a brighter accent keeps its own tone; one brush
     // serves solid and translucent alike. **Never `.brighter()`** — that scales HSV value and

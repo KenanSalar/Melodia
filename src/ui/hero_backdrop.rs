@@ -1,11 +1,11 @@
 //! Publishes the hero band's solved colour set into the `HeroBackdrop` global.
 //!
 //! The thin half of [`crate::ui::backdrop`]: that module argues the colours and does
-//! the maths, this one takes the measurement its caller decoded off the blur and
+//! the maths, this one takes the measurement its caller decoded off the cover and
 //! writes the answer. Six views share one global, so every hero opens by calling
 //! exactly one of these.
 //!
-//! The seed is the hue quantized out of the hero's own blur, so the band carries the
+//! The seed is the hue quantized out of the hero's own cover, so the band carries the
 //! *artwork's* colour and changing the app accent leaves it where it is; `Theme.accent` is
 //! the fallback for an entity with no hue to take. Every tone comes from the solve either
 //! way, which is what keeps the band equally dark under every theme — so a theme change
@@ -16,15 +16,15 @@
 
 use slint::ComponentHandle;
 
-use crate::themes::{brush, brush_to_rgb, color};
-use crate::ui::backdrop::{self, BackdropColors, BackdropSample};
-use crate::{AppWindow, HeroBackdrop, Theme as ThemeGlobal};
+use crate::themes::{brush, color};
+use crate::ui::backdrop::{self, BackdropColors, BackdropKind, BackdropSample};
+use crate::{AppWindow, HeroBackdrop};
 
-/// Solve and publish from a blur's measurement. An empty sample — no artwork, or a
+/// Solve and publish from a cover's measurement. An empty sample — no artwork, or a
 /// failed decode — takes the same path as every cover; what it falls back to, and why
 /// that isn't a guess, is on [`BackdropSample::solve`].
 pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
-    write(ui, &sample.solve(theme_accent(ui)), None);
+    write(ui, &sample.solve(backdrop::theme_accent(ui), backdrop::kind(ui)), None);
 }
 
 /// Solve and publish for a hero whose backdrop *is* a gradient — Genre Detail, which has
@@ -34,19 +34,20 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
 ///
 /// `start_rgb` doubles as the hue seed, so the chrome tier stays recognisably that
 /// genre's rather than reverting to the theme accent.
+///
+/// **Always [`BackdropKind::Blur`], whatever the rest of the app is painting.** The
+/// aurora washes a record's own colours over a floor it owns; a genre has neither, and
+/// these stops are only legible under the scrim that arm solves.
 pub(crate) fn apply_gradient(ui: &AppWindow, start_rgb: u32, end_rgb: u32) {
-    let colors = backdrop::solve(start_rgb, backdrop::gradient_luma(start_rgb, end_rgb));
+    let luma = backdrop::gradient_luma(start_rgb, end_rgb);
+    let colors = backdrop::solve(start_rgb, luma, BackdropKind::Blur);
     write(ui, &colors, Some((start_rgb, end_rgb)));
 }
 
 /// Reset to the floor solve on hero teardown, so backing out of one detail and into
-/// another can't flash the previous entity's colours while the new blur decodes.
+/// another can't flash the previous entity's colours while the new cover decodes.
 pub(crate) fn reset(ui: &AppWindow) {
     apply(ui, BackdropSample::default());
-}
-
-fn theme_accent(ui: &AppWindow) -> u32 {
-    brush_to_rgb(&ui.global::<ThemeGlobal>().get_accent())
 }
 
 /// `floor_override` keeps a caller-supplied gradient instead of the solved one.

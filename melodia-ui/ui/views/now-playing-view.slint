@@ -99,11 +99,10 @@ export component NowPlayingView inherits Rectangle {
         animate background { duration: Theme.dur-med; easing: ease-in-out; }
     }
 
-    // The replacement for all four layers above; both it and they go once the look is settled.
-    // **`Player.np-aurora` is temporary scaffolding**, and mounts *over* rather than instead — its
-    // base gradient is opaque, so the toggle is one gate rather than four and swapping doesn't
-    // remount the image slots underneath.
-    if Player.np-aurora: AuroraBackdrop {
+    // The other backdrop. It mounts *over* the four layers above rather than instead — its base
+    // gradient is opaque, so the gate is one rather than four and swapping doesn't remount the
+    // image slots underneath.
+    if Theme.aurora-backdrop: AuroraBackdrop {
         x: 0;
         y: 0;
         width: 100%;

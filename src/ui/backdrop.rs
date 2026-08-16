@@ -1,9 +1,10 @@
-//! How bright a blurred-artwork backdrop is, and which colours survive on it.
+//! How bright an artwork-derived backdrop is, and which colours survive on it.
 //!
-//! Two surfaces float their chrome directly on a blurred cover, so nothing about their legibility
-//! is knowable until the cover is. **Measure** the blur ([`luma_p90`]) and solve a scrim opacity
-//! driving the *composited* result into a known dark band ([`scrim_alpha`], [`composited_tone`]),
-//! then **solve** each foreground tier's HCT tone against that for a WCAG target.
+//! Two surfaces float their chrome directly on the cover's own colours, so nothing about their
+//! legibility is knowable until the cover is. **Measure** it ([`luma_p90`]) and solve a scrim
+//! opacity driving the *composited* result into a known dark band ([`scrim_alpha`],
+//! [`composited_tone`]), then **solve** each foreground tier's HCT tone against that for a WCAG
+//! target.
 //!
 //! That order is load-bearing. Adapting the foreground first means a bright cover is answered by a
 //! *polarity flip* past the black/white crossover rather than a darker accent, and a blurred cover
@@ -11,21 +12,28 @@
 //! and dark in another. Pin the backdrop and every cover ends up dark, so one light hue-carrying
 //! foreground is correct everywhere.
 //!
-//! **The measurement comes off the decoded blur buffer, never the rendered frame** — the chrome
-//! tints itself off the same accent feeding the backdrop, so sampling the composite closes a
-//! feedback loop. A consumer borrows only the artwork's *hue* and owns every lightness decision,
-//! which is why these surfaces look the same under every theme.
+//! **[`BackdropKind`] is where the two backdrops part.** The blur is a photograph, so its
+//! brightest point belongs to that cover and has to be measured; the aurora is ours, so
+//! [`crate::ui::aurora::PEAK_TONE`] states it and the scrim solve is skipped. Everything past that
+//! one answer is shared.
+//!
+//! **The measurement comes off the decoded cover, never the rendered frame** — the chrome tints
+//! itself off the same accent feeding the backdrop, so sampling the composite closes a feedback
+//! loop. A consumer borrows only the artwork's *hue* and owns every lightness decision, which is
+//! why these surfaces look the same under every theme.
 
 use std::sync::LazyLock;
 
 use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast;
-use slint::{Brush, Rgb8Pixel, SharedPixelBuffer};
+use slint::{Brush, ComponentHandle, Rgb8Pixel, SharedPixelBuffer};
 
 use crate::services::material_you::{
     clamp_to_tone_band, extract_seeds_from_rgb8, to_tone_capped_chroma,
 };
-use crate::themes::brush_with_alpha;
+use crate::themes::{brush_to_rgb, brush_with_alpha};
+use crate::ui::aurora;
+use crate::{AppWindow, Theme as ThemeGlobal};
 
 /// HCT tone the composited backdrop is driven down to. Below it a light hue-carrying chrome tone
 /// clears WCAG's 3:1 non-text bar with margin and body text clears 4.5:1 without washing out.
@@ -172,7 +180,7 @@ fn bin_centre(bin: usize) -> f64 {
     (bin as f64 + 0.5) / HISTOGRAM_BINS as f64 * 100.0
 }
 
-/// The 90th-percentile lightness of a decoded blur buffer.
+/// The 90th-percentile lightness of a decoded cover.
 ///
 /// **Not the mean, and that is the whole point.** A mostly-black sleeve with a white wordmark has
 /// a low mean — "dark backdrop, brighten the chrome" — while the region the title sits on is
@@ -217,6 +225,18 @@ fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
 /// five drops it to 19–31° and six is forced toward the 15° floor, returning near-duplicates by
 /// construction.
 pub(crate) const SEED_COUNT: usize = 4;
+
+/// Which of the two backdrops a foreground will sit on. They differ in how the brightest point is
+/// known and in nothing else, so the split reaches exactly one line of [`solve`].
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum BackdropKind {
+    /// The blurred cover. The brightness is that photograph's, so it is measured and a scrim
+    /// drives the composite down into range.
+    Blur,
+    /// [`crate::ui::aurora`]'s brush stack. Every layer's tone is ours and no wash is opaque, so
+    /// there is nothing to measure and no scrim to solve.
+    Aurora,
+}
 
 /// Everything a solve needs off a decoded cover. All are `None` when there is none — no artwork,
 /// or a failed decode — and the publisher falls back to the live `Theme.accent` and
@@ -268,8 +288,8 @@ impl BackdropSample {
     /// `theme_accent` supplies the hue when there was no artwork, so a missing-artwork entry
     /// doesn't strand the surface on the previous one's colour. Only the hue is borrowed —
     /// [`solve`] owns every tone.
-    pub(crate) fn solve(self, theme_accent: u32) -> BackdropColors {
-        solve(self.accent_argb.unwrap_or(theme_accent), self.luma.unwrap_or_else(floor_luma))
+    pub(crate) fn solve(self, theme_accent: u32, kind: BackdropKind) -> BackdropColors {
+        solve(self.accent_argb.unwrap_or(theme_accent), self.luma.unwrap_or_else(floor_luma), kind)
     }
 }
 
@@ -386,9 +406,14 @@ pub(crate) struct BackdropColors {
 /// Reach for [`BackdropSample::solve`] rather than calling this directly — it resolves both
 /// fallbacks in one place, which is what keeps the two consumers from drifting. Genre Detail's
 /// procedural gradient is the sole caller here, having no artwork.
-pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
+pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64, kind: BackdropKind) -> BackdropColors {
+    // The scrim is the blur's, and stays solved on both arms — it is what the blur stack reads
+    // whenever that is the one mounted, and it costs a pair of transfer-function calls.
     let alpha = scrim_alpha(backdrop_luma);
-    let tone = composited_tone(backdrop_luma, alpha);
+    let tone = match kind {
+        BackdropKind::Blur => composited_tone(backdrop_luma, alpha),
+        BackdropKind::Aurora => aurora::PEAK_TONE,
+    };
 
     BackdropColors {
         scrim: to_tone_capped_chroma(seed_argb, SCRIM_TONE, BACKDROP_MAX_CHROMA),
@@ -401,6 +426,24 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
         text: to_tone_capped_chroma(seed_argb, text_tone(tone), TEXT_MAX_CHROMA),
         muted: to_tone_capped_chroma(seed_argb, muted_tone(tone), MUTED_MAX_CHROMA),
     }
+}
+
+/// Which backdrop is painted, and the only place that asks — so no publisher can solve for one
+/// surface while the mount paints the other. Worth centralising precisely because that mismatch
+/// shows nothing today: every tier saturates at its band floor under both answers, and would stop
+/// the moment a tone constant moved.
+pub(crate) fn kind(ui: &AppWindow) -> BackdropKind {
+    if ui.global::<ThemeGlobal>().get_aurora_backdrop() {
+        BackdropKind::Aurora
+    } else {
+        BackdropKind::Blur
+    }
+}
+
+/// Hue of the live accent — what [`BackdropSample::solve`] falls back to for an entry with no
+/// artwork. Here rather than at each publisher so the two tiers can't read different accents.
+pub(crate) fn theme_accent(ui: &AppWindow) -> u32 {
+    brush_to_rgb(&ui.global::<ThemeGlobal>().get_accent())
 }
 
 /// The scrim as a Slint brush, opacity baked into the alpha channel. Here rather than at each

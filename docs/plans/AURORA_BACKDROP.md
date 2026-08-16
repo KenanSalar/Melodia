@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **accepted** · Created: 2026-08-16 · Phases 0–3 landed; 4–8 remaining
+Status: **accepted** · Created: 2026-08-16 · Phases 0–4 landed; 5–8 remaining
 
 > Slint facts below were verified **2026-08-16** against the pinned `slint 1.16.1`
 > sources in the registry (`i-slint-core-1.16.1/graphics/brush.rs`,
@@ -14,7 +14,8 @@ Status: **accepted** · Created: 2026-08-16 · Phases 0–3 landed; 4–8 remain
 > The **tree** facts were verified a second time before implementation, and that pass
 > moved three things: the blur slots are not on `HeroBackdrop`, `write_crossfade_slot`
 > also drives the sharp cover, and the mosaic wants to keep its atlas. Each is argued
-> where it bites rather than listed here.
+> where it bites rather than listed here. **The third was later reversed** — Phase 6 now
+> deletes the atlas rather than keeping it, and says why at its own heading.
 >
 > **Phase 3 rewrote what the stack is made of, and what the feature is.** Six rounds on
 > screen retired the layer shape this doc proposed and several of its numbers; "What the look
@@ -66,7 +67,7 @@ What the aurora buys over the blur, which is also what the setting's subtext has
 | Release protocol | the blur half of `release_hero_slots!`, `forget_mosaic`, `last_mosaic_paths`, `has-blur` | none |
 | Per track change | decode → downscale → `fast_blur` → texture upload | the quantize both already pay |
 | On a 4K hero | a 192 px texture upscaled ~10× | vector, exact |
-| Mosaic band | decode 4 → blit 2×2 atlas → blur → quantize | the same atlas, no blur |
+| Mosaic band | decode 4 → blit 2×2 atlas → blur → quantize | neither — the band is **deleted** in Phase 6 and its heroes become ordinary artwork ones |
 
 **Not in scope:** any change to the sharp cover tile (`ArtworkCache` keeps producing it),
 to `CoverThumbs`, to Material You theme generation, or to the accent solve outside the
@@ -423,17 +424,54 @@ keep its own chrome tone. Against the aurora's constant, chrome becomes a pure f
 always has, so the two backdrops differ slightly in their chrome and that is honest rather than
 a bug: they are different surfaces.
 
+#### What landed, and the one thing this phase turned out not to be
+
+**It moved no pixel, and that was worth finding out.** `chrome_tone` and `muted_tone` saturate at
+their band floor of 70 and `text_tone` at 78 across the *entire* achievable range — the worst
+permitted backdrop only asks chrome for 63 — so substituting a constant for the composite changes
+no output at any tone the solve can be handed. The named trade above describes a difference that
+does not exist numerically today. What the phase actually bought is the coupling removed (the
+aurora's foreground no longer answers to a cover it never draws) and the invariant pinned, which
+is the half that has teeth: nothing previously caught `TINT_TONE` or a blob peak rising until the
+surface was brighter than the tiers were solved for.
+
+- `PEAK_TONE` is **argued, not measured** — the note above overstated it. Every wash sits at
+  `TINT_TONE`, so 36 bounds it absolutely; the geometry (1.3-diagonal blob rects whose ramps die
+  0.643 diagonals out, centres 0.35 out and 0.495 apart) caps coverage near 0.6, which over a base
+  at `FLOOR_TONE_START` lands near 29. 31 is that with headroom.
+- **Both bounds are `const _: () = assert!(…)`**, not tests — clippy's `assertions_on_constants`
+  pointed at the const block and it is the better answer: a peak past `TINT_TONE` or
+  `TARGET_BACKDROP_TONE` now fails the build rather than a test run.
+- `backdrop::theme_accent` was hoisted out of `hero_backdrop.rs` beside the new `backdrop::kind`,
+  since `track_change.rs` had open-coded the same accent read.
+- Three doc comments and one `ui-patterns.md` bullet still said the measurement came off the blur;
+  Phase 3 had moved it to the sharp downscale. Fixed in passing.
+
 ### Phase 5 — Roll to the six heroes
+
+**The flag moved in Phase 4, ahead of its schedule here.** `backdrop::kind` has to read it and so
+do all three mounts, so `Player.np-aurora` became **`Theme.aurora-backdrop`** — the same temporary
+role, but reachable by every site instead of only Now Playing, and `Ctrl+Shift+B` writes it. Phase 7
+hydrates it from `settings.json` and deletes the shortcut, exactly as written there.
 
 1. `HeroBackdrop` gains `tint-{1..}` and `dither` beside `chrome` and `floor-*`;
    `hero_backdrop::write` grows the setters, and `boot::ui_setup` writes the one tile to both
    globals. The blur quartet on the six per-view globals is untouched — both sets coexist.
-2. Mount `AuroraBackdrop` **beside** `HeroBlurBackdrop` at both sites
-   (`mosaic-tab-hero.slint:109`, `library-tab-band.slint:234`), one `if`/`else` on the setting.
-3. Same at Now Playing. The temporary `Player.np-aurora` still drives it here, and stays until
-   Phase 7 hands it the persisted flag — the mounts are the work of this phase, the preference
-   is the work of that one. The inline blur stack stays either way; collapsing it is its own
-   change, argued in Structure.
+2. It also gains **`has-tints`**, false only from `apply_gradient`. Genre Detail shares the band
+   with three artwork details, so mounting the aurora there would mount it for a hero whose
+   name-hashed stops sit near L\*50 and are only legible under the scrim the aurora doesn't
+   paint. Genre keeps the blur stack under both settings and is byte-identical to today.
+3. Mount `AuroraBackdrop` beside `HeroBlurBackdrop` at both sites —
+   `components/hero/mosaic-tab-hero.slint:109` and `components/hero/library-tab-band.slint:234`
+   (the doc had them under `views/`). **Not one `if`/`else`**: Slint has no element-level `else`
+   and there is not one in the tree, so it is a local `aurora-shown` property plus two `if`s over
+   it and its negation — which is also what keeps the condition single-sourced. Only the band
+   folds `has-tints` in; the mosaic hero gates on the setting alone, never being able to show a
+   genre and a stale `false` there only costing it a frame of blur stack.
+4. Same at Now Playing, on the setting alone. The aurora stops mounting *over* the blur and
+   becomes one of the two arms; the blur arm promotes the existing floor `Rectangle` to be its
+   own root, so no element is added. The inline stack stays — collapsing it is its own change,
+   argued in Structure.
 4. `hero_backdrop::apply` publishes tints; the `hero-open` gate carries over to every gated
    layer (the don't-ease-out-of-a-held-tier rule in `ui-patterns.md` is unchanged and
    still applies — a brush that eases is a brush that can ease out of a stale value).
@@ -441,19 +479,50 @@ a bug: they are different surfaces.
    `hero-t` ternary, and a leaf cannot tell an eased input from a stepped one — it would
    restart its own `animate` every frame and arrive in one late rush.
 
-### Phase 6 — The mosaic bands
+### Phase 6 — The mosaic band is deleted, not ported
 
-1. `compose_mosaic_blur` **keeps the atlas** and makes the blur conditional, the same way
-   `ArtworkCache` does. A seed per cover would be four quantizes where there is one today, and
-   finding 1 says the quantize is the cost centre — the 2×2 blit is trivial beside the four
-   decodes both shapes pay anyway. So: compose as now, take the tints from the one quantize,
-   and run `fast_blur` only when the blur is what will be painted. The mixed distribution is
-   also the better answer, the band being about the *set*.
-2. `impl_mosaic_hero!` keeps its paint guard and `last_mosaic_paths` — the blur it guards is
-   still there. Under the aurora the guard is simply answering about a slot nothing reads,
-   which costs one comparison.
-3. **Genre Detail is not part of this.** It has no artwork, so it has no aurora and no blur —
-   see Structure.
+**This phase reverses what the doc said above**, and the reason is that the two mosaic heroes
+compose their artwork **three times**. `CoverMosaic` lays out a live 1/2/3/4 tile in Slint,
+`compose_mosaic_blur` blits a *second* composition at 192² purely so there is something to blur
+behind it, and `media::artwork::compose_artwork` already holds a third — the one Playlist Detail
+uses. Teaching the middle one about the aurora entrenches a duplicate; deleting it is the
+smaller tree and the unified look.
+
+Playlist Detail is the shape to copy, and it already works: a playlist's mosaic is composed
+**once** into a 600² collage, and from that point the playlist is an ordinary single-artwork
+entity — one image feeding the tile, the backdrop, the seeds and the chips. Favorites and
+Recently Played adopt exactly that. Neither gets an aurora of its own; they get whatever a
+detail hero gets, because they *become* one.
+
+1. **Lift the composition, not the file.** `compose_artwork` composes 1–4 covers onto a 600²
+   canvas and then persists a content-addressed JPEG. The layouts are the reusable half; the
+   persist is not — a playlist's collage is written on a rare user action, where Recently
+   Played's top four moves on nearly every track and would leave a ~50 KB file per distinct set
+   in `artwork_dir` with nothing to reap them. Split it: a pure `compose_cover(sources)`
+   returning the canvas, shared by both, with `compose_artwork` keeping the
+   encode-hash-persist tail for playlists.
+2. **The hero takes that buffer through the ordinary path**, so `BackdropSample::measure` and
+   the conditional `fast_blur` are the ones every cover already runs. `mosaic_blur.rs` goes
+   whole — `MosaicBlur`, `compose_mosaic_blur`, `blit`, `PER_TILE`, `mosaic_blur_tests.rs`.
+3. **`impl_mosaic_hero!` goes with it.** `apply_hero_blur` / `clear_hero_blur` are the mosaic's
+   own copy of what `apply_detail_artwork` does, and two views calling the shared helper is the
+   point of deleting them. **`last_mosaic_paths` stays and changes meaning**: it stops guarding
+   a *paint* and starts guarding a *recompose*, which is what keeps an unchanged top-four off
+   the composer.
+4. **The hero tile becomes one `ArtworkImage`**, as Playlist Detail's is, so `MosaicHeroTile`'s
+   `CoverMosaic` branch retires along with the second composition it was the visible half of.
+   `CoverMosaic` itself **stays** — the mosaic *picker* is its other consumer and the surface it
+   was written for.
+5. **No aurora work in this phase at all**, which is the whole point of it being a deletion:
+   once these two are ordinary artwork heroes, Phase 5's `MosaicTabHero` mount already covers
+   them and there is no third rendering to teach.
+6. **Genre Detail is still not part of this.** It has no artwork, so it has no aurora and no
+   mosaic — see Structure.
+
+**The cost, stated rather than buried:** a 600² compose-and-measure where there was a 192² one.
+The four decodes both shapes pay dominate it and the recompose guard means it runs when the set
+changes rather than per visit, but it is more work per change — bought with one composition path
+instead of three, and a band that agrees with its own tile.
 
 ### Phase 7 — The setting
 
@@ -473,10 +542,11 @@ gated, and deletes the scaffolding that stood in for it.
    persists and then calls `request_respawn_and_quit` — which may decline, and says so.
 3. **The restart is what keeps the decode simple.** Both artwork tiers are built once at boot,
    so the flag is read there and decides whether a `BlurSpec` exists at all: `ArtworkCache`
-   takes `Option<BlurSpec>`, `ArtworkPair.blur` and `DetailPair.blur` become `Option`, and
-   `compose_mosaic_blur` skips `fast_blur` the same way. One place answers the question, no
-   flag is threaded through any decode, and no cache can hold a pair made under the other
-   setting. Gating only the *mount* would leave every cover still decoded, blurred, uploaded
+   takes `Option<BlurSpec>`, and `ArtworkPair.blur` / `DetailPair.blur` become `Option`. One
+   place answers the question, no flag is threaded through any decode, and no cache can hold a
+   pair made under the other setting. **There is no second decode path to teach** once Phase 6
+   has retired `compose_mosaic_blur` — the mosaic heroes come through `ArtworkCache` like
+   everything else, which is most of what that deletion buys. Gating only the *mount* would leave every cover still decoded, blurred, uploaded
    and released — the whole cost the setting exists to let a user avoid.
 4. **Delete the scaffolding**: `Player.np-aurora`, and the `Ctrl+Shift+B` arm in
    `shortcut-scope.slint` that flips it. It existed to A/B the two on one track and is replaced
@@ -500,8 +570,9 @@ gated, and deletes the scaffolding that stood in for it.
    is staying. So do `hero_backdrop_tests.rs`'s section-gating walks and
    `hero_blur_backdrop_tests.rs`, which pins a component that is no longer being replaced —
    the earlier plan had all three losing large parts of themselves. What still needs edits is
-   only what gains a sibling: `mosaic_blur_tests.rs` and `artwork_cache_tests.rs` for the
-   optional buffer, and the two band walks for the second mount beside the first.
+   only what gains a sibling: `artwork_cache_tests.rs` for the optional buffer, and the two band
+   walks for the second mount beside the first. `mosaic_blur_tests.rs` is not edited but
+   **deleted**, with the module it pins, by Phase 6.
 2. Walks worth keeping in new form: no surface spells a `Theme.*` brush on a backdrop, and
    **each of the three sites mounts exactly one of the two stacks** — the regression being a
    mount that grows a third, or one that forgets the `else`.

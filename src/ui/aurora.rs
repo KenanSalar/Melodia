@@ -25,6 +25,34 @@ use crate::ui::backdrop::SEED_COUNT;
 /// spends the whole margin for nothing and is what made this grey — chroma is bounded by tone.
 pub(crate) const TINT_TONE: f64 = 36.0;
 
+/// The brightest tone the finished stack presents — what [`crate::ui::backdrop`] solves its
+/// foreground tiers against when this is the surface they sit on.
+///
+/// **Stated rather than measured, there being no buffer to measure.** Two bounds fix it. Every
+/// wash is driven to [`TINT_TONE`], and compositing a colour over something darker lands between
+/// the two, so 36 is a ceiling no stacking can pass. And the geometry keeps coverage well under
+/// 1: the blob rects are 1.3 diagonals square, so their ramps die 0.643 diagonals out while their
+/// centres sit 0.35 out and 0.495 apart, leaving the strongest point its own 0.5 plus about a
+/// tenth from each neighbour. Six tenths of tone 36 over a base starting at
+/// `backdrop::FLOOR_TONE_START` lands near 29; this carries the headroom, and stays under
+/// [`crate::ui::backdrop::TARGET_BACKDROP_TONE`] so the tiers keep the bands they already solve in.
+///
+/// **Not a mean over the tint colours.** Understating bright regions is the exact failure the
+/// blur's percentile exists to avoid, and a blob centre is the smeared wordmark that argument was
+/// about.
+pub(crate) const PEAK_TONE: f64 = 31.0;
+
+// Both of [`PEAK_TONE`]'s bounds, as build failures rather than prose: a peak above either has no
+// symptom on screen, every tier saturating at its band floor across the whole legal range today.
+const _: () = assert!(
+    PEAK_TONE <= TINT_TONE,
+    "a stack of washes cannot be brighter than the tone every wash is driven to"
+);
+const _: () = assert!(
+    PEAK_TONE <= crate::ui::backdrop::TARGET_BACKDROP_TONE,
+    "the peak sits above the band the foreground tiers are solved for"
+);
+
 /// Chroma floor, and the reason the surface carries the record's colour rather than a wash of it.
 ///
 /// `Score` ranks by how *usable* a colour is, not how saturated, so a cover's second and third

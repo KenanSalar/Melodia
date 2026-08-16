@@ -1,10 +1,11 @@
 //! Source-level pins on `components/aurora-backdrop.slint`.
 //!
-//! Four of the five things this file gets right are invisible on screen until an edge case
-//! arrives, and each was paid for once: the count has to be fixed or `Brush::interpolate` crosses
-//! mismatched gradients, a ramp ending on the `transparent` keyword darkens instead of thinning,
-//! the dither's `image-fit` decides whether it dithers or mottles, and a mount reading a global
-//! directly is what stops one component serving both backdrop tiers.
+//! Nothing pinned here shows on screen until an edge case arrives, and each was paid for once:
+//! the count has to be fixed or `Brush::interpolate` crosses mismatched gradients, a ramp ending
+//! on the `transparent` keyword darkens instead of thinning, the dither's `image-fit` decides
+//! whether it dithers or mottles, a mount reading a global directly is what stops one component
+//! serving both backdrop tiers, and the blob geometry is what `ui::aurora::PEAK_TONE` is derived
+//! from.
 
 // Comments dropped: every anchor here is a gradient literal, and the prose above them argues
 // about gradients, stop counts and `transparent`.
@@ -78,6 +79,32 @@ fn the_dither_keeps_its_own_pitch() {
         "vertical-tiling: ImageTiling.repeat;",
     ] {
         assert!(code(AURORA).contains(binding), "the dither dropped `{binding}`");
+    }
+}
+
+/// The numbers `ui::aurora::PEAK_TONE` was derived from.
+///
+/// That constant is what the WCAG solve targets on this surface, and it is stated rather than
+/// measured — there is no buffer to measure. Its derivation reads the span and offset (which fix
+/// how far the ramps carry and how far apart their centres sit) and the four peaks (which fix how
+/// much alpha meets at the strongest point). Move any of them and the peak has to be re-derived,
+/// which is a change with no symptom on screen: the foreground stays legible right up until it
+/// isn't.
+#[test]
+fn the_peak_tone_is_derived_from_the_geometry_below() {
+    for binding in [
+        "blob-span: root.diagonal * 1.3;",
+        "blob-offset: root.diagonal * 0.35;",
+        "blob-step: root.blob-offset * 0.707;",
+        "peak: 0.5;",
+        "peak: 0.46;",
+        "peak: 0.42;",
+        "peak: 0.38;",
+    ] {
+        assert!(
+            code(AURORA).contains(binding),
+            "`{binding}` moved — re-derive `ui::aurora::PEAK_TONE` before changing it here"
+        );
     }
 }
 

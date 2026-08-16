@@ -3,6 +3,7 @@ import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
+import { Theme } from "../theme.slint";
 
 // The app's global keyboard shortcuts, and the focus scope catching them. It takes the whole main
 // layout as its children, so it sits between any nested scope and the Window's key dispatch. **It
@@ -166,11 +167,11 @@ export component ShortcutScope inherits FocusScope {
                 Queue.select-all();
                 return accept;
             }
-            // **Temporary**: swaps the aurora backdrop for the blur it replaces, so both can be
-            // judged on one track; goes with the blur. Ahead of plain Ctrl+B, whose arm doesn't
+            // **Temporary**: swaps the two backdrops everywhere at once, so both can be judged on
+            // one track; goes once the preference lands. Ahead of plain Ctrl+B, whose arm doesn't
             // exclude Shift, and both cases because platforms disagree on what Ctrl+Shift yields.
             if (ev.modifiers.shift && (ev.text == "b" || ev.text == "B")) {
-                Player.np-aurora = !Player.np-aurora;
+                Theme.aurora-backdrop = !Theme.aurora-backdrop;
                 return accept;
             }
             if (ev.text == "b") {

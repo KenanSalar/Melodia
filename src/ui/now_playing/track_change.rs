@@ -14,15 +14,15 @@ use super::write_crossfade_slot;
 use crate::entities::track::TrackSummary;
 use crate::library;
 use crate::state::AppState;
-use crate::themes::{brush, brush_to_rgb, color, color_with_alpha};
+use crate::themes::{brush, color, color_with_alpha};
 use crate::ui::aurora;
 use crate::ui::backdrop;
 use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
-use crate::{AppWindow, Player, Theme as ThemeGlobal, TrackMetaRow};
+use crate::{AppWindow, Player, TrackMetaRow};
 
 /// What one artwork decode hands back to the UI thread: the sharp cover, the
-/// blurred backdrop, and the hue + brightness measured off that blur.
+/// blurred backdrop, and the hue + brightness measured off the sharp downscale.
 type DecodedArtwork = (Option<Image>, Option<Image>, backdrop::BackdropSample);
 
 /// Subscribe to `sinks.view_model` and react only to actual track changes. Always
@@ -159,8 +159,8 @@ pub(super) async fn apply_track_change(
     // Every colour the view paints on the backdrop, solved together from one hue and
     // one measurement. Both fallbacks live on `BackdropSample::solve`, so this tier and
     // the hero's resolve them identically.
-    let theme_accent = brush_to_rgb(&ui.global::<ThemeGlobal>().get_accent());
-    let colors = sample.solve(theme_accent);
+    let theme_accent = backdrop::theme_accent(&ui);
+    let colors = sample.solve(theme_accent, backdrop::kind(&ui));
 
     player.set_np_accent_bright(brush(colors.chrome));
     player.set_np_on_backdrop(brush(colors.text));
