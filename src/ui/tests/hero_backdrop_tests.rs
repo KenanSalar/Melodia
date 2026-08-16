@@ -1,13 +1,11 @@
 //! Source pins for the one rule `HeroBackdrop` and `HeroChips` share: a view
 //! may publish into them only while it is the hero on screen.
 //!
-//! Both are one global for six views, and nothing at runtime can catch a
-//! violation — the app builds, boots and paints either way. What it looks like
-//! is a banner wearing some *other* entity's colours until you navigate away
-//! and back, which is what a cold boot reliably produces: `install_views`
-//! fetches every persisted detail id regardless of which section is being
-//! restored, so up to four detail views publish while a different hero owns the
-//! band, and the last to finish wins.
+//! Both are one global for six views, and nothing at runtime can catch a violation — the
+//! app builds, boots and paints either way. What it looks like is a banner wearing some
+//! *other* entity's colours until you navigate away and back, which a cold boot reliably
+//! produces: `install_views` fetches every persisted detail id whichever section is being
+//! restored, so up to four detail views publish while a different hero owns the band.
 
 const DETAIL_VIEW: &str = include_str!("../detail_view.rs");
 const HERO_CHIPS: &str = include_str!("../hero_chips.rs");
@@ -45,13 +43,10 @@ const DETAILS: [(&str, &str, &str, &[&str]); 4] = [
 /// token rather than re-deriving the `tab_is_mounted` call at each site.
 const GATE: &str = "on_screen";
 
-/// Call sites of `name` in `src`, paired with whether the gate reaches them.
-///
-/// Bounded by the call's **own** argument list — the first `);` after the open
-/// paren, which none of these arguments contain. A fixed-width window instead
-/// of that terminator reads into the statement *after* the call, and since
-/// these publishers sit next to each other, a gated neighbour then vouches for
-/// an ungated call.
+/// Call sites of `name` in `src`, paired with whether the gate reaches them. Bounded by
+/// the call's **own** argument list — a fixed-width window instead reads into the statement
+/// *after* the call, and these publishers sit next to each other, so a gated neighbour
+/// would vouch for an ungated call.
 fn call_sites(src: &str, name: &str) -> Vec<bool> {
     src.match_indices(name)
         // Skip the definition — only calls are being checked.
@@ -64,19 +59,14 @@ fn call_sites(src: &str, name: &str) -> Vec<bool> {
         .collect()
 }
 
-/// Every publish into a shared hero global takes its gate from a live read of
-/// the mounted tab, never from a literal.
+/// Every publish into a shared hero global takes its gate from a live read of the mounted
+/// tab, never a literal. A hardcoded `true` is the whole failure mode: it compiles, it is
+/// correct on the path the author was looking at, and it is wrong wherever something else
+/// fetches this view in the background.
 ///
-/// A hardcoded `true` is the whole failure mode: it compiles, it is correct on
-/// the path the author was looking at (the user clicked into this view), and it
-/// is wrong on every path where something else fetches this view in the
-/// background — a cold boot's four `seed_detail_from_settings` calls above all.
-///
-/// The two curated pages are absent on purpose: their publishers take the
-/// section's *handle* rather than a flag and derive the gate from it, so their
-/// call sites carry nothing to check and the assertion lives in the seams test
-/// below. That is the stronger shape, not an exemption — there is no way to hand
-/// either one another section's answer.
+/// The two curated pages are absent on purpose: their publishers take the section's
+/// *handle* rather than a flag, so their call sites carry nothing to check. That is the
+/// stronger shape, not an exemption.
 #[test]
 fn every_shared_hero_publish_is_gated_on_its_own_section() {
     for (src, name, _, helpers) in DETAILS {
@@ -96,19 +86,15 @@ fn every_shared_hero_publish_is_gated_on_its_own_section() {
     }
 }
 
-/// **The gate is the live tab, and it is read after the drill has landed.**
+/// **The gate is the live tab, and it is read after the drill has landed.** The view's own
+/// `section_active()` shadow is the wrong source: `SectionActiveGate` only updates it on
+/// the *next* frame, so a cross-section drill — which moves the tab from inside this very
+/// closure — answers for the tab being *left* and drops both the chips and the solved
+/// backdrop.
 ///
-/// It used to be the view's own `section_active()` shadow, which the
-/// `SectionActiveGate` only updates on the *next* frame — so a cross-section
-/// drill, which moves the tab from inside this very closure, read the answer for
-/// the tab the user was *leaving* and dropped both the chips and the solved
-/// backdrop. They then reappeared only once the section-enter had re-run
-/// `fetch_grid` plus this whole fetch again, which is a visible beat with the
-/// previous hero's counts sitting under the new title.
-///
-/// Two mutations reintroduce that and neither changes what the code looks like
-/// at a glance: swapping `tab_is_mounted` back for the shadow, and hoisting the
-/// binding above `on_applied` — which is the hook that moves the tab.
+/// Two mutations reintroduce that, and neither changes what the code looks like at a
+/// glance: swapping `tab_is_mounted` back for the shadow, and hoisting the binding above
+/// `on_applied`, the hook that moves the tab.
 #[test]
 fn the_detail_gate_is_the_live_tab_read_after_the_drill_lands() {
     for (src, name, tab, _) in DETAILS {
@@ -124,12 +110,8 @@ fn the_detail_gate_is_the_live_tab_read_after_the_drill_lands() {
              the only answer a drill's own closure can trust"
         );
 
-        // All four carry the hook now. Playlists was the exception while it had no
-        // `open_*_with` — it grew one so a `nav_history` replay could land the tab
-        // beside the id instead of a fetch ahead of it, and the gate's position
-        // became load-bearing there the moment it did.
         // An assert plus a total unwrap rather than a `let … else`, which would need a
-        // diverging body and `clippy::panic` is denied crate-wide.
+        // diverging body where `clippy::panic` is denied crate-wide.
         let hook = src.split_once("on_applied(&ui);");
         assert!(
             hook.is_some(),
@@ -145,20 +127,16 @@ fn the_detail_gate_is_the_live_tab_read_after_the_drill_lands() {
     }
 }
 
-/// The gate's counterpart: a section whose boot pre-fetch was gated off has to
-/// re-fetch on its first enter, or the band it could not publish stays empty
-/// until the user opens the detail by hand.
-///
-/// `SectionState::new` starts `dirty: false` so a boot pre-fetch wins the first
-/// enter without re-fetching — a real optimisation, and exactly the wrong one
-/// for a section that was pre-fetched *off-screen*, since the half it could not
-/// write is the half that is shared.
+/// The gate's counterpart: a section whose boot pre-fetch was gated off has to re-fetch on
+/// its first enter, or the band it could not publish stays empty until the user opens the
+/// detail by hand. `SectionState::new` starts `dirty: false` so a boot pre-fetch wins the
+/// first enter — a real optimisation, and exactly the wrong one for a section pre-fetched
+/// *off-screen*, since the half it could not write is the shared half.
 #[test]
 fn a_section_pre_fetched_off_screen_re_fetches_on_its_first_enter() {
-    // The handle's name is part of the anchor: a bare `if !` would latch onto
-    // whichever negated guard happens to come first in the file, and the
-    // *negation* is the half that has to be pinned — `if handle.section_active()
-    // { mark_dirty() }` is the inverted bug, and it reads almost identically.
+    // The handle's name is part of the anchor: a bare `if !` latches onto whichever
+    // negated guard comes first, and the *negation* is the half to pin —
+    // `if handle.section_active() { mark_dirty() }` is the inverted bug and reads alike.
     const LIFECYCLES: [(&str, &str, &str); 4] = [
         (include_str!("../albums/callbacks/lifecycle.rs"), "albums/lifecycle.rs", "albums_ui"),
         (include_str!("../artists/callbacks/lifecycle.rs"), "artists/lifecycle.rs", "artists_ui"),
@@ -210,9 +188,8 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
          to paint when it is shown"
     );
 
-    // Anchored without a visibility keyword: what this pins is that the seam
-    // takes the gate and holds it, which is true of `publish` whether it is
-    // `pub`, `pub(crate)` or private to its module.
+    // Anchored without a visibility keyword: what this pins is that the seam takes the
+    // gate and holds it, true of `publish` at any visibility.
     assert!(
         HERO_CHIPS.contains(
             "fn publish(ui: &AppWindow, owner: ChipOwner, chips: Vec<SharedString>, \
@@ -227,8 +204,8 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
          section is already inactive by definition"
     );
 
-    // The two publishers that derive their gate instead of being handed one.
-    // (Kept in this test so both halves of the gate's contract sit together.)
+    // The two publishers that derive their gate instead of being handed one, kept here so
+    // both halves of the contract sit together.
     for (opener, handle) in [
         ("pub fn publish_favorites(", "fav_ui.section_active()"),
         ("pub fn publish_recently_played(", "rp_ui.section_active()"),
@@ -247,23 +224,19 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
 
 /// **The teardown has a gate too, and its two halves stop at different points.**
 ///
-/// A section leave is not a teardown on a tabbed page, and there are three ways
-/// that bites. Switch from Genre Detail to a Playlists tab that already has a
-/// detail open and `detail-open` never goes false, so the band holds still by
-/// design — while the departing tab's leave hands the colours back and the
-/// entering tab republishes them a query and a decode later. Switch to a tab with
-/// *no* detail and the band collapses over the banner instead, for 400 ms, on
-/// globals the same leave just emptied. Pick that first tab again and its detail
-/// id has never been cleared, so the band morphs straight back open onto them.
-/// All three are the colour set belonging to the *page*, which is what
-/// `the_band_is_up` says and what a hand-off-shaped guard only approximated.
+/// A section leave is not a teardown on a tabbed page, and that bites three ways: a switch
+/// to a tab with a detail already open never moves `detail-open`, so the departing leave
+/// hands the colours back and the entering tab republishes them a query later; a switch to
+/// a tab with *no* detail collapses the band over globals the leave just emptied; and
+/// picking the first tab again morphs its never-cleared banner straight back open onto
+/// them. All three are the colour set belonging to the *page*, which is what
+/// `the_band_is_up` says and a hand-off-shaped guard only approximated.
 ///
 /// The chips stop one step earlier, at `hero_chips::clear_if_stale`, and folding the two
-/// into one guard is the mutation this exists to catch: a colour held across a
-/// **hand-off** is the outgoing hero's tone, where a count held across it is the
-/// outgoing hero's *facts* under the incoming one's title — unless the incoming
-/// hero has already published, which is now every cross-tab drill. Only the record
-/// itself can tell those apart, which is why the leave hands over no tab.
+/// into one guard is the mutation this exists to catch: a colour held across a **hand-off**
+/// is the outgoing hero's tone, where a count held across it is its *facts* under the
+/// incoming title — unless the incoming hero has already published, which is every
+/// cross-tab drill. Only the record can tell those apart.
 #[test]
 fn the_shared_teardown_holds_what_the_band_can_still_reach() {
     const MACROS: &str = include_str!("../callbacks/macros.rs");
@@ -296,10 +269,9 @@ fn the_shared_teardown_holds_what_the_band_can_still_reach() {
          one written here cannot see whether the incoming hero has already published"
     );
 
-    // A leave that names the tab it is leaving is the shape this replaced, and it is the
-    // one a later edit is likeliest to reach for: it cannot tell a hand-off whose
-    // destination has already filled the strip from one still waiting on a fetch, because
-    // the departing tab says nothing about either.
+    // A leave that names the tab it is leaving is the shape this replaced, and the one a
+    // later edit is likeliest to reach for: the departing tab cannot tell a hand-off whose
+    // destination has already filled the strip from one still waiting on a fetch.
     assert!(
         !body.contains("$departing"),
         "`release_shared_hero!` must take the `AppWindow` alone — whose chips are on the band \
@@ -307,12 +279,11 @@ fn the_shared_teardown_holds_what_the_band_can_still_reach() {
     );
 }
 
-/// **The image slots ride the page-level gate too, for the reason the detail id gives.**
-///
-/// Nothing on this page clears an id on a tab leave, so `AlbumDetail.album-id >= 0` still
+/// **The image slots ride the page-level gate too**, for the reason the detail id gives:
+/// nothing on this page clears an id on a tab leave, so `AlbumDetail.album-id >= 0` still
 /// means "this banner is in the globals" and picking that tab again morphs it back open
-/// ahead of the re-fetch. Emptying `cover` at the leave is what dropped `ArtworkImage` to
-/// its fallback glyph — during the collapse on the way out, and again on the way back in.
+/// ahead of the re-fetch. Emptying `cover` at the leave drops `ArtworkImage` to its
+/// fallback glyph during the collapse and again on the way back in.
 #[test]
 fn a_tab_leave_holds_the_slots_the_band_can_still_paint() {
     const MACROS: &str = include_str!("../callbacks/macros.rs");
@@ -392,25 +363,17 @@ fn the_collapsed_teardown_hands_back_only_what_closed() {
     );
 }
 
-/// The page teardown watches the **nav index**, and a `SectionActiveGate` cannot.
-///
-/// A gate goes false for three reasons — the nav index moved, Now Playing opened, the
-/// miniplayer took over — and only the first is leaving the page; the other two put the
-/// band back with the same detail open. But the mutation worth catching is subtler than
-/// picking the wrong one of the three, because a sixth gate reads as the obvious home for
-/// this and *compiles*: `sidebar.slint` clears `now-playing-open` and writes the new index
-/// in **one** handler, so leaving the page from behind Now Playing takes that gate false →
-/// false and delivers no edge at all. The hero then stays pinned for the session and the
-/// next page's band paints the departing detail's chips under its own title — which is the
-/// stale-facts failure the whole chip asymmetry exists to prevent.
+/// The page teardown watches the **nav index**, and a `SectionActiveGate` cannot. A gate
+/// goes false for three reasons and only one is leaving the page — but the mutation worth
+/// catching is subtler, because a sixth gate reads as the obvious home for this and
+/// *compiles*: `sidebar.slint` clears `now-playing-open` and writes the new index in
+/// **one** handler, so leaving the page from behind Now Playing takes that gate
+/// false → false and delivers no edge at all.
 ///
 /// **What the mirror costs is that it fires on every nav change, so the handler owes a
-/// latch**, and that is the second mutation. A `changed` handler cannot ask which index it
-/// moved *from*, so an unlatched teardown also runs on Search → Browse — where the ids are
-/// untouched and the slots hold what `seed_detail_from_settings` wrote at boot *because* the
-/// page was hidden, so that the first visit paints rather than waiting on a re-fetch. It
-/// reads as a page-leave hook either way and the flash it leaves lands on a page nobody was
-/// looking at when it fired.
+/// latch.** A `changed` handler cannot ask which index it moved *from*, so an unlatched
+/// teardown also runs on Search → Browse, where the ids are untouched and the slots hold
+/// what `seed_detail_from_settings` wrote at boot *because* the page was hidden.
 #[test]
 fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
     const APP: &str = include_str!("../../../melodia-ui/ui/app-window.slint");
@@ -463,36 +426,29 @@ fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
     );
 }
 
-/// **No leave decides for itself whether the chips are stale.**
-///
-/// The macro pair is the only way a hero teardown may be spelled, and the mutation to catch
-/// is a site reaching past it for a bare `hero_chips::clear` — which reads as the direct
-/// call and wipes a row the *incoming* hero has already filled, or one the band is 400 ms
-/// into collapsing over. Both of those are invisible in review at the site, because the site
-/// is the one place with no way to tell which case it is in.
+/// **No leave decides for itself whether the chips are stale.** The macro pair is the only
+/// way a hero teardown may be spelled, and the mutation to catch is a site reaching past
+/// it for a bare `hero_chips::clear` — which wipes a row the *incoming* hero has already
+/// filled, or one the band is mid-collapse over. Both are invisible at the site, the one
+/// place with no way to tell which case it is in.
 ///
 /// **It walks the wiring tree rather than listing the sites**, for the reason
-/// `ui::file_dialog::tests` does: a list is a list of the sites someone remembered, and the
-/// one that gets this wrong is the one nobody has written yet. A fixed four already missed
-/// `playlists/dialog.rs`, the fifth. The corpus is `test_support::callback_sources`, whose
-/// own `CALLBACK_HOMES` equality is what stops a renamed subtree shrinking this walk in
-/// silence — the failure a floor here could not catch.
+/// `ui::file_dialog::tests` does. The corpus is `test_support::callback_sources`, whose
+/// `CALLBACK_HOMES` equality stops a renamed subtree shrinking this walk in silence.
 #[test]
 fn no_leave_clears_the_chips_behind_the_macro() {
-    /// Two per detail lifecycle — the section leave and the failed re-fetch that drops
-    /// back to the grid — plus the playlist dialog's, plus one per curated page. A floor
-    /// rather than an equality so a sixth teardown needs no edit here; the *corpus* is
-    /// held exact by `CALLBACK_HOMES` instead, which is the half a floor could never do.
+    /// Two per detail lifecycle, plus the playlist dialog's, plus one per curated page. A
+    /// floor rather than an equality so a sixth teardown needs no edit here; the *corpus*
+    /// is held exact by `CALLBACK_HOMES` instead.
     const MIN_TEARDOWNS: usize = 11;
 
     let mut total = 0;
     for (rel, code) in crate::test_support::callback_sources() {
-        // Skipped rather than checked: `macros.rs` *defines* the needles, and
-        // `my_library`'s wiring owns the page's two deliberate teardowns — the
-        // unconditional `clear` once the page is gone, and the collapse's `clear_if_stale`.
-        // Both are pinned by their own tests below. The asserts are what stop each skip
-        // outliving its reason, and a file that moves out from under its literal loses its
-        // exemption and trips the `hero_chips::clear` assert instead — the loud direction.
+        // Skipped rather than checked: `macros.rs` *defines* the needles and
+        // `my_library`'s wiring owns the page's two deliberate teardowns, both pinned by
+        // their own tests. The asserts stop each skip outliving its reason — a file that
+        // moves out from under its literal loses its exemption and trips the
+        // `hero_chips::clear` assert instead, which is the loud direction.
         if rel == "callbacks/macros.rs" {
             assert!(
                 code.contains("macro_rules! release_shared_hero")

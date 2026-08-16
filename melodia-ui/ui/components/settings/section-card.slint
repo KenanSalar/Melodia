@@ -12,17 +12,12 @@ export component SectionCard inherits Rectangle {
     background: transparent;
     vertical-stretch: 0;
 
-    // `preferred-width` and `max-width`, never `width` — Slint reports a bound
-    // `width` as the element's minimum *and* maximum, and that floor climbs out
-    // to the window's own.
-    //
-    // Pinning the preferred is what keeps the two body columns equal: the grid
-    // seeds every column at its cells' *preferred* width and only then hands out
-    // the surplus by stretch, so cards of different natural width give columns
-    // of different width, which side by side reads as a misalignment rather than
-    // as a layout. The max then holds the cap where a column is wider than one
-    // card — a single-column page drawn into a two-column body. `min-width` is
-    // deliberately left alone, so the card still compresses all the way down.
+    // `preferred-width` and `max-width`, never `width` — Slint reports a bound `width` as the
+    // element's minimum *and* maximum, and that floor climbs out to the window's own. Pinning the
+    // preferred is what keeps the two body columns equal: the grid seeds every column at its cells'
+    // *preferred* width and only then hands out the surplus by stretch, so cards of different
+    // natural width give columns of different width. The max then holds the cap where a column is
+    // wider than one card. `min-width` is deliberately left alone, so the card still compresses.
     preferred-width: root.card-width;
     max-width: root.card-width;
 

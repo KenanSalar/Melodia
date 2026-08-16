@@ -2,45 +2,40 @@ import { ListView } from "std-widgets.slint";
 import { BrowseCardGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 
-// Browse's card view: one virtualized grid over subfolders *and* files, folders
-// first, in the same order the list would draw them. Rust chunks the flat card
-// list into rows of `columns`, so the inner `ListView` virtualizes by row and
-// instantiates only what's on screen.
+// Browse's card view: one virtualized grid over subfolders *and* files, folders first, in the same
+// order the list would draw them. Rust chunks the flat card list into rows of `columns`, so the
+// inner `ListView` virtualizes by row.
 //
-// **`EntityCardGrid`'s skeleton, kept deliberately in step with it** — the
-// delegate's fixed height, the gap-padded row, the lazy `covers-generation`
-// cover binding and the whole host-mounted-scrollbar contract are that
-// component's and should move together with it. What can't be shared is the
-// card: a browse card carries three things no entity card has — which glyph a
-// coverless tile falls back to, whether the row is a real library track, and a
-// folder path to drill into — and putting those on `EntityStripRow` would tax
-// the four grids sharing it for a case none of them has.
+// **`EntityCardGrid`'s skeleton, kept deliberately in step with it** — the delegate's fixed height,
+// the gap-padded row, the lazy `covers-generation` cover binding and the host-mounted-scrollbar
+// contract are that component's and should move together with it. What can't be shared is the card:
+// a browse card carries three things no entity card has — a coverless tile's fallback glyph,
+// whether the row is a real library track, and a folder path to drill into — and putting those on
+// `EntityStripRow` would tax the four grids sharing it for a case none of them has.
 export component BrowseCardGrid inherits Rectangle {
     in property <[BrowseCardGridRow]> rows;
     in property <length> card-width: 180px;
     in property <length> card-height: 226px;
-    // The gap is baked into the slot height because a `ListView` lays its
-    // delegates back-to-back and has no `spacing`.
+    // The gap is baked into the slot height because a `ListView` lays its delegates back-to-back
+    // and has no `spacing`.
     in property <length> row-height: 246px;
     in property <length> gap: 20px;
 
-    // Bumped by the host once the card tier behind `request-cover` is warm. A
-    // mode toggle has no fetch to await before the grid mounts, so the binding
-    // reads this to re-run and its value tells Rust whether it may decode.
+    // Bumped by the host once the card tier behind `request-cover` is warm. A mode toggle has no
+    // fetch to await before the grid mounts, so the binding reads this to re-run and its value
+    // tells Rust whether it may decode.
     in property <int> covers-generation: 0;
 
-    // A folder card drills in; a track card plays the folder from that track.
-    // Split at the delegate rather than dispatched in Rust, so the two existing
-    // `Browse` callbacks are reached with exactly the arguments the list
-    // already passes them.
+    // A folder card drills in; a track card plays the folder from that track. Split at the delegate
+    // rather than dispatched in Rust, so the two existing `Browse` callbacks are reached with
+    // exactly the arguments the list already passes them.
     callback folder-clicked(string /*path*/);
     callback track-clicked(int /*track_id*/, int /*row_index*/);
     // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
-    // Same sign convention as `TrackList`, `AlbumGrid` and `EntityCardGrid` — a
-    // positive `v-offset` is N px scrolled, where the inner `ListView` holds
-    // that as a non-positive `viewport-y`, so the boundary negates.
+    // Same sign convention as `TrackList`, `AlbumGrid` and `EntityCardGrid` — a positive `v-offset`
+    // is N px scrolled, where the inner `ListView` holds that as a non-positive `viewport-y`.
     out property <length> v-visible-height: list.visible-height;
     out property <length> v-viewport-height: list.viewport-height;
     out property <length> v-offset: -list.viewport-y;
@@ -52,8 +47,7 @@ export component BrowseCardGrid inherits Rectangle {
         horizontal-scrollbar-policy: always-off;
 
         for grid-row in root.rows: Rectangle {
-            // A `ListView` delegate needs a fixed height or the virtualization
-            // math breaks.
+            // A `ListView` delegate needs a fixed height or the virtualization math breaks.
             min-height: root.row-height;
             max-height: root.row-height;
 
@@ -69,19 +63,15 @@ export component BrowseCardGrid inherits Rectangle {
                     artwork-path: card.artwork_path;
                     cover: root.request-cover(card.artwork_path, root.covers-generation);
                     fallback-icon: card.is_folder ? "folder" : "music-note";
-                    // A pronounced zoom on the placeholder, as on the other
-                    // grids; real artwork stays gentle so a cover doesn't
-                    // jitter inside the tile clip on hover.
+                    // A pronounced zoom on the placeholder, as on the other grids; real artwork
+                    // stays gentle so a cover doesn't jitter inside the tile clip on hover.
                     cover-scale-hover: card.artwork_path == "" ? 1.15 : 1.04;
                     title: card.title;
-                    // A folder's subtitle is a literal here rather than a string
-                    // Rust pushed: `@tr` only translates literals at codegen, so
-                    // the Rust-built one would render untranslated. A track card
-                    // carries its artist, empty for a disk-only file.
+                    // A folder's subtitle is a literal here rather than a string Rust pushed, `@tr`
+                    // only translating literals at codegen. A track card carries its artist.
                     subtitle: card.is_folder ? @tr("Folder") : card.subtitle;
-                    // A disk-only file — on disk inside a library folder but not
-                    // in the DB. `EntityCard` dims it and disables its own
-                    // TouchArea, so `clicked` can't reach here for one.
+                    // A disk-only file — on disk inside a library folder but not in the DB.
+                    // `EntityCard` dims it and disables its own TouchArea.
                     enabled: card.enabled;
                     clicked => {
                         if (card.is_folder) {

@@ -104,8 +104,7 @@ async fn run_sweep(
     };
     match backfill(state, &token, shutdown, attempted).await {
         Ok(outcome) => {
-            // Always log the outcome — a zero-match sweep used to be silent, which
-            // read as "nothing happened / stuck".
+            // Always log the outcome — a silent zero-match sweep reads as "nothing happened".
             log::info!("MBID backfill: looked up {}, tagged {}", outcome.looked_up, outcome.tagged);
             // Anything looked up grew the attempted set (only not-yet-attempted
             // rows are queried) — persist so the next launch skips them.

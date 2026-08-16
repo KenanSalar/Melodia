@@ -1,15 +1,8 @@
-// Suppress the auto-allocated console window on Windows release builds.
-// Without this attribute, rustc defaults to the `console` subsystem on
-// Windows: the OS allocates a console alongside the GUI window and ties
-// the app's lifetime to it (closing the console terminates Melodia). The
-// `cfg_attr(not(debug_assertions))` form keeps the console available
-// during `cargo run` so `RUST_LOG` / `MELODIA_RSS_SAMPLE` output stays
-// visible for development; only release builds become true GUI apps.
-//
-// Doesn't affect stdout capture by parent processes — the updater's
-// post-install smoke test spawns this binary with `Stdio::piped()`,
-// which works for GUI-subsystem children just as it does for console
-// ones (the pipe handle is inherited regardless of subsystem).
+// Without this, rustc defaults to the `console` subsystem on Windows: the OS
+// allocates a console beside the GUI window and ties the app's lifetime to it.
+// Gated on `debug_assertions` so `cargo run` keeps a console for `RUST_LOG` /
+// `MELODIA_RSS_SAMPLE`. A parent's `Stdio::piped()` still captures stdout either
+// way, which is what the updater's smoke test relies on.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod boot;
@@ -29,38 +22,31 @@ use slint::ComponentHandle;
 use tokio::sync::watch;
 
 fn main() -> AppResult<()> {
-    // `--version` is the updater's post-swap smoke test
-    // (`updater::install::verify_swapped_binary`), which spawns the freshly
-    // renamed binary to confirm it boots before offering Restart. It asserts
-    // exit 0 within 5 s and stdout starting `Melodia ` and carrying the expected
-    // version, so this must print exactly that and return promptly — and must
-    // **stay here forever**: removing it, or the prefix, breaks in-place updates
-    // for every older client that smoke-tests against it.
-    //
-    // Ahead of `mallopt`, which only shapes steady-state RSS of a long-lived
-    // process and would cost the verifier latency for nothing.
+    // The updater's post-swap smoke test spawns the freshly renamed binary with
+    // this and asserts exit 0 plus a `Melodia ` prefix carrying the expected
+    // version. It must **stay here forever**: removing the branch or the prefix
+    // breaks in-place updates for every older client. Ahead of `mallopt`, which
+    // shapes a long-lived process's steady state and would only cost the
+    // verifier latency.
     if std::env::args().nth(1).as_deref() == Some("--version") {
         use std::io::Write;
         // Locked handle to dodge `clippy::print_stdout`, which guards against
-        // accidental GUI-app stdout; this is a deliberate CLI contract. A write
-        // failure is swallowed because the binary still *works* — and the
-        // verifier's prefix check fails on the empty stdout regardless.
+        // accidental GUI-app stdout where this is a deliberate CLI contract. A
+        // write failure is swallowed — the binary still works, and the
+        // verifier's prefix check fails on the empty stdout anyway.
         let _ = writeln!(std::io::stdout().lock(), "Melodia {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
 
-    // `--logs` answers what the rest of the diagnostics feature can't: it sits
+    // Answers what the rest of the diagnostics feature can't: that surface sits
     // behind Settings → About, unreachable when the thing being reported is that
     // Melodia won't open. Touches neither the database nor Slint, and stays
-    // beside the branch above — both are contracts that must precede anything
-    // that can fail.
+    // beside the branch above — both must precede anything that can fail.
     //
-    // Linux and macOS only, not by choice: `windows_subsystem = "windows"`
-    // leaves a release build no console, so `GetStdHandle` hands back nothing
-    // and this is swallowed (the branch above escapes only via the updater's
-    // `Stdio::piped()`). Debug builds are console-subsystem, so the gap is
-    // invisible locally — `README.md` and the issue template point Windows at
-    // `%APPDATA%\Melodia\logs\`.
+    // Linux and macOS only, not by choice: a release build has no console under
+    // `windows_subsystem = "windows"`, so this is swallowed there. Debug builds
+    // are console-subsystem, making the gap invisible locally — `README.md` and
+    // the issue template point Windows at `%APPDATA%\Melodia\logs\`.
     if std::env::args().nth(1).as_deref() == Some("--logs") {
         use std::io::Write;
         let paths = Paths::resolve()?;
@@ -68,10 +54,9 @@ fn main() -> AppResult<()> {
         return Ok(());
     }
 
-    // Reap the previous-binary snapshot `updater::install::swap_in_place` keeps
-    // for rollback on AppImage / tarball installs: reaching this launch proves
-    // the new binary works. Linux-only — Windows upgrades through msiexec, which
-    // never leaves an `.old` at the install target.
+    // Reap the rollback snapshot `swap_in_place` keeps on AppImage / tarball
+    // installs — reaching this launch proves the new binary works. Linux-only;
+    // msiexec never leaves an `.old` at the install target.
     #[cfg(target_os = "linux")]
     {
         if let Ok(stale) = melodia::services::updater::install_target_old() {
@@ -79,21 +64,19 @@ fn main() -> AppResult<()> {
         }
     }
     // Cap the arenas at 2. glibc's default `8 × num_cpus` gives every long-lived
-    // thread its own 64 MiB arena, and this process runs enough of them (art
-    // prewarm, queue restore, Slint, souvlaki, SQLx) that the committed slack is
-    // pure per-thread free-list overhead. Capping trades it for malloc
-    // contention under heavy parallel allocation, which an idle-most-of-the-time
-    // player doesn't have. **Must precede the first malloc on any thread** — the
-    // logger and the runtime builder both allocate, so staying first covers it.
+    // thread its own 64 MiB arena, and this process runs enough of them that the
+    // committed slack is pure per-thread free-list overhead. Capping trades it
+    // for malloc contention under heavy parallel allocation, which an
+    // idle-most-of-the-time player doesn't have. **Must precede the first malloc
+    // on any thread** — the logger and the runtime builder both allocate, so
+    // staying first covers it.
     //
     // The other two freeze the mmap and trim thresholds, which glibc otherwise
-    // ratchets: freeing an mmap'd block raises the mmap threshold to that size
-    // and trim to twice it, so one full-resolution cover decode leaves every
-    // later allocation coming off the arena free list, where freeing hands
-    // nothing back to the kernel. Setting either explicitly disables the
-    // adjustment, and these *are* glibc's initial values — pinning where the
-    // process starts, not tuning. Trade: more minor faults for less resident
-    // anonymous memory.
+    // ratchets upward on every mmap'd block freed: one full-resolution cover
+    // decode is enough to leave every later allocation coming off the arena free
+    // list, where freeing hands nothing back to the kernel. These *are* glibc's
+    // initial values — pinning where the process starts, not tuning — and the
+    // trade is more minor faults for less resident anonymous memory.
     //
     // `M_TRIM_THRESHOLD = -1`, `M_MMAP_THRESHOLD = -3`, `M_ARENA_MAX = -8` per
     // glibc's `malloc.h`.
@@ -108,14 +91,11 @@ fn main() -> AppResult<()> {
         libc::mallopt(-1, 128 * 1024);
     }
 
-    // Give PipeWire's ALSA-compat layer a clean stream name. CPAL opens the
-    // default ALSA PCM, which PipeWire turns into a graph node auto-named
-    // `alsa_playback.<prgname>` — what EasyEffects and pavucontrol show
-    // verbatim. pipewire-alsa reads `PIPEWIRE_ALSA` (SPA-JSON) when the PCM
-    // opens; `node.name` overrides the auto-name and `application.name` fills
-    // those mixers' app column, so the stream reads simply "Melodia". Ignored on
-    // bare ALSA and non-PipeWire systems. Before any thread spawns, so
-    // `AppState::init`'s device inherits it.
+    // Give PipeWire's ALSA-compat layer a clean stream name: CPAL opens the
+    // default ALSA PCM, which PipeWire turns into a node auto-named
+    // `alsa_playback.<prgname>` and EasyEffects and pavucontrol show verbatim.
+    // pipewire-alsa reads this when the PCM opens; ignored on bare ALSA. Before
+    // any thread spawns, so `AppState::init`'s device inherits it.
     #[cfg(target_os = "linux")]
     #[allow(unsafe_code, reason = "env::set_var is unsafe in Rust 2024")]
     // SAFETY: `set_var` requires that no other thread is reading or writing the
@@ -191,13 +171,8 @@ fn main() -> AppResult<()> {
         }
     );
 
-    // Unified task lifecycle handle.
     let spawner = tasks::TaskSpawner::from_state(&state);
-
-    // 1, 2. Always-running background tasks + souvlaki receiver.
     boot::tasks::spawn_background_tasks(&spawner, &state, channels);
-
-    // 3. Restore persisted queue from disk.
     boot::tasks::restore_persisted_queue(&runtime, &state);
 
     // Read `settings.json` and `views.json` once and reuse them everywhere.
@@ -206,22 +181,19 @@ fn main() -> AppResult<()> {
     let startup_view_state: Option<services::view_state::ViewStateData> =
         library::settings::get_view_state(&state).ok();
 
-    // 3a. Files on the command line replace the restored queue and play, so
-    // resume would only be visible for the moment it takes them to land.
+    // Files on the command line replace the restored queue and play, so resume
+    // would only be visible for the moment it takes them to land.
     if startup_files.is_empty() {
         boot::tasks::maybe_resume_on_startup(&state, startup_settings.as_ref());
     } else {
         boot::tasks::open_startup_files(&runtime, &state, &startup_files);
     }
 
-    // 4. First-launch auto-add + folder-watcher restart.
     boot::tasks::spawn_first_launch(&spawner, &state);
 
-    // 4-pre. Persisted window geometry. Maximized rides the winit
-    // `WindowAttributes` hook — Slint exposes no API for it, and the hook
-    // creates the window already-maximized with no flash. Size and position come
-    // after `AppWindow::new()` via `geometry::restore`. `fallback()` covers a
-    // first launch with no `settings.json`.
+    // Maximized rides the winit `WindowAttributes` hook — Slint exposes no API
+    // for it, and the hook creates the window already-maximized with no flash.
+    // Size and position come after `AppWindow::new()`, via `geometry::restore`.
     let geometry = startup_settings.as_ref().map_or_else(
         ui::window_chrome::geometry::PersistedGeometry::fallback,
         ui::window_chrome::geometry::PersistedGeometry::from_settings,
@@ -236,16 +208,12 @@ fn main() -> AppResult<()> {
                 attrs
             };
             // Pin the window identity so the compositor resolves our icon and
-            // label. The two protocols match differently:
-            //
-            //   * X11 matches `WM_CLASS` res_class against the desktop file's
-            //     `StartupWMClass=Melodia`. Left empty, the compositor falls
-            //     back to the binary basename — lowercase for `/usr/bin/melodia`.
-            //   * Wayland clients cannot set an icon at all: the compositor
-            //     matches `app_id` to a desktop file of the *same basename* and
-            //     reads its `Icon=`, ignoring `StartupWMClass`. Ours installs as
-            //     `com.github.kenansalar.melodia.desktop`, so the `app_id` must
-            //     be that reverse-DNS id or KWin shows the generic placeholder.
+            // label. X11 matches `WM_CLASS` against the desktop file's
+            // `StartupWMClass=Melodia`, falling back to the binary basename when
+            // empty. Wayland clients can't set an icon at all — the compositor
+            // matches `app_id` to a desktop file of the *same basename* and
+            // reads its `Icon=` — so that half must be the reverse-DNS id we
+            // install under, or KWin shows the generic placeholder.
             #[cfg(target_os = "linux")]
             let attrs = {
                 use slint::winit_030::winit::platform::wayland::WindowAttributesExtWayland;
@@ -270,32 +238,16 @@ fn main() -> AppResult<()> {
     // show — without it the window snaps to the ~640×420 layout minimum.
     ui::window_chrome::geometry::restore(&app, geometry);
 
-    // 4a. Locale.
     boot::ui_setup::install_locale(&app, &state, startup_settings.as_ref());
-
-    // 4b. Window chrome (no-frame / drag region / native-frame hydrate).
     boot::ui_setup::install_app_chrome(&app, &state);
-
-    // 5–5c3. Tracks / Browse / Albums views + their callbacks + the
-    // now-playing-favorite fan-out + album cover-cache tune. Returns the
-    // per-view handles for downstream wiring.
     let views = boot::ui_setup::install_views(&app, &state, startup_view_state.as_ref());
-
-    // 5d–5d4. Library Settings + playback toggle + notifications stack +
-    // file-watcher toggle.
     let notifications = boot::ui_setup::install_library_settings_and_friends(&app, &state)?;
 
-    // 5d5. Playlist import/export (M3U8) action pills. Wired here — after
-    // both the playlists UI handle and the notifications stack exist —
-    // because the completion toasts need the `Rc<NotificationsUi>`.
+    // These two wire here rather than inside their slices because their
+    // completion toasts need the `Rc<NotificationsUi>`.
     ui::playlists::wire_files(&app, &state, &views.playlists_ui, &notifications);
-
-    // 5d6. Edit-Track-Information dialog callbacks. Wired here for the same
-    // reason as the playlist pills — the Save completion toast needs the
-    // `Rc<NotificationsUi>`.
     ui::callbacks::wire_tags(&app, &state, &notifications);
 
-    // 5e. Appearance.
     let appearance_handles = match ui::appearance::install(&app, &state) {
         Ok(h) => Some(h),
         Err(e) => {
@@ -304,8 +256,7 @@ fn main() -> AppResult<()> {
         }
     };
 
-    // 5f. Material You coordinator — after `appearance::install`, whose kick
-    // channel it subscribes to.
+    // After `appearance::install`, whose kick channel it subscribes to.
     if let Some(h) = &appearance_handles {
         tasks::material_you::spawn(
             &spawner,
@@ -318,8 +269,6 @@ fn main() -> AppResult<()> {
         );
     }
 
-    // 5c–5e. Apply persisted UI state (column visibility, sidebar width,
-    // column widths).
     boot::ui_setup::hydrate_ui_from_settings(
         &app,
         &state,
@@ -327,7 +276,6 @@ fn main() -> AppResult<()> {
         startup_view_state.as_ref(),
     );
 
-    // 6. Bridge subscribers: ViewModel / queue / position channels.
     let weak = app.as_weak();
     ui::shell::bridge::spawn_view_model_subscriber(
         weak.clone(),
@@ -340,14 +288,13 @@ fn main() -> AppResult<()> {
     ui::shell::bridge::spawn_position_subscriber(weak.clone(), &state.position_tx)
         .map_err(|e| AppError::Window(format!("position subscriber: {e}")))?;
 
-    // 6b. Queue bottom-sheet.
     match ui::queue_sheet::install(&app, &state) {
         Ok(h) => ui::window_chrome::set_queue_sheet_open(h.is_open),
         Err(e) => log::warn!("queue_sheet::install: {e}"),
     }
 
-    // 6c. Full-screen Now Playing view (owns its own small `(cover, blur)`
-    // LRU separate from `cover_thumbs`).
+    // Now Playing owns its own small `(cover, blur)` tier, separate from
+    // `cover_thumbs`.
     let np_artwork = Arc::new(ui::now_playing_artwork::NowPlayingArtwork::new());
     let np_state = match ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork) {
         Ok(s) => Some(s),
@@ -364,49 +311,36 @@ fn main() -> AppResult<()> {
         log::warn!("mini_player::install: {e}");
     }
 
-    // 7. Seed `Player.vm` / `Player.queue` once with the current state.
     boot::ui_setup::seed_initial_view_model(&app, &state, &views.cover_thumbs);
 
-    // 8, 8b, 8c, 8d, 8e. Initial Tracks + Albums + Artists + Genres +
-    // Playlists fetches.
     boot::ui_setup::spawn_initial_tracks_fetch(&state, &views.tracks_ui, weak.clone());
     boot::ui_setup::spawn_initial_albums_fetch(&state, &views.albums_ui, weak.clone());
     boot::ui_setup::spawn_initial_artists_fetch(&state, &views.artists_ui, weak.clone());
     boot::ui_setup::spawn_initial_genres_fetch(&state, &views.genres_ui, weak.clone());
     boot::ui_setup::spawn_initial_playlists_fetch(&state, &views.playlists_ui, weak.clone());
 
-    // 9. Re-fetch Tracks whenever the library mutates (deferred to the next
-    // section-enter while the view is hidden).
     boot::ui_setup::install_library_changed_refresher(&state, &views.tracks_ui, weak.clone())?;
-
-    // 9b. Toast on watcher-overflow rescan (kernel queue dropped events).
     boot::ui_setup::install_rescan_notice_subscriber(&state, weak.clone(), notifications.clone())?;
-
-    // 9b-ii. Toast when the audio output device goes away mid-session.
     boot::ui_setup::install_audio_device_lost_subscriber(
         &state,
         weak.clone(),
         notifications.clone(),
     )?;
 
-    // 9b-iii. The Ko-fi link, plus the one-time support toast a few minutes into
+    // The Ko-fi link, plus the one-time support toast a few minutes into
     // whichever early launch is the fifth. Counts this launch either way.
     ui::support::install(&app, &state, notifications.clone())?;
 
-    // 9c. Surface backend failures (playback decode errors, failed scans /
-    // imports / saves) pushed through the `services::toast` bridge as toasts.
     boot::ui_setup::install_toast_bridge(weak.clone(), notifications.clone())?;
 
-    // 10. Opt-in memory sampler (`MELODIA_RSS_SAMPLE=1`), no-op when unset. On
-    // the UI thread so it can read the Nav / *Detail globals for its view tag
-    // without an atomic-shadow plumbing pass.
+    // No-op unless `MELODIA_RSS_SAMPLE` is set. On the UI thread so it can read
+    // the Nav / *Detail globals for its view tag without an atomic shadow.
     tasks::rss_sampler::install(&weak);
 
-    // 11. Auto-updater. One `watch` carries backend events from the daily task
-    // and the `Updater.*` callbacks to the UI-thread subscriber that toasts
-    // them. The daily task spawns only when auto-check is on *and* the install
-    // path is user-writable — system-managed installs go through the OS package
-    // manager instead.
+    // One `watch` carries backend events from the daily task and the `Updater.*`
+    // callbacks to the UI-thread subscriber that toasts them. The daily task
+    // spawns only when auto-check is on *and* the install path is user-writable
+    // — system-managed installs go through the OS package manager instead.
     let (updater_event_tx, updater_event_rx) =
         watch::channel::<Option<services::updater::UpdaterEvent>>(None);
     ui::settings::updater_settings::install_event_subscriber(
@@ -429,10 +363,10 @@ fn main() -> AppResult<()> {
     }
 
     // Independent of the daily check: the in-attempt prune only fires on the
-    // next install click, so a cancelled or failed install leaves a verified
-    // package in the staging dir forever for a user who never clicks again. The
-    // 30 s grace matches `updater_daily::STARTUP_DELAY`, giving the first-launch
-    // scan and DB pre-fetch first claim on the disk.
+    // next install click, so a cancelled install leaves a verified package in
+    // the staging dir forever for a user who never clicks again. The grace
+    // matches `updater_daily::STARTUP_DELAY`, giving the first-launch scan and
+    // DB pre-fetch first claim on the disk.
     runtime.spawn(async {
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
         services::updater::prune_stale_staging().await;
@@ -448,11 +382,10 @@ fn main() -> AppResult<()> {
         }
     });
 
-    // Opt-in and off by default; when off, no D-Bus connection, no ksni thread,
-    // no receiver tasks. Restart-gated through the `restart-tray` Dialog, so
-    // this startup read is the single gate. `install` is cross-platform: Linux
-    // creates the StatusNotifierItem eagerly, Win/mac defer `tray-icon` onto the
-    // event loop, which has to be running first.
+    // Restart-gated through the `restart-tray` Dialog, so this startup read is
+    // the single gate; off, there is no D-Bus connection, ksni thread or
+    // receiver task at all. `install` is cross-platform — Linux creates the
+    // StatusNotifierItem eagerly, Win/mac defer onto the event loop.
     if startup_settings.as_ref().is_some_and(|s| s.tray.tray_enabled) {
         ui::shell::tray_bridge::install(&spawner, &state, &app);
     }
@@ -477,8 +410,7 @@ fn main() -> AppResult<()> {
                 Some(hwnd) => {
                     if mc.attach_smtc(hwnd) {
                         // `sync()` no-op'd while the controls were inert, so the
-                        // OS panel is still empty — push current state through
-                        // the canonical path.
+                        // OS panel is still empty.
                         melodia::player::state::with_state_emit(&player_state, &sinks, |_| {});
                     }
                 }
@@ -491,16 +423,14 @@ fn main() -> AppResult<()> {
         }
     }
 
-    // Native-titlebar polish: boot's `themes::apply` ran inside
-    // `appearance::install`, but its DWM hook no-op'd with no HWND yet. By the
-    // time this one-shot fires the window is up and `Theme.mantle` carries the
-    // resolved palette, so the caption picks up dark/light and its mantle
-    // colour; every later palette change drives DWM from `write_palette`.
+    // Boot's `themes::apply` ran inside `appearance::install`, where the DWM
+    // hook no-op'd with no HWND yet. By the time this one-shot fires the window
+    // is up and `Theme.mantle` carries the resolved palette; every later change
+    // drives DWM from `write_palette`.
     //
-    // The same closure pushes the embedded icon onto the winit window: the
-    // taskbar reads `assets/melodia.ico` out of the EXE directly, but the
-    // *caption* icon comes from the WNDCLASS, which winit registers with
-    // `hIcon: 0` — without `set_window_icon` the titlebar stays generic.
+    // The same closure pushes the embedded icon onto the winit window — the
+    // taskbar reads it out of the EXE directly, but the *caption* icon comes
+    // from the WNDCLASS, which winit registers with `hIcon: 0`.
     #[cfg(target_os = "windows")]
     {
         let weak = app.as_weak();
@@ -513,11 +443,9 @@ fn main() -> AppResult<()> {
         }
     }
 
-    // Not `app.run()`: its `run_event_loop` terminates as soon as the last
-    // window is *hidden*, which close-to-tray does. `run_event_loop_until_quit`
-    // is Slint's documented tray pattern — it survives having no visible window
-    // and returns only on `quit_event_loop()`, which every quit path already
-    // calls.
+    // Not `app.run()`: its loop terminates as soon as the last window is
+    // *hidden*, which close-to-tray does. This is Slint's documented tray
+    // pattern, returning only on `quit_event_loop()`.
     app.show().map_err(|e| AppError::Window(e.to_string()))?;
     slint::run_event_loop_until_quit().map_err(|e| AppError::Window(e.to_string()))?;
 
@@ -554,15 +482,14 @@ fn main() -> AppResult<()> {
     shutdown::respawn_if_requested();
 
     // Returning normally would linger until every non-daemon thread exits, and
-    // four of them never do: the leaked `MixerDeviceSink`'s rodio output thread,
-    // souvlaki's MPRIS thread, accesskit's a11y thread, and any tokio worker
-    // parked on a blocking call. State is flushed and the rest is OS-managed.
+    // four never do: the leaked `MixerDeviceSink`'s output thread, souvlaki's
+    // MPRIS thread, accesskit's a11y thread, and any tokio worker parked on a
+    // blocking call. State is flushed and the rest is OS-managed.
     std::process::exit(0);
 }
 
-/// Extract the native Win32 `HWND` from the shown Slint window for souvlaki's
-/// SMTC backend. Returns `None` if the winit window does not exist yet or the
-/// platform handle is not `Win32` — `attach_smtc` then leaves controls inert.
+/// The shown window's native `HWND`, for souvlaki's SMTC backend. `None` before
+/// the winit window exists, which leaves `attach_smtc` inert.
 #[cfg(target_os = "windows")]
 fn win32_hwnd(app: &AppWindow) -> Option<*mut std::ffi::c_void> {
     use slint::winit_030::WinitWindowAccessor;
@@ -576,11 +503,9 @@ fn win32_hwnd(app: &AppWindow) -> Option<*mut std::ffi::c_void> {
         .flatten()
 }
 
-/// Push the embedded EXE icon (ordinal 1, from `build.rs`'s `winresource`) onto
-/// the winit window. Windows auto-binds that icon to the taskbar but not the
-/// caption, whose WNDCLASS winit registers with `hIcon: 0`.
-///
-/// Failures are logged and dropped — the titlebar falls back to the generic icon.
+/// Push the embedded EXE icon onto the winit window. Windows auto-binds it to
+/// the taskbar but not the caption, whose WNDCLASS winit registers with
+/// `hIcon: 0`. A failure just leaves the generic icon.
 #[cfg(target_os = "windows")]
 fn install_window_icon(app: &AppWindow) {
     use slint::winit_030::WinitWindowAccessor;

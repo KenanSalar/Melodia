@@ -1,37 +1,28 @@
 import { Theme } from "../theme.slint";
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
 
-// Enter-only wrapper, re-instantiated on every branch mount so the flip and the
-// animation replay per nav. There is no exit half — Slint's `if` destroys the
-// outgoing view instantly. `enter-from` picks the axis: `below` for sidebar nav,
-// `right` for drilling into a detail, `left` for coming back out.
+// Enter-only wrapper, re-instantiated on every branch mount so the flip and the animation replay
+// per nav. There is no exit half — Slint's `if` destroys the outgoing view instantly.
 //
-// **A single-shot Timer, not `init`.** `init` runs *after* bindings resolve to
-// their final values, so flipping `shown` there makes `true` the initial value —
-// no from-state to interpolate, and the view appears instantly. The Timer fires
-// once the first `shown: false` frame has painted, so the flip is a real change
-// and the `animate` blocks engage.
+// **A single-shot Timer, not `init`.** `init` runs *after* bindings resolve to their final values,
+// so flipping `shown` there makes `true` the initial value and the view appears instantly; the
+// Timer fires once the first `shown: false` frame has painted.
 export component ViewTransition inherits Rectangle {
     in property <NavEnterFrom> enter-from: NavEnterFrom.below;
-    // Off, the view is simply *there* — no fade, no slide, nothing to interrupt.
-    //
-    // It exists for the nested case: Favorites wraps each tab body in one of
-    // these, inside the page's own enter transition, so on the mount frame both
-    // would play and a horizontal tab slide composed with the page's fade-up
-    // reads as a diagonal. The host arms it on the first real tab pick.
+    // Off, the view is simply *there*. For the nested case: a page wrapping each tab body in
+    // one of these, inside its own enter transition, would otherwise play both on the mount
+    // frame and a horizontal tab slide over a fade-up reads as a diagonal. The host arms it on
+    // the first real tab pick.
     in property <bool> enabled: true;
-    // **Fade without translating.** `enabled` answers "does this view animate at
-    // all"; this answers "is anything *else* already moving it". A body sitting
-    // under a container that morphs its own height is translated by that morph, so
-    // its own slide composes with it — on the other axis that reads as a diagonal,
-    // and even on the same axis the two curves can send it one way and then back.
-    // Material 3 cross-fades content through a container transform for the same
-    // reason. My Library's band is the one such container here.
+    // **Fade without translating.** `enabled` answers "does this view animate at all"; this
+    // answers "is anything *else* already moving it". A body under a container morphing its
+    // own height is translated by that morph, so its own slide composes with it — a diagonal
+    // on the other axis, and on the same axis two curves that can send it back. My Library's
+    // band is the one such container.
     in property <bool> slide: true;
     private property <bool> shown: false;
-    // Disabled — or suppressed, for the mount the window launches on — this is `true`
-    // from the first evaluation, so the three bindings below never transition and the
-    // Timer's flip is a write nothing reads.
+    // Disabled — or suppressed, for the launch mount — this is `true` from the first
+    // evaluation, so the three bindings below never transition.
     private property <bool> settled: !root.enabled || root.shown || Nav.suppress-enter-animation;
 
     Timer {
@@ -40,12 +31,10 @@ export component ViewTransition inherits Rectangle {
         triggered() => {
             self.running = false;
             root.shown = true;
-            // **The launch mount hands the suppression back, not Rust**, a clear from outside
-            // being able to land on a frame where `shown` is still false and fade the settled
-            // page back out. Gated on `enabled` because a nested body that never animates — My
-            // Library's tab bodies mount at boot with `enabled: false` — runs this same Timer.
-            // A window launched at miniplayer size mounts no such branch and keeps the flag
-            // until it grows back.
+            // **The launch mount hands the suppression back, not Rust** — a clear from outside
+            // can land on a frame where `shown` is still false and fade the settled page back
+            // out. Gated on `enabled` because a nested body that never animates runs this same
+            // Timer and would drop the flag for the page above it.
             if (root.enabled) {
                 Nav.suppress-enter-animation = false;
             }

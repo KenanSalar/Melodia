@@ -63,10 +63,9 @@ pub async fn build_report(state: &AppState) -> AppResult<String> {
 
 /// What the library looks like, as far as the database could answer.
 ///
-/// Each line degrades on its own, and that is the point: a locked or corrupt
-/// database is a plausible thing to be filing a bug *about*, and it is exactly
-/// the case where one query wins and the next loses. It used to take the whole
-/// bundle down with it — leaving the reporter with no file at all while the logs
+/// Each line degrades on its own, and that is the point: a locked or corrupt database is a
+/// plausible thing to be filing a bug *about*, and exactly the case where one query wins and the
+/// next loses. A shared failure arm would leave the reporter with no bundle at all while the logs
 /// and crash reports sat there readable.
 struct LibraryFacts {
     tracks: Option<i64>,

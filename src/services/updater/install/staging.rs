@@ -1,25 +1,14 @@
-//! Staging-path selection + the `(version, size, url, etag?)` sidecar
-//! that fingerprints a partially-downloaded file so cross-release
-//! `Range:` resume can't glue mismatched bytes together.
+//! Staging-path selection, plus the sidecar that fingerprints a partially
+//! downloaded file so cross-release `Range:` resume can't glue mismatched bytes
+//! together.
 //!
-//! Staging path selection branches on the resolved [`InstallMethod`]:
-//!
-//!   - **[`InstallMethod::AtomicSwap`]** (`AppImage` / tarball) — the
-//!     downloaded file goes next to the install target when that
-//!     directory is user-writable (`std::fs::rename` stays inside one
-//!     filesystem and is atomic). Otherwise the staged file lands
-//!     under the user cache dir and the final swap goes through
-//!     `pkexec mv` (Linux only).
-//!   - **[`InstallMethod::LinuxPackage`]** (RPM / .deb installs
-//!     detected via [`super::super::linux_pkg::detect`]) — staged under
-//!     `$XDG_CACHE_HOME/Melodia/update-staging/` with the original
-//!     `.rpm` / `.deb` suffix preserved so `dnf` / `apt` recognise the
-//!     local file.
-//!   - **[`InstallMethod::WindowsMsi`]** — staged under
-//!     `%LocalAppData%\Melodia\update-staging\` with a `.msi` suffix
-//!     so `msiexec /i` recognises the package. Lands in the per-user
-//!     cache (writable without admin) — the elevation prompt comes
-//!     from msiexec, not the download.
+//! The path branches on the resolved [`InstallMethod`]. An
+//! [`InstallMethod::AtomicSwap`] stages *beside* the install target where that
+//! directory is user-writable, keeping the final `rename` inside one filesystem;
+//! otherwise it falls back to the user cache dir and a `pkexec mv`. The two
+//! package methods always stage in the cache dir, keeping the original suffix so
+//! `dnf` / `apt` / `msiexec` recognise the local file — writable without
+//! elevation, which is deferred to install time.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -31,24 +20,20 @@ use crate::services::updater::linux_pkg::LinuxPackageFormat;
 use crate::services::updater::probe::dir_is_writable;
 use crate::services::updater::target::current_target_key;
 
-/// Install strategy resolved from the current `latest.json` target key.
-/// Drives both the staging-path choice (where the downloaded artifact
-/// lands) and the install method (atomic rename vs. package-manager
-/// subprocess vs. msiexec). Keeping the two coupled to one enum
-/// ensures the `latest.json` asset choice and the install path stay in
-/// lockstep — picking an `.rpm` asset and then trying to atomic-swap
-/// it as a raw binary is a bug class this prevents.
+/// Install strategy resolved from the current `latest.json` target key, driving
+/// both where the artifact lands and how it is installed. One enum for both, so
+/// the asset choice and the install path can't drift — picking an `.rpm` and
+/// then atomic-swapping it as a raw binary is the bug class that prevents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InstallMethod {
-    /// Direct rename over the live binary (`AppImage` / tarball).
-    /// Keeps a `.old` snapshot for post-swap-smoke-test rollback.
+    /// Direct rename over the live binary, keeping a `.old` snapshot for
+    /// post-smoke-test rollback.
     AtomicSwap,
     /// Elevated `dnf install` / `apt install` of a local package.
     LinuxPackage(LinuxPackageFormat),
-    /// `msiexec /i <staged>.msi` — elevation comes from the per-machine
-    /// MSI's `Scope="perMachine"` (UAC) rather than polkit; the
-    /// `MajorUpgrade` element + `util:RestartResource` in `wix/main.wxs`
-    /// handle replacing the running app.
+    /// `msiexec /i` — elevation comes from the per-machine MSI's UAC prompt, and
+    /// `wix/main.wxs`'s `MajorUpgrade` + `util:RestartResource` replace the
+    /// running app.
     WindowsMsi,
 }
 
@@ -62,19 +47,16 @@ pub(crate) fn resolve_install_method() -> InstallMethod {
             InstallMethod::LinuxPackage(LinuxPackageFormat::Deb)
         }
         Some("windows-x86_64-msi" | "windows-aarch64-msi") => InstallMethod::WindowsMsi,
-        // AppImage / tarball / unknown / non-packaged platform fall
-        // through to the atomic-swap path. The caller catches
-        // unsupported platforms separately via the manifest's
-        // `NoAssetForTarget` outcome before we reach the install step.
+        // AppImage, tarball and unknown all fall through to the swap. An
+        // unsupported platform is caught earlier, by the manifest's
+        // `NoAssetForTarget` outcome.
         _ => InstallMethod::AtomicSwap,
     }
 }
 
-/// Stages an `.rpm` / `.deb` under `$XDG_CACHE_HOME/Melodia/update-staging/`
-/// with the original asset filename so `dnf install` / `apt install`
-/// recognise it as a local package. Falls back to a synthetic name
-/// (`melodia-update.rpm` / `melodia-update.deb`) if the URL has no
-/// usable basename.
+/// Stage an `.rpm` / `.deb` in the cache dir under the original asset filename,
+/// so the package manager recognises it as a local package. A URL with no usable
+/// basename falls back to a synthetic name.
 pub(super) fn staged_package_path(
     asset_url: &str,
     format: LinuxPackageFormat,
@@ -98,13 +80,8 @@ pub(super) fn staged_package_path(
     Ok(dir.join(name))
 }
 
-/// Stages a Windows `.msi` under `%LocalAppData%\Melodia\update-staging\`
-/// with the original asset filename so `msiexec /i` reads the `.msi`
-/// extension correctly (msiexec dispatches on extension; renaming to
-/// `.new` would silently fail with error 1620 "invalid package"). Falls
-/// back to a synthetic name (`melodia-update.msi`) if the URL has no
-/// usable basename. The per-user cache dir is writable without
-/// elevation — the UAC prompt is deferred to msiexec at install time.
+/// [`staged_package_path`]'s Windows twin. msiexec dispatches on the extension,
+/// so a file renamed to `.new` fails with error 1620, "invalid package".
 pub(crate) fn staged_msi_path(asset_url: &str) -> AppResult<PathBuf> {
     let cache = dirs::cache_dir().ok_or_else(|| {
         AppError::Settings("could not resolve user cache dir for update staging".into())
@@ -113,33 +90,22 @@ pub(crate) fn staged_msi_path(asset_url: &str) -> AppResult<PathBuf> {
     std::fs::create_dir_all(&dir)?;
     let name = asset_basename(asset_url)
         .filter(|n| {
-            // Case-insensitive `.msi` extension check — Windows
-            // filesystems are case-insensitive by default, and a
-            // manifest with an uppercase `.MSI` URL is plausible
-            // (cargo-wix output is lowercase, but a CDN redirect or
-            // a hand-renamed asset could differ).
+            // Case-insensitively: Windows filesystems are, and a CDN redirect
+            // or hand-renamed asset can hand back an uppercase `.MSI`.
             std::path::Path::new(n).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("msi"))
         })
         .unwrap_or_else(|| "melodia-update.msi".to_string());
     Ok(dir.join(name))
 }
 
-/// Removes files older than 7 days from
-/// `$XDG_CACHE_HOME/Melodia/update-staging/` — the directory shared by
-/// both [`staged_package_path`] (RPM/.deb) and [`resolve_staged_path`]'s
-/// cross-fs fallback (tarball / per-user `AppImage` cases). Called from
-/// (a) the start of every install attempt, and (b) a fire-and-forget
-/// one-shot spawned at boot so a user who dismisses every prompt still
-/// gets stale artifacts reaped.
+/// Reap the staging dir every method shares. Runs at the start of each install
+/// attempt *and* as a one-shot at boot, so a user who dismisses every prompt
+/// still gets stale artifacts collected.
 ///
-/// Failed / auth-cancelled installs deliberately leave their verified
-/// bytes on disk for retry-without-redownload; this gathers them up
-/// after the 7d retention window. Silent on every error path — the
-/// only observable effect is freed disk space.
-///
-/// All filesystem work runs on Tokio's blocking pool so a pathologically
-/// large staging dir (shouldn't happen, but cheap insurance) can't
-/// stall the async worker.
+/// A failed or cancelled install deliberately leaves its verified bytes for
+/// retry-without-redownload; this gathers them once the retention window
+/// closes. Silent on every error path — the only observable effect is disk
+/// space. Filesystem work goes on the blocking pool.
 pub async fn prune_stale_staging() {
     let _ = tokio::task::spawn_blocking(|| {
         let Some(cache) = dirs::cache_dir() else {
@@ -172,9 +138,8 @@ pub async fn prune_stale_staging() {
     .await;
 }
 
-/// Best-effort URL basename extraction. Strips query string and
-/// fragment, then takes the last `/`-segment. Returns `None` for an
-/// empty result so the caller can fall back to a synthetic name.
+/// Best-effort URL basename: strip fragment and query, take the last segment.
+/// `None` on an empty result, so the caller can fall back to a synthetic name.
 fn asset_basename(url: &str) -> Option<String> {
     let no_fragment = url.split_once('#').map_or(url, |(head, _)| head);
     let no_query = no_fragment.split_once('?').map_or(no_fragment, |(head, _)| head);
@@ -185,34 +150,23 @@ fn asset_basename(url: &str) -> Option<String> {
     Some(last.to_string())
 }
 
-/// The download target normally sits next to the install target so
-/// the final rename stays inside one filesystem (avoids `EXDEV` on
-/// `/tmp` vs the user's home / `/opt` mount). The suffix carries the
-/// original extension where possible — `Melodia.exe` ⇒
-/// `Melodia.exe.new` — so the rename produces clean side-by-side
-/// names mid-swap.
+/// `<target>.new`, beside the install target so the final rename stays inside
+/// one filesystem. Appends rather than replaces, so `Melodia.exe` keeps its
+/// extension and the two names read as siblings mid-swap.
 ///
-/// Used directly in tests; production callers go through
-/// [`resolve_staged_path`] which falls back to a user-writable cache
-/// dir when the target's parent isn't writable (RPM/.deb installs).
+/// Used directly by tests; production goes through [`resolve_staged_path`].
 pub(crate) fn staged_path(target: &Path) -> PathBuf {
     let mut name = target.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
     name.push(".new");
     target.with_file_name(name)
 }
 
-/// Resolves a writable staging path for the downloaded artifact.
-///
-/// Happy path (per-user installs): the staged file lives next to the
-/// install target, the final swap is a same-filesystem
-/// `std::fs::rename` — atomic and no elevation needed.
-///
-/// Fallback (RPM/.deb to `/usr/bin/`): the target dir is root-owned,
-/// so we stage under `$XDG_CACHE_HOME/Melodia/update-staging/`
-/// instead. The final swap will need a cross-filesystem move via
-/// `pkexec mv` (handled in [`super::swap::swap_in_place`] on Linux).
-/// The user sees the polkit prompt at swap time, not download time, so
-/// a network failure mid-download doesn't waste their authentication.
+/// A writable staging path for the downloaded artifact: beside the install
+/// target on a per-user install, so the swap is an atomic same-filesystem
+/// rename needing no elevation; in the cache dir when that parent is root-owned,
+/// where the swap becomes a `pkexec mv`. The polkit prompt therefore comes at
+/// swap time rather than download time, so a mid-download network failure
+/// doesn't waste the user's authentication.
 pub(super) fn resolve_staged_path(target: &Path) -> AppResult<PathBuf> {
     let primary = staged_path(target);
     if primary.parent().is_some_and(dir_is_writable) {
@@ -233,30 +187,23 @@ pub(super) fn resolve_staged_path(target: &Path) -> AppResult<PathBuf> {
 /// `Range:` resume. Written next to the staged file at download start;
 /// validated on every later attempt before deciding `plan_resume`.
 ///
-/// The first three fields are the fingerprint [`StagedMeta::matches`] checks:
-/// * `version` — the manifest version, and the usual drift signal: CI re-cut
-///   the release and the partial belongs to the previous one.
-/// * `size` — the manifest-declared byte count, which catches a release
-///   re-cut at the *same* version with a different file (`--clobber`).
-/// * `asset_url` — catches a flipped target key (partial RPM bytes don't
-///   apply once the resolved key is the tarball).
+/// The first three fields are the fingerprint [`StagedMeta::matches`] checks,
+/// and each catches a different drift: `version` a re-cut release, `size` a
+/// re-cut at the *same* version with a different file, `asset_url` a flipped
+/// target key.
 ///
-/// `etag` is decoupled freshness metadata for the resume protocol, not part
-/// of the fingerprint. Captured from the CDN's `ETag` on the original GET and
-/// replayed as `If-Range`, so a resource that changed between attempts comes
-/// back as a 200 full body rather than a 206 append — closing the hole where
-/// two different artifacts get glued together. **Strong tags only**: RFC 9110
-/// §13.1.5 forbids `If-Range` with a weak entity-tag, and under §8.8.3.2
-/// strong comparison a server receiving one always evaluates it false,
-/// silently forcing a full re-download on every resume. Weak tags are
-/// filtered at capture in [`super::download::download_to_file`], so this is
-/// either a strong tag or `None`.
+/// `etag` is freshness metadata for the resume protocol rather than part of the
+/// fingerprint — captured from the original GET and replayed as `If-Range`, so a
+/// resource that changed between attempts comes back as a full 200 rather than a
+/// 206 append. **Strong tags only**: RFC 9110 §13.1.5 forbids `If-Range` with a
+/// weak entity-tag, and under §8.8.3.2 a server receiving one always evaluates
+/// it false, silently forcing a full re-download on every resume. Weak tags are
+/// filtered at capture, so this is a strong tag or `None`.
 ///
-/// `None` covers pre-etag sidecars (hence `#[serde(default)]`), responses
-/// without the header, and those filtered weak tags. Correctness doesn't
-/// depend on it — the size bound and the post-download signature verify catch
-/// a concatenation accident regardless; the etag just shrinks the wasted
-/// bandwidth to one zero-byte roundtrip.
+/// `None` also covers pre-etag sidecars and responses without the header.
+/// Correctness doesn't depend on it — the size bound and the post-download
+/// signature verify catch a concatenation accident regardless; the etag only
+/// shrinks the wasted bandwidth to one zero-byte round trip.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct StagedMeta {
     pub(crate) version: String,
@@ -272,10 +219,8 @@ impl StagedMeta {
     }
 }
 
-/// `<staged>.meta.json` — sits next to the staged file (`.new`, `.rpm`,
-/// `.deb`, …). Appends to the basename rather than replacing the
-/// extension so multi-suffix names like `melodia-0.2.0.x86_64.rpm`
-/// don't lose their format suffix.
+/// `<staged>.meta.json`, beside the staged file. Appends rather than replacing
+/// the extension, so a multi-suffix name keeps its format suffix.
 pub(crate) fn sidecar_meta_path(staged: &Path) -> PathBuf {
     let mut name: OsString =
         staged.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
@@ -283,10 +228,8 @@ pub(crate) fn sidecar_meta_path(staged: &Path) -> PathBuf {
     staged.with_file_name(name)
 }
 
-/// Returns the sidecar if it exists and parses; `None` for missing,
-/// unreadable, or corrupted files. The caller's policy on `None` is to
-/// discard the staged file alongside (it's not safe to resume bytes
-/// without a fingerprint).
+/// The sidecar if it exists and parses. `None` means the caller discards the
+/// staged file too — bytes with no fingerprint aren't safe to resume.
 pub(crate) fn read_staged_meta(path: &Path) -> Option<StagedMeta> {
     let bytes = std::fs::read(path).ok()?;
     serde_json::from_slice(&bytes).ok()
@@ -299,16 +242,11 @@ pub(crate) fn write_staged_meta(path: &Path, meta: &StagedMeta) -> AppResult<()>
     Ok(())
 }
 
-/// If `dest` carries bytes but the sidecar is missing / corrupted /
-/// fingerprint-mismatched, drop both. Caller then re-reads `dest`'s size
-/// (will be 0) and `plan_resume` returns `Fresh`. No-op when `dest`
-/// doesn't exist or is empty.
+/// Drop both files when `dest` carries bytes their sidecar can't fingerprint;
+/// the caller then re-reads a size of 0 and `plan_resume` answers `Fresh`.
 ///
-/// Returns the surviving sidecar (if any) so the caller can extract the
-/// cached `ETag` for `If-Range` resume without re-reading the file. `None`
-/// means the sidecar was absent, corrupted, fingerprint-mismatched, or
-/// orphan-cleaned because `dest` was missing/empty. Tests discard the
-/// return value freely — it's purely a hot-path optimisation.
+/// Hands back the surviving sidecar so the caller can take its `ETag` without
+/// re-reading the file — purely an optimisation, so tests discard it freely.
 pub(crate) fn discard_staging_if_sidecar_mismatches(
     dest: &Path,
     expected_version: &str,
@@ -318,8 +256,8 @@ pub(crate) fn discard_staging_if_sidecar_mismatches(
     let sidecar = sidecar_meta_path(dest);
     let existing_size = std::fs::metadata(dest).map_or(0, |m| m.len());
     if existing_size == 0 {
-        // No bytes to validate, but clear any orphan sidecar so it
-        // doesn't outlive the next prune cycle as misleading state.
+        // Nothing to validate, but an orphan sidecar left here outlives the next
+        // prune cycle as misleading state.
         let _ = std::fs::remove_file(&sidecar);
         return None;
     }

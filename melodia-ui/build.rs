@@ -1,29 +1,18 @@
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Bundle gettext-style `.po` translations into the compiled UI so locale
-    // switching at runtime (`slint::select_bundled_translation`) re-renders
-    // every `@tr(...)` without a system gettext dependency. Layout:
+    // The `translations/<lang>/LC_MESSAGES/melodia-ui.po` catalogs bundle into the
+    // compiled UI, so `slint::select_bundled_translation` re-renders every `@tr(...)`
+    // with no system gettext dependency. That basename is not a free choice:
+    // slint-build derives the gettext domain from `CARGO_PKG_NAME` and exposes no
+    // override, so renaming the crate means renaming all six or the build fails with
+    // "No translations found". Both paths resolve against this crate's manifest dir
+    // rather than the working directory.
     //
-    //   translations/<lang>/LC_MESSAGES/melodia-ui.po
+    // `DefaultTranslationContext::None` keeps msgids context-free, so identical
+    // English across components shares one msgstr — matching extraction under
+    // `slint-tr-extractor --no-default-translation-context`.
     //
-    // The basename is not a free choice: slint-build derives the gettext domain
-    // from `CARGO_PKG_NAME` and exposes no override, so the catalogs have to be
-    // named after *this* package. Renaming the crate means renaming all six
-    // `.po` files with it, or the build fails with "No translations found".
-    //
-    // `DefaultTranslationContext::None` keeps msgids context-free: identical
-    // English strings across components share a single msgstr ("Cancel"
-    // translates the same everywhere). Matches `slint-tr-extractor
-    // --no-default-translation-context` for extraction.
-    //
-    // Both paths are relative to this crate's manifest dir, which is where
-    // slint-build resolves them from — not the working directory. The UI tree
-    // and the catalogs live inside the crate, so neither needs to reach out.
-    //
-    // Slint's AST compiler walks the UI tree recursively and overflows
-    // Windows' 1 MiB default main-thread stack with STATUS_STACK_OVERFLOW.
-    // Linux ships an 8 MiB default. Spawn the compile on an explicitly-
-    // sized thread so the same code path works on every host without
-    // depending on linker flags or env vars.
+    // The compile goes on an explicitly-sized thread because Slint's recursive AST
+    // walk overflows Windows' 1 MiB default main-thread stack; Linux's 8 MiB hides it.
     let join = std::thread::Builder::new().stack_size(16 * 1024 * 1024).spawn(
         || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let cfg = slint_build::CompilerConfiguration::new()

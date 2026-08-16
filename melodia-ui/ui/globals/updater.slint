@@ -1,24 +1,17 @@
 import { NotificationRow } from "../models.slint";
 import { Settings } from "../settings.slint";
 
-// The updater's state and the toast stack that surfaces it. Together because
-// the stack's only cross-global action target is the updater — keeping that
-// edge inside one file rather than turning it into an import.
+// The updater's state and the toast stack that surfaces it. Together because the stack's only
+// cross-global action target is the updater, keeping that edge inside one file.
 
 // In-app auto-update state, owned by `src/ui/settings/updater_settings.rs` and
-// `src/ui/callbacks/updater/`. `UpdaterState` in `src/services/updater/state.rs`
-// is the source of truth and these are its projection;
-// `update-section.slint` imports it aliased back to `Updater`.
+// `src/ui/callbacks/updater/`. `UpdaterState` in `src/services/updater/state.rs` is the source of
+// truth and these are its projection; `update-section.slint` imports it aliased back to `Updater`.
 //
-// The prefix is not cosmetic: Slint's codegen mangles a bare `Updater` with an
-// internal `_NNNN` suffix and doesn't re-export it, so `crate::Updater` won't
-// resolve.
-//
-// `notes-short` is plain text — `scripts/build-latest-json.py` strips the
-// Markdown server-side.
-//
-// Declared BEFORE `Notifications`, so that global's dispatcher can
-// forward-reference `install` / `restart` without hitting the same mangling.
+// The prefix is not cosmetic: Slint's codegen mangles a bare `Updater` with an internal `_NNNN`
+// suffix and doesn't re-export it, so `crate::Updater` won't resolve. `notes-short` is plain text,
+// `scripts/build-latest-json.py` stripping the Markdown server-side. Declared BEFORE
+// `Notifications`, so that global's dispatcher can forward-reference `install` / `restart`.
 export global MelodiaUpdater {
     in-out property <bool> is-checking;
     in-out property <bool> up-to-date;
@@ -31,44 +24,38 @@ export global MelodiaUpdater {
     in-out property <string> notes-short;
     in-out property <string> error-message;
     in-out property <bool> auto-check-enabled;
-    // A critical release suppresses "Skip this version", so it can't be
-    // permanently deferred; the toast still dismisses for the session and comes
-    // back at the next daily check.
+    // A critical release suppresses "Skip this version", so it can't be permanently deferred; the
+    // toast still dismisses for the session and comes back at the next daily check.
     in-out property <bool> is-critical;
-    // A read-only install path (RPM / MSI / Homebrew): the section trades
-    // Download and Skip for a hint pointing at the package manager. Seeded once
-    // at startup.
+    // A read-only install path (RPM / MSI / Homebrew): the section trades Download and Skip for a
+    // hint pointing at the package manager. Seeded once at startup.
     in property <bool> system-managed;
-    // Picks that hint string: "linux" | "windows" | "macos", off
-    // `cfg!(target_os)` at startup. A string rather than an enum keeps the Slint
-    // side free of conditional compilation and lets the hint resolve inline, so
-    // it re-translates on a locale switch.
+    // Picks that hint string: "linux" | "windows" | "macos", off `cfg!(target_os)` at startup. A
+    // string rather than an enum keeps the Slint side free of conditional compilation and lets the
+    // hint resolve inline, so it re-translates on a locale switch.
     in property <string> platform-kind;
 
     callback check();
     callback install();
     callback restart();
-    // Persists the version into `settings.updates.skipped_release`. Closing the
-    // toast is the other thing — "remind me later".
+    // Persists the version into `settings.updates.skipped_release`; closing the toast is the other
+    // thing — "remind me later".
     callback skip();
     callback auto-check-changed(bool);
 }
 
 // The bottom-right transient stack, for messages that don't warrant a modal.
-// `src/ui/shell/notifications.rs` owns the backing model and does the removal behind
-// `dismiss`.
-//
-// Unlike `Dialog`, `kind` lives on the *row*: several can be up at once, each
-// with its own, and a single field on the global wouldn't survive stacking.
+// `src/ui/shell/notifications.rs` owns the backing model and does the removal behind `dismiss`.
+// Unlike `Dialog`, `kind` lives on the *row*: several can be up at once, each with its own, and a
+// single field on the global wouldn't survive stacking.
 export global Notifications {
     in-out property <[NotificationRow]> rows: [];
     callback dismiss(int /*id*/);
     callback action(int /*id*/, string /*kind*/);
 
-    // Action-routing dispatcher, mirroring `Dialog.accepted`: a new action flow
-    // is one branch here plus a `show(...)` on the Rust side. Dismissing doesn't
-    // skip, so the toast returns next launch — the permanent skip lives in
-    // Settings, where that's what it obviously means.
+    // Action-routing dispatcher, mirroring `Dialog.accepted`: a new action flow is one branch here
+    // plus a `show(...)` on the Rust side. Dismissing doesn't skip, so the toast returns next
+    // launch — the permanent skip lives in Settings, where that's what it obviously means.
     action(id, kind) => {
         if (kind == "install-update") {
             MelodiaUpdater.install();

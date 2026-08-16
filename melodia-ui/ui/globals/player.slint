@@ -1,113 +1,82 @@
 import { PlayerVm, QueueVm, TrackMetaRow } from "../models.slint";
 
-// Bound to the backend through watch channels (push) and `library::*` (pull); Rust
-// wires every callback in `src/ui/callbacks/` — the cross-cutting wiring; each view
-// slice owns its own under `src/ui/<view>/callbacks/`.
+// Bound to the backend through watch channels (push) and `library::*` (pull); cross-cutting
+// callbacks are wired in `src/ui/callbacks/`, each view slice owning its own under `<view>/`.
 export global Player {
     in-out property <PlayerVm> vm;
     in-out property <QueueVm> queue;
 
-    // Standalone rather than fields of `vm`, so the 500 ms monitor publish only
-    // invalidates the bindings that read them — see `PlayerVm` in `models.slint` for
-    // the leak this shape exists to avoid.
+    // Standalone rather than fields of `vm`, so the 500 ms monitor publish only invalidates
+    // the bindings that read them — see `PlayerVm` in `models.slint`.
     in-out property <int> position-ms;
     in-out property <int> duration-ms;
     in-out property <float> progress;
 
-    // A seek target held from the callback until the backend's reported position lands
-    // within ±2 s or the track changes. While ≥ 0 the slider and time label prefer it
-    // over `position-ms`, so the thumb doesn't snap back to the old position for a
-    // frame before the next view-model push.
+    // A seek target held until the reported position lands within ±2 s or the track changes. While
+    // ≥ 0 the slider prefers it over `position-ms`, so the thumb doesn't snap back for a frame.
     in-out property <int> seek_pending_ms: -1;
 
-    // The Now Playing backdrop's dual-slot cross-fade. On a track change Rust writes the
-    // freshly blurred cover into the *inactive* slot then flips `blur-use-a`, and Slint
-    // animates both opacities. **Neither slot is ever cleared** — the outgoing layer
-    // stays painted for the whole fade, with the gradient floor underneath, so there is
-    // no empty frame. Written only on track change, so unlike the position scalars these
-    // don't re-invalidate per tick.
+    // The dual-slot cross-fade: Rust writes the fresh blur into the *inactive* slot then flips
+    // `blur-use-a`. **Neither slot is ever cleared** — the outgoing layer stays painted for the
+    // whole fade. Written only on track change, so these don't re-invalidate per tick.
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool> blur-use-a: true;
-    // False for an art-less or failed-decode track: both slots fade to 0 and the
-    // accent-tinted gradient floor shows through.
+    // False for an art-less or failed-decode track: both slots fade to 0 and the accent-tinted
+    // gradient floor shows through.
     in-out property <bool> blur-has-image: false;
 
-    // The foreground cover tile, same dual-slot contract over the sharp high-resolution
-    // artwork rather than the row thumbnail in `vm.track.cover_img`. False
-    // `np-cover-has-image` fades both slots out and the `music_note` placeholder in.
+    // The foreground cover tile, same dual-slot contract over the sharp artwork rather than
+    // the row thumbnail in `vm.track.cover_img`.
     in-out property <image> np-cover-a;
     in-out property <image> np-cover-b;
     in-out property <bool> np-cover-use-a: true;
     in-out property <bool> np-cover-has-image: false;
 
-    // The current track's technical metadata, replaced wholesale by the subscriber.
-    // `track_id` is what lets the view drop a stale push landing after a rapid track
-    // change.
+    // Replaced wholesale by the subscriber; `track_id` is what lets the view drop a stale push
+    // landing after a rapid track change.
     in-out property <TrackMetaRow> track-meta;
 
-    // Rows of chips, chunked by `ui::chips` from the fields `now_playing::metadata`
-    // pulls out of `track-meta`, against the width the strip last reported. Uncapped —
-    // the view has room to wrap where the hero band does not. An empty outer array
-    // means no chips: no track, a stale fetch, or every field empty.
+    // Chunked by `ui::chips` against the width the strip last reported. Uncapped — the view
+    // has room to wrap where the hero band does not.
     in-out property <[[string]]> chip-rows;
 
-    // View → Rust: the strip's available width. `MetaChipStrip` owns the mirror and the
-    // mount seed and reports through `measured`. Rust re-chunks on every fire, and the
-    // track-change subscriber re-chunks against the last width it cached.
+    // View → Rust: the strip's available width. `MetaChipStrip` owns the mirror and mount seed.
     callback recompute-chip-rows(length);
 
-    // The Now Playing backdrop colour set — six properties written together by the
-    // `track_change` subscriber from `ui::now_playing::backdrop::solve`, which is where
-    // the reasoning lives.
-    //
-    // **None of these can be a theme constant.** The view floats its chrome on a
-    // blurred cover, and a white sleeve and a black one need opposite treatment. They
-    // take their *hue* from the accent quantized out of the cover — `Theme.accent` for
-    // an art-less track — and their *tone* from a solve against how bright the backdrop
-    // measured. That split is why the view looks right under Mocha, Latte, macOS Light
-    // and Material You alike: the theme lends its colour, never its polarity. So don't
-    // reach for `Theme.text` / `subtext0` / `crust` / `base` on anything painting on the
-    // blur; they're fixed, and on a light theme they land light-on-light.
-    //
-    // The defaults are literals for the same reason: they are what paints in the frame
-    // or two before the first solve lands, and a theme binding would make *that* frame
-    // the broken case. They're the default accent solved against the floor, so the set
-    // is self-consistent from the first paint.
+    // The Now Playing backdrop colour set, written together by the `track_change` subscriber from
+    // `ui::now_playing::backdrop::solve`. **None of these can be a theme constant**: they take their
+    // *hue* from the accent quantized out of the cover (`Theme.accent` when art-less) and their
+    // *tone* from a solve against how bright the backdrop measured — the theme lends its colour,
+    // never its polarity. Don't reach for `Theme.text` / `subtext0` / `crust` / `base` on anything
+    // painting on the blur; the literal defaults are for the same reason.
 
-    // Alpha baked in. Solved so the *composited* backdrop lands in a known dark band
-    // whatever the cover, which is what lets one light foreground be correct on all of
-    // them — heavier on a bright sleeve, lighter than a fixed 45% on a dark one.
+    // Alpha baked in. Solved so the *composited* backdrop lands in a known dark band whatever
+    // the cover, which is what lets one light foreground be correct on all of them.
     in-out property <brush> np-scrim: #0a0a0e73;
 
-    // The floor under the blur slots, so what shows for an art-less track. Two `color`s
-    // rather than one `brush`: gradient stops and `.mix()` need `color` operands.
+    // The floor under the blur slots. Two `color`s rather than one `brush`: gradient stops and
+    // `.mix()` need `color` operands.
     in-out property <color> np-floor-start: #2b2135;
     in-out property <color> np-floor-end: #14101a;
 
-    // The hue-carrying tier — visualizer, stars, heart, back button, chips, Up-Next
-    // chrome. Solved for the 3:1 non-text bar against the composited backdrop, then
-    // floored, so a cover whose accent is already brighter keeps its own tone and its
-    // own saturation. One brush serves solid and translucent surfaces alike and callers
-    // vary alpha off it, which is what keeps the view one colour family. **Never
-    // `.brighter()`** — that scales HSV value and can't lift a near-black accent at all.
+    // The hue-carrying tier — visualizer, stars, heart, back button, chips, Up-Next chrome. Solved
+    // for the 3:1 non-text bar then floored, so a brighter accent keeps its own tone; one brush
+    // serves solid and translucent alike. **Never `.brighter()`** — that scales HSV value and
+    // can't lift a near-black accent at all.
     in-out property <brush> np-accent-bright: #cba6f7;
 
-    // Derived here rather than at each call site, so surfaces meant to match can't
-    // drift. `np-accent-pill` is the resting weight for every tinted surface in the
-    // view, chips and disc buttons alike. Genuine one-offs stay inline; naming them
-    // would move the number without sharing it.
+    // Derived here so surfaces meant to match can't drift. Genuine one-offs stay inline;
+    // naming them would move the number without sharing it.
     out property <brush> np-accent-pill: root.np-accent-bright.with-alpha(0.16);
     out property <brush> np-accent-disc-hover: root.np-accent-bright.with-alpha(0.3);
     out property <brush> np-accent-dim: root.np-accent-bright.with-alpha(0.6);
 
-    // Body text, solved for 4.5:1 and chroma-capped, so it reads as near-white carrying
-    // a whisper of the album's warmth rather than as coloured type — the tier above is
-    // where the hue gets to be loud.
+    // Body text, solved for 4.5:1 and chroma-capped, so it reads as near-white carrying a
+    // whisper of the album's warmth — the tier above is where the hue gets to be loud.
     in-out property <brush> np-on-backdrop: #c4c0cc;
 
-    // Secondary text at 3:1 in its own dimmer band, so the hierarchy under the cover
-    // survives every backdrop.
+    // Secondary text at 3:1 in its own dimmer band, so the hierarchy survives every backdrop.
     in-out property <brush> np-on-backdrop-muted: #ada9b5;
 
     callback play-pause();
@@ -116,8 +85,7 @@ export global Player {
     callback seek(int);          // position in ms
     callback set-volume(int);    // 0..100, fires continuously during drag
     callback commit-volume();    // fires on slider release; persists to settings.json
-    // Applies to the live player immediately *and* persists, so speed survives a
-    // restart. The active value reads back through `vm.playback_speed`.
+    // Applies to the live player immediately *and* persists; reads back through `vm.playback_speed`.
     callback set-playback-speed(float);
     callback toggle-mute();
     callback toggle-shuffle();
@@ -127,22 +95,18 @@ export global Player {
     // surfaces. Reads back through `vm.track.rating`.
     callback set-current-rating(int /*rating*/);
 
-    // 0 = off, > 0 = duration timer, -1 = "End of current track". **Session-only** —
-    // never persisted, so it resets each launch.
+    // 0 = off, > 0 = duration timer, -1 = "End of current track". **Session-only.**
     callback set-sleep-timer(int /*minutes*/);
     // The flyout's ±stepper Start pill. Rust clamps to [30 s, 2 h].
     callback set-sleep-timer-seconds(int /*seconds*/);
-    // The armed *duration*, 0 for none. Drives the preset rows' active highlight — a
-    // preset matches when `value * 60 == this` — and the collapsed row. End-of-track
-    // mode is separate, riding on `vm.sleep_at_track_end`.
+    // The armed *duration*, 0 for none. Drives the preset rows' active highlight — a preset
+    // matches when `value * 60 == this`. End-of-track mode rides `vm.sleep_at_track_end`.
     in-out property <int> sleep-timer-total-seconds: 0;
-    // Written by the countdown task each second. Standalone, not a `vm` field, so the
-    // per-second update only invalidates the row reading it — the `position-ms` rule.
+    // Written each second by the countdown task. Standalone, not a `vm` field, so the update
+    // only invalidates the row reading it — the `position-ms` rule.
     in-out property <string> sleep-timer-remaining: "";
 
-    // Bumped by the keyboard volume shortcuts. `VolumePopup` watches it, sets a
-    // tick-down counter and force-shows its hover tooltip with the current percentage,
-    // which fades 1.5 s after the last keystroke. **Slider drags don't bump it** — they
-    // already raise the popup chrome.
+    // Bumped by the keyboard volume shortcuts; `VolumePopup` force-shows its tooltip. **Slider
+    // drags don't bump it** — they already raise the popup chrome.
     in-out property <int> volume-hud-tick: 0;
 }

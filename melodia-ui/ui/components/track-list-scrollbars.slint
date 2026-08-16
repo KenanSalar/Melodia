@@ -1,31 +1,18 @@
 import { Theme } from "../theme.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 
-// The vertical + horizontal `OverlayScrollbar` pair every plain `TrackList` page mounts.
+// The vertical + horizontal `OverlayScrollbar` pair every plain `TrackList` page mounts;
+// `CompositeScrollbars` is the sibling for a list nested *under* another scroller.
 //
-// `CompositeScrollbars` is the sibling for the two views that nest a list *under* another
-// scroller; this is the simple case, and it was spelled out six times — the two curated
-// Songs tabs, My Library's Songs tab, and the Album / Genre / Playlist detail bodies.
+// **Mount contract**, the same as `CompositeScrollbars`': last child of the view root at
+// `x: 0; y: 0; width: 100%; height: 100%`, so `parent` inside resolves to the page. Everything else
+// the host mirrors off its `TrackList`, Slint having no way to hand an element over.
 //
-// **Mount contract**, the same as `CompositeScrollbars`': the last child of the view root,
-// at `x: 0; y: 0; width: 100%; height: 100%`, so `parent` inside resolves to the page and
-// the bars pin to its edges. Everything else the host mirrors off its `TrackList` — Slint
-// has no way to hand an element over, so the metrics come across as properties and the two
-// setters as callbacks.
-//
-// **`list-x` / `list-y` are the reason this is a component rather than a snippet.** The bar
-// has to be placed in the *page's* coordinates, and the six copies had drifted into two
-// spellings of that: `tl.absolute-position.y - root.absolute-position.y + tl.body-y` in the
-// three detail bodies, a bare `tl.y + tl.body-y` in the three Songs tabs. Both are right at
-// their own nesting depth — the tabs mount their list directly on the root, the details
-// wrap theirs — and the short one silently stops being right the moment a wrapper appears
-// above it. The general form is the one that survives either, so every host now passes it.
-//
-// The thickness comes off `Theme.scrollbar-slot` for the same reason. It is not one number
-// but a *pair*: the horizontal bar's width subtracts exactly the vertical bar's, so the two
-// never overlap in the corner. Spelled per site, that coupling is invisible and getting it
-// wrong leaves a bar the corner eats. The host's list reserves the same slot as a lane, so
-// it reads the token too rather than a matching literal.
+// **`list-x` / `list-y` are the reason this is a component rather than a snippet** — the bar is
+// placed in the *page's* coordinates, and the six copies had drifted into two spellings, each right
+// only at its own nesting depth. The thickness comes off `Theme.scrollbar-slot` for the same
+// reason: it is a *pair*, the horizontal bar's width subtracting exactly the vertical bar's so the
+// two don't overlap in the corner, and the host's list reserves the same slot as a lane.
 export component TrackListScrollbars inherits Rectangle {
     // The list's origin in the *page's* coordinates. Pass
     // `tl.absolute-position.x - root.absolute-position.x` (and the `y` twin) — correct at

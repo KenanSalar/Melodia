@@ -1,30 +1,18 @@
 //! Language picker wiring for the Settings page.
 //!
-//! Slint's bundled-translation runtime ([`slint::select_bundled_translation`])
-//! is the source of truth for the active locale: a single thread-local switch
-//! that flips every `@tr(...)` expression in the compiled UI tree on the next
-//! frame. We never expose the active locale through the `Settings` global
-//! beyond a `language-idx` index — the runtime owns it.
+//! [`slint::select_bundled_translation`] is the source of truth for the active locale —
+//! one thread-local switch flipping every `@tr(...)` in the compiled tree on the next
+//! frame — so the `Settings` global carries only a `language-idx`.
 //!
-//! Flow:
-//! 1. `install_locale` reads the persisted `locale` from `settings.json`,
-//!    populates `Settings.language-{names,codes}` with the canonical lists
-//!    from [`services::settings::SUPPORTED_LOCALES`], and sets
-//!    `language-idx` to match the persisted code (falling back to en).
-//! 2. `wire_language_changed` listens on `Settings.language-changed(int)`.
-//!    On click the callback resolves idx → code, calls
-//!    `select_bundled_translation` synchronously on the UI thread (the
-//!    next paint re-renders every `@tr`), updates the in-memory
-//!    [`PersistedLocale`] shadow, and spawns the disk write through
-//!    [`library::settings::set_locale`].
+//! `install_locale` populates the name and code lists from
+//! [`services::settings::SUPPORTED_LOCALES`] and seeds the index from the persisted
+//! code; `wire_language_changed` resolves a click back to a code, calls
+//! `select_bundled_translation` synchronously, updates the [`PersistedLocale`] shadow
+//! and spawns the disk write. `main.rs` makes the same call once before `app.run()`, so
+//! the first frame already paints in the persisted language.
 //!
-//! `main.rs` separately calls `select_bundled_translation(&locale)` once
-//! before `app.run()` so the very first frame paints in the persisted
-//! language.
-//!
-//! Native-name labels (`English`, `Deutsch`, …) are always rendered in their
-//! own script, never translated — that's the universal convention for
-//! language pickers.
+//! Native-name labels are always rendered in their own script, never translated — the
+//! universal convention for language pickers.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -48,24 +36,16 @@ const LOCALE_NATIVE_NAMES: &[&str] = &[
     "Italiano",
 ];
 
-/// Synchronous in-memory shadow of `settings.locale`. Updated by the
-/// language-changed callback before it spawns the async disk write.
-/// Mirrors [`crate::ui::appearance::PersistedAccent`] (see CLAUDE.md
-/// "Sibling-callback writes need a synchronous shadow"). Not consumed by
-/// any current sibling, but cheap insurance against future code adding a
-/// reader that would race `read_settings` against the in-flight
-/// `mutate_settings`.
+/// Synchronous in-memory shadow of `settings.locale`, updated by the language-changed
+/// callback before it spawns the disk write —
+/// [`crate::ui::appearance::PersistedAccent`]'s shape, and the root `CLAUDE.md`'s
+/// sibling-callback rule. No sibling reads it yet; it is what stops the next one racing
+/// `read_settings` against an in-flight `mutate_settings`.
 type PersistedLocale = Arc<parking_lot::Mutex<String>>;
 
-/// Hydrate the `Settings` global's language lists from
-/// [`services::settings::SUPPORTED_LOCALES`], seed `language-idx` from the
-/// persisted locale, and wire the change callback.
-///
-/// Call **after** `AppWindow::new()` (so the global is mounted) and **before**
-/// `app.run()` so the first frame's `@tr(...)` resolutions land in the
-/// persisted language. The companion `slint::select_bundled_translation`
-/// call lives in `main.rs` so the very first frame paints correctly even
-/// before any callback fires.
+/// Hydrate the language lists, seed `language-idx` from the persisted locale, and wire
+/// the change callback. **After** `AppWindow::new()`, so the global is mounted, and
+/// **before** `app.run()`.
 pub fn install_locale(ui: &AppWindow, state: &AppState) {
     debug_assert_eq!(
         services::settings::SUPPORTED_LOCALES.len(),

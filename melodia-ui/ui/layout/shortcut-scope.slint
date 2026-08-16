@@ -4,22 +4,17 @@ import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
 
-// The app's global keyboard shortcuts, and the focus scope catching them.
-//
-// It takes the whole main layout as its children, so it sits between any nested scope
-// and the Window's key dispatch. **It is the only `FocusScope` in the tree** — the queue
-// sheet's used to catch Esc / Ctrl+A before this one, and those two bindings now live
-// below. Text inputs consume their typed keys naturally, Slint routing key events to the
-// focused element first, so an alphabetic shortcut never fires while the user is typing.
-//
-// The handler runs even under `Dialog.open`, so Escape can route through to
-// `Dialog.cancelled()` — the dialog has no Esc binding of its own. **Every non-Escape
-// shortcut early-outs there**, so a confirm-only kind, which has no input to swallow
-// Space, doesn't leak a playback toggle through the backdrop.
+// The app's global keyboard shortcuts, and the focus scope catching them. It takes the whole main
+// layout as its children, so it sits between any nested scope and the Window's key dispatch. **It
+// is the only `FocusScope` in the tree** — a second one takes focus on mouse press and steals Esc.
+// Text inputs consume their typed keys naturally, so an alphabetic shortcut never fires while the
+// user is typing. The handler runs even under `Dialog.open`, so Escape routes through to
+// `Dialog.cancelled()`; **every non-Escape shortcut early-outs there**, so a confirm-only kind with
+// no input to swallow Space doesn't leak a playback toggle.
 export component ShortcutScope inherits FocusScope {
-    // **Slint doesn't return focus to an ancestor scope when the focused item is
-    // destroyed**, so a view unmounting with focus inside it leaves shortcuts dead until
-    // the next click. The host calls this on every content-view switch.
+    // **Slint doesn't return focus to an ancestor scope when the focused item is destroyed**, so a
+    // view unmounting with focus inside it leaves shortcuts dead until the next click. The host
+    // calls this on every content-view switch.
     public function grab-focus() {
         self.focus();
     }
@@ -27,11 +22,10 @@ export component ShortcutScope inherits FocusScope {
     // First grab, at first show.
     init => { root.grab-focus(); }
 
-    // The debounce for the *persistence* side of a keyboard volume change.
-    // `bump-volume` always pushes the new value to the backend, which is cheap, and
-    // resets this; the timer below drains it and commits exactly once on the trailing
-    // edge — so a held arrow key writes `settings.json` at release rather than ~20×/s.
-    // A slider drag has the same one-commit-per-gesture contract via its own gate.
+    // The debounce for the *persistence* side of a keyboard volume change. `bump-volume` always
+    // pushes the new value to the backend, which is cheap, and resets this; the timer below drains
+    // it and commits once on the trailing edge, so a held arrow key writes `settings.json` at
+    // release. A slider drag has the same one-commit-per-gesture contract via its own gate.
     property <int> commit-debounce-ticks: 0;
 
     commit-debounce-timer := Timer {
@@ -77,21 +71,16 @@ export component ShortcutScope inherits FocusScope {
         }
     }
 
-    // **`Queue.open` alone doesn't mean the sheet is on screen**: the miniplayer swap
-    // unmounts the whole full-UI branch, sheet included, without touching the flag — so
-    // both queue bindings take the mini state too. `MiniPlayer.active` leads the mount's
-    // own flag by a beat, so the keys go dead slightly early during the fade, which is
-    // the harmless direction.
+    // **`Queue.open` alone doesn't mean the sheet is on screen**: the miniplayer swap unmounts the
+    // whole full-UI branch, sheet included, without touching the flag — so both queue bindings take
+    // the mini state too. `MiniPlayer.active` leads the mount's own flag by a beat, so the keys go
+    // dead slightly early during the fade, the harmless direction.
     property <bool> queue-sheet-up: Queue.open && !MiniPlayer.active;
 
     key-pressed(ev) => {
-        // Priority: dialog cancel, then the queue sheet, then closing Now Playing. The
-        // sheet used to own its Esc in a nested `FocusScope`, which only took focus when
-        // the user clicked its blank area — Slint focuses a scope on mouse press, never
-        // on mount — so Esc did nothing on a sheet opened with `Q`, and once the dialog
-        // chain started re-grabbing focus up here, any confirm dialog raised *from* the
-        // sheet left it dead for good. Owning both keys at the root makes the priority
-        // explicit and takes the click out of it.
+        // Priority: dialog cancel, then the queue sheet, then closing Now Playing. A nested
+        // `FocusScope` can't own the sheet's Esc — Slint focuses a scope on mouse press, never on
+        // mount — so owning both keys at the root is what makes the priority explicit.
         if (ev.text == Key.Escape) {
             if (Dialog.open) {
                 Dialog.cancelled();
@@ -182,10 +171,9 @@ export component ShortcutScope inherits FocusScope {
                 return accept;
             }
             if (ev.text == ",") {
-                // Settings' nav index; the `Nav` global has the map. The edge goes
-                // with it, as `sidebar.slint` does: this is lateral nav, and left
-                // unwritten the page inherits whichever direction the last drill or
-                // back put there.
+                // Settings' nav index; the `Nav` global has the map. The edge goes with it, as
+                // `sidebar.slint` does — lateral nav, and left unwritten the page inherits
+                // whichever direction the last drill or back put there.
                 Nav.pending-enter-from = NavEnterFrom.below;
                 Nav.selected-index = 9;
                 Nav.persist-selected-index(9);
@@ -209,10 +197,9 @@ export component ShortcutScope inherits FocusScope {
         if (ev.text == "s") { Player.toggle-shuffle();  return accept; }
         if (ev.text == "r") { Player.cycle-repeat();    return accept; }
 
-        // Mini-gated for a sharper reason than the two above: **arming `Queue.open`
-        // while the sheet is unmounted leaves nothing to fire `open-changed`**, so the
-        // remount seeds its mirror already-true, Rust never builds the rows, and the
-        // sheet slides up empty.
+        // Mini-gated for a sharper reason than the two above: **arming `Queue.open` while the
+        // sheet is unmounted leaves nothing to fire `open-changed`**, so the remount seeds its
+        // mirror already-true, Rust never builds the rows, and the sheet slides up empty.
         if (ev.text == "q" && !MiniPlayer.active) {
             Queue.open = !Queue.open;
             return accept;

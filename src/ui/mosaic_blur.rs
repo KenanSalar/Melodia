@@ -1,13 +1,10 @@
 //! Shared 2×2 cover-mosaic atlas + blur composition.
 //!
-//! Both hero surfaces (Favorites, Recently Played) paint a blurred backdrop
-//! built from up to 4 cover paths: tile the sources into a 2×2 atlas,
-//! downscale to the now-playing-tier `BLUR_TARGET`, and run
-//! `image::imageops::fast_blur` (parity with the single-source decode behind
-//! [`crate::ui::artwork_cache`]), then measure the result for the
-//! hero's colour solve. The per-view `hero.rs` files own the data source and
-//! the `write_crossfade_slot` application; this module owns the CPU-bound
-//! image work, and the quantize behind that measurement is the heaviest of it.
+//! Both mosaic heroes paint a blurred backdrop built from up to four cover paths: tile
+//! the sources into a 2×2 atlas, downscale to `BLUR_TARGET`, `fast_blur` it — parity
+//! with the single-source decode behind [`crate::ui::artwork_cache`] — then measure the
+//! result for the colour solve. The per-view `hero.rs` files own the data source and the
+//! application; this owns the CPU-bound work, of which the quantize is the heaviest.
 
 use std::path::Path;
 
@@ -21,22 +18,20 @@ use crate::ui::util::{BLUR_SIGMA, BLUR_TARGET, buffer_from_rgb};
 /// Side length of one tile in the 2×2 atlas.
 const PER_TILE: u32 = BLUR_TARGET / 2;
 
-/// A composed mosaic backdrop and what the hero's colour solve needs to know
-/// about it. Both halves are produced by the same blocking call, so the scrim
-/// can't fall out of step with the blur it is darkening.
+/// A composed mosaic backdrop and what the colour solve needs to know about it. Both
+/// halves come out of the same blocking call, so the scrim can't fall out of step with
+/// the blur it is darkening.
 pub(crate) struct MosaicBlur {
     pub(crate) blur: SharedPixelBuffer<Rgb8Pixel>,
     pub(crate) sample: BackdropSample,
 }
 
-/// Compose up to 4 source images into a `BLUR_TARGET × BLUR_TARGET`
-/// 2×2 atlas, blur it, and measure the result. Mirrors the picker's mosaic
-/// layout for the 4-tile case; the 1 / 2 / 3 / 0 cases fall back to "fill the
-/// whole atlas with the available tiles" so a partially-populated mosaic still
-/// produces a usable hero backdrop. Runs on the blocking pool.
+/// Compose up to four sources into a square 2×2 atlas, blur it, and measure the result.
+/// A partially-populated mosaic fills the whole atlas with what it has, so it still
+/// produces a usable backdrop. Blocking pool.
 ///
-/// Returns `None` when every source decode failed — the caller clears
-/// `has-blur` so the gradient floor shows through.
+/// `None` when every decode failed — the caller clears `has-blur` so the gradient floor
+/// shows through.
 pub(crate) fn compose_mosaic_blur(paths: &[String]) -> Option<MosaicBlur> {
     use image::{ImageBuffer, RgbImage};
 
@@ -57,15 +52,9 @@ pub(crate) fn compose_mosaic_blur(paths: &[String]) -> Option<MosaicBlur> {
         return None;
     }
 
-    // Lay tiles into the atlas. Layouts mirror the CoverMosaic
-    // component for visual parity with the foreground mosaic:
-    //   1 tile  → fill whole atlas
-    //   2 tiles → left / right halves
-    //   3 tiles → left full-height + right column split top/bottom
-    //   4 tiles → 2×2 grid
-    // The atlas is then heavily blurred so the exact layout is
-    // imperceptible — but the tile-count branching keeps colour
-    // distribution consistent with the visible mosaic above.
+    // The layouts mirror `CoverMosaic`'s. The atlas is then heavily blurred, so the
+    // exact arrangement is imperceptible — but branching on the tile count keeps the
+    // colour distribution consistent with the visible mosaic above.
     match tiles.len() {
         1 => {
             blit(&mut atlas, &tiles[0], 0, 0, BLUR_TARGET, BLUR_TARGET);
@@ -99,19 +88,14 @@ fn decode_tile(path: &Path) -> Option<image::RgbImage> {
     Some(decoded.thumbnail_exact(BLUR_TARGET, BLUR_TARGET).to_rgb8())
 }
 
-/// Stretch-copy `src` into `dst` at the given destination rectangle.
-/// `src` is already a square `BLUR_TARGET × BLUR_TARGET` thumbnail
-/// (`decode_tile`'s output), so the per-tile blit is a sub-block of
-/// the larger atlas; sampling is nearest-neighbour because the blur
-/// pass that immediately follows obliterates any aliasing.
+/// Stretch-copy `src` into `dst` at a destination rectangle. Sampling is
+/// nearest-neighbour, the blur pass immediately after obliterating any aliasing.
 ///
-/// The per-pixel `get_pixel`/`put_pixel` is deliberate, not an oversight:
-/// the whole rectangle is at most `BLUR_TARGET²` pixels and runs once per
-/// artwork change, so trading the bounds-checked accessors for hand-rolled
-/// row offsets would buy a fraction of a cold path and cost the reader the
-/// coordinates. Reach for a row-wise rewrite only with a profile saying this
-/// is what a mosaic recompose spends its time on — it is the `fast_blur`
-/// below and the quantize behind it.
+/// The per-pixel `get_pixel` / `put_pixel` is deliberate: the rectangle is at most
+/// `BLUR_TARGET²` pixels and runs once per artwork change, so hand-rolled row offsets
+/// would buy a fraction of a cold path and cost the reader the coordinates. What a
+/// recompose actually spends its time on is the `fast_blur` below and the quantize
+/// behind it.
 fn blit(dst: &mut image::RgbImage, src: &image::RgbImage, dx: u32, dy: u32, dw: u32, dh: u32) {
     let (sw, sh) = src.dimensions();
     if sw == 0 || sh == 0 {

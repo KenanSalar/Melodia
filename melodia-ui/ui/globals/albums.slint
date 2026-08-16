@@ -1,21 +1,14 @@
 import { AlbumRow, AlbumGridRow, TrackListRow } from "../models.slint";
 
-// The Album grid. Rust owns `grid-rows`, installed once and rebuilt in place on every
-// filter / sort / column-count change; the canonical unfiltered list lives there too, so
-// **neither `apply-filter` nor `request-sort` hits the DB** — the stats are fetched once
-// and re-sorted in memory.
-//
-// `columns` is computed by the view from its body width and pushed back, so Rust
-// re-chunks the flat list into rows of N cards and the `ListView` virtualizes by row.
+// The Album grid. Rust owns `grid-rows`, installed once and rebuilt in place on every filter /
+// sort / column-count change; the canonical unfiltered list lives there too, so **neither
+// `apply-filter` nor `request-sort` hits the DB**. `columns` is computed by the view from its body
+// width and pushed back, so Rust re-chunks into rows of N cards and the `ListView` virtualizes.
 export global Albums {
     in-out property <[AlbumGridRow]> grid-rows;
-    // `-1` is "not fetched yet" (`ui::tab_bar::UNFETCHED_COUNT`) — the sentinel
-    // `curated.slint` argues at `Favorites.track-count`. A section leave empties
-    // `grid-rows`, so a count left at its last real value suppresses the empty
-    // state over a model that really is empty, while rewinding to `0` instead
-    // asserts "No albums yet" for the whole length of the re-fetch. One thing is
-    // new here: the header line interpolates this into a plural, and `@tr` would
-    // spell the sentinel out, so that `Text` guards on `>= 0`.
+    // `-1` is "not fetched yet" (`ui::tab_bar::UNFETCHED_COUNT`) — the sentinel `curated.slint`
+    // argues at `Favorites.track-count`. One thing is new here: the header line interpolates this
+    // into a plural and `@tr` would spell the sentinel out, so that `Text` guards on `>= 0`.
     in-out property <int> total-count: -1;      // pre-filter album count
     in-out property <int> columns: 4;           // view-computed; always >= 1
     in-out property <string> filter;
@@ -26,12 +19,11 @@ export global Albums {
     callback apply-filter(string);
     callback request-sort(string /*field*/);
     callback open-album(int /*album_id*/);
-    // Invoked from each on-screen card's own binding, so only visible cards decode or
-    // lock a cover. `pure` so Slint may evaluate it inside a binding at all.
+    // Invoked from each on-screen card's own binding, so only visible cards decode or lock a
+    // cover. `pure` so Slint may evaluate it inside a binding at all.
     pure callback request-cover(string /*artwork_path*/) -> image;
-    // Rust releases the album-tier cover cache on `false` and re-warms the first
-    // screenful on `true` — the grid-size buffers aren't worth keeping resident while
-    // the section is hidden.
+    // Rust releases the album-tier cover cache on `false` and re-warms the first screenful on
+    // `true` — the grid-size buffers aren't worth keeping resident while the section is hidden.
     callback section-active-changed(bool);
 }
 
@@ -44,9 +36,8 @@ export global AlbumDetail {
     in-out property <AlbumRow> album;
     in-out property <[TrackListRow]> tracks;
 
-    // What the band's search box means while this detail is open. Cleared on a fresh
-    // open, but preserved across library-changed refreshes so a typed needle survives a
-    // scan finishing.
+    // What the band's search box means while this detail is open. Cleared on a fresh open, but
+    // preserved across a library-changed refresh so a typed needle survives a scan finishing.
     in-out property <string> filter;
 
     in-out property <length> w-number: 56px;
@@ -71,16 +62,12 @@ export global AlbumDetail {
     in-out property <[int]> selected-ids;
     in-out property <int> selection-anchor: -1;
 
-    // The **section** the detail was opened from, or -1 for a drill that started inside
-    // My Library. Set synchronously by the cross-tab handler and read by `on_close_detail`
-    // to flip `Nav.selected-index` back **before** clearing `album-id`, so the conditional
-    // reroutes to the originating view in the same frame with no grid flash.
-    //
-    // A drill from a *sibling tab* deliberately records nothing: the band's back arrow
-    // means "close this detail", and the tab bar already says Albums for the whole visit,
-    // so restoring the Artists tab would contradict it. Mouse-4/5 is the control with
-    // history semantics. In-memory only — the per-tab `last_detail_ids` persistence
-    // already restores each page independently on the next launch.
+    // The **section** the detail was opened from, or -1 for a drill that started inside My
+    // Library. Set synchronously by the cross-tab handler and read by `on_close_detail` to flip
+    // `Nav.selected-index` back **before** clearing `album-id`, so the conditional reroutes in the
+    // same frame with no grid flash. A drill from a *sibling tab* deliberately records nothing: the
+    // back arrow means "close this detail", and the tab bar already says Albums for the whole
+    // visit. In-memory only — `last_detail_ids` restores each page on the next launch.
     in-out property <int> origin-nav-index: -1;
 
     // Decoded **once** per album into a `(cover, blur)` pair by `ui::artwork_cache`.
@@ -90,8 +77,7 @@ export global AlbumDetail {
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool>  blur-use-a;
-    // False with no artwork or a failed decode: both slots fade to 0 and the gradient
-    // floor shows through.
+    // False with no artwork or a failed decode: both slots fade to 0, the gradient floor showing.
     in-out property <bool>  has-blur;
 
     callback close-detail();

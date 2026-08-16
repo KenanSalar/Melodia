@@ -1,35 +1,24 @@
-//! Single-home wiring for the `go-to-album` / `go-to-artist` /
-//! `go-to-genre` callbacks every track-list view's right-click menu
-//! emits. Lives in its own module because each per-view callback file
-//! would otherwise need access to all three target UI handles
-//! (`AlbumsUi`, `ArtistsUi`, `GenresUi`); instead, this runs after every
-//! per-view `wire_*` so the handles are guaranteed to exist.
+//! Single-home wiring for the `go-to-album` / `go-to-artist` / `go-to-genre` callbacks
+//! every track-list view's right-click menu emits. Its own module because each per-view
+//! callback file would otherwise need all three target UI handles; instead this runs
+//! after every `wire_*`, so the handles are guaranteed to exist.
 //!
-//! Behaviour mirrors the existing cross-tab open-album/artist hand-offs
-//! (`artists/callbacks/cross_tab.rs::on_open_album`, `favorites/callbacks/subviews.rs::
-//! on_open_artist`):
-//!
-//! 1. Stamp `*Detail.origin-nav-index` from where the user is standing,
-//!    synchronously, so the back arrow returns there — see [`origin_stamp`] for
-//!    the drills that deliberately record nothing.
-//! 2. Mark `Nav.pending-enter-from = Right` (drill-in slide).
-//! 3. Spawn `open_*_with`; move `Nav.selected-index` and `MyLibrary.tab-idx` to
-//!    the target inside the `upgrade_in_event_loop` closure.
-//! 4. Persist `views.json`'s `last_detail_ids[target_view]` so a restart
-//!    reopens the same detail.
+//! Four steps, mirroring the older cross-tab hand-offs: stamp
+//! `*Detail.origin-nav-index` synchronously from where the user is standing, mark the
+//! drill-in slide, spawn `open_*_with` and move the nav index and tab inside its
+//! completion closure, and persist `last_detail_ids[target_view]` so a restart reopens
+//! the same detail.
 //!
 //! **An origin is a section, not a position.** The four destinations are all tabs of My
 //! Library, so a drill starting *inside* that page ends inside it: the tab bar names the
-//! detail's own tab for the whole visit, and an arrow restoring the tab the drill came
-//! from contradicts the bar beside it. Such a drill stamps `-1` and the arrow closes into
-//! its own grid. The **`tab` half of [`Origin`] survives** for the other question it
-//! answers — "did the user navigate away mid-fetch", which the nav index alone stopped
-//! being able to tell once the four destinations became tabs of one page.
+//! detail's own tab for the whole visit, and an arrow restoring the tab it came from
+//! contradicts the bar beside it. Such a drill stamps `-1`. The **`tab` half of
+//! [`Origin`] survives** for the other question it answers — "did the user navigate away
+//! mid-fetch", which the nav index alone stopped being able to tell once the four
+//! destinations became tabs of one page.
 //!
-//! Search-view exception: the Slint side rewires its row context menu
-//! to call the existing `Search.open-album` / `Search.open-artist`
-//! (already wired in `search/callbacks/results.rs`). Only `go-to-genre` is new
-//! for Search — wired below alongside the other six globals.
+//! Search is the exception: its row menu calls the existing `Search.open-album` /
+//! `open-artist`, so only `go-to-genre` is wired here.
 
 use std::sync::Arc;
 
@@ -48,10 +37,10 @@ use crate::{
     NavEnterFrom, PlaylistDetail, RecentlyPlayed, Search, Tracks,
 };
 
-/// Where the user is standing when a "Go to …" fires: the nav index, plus the My
-/// Library tab when that index *is* My Library ([`NO_TAB`] otherwise). Both halves are
-/// read synchronously, before any await; the tab half guards the mid-fetch flip, and
-/// [`Origin::stamp`] decides what the destination's back arrow records.
+/// Where the user is standing when a "Go to …" fires: the nav index, plus the My Library
+/// tab when that index *is* My Library. Both halves are read synchronously, before any
+/// await — the tab half guards the mid-fetch flip, and [`Origin::stamp`] decides what
+/// the destination's back arrow records.
 #[derive(Clone, Copy)]
 pub(in crate::ui) struct Origin {
     nav: i32,
@@ -91,22 +80,17 @@ impl Origin {
 /// The `origin-nav-index` a drill starting at section `nav` records: `-1` when that
 /// section *is* My Library, the index itself otherwise.
 ///
-/// **An origin means "another section".** The four destinations are all tabs of one page,
-/// so a drill that starts there ends there — the tab bar names the detail's own tab for
-/// the whole visit, and a back arrow restoring the tab it came from contradicts the bar it
-/// sits next to. The arrow means "close this detail"; Mouse-4/5 walks the real history and
-/// still steps back into the detail the drill came from.
-///
-/// A free fn rather than only a method so the rule is testable without an `AppWindow`, the
-/// [`crate::ui::my_library::fold_retired_nav_index`] precedent.
+/// **An origin means "another section".** The four destinations are all tabs of one
+/// page, so a drill that starts there ends there — the tab bar names the detail's own
+/// tab for the whole visit, and a back arrow restoring the tab it came from contradicts
+/// the bar beside it. The arrow means "close this detail"; Mouse-4/5 walks the real
+/// history. A free fn as well as a method, so the rule is testable without an `AppWindow`.
 pub(in crate::ui) fn origin_stamp(nav: i32) -> i32 {
     if nav == NAV_MY_LIBRARY { -1 } else { nav }
 }
 
-/// Wire every `*.go-to-album` / `*.go-to-artist` / `*.go-to-genre`
-/// callback to its cross-tab navigation handler. Must be called *after*
-/// `albums::install` / `artists::install` / `genres::install` so the
-/// per-target UI handles exist.
+/// Wire every `go-to-*` callback to its cross-tab handler. Must run *after* the three
+/// target `install`s, so their UI handles exist.
 pub fn wire_cross_tab_nav(
     ui: &AppWindow,
     state: &AppState,
@@ -140,9 +124,8 @@ pub fn wire_cross_tab_nav(
     g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
     g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
 
-    // --- AlbumDetail (cross-tab from Album Detail's track list) ------
-    // The row menu hides "Go to Album" inside Album Detail, but
-    // "Go to Artist" / "Go to Genre" stay live.
+    // --- AlbumDetail -------------------------------------------------
+    // The row menu hides "Go to Album" here; the other two stay live.
     let g = ui.global::<AlbumDetail>();
     g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
     g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
@@ -166,9 +149,8 @@ pub fn wire_cross_tab_nav(
     g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
     g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
 
-    // --- Search (only Go-to-Genre is new; Album / Artist reuse the
-    // pre-existing `Search.open-album` / `Search.open-artist` already
-    // wired in `search/callbacks/results.rs`) ----------------------
+    // --- Search ------------------------------------------------------
+    // Album and Artist reuse `Search.open-album` / `open-artist`, wired elsewhere.
     let g = ui.global::<Search>();
     g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak));
 }
@@ -205,24 +187,15 @@ fn make_go_to_artist(
     }
 }
 
-/// Shared cross-tab "open the Album Detail under the Albums tab" hand-off,
-/// used by every track-list "Go to Album" menu item and the Search-result
-/// album card:
+/// The shared "open Album Detail under the Albums tab" hand-off, for every track-list
+/// "Go to Album" and the Search-result album card: stamp `origin-nav-index` so the back
+/// arrow returns to the section the user came from, spawn `open_album_with` and move to
+/// the Albums tab inside its completion closure — guarded, so a nav or tab switch
+/// mid-fetch doesn't yank the user away — then persist the detail id.
 ///
-/// 1. Stamp `AlbumDetail.origin-nav-index` from `origin` so the back arrow returns to
-///    the section the user came from — `-1`, and no restore at all, when that section
-///    was My Library itself (see [`origin_stamp`]).
-/// 2. Spawn `open_album_with`, moving to the Albums tab inside its
-///    `upgrade_in_event_loop` closure (guarded so a nav or tab switch mid-fetch
-///    doesn't yank the user away).
-/// 3. Persist `views.json`'s `last_detail_ids[ALBUM_DETAIL]` so a restart
-///    reopens the same detail.
-///
-/// The view-transition direction is intentionally **not** set here —
-/// `open_album_with` marks it from its `NavEnterFrom::Right` argument.
-/// Callers that also want an early `nav_transition::mark` (the track-list
-/// menus do, to cover the same-tab case) must call it themselves before
-/// invoking this helper.
+/// The view-transition direction is deliberately **not** set here; `open_album_with`
+/// marks it from its argument. A caller that also wants an early `nav_transition::mark`,
+/// as the track-list menus do for the same-tab case, calls it before this.
 pub(in crate::ui) fn open_album_cross_tab(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -267,9 +240,7 @@ pub(in crate::ui) fn open_album_cross_tab(
     });
 }
 
-/// Artist counterpart of [`open_album_cross_tab`] — see that function's
-/// docs. Moves to the Artists tab and persists
-/// `views.json`'s `last_detail_ids[ARTIST_DETAIL]`.
+/// Artist counterpart of [`open_album_cross_tab`], moving to the Artists tab.
 pub(in crate::ui) fn open_artist_cross_tab(
     state: &AppState,
     artists_ui: &Arc<ArtistsUi>,

@@ -1,37 +1,21 @@
-// The hero band's metadata chips — the counts, duration, year and flags that
-// used to be a `·`-joined meta line under the title. Written by
-// `src/ui/hero_chips.rs`.
+// The hero band's metadata chips, written by `src/ui/hero_chips.rs`. **One global for six views**,
+// only one hero being mountable at a time — the `globals/hero-backdrop.slint` argument.
 //
-// One global for six views, for the reason `globals/hero-backdrop.slint`
-// spells out at length: only one hero can be mounted at a time, since every
-// hero-bearing view sits under a mutually exclusive `if` in `app-window.slint`
-// and `ViewTransition` is enter-only. Whoever opens last owns the set.
-//
-// The chips are built in Rust rather than composed here, and that is the one
-// choice worth arguing. The facts live in Rust already — `AlbumStats.disc_count`
-// and `.is_compilation` never even reach `AlbumRow` — so building them there
-// costs no new query and no widened struct, and it makes "which chips, in what
-// order, omitted when" a pure function with tests instead of six ternary chains
-// spread across the views. What Rust cannot do is translate: `@tr` only folds
-// *literals*, at codegen. Hence the trampolines below.
+// **The chips are built in Rust rather than composed here.** The facts already live there —
+// `AlbumStats.disc_count` and `.is_compilation` never reach `AlbumRow` — so it costs no new query,
+// and it makes "which chips, in what order, omitted when" a tested pure function instead of six
+// ternary chains. What Rust cannot do is translate; hence the trampolines below.
 export global HeroChips {
-    // Outer array is rows, inner is the chips in that row — the `MetaChipStrip`
-    // contract. A hero wraps into at most `ui::hero_chips::HERO_MAX_ROWS` and
-    // drops the overflow, so the outer array is 0..=2 long. Empty means "no
-    // chips": no hero mounted, or an entity with nothing worth stating.
+    // Rows of chips — the `MetaChipStrip` contract. A hero wraps into at most
+    // `ui::hero_chips::HERO_MAX_ROWS` and drops the overflow. Empty means no chips at all.
     in-out property <[[string]]> rows;
 
-    // Strip → Rust: the width to chunk against. `MetaChipStrip` owns the width
-    // mirror and the 1 ms mount seed; each hero forwards its `measured` here.
+    // Strip → Rust: the width to chunk against. `MetaChipStrip` owns the width mirror and the
+    // mount seed; each hero forwards its `measured` here.
     callback recompute(length);
 
-    // Translated chip labels, resolved by Rust at build time on the UI thread.
-    // Same shape as `Favorites.artist-favorite-subtitle`,
-    // `Search.album-count-label` and `SettingsPage.matches`.
-    //
-    // The four plural pairs deliberately reuse msgids the catalogues already
-    // carry from the meta lines these chips replace, so no locale had to learn
-    // a new string for the counts.
+    // Translated chip labels, resolved by Rust on the UI thread. The plural pairs deliberately
+    // reuse msgids the catalogues already carry from the meta lines these chips replace.
     pure callback tracks(int /*count*/) -> string;
     tracks(count) => {
         return @tr("{n} track" | "{n} tracks" % count);

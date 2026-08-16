@@ -7,22 +7,19 @@ import { MaterialIcon } from "../material-icon.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
-// One row inside the Up Next list. The two variants differ only in scale and palette —
-// same three cells, same typography — so a track reads the same way in the miniplayer as
-// it does full-screen.
+// One row inside the Up Next list. The two variants differ only in scale and palette — same three
+// cells, same typography — so a track reads the same way in the miniplayer as full-screen.
 //
-// **Scale** comes from the host, one source of truth shared with the slide animation,
-// and the tile and padding step down with it: the miniplayer sits tighter so more of the
-// queue fits in a window the user is deliberately shrinking, but not so much tighter
-// that it becomes a different list.
+// **Scale** comes from the host, one source of truth shared with the slide animation, and the tile
+// and padding step down with it: the miniplayer sits tighter so more of the queue fits, but not so
+// much tighter that it becomes a different list.
 //
-// **Palette is the `compact` flag's real job.** The full-screen host paints on the
-// artwork blur and takes the backdrop-solved brushes; the miniplayer paints on ordinary
-// chrome and takes the neutral list palette, including the shared row hover — the
-// Now-Playing accent is always solved *light* for the blur, and a light tint on a light
-// theme's mantle is no hover indication at all. Restated per branch because Slint can't
-// apply a property conditionally, and flipped without an `animate` like the track rows,
-// where an eased fade reads as lag when crossing rows.
+// **Palette is the `compact` flag's real job.** The full-screen host paints on the artwork blur and
+// takes the backdrop-solved brushes; the miniplayer paints on ordinary chrome and takes the neutral
+// list palette, including the shared row hover — the Now-Playing accent is always solved *light*
+// for the blur, and a light tint on a light theme's mantle is no hover indication at all. Restated
+// per branch because Slint can't apply a property conditionally, and flipped without an `animate`
+// like the track rows, where an eased fade reads as lag when crossing rows.
 component UpNextRow inherits Rectangle {
     in property <QueueRow> data;
     in property <bool> compact;

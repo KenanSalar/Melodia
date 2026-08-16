@@ -1,23 +1,19 @@
 //! The My Library page — five tabs (Songs, Albums, Artists, Genres, Playlists) over the
 //! five views that used to be five sidebar sections at nav indices 3–7.
 //!
-//! **This module owns the page, not its contents.** Each of the five keeps its own
-//! `*Ui` handle, models, caches, sorts and `view_id` keys; what lives here is the nav
-//! index, which tab is mounted, and where a keystroke in the page's single filter box
-//! has to land.
+//! **This module owns the page, not its contents.** Each of the five keeps its own `*Ui`
+//! handle, models, caches, sorts and `view_id` keys; what lives here is the nav index,
+//! which tab is mounted, and where a keystroke in the single filter box has to land.
 //!
 //! There is deliberately **no `MyLibraryUi` handle**. A tabbed page usually needs a
-//! synchronous shadow of its active tab so off-thread fetchers know which model to fill —
-//! Favorites and Recently Played both carry one — but here the answer already exists five
-//! times over: `SectionActiveGate` is mounted per tab, so each view's own `section_active`
-//! shadow means "My Library is up *and* my tab is mounted". Everything else that asks
-//! (the filter dispatcher, `nav_history`, `cross_tab_nav`, `rss_sampler::format_view`)
-//! runs on the UI thread with the global in reach.
+//! synchronous shadow of its active tab so off-thread fetchers know which model to fill,
+//! but here the answer already exists five times over: `SectionActiveGate` is mounted per
+//! tab, so each view's own `section_active` shadow means "My Library is up *and* my tab is
+//! mounted". Everything else that asks runs on the UI thread.
 
 mod callbacks;
-// `pub(super)` is `pub(in crate::ui)`: the dispatcher is reached by the four
-// detail slices' `open_*` (which reseat the shared box) and by nothing outside
-// `ui::`.
+// `pub(super)` is `pub(in crate::ui)`: the dispatcher is reached by the four detail
+// slices' `open_*`, which reseat the shared box, and by nothing outside `ui::`.
 pub(super) mod filter;
 mod tabs;
 
@@ -30,11 +26,8 @@ pub use tabs::{
     tab_of_section, the_band_is_up,
 };
 
-/// Wire the My Library page's own three callbacks — the tab pick, the shared
-/// filter, the back arrow.
-///
-/// Takes no view handle, which is why it runs before the five tab slices rather
-/// than after them. Call once, after `wire_all`.
+/// Wire the page's own callbacks. Takes no view handle, which is why it runs before the
+/// five tab slices rather than after them. Call once, after `wire_all`.
 pub fn install(ui: &AppWindow, state: &AppState) {
     callbacks::wire(ui, state);
 }
@@ -44,12 +37,10 @@ pub fn install(ui: &AppWindow, state: &AppState) {
 /// stand for the sections this page absorbed.
 pub const NAV_MY_LIBRARY: i32 = 3;
 
-/// Map a persisted `views.json` nav index onto a live one.
-///
-/// 4–7 were Albums / Artists / Genres / Playlists. The app is publicly released, so those
-/// values are in `views.json` files in the wild; left alone they select no router branch
-/// and the user boots onto `PlaceholderView`. Anything else passes through — including
-/// values outside the valid range, which the caller still has to bound.
+/// Map a persisted `views.json` nav index onto a live one. 4–7 were Albums / Artists /
+/// Genres / Playlists and are in files in the wild; left alone they select no router
+/// branch and the user boots onto `PlaceholderView`. Anything else passes through,
+/// including values outside the valid range, which the caller still has to bound.
 pub fn fold_retired_nav_index(idx: i32) -> i32 {
     if (4..=7).contains(&idx) {
         NAV_MY_LIBRARY

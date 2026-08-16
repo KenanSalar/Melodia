@@ -4,21 +4,14 @@ import { EntityStripRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
-// A horizontally-scrolling row of `EntityCard`s under a section heading, over
-// one `EntityStripRow` shape with a boolean per flavour. Two mounts left, both
-// on the Search view; the two curated pages drove the original three and now
-// take the vertical `EntityCardGrid` instead, a tab each.
+// A horizontally-scrolling row of `EntityCard`s under a section heading, over one `EntityStripRow`
+// shape with a boolean per flavour. Two mounts left, both on the Search view. A strip stays the
+// right answer where the row is a *capped* carousel beside other content — every card is built and
+// every cover requested, which is what makes it affordable there and not on a page of its own.
 //
-// A strip stays the right answer where the row is a *capped* carousel beside
-// other content — every card is built and every cover requested, which is what
-// makes it affordable there and not on a page of its own.
-//
-// Scrolling is the usual pattern: stock scrollbars off, a sibling
-// `OverlayScrollbar` along the bottom edge reading `viewport-x`, and the bar
-// hides itself with no overflow — so no consumer needs a visibility gate.
-//
-// The hover play overlay is opt-in: the result strips show it so a whole album
-// or artist can be played without leaving the page.
+// Scrolling is the usual pattern: stock scrollbars off, a sibling `OverlayScrollbar` along the
+// bottom edge reading `viewport-x`, and the bar hides itself with no overflow. The hover play
+// overlay is opt-in, the result strips showing it so an album plays without leaving the page.
 export component HorizontalCardStrip inherits Rectangle {
     in property <string>             heading;
     in property <[EntityStripRow]>   rows;

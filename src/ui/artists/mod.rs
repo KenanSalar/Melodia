@@ -2,22 +2,17 @@
 //!
 //! Two Slint globals are driven from here:
 //!
-//! * `Artists` — the responsive artist-card grid. Same shape as the Albums
-//!   grid: Rust owns a flat, name-sorted `Vec<ArtistStats>` (plus a pre-
-//!   lowercased sort key) behind `ArtistsUi::grid.data`; the grid model
-//!   is rebuilt from it on every filter / sort / column-count change
-//!   without a DB hit. Cards are circular (Tauri parity) and pull their
-//!   cover lazily via `request-cover`, exactly like the Album cards do.
+//! * `Artists` — the responsive artist-card grid, the same shape as the Albums grid: Rust owns a
+//!   flat, name-sorted `Vec<ArtistStats>` behind `ArtistsUi::grid.data`, and the grid model is
+//!   rebuilt from it on every filter / sort / column-count change without a DB hit. Cards are
+//!   circular and pull their cover lazily via `request-cover`.
 //!
-//! * `ArtistDetail` — the full Artist Detail view. `open_artist` fetches
-//!   the header + the artist's albums sub-section + the full track list.
-//!   The cached track list in `ArtistsUi::detail.tracks` lets `play-row`,
-//!   selection, and in-memory re-sort work without round-tripping the
-//!   Slint model.
+//! * `ArtistDetail` — the full Artist Detail view. `open_artist` fetches the header, the albums
+//!   sub-section and the full track list; the cached list in `ArtistsUi::detail.tracks` lets
+//!   `play-row`, selection and in-memory re-sort work without round-tripping the Slint model.
 //!
-//! Cross-thread layout mirrors `albums.rs`: `ArtistsUi` is `Send + Sync`;
-//! Slint properties + models are only touched from the UI thread, reached
-//! via `Weak<AppWindow>::upgrade_in_event_loop`.
+//! Cross-thread layout mirrors `albums.rs`: `ArtistsUi` is `Send + Sync`, and Slint properties and
+//! models are only touched from the UI thread via `Weak<AppWindow>::upgrade_in_event_loop`.
 
 mod callbacks;
 mod detail;
@@ -53,17 +48,15 @@ use grid::compute_indices;
 #[cfg(test)]
 use state::GridIndexCache;
 
-// Reached from outside the slice: `ui::nav_history` replays a walk into a
-// detail, `boot::ui_setup` seeds the persisted one and retunes the cover cap,
-// and its `initial_grid_fetch!` kicks the first fetch after the window is shown
-// — which is why `fetch_grid` can't fold into `install` with the rest.
+// Reached from outside the slice: `ui::nav_history` replays a walk into a detail, `boot::ui_setup`
+// seeds the persisted one and retunes the cover cap, and its `initial_grid_fetch!` kicks the first
+// fetch after the window is shown — which is why `fetch_grid` can't fold into `install`.
 pub use detail::{open_artist_with, seed_detail_from_settings};
 pub use grid::{fetch_grid, tune_cache_for_display};
 
-// Reached only from this slice's own `callbacks/`, which used to live two
-// modules away, plus the cross-slice `apply_detail_row_*` mirrors in
-// `callbacks::now_playing` and the drill in `callbacks::cross_tab_nav`.
-// `pub(super)` is `pub(in crate::ui)` here, which is exactly that reach.
+// Reached only from this slice's own `callbacks/`, plus the cross-slice `apply_detail_row_*`
+// mirrors in `callbacks::now_playing` and the drill in `callbacks::cross_tab_nav`. `pub(super)` is
+// `pub(in crate::ui)` here, which is exactly that reach.
 pub(super) use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
     open_artist, refresh_detail, resort_detail, set_filter,
@@ -71,15 +64,13 @@ pub(super) use detail::{
 pub(super) use grid::rebuild_grid;
 pub(super) use selection::{clear_selection, handle_select_row};
 
-/// Install the Artists grid + detail models, build the handle, and wire every
-/// `Artists.*` / `ArtistDetail.*` callback to it.
+/// Install the Artists grid + detail models, build the handle, and wire every `Artists.*` /
+/// `ArtistDetail.*` callback to it.
 ///
-/// Takes `albums_ui` because Artists depends on Albums twice over: the handle
-/// borrows the Albums grid-cover tier for its own Albums strip, and the
-/// "open album from Artist Detail" hand-off needs a live `AlbumsUi` to call
-/// into. That parameter is the ordering — this does not resolve until
-/// `albums_ui` is bound, so "Albums before Artists" is a compile error to get
-/// wrong rather than a comment in the boot file.
+/// Takes `albums_ui` because Artists depends on Albums twice over: the handle borrows the Albums
+/// grid-cover tier for its own Albums strip, and the "open album from Artist Detail" hand-off needs
+/// a live `AlbumsUi` to call into. That parameter *is* the ordering, so "Albums before Artists" is
+/// a compile error to get wrong rather than a comment in the boot file.
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>, albums_ui: &Arc<AlbumsUi>) -> Arc<ArtistsUi> {
@@ -89,33 +80,27 @@ pub fn install(cx: ViewCtx<'_>, albums_ui: &Arc<AlbumsUi>) -> Arc<ArtistsUi> {
     artists_ui
 }
 
-/// Rust-side state for the Artists grid + detail views. Mirrors
-/// [`AlbumsUi`] layer by layer; the grid and
-/// detail concerns live in their own sub-structs.
+/// Rust-side state for the Artists grid + detail views. Mirrors [`AlbumsUi`] layer by layer; the
+/// grid and detail concerns live in their own sub-structs.
 pub struct ArtistsUi {
     grid: ArtistGridState,
     detail: ArtistDetailState,
-    /// Row-tier cache shared with Tracks / Browse / Albums — backs
-    /// the small artwork column of the detail view's `TrackList`.
+    /// Row-tier cache shared with Tracks / Browse / Albums — backs the small artwork column of the
+    /// detail view's `TrackList`.
     cover_thumbs: Arc<CoverThumbs>,
-    /// Grid-tier (`GRID_COVER_SIZE`) cache for the Artists grid card tiles
-    /// — private to this view, resolution-derived cap. Released entirely
-    /// (see [`Self::release_section_state`]) whenever the user leaves the
-    /// Artists section, and re-warmed on return.
+    /// Grid-tier cache for the Artists grid card tiles — private to this view, resolution-derived
+    /// cap, released entirely on section leave (see [`Self::release_section_state`]).
     grid_covers: Arc<CoverThumbs>,
-    /// Borrowed handle to the **Albums** grid tier
-    /// ([`crate::ui::albums::AlbumsUi::grid_thumbs`]). The Artist Detail
-    /// Albums strip resolves its cards through `AlbumsUi::grid_cover`
-    /// (decode-on-miss on the UI thread), so [`detail::open_artist`]'s
-    /// fetch prewarms the strip's covers into this cache off-thread first.
-    /// Not released here — the Artists wiring already clears the shared LRU on
-    /// section-leave / detail-close via the `AlbumsUi` handle.
+    /// Borrowed handle to the **Albums** grid tier. The Artist Detail Albums strip resolves its
+    /// cards through `AlbumsUi::grid_cover` (decode-on-miss on the UI thread), so
+    /// [`detail::open_artist`]'s fetch prewarms the strip's covers into this cache off-thread
+    /// first. Not released here — the Artists wiring already clears the shared LRU through the
+    /// `AlbumsUi` handle.
     albums_grid_covers: Arc<CoverThumbs>,
-    /// Detail-tier `(cover, blur)` pair cache for the Artist Detail header.
-    /// Released on section exit.
+    /// Detail-tier `(cover, blur)` pair cache for the Artist Detail header. Released on section
+    /// exit.
     detail_artwork: Arc<DetailArtwork>,
-    /// Section-visibility + staleness bookkeeping (on-screen shadow, dirty
-    /// flag, and the wipe/fetch mutation gate). See [`SectionState`].
+    /// Section-visibility + staleness bookkeeping — see [`SectionState`].
     section: SectionState,
 }
 
@@ -155,23 +140,15 @@ impl ArtistsUi {
         self.section.active()
     }
 
-    /// Drop *everything* the Artists section is keeping resident — both
-    /// cover LRUs, the canonical grid data (`Vec<ArtistStats>` +
-    /// pre-lowercased keys), the memoized filter/sort indices, the cached
-    /// detail track rows, and the applied-selection shadow — then hand the
-    /// freed pages back to the OS. Called (off the UI thread) when the user
-    /// leaves the Artists section so the hidden view's resident footprint
-    /// drops to ~0. Re-entry re-fetches via [`fetch_grid`]; if a detail was
-    /// open (`ArtistDetail.artist-id >= 0`), the caller re-runs
-    /// `open_artist` to repopulate it. The caller is responsible for
-    /// clearing the Slint-side properties (`Artists.grid-rows`, the
-    /// `ArtistDetail` cover / blur Images, and the tracks / albums /
-    /// selected-ids `VecModel`s) on the UI thread before this runs.
+    /// Drop *everything* the Artists section is keeping resident — both cover LRUs, the canonical
+    /// grid data, the memoized filter/sort indices, the cached detail track rows and the
+    /// applied-selection shadow — then hand the freed pages back to the OS. Called off the UI
+    /// thread on section leave. Re-entry re-fetches via [`fetch_grid`]; an open detail is
+    /// repopulated by the caller re-running `open_artist`. **The caller clears the Slint-side
+    /// properties on the UI thread before this runs.**
     ///
-    /// Race-correct against an in-flight [`fetch_grid`] via the same
-    /// early-check + gated-bulk-writes shape as
-    /// [`crate::ui::albums::AlbumsUi::release_section_state`] — see that
-    /// doc for the full rationale.
+    /// Race-correct against an in-flight [`fetch_grid`] via the same early-check +
+    /// gated-bulk-writes shape as [`crate::ui::albums::AlbumsUi::release_section_state`].
     pub fn release_section_state(&self) {
         if self.section_active() {
             return;
@@ -194,36 +171,31 @@ impl ArtistsUi {
         crate::tasks::heap_trim::trim();
     }
 
-    /// Mark the cached grid + detail data as "must be re-fetched on the
-    /// next section-enter". Synchronous on the UI thread; see
-    /// [`crate::ui::albums::AlbumsUi::mark_dirty`] for the race rationale.
+    /// Mark the cached grid + detail data as "must be re-fetched on the next section-enter".
+    /// Synchronous on the UI thread; see [`crate::ui::albums::AlbumsUi::mark_dirty`].
     pub fn mark_dirty(&self) {
         self.section.mark_dirty();
     }
 
-    /// Atomically read-and-clear the dirty flag. See
-    /// [`crate::ui::albums::AlbumsUi::take_dirty`].
+    /// Atomically read-and-clear the dirty flag. See [`crate::ui::albums::AlbumsUi::take_dirty`].
     pub fn take_dirty(&self) -> bool {
         self.section.take_dirty()
     }
 
-    /// Drop just the grid-tier cover cache. Called (off the UI thread)
-    /// when the user opens an artist: the grid view is unmounted by the
-    /// `ArtistDetail.artist-id` flip.
+    /// Drop just the grid-tier cover cache. Called off the UI thread when the user opens an
+    /// artist: the grid view is unmounted by the `ArtistDetail.artist-id` flip.
     pub fn release_grid_covers(&self) {
         self.grid_covers.clear();
         crate::tasks::heap_trim::trim();
     }
 
-    /// Drop just the detail-tier `(cover, blur)` pair cache. Called when
-    /// the user closes a detail view.
+    /// Drop just the detail-tier `(cover, blur)` pair cache. Called when the user closes a detail.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
         crate::tasks::heap_trim::trim();
     }
 
-    /// Re-decode the first screenful of grid covers into the grid-tier
-    /// cache after a release.
+    /// Re-decode the first screenful of grid covers into the grid-tier cache after a release.
     pub fn prewarm_visible_covers(&self) {
         let data = self.grid.data.lock().clone();
         let unique = grid::first_screenful_paths(&data);
@@ -237,16 +209,14 @@ impl ArtistsUi {
         *self.detail.artist_id.lock()
     }
 
-    /// Track ids of the **displayed** detail list, in display order — the
-    /// filter-applied subset when a search is active, otherwise every
-    /// track. Play / shuffle / add-to-queue act on exactly these rows.
+    /// Track ids of the **displayed** detail list, in display order — the filter-applied subset
+    /// when a search is active. Play / shuffle / add-to-queue act on exactly these rows.
     pub fn detail_track_ids(&self) -> Vec<i64> {
         self.detail.tracks.lock().iter().map(|r| r.id).collect()
     }
 
-    /// Surgically flip `is_favorite` on the cached detail row. Both the
-    /// displayed `tracks` cache and the canonical `all_tracks` set are
-    /// touched so a later `apply_filtered_detail` rebuild keeps the star.
+    /// Surgically flip `is_favorite` on the cached detail row. Both the displayed `tracks` cache
+    /// and the canonical `all_tracks` set are touched so a later rebuild keeps the star.
     pub fn flip_detail_favorite(&self, id: i64, fav: bool) {
         if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
             r.is_favorite = fav;
@@ -256,8 +226,8 @@ impl ArtistsUi {
         }
     }
 
-    /// Star-rating analogue of [`Self::flip_detail_favorite`] — set `rating`
-    /// on both the displayed `tracks` cache and the canonical `all_tracks` set.
+    /// Star-rating analogue of [`Self::flip_detail_favorite`] — set `rating` on both the displayed
+    /// `tracks` cache and the canonical `all_tracks` set.
     pub fn flip_detail_rating(&self, id: i64, rating: i32) {
         if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
             r.rating = rating;
@@ -267,17 +237,15 @@ impl ArtistsUi {
         }
     }
 
-    /// Lazy cover lookup for an Artists **grid card** — backs
-    /// `Artists.request-cover`. Resolves against the grid-tier
-    /// (`GRID_COVER_SIZE`) cache.
+    /// Lazy cover lookup for an Artists **grid card** — backs `Artists.request-cover`, resolving
+    /// against the grid-tier cache.
     pub fn grid_cover(&self, image_path: &str) -> slint::Image {
         self.grid_covers.get_or_load_opt(Some(image_path).filter(|s| !s.is_empty()))
     }
 }
 
-/// Build the empty `VecModel`s the Artists grid, the detail track list,
-/// the detail Albums sub-section, and the detail selection need, and hand
-/// them to the Slint globals as `ModelRc`s.
+/// Build the empty `VecModel`s the Artists grid, the detail track list, the detail Albums
+/// sub-section and the detail selection need, and hand them to the Slint globals as `ModelRc`s.
 fn install_models(ui: &AppWindow) {
     let grid: Rc<VecModel<UiArtistGridRow>> = Rc::new(VecModel::default());
     ui.global::<Artists>().set_grid_rows(ModelRc::from(grid));
@@ -307,9 +275,7 @@ pub fn to_slint_artist_row(a: &ArtistStats) -> UiArtistRow {
     }
 }
 
-// Compile-time assertion, not runtime code: an anonymous `const _` is
-// type-checked but never dead-code-flagged, so the bound is enforced
-// without an `#[allow(dead_code)]` on a fn nothing calls.
+// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<ArtistsUi>();

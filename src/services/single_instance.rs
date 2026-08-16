@@ -127,11 +127,10 @@ fn name_is_taken(e: &io::Error) -> bool {
     name_is_taken_on(e, cfg!(windows))
 }
 
-/// The pure half of [`name_is_taken`], as `services::redact_prefix` is
-/// `redact_home`'s. A `cfg!` inside the predicate is a branch CI compiles out
-/// and can never exercise, so the platform arrives as an argument instead —
-/// otherwise a "simplification" back to one spelling merges green on a
-/// Linux-only gate, which is exactly how the bug shipped.
+/// The pure half of [`name_is_taken`], as `services::redact_prefix` is `redact_home`'s. A `cfg!`
+/// inside the predicate is a branch CI compiles out and can never exercise, so the platform
+/// arrives as an argument instead — otherwise a "simplification" back to one spelling merges green
+/// on a Linux-only gate.
 fn name_is_taken_on(e: &io::Error, windows: bool) -> bool {
     e.kind() == io::ErrorKind::AddrInUse || (windows && e.kind() == io::ErrorKind::PermissionDenied)
 }

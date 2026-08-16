@@ -1,17 +1,12 @@
-// Carries a grid view's `computed-cols` — derived from its body width — into
-// whichever global backs it. The component owns the *when*, the host's `seed`
-// callback owns the *what*.
+// Carries a grid view's `computed-cols` — derived from its body width — into whichever global backs
+// it. The component owns the *when*, the host's `seed` callback owns the *what*.
 //
-// **It takes two fire sources, and the second is the one easy to leave out.**
-// `changed watched-cols` covers every later change, mirrored locally because
-// `changed` can't watch a path expression. The 1 ms Timer covers mount, because
-// `changed` doesn't fire on the *initial* binding evaluation — and a window
-// whose first layout settles directly on the final grid width never transitions
-// at all, so Rust would keep chunking against the global's default while the
-// cards render at the size the layout actually fits, leaving a right-edge gap.
-//
-// A Timer rather than `init` so the first layout pass has assigned the host's
-// width and `computed-cols` reads its real value instead of the pre-layout 0.
+// **It takes two fire sources, and the second is the one easy to leave out.** `changed watched-cols`
+// covers every later change, mirrored locally because `changed` can't watch a path expression. The
+// 1 ms Timer covers mount, `changed` not firing on the *initial* binding evaluation — a window
+// whose first layout settles directly on the final grid width never transitions at all, so Rust
+// would keep chunking against the global's default and leave a right-edge gap. A Timer rather than
+// `init` so the first layout pass has assigned the host's width.
 
 export component GridColumnsSync {
     in property <int> computed-cols;

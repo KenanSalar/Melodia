@@ -4,10 +4,9 @@ import { MaterialIcon } from "material-icon.slint";
 import { Tooltip } from "tooltip.slint";
 import { MacOsTitleBarCluster } from "macos-titlebar-cluster.slint";
 
-// One decoration button. Hover paints a rounded fill; the close button overrides both
-// hover brushes to flash the theme's danger red. Bespoke rather than an `IconButton`
-// because these are rectangular and need a `hover-bg` knob that component doesn't
-// expose. Private to this file.
+// One decoration button. Hover paints a rounded fill; the close button overrides both hover brushes
+// to flash the theme's danger red. Bespoke rather than an `IconButton` because these are
+// rectangular and need a `hover-bg` knob that component doesn't expose. Private to this file.
 component TitleBarButton inherits Rectangle {
     in property <string> icon;
     in property <string> tooltip-text;
@@ -34,15 +33,11 @@ component TitleBarButton inherits Rectangle {
         y: 4px;
         width: parent.width - 8px;
         height: parent.height - 8px;
-        // Tracks the window's outer radius, so every button reads as matched to the
-        // outline: the close button at the corner is genuinely concentric with the
-        // window's arc — same centre, inset by the cell's own inset — and the other two
-        // take the same value for consistency. Floored at 0 for the Square preset.
-        //
-        // Only the preset chips populate `shell-radius`, so the subtraction never lands
-        // on a sub-3 px arc and needs no piecewise floor. Maximized falls back to a
-        // friendly pill: the outline goes square there, and an arc of 0 reads too sharp
-        // on the buttons themselves.
+        // Tracks the window's outer radius, so every button reads as matched to the outline: the
+        // close button at the corner is genuinely concentric with the window's arc, and the other
+        // two take the same value. Floored at 0 for the Square preset, and only the preset chips
+        // populate `shell-radius`, so the subtraction never needs a piecewise floor. Maximized
+        // falls back to a pill — the outline goes square there, and 0 reads too sharp on a button.
         border-radius: WindowChrome.is-maximized
             ? 6px
             : max(0px, Theme.shell-radius - 4px);
@@ -77,22 +72,16 @@ component TitleBarButton inherits Rectangle {
 
 // The brand on one side, a drag region in the middle, the decoration cluster opposite.
 //
-// **Drag handling is split**: Slint tracks only *hover* over the drag region, plus
-// double-click to toggle maximize, and Rust intercepts the press at the winit layer —
-// dragging from a `TouchArea` strands its mouse grab. The maximize icon reads
-// `WindowChrome.is-maximized`, fed from winit's `Resized`, so tiling shortcuts update it
-// too.
-//
-// Style and side come from `Theme.titlebar-button-{style,side}`, and the four
-// conditional branches mount the right cluster on the right side. **The buttons are
-// inlined into the outer layout rather than wrapped in a sub-component**: a
-// Rectangle-inheriting wrapper with conditional layout children reports 0 × 0. The brand
-// lives inside the drag region and pins to whichever side the buttons aren't on, so the
-// two groups never crowd each other.
+// **Drag handling is split**: Slint tracks only *hover* over the drag region, plus double-click to
+// toggle maximize, and Rust intercepts the press at the winit layer — dragging from a `TouchArea`
+// strands its mouse grab. The maximize icon reads `WindowChrome.is-maximized`, fed from winit's
+// `Resized`, so tiling shortcuts update it too. Style and side come from
+// `Theme.titlebar-button-{style,side}`, and the four conditional branches mount the right cluster
+// on the right side. **The buttons are inlined into the outer layout rather than wrapped in a
+// sub-component**: a Rectangle-inheriting wrapper with conditional layout children reports 0 × 0.
 export component CustomTitleBar inherits Rectangle {
-    // Pinned as a fixed slot. A plain `height` is ignored by the layout — the
-    // height-on-a-layout-child cycle — and the bar then claims the window's whole
-    // vertical space, leaving everything below it at zero.
+    // Pinned as a fixed slot. A plain `height` is ignored by the layout — the height-on-a-layout-
+    // child cycle — and the bar then claims the window's whole vertical space.
     min-height: 32px;
     max-height: 32px;
     vertical-stretch: 0;
@@ -132,14 +121,10 @@ export component CustomTitleBar inherits Rectangle {
             clicked => { WindowChrome.minimize(); }
         }
 
-        // Wraps the brand plus the middle stretch, so everything but the cluster is
-        // draggable. The TouchArea tracks only `has-hover`; Rust reads it and intercepts
-        // the press at the winit layer. `double-clicked` stays here because it fires
-        // *after* release, by which point the press was intercepted and Slint sees the
-        // second one normally.
-        //
-        // A stretch spacer placed before or after the brand is what pins it to the side
-        // the cluster isn't on.
+        // Wraps the brand plus the middle stretch, so everything but the cluster is draggable. The
+        // TouchArea tracks only `has-hover`; Rust reads it and intercepts the press at the winit
+        // layer. `double-clicked` stays here because it fires *after* release, by which point the
+        // press was intercepted. A stretch spacer before or after the brand pins it to its side.
         drag-region := TouchArea {
             horizontal-stretch: 1;
             mouse-cursor: default;

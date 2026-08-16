@@ -1,25 +1,19 @@
 //! Tests for the parts of the visualizer no compiler checks: the style table's
 //! mirrors, the strip Timer's gate, and the stall rule behind `dormant`.
 //!
-//! `STYLES` is mirrored by two things the compiler can't see: the translated
-//! name array both pickers render, and the key `VisualizerStrip` branches on.
-//! Both drift silently — a reordered picker would repoint every install's saved
-//! style, and a renamed key would leave the strip blank — so they are pinned
-//! here against the `.slint` sources.
+//! `STYLES` is mirrored by two things the compiler can't see — the translated name array
+//! both pickers render, and the key `VisualizerStrip` branches on — and both drift
+//! silently: a reordered picker repoints every install's saved style, a renamed key
+//! leaves the strip blank.
 //!
-//! The Timer's `running` and `interval` are pinned for the same reason and are
-//! worse when they drift: Rust would still publish every property, the strip
-//! would still look right on screen, and the only symptom would be a tick
-//! running at 60 Hz for a window nobody is looking at.
+//! The Timer's `running` and `interval` are worse when they drift. Rust still publishes
+//! every property, the strip still looks right, and the only symptom is a tick running
+//! at 60 Hz for a window nobody is looking at.
 //!
-//! [`FrameWatch`] is here for the opposite reason — it is ordinary logic, but the
-//! only way to reach it in the running app is to stop painting the window.
-//!
-//! The resting drawing is here for a third reason again: it is what a strip
-//! remounting over a paused player comes up on, and that strip never ticks, so
-//! nothing downstream would correct a wrong one. Its two halves are pure and
-//! covered below; the property writes wrapping them are not, since a
-//! `Visualizer` global only exists on an `AppWindow`.
+//! [`FrameWatch`] is here for the opposite reason: ordinary logic, whose only route in
+//! the running app is to stop painting the window. And the resting drawing is what a
+//! strip remounting over a paused player comes up on, which never ticks — so nothing
+//! downstream would correct a wrong one.
 
 use super::*;
 use crate::services::settings::{DEFAULT_VIZ_STYLE, VisualizerFlags};
@@ -39,7 +33,6 @@ const NOW_PLAYING_VIEW: &str =
 
 #[test]
 fn the_picker_names_one_style_per_key() {
-    // `@tr(` occurrences inside `property <[string]> viz-style-names: [ … ];`.
     // `None` when the array is renamed or removed, which fails loudly.
     let names = FLYOUT_PRESETS
         .split_once("property <[string]> viz-style-names: [")
@@ -51,9 +44,8 @@ fn the_picker_names_one_style_per_key() {
 
 #[test]
 fn the_settings_picker_renders_the_shared_name_list() {
-    // Both pickers have to name the same styles in the same order. They can
-    // only do that by rendering the one array — a re-introduced local copy in
-    // the Settings section would drift silently.
+    // Both pickers have to name the same styles in the same order, which they can only
+    // do by rendering the one array — a local copy here would drift silently.
     assert!(
         PLAYBACK_SECTION.contains("options: VizStylePresets.viz-style-names;"),
         "the Settings style picker no longer binds the shared name list"
@@ -62,20 +54,17 @@ fn the_settings_picker_renders_the_shared_name_list() {
 
 #[test]
 fn the_view_flyout_renders_the_shared_name_list() {
-    // The other picker, pinned the same way. It also takes each row's index
-    // straight off the loop, which is what keeps its leading "Off" row from
-    // shifting the style rows out of step with `STYLES`.
+    // The other picker, pinned the same way. It takes each row's index straight off the
+    // loop, which keeps its leading "Off" row from shifting the rest out of step.
     assert!(
         VIZ_FLYOUT.contains("for name[i] in VizStylePresets.viz-style-names:"),
         "the Now-Playing style flyout no longer renders the shared name list"
     );
 }
 
-/// The y coordinate of every vertex a path visits, in order.
-///
-/// The commands are `M{x} {y}` then ` L{x} {y}` … then a bare `Z` stuck to the
-/// last one, so the y values are exactly the tokens that don't open with a
-/// command letter.
+/// The y coordinate of every vertex a path visits, in order. The commands are `M{x} {y}`
+/// then `L{x} {y}` with a bare `Z` stuck to the last, so the y values are exactly the
+/// tokens that don't open with a command letter.
 fn path_y_values(path: &str) -> Vec<&str> {
     path.split_whitespace()
         .filter(|token| !token.starts_with(['M', 'L']))
@@ -132,10 +121,9 @@ fn the_resting_figure_is_what_a_decayed_trace_settles_to() {
 
 #[test]
 fn resting_bars_put_every_band_back_where_the_model_was_seeded() {
-    // The bars' rest is the seed `install_visualizer` builds the model with —
-    // the strip floors each band at a dot, so there is no drawn height to
-    // restore. Spelled out here as its own literal rather than shared with
-    // `rest_bars`, so the two can actually disagree.
+    // Rest is the seed `install_visualizer` builds the model with, the strip flooring
+    // each band at a dot. Its own literal rather than shared with `rest_bars`, so the
+    // two can actually disagree.
     const SEEDED_LEVEL: f32 = 0.0;
 
     let model = VecModel::from(vec![SEEDED_LEVEL; NUM_BANDS]);
@@ -144,9 +132,9 @@ fn resting_bars_put_every_band_back_where_the_model_was_seeded() {
     }
     rest_bars(&model);
 
-    // Bit patterns rather than `==`: this is an exact-restore claim, and the
-    // crate denies a loose float comparison anyway. Reported as the first band
-    // that strayed — sixty-four levels side by side say nothing on failure.
+    // Bit patterns rather than `==`: an exact-restore claim, and the crate denies a
+    // loose float comparison anyway. Reported as the first band that strayed — sixty-four
+    // levels side by side say nothing on failure.
     let strayed =
         model.iter().enumerate().find(|(_, level)| level.to_bits() != SEEDED_LEVEL.to_bits());
     assert!(strayed.is_none(), "band left off the seed: {strayed:?}");
@@ -165,11 +153,9 @@ fn the_strip_branches_on_a_key_the_table_knows() {
         STRIP.contains(&format!("Visualizer.style != \"{STYLE_WAVEFORM}\"")),
         "the strip lost its fallback branch"
     );
-    // Mirrored has no component of its own — it rides the catch-all branch and
-    // only flips the bars' anchor, so what has to hold is the whole binding,
-    // not just the key appearing somewhere in the file. Both ends are pinned:
-    // a dead comparison left behind after `centred:` was dropped would pass the
-    // first assertion, and the two files drift independently.
+    // Mirrored has no component of its own, riding the catch-all branch and only
+    // flipping the bars' anchor — so what has to hold is the whole binding, not the key
+    // appearing somewhere in the file. Both ends, the two files drifting independently.
     assert!(STYLES.contains(&STYLE_MIRRORED));
     assert!(
         STRIP.contains(&format!("centred: Visualizer.style == \"{STYLE_MIRRORED}\"")),
@@ -183,11 +169,10 @@ fn the_strip_branches_on_a_key_the_table_knows() {
 
 #[test]
 fn the_strips_height_comes_from_the_panel_rather_than_a_literal() {
-    // Both ends, because either alone still builds and still draws: a strip
-    // that re-pins its own height ignores whatever the view passes, and a view
-    // that stops passing one leaves the strip on its fallback. Neither is
-    // visible on a small window — the fallback *is* the small-window height —
-    // so the symptom is a maximized window drawing the same sliver it used to.
+    // Both ends, either alone still building and drawing: a strip that re-pins its own
+    // height ignores what the view passes, a view that stops passing one leaves the
+    // strip on its fallback. Neither shows on a small window — the fallback *is* the
+    // small-window height — so the symptom is a maximized window drawing a sliver.
     assert!(
         STRIP.contains("min-height: root.strip-height;")
             && STRIP.contains("max-height: root.strip-height;"),
@@ -213,9 +198,9 @@ fn the_strip_stops_ticking_for_a_window_the_os_calls_hidden() {
 
 #[test]
 fn a_dormant_strip_polls_rather_than_running_at_frame_rate() {
-    // The inferred half. Nothing can wake this one, so it slows the Timer down
-    // instead of stopping it — drop the arm and the Timer is back at 60 Hz for
-    // a window Wayland never admitted was minimized.
+    // The inferred half. Nothing can wake this one, so it slows the Timer rather than
+    // stopping it — drop the arm and it is back at frame rate for a window Wayland
+    // never admitted was minimized.
     assert!(
         STRIP.contains("Visualizer.dormant ? 500ms"),
         "the strip's Timer lost its dormant polling interval"

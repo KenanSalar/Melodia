@@ -1,44 +1,27 @@
-//! Browse-view glue between Rust and Slint.
+//! The Browse page: the filesystem under the library folders, as a track list
+//! or a card grid.
 //!
-//! The Slint `Browse` global owns three `Rc<VecModel<_>>` lists
-//! (`folders`, `rows`, `breadcrumbs`) installed once at startup via
-//! `install_models`, plus a persistent `VecModel<i32>` for the
-//! selection (`install_selection_model`). `fetch_and_apply`
-//! mutates the existing `VecModel`s in place on every navigation — no
-//! `ModelRc` swaps after install, so Slint's reactive bindings keep their
-//! dependency tracks.
+//! Its models are installed once at startup and mutated **in place** on every
+//! navigation — no `ModelRc` swaps after install, so Slint's reactive bindings
+//! keep their dependency tracks.
 //!
-//! `rows` is rendered by the shared `TrackList` component (the same one
-//! the Tracks view uses). In-library files carry their real DB
-//! `TrackListRow`; disk-only files (present on disk inside a library
-//! folder but not yet in the DB) carry a synthesized sparse row with
-//! `id == 0` / `enabled == false`, so the shared row item renders them
+//! `rows` renders through the shared `TrackList`. In-library files carry their
+//! real `TrackListRow`; a file on disk that isn't in the DB carries a synthesized
+//! sparse row with `id == 0` and `enabled == false`, so the row item draws it
 //! dimmed and swallows every interaction.
 //!
-//! `current-path == ""` is the special **root** state: instead of
-//! calling `library::browse::browse_directory` (which would reject an
-//! empty path), Rust fetches the library folder list via
-//! `library::settings::get_folders` and renders them as drillable folder
-//! rows. `has_library_folders` flips false when that list is empty so
-//! the view paints a "No music folders configured" CTA.
+//! `current-path == ""` is the **root** state: rather than call
+//! `browse_directory`, which rejects an empty path, Rust lists the library
+//! folders as drillable rows — and flips `has_library_folders` false when there
+//! are none, so the view paints its CTA.
 //!
-//! Browse sorts **in-memory** in Rust: it mixes disk-only and DB files,
-//! so unlike the Tracks view it can't re-query the DB with an `ORDER BY`.
-//! `sort_browse_files` reorders the cached `last_files` Vec; the sort
-//! field/direction live on `BrowseUi` so a watcher-driven re-fetch
-//! preserves the user's chosen order.
+//! Browse sorts **in memory**, mixing disk-only and DB files, so unlike the
+//! Tracks view it can't push an `ORDER BY`. The sort state lives on `BrowseUi`,
+//! so a watcher-driven re-fetch preserves the user's chosen order.
 //!
-//! Cross-thread layout:
-//! * `BrowseUi` is `Send + Sync` — `Arc<BrowseUi>` cloned into callbacks
-//!   and tokio tasks.
-//! * Slint properties/models can only be touched from the UI thread; we
-//!   hop back via `Weak<AppWindow>::upgrade_in_event_loop`.
-//!
-//! Stale-fetch guard: every call to [`fetch_and_apply`] bumps
-//! `fetch_token` and captures its post-bump value. If a later fetch
-//! has incremented the token by the time the UI-thread closure runs,
-//! the late fetch drops its UI write so it doesn't overwrite a newer
-//! result.
+//! Every [`fetch_and_apply`] bumps `fetch_token` and captures the post-bump
+//! value; a late fetch whose token has moved by the time its closure runs drops
+//! its UI write rather than overwriting a newer result.
 
 mod breadcrumbs;
 mod callbacks;
@@ -69,16 +52,12 @@ use crate::{
 // `boot::ui_setup` retunes the cover cap once the window is live.
 pub use cards::tune_cache_for_display;
 
-/// Browse's `Nav.selected-index`. **The single definition** — every other section has
-/// carried one of these for a while and this was the last literal `1` left standing in a
-/// `get_selected_index()` comparison, which is the same shape as the five duplicated
-/// `const`s `my_library::NAV_MY_LIBRARY` retired.
+/// Browse's `Nav.selected-index` — see [`crate::ui::favorites::NAV_FAVORITES`].
 pub const NAV_BROWSE: i32 = 1;
 
-// Reached only from this slice's own `callbacks.rs`, which used to live two
-// modules away, plus the cross-slice `apply_row_*` mirrors in
-// `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is
-// exactly that reach.
+// `pub(super)` is `pub(in crate::ui)` here, which is exactly the reach these
+// need: this slice's own `callbacks.rs`, plus the cross-slice `apply_row_*`
+// mirrors in `callbacks::now_playing`.
 pub(super) use cards::{BrowseViewMode, mode_from_index, mode_index, rebuild_cards};
 pub(super) use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, resort_and_apply};
 pub(super) use selection::{clear_selection, handle_select_row};
@@ -86,9 +65,9 @@ pub(super) use selection::{clear_selection, handle_select_row};
 /// Install the Browse models, build the handle, wire every `Browse.*` callback,
 /// and seed the persisted path + presentation mode.
 ///
-/// The seed folds in here because it is Browse-local and needs only the handle
-/// this call just built — and folding it is what let it take `views.json` as an
-/// argument instead of re-reading the file `install_views` had already parsed.
+/// The seed folds in here, being Browse-local and needing only the handle this
+/// call just built — which is also what lets it take `views.json` as an argument
+/// rather than re-reading a file `install_views` already parsed.
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<BrowseUi> {
@@ -110,39 +89,32 @@ pub struct BrowseUi {
     /// and refetches; `open_folder` pushes the current path before
     /// switching.
     pub(super) history: Mutex<Vec<String>>,
-    /// Last fetched files in display order (already sorted by the
-    /// current `sort_field` / `sort_dir`) — used by `play-row`, the
-    /// selection helpers, and the favourite toggle to recover full row
-    /// data without round-tripping through the Slint model.
+    /// Last fetched files, already in display order — `play-row`, the selection
+    /// helpers and the favourite toggle recover full row data from here rather
+    /// than round-tripping the Slint model.
     pub(super) last_files: Mutex<Vec<BrowseFile>>,
-    /// Last fetched subfolders, in the order they are published. Cached
-    /// beside `last_files` because the card view draws both in one grid
+    /// Cached beside `last_files` because the card view draws both in one grid,
     /// and a mode toggle rebuilds it with no fetch to take them from.
     pub(super) last_folders: Mutex<Vec<BrowseFolder>>,
-    /// In-memory sort state. Browse can't push an `ORDER BY` to the DB
-    /// (it mixes disk-only + DB files), so it re-sorts `last_files`.
+    /// In-memory sort state — Browse mixes disk-only and DB files, so it can't
+    /// push an `ORDER BY`.
     sort_field: Mutex<String>,
     sort_dir: Mutex<String>,
-    /// Shared with Tracks/now-playing-bar so cached thumbnails are
-    /// reused across views.
+    /// The shared row tier.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
-    /// The card view's own grid tier — private, so releasing it can't
-    /// yank the row thumbnails the shared tier above is still serving.
-    /// Released on section-leave and whenever the view goes back to the
-    /// list. See `cards.rs`.
+    /// The card view's own tier — private, so releasing it can't yank the row
+    /// thumbnails the shared one is still serving. Released on section leave and
+    /// on going back to the list.
     pub(super) grid_covers: Arc<CoverThumbs>,
-    /// Synchronous shadow of `Browse.view-mode`, as a bool because the
-    /// index lives only in Slint (`cards::mode_from_index`). The fetch
-    /// reads it off a tokio worker, which is why it isn't read back off
-    /// the global.
+    /// Synchronous shadow of `Browse.view-mode`, read by the fetch off a tokio
+    /// worker where the global is out of reach. A bool because the index itself
+    /// lives only in Slint.
     card_mode: AtomicBool,
-    /// Stale-fetch guard. See module-level comment.
+    /// Stale-fetch guard — see the module docs.
     pub(super) fetch_token: AtomicU64,
-    /// Visibility and staleness bookkeeping (`section-active-changed`
-    /// shadow plus dirty flag). Browse releases nothing on leave —
-    /// `dirty` is set only by the `library_changed` subscriber when a
-    /// bump arrives while the section is hidden, and consumed on
-    /// re-enter to re-fetch the current directory once.
+    /// Visibility and staleness. Browse releases nothing on leave, so `dirty` is
+    /// set only by the `library_changed` subscriber while hidden, and consumed
+    /// on re-enter to re-fetch the current directory once.
     section: SectionState,
 }
 
@@ -166,24 +138,21 @@ impl BrowseUi {
         }
     }
 
-    /// Mirror the Browse-section-visible flag (`section-active-changed`).
     pub fn set_section_active(&self, active: bool) {
         self.section.set_active(active);
     }
 
-    /// Whether the Browse section is currently on screen.
     pub fn section_active(&self) -> bool {
         self.section.active()
     }
 
-    /// Mark the cached directory listing stale — a `library_changed` bump
-    /// arrived while the section was hidden. See [`Self::take_dirty`].
+    /// Mark the cached listing stale — a `library_changed` bump arrived while
+    /// the section was hidden.
     pub fn mark_dirty(&self) {
         self.section.mark_dirty();
     }
 
-    /// Atomically read-and-clear the dirty flag. `true` on section-enter
-    /// means a library mutation happened while hidden and the current
+    /// Atomically read-and-clear. `true` on a section enter means the current
     /// directory must be re-fetched.
     pub fn take_dirty(&self) -> bool {
         self.section.take_dirty()
@@ -203,27 +172,25 @@ impl BrowseUi {
         self.card_mode.store(mode == BrowseViewMode::Card, Ordering::Relaxed);
     }
 
-    /// Resolve one card's cover against the card tier, decoding only once the
-    /// tier is known warm — `generation == 0` means "just toggled or just
-    /// re-entered", so answer from the cache and let the card paint its
-    /// placeholder rather than putting a grid-tier decode per visible card on the
-    /// UI thread.
+    /// Resolve one card's cover, decoding only once the tier is known warm — a
+    /// `generation` of `0` means just toggled or just re-entered, so answer from
+    /// the cache and let the card paint its placeholder rather than putting a
+    /// decode per visible card on the UI thread.
     pub fn grid_cover(&self, artwork_path: &str, generation: i32) -> slint::Image {
         crate::ui::grid_prewarm::grid_cover(&self.grid_covers, artwork_path, generation)
     }
 
     /// Decode `paths` into the card tier. Blocking — call from `spawn_blocking`.
     ///
-    /// Returns whether the tier is warm **and still holds what was decoded**: the
-    /// answer a caller's `covers-generation` bump is gated on. `false` when a
-    /// section leave or a toggle back to the list landed inside the decode, and
-    /// there the buffers are handed straight back — announcing a tier the leave
-    /// has already released puts the next cards on the decoding path. The two
-    /// warm sites (a fetch, a mode toggle) differ only in where the paths come
-    /// from, so the re-check lives here rather than at each of them.
+    /// Returns whether the tier is warm **and still holds what was decoded** —
+    /// the answer a caller's `covers-generation` bump is gated on. `false` when
+    /// a leave or a toggle back to the list landed inside the decode, where the
+    /// buffers are handed straight back: announcing a tier the leave already
+    /// released puts the next cards on the decoding path. The two warm sites
+    /// differ only in where the paths come from, so the re-check lives here.
     ///
-    /// An empty `paths` is still a warm tier: a directory of nothing but
-    /// subfolders has no cover to wait for, and its files may load on demand.
+    /// An empty `paths` is still a warm tier — a directory of nothing but
+    /// subfolders has no cover to wait for.
     pub fn warm_card_tier(&self, paths: &[PathBuf]) -> bool {
         if !paths.is_empty() {
             self.grid_covers.prewarm(paths);
@@ -250,9 +217,8 @@ impl BrowseUi {
     }
 
     /// Drop every card cover. Paired with a `covers-generation` rewind by the
-    /// caller, so `0` keeps meaning "this tier is cold" rather than "first toggle
-    /// of the session". Called off the UI thread on a section-leave and whenever
-    /// the view goes back to the list.
+    /// caller, so `0` keeps meaning "this tier is cold" rather than "first
+    /// toggle of the session".
     pub fn release_grid_covers(&self) {
         self.grid_covers.clear();
         crate::tasks::heap_trim::trim();
@@ -262,16 +228,13 @@ impl BrowseUi {
         self.current_path.lock().clone()
     }
 
-    /// Push `path` onto the back-stack and set `current_path` to `next`.
-    /// `next` is the path the caller is navigating *to*; `path` is the
-    /// path the caller is leaving.
+    /// Push `leaving` onto the back-stack and land on `going_to`.
     pub fn push_history(&self, leaving: String, going_to: String) {
         self.history.lock().push(leaving);
         *self.current_path.lock() = going_to;
     }
 
-    /// Pop the most recent entry off the back-stack. Returns `None` when
-    /// the stack is empty.
+    /// Pop the most recent entry off the back-stack.
     pub fn pop_history(&self) -> Option<String> {
         let popped = self.history.lock().pop();
         if let Some(p) = popped.as_ref() {
@@ -280,10 +243,9 @@ impl BrowseUi {
         popped
     }
 
-    /// Trim history down to (and including) `path` if it appears in the
-    /// stack, then set `current_path` to `path`. If `path` isn't in the
-    /// stack (a user clicked a breadcrumb that isn't an ancestor — rare
-    /// but possible after a refresh), the stack is cleared.
+    /// Trim history back to `path` and land on it. A `path` that isn't in the
+    /// stack — a breadcrumb that stopped being an ancestor across a refresh —
+    /// clears it instead.
     pub fn truncate_history_to(&self, path: &str) {
         let mut h = self.history.lock();
         if let Some(pos) = h.iter().position(|p| p == path) {
@@ -294,37 +256,34 @@ impl BrowseUi {
         path.clone_into(&mut self.current_path.lock());
     }
 
-    /// Replace `current_path` without touching history. Used by `refresh`
-    /// (no history change) and the initial seed.
+    /// Replace `current_path` without touching history — the refresh path and
+    /// the initial seed.
     pub fn set_path(&self, path: String) {
         *self.current_path.lock() = path;
     }
 
-    /// Current sort field (`"title"`, `"artist"`, …).
     pub fn sort_field(&self) -> String {
         self.sort_field.lock().clone()
     }
 
-    /// Current sort direction (`"asc"` / `"desc"`).
     pub fn sort_dir(&self) -> String {
         self.sort_dir.lock().clone()
     }
 
-    /// Store the sort field + direction. The next `fetch_and_apply` /
-    /// `resort_and_apply` reads these.
+    /// Store the sort, for the next `fetch_and_apply` / `resort_and_apply`.
     pub fn set_sort(&self, field: String, dir: String) {
         *self.sort_field.lock() = field;
         *self.sort_dir.lock() = dir;
     }
 
-    /// IDs of `last_files` rows that are in the library, in display
-    /// order. `play-row` passes the result to `player_play_tracks`.
+    /// Ids of the in-library `last_files` rows, in display order — what
+    /// `play-row` hands to `player_play_tracks`.
     pub fn current_in_library_ids(&self) -> Vec<i64> {
         self.last_files.lock().iter().filter_map(|f| f.in_library.then_some(f.row.id)).collect()
     }
 
-    /// Surgically flip `is_favorite` on the cached `last_files` row so a
-    /// single-row favourite toggle doesn't need a full re-fetch.
+    /// Flip `is_favorite` on the cached row, so a single-row toggle needs no
+    /// re-fetch.
     pub fn flip_favorite(&self, id: i64, fav: bool) {
         let mut files = self.last_files.lock();
         if let Some(f) = files.iter_mut().find(|f| f.row.id == id) {
@@ -332,8 +291,7 @@ impl BrowseUi {
         }
     }
 
-    /// Surgically set `rating` on the cached `last_files` row — the rating
-    /// analogue of [`Self::flip_favorite`].
+    /// [`Self::flip_favorite`]'s star-rating twin.
     pub fn flip_rating(&self, id: i64, rating: i32) {
         let mut files = self.last_files.lock();
         if let Some(f) = files.iter_mut().find(|f| f.row.id == id) {
@@ -342,10 +300,8 @@ impl BrowseUi {
     }
 }
 
-/// Build empty `VecModel`s for `folders`, `rows`, `breadcrumbs` and the card
-/// grid's `card-rows`, and hand them to the Slint `Browse` global as `ModelRc`s.
-/// Subsequent updates locate them by downcasting back to `VecModel<T>` and
-/// mutating in place.
+/// Hand the `Browse` global its four empty `VecModel`s. Later updates find them
+/// by downcasting back and mutating in place.
 fn install_models(ui: &AppWindow) {
     let g = ui.global::<Browse>();
     let folders: Rc<VecModel<UiBrowseFolderRow>> = Rc::new(VecModel::default());
@@ -358,22 +314,17 @@ fn install_models(ui: &AppWindow) {
     g.set_card_rows(ModelRc::from(cards));
 }
 
-/// Install a persistent `VecModel<i32>` for `Browse.selected-ids` so
-/// selection mutations can `set_vec` into the same model instead of
-/// allocating a fresh `ModelRc + VecModel` on every click. Mirrors
+/// A persistent model for `Browse.selected-ids`, so a selection change is a
+/// `set_vec` rather than a fresh `ModelRc` per click. Mirrors
 /// `tracks::install_selection_model`.
 fn install_selection_model(ui: &AppWindow) {
     let model: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     ui.global::<Browse>().set_selected_ids(ModelRc::from(model));
 }
 
-/// Seed `Browse.current-path` and `Browse.view-mode` from `views.json` at
-/// startup and kick the initial fetch. `None` — a fresh install, or a file that
-/// wouldn't read — leaves `current-path` empty (root) and the mode on the list,
-/// and the fetch lands at the root view.
-///
-/// Takes the boot read rather than repeating it: `install_views` already has
-/// `views.json` in hand, and this used to be a second full parse of it.
+/// Seed the path and presentation mode from `views.json` and kick the initial
+/// fetch. `None` — a fresh install, or a file that wouldn't read — lands at the
+/// root in list mode. Takes the boot read rather than repeating it.
 fn seed_from_settings(
     ui: &AppWindow,
     state: &AppState,
@@ -388,8 +339,7 @@ fn seed_from_settings(
     g.set_current_path(SharedString::from(initial_path.as_str()));
 
     // Clamped against the Slint-declared count, the `tab-count` contract: a file
-    // written by a build with more presentations would otherwise select a branch
-    // that mounts nothing.
+    // from a build with more presentations would select a branch mounting nothing.
     let mode_idx = crate::ui::tab_bar::clamp_tab(persisted_mode, g.get_view_mode_count());
     g.set_view_mode(mode_idx);
     browse_ui.set_view_mode(mode_from_index(&g, mode_idx));
@@ -404,13 +354,11 @@ fn seed_from_settings(
     });
 }
 
-/// Re-export of `BreadcrumbRow` used by `install_browse_models`.
 use crate::BreadcrumbRow as UiBreadcrumbRow;
 
-/// Convert a `BrowseFile` into the shared `TrackListRow` the `TrackList`
-/// component renders. In-library files reuse the Tracks-view converter
-/// (full data, `enabled: true`); disk-only files become a sparse,
-/// dimmed, non-interactive row (`id == 0`, `enabled: false`).
+/// A `BrowseFile` as the shared `TrackListRow`. An in-library file reuses the
+/// Tracks converter; a disk-only one becomes the sparse, dimmed,
+/// non-interactive row the module docs describe.
 pub fn to_slint_browse_track_row(f: &BrowseFile) -> UiTrackListRow {
     if f.in_library {
         let mut row = crate::ui::tracks::to_slint_track_list_row(&f.row);
@@ -439,9 +387,7 @@ pub fn to_slint_browse_track_row(f: &BrowseFile) -> UiTrackListRow {
     }
 }
 
-// Compile-time assertion, not runtime code: an anonymous `const _` is
-// type-checked but never dead-code-flagged, so the bound is enforced
-// without an `#[allow(dead_code)]` on a fn nothing calls.
+// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<BrowseUi>();

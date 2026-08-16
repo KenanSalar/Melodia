@@ -2,23 +2,20 @@
 //! which both shared bands mount, and the Now Playing view's own copy of the same three
 //! layers.
 //!
-//! A gradient floor, two cross-fading blur slots, and a scrim solved against them. All
-//! three have to ride one curve, and the floor is the layer that shipped without an
-//! `animate` — in both files, because they were written apart. It is also the layer that
-//! *is* the backdrop whenever the slots sit at 0: an art-less track, an artwork-less
-//! entity, Genre Detail's name-hashed stops, and the window between any hero opening and
-//! its decode landing. So the failure is invisible on everything that has artwork, which
-//! is why it survived two rounds of review on each side.
+//! A gradient floor, two cross-fading blur slots, and a scrim solved against them, all
+//! riding one curve. The floor is the layer that shipped without an `animate`, in both
+//! files, because they were written apart — and it is the layer that *is* the backdrop
+//! whenever the slots sit at 0: an art-less track, an artwork-less entity, Genre Detail's
+//! name-hashed stops, the window between a hero opening and its decode landing. So the
+//! failure is invisible on anything with artwork.
 //!
-//! That same reach is why the shared floor now takes a gate: the layer that *is* the
-//! backdrop is also the one that eases, and on My Library the globals behind it outlive the
-//! tab that filled them.
+//! That reach is also why the shared floor takes a gate: the layer that *is* the backdrop
+//! is the one that eases, and on My Library the globals behind it outlive the tab that
+//! filled them.
 
-// A file with its comments dropped, so prose about a fix can neither satisfy a pin nor
-// bound a region early. Needed here for a reason particular to this file: every anchor
-// below is a gradient literal, and the comment block sitting directly above the floor's
-// own binding argues about gradients and stop counts. One line spelling the literal would
-// re-anchor both pins ahead of the code.
+// Comments dropped, so prose about a fix can neither satisfy a pin nor bound a region
+// early — particularly here, where every anchor is a gradient literal and the block above
+// the floor's own binding argues about gradients and stop counts.
 use crate::test_support::strip_line_comments as code;
 
 const HERO_BLUR: &str = include_str!("../../../melodia-ui/ui/components/hero-blur-backdrop.slint");
@@ -31,23 +28,20 @@ const NOW_PLAYING: &str = include_str!("../../../melodia-ui/ui/views/now-playing
 /// from directly under the gradient.
 ///
 /// Safe to `animate` where a shared component's brush input is not, which is the
-/// distinction worth keeping straight — `Brush::interpolate` handles gradient↔gradient
-/// stop-for-stop and both sides are two stops at 135deg, and each pair of stops has
-/// exactly one writer (`ui::hero_backdrop::write`, `ui::now_playing::track_change`),
-/// writing discretely. Nothing can restart either binding mid-flight. See the
-/// shared-component entry in `.claude/rules/slint-pitfalls.md` for the case where that
-/// isn't true.
+/// distinction worth keeping straight: `Brush::interpolate` crosses gradients
+/// stop-for-stop and both sides are two stops at 135deg, and each pair has exactly one
+/// writer, writing discretely — so nothing can restart either binding mid-flight.
+/// `.claude/rules/slint-pitfalls.md` has the case where that isn't true.
 #[test]
 fn both_backdrop_floors_ease_with_the_layers_above_them() {
     for (file, source) in [
         ("hero-blur-backdrop.slint", HERO_BLUR),
         ("now-playing-view.slint", NOW_PLAYING),
     ] {
-        // Anchored on the gradient and then on the end of its own statement, rather than
-        // on the line under `background:` — the shared floor swaps its stops for a
-        // transparent pair while its host paints no hero, so that binding now spans three
-        // lines. What this pin is about is the `animate` sitting directly under it, which
-        // both spellings still have to.
+        // On the gradient and then the end of its statement, rather than the line under
+        // `background:` — the shared floor swaps its stops for a transparent pair while
+        // its host paints no hero, so that binding spans three lines. What matters is
+        // the `animate` directly under it, which both spellings still owe.
         let source = code(source);
         let after = source
             .split_once("@linear-gradient(135deg,")
@@ -65,13 +59,11 @@ fn both_backdrop_floors_ease_with_the_layers_above_them() {
 }
 
 /// `HeroBlurBackdrop` is nothing but the three layers, so its duration token can be
-/// counted rather than located: two slot opacities, the scrim, and the floor. A layer
-/// given a curve of its own is what makes a cover swap and its scrim land a beat apart,
-/// which reads as a flicker rather than as a wrong duration.
+/// counted rather than located. A layer given a curve of its own makes a cover swap and
+/// its scrim land a beat apart, which reads as a flicker rather than a wrong duration.
 ///
-/// Counted over `code` for the reason that helper exists, and a count is the shape prose
-/// inflates most easily: one comment line quoting the animate block reads as a fifth layer
-/// and fails this for something that is not a regression.
+/// Counted over `code`, a count being the shape prose inflates most easily: one comment
+/// quoting the animate block reads as a fifth layer.
 #[test]
 fn the_shared_backdrop_rides_one_duration() {
     assert_eq!(
@@ -87,11 +79,10 @@ fn the_shared_backdrop_rides_one_duration() {
 /// unchanged. Only `LibraryTabBand` morphs, and only it can hold a `HeroBackdrop` its band
 /// stopped painting a tab ago.
 ///
-/// Defaulted the other way every hero would come up on a transparent floor and stay there,
-/// which on the one backdrop with no blur over it — Genre Detail's — is the whole banner.
-/// **The two arms are checked one at a time, and that is the point rather than pedantry**:
-/// an inverted ternary is the same failure as an inverted default, it reads correctly at a
-/// glance, and a window holding both arms cannot tell the two spellings apart.
+/// Defaulted the other way, every hero comes up on a transparent floor and stays there —
+/// which on the one backdrop with no blur over it, Genre Detail's, is the whole banner.
+/// **The two arms are checked one at a time**, an inverted ternary being the same failure
+/// as an inverted default and reading correctly at a glance.
 #[test]
 fn the_floors_hero_gate_defaults_to_shown() {
     let code = code(HERO_BLUR);
@@ -102,9 +93,8 @@ fn the_floors_hero_gate_defaults_to_shown() {
          value and always have a hero up, so the default is their whole answer"
     );
 
-    // Split at the ternary's own separators: neither arm is anything but a two-stop
-    // `@linear-gradient(135deg, …)`, so neither carries a `?` or a `:` of its own and this
-    // lands exactly on the two halves.
+    // At the ternary's own separators: neither arm is anything but a two-stop gradient,
+    // so neither carries a `?` or a `:` and this lands exactly on the two halves.
     let arms = code
         .split_once("background: root.hero-open")
         .and_then(|(_, rest)| rest.split_once(";\n"))

@@ -3,35 +3,25 @@ import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
 import { CoverMosaic } from "../grid/cover-mosaic.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The artwork square both mosaic heroes draw. The outer Rectangle owns the
-// chrome and `CoverMosaic` paints the tile layout inside it; an empty set gets a
-// single centred glyph instead.
+// The artwork square both mosaic heroes draw: the outer Rectangle owns the chrome and
+// `CoverMosaic` paints the tile layout inside it, an empty set getting a centred glyph.
+// Mounted once by `MosaicTabHero`, which forwards its cover callback rather than reading a
+// global, each page owning its own mosaic tier.
 //
-// Mounted once, by `MosaicTabHero`, which forwards each page's three values and
-// its cover callback — a callback rather than a global read because each page
-// owns its own mosaic tier. Still its own component rather than inlined into the
-// band: the square is the one part of that banner a non-tabbed hero could want.
-//
-// **Every brush here is a `HeroBackdrop` tier, and none may become a `Theme.*`
-// token.** The tile sits *on* the hero: with no mosaic that's the dark gradient
-// floor, where a light theme's accent lands dark-on-dark, and the populated fill
-// matters as much because the mosaic's placeholder slots are translucent —
-// whatever fills this rectangle is most of what their chrome composites against.
-// The edge had to follow the fill for the same reason: a theme hairline vanishes
-// under a dark variant and turns a hard bright ring under every light one, so it
-// takes the derived `tile-edge` tier.
+// **Every brush here is a `HeroBackdrop` tier, and none may become a `Theme.*` token.** The
+// tile sits *on* the hero — with no mosaic that's the dark gradient floor, where a light
+// theme's accent lands dark-on-dark, and the populated fill matters as much, the placeholder
+// slots being translucent. The edge follows the fill for the same reason.
 export component MosaicHeroTile inherits Rectangle {
-    // Tiles to draw, before the 4-slot cap. Zero means an empty *set*, not
-    // "entries with no artwork" — an entry lacking a cover still contributes a
-    // tile, which `CoverMosaic` paints as a placeholder.
+    // Tiles to draw, before the 4-slot cap. Zero means an empty *set*, not "entries with no
+    // artwork" — an entry lacking a cover still contributes a tile, painted as a placeholder.
     in property <int> count;
     in property <[string]> paths;
     // Each view passes its own sidebar entry's glyph.
     in property <string> empty-glyph;
     in property <bool> empty-glyph-filled: false;
 
-    // `pure` because `CoverMosaic`'s is, and Slint won't call an impure
-    // callback from a pure one.
+    // `pure` because `CoverMosaic`'s is, Slint not calling an impure callback from a pure one.
     pure callback request-cover(string) -> image;
 
     width: Theme.hero-artwork;

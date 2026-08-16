@@ -1,9 +1,7 @@
-// The Settings page's reactive state. Rust populates the lists and indices at startup
-// and on every chip / dot click; the UI binds chip groups and colour-dot grids to them
-// and forwards `selected(int)` to the change callbacks.
-//
-// The page's own search filter and row-visibility rule live on `SettingsPage`, not here:
-// values the user configures vs. how the page configuring them is navigated.
+// The Settings page's reactive state. Rust populates the lists and indices at startup and on every
+// chip / dot click; the UI binds chip groups and colour-dot grids to them and forwards
+// `selected(int)` to the change callbacks. The page's own search filter and row-visibility rule
+// live on `SettingsPage`: values the user configures vs. how the page configuring them is navigated.
 
 export global Settings {
     // Stable across runs — populated once at startup from `themes::registry()`.
@@ -55,16 +53,14 @@ export global Settings {
     // applying next launch. Opt-in.
     in property <bool> tray-enabled;
 
-    // A tray icon was actually created. "Close to Tray" greys out rather than hiding
-    // when false — either the tray is off, or the session has no tray host (vanilla
-    // GNOME without AppIndicator) — because the close handlers then fall back to
-    // quitting and the toggle would do nothing.
+    // A tray icon was actually created. "Close to Tray" greys out rather than hiding when false —
+    // either the tray is off, or the session has no tray host (vanilla GNOME without AppIndicator)
+    // — because the close handlers then fall back to quitting and the toggle would do nothing.
     in property <bool> tray-active;
 
-    // Applied synchronously to a process-global atomic so `window_chrome`'s close
-    // handlers see it on the next close, then persisted on the blocking pool. Off by
-    // default, matching every release before the tray landed; with no tray icon active
-    // the close handlers quit regardless, so this can never strand the window.
+    // Applied synchronously to a process-global atomic so `window_chrome`'s close handlers see it
+    // on the next close, then persisted on the blocking pool. Off by default; with no tray icon
+    // active the close handlers quit regardless, so this can never strand the window.
     in-out property <bool> close-to-tray: false;
     callback close-to-tray-changed(bool);
 
@@ -89,14 +85,12 @@ export global Settings {
     in-out property <bool> resume-on-startup: false;
     callback resume-on-startup-changed(bool);
 
-    // Each `*-changed` applies to the live Rodio backend synchronously before
-    // persisting on the blocking pool — the equalizer / ReplayGain two-phase shape.
-    //
-    // The duration is in **seconds** here, the slider's natural unit; Rust converts to
-    // the milliseconds the backend and `settings.json` use. The bounds are seeded from
-    // `player::crossfade::{MIN,MAX}_CROSSFADE_MS`, so the range lives in one place.
-    // `-changed` fires live during a drag and only applies; `-committed` fires on
-    // release and persists — the `set-volume` / `commit-volume` split.
+    // Each `*-changed` applies to the live Rodio backend synchronously before persisting on the
+    // blocking pool — the equalizer / ReplayGain two-phase shape. The duration is in **seconds**
+    // here, the slider's natural unit; Rust converts to the milliseconds the backend and
+    // `settings.json` use, and the bounds are seeded from `player::crossfade::{MIN,MAX}`.
+    // `-changed` fires live during a drag and only applies; `-committed` fires on release and
+    // persists — the `set-volume` / `commit-volume` split.
     in-out property <bool> crossfade-enabled: false;
     callback crossfade-enabled-changed(bool);
     in-out property <float> crossfade-duration-secs: 2.0;
@@ -111,12 +105,10 @@ export global Settings {
     in-out property <bool> crossfade-fade-on-pause: false;
     callback crossfade-fade-on-pause-changed(bool);
 
-    // Rust owns every property here — the `ScrobbleService` status-watch subscriber is
-    // the single writer — and the toggles route their events back to persist and
-    // refresh the shadow. Connect is opened inline from the section markup rather than
-    // through a callback, dodging Slint's recursion guard. `configured` says whether
-    // this build shipped Last.fm app keys; false shows "Not configured in this build"
-    // with no Connect button.
+    // Rust owns every property here — the `ScrobbleService` status-watch subscriber is the single
+    // writer — and the toggles route their events back to persist and refresh the shadow. Connect
+    // is opened inline from the section markup rather than through a callback, dodging Slint's
+    // recursion guard. `configured` says whether this build shipped Last.fm app keys.
     in property <bool> scrobble-lastfm-configured;
     in property <bool> scrobble-lastfm-connected;
     in property <string> scrobble-lastfm-username;
@@ -134,17 +126,16 @@ export global Settings {
     // Mirror favorites to ListenBrainz recording feedback.
     in-out property <bool> scrobble-listenbrainz-love;
     callback scrobble-listenbrainz-love-changed(bool);
-    // Auto-tag scanned tracks with their MusicBrainz Recording ID so loves work on
-    // untagged libraries; the button forces a re-sweep of tracks still missing one.
+    // Auto-tag scanned tracks with their MusicBrainz Recording ID so loves work on untagged
+    // libraries; the button forces a re-sweep of tracks still missing one.
     in-out property <bool> scrobble-mbid-auto-tag;
     callback scrobble-mbid-auto-tag-changed(bool);
     callback scrobble-lookup-missing-mbids();
 
-    // Same shape as scrobbling: the `DiscordPresenceService` status-watch subscriber is
-    // the single writer, so a Discord restart flips the status row live, and the
-    // toggles persist and refresh the shadow through `set_flags`, which starts and
-    // stops the IPC worker. No credentials — the application id is a compile-time
-    // constant, so unlike scrobbling everything fits on `Settings`.
+    // Same shape as scrobbling: the `DiscordPresenceService` status-watch subscriber is the single
+    // writer, so a Discord restart flips the status row live, and the toggles persist and refresh
+    // the shadow through `set_flags`, which starts and stops the IPC worker. No credentials — the
+    // application id is a compile-time constant, so everything fits on `Settings`.
     in property <bool> discord-rpc-connected;
     in-out property <bool> discord-rpc-enabled;
     callback discord-rpc-enabled-changed(bool);
@@ -160,18 +151,15 @@ export global Settings {
     in-out property <bool> watch-for-file-changes: true;
     callback watch-for-file-changes-changed(bool);
 
-    // Logical pixels, mirrored into `Theme.shell-radius` on every change so the mantle
-    // shell and content panel repaint reactively. Rust clamps and snaps to the nearest
-    // chip preset on read, so the value here is always one of the presets and the chip
-    // selection matches what's painted even after a hand-edited `settings.json`. Kept
-    // unitless to match the Rust field name.
+    // Logical pixels, mirrored into `Theme.shell-radius` on every change so the mantle shell and
+    // content panel repaint reactively. Rust clamps and snaps to the nearest chip preset on read,
+    // so the chip selection matches what's painted even after a hand-edited `settings.json`.
     in-out property <int> corner-radius: 6;
     callback corner-radius-changed(int);
 
-    // 0 = Standard (Material bar icons), 1 = macOS (traffic lights with hover-reveal
-    // glyphs). Mirrored into `Theme.titlebar-button-style` so `custom-titlebar.slint`
-    // reads it through `Theme`, the `shell-radius` precedent. Inert under the native
-    // titlebar, where the OS owns the buttons.
+    // 0 = Standard (Material bar icons), 1 = macOS (traffic lights with hover-reveal glyphs).
+    // Mirrored into `Theme.titlebar-button-style` so `custom-titlebar.slint` reads it through
+    // `Theme`, the `shell-radius` precedent. Inert under the native titlebar.
     in-out property <int> titlebar-button-style: 0;
     callback titlebar-button-style-changed(int);
 
@@ -191,11 +179,10 @@ export global Settings {
     in-out property <bool> overflow-queue;
     callback overflow-buttons-changed(string /*id*/, bool /*overflow-on*/);
 
-    // `language-names` carries native-name labels, always in the language's own script
-    // and never re-translated; `language-codes` the matching `SUPPORTED_LOCALES` codes.
-    // The change callback resolves idx → code and calls
-    // `slint::select_bundled_translation` synchronously, which re-renders every `@tr`
-    // on the next frame, then spawns the disk persist.
+    // `language-names` carries native-name labels, always in the language's own script and never
+    // re-translated; `language-codes` the matching `SUPPORTED_LOCALES` codes. The change callback
+    // resolves idx → code and calls `slint::select_bundled_translation` synchronously, which
+    // re-renders every `@tr` on the next frame, then spawns the disk persist.
     in property <[string]> language-names;
     in property <[string]> language-codes;
     in-out property <int>  language-idx;
@@ -204,24 +191,22 @@ export global Settings {
     // Opens `CARGO_PKG_REPOSITORY` in the system browser. No Slint-side handler.
     callback open-repository();
 
-    // Opens the Ko-fi page, from the About card's button and from the one-time support
-    // toast's action button alike — hence `src/ui/support.rs` rather than `about.rs`.
+    // Opens the Ko-fi page, from the About card's button and the one-time support toast's action
+    // alike — hence `src/ui/support.rs` rather than `about.rs`.
     callback open-kofi();
 
     // The Diagnostics card's three rows, all handled in `src/ui/settings/diagnostics.rs`.
-    // `open-log-folder` is also what the "crashed last run" toast's action button
-    // routes to, via the `Notifications.action` dispatcher.
+    // `open-log-folder` is also the "crashed last run" toast's action, via `Notifications.action`.
     callback open-log-folder();
     callback save-diagnostics-report();
-    // Applied live via `LoggerHandle::set_new_spec` — no relaunch — then persisted.
-    // Inert when `RUST_LOG` is set, which wins outright; see `services::logging`.
+    // Applied live via `LoggerHandle::set_new_spec` — no relaunch — then persisted. Inert when
+    // `RUST_LOG` is set, which wins outright; see `services::logging`.
     in-out property <bool> verbose-logging: false;
     callback verbose-logging-changed(bool);
 
-    // Everything below is a `pure callback` wrapping an `@tr` literal, because Slint
-    // 1.16 exposes no Rust-callable `tr(...)`: Rust invokes these at push time so each
-    // string resolves in the locale selected right then, rather than the one that was
-    // active when the notification was built.
+    // Everything below is a `pure callback` wrapping an `@tr` literal, Slint 1.16 exposing no
+    // Rust-callable `tr(...)`: Rust invokes these at push time so each string resolves in the
+    // locale selected right then, not the one active when the notification was built.
     pure callback watcher-disabled-title() -> string;
     watcher-disabled-title => {
         return @tr("File watching disabled");

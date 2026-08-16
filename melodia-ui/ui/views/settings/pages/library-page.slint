@@ -3,22 +3,14 @@ import { SettingsPage } from "../../../globals/settings-page.slint";
 import { LibrarySection } from "../library-section.slint";
 import { FileWatchingSection } from "../file-watching-section.slint";
 
-// Where music comes from and how it stays in sync. File Watching pairs with the
-// folder list rather than sitting nine cards away as it did when the page was
-// one scroll.
+// Where music comes from and how it stays in sync. `has-matches` ORs the cards' own verdicts, so
+// the router can tell whether the page filtered itself away; every tab page carries it.
 //
-// `has-matches` ORs the cards' own verdicts, so the router can tell whether the
-// page filtered itself away. Every tab page carries it and the router
-// special-cases none.
-//
-// **This is also the shape every page takes.** The `GridLayout` gets one cell
-// per *column*, each a `VerticalLayout` of cards placing itself through
-// `SettingsPage.grid-row`/`grid-col`: side by side when the body is wide,
-// stacked when it isn't. Cards as cells would be row-aligned, so a short one
-// would leave a hole down to the next row instead of being followed by the next
-// card. The columns are contiguous halves of the list, so stacked they read in
-// source order; each card is mounted exactly once, and the index passed is the
-// column's position in the file — unique, and no page has more than two.
+// **This is also the shape every page takes.** The `GridLayout` gets one cell per *column*, each a
+// `VerticalLayout` of cards placing itself through `SettingsPage.grid-row`/`grid-col`: side by side
+// when the body is wide, stacked when it isn't. Cards as cells would be row-aligned, so a short one
+// would leave a hole down to the next row. The columns are contiguous halves of the list, so
+// stacked they read in source order; each card is mounted exactly once.
 export component LibraryPage inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;

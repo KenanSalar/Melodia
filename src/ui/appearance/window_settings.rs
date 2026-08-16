@@ -12,12 +12,9 @@ use crate::services::settings::{TitlebarButtonSide, TitlebarButtonStyle};
 use crate::state::AppState;
 use crate::{AppWindow, Settings, Theme};
 
-/// Wire the "Match Unfocused Window Background" toggle (KDE-only).
-/// The two-way Slint binding has already flipped `Settings.match-unfocused-bg`
-/// before this fires; the sidebar / now-playing-bar bindings consult
-/// `(Settings.match-unfocused-bg && !Theme.window-focused)` directly, so
-/// no Rust-side state mirror is needed. Persist the new value
-/// asynchronously through `mutate_settings`.
+/// Wire the KDE-only "Match Unfocused Window Background" toggle. The two-way binding
+/// has already flipped the property, and the sidebar and bar bindings read it directly,
+/// so no Rust mirror is needed — only the persist.
 pub(super) fn wire_match_unfocused_bg_changed(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_match_unfocused_bg_changed(move |on| {
@@ -30,36 +27,26 @@ pub(super) fn wire_match_unfocused_bg_changed(ui: &AppWindow, state: &AppState) 
     });
 }
 
-/// Wire the Window Corner Radius row's `corner-radius-changed` callback.
-/// Mirrors `wire_match_unfocused_bg_changed`'s shape: clamp the value,
-/// apply the runtime effect synchronously (so the rounded outer shell +
-/// inner panel repaint immediately), then spawn the disk write on the
-/// tokio blocking pool. No synchronous shadow needed — no other callback
-/// reads or writes `settings.corner_radius`. No coordinator kick needed —
-/// the only consumer (`Theme.shell-radius`) is updated synchronously here,
-/// not by a downstream task re-reading `settings.json`.
+/// Wire the Window Corner Radius row: clamp, apply synchronously so the shell and inner
+/// panel repaint at once, then persist on the blocking pool. No shadow — nothing else
+/// touches `settings.corner_radius` — and no coordinator kick, `Theme.shell-radius`
+/// being written here rather than by a task re-reading the file.
 pub(super) fn wire_corner_radius_changed(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     let s = state.clone();
     ui.global::<Settings>().on_corner_radius_changed(move |px_i32| {
         let Some(ui) = weak.upgrade() else { return };
-        // Clamp first, then snap to the nearest chip preset so the
-        // painted radius and the persisted value can never diverge from
-        // the chip-group set {0, 6, 8, 10, 15}. The chip group only
-        // emits valid presets in practice — the snap is defensive
-        // against future code paths that might forward arbitrary px
-        // values through this callback.
+        // Clamp, then snap to the nearest chip preset, so the painted radius and the
+        // persisted value can't diverge from the chip group's set. Defensive — the chip
+        // group only emits valid presets — against a later path forwarding arbitrary px.
         let clamped = u32::try_from(px_i32).unwrap_or(0).min(services::settings::MAX_CORNER_RADIUS);
         let radius = library::settings::snap_to_preset(clamped);
-        // Apply: drive `Theme.shell-radius` synchronously. Slint length
-        // properties codegen as `f32` in logical pixels.
+        // Slint length properties codegen as `f32` logical pixels.
         #[allow(
             clippy::cast_precision_loss,
             reason = "snapped to {0,6,8,10,15}: exact f32 representation"
         )]
         ui.global::<Theme>().set_shell_radius(radius as f32);
-        // Persist on a blocking worker — `mutate_settings` does a
-        // synchronous file rewrite that we don't want on the UI thread.
         let s_clone = s.clone();
         s.runtime.spawn_blocking(move || {
             if let Err(e) = library::settings::set_corner_radius(&s_clone, radius) {
@@ -69,12 +56,9 @@ pub(super) fn wire_corner_radius_changed(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Wire the "Close to Tray" toggle. The two-way Slint binding has already
-/// flipped `Settings.close-to-tray` before this fires; we mirror the value
-/// into the process-global atomic that `window_chrome`'s close handlers
-/// read — synchronously, so the very next window-close honours it — then
-/// persist on the blocking pool. No coordinator kick: nothing downstream
-/// re-reads `settings.json` for this field.
+/// Wire the "Close to Tray" toggle: mirror the value into the process-global atomic
+/// `window_chrome`'s close handlers read — synchronously, so the very next close honours
+/// it — then persist. No coordinator kick; nothing re-reads the file for this field.
 pub(super) fn wire_close_to_tray_changed(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_close_to_tray_changed(move |on| {
@@ -88,22 +72,9 @@ pub(super) fn wire_close_to_tray_changed(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Wire the Overflow Menu Buttons row's `overflow-buttons-changed`
-/// callback. Each click in the Appearance section fires
-/// `(id, overflow-on)`; the matching `Settings.overflow-<id>` bool has
-/// already been flipped synchronously inside the `OverflowCheckCell`
-/// before this fires, so the now-playing bar repaints immediately.
-/// We just persist the new state through `library::settings`. No
-/// shadow needed (no sibling callback reads `overflow_buttons` before
-/// the disk write commits); no coordinator kick needed (no downstream
-/// task re-reads `settings.json` for this field).
-/// Wire the Decoration Button Style chip group (Standard / macOS).
-/// Mirrors `wire_corner_radius_changed`'s shape: apply the runtime
-/// effect synchronously by writing the matching `Theme.titlebar-button-style`
-/// token (so `custom-titlebar.slint` reflows immediately), then spawn the
-/// disk write on the tokio blocking pool. No coordinator kick — the
-/// titlebar reads from `Theme` directly, no downstream task re-reads
-/// `settings.json`.
+/// Wire the Decoration Button Style chip group: write the matching
+/// `Theme.titlebar-button-style` token synchronously so `custom-titlebar.slint` reflows
+/// at once, then persist. No coordinator kick — the titlebar reads `Theme` directly.
 pub(super) fn wire_titlebar_button_style_changed(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     let s = state.clone();
@@ -123,8 +94,8 @@ pub(super) fn wire_titlebar_button_style_changed(ui: &AppWindow, state: &AppStat
     });
 }
 
-/// Wire the Decoration Button Side chip group (Right / Left). Same shape
-/// as `wire_titlebar_button_style_changed`.
+/// Wire the Decoration Button Side chip group, in `wire_titlebar_button_style_changed`'s
+/// shape.
 pub(super) fn wire_titlebar_button_side_changed(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     let s = state.clone();
@@ -144,8 +115,8 @@ pub(super) fn wire_titlebar_button_side_changed(ui: &AppWindow, state: &AppState
     });
 }
 
-/// Slint stores titlebar style as an int — keep the enum-to-int mapping
-/// here so the install / wire paths agree. 0 = Standard, 1 = macOS.
+/// Slint stores the titlebar style as an int, so the enum-to-int mapping lives here and
+/// the install and wire paths agree on it.
 pub(super) fn idx_for(style: TitlebarButtonStyle) -> i32 {
     match style {
         TitlebarButtonStyle::Standard => 0,
@@ -153,7 +124,7 @@ pub(super) fn idx_for(style: TitlebarButtonStyle) -> i32 {
     }
 }
 
-/// Same as `idx_for` but for the side enum. 0 = Right, 1 = Left.
+/// [`idx_for`] for the side enum.
 pub(super) fn idx_for_side(side: TitlebarButtonSide) -> i32 {
     match side {
         TitlebarButtonSide::Right => 0,
@@ -161,6 +132,9 @@ pub(super) fn idx_for_side(side: TitlebarButtonSide) -> i32 {
     }
 }
 
+/// Wire the Overflow Menu Buttons row. `OverflowCheckCell` has already flipped the
+/// matching `Settings.overflow-<id>` bool synchronously, so the now-playing bar has
+/// repainted and only the persist is left. No shadow, no coordinator kick.
 pub(super) fn wire_overflow_buttons_changed(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_overflow_buttons_changed(move |id, on| {

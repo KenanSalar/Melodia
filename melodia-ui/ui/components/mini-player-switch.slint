@@ -1,17 +1,15 @@
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { MiniPlayer } from "../globals/shell.slint";
 
-// The responsive full-UI ↔ miniplayer swap, as a non-visual state machine: both `Timer`s
-// are pseudo-elements, so it occupies no layout space and can be mounted anywhere.
+// The responsive full-UI ↔ miniplayer swap, as a non-visual state machine: both `Timer`s are
+// pseudo-elements, so it occupies no layout space and can be mounted anywhere. Compact when the
+// window is either narrow *or* short, and the `square` variant — the one that can show an Up Next
+// list — once the aspect is roughly square or taller. The host passes its size in, a component's
+// root binding not reaching `parent`.
 //
-// Compact when the window is either narrow *or* short, and the `square` variant — the one
-// that can show an Up Next list — once the aspect is roughly square or taller. The host
-// passes its size in, a component's root binding not reaching `parent`; winit drives that
-// directly, so nothing else needs plumbing.
-//
-// **The swap is two-phase on purpose**: `render-active` lags `active` by the fade, so
-// only *one* branch is ever mounted. Overlapping them holds the sidebar's grid covers
-// and the mini's up-next subscriber alive at once, which is a memory regression.
+// **The swap is two-phase on purpose**: `render-active` lags `active` by the fade, so only *one*
+// branch is ever mounted — overlapping them holds the sidebar's grid covers and the mini's up-next
+// subscriber alive at once, which is a memory regression.
 export component MiniPlayerSwitch {
     // The host window's live size.
     in property <length> host-width;
@@ -32,30 +30,27 @@ export component MiniPlayerSwitch {
     // Internal: nothing outside needs the variant, it only feeds the global.
     private property <bool> square: root.host-height >= root.host-width * 0.8;
 
-    // Mirrored locally because a `changed` handler can't watch a global's property.
-    //
-    // It publishes to the global so children see the new value, schedules
-    // fade-out → swap → fade-in, closes any open Now Playing view so its artwork release
-    // runs, and notifies Rust for the up-next gate and the square variant's cover cache.
-    // **`MiniPlayer.square` is `watched-square`'s to own** — Rust re-reads it from the
-    // global on entry, so no redundant write belongs here.
+    // Mirrored locally because a `changed` handler can't watch a global's property. It publishes to
+    // the global so children see the new value, schedules fade-out → swap → fade-in, closes any
+    // open Now Playing view so its artwork release runs, and notifies Rust for the up-next gate.
+    // **`MiniPlayer.square` is `watched-square`'s to own** — Rust re-reads it from the global on
+    // entry, so no redundant write belongs here.
     private property <bool> watched-active: root.active;
     changed watched-active => {
         MiniPlayer.active = root.watched-active;
-        // **Lateral, and owed twice.** The swap destroys the whole full UI, so the
-        // content branch is a fresh `ViewTransition` mount on the way back; and the
-        // line below closes Now Playing, which remounts the branch underneath it.
-        // Unconditional because the first of those is owed in both directions — an
-        // unwritten edge is whatever the last drill or back left behind.
+        // **Lateral, and owed twice.** The swap destroys the whole full UI, so the content branch
+        // is a fresh `ViewTransition` mount on the way back; and the line below closes Now Playing,
+        // which remounts the branch underneath it. Unconditional because the first is owed in both
+        // directions — an unwritten edge is whatever the last drill or back left behind.
         Nav.pending-enter-from = NavEnterFrom.below;
         if (root.watched-active && Nav.now-playing-open) {
             Nav.now-playing-open = false;
         }
-        // The host has no size at construction, so `active` reads `true` for a window about
-        // to lay out full-size, and the first settle then arrives here looking like a swap.
-        // It isn't one while `render-active` already agrees, and a fade with no incoming
-        // branch to cross to is the whole-shell flicker that used to open every launch.
-        // `active` itself keeps its 0×0 answer: `SectionActiveGate` baselines on it.
+        // The host has no size at construction, so `active` reads `true` for a window about to lay
+        // out full-size, and the first settle arrives here looking like a swap. It isn't one while
+        // `render-active` already agrees, and a fade with no incoming branch to cross to is the
+        // whole-shell flicker that used to open every launch. `active` itself keeps its 0×0
+        // answer: `SectionActiveGate` baselines on it.
         if (root.render-active != root.watched-active) {
             root.fade-opacity = 0.0;
             swap-timer.running = true;
@@ -63,19 +58,17 @@ export component MiniPlayerSwitch {
         MiniPlayer.active-changed(root.watched-active);
     }
 
-    // **A variant change inside mini deliberately doesn't fade**: it is an in-place
-    // re-layout of the same component, and a flash on every aspect wobble through a
-    // window drag would be jarring. The callback drives the high-res cover cache — seed
-    // on rectangle→square, release on the way back.
+    // **A variant change inside mini deliberately doesn't fade**: it is an in-place re-layout of
+    // the same component, and a flash on every aspect wobble through a drag would be jarring. The
+    // callback drives the high-res cover cache — seed on rectangle→square, release on the way back.
     private property <bool> watched-square: root.square;
     changed watched-square => {
         MiniPlayer.square = root.watched-square;
         MiniPlayer.square-changed(root.watched-square);
     }
 
-    // The mount seed: `changed` doesn't fire when the first settle lands directly on the
-    // final value, so without it an app launched straight into a mini-sized window
-    // paints the full UI for a frame before switching.
+    // The mount seed: `changed` doesn't fire when the first settle lands directly on the final
+    // value, so without it a launch straight into a mini-sized window paints the full UI first.
     seed-timer := Timer {
         interval: 1ms;
         triggered => {
@@ -87,9 +80,9 @@ export component MiniPlayerSwitch {
         }
     }
 
-    // Flips the render shadow and eases the opacity back. Single-shot, armed only by a
-    // crossing the guard above let through — a wiggle back inside the 100 ms doesn't re-arm
-    // it and doesn't need to, the body landing on whichever branch `active` ended on.
+    // Flips the render shadow and eases the opacity back. Single-shot, armed only by a crossing the
+    // guard above let through — a wiggle back inside the 100 ms needn't re-arm it, the body landing
+    // on whichever branch `active` ended on.
     swap-timer := Timer {
         interval: 100ms;
         running: false;

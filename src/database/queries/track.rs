@@ -6,47 +6,35 @@ use crate::database::{DbPool, chunked_in_query};
 use crate::entities::track;
 use crate::error::AppError;
 
-/// The `ORDER BY` body every "most played" surface ranks with — the Favorites
-/// grid tab and the hero mosaic that has to agree with it.
+/// The `ORDER BY` body every "most played" surface ranks with — the Favorites grid tab and the
+/// hero mosaic that has to agree with it.
 ///
-/// `play_count DESC` is the ranking; the three keys after it are what make it
-/// *total*. Without them `SQLite` may hand back tied rows in any order, so the
-/// grid could re-order between refreshes and the mosaic — a second query over
-/// the same rows — had no reason to pick the same four covers. `last_played
-/// DESC` breaks a tie toward the one played most recently (the column is
-/// RFC-3339 text whose lexical order is chronological, per
-/// [`get_recently_played`]; NULLs sort last under `DESC`, so a row whose count
-/// predates the timestamp falls to the back of its group). `date_added DESC` is
-/// reachable wherever `last_played` ties — in practice the never-played tail,
-/// where it keeps the mosaic's fill newest-first. `id ASC` closes the last gap.
+/// `play_count DESC` is the ranking; the three keys after it are what make it *total*. Without
+/// them `SQLite` may hand back tied rows in any order, so the grid could re-order between
+/// refreshes and the mosaic — a second query over the same rows — had no reason to pick the same
+/// four covers. `last_played DESC` breaks a tie toward the most recently played (RFC-3339 text
+/// whose lexical order is chronological; NULLs sort last under `DESC`). `date_added DESC` is
+/// reachable wherever that ties, keeping the mosaic's fill newest-first, and `id ASC` closes the
+/// last gap.
 const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added DESC, id ASC";
 
-/// The `ORDER BY` body the three whole-table track fetches share — the natural-
-/// ordering key built at scan time from title/artist/album.
+/// The `ORDER BY` body the three whole-table track fetches share — the natural-ordering key built
+/// at scan time from title/artist/album.
 ///
-/// **Fixed, and it is `ui::track_sort` that made it so.** This used to be a
-/// `track_list_order_by(sort_by, sort_dir)` switch with an arm per sortable
-/// column, because a header click re-issued the query with a new `ORDER BY`.
-/// Both callers that could ask now retain their rows (`ui::track_list_cache`)
-/// and re-permute them in memory instead, so every arm but this one had
-/// stopped being reachable from anything but its own test — a second, drifting
-/// spelling of sort semantics that nothing in the app consulted.
+/// **Fixed, and it is `ui::track_sort` that made it so.** Both callers that could ask for another
+/// order now retain their rows (`ui::track_list_cache`) and re-permute in memory, so an arm per
+/// sortable column was a second, drifting spelling of sort semantics that nothing consulted.
 ///
-/// What the clause is still for is **determinism**: the in-memory comparator
-/// appends `sort_key` as its tie-breaker and `sort_by_cached_key` is stable, so
-/// rows tied on it fall back to the order `SQLite` handed over. Dropping the
-/// clause would leave that to the query plan.
-///
-/// And it is close to free, which is what makes that trade an easy one:
-/// `idx_tracks_sort_key` is `(sort_key COLLATE NOCASE)` — the same expression
-/// under the same collation — so this reads as an index scan rather than a
-/// sort, and the in-memory permutation is the only sort either list pays for.
+/// What the clause is still for is **determinism**: the in-memory comparator appends `sort_key` as
+/// its tie-breaker and `sort_by_cached_key` is stable, so rows tied on it fall back to the order
+/// `SQLite` handed over. Dropping the clause would leave that to the query plan — and it is close
+/// to free, `idx_tracks_sort_key` being the same expression under the same collation, so this
+/// reads as an index scan rather than a sort.
 const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 
-// The four `SELECT *` variants below are kept for unit-test fixtures only
-// (they return a full `Track`, which assertions need). Production list views
-// always use the `_for_list` variants further down which fetch the
-// `TrackListRow` projection.
+// The four `SELECT *` variants below are kept for unit-test fixtures only — they return a full
+// `Track`, which assertions need. Production list views always use the `_for_list` variants
+// further down, which fetch the `TrackListRow` projection.
 #[cfg(test)]
 pub async fn get_all_tracks(db: &DbPool) -> Result<Vec<track::Track>, AppError> {
     let sql = format!("SELECT * FROM tracks ORDER BY {TRACK_LIST_ORDER}");
@@ -120,10 +108,9 @@ pub async fn get_tracks_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<track::Tr
     Ok(ids.iter().filter_map(|id| track_map.remove(id)).collect())
 }
 
-/// Technical-metadata projection for the full-screen Now Playing view's
-/// chip row — reads only the 8 columns `TrackMetaRow` consumes (vs
-/// `get_track_by_id`'s full 41-column `SELECT *`). Returns `None` for a
-/// missing id; the caller renders empty chips.
+/// Technical-metadata projection for the full-screen Now Playing view's chip row — reads only the
+/// columns `TrackMetaRow` consumes, against `get_track_by_id`'s full `SELECT *`. Returns `None`
+/// for a missing id; the caller renders empty chips.
 pub async fn get_track_meta(db: &DbPool, id: i64) -> Result<Option<track::TrackMeta>, AppError> {
     let cols = track::track_meta_columns();
     let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
@@ -134,9 +121,8 @@ pub async fn get_track_meta(db: &DbPool, id: i64) -> Result<Option<track::TrackM
     Ok(row)
 }
 
-/// Single-id fetch of the columns a scrobble needs, for the detector's
-/// per-track-start enrichment. Sibling of `get_track_meta`; returns `None` for
-/// a missing id (the detector then skips the scrobble).
+/// Single-id fetch of the columns a scrobble needs, for the detector's per-track-start enrichment.
+/// Sibling of `get_track_meta`; returns `None` for a missing id, and the detector then skips it.
 pub async fn get_scrobble_row(
     db: &DbPool,
     id: i64,
@@ -151,10 +137,9 @@ pub async fn get_scrobble_row(
     Ok(row)
 }
 
-/// Every favorited track's scrobble projection — the bulk source for the
-/// retroactive love backfill (enable a love toggle / connect a service and
-/// existing favorites sync without re-toggling each heart). Carries the
-/// `MusicBrainz` ids `ScrobbleRow` needs for the `ListenBrainz` love path.
+/// Every favorited track's scrobble projection — the bulk source for the retroactive love
+/// backfill, so connecting a service syncs existing favorites without re-toggling each heart.
+/// Carries the `MusicBrainz` ids `ScrobbleRow` needs for the `ListenBrainz` love path.
 pub async fn get_favorite_scrobble_rows(db: &DbPool) -> Result<Vec<track::ScrobbleRow>, AppError> {
     let cols = track::scrobble_row_columns();
     let sql = format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE");
@@ -163,10 +148,9 @@ pub async fn get_favorite_scrobble_rows(db: &DbPool) -> Result<Vec<track::Scrobb
     Ok(rows)
 }
 
-/// Bulk sibling of [`get_scrobble_row`]: the scrobble projection for an
-/// arbitrary id set in one chunked `IN (…)` query. The favorite→love sync uses
-/// it to enrich a multi-selection without a per-id round-trip. Love order is
-/// irrelevant, so rows come back in query order (no order-preserving re-walk).
+/// Bulk sibling of [`get_scrobble_row`]: the scrobble projection for an arbitrary id set in one
+/// chunked `IN (…)` query, so the favorite→love sync enriches a multi-selection without a per-id
+/// round-trip. Love order is irrelevant, so rows come back in query order.
 pub async fn get_scrobble_rows_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -178,10 +162,8 @@ pub async fn get_scrobble_rows_by_ids(
     .await
 }
 
-/// Fetch just the `file_path` column for a single track id — the
-/// leanest possible projection, used by the "Open Containing Folder"
-/// context-menu action which only needs the on-disk location. Returns
-/// `None` for a missing id.
+/// Fetch just the `file_path` column for a single track id — the leanest projection, for the "Open
+/// Containing Folder" action. Returns `None` for a missing id.
 pub async fn get_track_file_path(db: &DbPool, id: i64) -> Result<Option<String>, AppError> {
     let path: Option<String> =
         sqlx::query_scalar("SELECT file_path FROM tracks WHERE id = ? LIMIT 1")
@@ -191,18 +173,16 @@ pub async fn get_track_file_path(db: &DbPool, id: i64) -> Result<Option<String>,
     Ok(path)
 }
 
-/// How many tracks the library holds. The diagnostics bundle reports it as
-/// library shape — a bug that only shows up at scale is a different bug.
+/// How many tracks the library holds. The diagnostics bundle reports it as library shape — a bug
+/// that only shows up at scale is a different bug.
 pub async fn count_tracks(db: &DbPool) -> Result<i64, AppError> {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     Ok(count)
 }
 
-/// Fetch `TrackSummary` projections by IDs, preserving the input order.
-/// Reads only the 12 columns the queue / now-playing / playback paths
-/// actually consume — vs `get_tracks_by_ids` which reads all 41. Callers
-/// that immediately do `tracks.into_iter().map(|t| t.into()).collect()`
-/// into `TrackSummary` should use this instead.
+/// Fetch `TrackSummary` projections by IDs, preserving the input order. Reads only the columns the
+/// queue / now-playing / playback paths consume, against `get_tracks_by_ids`' full row — a caller
+/// that would immediately collect into `TrackSummary` wants this instead.
 pub async fn get_track_summaries_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -219,10 +199,9 @@ pub async fn get_track_summaries_by_ids(
     Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
 }
 
-/// Fetch `TagEditRow` projections by IDs for the Edit-Track-Information
-/// dialog, preserving the input order. Reads the editable tag columns plus
-/// the read-only technical columns the Summary tab shows — no joins, since
-/// artist/album/genre are stored denormalized on `tracks`.
+/// Fetch `TagEditRow` projections by IDs for the Edit-Track-Information dialog, preserving the
+/// input order. Reads the editable tag columns plus the read-only technical ones the Summary tab
+/// shows — no joins, artist/album/genre being stored denormalized on `tracks`.
 pub async fn get_tag_edit_rows_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -239,9 +218,9 @@ pub async fn get_tag_edit_rows_by_ids(
     Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
 }
 
-/// Fetch `(id, file_path)` pairs by IDs, preserving the input order. The tag
-/// writer marks each `file_path` in the self-write suppression set before
-/// rewriting it, so a stable order keeps the marking deterministic.
+/// Fetch `(id, file_path)` pairs by IDs, preserving the input order. The tag writer marks each
+/// `file_path` in the self-write suppression set before rewriting it, so a stable order keeps the
+/// marking deterministic.
 pub async fn get_track_paths_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -359,11 +338,9 @@ pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<()
     Ok(())
 }
 
-/// Set the star `rating` (0–5) for one or more tracks by ID. Mirrors
-/// [`set_favorite`]: the value is clamped 0–5 by the caller
-/// (`library::ratings::set_rating`), chunked to respect the `SQLite` bind
-/// limit (one slot reserved for the `rating` bind), and run non-persistently
-/// since the placeholder count is dynamic.
+/// Set the star `rating` (0–5) for one or more tracks by ID. Mirrors [`set_favorite`]: the value
+/// is clamped by `library::ratings::set_rating`, chunked to respect the `SQLite` bind limit, and
+/// run non-persistently since the placeholder count is dynamic.
 pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
@@ -381,12 +358,11 @@ pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), App
     Ok(())
 }
 
-/// Authoritatively set `artwork_path` for one or more tracks by ID, within a
-/// caller-supplied transaction. Unlike `update_track_metadata`'s
-/// `artwork_path = COALESCE(?, artwork_path)`, this is a plain overwrite — so
-/// `None` genuinely nulls the column (the artwork-Remove case), which a
-/// COALESCE can never do. Tx-scoped because the tag-edit orchestrator writes
-/// it in the same transaction as the metadata refresh.
+/// Authoritatively set `artwork_path` for one or more tracks by ID, within a caller-supplied
+/// transaction. Unlike `update_track_metadata`'s `artwork_path = COALESCE(?, artwork_path)`, this
+/// is a plain overwrite — so `None` genuinely nulls the column, the artwork-Remove case a COALESCE
+/// can never express. Tx-scoped because the tag-edit orchestrator writes it in the same
+/// transaction as the metadata refresh.
 pub async fn set_track_artwork(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ids: &[i64],
@@ -410,8 +386,8 @@ pub async fn set_track_artwork(
 
 /// Fetch all favorite tracks (lightweight list-view columns).
 ///
-/// Ordered like [`get_all_tracks_for_list`] and for the same reason — the
-/// Songs tab's own sort is resolved over the retained rows, not here.
+/// Ordered like [`get_all_tracks_for_list`] and for the same reason — the Songs tab's own sort is
+/// resolved over the retained rows, not here.
 pub async fn get_favorite_tracks_for_list(
     db: &DbPool,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
@@ -423,35 +399,26 @@ pub async fn get_favorite_tracks_for_list(
     Ok(tracks)
 }
 
-/// Fetch tracks whose files live directly inside `dir_path` (not in
-/// subdirectories). Returns the `TrackListRow` projection (19 columns) — the
-/// Browse view renders these through the shared `TrackList` component, so it
-/// needs the same column set the Tracks view uses (genre / year / favourite /
-/// foreign-key ids), not a narrower browse-only slice.
+/// Fetch tracks whose files live directly inside `dir_path`, not in subdirectories. Returns the
+/// `TrackListRow` projection — Browse renders these through the shared `TrackList`, so it needs
+/// the same column set the Tracks view uses rather than a narrower browse-only slice.
 ///
-/// Platform invariant: `tracks.file_path` is stored verbatim from
-/// `Path::to_string_lossy()` at scan time, which uses the platform's native
-/// separator (`/` on Unix, `\` on Windows). The LIKE pattern below matches that
-/// — pass `dir_path` in native form too (callers route through
-/// `dunce::canonicalize` / `crate::utils::canonicalize_path`).
+/// **Platform invariant**: `tracks.file_path` is stored verbatim from `Path::to_string_lossy()` at
+/// scan time, so it carries the platform's native separator and the LIKE pattern below matches
+/// that. Pass `dir_path` in native form too — callers route through
+/// `crate::utils::canonicalize_path`.
 ///
-/// Query-plan note: `file_path` has a UNIQUE auto-index, but the `ESCAPE`
-/// clause disables `SQLite`'s prefix-`LIKE`→range-scan optimisation
-/// entirely (verified with `EXPLAIN QUERY PLAN`: `SCAN tracks USING INDEX
-/// sqlite_autoindex_tracks_1`). At realistic library sizes (hundreds–low
-/// thousands of tracks) a one-off index scan per *navigation* is sub-ms
-/// and not worth a generated `parent_dir` column + index (which would slow
-/// every insert — see CLAUDE.md "don't over-index"). Revisit only if a
-/// profiler flags this at a much larger library size.
+/// Query-plan note: `file_path` has a UNIQUE auto-index, but the `ESCAPE` clause disables
+/// `SQLite`'s prefix-`LIKE`→range-scan optimisation entirely. At realistic library sizes a one-off
+/// index scan per *navigation* isn't worth a generated `parent_dir` column and index, which would
+/// slow every insert. Revisit only if a profiler flags it at a much larger library size.
 pub async fn get_tracks_in_directory(
     db: &DbPool,
     dir_path: &str,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
     let escaped = dir_path.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
-    // Native path separator inside the LIKE pattern. `\` is the ESCAPE
-    // character (per the `ESCAPE '\'` clause below), so on Windows the
-    // separator must be doubled to denote a literal `\` rather than an
-    // escape sequence.
+    // Native path separator inside the LIKE pattern. `\` is the ESCAPE character, so on Windows
+    // the separator must be doubled to denote a literal `\` rather than an escape sequence.
     #[cfg(windows)]
     let sep = "\\\\";
     #[cfg(not(windows))]
@@ -487,11 +454,10 @@ pub async fn get_track_ids_by_paths(
     Ok(map)
 }
 
-/// Look up track IDs by BLAKE3 `file_hash`. Returns a map from `file_hash`
-/// → track ID. Uses the partial index `idx_tracks_file_hash`. Hashes with
-/// no match are simply absent from the map. If two tracks share a hash
-/// (true content duplicates), one arbitrary id wins — acceptable for
-/// playlist re-matching since either copy plays identical audio.
+/// Look up track IDs by BLAKE3 `file_hash`, through the partial index `idx_tracks_file_hash`.
+/// Hashes with no match are absent from the map. Where two tracks share a hash — true content
+/// duplicates — one arbitrary id wins, acceptable for playlist re-matching since either copy
+/// plays identical audio.
 pub async fn get_track_ids_by_hashes(
     db: &DbPool,
     hashes: &[String],

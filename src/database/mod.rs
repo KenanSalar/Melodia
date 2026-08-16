@@ -23,9 +23,9 @@ const MIGRATIONS_TABLE: &str = "_sqlx_migrations";
 /// afford to log that.
 const FTS_OPTIMIZE: &str = "INSERT INTO tracks_fts(tracks_fts) VALUES('optimize')";
 
-/// Build a `?, ?, …` placeholder list for an `IN (...)` clause. Single-pass,
-/// capacity-preallocated — replaces the previous `repeat_n("?", n).collect::<Vec<_>>().join(", ")`
-/// idiom that allocated an intermediate `Vec<&str>` of size `n` before joining.
+/// Build a `?, ?, …` placeholder list for an `IN (...)` clause. Single-pass and
+/// capacity-preallocated, where a `repeat_n(…).join(", ")` allocates an
+/// intermediate `Vec<&str>` of size `n` first.
 pub(crate) fn placeholders(n: usize) -> String {
     let mut s = String::with_capacity(n * 3);
     for i in 0..n {
@@ -37,12 +37,11 @@ pub(crate) fn placeholders(n: usize) -> String {
     s
 }
 
-/// Execute a chunked single-column IN-clause query, staying within `SQLite`'s bind limit.
-/// Returns all results concatenated across chunks.
+/// Execute a chunked single-column IN-clause query inside `SQLite`'s bind limit,
+/// concatenating the results.
 ///
-/// Each item binds exactly one placeholder (`IN (?, ?, …)`). Do not use this for
-/// tuple-IN clauses (`WHERE (a,b) IN ((?,?), …)`) — the chunk size assumes one
-/// bind per item and would bust the 999-bind cap.
+/// Each item binds exactly one placeholder. **Not** for a tuple-IN clause — the
+/// chunk size assumes one bind per item and would bust the cap.
 pub async fn chunked_in_query<T, B>(
     pool: &SqlitePool,
     items: &[B],
@@ -89,30 +88,26 @@ impl DbPool {
     }
 
     /// Refresh planner statistics, compact the search index, and close both
-    /// pools. Call on application shutdown.
+    /// pools. Call on shutdown.
     ///
     /// The two optimizes are unrelated despite the shared name: `PRAGMA
     /// optimize` updates `sqlite_stat1`, while the fts5 command collapses the
-    /// index's b-tree segments into one and drops the tombstone every track
-    /// delete leaves behind. fts5's own `automerge` folds segments together as
-    /// writes accumulate, so this isn't the only thing keeping the index in
-    /// shape — it's the full collapse `automerge` never gets to, and what it
-    /// buys is a smaller index for every pre-migration `VACUUM INTO` to copy.
-    /// Once the index is a single segment fts5 skips the merge outright, so a
-    /// session that never touched the library pays for a no-op.
+    /// index's segments and drops the tombstone every track delete leaves.
+    /// fts5's `automerge` already folds segments as writes accumulate, so this
+    /// is the full collapse that never gets to — buying a smaller index for
+    /// every pre-migration `VACUUM INTO` to copy, and skipped outright once the
+    /// index is one segment.
     ///
-    /// All four steps sit inside the one 3 s budget `flush_tasks_and_db` gives
-    /// this call plus the task wait ahead of it, and the merge is the one that
-    /// can grow: it is a full collapse, so the session that just scanned a
-    /// library in is also the one leaving it the most segments to fold.
-    /// Nothing is lost if it doesn't finish — past the budget `main`
-    /// force-exits, `SQLite` rolls the unfinished merge back on the next open,
-    /// and the index is left correct and merely un-compacted.
+    /// All four steps share the budget `flush_tasks_and_db` gives this call, and
+    /// the merge is the one that can grow — a session that just scanned a
+    /// library in leaves the most segments to fold. Nothing is lost if it
+    /// doesn't finish: `SQLite` rolls an unfinished merge back on the next open
+    /// and the index is correct, merely un-compacted.
     ///
-    /// Both are best-effort, and both log rather than discard: an unrecognised
-    /// fts5 command is a step-time error with no other symptom, so a silent
-    /// discard would make a typo here indistinguishable from a shutdown that
-    /// did the work.
+    /// Both are best-effort, and both **log** rather than discard: an
+    /// unrecognised fts5 command is a step-time error with no other symptom, so
+    /// a silent discard would make a typo here indistinguishable from a shutdown
+    /// that did the work.
     pub async fn close(&self) {
         if let Err(e) = sqlx::query("PRAGMA optimize").execute(&self.write).await {
             log::warn!("db close: PRAGMA optimize: {e}");
@@ -125,43 +120,33 @@ impl DbPool {
     }
 }
 
-/// One-shot normalization of Windows verbatim/extended-length path strings
-/// in `folders.path` and `tracks.file_path`, for libraries that were
-/// scanned by older versions which called `std::fs::canonicalize` directly
-/// (producing `\\?\C:\...` for drive paths and `\\?\UNC\server\share\...`
-/// for network shares). Runs immediately after migrations so the rest of
-/// init sees the canonical form.
+/// One-shot normalization of Windows verbatim path prefixes left by older
+/// versions that called `std::fs::canonicalize` directly. Runs right after
+/// migrations so the rest of init sees the canonical form, in one transaction,
+/// and idempotently — a second boot matches zero rows.
 ///
-/// Two forms, two transformations:
-///   * `\\?\<drive>:\…`            → `<drive>:\…`              (drop 4-char prefix)
-///   * `\\?\UNC\server\share\…`    → `\\server\share\…`        (replace 8-char `\\?\UNC\` with `\\`)
+/// Two forms: `\\?\<drive>:\…` drops its 4-char prefix, `\\?\UNC\server\share\…`
+/// swaps its 8-char one for `\\`. Both gate on the *post-strip* length fitting
+/// in `MAX_PATH`, since a path genuinely exceeding it keeps the prefix under
+/// `dunce::canonicalize` too.
 ///
-/// Both UPDATEs gate on `LENGTH(path) < 260` (the post-strip length must
-/// fit in `MAX_PATH`); paths that genuinely exceed `MAX_PATH` keep the
-/// prefix because `dunce::canonicalize` would also keep it. Wrapped in a
-/// single transaction. Idempotent: a second boot matches zero rows.
-///
-/// The function itself is not `#[cfg(windows)]`, so it stays compiled and
-/// unit-testable on every CI runner; its *call site* in [`init_database`] is
-/// guarded by a runtime `cfg!(target_os = "windows")` instead. That keeps the
-/// two full-table `tracks` LIKE scans (the `\\?\…` patterns can never match
-/// off-Windows, where paths don't start with `\\?\`) out of every Linux/macOS
-/// boot — the default case-insensitive LIKE collation can't use the
-/// `file_path` index, so each scan is a full table walk.
+/// Not `#[cfg(windows)]`, so it stays compiled and unit-testable on every CI
+/// runner; the *call site* is guarded by a runtime `cfg!` instead. That is what
+/// keeps two full-table `tracks` LIKE scans — the patterns can't match
+/// off-Windows, and the default collation can't use the `file_path` index — out
+/// of every Linux and macOS boot.
 async fn strip_windows_verbatim_paths(pool: &SqlitePool) -> Result<(), AppError> {
-    // `_` in LIKE matches exactly one char (the drive letter); the literal
-    // `:` after it prevents this pattern from ever matching a UNC path
-    // (`\\?\UNC\…` has `N` at that position). Post-strip length cap = 259
-    // chars, so original LENGTH(path) < 264 (== 259 + 4-char prefix + 1).
+    // `_` matches the drive letter and the literal `:` after it is what stops
+    // this pattern reaching a UNC path, which has `N` at that position. The
+    // length bound is the `MAX_PATH` cap plus the prefix this strips.
     const FOLDERS_DRIVE: &str = "\
         UPDATE folders SET path = SUBSTR(path, 5) \
         WHERE path LIKE '\\\\?\\_:\\%' AND LENGTH(path) < 264";
     const TRACKS_DRIVE: &str = "\
         UPDATE tracks SET file_path = SUBSTR(file_path, 5) \
         WHERE file_path LIKE '\\\\?\\_:\\%' AND LENGTH(file_path) < 264";
-    // `\\?\UNC\` is 8 chars; SUBSTR(path, 9) yields `server\share\…`,
-    // prepend `\\` to get the standard UNC form `\\server\share\…`.
-    // Net length change is -6, so original LENGTH(path) < 266 (== 259 + 6 + 1).
+    // The prefix is 8 chars and the replacement 2, so the bound is the cap plus
+    // the net 6 this removes.
     const FOLDERS_UNC: &str = "\
         UPDATE folders SET path = '\\\\' || SUBSTR(path, 9) \
         WHERE path LIKE '\\\\?\\UNC\\%' AND LENGTH(path) < 266";
@@ -192,42 +177,32 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
 
     log::info!("Database path: {}", db_path.display());
 
-    // Asked before the write pool opens, because `create_if_missing` below turns
-    // it true right there. The equivalent guard used to sit inside the backup
-    // itself, where it could only ever see `true` — so a genuine first launch
-    // snapshotted an empty schema and kept the file forever.
+    // Asked before the write pool opens, because `create_if_missing` below turns it true right
+    // there. Inside the backup it could only ever read `true`, and a first launch would snapshot
+    // an empty schema and keep the file forever.
     let db_existed = db_path.exists();
 
-    // Write pool: single connection for serialized writes.
-    // `busy_timeout` lets a writer wait briefly for the WAL checkpointer or a
-    // read connection's brief lock instead of returning SQLITE_BUSY immediately.
+    // One connection, so writes serialize; `busy_timeout` lets a writer wait out
+    // the WAL checkpointer instead of returning `SQLITE_BUSY` at once.
     //
-    // Transaction mode audit (§1.6): the rule of thumb in
-    // `.claude/rules/sqlx.md` is "use BEGIN IMMEDIATE for write transactions
-    // to fail fast on contention." With this architecture — a single-
-    // -connection write pool and WAL readers that don't block writers — the
-    // only contention source would be an external process opening the same
-    // SQLite file, which doesn't happen for Melodia. SQLx 0.9 does expose
-    // `Pool::begin_with("BEGIN IMMEDIATE")`, but with a single write
-    // connection there is no intra-process writer contention for it to
-    // fail fast on. DEFERRED + `busy_timeout(5s)` therefore stays — revisit
-    // if a future second writer (sidecar tool, multi-window mode, etc.) gets
-    // added.
+    // `.claude/rules/sqlx.md` prefers `BEGIN IMMEDIATE` for write transactions,
+    // to fail fast on contention. There is none to fail fast on here: one write
+    // connection, WAL readers that don't block writers, and no second process
+    // opening the file. DEFERRED stays — revisit if a sidecar tool or a
+    // multi-window mode ever adds a second writer.
     let write_opts = SqliteConnectOptions::from_str(&db_url)?
         .journal_mode(SqliteJournalMode::Wal)
         .create_if_missing(true)
         .busy_timeout(Duration::from_secs(5))
         .pragma("foreign_keys", "ON")
         .pragma("synchronous", "NORMAL")
-        // Page cache sized for a single-user desktop library DB, not a
-        // server. The working set fits comfortably; oversizing the cache
-        // only inflates idle resident memory. (Negative value = KiB.)
+        // Sized for a single-user desktop library rather than a server: the
+        // working set fits, and oversizing only inflates idle resident memory.
         .pragma("cache_size", "-16000")
         .pragma("temp_store", "MEMORY");
 
     let write_pool = SqlitePoolOptions::new().max_connections(1).connect_with(write_opts).await?;
 
-    // Check for pending migrations and backup before applying
     let migrator = sqlx::migrate!("./migrations");
     let (has_pending, applied_version) = {
         let mut conn = write_pool.acquire().await?;
@@ -244,7 +219,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
             .filter(|m| !m.migration_type.is_down_migration())
             .any(|m| !applied.contains(&m.version));
 
-        // conn dropped here — releases the single write connection
+        // The scope releases the single write connection.
         (pending, applied.iter().max().copied().unwrap_or(0))
     };
 
@@ -269,32 +244,19 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         return Err(e.into());
     }
 
-    // One-shot repair for Windows verbatim/extended-length path prefixes
-    // (`\\?\C:\…` for drive paths, `\\?\UNC\server\share\…` for shares)
-    // stored by older versions that used `std::fs::canonicalize` directly.
-    // New writes route through `crate::utils::canonicalize_path` (→
-    // `dunce::canonicalize` on Windows), which never produces the prefix for
-    // `MAX_PATH`-fitting paths; this brings existing rows in line so the
-    // Browse view's path-keyed HashMap matches `read_dir` output. Idempotent
-    // — the `WHERE` filters match zero rows on subsequent boots.
-    //
-    // Gated to Windows: off-Windows the patterns can never match, so the two
-    // `tracks` UPDATEs would just full-scan the table (LIKE can't use the
-    // index) to touch zero rows. `cfg!` const-folds the guard, leaving the fn
-    // compiled + unit-testable everywhere.
+    // New writes route through `crate::utils::canonicalize_path`, which never
+    // produces the prefix for a `MAX_PATH`-fitting path; this brings existing
+    // rows in line, so Browse's path-keyed `HashMap` matches `read_dir` output.
+    // `cfg!` const-folds, leaving the fn compiled and testable everywhere.
     if cfg!(target_os = "windows") {
         strip_windows_verbatim_paths(&write_pool).await?;
     }
 
-    // Read pool: a small, fixed band of connections for concurrent reads.
-    // Melodia is single-user and its reads are tiny and effectively
-    // sequential, so a handful of connections is ample. Clamp to 2..=4
-    // rather than scaling with core count: one connection per core (the old
-    // `.max(4)` floor with no ceiling) needlessly multiplies per-connection
-    // page-cache and prepared-statement memory on many-core machines for
-    // concurrency this workload never uses. (`.claude/rules/sqlx.md` advises
-    // a num_cpus read pool — that is server-workload guidance; a desktop
-    // app is a different profile.)
+    // A small fixed band rather than one connection per core: reads here are
+    // tiny and effectively sequential, and scaling with core count only
+    // multiplies per-connection page-cache and statement memory for concurrency
+    // this workload never uses. (`.claude/rules/sqlx.md`'s num_cpus advice is
+    // for a server profile.)
     let read_conns = std::thread::available_parallelism()
         .map_or(4, |n| u32::try_from(n.get()).unwrap_or(u32::MAX))
         .clamp(2, 4);
@@ -304,18 +266,16 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         .read_only(true)
         .busy_timeout(Duration::from_secs(5))
         .pragma("foreign_keys", "ON")
-        // Modest per-connection page cache: with `mmap_size` below, cold
-        // pages stay cheaply file-backed (shared) rather than being copied
-        // into per-connection heap cache, so a large cache here would just
-        // be idle resident overhead multiplied across the pool.
+        // Modest, because `mmap_size` below keeps cold pages cheaply
+        // file-backed rather than copied into per-connection heap — so a large
+        // cache here is idle overhead multiplied across the pool.
         .pragma("cache_size", "-16000")
         .pragma("temp_store", "MEMORY")
         .pragma("mmap_size", "268435456");
 
-    // `idle_timeout` reaps connections opened during the concurrent boot
-    // prefetch burst once they go idle; without it sqlx keeps them for the
-    // process lifetime. `min_connections` stays at its default (0) — the
-    // cold-reopen cost after idle is negligible for this workload.
+    // `idle_timeout` reaps the connections the boot prefetch burst opens; sqlx
+    // otherwise keeps them for the process lifetime. `min_connections` stays at
+    // its default — a cold reopen costs nothing at this scale.
     let read_pool = SqlitePoolOptions::new()
         .max_connections(read_conns)
         .idle_timeout(Duration::from_mins(1))
@@ -332,8 +292,8 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
 
 #[doc(hidden)]
 impl DbPool {
-    /// Create an in-memory `DbPool` for tests. Both read and write share the same
-    /// single-connection pool (in-memory `SQLite` is per-connection).
+    /// An in-memory `DbPool` for tests. Read and write share one connection,
+    /// in-memory `SQLite` being per-connection.
     #[expect(
         clippy::unwrap_used,
         reason = "test helper; failure here aborts the test run by design"

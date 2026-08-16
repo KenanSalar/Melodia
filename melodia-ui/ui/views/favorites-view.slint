@@ -14,19 +14,15 @@ import { FavoritesArtistsTab } from "favorites/artists-tab.slint";
 import { FavoritesMostPlayedTab } from "favorites/most-played-tab.slint";
 import { FavoritesSongsTab } from "favorites/songs-tab.slint";
 
-// A **pinned** hero banner — the shared `MosaicTabHero`, carrying the `TabBar`
-// and the filter `SearchBar` over the mosaic, title and chips — above three
-// mutually exclusive sub-views: the Songs `TrackList`, and the Most Played and
-// Favorite Artists card grids. Only the body scrolls, so the tabs stay reachable.
-// Albums are deliberately absent, being reachable through the Albums tab.
+// A **pinned** hero banner — the shared `MosaicTabHero`, carrying the `TabBar` and the filter
+// `SearchBar` over the mosaic, title and chips — above three mutually exclusive sub-views: the
+// Songs `TrackList`, and the Most Played and Favorite Artists card grids. Only the body scrolls, so
+// the tabs stay reachable. Albums are deliberately absent, being reachable through the Albums tab.
 //
-// **Each tab owns exactly one scroller**, which is why this view mounts plain
-// `OverlayScrollbar`s rather than `CompositeScrollbars`. The strips used to sit
-// in an outer `ScrollView` above a height-capped `TrackList`, and a nested
-// `ListView` swallows the wheel at its own edge instead of bubbling; one
-// scroller per tab retires that whole problem, along with the hover sentinel and
-// the two-way `viewport-y` binding that opted out of Slint's own out-of-bounds
-// correction.
+// **Each tab owns exactly one scroller**, which is why this view mounts plain `OverlayScrollbar`s
+// rather than `CompositeScrollbars`: a nested `ListView` swallows the wheel at its own edge instead
+// of bubbling, and one scroller per tab retires that whole problem along with the hover sentinel
+// and the two-way `viewport-y` binding that opts out of Slint's out-of-bounds correction.
 export component FavoritesView inherits Rectangle {
     property <int> filter-tick-pending: 0;
 

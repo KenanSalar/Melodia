@@ -1,34 +1,12 @@
-//! Genres-view glue between Rust and Slint.
+//! The Genres page: a virtualized card grid, and the detail view a card drills
+//! into. Shaped like [`crate::ui::albums`], whose module docs argue the grid
+//! data and the cached detail rows.
 //!
-//! Two Slint globals are driven from here:
-//!
-//! * `Genres` — the responsive genre-card grid. Rust owns a flat,
-//!   name-sorted `Vec<GenreStats>` (plus a pre-lowercased sort key)
-//!   behind `GenresUi::grid.data` (fetched once from `genre_stats`); the
-//!   grid model is rebuilt from it on every filter / sort / column-count
-//!   change *without* a DB hit. The grid is virtualized by row: Rust
-//!   chunks the filtered+sorted list into `Genres.columns`-wide rows of
-//!   `GenreGridRow`, so the Slint `ListView` only instantiates on-screen
-//!   rows.
-//!
-//! * `GenreDetail` — the full genre detail view. `open_genre` fetches
-//!   the header + track list; the cached `Vec<TrackListRow>` in
-//!   `GenresUi::detail.tracks` lets `play-row` / `select-row` /
-//!   `shuffle-genre` recover ids and re-sort in memory without
-//!   round-tripping the Slint model (mirrors `AlbumsUi::detail.tracks`).
-//!
-//! Unlike Albums / Artists, **no cover or hero-blur caches** live here:
-//! genres have no intrinsic artwork. Each grid tile renders the
-//! `EntityCard` `theater_comedy` fallback glyph, and the detail header
-//! paints only the accent gradient floor + scrim. The only shared cache
-//! the Genre tab reads is `cover_thumbs` (the shared row tier) for the
-//! detail track-list's artwork column — same shared instance Albums /
-//! Artists / Tracks use.
-//!
-//! Cross-thread layout mirrors `tracks.rs` / `albums.rs`: `GenresUi` is
-//! `Send + Sync`, cloned into callbacks / tokio tasks; Slint properties
-//! and models are only touched from the UI thread, reached via
-//! `Weak<AppWindow>::upgrade_in_event_loop`.
+//! What differs is that **no cover or hero-blur caches live here** — genres have
+//! no intrinsic artwork. Each tile renders `EntityCard`'s fallback glyph, and
+//! the detail header paints only its accent gradient and scrim. The one shared
+//! cache this page reads is the row tier, for the detail `TrackList`'s artwork
+//! column.
 
 mod callbacks;
 mod color;
@@ -74,10 +52,9 @@ pub use detail::{open_genre_with, seed_detail_from_settings};
 // which is why it can't fold into `install` with the models and the wiring.
 pub use grid::fetch_grid;
 
-// Reached only from this slice's own `callbacks/`, which used to live two
-// modules away. `pub(super)` is `pub(in crate::ui)` here — one notch wider than
-// needed, and the notch the cross-slice `apply_detail_row_*` mirrors in
-// `callbacks::now_playing` still use.
+// `pub(super)` is `pub(in crate::ui)` here — one notch wider than this slice's
+// own `callbacks/` needs, and the notch the cross-slice `apply_detail_row_*`
+// mirrors in `callbacks::now_playing` still use.
 pub(super) use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
     open_genre, refresh_detail, resort_detail, set_filter,
@@ -88,12 +65,10 @@ pub(super) use selection::{clear_selection, handle_select_row};
 /// Install the Genres grid + detail models, build the handle, and wire every
 /// `Genres.*` / `GenreDetail.*` callback to it.
 ///
-/// Self-contained: no cross-tab origin and no artwork, just the shared row-tier
-/// `cover_thumbs` for the detail track list's small artwork column.
+/// Self-contained: no cross-tab origin and no artwork, just the shared row tier
+/// for the detail list's artwork column.
 ///
-/// The returned handle is a convenience for the caller's own later wiring, not
-/// a keepalive — every wired closure clones its own strong `Arc` and those
-/// closures are owned by the `AppWindow` for the life of the app.
+/// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<GenresUi> {
     install_models(cx.app);
     let genres_ui = Arc::new(GenresUi::new(cx.cover_thumbs.clone()));
@@ -101,27 +76,20 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<GenresUi> {
     genres_ui
 }
 
-/// Rust-side state for the Genres grid + detail views. Shared between
-/// the UI callbacks (`callbacks::wire`) and the async fetchers. The grid and
-/// detail concerns are largely independent — each lives in its own
-/// sub-struct.
-///
-/// No `grid_covers` / `detail_artwork` caches: genres have no
-/// intrinsic image (see module-level doc).
+/// Rust-side state for the Genres grid and detail, shared between the UI
+/// callbacks and the async fetchers. The two concerns are largely independent,
+/// so each lives in its own sub-struct — and there is no cover tier at all, this
+/// page having no artwork.
 pub struct GenresUi {
     grid: GenreGridState,
     detail: GenreDetailState,
-    /// Row-tier cache shared with Tracks / Albums / Artists /
-    /// now-playing-bar — backs the small artwork column of the detail
-    /// view's `TrackList`. Same shared instance the other entity tabs
-    /// use; the Genre tab never clears it.
+    /// The shared row tier, for the detail `TrackList`'s artwork column. This
+    /// page never clears it.
     cover_thumbs: Arc<CoverThumbs>,
-    /// Section-visibility + staleness bookkeeping (on-screen shadow, dirty
-    /// flag, and the wipe/fetch mutation gate). See [`SectionState`]. Kept
-    /// for symmetry with the other entity tabs; no cache-release work is
-    /// gated on `section.active()` today (genres carry no artwork to
-    /// release), but the hook lives here so a future genre artwork
-    /// strategy can wire releases without re-plumbing the callbacks.
+    /// Visibility + staleness + the mutation gate. See [`SectionState`]. Kept
+    /// for symmetry with the other entity tabs: nothing is gated on it today,
+    /// there being no artwork to release, but the hook is here so a future
+    /// genre-artwork strategy needn't re-plumb the callbacks.
     section: SectionState,
 }
 
@@ -144,43 +112,31 @@ impl GenresUi {
         }
     }
 
-    /// Mirror the Genres-section-visible flag (`section-active-changed`).
     pub fn set_section_active(&self, active: bool) {
         self.section.set_active(active);
     }
 
-    /// Whether the Genres section is currently on screen.
     pub fn section_active(&self) -> bool {
         self.section.active()
     }
 
-    /// Hand any retained glibc arena slack back to the OS. Unlike
-    /// `AlbumsUi` / `ArtistsUi` there's no LRU to drop here — genres carry
-    /// no `grid_covers` / `detail_artwork` (tiles paint procedural
-    /// gradients). Used as the post-`clear_detail` close-detail trim
-    /// where wiping the grid would be wrong (the user is now looking at
-    /// the grid). Section-leave goes through
-    /// [`Self::release_section_state`] instead.
+    /// Hand retained glibc arena slack back, with no LRU to drop first. The
+    /// close-detail trim, where wiping the grid would be wrong — the user is now
+    /// looking at it. A section leave takes [`Self::release_section_state`].
     pub fn release_caches(&self) {
         crate::tasks::heap_trim::trim();
     }
 
-    /// Drop *everything* the Genres section is keeping resident — the
-    /// canonical grid data (`Vec<GenreStats>` + pre-lowercased keys), the
-    /// memoized filter/sort indices, the cached detail track rows, and the
-    /// applied-selection shadow — then hand the freed pages back to the
-    /// OS. Called (off the UI thread) when the user leaves the Genres
-    /// section so the hidden view's resident footprint drops to ~0.
-    /// Re-entry re-fetches via [`fetch_grid`]; if a detail was open
-    /// (`GenreDetail.genre-id >= 0`), the caller re-runs `open_genre` to
-    /// repopulate it. The Slint `Genres.grid-rows` model +
-    /// `GenreDetail.{tracks,selected-ids}` are cleared synchronously by
-    /// the caller on the UI thread before this runs.
+    /// Drop *everything* the section keeps resident — the canonical grid data,
+    /// the memoized indices, the cached detail rows and the selection shadow —
+    /// then hand the freed pages back. Runs off the UI thread on section leave;
+    /// the caller has already cleared the Slint models there. Re-entry
+    /// re-fetches through [`fetch_grid`], and re-runs `open_genre` if a detail
+    /// was open.
     ///
-    /// Race-correct against an in-flight [`fetch_grid`] via the same
-    /// early-check + gated-bulk-writes shape as
-    /// [`crate::ui::albums::AlbumsUi::release_section_state`] — see that
-    /// doc for the full rationale.
+    /// Race-correct against an in-flight [`fetch_grid`] through the same
+    /// early-check plus gated-writes shape as
+    /// [`crate::ui::albums::AlbumsUi::release_section_state`], which argues it.
     pub fn release_section_state(&self) {
         if self.section_active() {
             return;
@@ -199,14 +155,12 @@ impl GenresUi {
         crate::tasks::heap_trim::trim();
     }
 
-    /// Mark the cached grid + detail data as stale. See
-    /// [`crate::ui::albums::AlbumsUi::mark_dirty`].
+    /// See [`crate::ui::albums::AlbumsUi::mark_dirty`].
     pub fn mark_dirty(&self) {
         self.section.mark_dirty();
     }
 
-    /// Atomically read-and-clear the dirty flag. See
-    /// [`crate::ui::albums::AlbumsUi::take_dirty`].
+    /// See [`crate::ui::albums::AlbumsUi::take_dirty`].
     pub fn take_dirty(&self) -> bool {
         self.section.take_dirty()
     }
@@ -216,18 +170,15 @@ impl GenresUi {
         *self.detail.genre_id.lock()
     }
 
-    /// Track ids of the **displayed** detail list, in display order — the
-    /// filter-applied subset when a search is active, otherwise the full
-    /// genre. `play-row` / shuffle / add-to-queue pass these straight to
-    /// `player_play_tracks`, so those actions operate on the visible rows.
+    /// Track ids of the **displayed** detail list, so play / shuffle /
+    /// add-to-queue operate on the visible rows rather than the whole genre.
     pub fn detail_track_ids(&self) -> Vec<i64> {
         self.detail.tracks.lock().iter().map(|r| r.id).collect()
     }
 
-    /// Surgically flip `is_favorite` on the cached detail row so a
-    /// single-row favourite toggle doesn't need a full re-fetch. Both the
-    /// displayed `tracks` cache and the canonical `all_tracks` set are
-    /// touched so a later `apply_filtered_detail` rebuild keeps the star.
+    /// Flip `is_favorite` on the cached detail row, so a single-row toggle needs
+    /// no re-fetch. Touches the canonical set too, or a later
+    /// `apply_filtered_detail` rebuild drops the star.
     pub fn flip_detail_favorite(&self, id: i64, fav: bool) {
         if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
             r.is_favorite = fav;
@@ -237,8 +188,7 @@ impl GenresUi {
         }
     }
 
-    /// Star-rating analogue of [`Self::flip_detail_favorite`] — set `rating`
-    /// on both the displayed `tracks` cache and the canonical `all_tracks` set.
+    /// [`Self::flip_detail_favorite`]'s star-rating twin.
     pub fn flip_detail_rating(&self, id: i64, rating: i32) {
         if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
             r.rating = rating;
@@ -249,10 +199,8 @@ impl GenresUi {
     }
 }
 
-/// Build the empty `VecModel`s the Genres grid, the detail track list,
-/// and the detail selection need, and hand them to the Slint globals as
-/// `ModelRc`s. Subsequent updates locate them by downcasting back to
-/// `VecModel<T>`.
+/// Hand the two globals their empty `VecModel`s. Later updates find them by
+/// downcasting back.
 fn install_models(ui: &AppWindow) {
     let grid: Rc<VecModel<UiGenreGridRow>> = Rc::new(VecModel::default());
     ui.global::<Genres>().set_grid_rows(ModelRc::from(grid));
@@ -264,12 +212,10 @@ fn install_models(ui: &AppWindow) {
     ui.global::<GenreDetail>().set_selected_ids(ModelRc::from(sel));
 }
 
-/// Convert a `GenreStats` into the Slint `GenreRow` an `EntityCard`
-/// (and the detail header) renders. Pure data — there is no cover
-/// decode to skip (genres have no artwork), so this stays cheap to
-/// run for every genre on every grid rebuild. Hashes the name into a
-/// four-stop accent (two tile, two hero) that the Slint side plugs
-/// straight into `@linear-gradient` — see [`color::genre_accent`].
+/// A `GenreStats` as the `GenreRow` an `EntityCard` and the detail header
+/// render. Cheap enough to run for every genre on every rebuild — there is no
+/// cover to decode. The name hashes into the four gradient stops the Slint side
+/// plugs into `@linear-gradient`; see [`color::genre_accent`].
 pub fn to_slint_genre_row(g: &GenreStats) -> UiGenreRow {
     let accent = color::genre_accent(&g.name);
     UiGenreRow {
@@ -288,9 +234,7 @@ pub fn to_slint_genre_row(g: &GenreStats) -> UiGenreRow {
     }
 }
 
-// Compile-time assertion, not runtime code: an anonymous `const _` is
-// type-checked but never dead-code-flagged, so the bound is enforced
-// without an `#[allow(dead_code)]` on a fn nothing calls.
+// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<GenresUi>();

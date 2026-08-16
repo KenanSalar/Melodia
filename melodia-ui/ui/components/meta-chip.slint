@@ -1,15 +1,14 @@
 import { Theme } from "../theme.slint";
 
-// One metadata chip — a codec under the Now Playing cover, a count on a hero
-// band. Purely decorative: no TouchArea, no hover, no selected state. The
-// interactive pill is `chip-group.slint`'s `Chip`, and the two are deliberately
-// not one component: one states a fact, the other configures something.
+// One metadata chip — a codec under the Now Playing cover, a count on a hero band. Purely
+// decorative: no TouchArea, no hover, no selected state. The interactive pill is
+// `chip-group.slint`'s `Chip`, and the two are deliberately not one component: one states a fact,
+// the other configures something.
 //
-// Both brushes are inputs so the same chip can sit on a blurred cover *and* on a
-// blurred banner — those surfaces are solved per artwork, where a fixed theme
-// brush lands light-on-light under a light variant. The defaults are what a chip
-// on a plain panel would want and no mount takes them; keeping them theme-shaped
-// is what leaves this file free of `Player` and `HeroBackdrop` imports.
+// Both brushes are inputs so the same chip can sit on a blurred cover *and* on a blurred banner —
+// those surfaces are solved per artwork, where a fixed theme brush lands light-on-light under a
+// light variant. The defaults are what a chip on a plain panel would want and no mount takes them;
+// keeping them theme-shaped leaves this file free of `Player` and `HeroBackdrop` imports.
 export component MetaChip inherits Rectangle {
     in property <string> text;
     in property <brush> fill: Theme.surface1;

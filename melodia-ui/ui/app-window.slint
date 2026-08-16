@@ -1,12 +1,8 @@
-// Vazirmatn (OFL) — one family covering Latin and Arabic with consistent metrics, so
-// mixed-script rows don't drift vertically the way they did when Slint fell back from
-// Latin-only Inter to a system Arabic face. Regular/Medium/SemiBold is the whole set
-// the app uses.
-//
-// These TTFs are PATCHED: `scripts/patch_vazirmatn.py` rewrites the OS/2 typo + hhea
-// metrics to a Latin-typical line ratio. Upstream ships ~1.56× so Arabic combining
-// marks fit, which at our sizes pushes every centred Latin text several px up.
-// Pristine copies live in `assets/fonts/originals/` as the script's input.
+// Vazirmatn (OFL) — one family covering Latin and Arabic with consistent metrics, so mixed-script
+// rows don't drift vertically the way they do across a fallback. These TTFs are PATCHED:
+// `scripts/patch_vazirmatn.py` rewrites the OS/2 typo + hhea metrics to a Latin-typical line ratio,
+// upstream's ~1.56× (which fits Arabic combining marks) pushing every centred Latin text several px
+// up at our sizes. Pristine copies live in `assets/fonts/originals/` as the script's input.
 import "assets/fonts/vazirmatn/Vazirmatn-Regular.ttf";
 import "assets/fonts/vazirmatn/Vazirmatn-Medium.ttf";
 import "assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf";
@@ -72,39 +68,25 @@ export {
 
 export component AppWindow inherits Window {
     title: "Melodia";
-    // No `preferred-width`/`-height` on purpose. `window_chrome/geometry.rs::restore`
-    // calls `slint::Window::set_size` after `AppWindow::new()`, which sets winit's
-    // `has_explicit_size` — the only thing stopping Slint from snapping to the
-    // content-preferred size on first show. A preferred size here would just be that
-    // snap target.
-    //
-    // The floor is the miniplayer's smallest sensible footprint. The full UI only
-    // renders above `mini-active`'s ~550×250 threshold, so keeping the OS minimum down
-    // here lets the user drag straight into mini mode with no runtime winit constraint
-    // mutation.
+    // No `preferred-width`/`-height` on purpose: `window_chrome/geometry.rs::restore` calls
+    // `set_size` after `AppWindow::new()`, setting winit's `has_explicit_size` — the only thing
+    // stopping Slint snapping to the content-preferred size on first show, which a preferred size
+    // here would be the target of. The floor is the miniplayer's smallest sensible footprint, so
+    // the user can drag straight into mini mode with no runtime winit constraint mutation.
     min-width: 350px;
     min-height: 90px;
-    // Custom-frame + windowed gets a transparent ARGB surface, so the compositor
-    // blends the rounded mantle shell with the desktop and the alpha=0 corners read as
-    // "not our window" — real rounded corners on Wayland, X11-with-compositor, Windows
-    // and macOS alike. Slint's winit backend always requests a transparency-capable
-    // surface, so no extra Cargo feature is involved.
-    //
-    // Native-frame or maximized goes opaque instead: native wants the OS frame to abut
-    // a solid backdrop, and rounded corners on an edge-to-edge window clip against the
-    // screen edge. The Wayland transparency caveat sometimes cited here
-    // (slint-ui/slint#6145) is fullscreen-specific — there is no fullscreen mode today,
-    // so if one lands, mirror `is-maximized` with an `is-fullscreen` flag.
+    // Custom-frame + windowed gets a transparent ARGB surface, so the compositor blends the rounded
+    // mantle shell with the desktop and the alpha=0 corners read as "not our window". Native-frame
+    // or maximized goes opaque: native wants the OS frame to abut a solid backdrop, and rounded
+    // corners on an edge-to-edge window clip against the screen edge.
     background: (Theme.use-native-titlebar || WindowChrome.is-maximized)
         ? Theme.mantle
         : Colors.transparent;
 
-    // Slint reads `no-frame` once at first show, so `Theme.use-native-titlebar` must be
-    // hydrated before `app.run()` — `window_chrome::install` does it. Dropping the OS
-    // frame also drops winit's resize edges, which `Theme.resize-border` restores.
-    // `ResizeRing` below reads the same token: winit's border check decides where
-    // `drag_resize_window` fires and the ring decides where hover is suppressed, so a
-    // drift leaves a band where the cursor changes but the widget still flashes hover.
+    // Slint reads `no-frame` once at first show, so `Theme.use-native-titlebar` must be hydrated
+    // before `app.run()` — `window_chrome::install` does it. Dropping the OS frame also drops
+    // winit's resize edges, which `Theme.resize-border` restores; `ResizeRing` reads the same
+    // token, so a drift leaves a band where the cursor changes but the widget still flashes hover.
     no-frame: !Theme.use-native-titlebar;
     resize-border-width: Theme.use-native-titlebar ? 0px : Theme.resize-border;
 
@@ -123,50 +105,38 @@ export component AppWindow inherits Window {
         return "Melodia";
     }
 
-    // Clears the Settings page's search and blurs its TextInput on nav-away, so the
-    // next keystroke can't land in a hidden field on another page. It lives up here
-    // because `SettingsView` is unmounted before a handler inside it could see the
-    // leaving transition, and it watches a mirror because `changed` rejects path
-    // expressions on globals.
+    // Up here because `SettingsView` is unmounted before a handler inside it could see the leaving
+    // transition, and on a mirror because `changed` rejects path expressions on globals.
     property <int> watched-nav-idx: Nav.selected-index;
     changed watched-nav-idx => {
-        // The mounted content view changed — drop what the outgoing composite left.
         CompositeScroll.reset();
         if (self.watched-nav-idx != 9) {
-            // Both halves: the input is what the box shows, the query is what the page
-            // is filtered by, and a throttle sits between them.
+            // Both halves: the input is what the box shows, the query what the page is filtered by.
             SettingsPage.search-input = "";
             SettingsPage.search-query = "";
             SettingsPage.blur-search-tick += 1;
         }
-        // My Library's band holds its hero across a tab leave, so a *nav* change is the
-        // only thing that can hand it back — and it has to be watched here rather than
-        // through a `SectionActiveGate`, which cannot see this edge at all. The sidebar
-        // clears `now-playing-open` and writes the index in one handler, so a gate that
-        // was already false behind Now Playing goes false → false and delivers nothing:
-        // the hero would stay pinned, and the next page's band would paint the departing
-        // detail's chips under its own title. Rust re-reads the index, so it stays
-        // correct whichever seam calls it.
+        // My Library's band holds its hero across a tab leave, so a *nav* change is the only thing
+        // that can hand it back — and a `SectionActiveGate` cannot see this edge: the sidebar
+        // clears `now-playing-open` and writes the index in one handler, so a gate already false
+        // behind Now Playing goes false → false.
         MyLibrary.page-active-changed(self.watched-nav-idx == 3);
-        // The outgoing view may hold focus in a TextInput about to be destroyed, and
-        // Slint doesn't hand focus back to an ancestor FocusScope when that happens —
-        // shortcuts would stay dead until the next click. Synchronous, so SearchView's
-        // 1 ms autofocus Timer still wins when entering Search.
+        // The outgoing view may hold focus in a TextInput about to be destroyed, and Slint doesn't
+        // hand focus back to an ancestor FocusScope. Synchronous, so SearchView's autofocus wins.
         shortcut-scope.grab-focus();
     }
 
-    // A My Library tab pick swaps the mounted body without moving `Nav.selected-index`,
-    // so the mirror above never sees it. Artist Detail is one of the bodies it unmounts
-    // and it is composite, so this owes the reset as well as the regrab.
+    // A My Library tab pick swaps the mounted body without moving `Nav.selected-index`, so the
+    // mirror above never sees it. Artist Detail is one of the bodies it unmounts and it is
+    // composite, so this owes the reset as well as the regrab.
     property <int> watched-my-library-tab: MyLibrary.tab-idx;
     changed watched-my-library-tab => {
         CompositeScroll.reset();
         shortcut-scope.grab-focus();
     }
 
-    // Lets Rust gate the Up Next rebuild on the view being visible. Mirrored here for
-    // the `watched-nav-idx` reasons — `NowPlayingView` is unmounted while closed, so a
-    // handler inside it would miss both transitions.
+    // Lets Rust gate the Up Next rebuild on the view being visible. Mirrored here for the
+    // `watched-nav-idx` reasons — `NowPlayingView` is unmounted while closed.
     property <bool> watched-now-playing-open: Nav.now-playing-open;
     changed watched-now-playing-open => {
         // NP open/close swaps the mounted content view, and destroys the section view
@@ -176,26 +146,24 @@ export component AppWindow inherits Window {
         shortcut-scope.grab-focus();
     }
 
-    // Arms the visualizer's audio-thread sample tap only while something is drawing it.
-    // Its own property rather than a second handler on `now-playing-open-changed`:
-    // that callback has one slot, already taken by `wire_now_playing_open`.
+    // Arms the visualizer's audio-thread sample tap only while something is drawing it. Its own
+    // property rather than a second handler on `now-playing-open-changed`, whose one slot is
+    // already taken by `wire_now_playing_open`.
     property <bool> watched-viz-active: Nav.now-playing-open && Visualizer.enabled;
     changed watched-viz-active => {
         Visualizer.set-active(self.watched-viz-active);
     }
 
-    // Artist Detail is a composite-scroll view that opens and closes without a
-    // nav-index change — grid and detail both sit under index 5 — so the reset above
-    // misses it, and the unmounting view's stale hover flag would trap the wheel.
+    // Artist Detail is a composite-scroll view that opens and closes without a nav-index change, so
+    // the reset above misses it and the unmounting view's stale hover flag would trap the wheel.
     property <int> watched-artist-detail-id: ArtistDetail.artist-id;
     changed watched-artist-detail-id => {
         CompositeScroll.reset();
         shortcut-scope.grab-focus();
     }
 
-    // The other three unmount their grid the same way, and every grid carries a filter
-    // TextInput still holding focus when a card is clicked. None is a composite view,
-    // so focus is all they owe.
+    // The other three unmount their grid the same way, and every grid carries a filter TextInput
+    // still holding focus when a card is clicked. None is composite, so focus is all they owe.
     property <int> watched-album-detail-id: AlbumDetail.album-id;
     changed watched-album-detail-id => {
         shortcut-scope.grab-focus();
@@ -211,58 +179,48 @@ export component AppWindow inherits Window {
         shortcut-scope.grab-focus();
     }
 
-    // The miniplayer swap unmounts the whole full-UI branch — composite views and
-    // focused filters with it — without a nav-index change, so the resets above miss
-    // it too.
+    // The miniplayer swap unmounts the whole full-UI branch — composite views and focused filters
+    // with it — without a nav-index change, so the resets above miss it too.
     property <bool> watched-mini-render: mini-switch.render-active;
     changed watched-mini-render => {
         CompositeScroll.reset();
-        // Same class of stale sentinel one global over: the rail dies with the branch
-        // and its rows get no leave event, so the index they last published outlives
-        // them and the tooltip frame reads it as a live hover on the way back in.
+        // Same class of stale sentinel one global over: the rail dies with the branch and its rows
+        // get no leave event, so the tooltip frame reads the last index as a live hover on return.
         Nav.sidebar-tip-idx = -1;
         shortcut-scope.grab-focus();
     }
 
-    // Every dialog body mounts under `if Dialog.kind == "…"` and `closed-teardown()`
-    // clears `kind`, so a focused LabeledInput dies with the body exactly as a filter
-    // does above. Ungated on purpose: the bodies never autofocus, so regrabbing on
-    // *open* is free and it takes the keyboard off whatever SearchBar still held it —
-    // which would otherwise swallow keystrokes behind the backdrop instead of hitting
-    // the scope's `Dialog.open` guard. Safe where `focus()` from `init` isn't: a
-    // `changed` handler runs from `run_change_handlers`, outside the property
-    // evaluator's recursion guard.
+    // Every dialog body mounts under `if Dialog.kind == "…"` and `closed-teardown()` clears `kind`,
+    // so a focused LabeledInput dies with the body as a filter does above. Ungated on purpose: the
+    // bodies never autofocus, so regrabbing on *open* takes the keyboard off whatever SearchBar
+    // held it. Safe where `focus()` from `init` isn't — a `changed` handler runs from
+    // `run_change_handlers`, outside the property evaluator's recursion guard.
     property <string> watched-dialog-kind: Dialog.kind;
     changed watched-dialog-kind => {
         shortcut-scope.grab-focus();
     }
 
-    // The sheet is the odd one out: permanent, mounting nothing, only animating in.
-    // But its Esc / Ctrl+A live in the scope and nothing moves focus when it opens —
-    // the bar button and the overflow entry are both TouchArea clicks — so a filter
-    // SearchBar keeps the keyboard behind the backdrop and swallows the `a`.
+    // The sheet is the odd one out: permanent, mounting nothing, only animating in. But its Esc /
+    // Ctrl+A live in the scope and nothing moves focus when it opens — the bar button and the
+    // overflow entry are both TouchArea clicks — so a filter SearchBar swallows the `a`.
     property <bool> watched-queue-open: Queue.open;
     changed watched-queue-open => {
         shortcut-scope.grab-focus();
     }
 
-    // The responsive full-UI ↔ miniplayer swap: size thresholds, the two-phase fade,
-    // and the writes into `MiniPlayer`. Fed the live window size because a component's
-    // root binding can't reach `parent`.
+    // The responsive full-UI ↔ miniplayer swap: size thresholds, the two-phase fade, and the writes
+    // into `MiniPlayer`. Fed the live window size, a component's root binding having no `parent`.
     mini-switch := MiniPlayerSwitch {
         host-width: root.width;
         host-height: root.height;
     }
 
-    // One gate per section, in nav-index order — and, for a section built out of tabs,
-    // one more per tab. `SectionActiveGate` owns the predicate and the `changed` watcher
-    // (its header says why the watcher can't live inside each view); all that differs per
-    // mount is which Rust hook the transition drives and what that hook does — which is
-    // what the comments below record.
+    // One gate per section in nav-index order, plus one per tab for a section built out of tabs.
+    // `SectionActiveGate` owns the predicate and the `changed` watcher; all that differs per mount
+    // is which Rust hook it drives, which is what the notes below record.
 
     // Search. Query-driven, so no library-changed refresh, but Rust still releases the
-    // per-strip album + artist cover LRUs on `false` (clearing the result models on the
-    // UI thread first). `query` + `recent-rows` survive a flip away and back.
+    // per-strip album + artist cover LRUs on `false`. `query` + `recent-rows` survive a flip.
     SectionActiveGate {
         index: 0;
         mini-active: mini-switch.active;
@@ -277,30 +235,24 @@ export component AppWindow inherits Window {
         active-changed(active) => { Browse.section-active-changed(active); }
     }
 
-    // Favorites. One `FavoritesView` covers the hero and all three tabs, so no detail
-    // flip inside this branch. Rust releases the mosaic / Most Played / Artists cover
-    // caches *and* the borrowed Albums grid cache on `false`, then re-fetches hero +
-    // grids + tracks through the library-changed dirty flag on `true`.
+    // Favorites. One `FavoritesView` covers the hero and all three tabs, so no detail flip inside
+    // this branch. Rust releases the mosaic / Most Played / Artists cover caches *and* the borrowed
+    // Albums grid cache on `false`, then re-fetches through the library-changed dirty flag.
     SectionActiveGate {
         index: 2;
         mini-active: mini-switch.active;
         active-changed(active) => { Favorites.section-active-changed(active); }
     }
 
-    // My Library. Five gates on one index, one per tab. **A tab leave has to be the same
-    // event as a section leave** — it tears the same models down and re-fetches the same
-    // way — so each of the five keeps the hook it had as a sidebar section and the gate's
-    // `tab-index` / `current-tab` pair supplies the second half of the predicate. A
-    // drill-in doesn't move `tab-idx`, so it stays `true` inside a tab exactly as it used
-    // to inside a section.
-    //
-    // **The page's own teardown is not a sixth gate**, and can't be: it has to fire when
-    // the *nav index* leaves 3, which a gate whose predicate is already false behind Now
-    // Playing never reports. It rides `changed watched-nav-idx` above.
+    // My Library. Five gates on one index, one per tab. **A tab leave has to be the same event as a
+    // section leave**, tearing the same models down and re-fetching the same way, so each keeps the
+    // hook it had as a sidebar section and `tab-index` / `current-tab` supplies the second half of
+    // the predicate. A drill-in doesn't move `tab-idx`. **The page's own teardown is not a sixth
+    // gate** and can't be — it fires when the *nav index* leaves 3, which a gate already false
+    // behind Now Playing never reports; it rides `changed watched-nav-idx` above.
 
-    // Songs. Unlike the four grids, the view keeps its row model warm across leaves, so
-    // this only gates the `library_changed` refresher: hidden ⇒ mark dirty and skip the
-    // full-library re-fetch, re-enter ⇒ one deferred refresh.
+    // Songs. Unlike the four grids the view keeps its row model warm across leaves, so this
+    // only gates the `library_changed` refresher.
     SectionActiveGate {
         index: 3;
         tab-index: MyLibrary.tab-songs;
@@ -347,18 +299,16 @@ export component AppWindow inherits Window {
         active-changed(active) => { Playlists.section-active-changed(active); }
     }
 
-    // Recently Played. Like Favorites: release the cover cache on `false`, re-fetch on
-    // `true`.
+    // Recently Played. Like Favorites: release the cover cache on `false`, re-fetch on `true`.
     SectionActiveGate {
         index: 8;
         mini-active: mini-switch.active;
         active-changed(active) => { RecentlyPlayed.section-active-changed(active); }
     }
 
-    // Outer mantle shell. With a transparent Window background this rounded Rectangle
-    // *is* the visible window outline, and `clip: true` masks anything a child paints
-    // outside it. Native-frame or maximized drops the radius to 0 and stays full-bleed,
-    // per the background comment above; the inner content panel still rounds.
+    // Outer mantle shell. With a transparent Window background this rounded Rectangle *is* the
+    // visible window outline, and `clip: true` masks anything a child paints outside it.
+    // Native-frame or maximized drops the radius to 0 and stays full-bleed; the panel still rounds.
     Rectangle {
         width: 100%;
         height: 100%;
@@ -368,17 +318,16 @@ export component AppWindow inherits Window {
             : Theme.shell-radius;
         clip: true;
 
-        // The only FocusScope in the tree, wrapping the whole main layout — every key a
-        // focused TextInput doesn't consume lands here directly. Bindings, the
-        // volume-commit debounce and the focus contract are in the component.
+        // The only FocusScope in the tree, wrapping the whole main layout — every key a focused
+        // TextInput doesn't consume lands here directly. Bindings, the volume-commit debounce and
+        // the focus contract are in the component.
         shortcut-scope := ShortcutScope {
             width: 100%;
             height: 100%;
 
-        // Full UI branch, wrapped so the fade is driven from one ancestor. Gated on
-        // `render-active` — the fade-delayed shadow of `active` — so only one branch is
-        // ever mounted, and the sidebar's grid covers never sit alive beside the mini
-        // up-next subscriber mid-swap.
+        // Full UI branch, wrapped so the fade is driven from one ancestor. Gated on `render-active`
+        // — the fade-delayed shadow of `active` — so only one branch is ever mounted, and the
+        // sidebar's grid covers never sit alive beside the mini up-next subscriber mid-swap.
         if !mini-switch.render-active: Rectangle {
             width: 100%;
             height: 100%;
@@ -389,9 +338,9 @@ export component AppWindow inherits Window {
             // entirely in native mode — a hidden child still claims its stretch.
             if !Theme.use-native-titlebar: CustomTitleBar { }
 
-            // The custom-frame `padding-right` pushes the content panel and its
-            // scrollbar off the window edge; flush, grabbing the edge to resize catches
-            // the scrollbar's hover instead. Native mode leaves the OS frame abutting.
+            // The custom-frame `padding-right` pushes the content panel and its scrollbar off the
+            // window edge; flush, grabbing the edge to resize catches the scrollbar's hover
+            // instead. Native mode leaves the OS frame abutting.
             HorizontalLayout {
                 vertical-stretch: 1;
                 padding-right: Theme.use-native-titlebar ? 0px : 4px;
@@ -399,15 +348,12 @@ export component AppWindow inherits Window {
                 sidebar := Sidebar {}
 
                 // Rounded content panel — one Rectangle with a real rounded stroke, the
-                // `popup-surface.slint` pattern, so the border follows the corner curve
-                // with no clip-masking.
-                //
-                // Native mode rounds only the left side and sits flush against the OS
-                // frame. `Rectangle` has no per-side `border-width`, so the trick is a
-                // square-clip wrapper plus a panel oversized 1 px to the right: that
-                // border falls outside the wrapper and is clipped, while top/bottom/left
-                // survive because those edges match exactly. Custom mode keeps the panel
-                // at wrapper width, so the parent's right margin lands a closed rect.
+                // `popup-surface.slint` pattern, so the border follows the corner curve with no
+                // clip-masking. Native mode rounds only the left side and sits flush against the OS
+                // frame: `Rectangle` has no per-side `border-width`, so the trick is a square-clip
+                // wrapper plus a panel oversized 1 px to the right, that border falling outside the
+                // wrapper and being clipped while top/bottom/left match. Custom mode keeps the
+                // panel at wrapper width, so the parent's right margin lands a closed rect.
                 Rectangle {
                     horizontal-stretch: 1;
                     clip: true;
@@ -422,10 +368,9 @@ export component AppWindow inherits Window {
                         background: Theme.base;
                         border-color: Theme.border;
                         border-width: 1px;
-                        // Custom mode tracks the user-pickable `shell-radius` so the
-                        // panel and the mantle shell read as concentric arcs; native
-                        // tracks `native-content-radius`, seeded from the OS at
-                        // startup, so it matches the host without a user setting.
+                        // Custom mode tracks the user-pickable `shell-radius` so the panel and the
+                        // mantle shell read as concentric arcs; native tracks
+                        // `native-content-radius`, seeded from the OS, so it matches the host.
                         border-top-left-radius: Theme.use-native-titlebar
                             ? Theme.native-content-radius
                             : Theme.shell-radius;
@@ -440,14 +385,10 @@ export component AppWindow inherits Window {
                             : Theme.shell-radius;
                         clip: true;
 
-                        // One branch per nav index, `if` rather than `visible: false` so
-                        // the unselected ones leave the layout tree entirely. Every
-                        // regular branch is also gated on `!now-playing-open`, since the
-                        // full-screen Now Playing view replaces the current view inside
-                        // this panel — so exactly one is ever mounted. Unrouted indices
-                        // fall through to the placeholder at the end.
-                        //
-                        // Search is query-driven over FTS5 + LIKE (`search::search_all`).
+                        // One branch per nav index, `if` rather than `visible: false` so the
+                        // unselected ones leave the layout tree. Every regular branch is also gated
+                        // on `!now-playing-open`, the full-screen view replacing the current one
+                        // inside this panel. Unrouted indices fall through to the placeholder.
                         if !Nav.now-playing-open && Nav.selected-index == 0: ViewTransition {
                             width: parent.width;
                             height: parent.height;
@@ -460,21 +401,16 @@ export component AppWindow inherits Window {
                             enter-from: Nav.pending-enter-from;
                             BrowseView { width: 100%; height: 100%; }
                         }
-                        // Favorites — a pinned hero mosaic carrying the tab bar and the
-                        // filter over three sub-views. An artist card and the Songs
-                        // rows' go-to-{album,artist,genre} actions all stamp
-                        // `*Detail.origin-nav-index = 2`, so the back arrow returns
-                        // here rather than to the entity grid.
+                        // An artist card and the Songs rows' go-to-{album,artist,genre} actions all
+                        // stamp `*Detail.origin-nav-index = 2`, so the back arrow returns here.
                         if !Nav.now-playing-open && Nav.selected-index == 2: ViewTransition {
                             width: parent.width;
                             height: parent.height;
                             enter-from: Nav.pending-enter-from;
                             FavoritesView { width: 100%; height: 100%; }
                         }
-                        // My Library — five tabs over the views that used to be nav 3–7,
-                        // with each tab's grid ↔ detail swap inside the page rather than
-                        // out here. That is why one branch replaces nine: which body is
-                        // mounted is `MyLibrary.tab-idx`'s business now, not this chain's.
+                        // Five tabs over what used to be nav 3–7, each tab's grid ↔ detail swap
+                        // inside the page — so which body is mounted is `MyLibrary.tab-idx`'s.
                         if !Nav.now-playing-open && Nav.selected-index == 3: ViewTransition {
                             width: parent.width;
                             height: parent.height;
@@ -509,9 +445,8 @@ export component AppWindow inherits Window {
                                 title: root.view-title(Nav.selected-index);
                             }
                         }
-                        // Now Playing rides ViewTransition for parity, hard-coded to
-                        // `below`: this branch only fires on open, and closing is the
-                        // outgoing state, which `ViewTransition` doesn't animate.
+                        // Hard-coded to `below`: this branch only fires on open, and closing
+                        // is the outgoing state, which `ViewTransition` doesn't animate.
                         if Nav.now-playing-open: ViewTransition {
                             width: parent.width;
                             height: parent.height;
@@ -519,12 +454,9 @@ export component AppWindow inherits Window {
                             NowPlayingView { width: 100%; height: 100%; }
                         }
 
-                        // Mounted inside the content panel so its backdrop
-                        // and slide stay off the sidebar and the bar, and
-                        // declared after the view branches so it stacks
-                        // above them. The panel's clip hides the closed
-                        // card; always rendered, so the close animation can
-                        // play after `Queue.open` flips back.
+                        // Inside the content panel so its backdrop and slide stay off the sidebar
+                        // and the bar, after the view branches so it stacks above them. Always
+                        // rendered so the close animation can play; the panel's clip hides it.
                         QueueSheet {
                             x: 0;
                             y: 0;
@@ -538,47 +470,34 @@ export component AppWindow inherits Window {
             NowPlayingBar {}
             }
 
-            // Top-layer tooltip for the collapsed rail, which hides every row label.
-            // Declared after the layout because paint order is declaration order: the
-            // Sidebar is the content row's first child, so anything it drew past its
-            // right edge would land under the panel, and `nav-scroll` clips it besides.
-            // Same frame-tracks-the-host idiom as `settings-view.slint`'s `tab-tip`.
-            //
-            // The hovered row publishes its rect on `Nav`; the x comes off the live rail
-            // instead, so the frame rides the collapse animation — and the tooltip's own
-            // 500 ms reveal outlasts that animation, so it can't surface while the
-            // labels are still readable. A plain Rectangle captures no input, so the row
-            // underneath keeps its hover.
+            // Top-layer tooltip for the collapsed rail. Declared after the layout because paint
+            // order is declaration order: the Sidebar is the content row's first child, so anything
+            // it drew past its right edge lands under the panel. The hovered row publishes its rect
+            // on `Nav`; the x comes off the live rail, so the frame rides the collapse animation —
+            // and the 500 ms reveal outlasts it, so it can't surface while the labels are readable.
+            // A plain Rectangle captures no input, so the row underneath keeps its hover.
             sidebar-tip := Rectangle {
                 x: sidebar.absolute-position.x - parent.absolute-position.x;
                 y: Nav.sidebar-tip-y - parent.absolute-position.y;
                 width: sidebar.width;
                 height: Nav.sidebar-tip-h;
 
-                // Rail rows sit 4 px apart with a Divider between some pairs, so a
-                // pointer travelling down the rail is over nothing for a frame or two.
-                // Retracting on that restarts the 500 ms reveal per row and the pill
-                // flashes the new label, fades and comes back — where the Settings tab
-                // bar reads as one tooltip following the pointer, its cells being
-                // edge-to-edge. So hold across the gap and retract only once the pointer
-                // has really left. Retract leaves the label and rect alone, so the held
-                // pill sits still and swaps names the moment the next row takes over.
-                //
-                // `held` can only *extend* a live tooltip; `row-hovered` is what arms
-                // one. It has to be, since `held` is written from a `changed` handler
-                // and `changed` doesn't fire on a first evaluation — a rail remounting
-                // with `row-hovered` already true would sit dead until the pointer left
-                // it once. The miniplayer swap is that remount, and what makes it
-                // arrive true is the stale index left on `Nav`, so the real guard is the
-                // `sidebar-tip-idx = -1` above. Reading both keeps this frame honest
-                // against a future unmount path that forgets the reset.
+                // Rail rows sit 4 px apart with a Divider between some pairs, so a pointer
+                // travelling down the rail is over nothing for a frame or two and retracting on
+                // that restarts the 500 ms reveal per row. Hold across the gap and retract once the
+                // pointer has really left; retract leaves the label and rect alone, so the held
+                // pill swaps names when the next row takes over. **`held` can only extend a live
+                // tooltip; `row-hovered` is what arms one** — `held` is written from a `changed`
+                // handler, which doesn't fire on a first evaluation, so a rail remounting under the
+                // pointer would sit dead. Reading both also survives an unmount path that forgets
+                // the `sidebar-tip-idx = -1` above.
                 property <bool> row-hovered: Nav.sidebar-tip-idx != -1;
                 property <bool> held;
                 changed row-hovered => {
                     if (self.row-hovered) { self.held = true; }
                 }
-                // Long enough to cross the widest gap — a Divider between sections — at
-                // a deliberate pace, short enough that leaving the rail still dismisses.
+                // Long enough to cross the widest gap — a Divider between sections — at a
+                // deliberate pace, short enough that leaving the rail still dismisses.
                 Timer {
                     interval: 150ms;
                     running: !sidebar-tip.row-hovered && sidebar-tip.held;
@@ -592,15 +511,15 @@ export component AppWindow inherits Window {
                     host-width: sidebar-tip.width;
                     host-height: sidebar-tip.height;
                     side: TooltipSide.right;
-                    // Clears the rail rather than hugging it, so the pill reads as part
-                    // of the content panel it floats over.
+                    // Clears the rail rather than hugging it, so the pill reads as part of the
+                    // content panel it floats over.
                     gap: Theme.pad-md;
                 }
             }
         }
 
-        // Miniplayer branch — same opacity-binding, inside-the-scope shape as the full
-        // branch, so the fade animates symmetrically in either direction.
+        // Miniplayer branch — same opacity-binding, inside-the-scope shape as the full branch, so
+        // the fade animates symmetrically in either direction.
         if mini-switch.render-active: Rectangle {
             width: 100%;
             height: 100%;
@@ -614,25 +533,23 @@ export component AppWindow inherits Window {
         }
     }
 
-    // Cursor hints over the band winit resizes from. Mounted only when resizing is both
-    // possible and ours to advertise: not while maximized, where it's a no-op, and not
-    // in native mode, where the OS draws its own border. Geometry comes from the same
-    // `Theme.resize-*` tokens `resize-border-width` above reads.
+    // Cursor hints over the band winit resizes from. Mounted only when resizing is both possible
+    // and ours to advertise: not while maximized, where it's a no-op, and not in native mode, where
+    // the OS draws its own border. Geometry comes from the same `Theme.resize-*` tokens above.
     if !Theme.use-native-titlebar && !WindowChrome.is-maximized: ResizeRing {
         width: 100%;
         height: 100%;
     }
 
-    // Declared after the main layout, so it paints above it. Always rendered so the
-    // open/close animation can play; its TouchArea is `enabled` only while
-    // `Dialog.open`, so closed-state pointer events fall through.
+    // Declared after the main layout, so it paints above it. Always rendered so the open/close
+    // animation can play; its TouchArea is `enabled` only while `Dialog.open`.
     DialogOverlay {
         width: 100%;
         height: 100%;
     }
 
-    // After `DialogOverlay`, so a toast firing mid-dialog paints above the backdrop
-    // instead of behind it. No root TouchArea, so its empty area blocks no clicks.
+    // After `DialogOverlay`, so a toast firing mid-dialog paints above the backdrop rather than
+    // behind it. No root TouchArea, so its empty area blocks no clicks.
     NotificationStack {
         width: 100%;
         height: 100%;

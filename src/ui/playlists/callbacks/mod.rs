@@ -29,9 +29,9 @@ use crate::ui::shell::notifications::NotificationsUi;
 /// `library_changed_tx` subscriber that re-fetches the grid (and refreshes
 /// an open detail) on watcher / scan / CRUD events.
 ///
-/// Called by [`super::install`], which is what guarantees the models are in
-/// place first; that pairing used to be two statements a boot-file reorder
-/// could separate. `wire_all` still has to have run before it.
+/// Called by [`super::install`], which is what guarantees the models are in place first — a
+/// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
+/// have run before it.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     grid::wire(ui, state, playlists_ui);
     detail::wire(ui, state, playlists_ui);

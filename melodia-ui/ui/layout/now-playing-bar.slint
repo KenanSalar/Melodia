@@ -70,28 +70,21 @@ export component NowPlayingBar inherits Rectangle {
         spacing: clamp(root.bar-w * 0.015, 6px, 12px);
         alignment: stretch;
 
-        // Track info. A Rectangle rather than a layout so it can clip bidi overflow, and
-        // the inner text column takes `horizontal-stretch: 1` so `overflow: elide` fires
-        // at all — the `track-list-row.slint` title-cell pattern.
-        //
-        // **The whole cell is a button**, toggling the full-screen Now Playing view, so
-        // a second click closes it just as the view's back button does. Its TouchArea is
-        // declared last so it sits above the artwork and text, neither of which has one,
-        // and it's disabled when nothing is playing.
+        // A Rectangle rather than a layout so it can clip bidi overflow, and the inner text
+        // column takes `horizontal-stretch: 1` so `overflow: elide` fires at all — the
+        // `track-list-row.slint` title-cell pattern. **The whole cell is a button**, toggling
+        // the full-screen view, so a second click closes it; its TouchArea is declared last so
+        // it sits above the artwork and text.
         track-info-cell := Rectangle {
             width: clamp(root.bar-w * 0.25, 120px, 200px);
-            // Redundant — a Rectangle already defaults to 0 — but spelled out beside
-            // the transport and extra columns below, which genuinely need it.
+            // Redundant, but spelled out beside the columns below that genuinely need it.
             horizontal-stretch: 0;
             clip: true;
 
-            // The `IconButton` press wobble, driving **both** the hover fill and the
-            // content wrapper below so chrome and content contract together toward the
-            // cell's centre. Doing it at the wrapper rather than per element is what
-            // keeps the shrink centred: the artwork's left edge moves right as the
-            // text's right edge moves left, instead of both anchoring left. And **only
-            // the factor is animated** — the cell re-clamps as `bar-w` changes, so
-            // easing the derived sizes would wobble on every resize tick.
+            // The `IconButton` press wobble, driving **both** the hover fill and the content
+            // wrapper so the two contract together toward the cell's centre rather than both
+            // anchoring left. **Only the factor is animated** — the cell re-clamps as `bar-w`
+            // changes, so easing the derived sizes would wobble on every resize tick.
             property <float> press-scale: track-info-touch.pressed && Player.vm.has_track
                 ? 0.99
                 : 1.0;
