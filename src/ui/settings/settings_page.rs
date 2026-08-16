@@ -1,10 +1,7 @@
-//! Chrome wiring for the Settings page — the search predicate its sections
-//! filter through, the row split its wrapping strips lay themselves out on,
-//! and the persistence for which tab is showing.
-//!
-//! Distinct from the per-concern installers (`playback_settings`,
-//! `scrobbling_settings`, …), which wire the values the page *configures*.
-//! This module owns the page itself.
+//! Chrome wiring for the Settings page — the search predicate its sections filter through,
+//! the row split its wrapping strips lay themselves out on, and the persistence for which
+//! tab is showing. Distinct from the per-concern installers, which wire the values the
+//! page *configures*.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -28,8 +25,8 @@ pub enum SettingsTab {
 }
 
 impl SettingsTab {
-    /// Every variant, so a tab added to the `.slint` without one here fails a
-    /// test rather than falling through [`tab_from_index`]'s default arm.
+    /// Every variant, so a tab added to the `.slint` without one here fails a test rather
+    /// than falling through [`tab_from_index`]'s default arm.
     pub const ALL: [Self; 5] = [
         Self::Library,
         Self::Playback,
@@ -39,9 +36,8 @@ impl SettingsTab {
     ];
 }
 
-/// Resolve the page's live index against the Slint-declared `tab-*` constants.
-///
-/// Reads them rather than restating the numbering, so it lives in one place.
+/// Resolve the page's live index against the Slint-declared `tab-*` constants, read rather
+/// than restated so the numbering lives in one place.
 pub fn tab_from_index(page: &SettingsPage<'_>, idx: i32) -> SettingsTab {
     if idx == page.get_tab_playback() {
         SettingsTab::Playback
@@ -56,15 +52,12 @@ pub fn tab_from_index(page: &SettingsPage<'_>, idx: i32) -> SettingsTab {
     }
 }
 
-/// Split `0..count` into rows of at most `per_row`.
+/// Split `0..count` into rows of at most `per_row` — the wrapping chip and swatch strips
+/// need their items grouped and Slint can't build a nested array. Indices rather than the
+/// items themselves, so a chip still knows which option it is.
 ///
-/// The wrapping chip and swatch strips need their items grouped into rows, and
-/// Slint can't build a nested array — so the split comes from here and the
-/// strip iterates the groups. Indices rather than the items themselves, so a
-/// chip still knows which option it is and can compare against the selection.
-///
-/// `per_row` is floored at 1: it is derived from a measured width, which is
-/// zero for the frame before the first layout reports one.
+/// `per_row` is floored at 1: it comes from a measured width, which is zero for the frame
+/// before the first layout reports one.
 fn chunk_indices(count: i32, per_row: i32) -> Vec<Vec<i32>> {
     let count = count.max(0);
     let per_row = per_row.max(1);
@@ -82,8 +75,7 @@ fn chunk_indices(count: i32, per_row: i32) -> Vec<Vec<i32>> {
 }
 
 /// Seed the active tab from `views.json`. Call from
-/// `boot::ui_setup::hydrate_ui_from_settings`, which already has the view
-/// state loaded.
+/// `boot::ui_setup::hydrate_ui_from_settings`, which already has the view state loaded.
 pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
     let page = ui.global::<SettingsPage>();
     let clamped = clamp_tab(persisted_tab, page.get_tab_count());
@@ -94,18 +86,13 @@ pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
 pub fn install(ui: &AppWindow, state: &AppState) {
     let page = ui.global::<SettingsPage>();
 
-    // Slint 1.16 has no `.contains()` on string, so every section's
-    // row-visibility expression routes its substring test through here.
-    // Same predicate the library filter boxes run, so an ASCII query
-    // reaches the accented labels in the translated catalogues.
+    // Slint 1.16 has no `.contains()` on string, so every section's row-visibility
+    // expression routes its substring test through here — the same predicate the library
+    // filter boxes run, so an ASCII query reaches the accented catalogue labels.
     //
-    // The fold is memoized against the raw needle because this is the one
-    // `row_match` caller that can't hold a folded shadow: `matches` is invoked
-    // per *field*, not per pass — `row-visible` is three of them, and the page
-    // has dozens of call sites across eleven cards, all live at once while
-    // searching. Folding inside meant one `String` per invocation for a value
-    // that doesn't change until the next keystroke. One short string, replaced
-    // rather than accumulated — not a cache in the LRU sense.
+    // The fold is memoized against the raw needle because this is the one `row_match`
+    // caller that can't hold a folded shadow: `matches` is invoked per *field*, not per
+    // pass, and the page has dozens of call sites live at once while searching.
     let folded: RefCell<(String, Needle)> = RefCell::new((String::new(), Needle::default()));
     page.on_matches(move |haystack, needle| {
         let mut memo = folded.borrow_mut();
@@ -125,18 +112,14 @@ pub fn install(ui: &AppWindow, state: &AppState) {
         ModelRc::from(Rc::new(VecModel::from(rows)))
     });
 
-    // The tab bar two-way binds `tab-idx`, so the UI is already showing the
-    // new tab by the time this runs — the disk write is pure catch-up and a
-    // failure must not try to undo it.
-    //
-    // Hand-rolled rather than `spawn_blocking_logged!`, which this otherwise
-    // matches: a tab pick already logs its own `nav:` line, so the macro's
-    // `view state:` line would say the same thing twice. `my_library`'s tab
-    // persist bypasses it for the same reason.
+    // The tab bar two-way binds `tab-idx`, so the UI is already showing the new tab and
+    // the disk write is pure catch-up. Hand-rolled rather than `spawn_blocking_logged!`,
+    // which this otherwise matches: a tab pick already logs its own `nav:` line, so the
+    // macro's `view state:` line would say the same thing twice.
     let s = state.clone();
     let weak = ui.as_weak();
     page.on_tab_changed(move |tab| {
-        // Like the two curated pages: a tab pick moves no nav index, so
+        // As on the two curated pages: a tab pick moves no nav index, so
         // `nav_history::record_current` never hears about it.
         if let Some(ui) = weak.upgrade() {
             crate::ui::view_tag::log_current(&ui);

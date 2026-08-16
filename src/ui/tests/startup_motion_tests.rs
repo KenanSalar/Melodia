@@ -1,12 +1,11 @@
 //! Source pins for what the window does on the frame it opens.
 //!
-//! Two components decide that, and neither has a Rust module the contract could sit
-//! beside. `ViewTransition` fades and slides the view mounted at launch, which is what
-//! "Skip Startup Animation" turns off; `MiniPlayerSwitch` used to fade the *whole shell*
-//! out and back, having read the construction-time 0×0 window as miniplayer size and the
-//! first real layout as a swap out of it. They are pinned together because they were one
-//! symptom — a window that spends its first moments dark — and a later edit that restores
-//! either half puts that symptom back on its own.
+//! Two components decide that, and neither has a Rust module the contract could sit beside.
+//! `ViewTransition` fades and slides the view mounted at launch, which is what "Skip
+//! Startup Animation" turns off; `MiniPlayerSwitch` reads the construction-time 0×0 window
+//! as miniplayer size, so the first real layout looks like a swap out of it. Pinned
+//! together because they are one symptom — a window that spends its first moments dark —
+//! and restoring either half puts that symptom back on its own.
 
 use crate::test_support::strip_line_comments;
 
@@ -37,15 +36,12 @@ fn following(lines: &[String], from: usize, n: usize) -> Vec<&str> {
     lines.iter().skip(from).take(n).map(String::as_str).collect()
 }
 
-/// The launch mount reads the suppression and hands it back once it has settled.
-///
-/// Both halves are load-bearing and a later edit would separate them. `settled` is where the
-/// flag has to be read because that is where the entrance is decided and nothing else
-/// consults it, so a mount that stops reading it animates as though the setting were off.
-/// Clearing it one statement *after* `shown` is what stops the clear fading the settled page
-/// back out. And the `enabled` gate is what keeps a nested body that never animates — My
-/// Library's tab bodies mount at boot with `enabled: false` — from dropping the flag for the
-/// page above it.
+/// The launch mount reads the suppression and hands it back once it has settled, and all
+/// three halves are load-bearing. `settled` is where the flag has to be read, that being
+/// where the entrance is decided; clearing it one statement *after* `shown` is what stops
+/// the clear fading the settled page back out; and the `enabled` gate keeps a nested body
+/// that never animates — My Library's tab bodies mount at boot with `enabled: false` —
+/// from dropping the flag for the page above it.
 #[test]
 fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
     let lines = code_lines(VIEW_TRANSITION);
@@ -82,15 +78,14 @@ fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
 /// `active` reads `true` at construction because the host has no size yet, and it has to
 /// keep doing so — `SectionActiveGate` baselines on that pass — so the first real layout
 /// reaches the handler looking exactly like a swap out of miniplayer mode. The guard
-/// therefore belongs on the *swap*, and it has to ask about `render-active` rather than
-/// about who got there first: the seed timer and this handler both run on the loop's first
-/// pump, timers ahead of change handlers, so any latch either of them sets is a latch this
-/// handler always finds already closed.
+/// therefore belongs on the *swap*, and has to ask about `render-active` rather than who
+/// got there first: the seed timer and this handler both run on the loop's first pump,
+/// timers ahead of change handlers, so any latch either sets is one this handler always
+/// finds already closed.
 ///
 /// Which leaves the seed `Timer` as the only thing that ever mounts a branch without a
 /// threshold crossing, so it is pinned here too: a launch already below the threshold
-/// produces no `changed` at all, and without that write `render-active` sits at its declared
-/// `false` and the miniplayer never appears.
+/// produces no `changed` at all, and `render-active` would sit at its declared `false`.
 #[test]
 fn the_swap_fade_is_gated_on_the_branch_actually_changing() {
     let lines = code_lines(MINI_SWITCH);
@@ -104,8 +99,7 @@ fn the_swap_fade_is_gated_on_the_branch_actually_changing() {
     );
 
     // Bounded by the next declaration rather than a line count: `swap-timer`'s body writes
-    // `render-active` the same way, so a window that overran the seed timer would keep
-    // passing on that copy with the write this pins deleted.
+    // `render-active` the same way, so an overrunning walk passes on that copy.
     let seed = index_of(&lines, "seed-timer := Timer {");
     let swap = index_of(&lines, "swap-timer := Timer {");
     assert!(swap > seed, "the two timers changed places; this walk reads them in order");

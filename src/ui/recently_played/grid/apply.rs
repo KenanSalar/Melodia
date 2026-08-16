@@ -26,39 +26,29 @@ pub(super) struct PreparedGrid {
     tab: RecentlyPlayedTab,
     /// Empty unless [`Self::tab`] is `MostPlayed`.
     pub(super) most_played: Vec<UiEntityStripRow>,
-    /// The filtered count that gates the grid's `GridEmptyState`. `0` on the
-    /// Songs tab, where nothing reads it: both readers of
-    /// `RecentlyPlayed.most-played-count` sit inside the Most Played branch, and
-    /// the band takes its facts from `RecentlyPlayedUiState::most_played_totals`
-    /// rather than from here.
+    /// The filtered count gating the grid's `GridEmptyState`. `0` on Songs,
+    /// where nothing reads it — the band takes its facts from
+    /// `RecentlyPlayedUiState::most_played_totals` instead.
     pub(super) most_played_count: usize,
-    /// Hash of everything that reaches a card, taken from the **source**
-    /// entities rather than the built rows. `#[derive(Hash)]` keeps it complete
-    /// when a field is added, where a hand-listed set would quietly go stale.
-    /// `0` on the Songs tab, matching what [`mounted_content`] answers there.
+    /// Hash of everything reaching a card, off the **source** entities rather
+    /// than the built rows: `#[derive(Hash)]` stays complete when a field is
+    /// added, where a hand-listed set goes quietly stale.
     pub(super) most_played_content: u64,
 }
 
-/// Re-walk the cached `most_played` Vec through the current
-/// `RecentlyPlayed.filter`, hashing and counting the survivors as they go. Runs
-/// entirely in memory and touches no Slint state, so either thread can call it.
+/// Re-walk the cached `most_played` through the current filter, hashing and
+/// counting the survivors as it goes. Entirely in memory and touching no Slint
+/// state, so either thread can call it — the mounted tab comes off the
+/// [`RecentlyPlayedUi`] shadow, the only form of that answer a worker can read.
 ///
-/// **Nothing is walked on the Songs tab**, which is the same mounted-tab-only
-/// rule `songs::build_filtered_tracks` holds from the other side. The two
-/// sub-views are mutually exclusive `if`s, so
-/// neither the rows nor the count reaches anything there — and the walk is not
-/// free: the query behind this cache is uncapped and library-wide, and
-/// [`apply_filtered_grid_now`] calls this **on the UI thread** from
-/// `on_filter_changed` and `on_columns_changed`, so a settled keystroke was
-/// folding a needle against every played track and pushing each one's six
-/// strings through a hasher for a grid nobody can see. The bail is safe because
-/// [`mounted_content`] already collapses the Songs arm to a constant `0`: the
-/// signature never depended on this hash there, and the tab pick itself runs
-/// `apply_filtered_grid_now` on the way in, so the count is rebuilt before the
-/// grid it gates can mount.
-///
-/// Which tab is mounted comes off the [`RecentlyPlayedUi`] shadow, the only form
-/// of the answer a worker can read.
+/// **Nothing is walked on the Songs tab**, the mounted-tab-only rule
+/// `songs::build_filtered_tracks` holds from the other side. The two sub-views
+/// are mutually exclusive `if`s so neither rows nor count reaches anything
+/// there, and the walk is far from free: the query behind this cache is uncapped
+/// and library-wide, and [`apply_filtered_grid_now`] calls this **on the UI
+/// thread**. The bail is safe because [`mounted_content`] already collapses the
+/// Songs arm to a constant `0`, and the tab pick runs `apply_filtered_grid_now`
+/// on the way in, so the count is rebuilt before the grid it gates can mount.
 pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
     let tab = rp_ui.active_tab();
     if tab != RecentlyPlayedTab::MostPlayed {
@@ -73,10 +63,9 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
     let needle = rp_ui.state().filter.lock().clone();
     let mut hasher = DefaultHasher::new();
     let cache = rp_ui.state().most_played.lock();
-    // An empty needle keeps every row, and this cache is library-sized — a
-    // `Filter`'s `size_hint` floor of `0` would otherwise grow the `Vec` from
-    // nothing, reallocating and copying its way up. A real needle reserves
-    // nothing: no cheap thing predicts the survivor count.
+    // An empty needle keeps every row of a library-sized cache, where a
+    // `Filter`'s `size_hint` floor of `0` would grow the `Vec` from nothing. A
+    // real needle reserves nothing — no cheap thing predicts the survivor count.
     let mut most_played: Vec<UiEntityStripRow> =
         Vec::with_capacity(if needle.is_empty() { cache.len() } else { 0 });
     most_played.extend(
@@ -98,51 +87,35 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
 }
 
 /// Chunk the prepared rows into cards and push them into the grid's model. UI
-/// thread only.
+/// thread only, and takes `prepared` **by value** so the rows move into the
+/// per-row models rather than being cloned into them.
 ///
-/// The count is published unchunked beside the model: `rows.length` is a row
-/// count where the `GridEmptyState` wants cards. It is written on either tab, but
-/// only stands for something on Most Played — [`build_filtered_grid`] walks
-/// nothing on Songs, so there it is a constant `0`. That is safe for the same
-/// reason the skip below is: every reader of it sits inside the Most Played branch
-/// or under a `tab-idx` gate, so a count nothing walked is one nothing can render,
-/// and picking that tab is itself a signature change that recomputes it. **What
-/// the pick then owes is the sentinel**, when the cache it recomputed against is
-/// one a skipped tick left empty — `callbacks::recently_played::subviews` argues it.
+/// The count is published unchunked beside the model, `rows.length` being a row
+/// count where `GridEmptyState` wants cards. On Songs it is a constant `0`,
+/// which is safe because every reader sits inside the Most Played branch or
+/// under a `tab-idx` gate — and picking that tab is itself a signature change
+/// that recomputes it.
 ///
-/// **And what *this* owes the sentinel is being written above the signature
-/// guard.** The pick stamps a signature against that empty cache and then rewinds
-/// the count, so when the fetch it spawned returns the same content — nothing
-/// played yet, or a tick that didn't move this ranking — the guard fires and the
-/// sentinel is left with no answer coming. `-1` misses `> 0` as well as `== 0`,
-/// so that strands the Shuffle pill as well as the empty state. And when the
-/// guard fires the model already holds exactly `prepared`, so the count written
-/// above it is by construction the one the model shows.
-///
-/// **Hoisting it past the guard costs nothing, rather than costing a little.**
-/// The guard is there to skip a `write_grid` `set_vec` reset that tears down
-/// every mounted card, and the tempting reading is that a scalar write is merely
-/// a cheaper thing to have stopped skipping — which invites weighing it again
-/// later. It isn't: `Property::set` is value-compared
-/// (`i-slint-core`'s `properties.rs`, `*self.value.get() != t && …`), so on the
-/// path the guard would have taken the count is unchanged, nothing is stored and
-/// no dependent is marked dirty. The write is free exactly when it is redundant.
+/// **It is written above the signature guard, and that is load-bearing.** A pick
+/// stamps a signature against the cache it walked and rewinds the count to the
+/// sentinel; when the fetch it spawned returns the same content the guard fires,
+/// and past it the sentinel would be left with no answer coming — stranding the
+/// Shuffle pill as well as the empty state, `-1` matching neither `> 0` nor
+/// `== 0`. When the guard fires the model already holds exactly `prepared`, so
+/// the count above it is by construction the one the model shows. And hoisting
+/// costs *nothing*, not merely little: `Property::set` is value-compared, so on
+/// the path the guard would have taken nothing is stored and no dependent is
+/// marked dirty.
 ///
 /// Three things short-circuit it. A hidden section is never written to — the
-/// leave teardown emptied this model deliberately, and refilling it behind that
-/// holds a card row per track for a view nobody can see. An apply carrying
-/// another tab's rows is dropped: [`build_filtered_grid`] materializes only the
-/// mounted tab, so a pick landing between the build and this write would empty
-/// the grid it just filled — and there is nothing to salvage, because that pick
-/// ran [`apply_filtered_grid_now`] synchronously against the same cache on its
-/// way through. And an apply that would repaint what is already on screen is
-/// dropped: `write_grid` is a `set_vec` reset, so it tears down and rebuilds
-/// every mounted card, and a `stats_changed` tick reaches both tabs while only
-/// this one is ranked by play count.
-///
-/// Takes `prepared` **by value**, so the rows move into the per-row models
-/// rather than being cloned into them. The three early returns below drop them
-/// instead, which is what happened to them anyway.
+/// leave teardown emptied this model deliberately, and refilling it holds a card
+/// row per track for a view nobody can see. An apply carrying another tab's rows
+/// is dropped, [`build_filtered_grid`] materializing only the mounted tab, so a
+/// pick landing in the gap would empty the grid it just filled — and nothing is
+/// lost, that pick having run [`apply_filtered_grid_now`] synchronously against
+/// the same cache. And an apply that would repaint what is already on screen is
+/// dropped, `write_grid` being a `set_vec` reset that tears down every mounted
+/// card, where a `stats_changed` tick reaches both tabs and only ranks one.
 fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: PreparedGrid) {
     if !rp_ui.section_active() {
         return;
@@ -155,9 +128,7 @@ fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: Prepa
         return;
     }
 
-    // Above the signature guard: a pick's `UNFETCHED_COUNT` rewind has no other
-    // answer coming, and the fetch that would give it one lands on the guard
-    // whenever the content hasn't moved. See the doc comment.
+    // Above the guard — see the doc comment.
     g.set_most_played_count(len_as_i32(prepared.most_played_count));
 
     let signature = grid_signature(tab, columns, mounted_content(tab, &prepared));
@@ -165,16 +136,15 @@ fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: Prepa
         return;
     }
 
-    // Covers a tab pick as well as a count change, because the signature above
-    // hashes the tab — so anything that moves what the band should say has
-    // already got past that early return.
+    // Covers a tab pick as well as a count change, the signature above hashing
+    // the tab — so anything that moves what the band says is already past the
+    // early return.
     crate::ui::hero_chips::publish_recently_played(ui, rp_ui);
 
-    // The Songs tab empties this rather than leaving it holding its last rows:
-    // keeping them would pin one `SharedString` per field of every card behind a
-    // tab the user has left. No branch is needed to do it — `build_filtered_grid`
-    // materialized rows only for `MostPlayed`, so the other's Vec is already
-    // empty and chunks to nothing.
+    // On Songs this empties the model rather than leaving it pinning a
+    // `SharedString` per field of every card behind a tab the user has left. No
+    // branch needed: `build_filtered_grid` materialized rows only for
+    // `MostPlayed`, so the Vec is already empty and chunks to nothing.
     write_grid(
         &g.get_most_played_rows(),
         chunk_entity_rows(prepared.most_played, columns),
@@ -207,23 +177,19 @@ pub(super) fn apply_filtered_grid(
 
 /// Apply for a settled keystroke: build on the calling worker, then post.
 ///
-/// **The one apply path that must not run on the UI thread.** Every other caller
-/// either already sits on a worker or is a tab pick that has to land
-/// synchronously; this one is a filter keystroke, and the cache it walks is the
-/// output of an uncapped, library-wide `get_most_played`. On the event loop that
-/// was a needle folded against every played track, each survivor's six strings
-/// pushed through a hasher and three `SharedString`s built for it, every 130 ms
-/// while the user types.
+/// **The one apply path that must not run on the UI thread.** The cache it walks
+/// is an uncapped, library-wide `get_most_played`, so on the event loop a
+/// keystroke folded a needle against every played track, hashed each survivor
+/// and built three `SharedString`s for it, per debounce interval while typing.
 ///
 /// Deferring is safe here in a way it is not for a pick — the tab isn't moving,
-/// so the model already holds the previous needle's rows rather than the empty
-/// set a leave writes, and a late apply updates them instead of painting a bare
-/// panel. What deferring *does* cost is ordering: two builds can finish in either
-/// order, and [`write_filtered_grid`]'s signature check reads a stale set as a
-/// change rather than as staleness. Hence `generation`, checked twice — once
-/// here to drop the walk's result before it is worth posting, and again on the
-/// UI thread, where a newer keystroke may have landed while the post was in
-/// flight.
+/// so the model still holds the previous needle's rows rather than the empty set
+/// a leave writes, and a late apply updates them instead of painting a bare
+/// panel. What it *costs* is ordering: two builds can finish either way round,
+/// and [`write_filtered_grid`]'s signature check reads a stale set as a change
+/// rather than as staleness. Hence `generation`, checked twice — here before the
+/// post is worth making, and again on the UI thread, where a newer keystroke may
+/// have landed in flight.
 pub fn apply_filtered_grid_settled(
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &Weak<AppWindow>,

@@ -1,36 +1,24 @@
 //! Opening a native file dialog against the main window.
 //!
-//! `rfd` will happily build a parentless dialog, and on Linux that is
-//! indistinguishable from a correct one — the XDG portal parents OS-side
-//! regardless of what we hand it. On Windows and macOS the same dialog opens
-//! *behind* Melodia. So the parenting is invisible on the platform every one of
-//! these is written and reviewed on, which is why it lives here rather than at
-//! five call sites. `ui::file_dialog::tests::every_native_dialog_is_built_by_the_shared_helper`
-//! pins that it stays that way, by walking the tree rather than by naming those
-//! five — the site that would get it wrong is the one nobody has written yet — and
-//! holds this file to still making the `set_parent` call, since deleting it here
-//! unparents all five at once and looks like a simplification.
+//! `rfd` will happily build a parentless dialog, and on Linux that is indistinguishable
+//! from a correct one — the XDG portal parents OS-side regardless — where on Windows and
+//! macOS it opens *behind* Melodia. The parenting is invisible on the platform every one
+//! of these is written and reviewed on, hence one helper rather than five call sites. Its
+//! test walks the tree instead of naming them, and pins this file to still calling
+//! `set_parent` — deleting it here unparents all five and reads as a simplification.
 
 use slint::ComponentHandle;
 
 use crate::AppWindow;
 
-/// A native dialog parented to the main window, titled `title`.
+/// A native dialog parented to the main window, titled `title`. Chain the rest at the call
+/// site.
 ///
-/// Chain the rest at the call site — `add_filter`, `set_file_name`, and the
-/// `pick_*` / `save_file` terminator all take and return the builder.
-///
-/// **Call from the UI thread**, i.e. inside a `slint::spawn_local`, which is
-/// where every caller already sits: `Weak::upgrade` is UI-thread-only, and on
-/// Linux that is also the only thread the GTK/portal-backed dialog may be
-/// invoked from.
-///
-/// A dropped window is not an error — the dialog is simply built unparented,
-/// which is the same thing that happens off Windows and macOS anyway.
-/// `set_parent` only stashes the raw window / display handles (rfd 0.17.2,
-/// `file_dialog.rs::set_parent`), so the strong handle taken here may drop as
-/// soon as this returns; the Slint window itself stays alive through the
-/// `AppWindow` `main.rs` owns.
+/// **Call from the UI thread**, where every caller already sits: `Weak::upgrade` is
+/// UI-thread-only, and on Linux so is the GTK/portal-backed dialog. A dropped window is
+/// not an error — the dialog is built unparented, which is what happens off Windows and
+/// macOS anyway. `set_parent` only stashes the raw window / display handles (rfd 0.17.2),
+/// so the strong handle taken here may drop as soon as this returns.
 pub fn parented(weak: &slint::Weak<AppWindow>, title: &str) -> rfd::AsyncFileDialog {
     let dialog = rfd::AsyncFileDialog::new().set_title(title);
     match weak.upgrade() {

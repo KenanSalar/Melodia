@@ -1,18 +1,13 @@
 //! Source-level pins on `melodia-ui/ui/components/hero/tab-search-header.slint`.
 //!
-//! The tab bar and the filter box sharing one row, plus the width budget dividing it —
-//! the row `LibraryTabBand`, `MosaicTabHero` and `settings-view.slint` each spelled out
-//! before it was a component. Five separately paid-for fixes live in it, every one of
-//! them invisible in review, which is why they were pinned in the first place.
+//! The tab bar and the filter box sharing one row, plus the width budget dividing it.
+//! Five separately paid-for fixes live in it, every one invisible in review, which is
+//! why they are pinned at all — and one copy of each, where three hosts once spelled the
+//! row out for themselves. Each band keeps a single pin that it still mounts this row
+//! and forwards what its host reads back.
 //!
-//! **These pins used to be written twice**, once in `library_tab_band_tests.rs` and once
-//! in `mosaic_tab_hero_tests.rs`, worded the same way on purpose — the duplication in the
-//! tests being the duplication in the sources, seen from the other side. There is one
-//! copy now, and each band keeps a single pin that it still mounts this row and forwards
-//! what its host reads back.
-//!
-//! They live here rather than under a host for the `tab_bar_tests.rs` reason — no Rust
-//! module owns the file.
+//! Here rather than under a host for the `tab_bar_tests.rs` reason: no Rust module owns
+//! the file.
 
 use crate::test_support::{binding_value as binding, strip_line_comments};
 
@@ -26,14 +21,12 @@ fn code() -> String {
 
 /// **The floor is published rather than restated.**
 ///
-/// Each host draws this row from its own width mirror, which is a plausible guess for one
-/// frame before the first layout reports the truth — and that seed has to be the row's own
+/// Each host draws this row from its own width mirror, a plausible guess for the frame
+/// before the first layout reports the truth — and that seed has to be the row's own
 /// floor. Seeded wide, the bar believes it can afford full-width tabs, draws them into a
-/// panel that can't seat them, and they spill under the search bar, which is what a
-/// miniplayer → full swap reliably produces.
-///
-/// Publishing it is what stopped three hosts each summing `compact-w + 2 * pad-md +
-/// search-w-max` for themselves.
+/// panel that can't seat them, and they spill under the search bar, which a miniplayer →
+/// full swap reliably produces. Publishing it is what stopped three hosts each summing
+/// the same terms.
 #[test]
 fn the_row_publishes_its_own_floor() {
     let floor = binding(HEADER, "out property <length> row-floor:");
@@ -108,10 +101,9 @@ fn the_sub_view_slide_is_disarmed_until_the_first_switch() {
         "the bar's `selected` handler must arm the slide — nothing else can tell a real switch \
          from the page mounting"
     );
-    // Pinned down to the operand: the direction has to come off the bar's own
-    // `previous-index`, since `tab-idx` and everything bound to it already read the tab
-    // just picked. A local mirror reintroduced here would compare `i` against `i` and
-    // enter from the left every time.
+    // Down to the operand: the direction has to come off `previous-index`, `tab-idx` and
+    // everything bound to it already reading the tab just picked. A local mirror here
+    // would compare `i` against `i` and enter from the left every time.
     assert!(
         handler.contains("root.tab-enter-from = i > bar.previous-index"),
         "the `selected` handler must set the direction from `bar.previous-index`, and *before* it \
@@ -128,9 +120,8 @@ fn the_sub_view_slide_is_disarmed_until_the_first_switch() {
 ///
 /// The other half — that the row draws no pill of its own — is
 /// `placeholder_tests::no_shared_band_draws_its_own_tooltip`, which walks
-/// `components/hero/` rather than asserting it here, in `library_tab_band_tests` and in
-/// `mosaic_tab_hero_tests` as it used to. Publishing an anchor and drawing nothing are two
-/// rules: this one is the row's alone, that one is every band's.
+/// `components/hero/`. Publishing an anchor and drawing nothing are two rules: this one
+/// is the row's alone, that one every band's.
 #[test]
 fn the_row_publishes_every_tooltip_anchor_its_host_needs() {
     for prop in [
@@ -155,13 +146,10 @@ fn the_row_publishes_every_tooltip_anchor_its_host_needs() {
          possible, and a snapshotted rect goes stale the moment anything resizes the bar"
     );
     // **Both anchors owe the bar's own offset inside the row**, and only `x` can lose it
-    // silently: a host adds its own `header ↔ root` delta and has no way to reach past
-    // that into where the bar sits. With a leading slot — `LibraryTabBand`'s back button,
-    // which is `@children` and therefore laid out *before* the bar — that is the whole
-    // `lead-w`, so the pill lands a back button's width left of the tab it names, and
-    // only while a detail is open. The two mounts with no leading slot put the bar at
-    // `x == 0`, which is what makes the omission invisible in four of the six places you
-    // would look.
+    // silently: a host adds its own `header ↔ root` delta and cannot reach past that
+    // into where the bar sits. With a leading slot that offset is the whole `lead-w`, so
+    // the pill lands a back button's width left of the tab it names — and only while a
+    // detail is open, the mounts without one putting the bar at `x == 0`.
     for (prop, axis) in [("tip-x", "x"), ("tip-y", "y")] {
         assert!(
             binding(HEADER, &format!("out property <length> {prop}:"))

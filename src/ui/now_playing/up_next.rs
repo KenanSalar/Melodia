@@ -16,12 +16,10 @@ use crate::ui::queue_sheet::to_slint_queue_row;
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Nav, NowPlaying, QueueRow};
 
-/// Subscribe to `sinks.queue`. While the view is closed the subscriber
-/// only stashes the latest snapshot into `NowPlayingState::latest_qvm`;
-/// while it's open it rebuilds the Up Next list — but only when the
-/// visible id slice actually changed — and resets the
-/// `NowPlaying.slide-phase` animation counter on actual current-track
-/// changes.
+/// Subscribe to `sinks.queue`. Closed, the subscriber only stashes the latest snapshot
+/// into `NowPlayingState::latest_qvm`; open, it rebuilds the Up Next list when the
+/// visible id slice actually changed, and resets `NowPlaying.slide-phase` on a real
+/// current-track change.
 pub(super) fn spawn_up_next_subscriber(
     ui: &AppWindow,
     state: &AppState,
@@ -39,27 +37,22 @@ pub(super) fn spawn_up_next_subscriber(
             let Some(ui) = weak.upgrade() else { break };
             let Some(qvm) = snapshot else { continue };
 
-            // Skip the rebuild when nothing that renders the model is on
-            // screen — neither the full-screen Now Playing view nor the
-            // square miniplayer variant. Stash the snapshot so a later
-            // open can rebuild from it.
+            // Nothing that renders the model is on screen, so stash the snapshot for a
+            // later open.
             if !np_state.open.get() && !np_state.mini_visible.get() {
                 *np_state.latest_qvm.borrow_mut() = Some(qvm);
                 continue;
             }
 
-            // View open: rebuild only when the visible slice actually
-            // changed. A reorder/add *below* the Up Next window leaves the
-            // rendered ids identical — diffing 20 freshly-built rows away
-            // is pure waste. A current-track change always rebuilds (the
-            // base index shifts) and additionally restarts the slide.
+            // Rebuild only when the visible slice actually changed: a reorder or add
+            // *below* the window leaves the rendered ids identical. A current-track
+            // change always rebuilds, the base index shifting, and restarts the slide.
             let new_ids = upcoming_id_slice(&qvm);
             let current_id = current_track_id(&qvm);
             let track_changed = current_id != np_state.last_current_id.get();
             let ids_changed = *np_state.rendered_ids.borrow() != new_ids;
-            // Snapshot the *old* visible ids before the rebuild overwrites
-            // them — needed only on a track change, to look up the row
-            // that fell off the bottom for the Backward outgoing overlay.
+            // Before the rebuild overwrites them: needed only on a track change, to
+            // look up the row that fell off the bottom for the outgoing overlay.
             let old_rendered_ids: Vec<i64> = if track_changed {
                 np_state.rendered_ids.borrow().clone()
             } else {
@@ -71,12 +64,9 @@ pub(super) fn spawn_up_next_subscriber(
             }
             if track_changed {
                 let kind = classify_step(np_state.last_queue_index.get(), &qvm);
-                // The track that fell off the bottom of the *old* visible
-                // list — captured before the rebuild overwrote
-                // `rendered_ids`. For a Backward step it becomes the
-                // outgoing overlay row, but only if it actually fell off
-                // (i.e. is no longer in the new visible slice — short
-                // lists that grew by one don't drop anything).
+                // The track that fell off the bottom of the *old* list becomes the
+                // Backward step's outgoing overlay row — but only if it really fell
+                // off, a short list that grew by one dropping nothing.
                 let dropped_tail_id = old_rendered_ids
                     .last()
                     .copied()
@@ -85,11 +75,10 @@ pub(super) fn spawn_up_next_subscriber(
 
                 np_state.last_current_id.set(current_id);
                 np_state.last_queue_index.set(qvm.queue_index);
-                // Direct property writes — land in the same render as the
-                // model swap above (one render follows both), so there's
-                // no post-advance flash. Direction and outgoing-row are
-                // set *before* the phase reset so the timer's first tick
-                // already has the right offset and content.
+                // Direct writes, landing in the same render as the model swap above, so
+                // there is no post-advance flash. Direction and outgoing row go
+                // *before* the phase reset, so the timer's first tick already has the
+                // right offset and content.
                 let np = ui.global::<NowPlaying>();
                 if let Some(row) = outgoing_row {
                     np.set_outgoing_row(row);
@@ -115,9 +104,8 @@ pub(super) fn spawn_up_next_subscriber(
 /// - `crate::ui::shell::mini_player::install` — via `NowPlayingState::kick_up_next`,
 ///   when the responsive miniplayer becomes visible.
 ///
-/// Resets the slide bookkeeping (`last_current_id`, `last_queue_index`) so
-/// the next real track change picks the right direction without replaying
-/// a phantom animation for changes that happened while closed.
+/// Resets the slide bookkeeping so the next real track change picks the right direction
+/// without replaying a phantom animation for changes that happened while closed.
 pub(super) fn seed_from_stash(
     ui: &AppWindow,
     up_next_model: &Rc<VecModel<QueueRow>>,
@@ -131,9 +119,8 @@ pub(super) fn seed_from_stash(
     np_state.last_queue_index.set(qvm.queue_index);
 }
 
-/// Wire `Nav.now-playing-open-changed` (mirrored from the Slint side — see
-/// `app-window.slint`). Updates the shared `open` flag and, on open, seeds
-/// everything the two subscribers skipped while the view was closed.
+/// Wire `Nav.now-playing-open-changed`, mirrored from `app-window.slint`. Updates the
+/// shared `open` flag and, on open, seeds what the two subscribers skipped while closed.
 pub(super) fn wire_now_playing_open(
     ui: &AppWindow,
     state: &AppState,
@@ -146,12 +133,10 @@ pub(super) fn wire_now_playing_open(
     ui.global::<Nav>().on_now_playing_open_changed(move |is_open| {
         np_state.open.set(is_open);
         if !is_open {
-            // View closed — drop the decoded cover + blur buffers and hand
-            // the pages back to the OS. The currently-displayed track's
-            // buffers stay alive (the `Player` global still references the
-            // `Image`s), so a same-track reopen still shows it without a
-            // decode; only the LRU's other entries are freed. Off the UI
-            // thread — `clear()` drops buffers and `trim()` walks arenas.
+            // Drop the decoded cover and blur buffers and hand the pages back. The
+            // displayed track's stay alive, the `Player` global still referencing its
+            // `Image`s, so a same-track reopen needs no decode. Off the UI thread —
+            // `clear()` drops buffers and `trim()` walks arenas.
             let np_artwork = np_artwork.clone();
             state.runtime.spawn_blocking(move || {
                 np_artwork.clear();
@@ -161,14 +146,12 @@ pub(super) fn wire_now_playing_open(
         }
         let Some(ui) = weak.upgrade() else { return };
 
-        // Up Next: rebuild from the latest snapshot stashed while closed.
         seed_from_stash(&ui, &up_next_model, &np_state);
 
-        // Artwork + chips: seed for the current track, but only if it
-        // differs from whatever is already written into the `Player`
-        // global — a close/re-open with no track change in between needs
-        // no decode. `animate = false`: the cover should already be there
-        // when the view appears, not cross-fade in.
+        // Artwork and chips, but only when the track differs from what is already in
+        // the `Player` global — a close and re-open with no change between needs no
+        // decode. `animate = false`: the cover should already be there when the view
+        // appears, not cross-fade in.
         let current_track = np_state.current_track.borrow().clone();
         let current_id = current_track.as_ref().map(|t| t.id);
         if current_id != np_state.applied_track_id.get() {
@@ -187,19 +170,17 @@ pub(super) fn wire_now_playing_open(
     });
 }
 
-/// What kind of step the current-track change was. Drives both the
-/// slide direction and which row (if any) gets rendered as the
-/// transient "outgoing" overlay during the animation.
+/// What kind of step the current-track change was, driving both the slide direction and
+/// which row, if any, renders as the transient "outgoing" overlay.
 #[derive(Clone, Copy)]
 enum SlideKind {
-    /// Forward step (incl. wrap from last → first under repeat-all/one).
-    /// The just-promoted track slides off the top with the list.
+    /// A forward step, wrap from last to first included. The just-promoted track slides
+    /// off the top with the list.
     Forward,
-    /// Backward step (incl. wrap from first → last under repeat-all/one).
-    /// The row that fell off the visible bottom slides off the bottom.
+    /// A backward step, wrap included. The row that fell off the visible bottom slides
+    /// off the bottom.
     Backward,
-    /// Anything else (skip-to / queue rebuild). Animates forward by
-    /// default; no outgoing overlay row.
+    /// A skip-to or a queue rebuild: animates forward, with no outgoing overlay.
     Other,
 }
 
@@ -212,9 +193,8 @@ impl SlideKind {
     }
 }
 
-/// Classify the transition from `old_idx` to `qvm.queue_index`,
-/// recognising single-step forward / backward moves with wrap-around so
-/// repeat-all and repeat-one navigation animates the right way.
+/// Classify the transition from `old_idx`, recognising single-step moves *with*
+/// wrap-around so repeat-all and repeat-one navigation animates the right way.
 fn classify_step(old_idx: i32, qvm: &QueueViewModel) -> SlideKind {
     let new_idx = qvm.queue_index;
     let len = len_as_i32(qvm.queue_tracks.len());
@@ -230,12 +210,9 @@ fn classify_step(old_idx: i32, qvm: &QueueViewModel) -> SlideKind {
     }
 }
 
-/// Build the "outgoing" row for the slide animation, if any.
-/// `Forward`: the just-promoted track (`current_id` — was at the top of
-/// the old Up Next). `Backward`: `dropped_tail_id` — the track that
-/// fell off the bottom of the old visible list (only set by the caller
-/// when it actually fell off, never when the list merely grew).
-/// `Other`: never.
+/// The "outgoing" row for the slide, if any: on `Forward` the just-promoted track, which
+/// was at the top of the old list; on `Backward` the one that fell off the bottom, which
+/// the caller only passes when it really fell off.
 fn outgoing_row(
     kind: SlideKind,
     qvm: &QueueViewModel,
@@ -251,13 +228,12 @@ fn outgoing_row(
     Some(to_slint_queue_row(track.as_ref(), false))
 }
 
-/// Play-order indices of the next `UP_NEXT_N` tracks after the current
-/// one (current excluded), plus the play-order base index (`queue_index +
-/// 1`, clamped; `queue_index` is -1 when nothing is playing → base 0).
+/// Play-order indices of the next `UP_NEXT_N` tracks after the current one, plus the
+/// base index — `queue_index + 1` clamped, since `queue_index` is `-1` with nothing
+/// playing.
 ///
-/// With `RepeatMode::All` or `RepeatMode::One` the queue is a cycle: the
-/// slice wraps past the end back to the start, stopping just before the
-/// current track again. `RepeatMode::Off` uses a plain forward slice.
+/// Under `RepeatMode::All` or `One` the queue is a cycle, so the slice wraps past the
+/// end and stops just before the current track again; `Off` takes a plain forward slice.
 pub(super) fn upcoming_indices(qvm: &QueueViewModel) -> (Vec<usize>, usize) {
     let len = qvm.queue_tracks.len();
     let base = usize::try_from(qvm.queue_index + 1).unwrap_or(0);
@@ -270,18 +246,16 @@ pub(super) fn upcoming_indices(qvm: &QueueViewModel) -> (Vec<usize>, usize) {
     (indices, base)
 }
 
-/// The track ids the Up Next list *would* render for `qvm` — the cheap
-/// pre-check the subscriber uses to skip an unchanged rebuild.
+/// The track ids the list *would* render for `qvm` — the cheap pre-check the subscriber
+/// skips an unchanged rebuild on.
 fn upcoming_id_slice(qvm: &QueueViewModel) -> Vec<i64> {
     let (indices, _) = upcoming_indices(qvm);
     indices.iter().map(|&i| qvm.queue_tracks[i].id).collect()
 }
 
-/// Rebuild `up_next_model` with the next `UP_NEXT_N` tracks after the
-/// current one and publish the play-order base index + queue length so row
-/// clicks can `Queue.skip-to` (with a modulo for the wrapped repeat-all
-/// case). Returns the rendered track-id slice for the caller's
-/// `NowPlayingState::rendered_ids` shadow.
+/// Rebuild `up_next_model` and publish the base index and queue length, so a row click
+/// can `Queue.skip-to` — with a modulo for the wrapped repeat-all case. Returns the
+/// rendered id slice for the caller's `rendered_ids` shadow.
 pub(super) fn rebuild_up_next(
     ui: &AppWindow,
     up_next_model: &Rc<VecModel<QueueRow>>,

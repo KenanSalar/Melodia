@@ -1,10 +1,9 @@
 //! Source pins for the My Library page.
 //!
-//! Every one of these holds something that builds, looks right, and is wrong: a tab
-//! whose gate was never mounted, a drill whose origin can't be restored, a section
-//! shadow seeded against the wrong question. None of it surfaces at runtime as a
-//! failure — it surfaces as a page that quietly refetches, or a back button that lands
-//! on the wrong tab.
+//! Every one holds something that builds, looks right, and is wrong: a tab whose gate
+//! was never mounted, a drill whose origin can't be restored, a section shadow seeded
+//! against the wrong question. None surfaces as a failure — it surfaces as a page that
+//! quietly refetches, or a back button that lands on the wrong tab.
 
 use super::{NAV_MY_LIBRARY, fold_retired_nav_index};
 
@@ -175,11 +174,11 @@ const DETAIL_GLOBALS: [(&str, &str); 3] = [
 ///
 /// The four destinations are all tabs of one page, so a drill starting there ends there:
 /// the tab bar names the detail's own tab for the whole visit, and a back arrow restoring
-/// the tab it came from contradicts the bar beside it. Mouse-4/5 is the control with
-/// history semantics, and it still steps back into the detail the drill came from.
+/// the tab it came from contradicts the bar beside it. Mouse-4/5 carries the history
+/// semantics instead.
 ///
-/// The mutation to catch is `origin-tab` coming back — either as a property or as a second
-/// write beside the nav index — since that is the shape the arrow's tab-jump had.
+/// The mutation to catch is `origin-tab` coming back, as a property or as a second write
+/// beside the nav index — the shape the arrow's tab-jump had.
 #[test]
 fn a_drill_inside_the_page_records_no_origin() {
     for (name, source) in DETAIL_GLOBALS {
@@ -223,10 +222,10 @@ fn a_drill_inside_the_page_records_no_origin() {
 
 /// **A same-tab grid open zeroes whatever origin is left over.**
 ///
-/// A "Go to Album" from Favorites stamps one and only `close-detail` clears it, so reaching
-/// that grid by any path that left the detail open sends the next back press to Favorites.
-/// Albums carried this line for years and its two siblings did not, which is the shape of
-/// the bug: correct at the site someone looked at, absent at the two they didn't.
+/// A "Go to Album" from Favorites stamps one and only `close-detail` clears it, so
+/// reaching that grid by any path that left the detail open sends the next back press to
+/// Favorites. One of the three carried this line and its two siblings didn't — correct
+/// at the site someone looked at, absent at the two they didn't.
 #[test]
 fn every_grid_open_zeroes_a_stale_origin() {
     const GRIDS: [(&str, &str, &str); 3] = [
@@ -342,17 +341,16 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
 
 /// **A drill-in, a back or a tab move reseats the box; none of them clears it.**
 ///
-/// The page has one filter box over nine surfaces, and only a tab *pick* clears it. Two
-/// other things move the surface under it. A detail id crossing zero, where both
-/// directions matter: on the way in the detail's own filter is already empty, so the box
-/// has to empty with it rather than show the grid's needle over a list it filters nothing
-/// of; on the way out the grid's needle is still there — untouched, and the rebuild is
-/// memoized on it — so the box has to say so rather than read empty over filtered cards.
-/// And a tab move that isn't a pick — a cross-tab drill, a Mouse-4/5 walk — which goes
-/// through `persist-tab-idx` precisely so it *doesn't* clear, leaving the entering tab's
-/// own needle in force with nothing having told the box.
+/// The page has one filter box over nine surfaces and only a tab *pick* clears it, so
+/// two other things move the surface under it. A detail id crossing zero, in both
+/// directions: on the way in the detail's own filter is empty, so the box has to empty
+/// with it rather than show the grid's needle over a list it filters nothing of; on the
+/// way out the grid's needle is untouched and its rebuild memoized on it, so the box has
+/// to say so rather than read empty over filtered cards. And a tab move that isn't a
+/// pick — a cross-tab drill, a Mouse-4/5 walk — which goes through `persist-tab-idx`
+/// precisely so it *doesn't* clear.
 ///
-/// The mutation to check is dropping the close half. Nothing fails, the grid comes back
+/// The mutation to check is dropping the close half: nothing fails, the grid comes back
 /// correctly filtered, and the box simply lies about why.
 #[test]
 fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
@@ -427,16 +425,14 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
 
 /// **The nine surfaces are enumerated exactly once, and everything routes through it.**
 ///
-/// The dispatch table used to be written out three times inside `filter.rs` — once to
-/// write a needle, once to read one back, once to rewind a count — with the
-/// `get_*_id() >= 0` detail predicate spelled twelve times between them, under a doc
-/// comment warning that asking twice is how the hand-off drifts apart. It is
-/// `on_mounted_surface!` now, over the pair `my_library::mounted_surface` resolves.
+/// Writing a needle, reading one back and rewinding a count all ask the same nine-way
+/// question, and asking it twice is how the hand-off drifts apart. It is
+/// `on_mounted_surface!` over the pair `my_library::mounted_surface` resolves.
 ///
-/// Pinned here rather than at each consumer for the reason the fold was made: a per-caller
-/// check is satisfied by a *copy*, which is the thing being prevented. The mutation to
-/// check is inlining any one arm back into a caller — the caller still reaches its own
-/// surface, so a body scan would pass.
+/// Pinned here rather than at each consumer for the reason the fold was made: a
+/// per-caller check is satisfied by a *copy*, which is the thing being prevented. The
+/// mutation to check is inlining any one arm back into a caller — that caller still
+/// reaches its own surface, so a body scan passes.
 #[test]
 fn the_nine_surfaces_are_enumerated_once_and_every_caller_routes_through_it() {
     let table = FILTER
@@ -493,28 +489,23 @@ fn the_nine_surfaces_are_enumerated_once_and_every_caller_routes_through_it() {
 
 /// **A tab pick clears the entering tab's needle only if it has one.**
 ///
-/// The pick runs ahead of the section gate, so the surface it dispatches into has already
-/// had its Rust cache wiped by its own leave. Dispatching unconditionally therefore
-/// rebuilds each of the four grid tabs from nothing — `total-count = 0` and an empty model,
-/// which is precisely the pair `GridEmptyState` mounts on, overwriting the
-/// `UNFETCHED_COUNT` sentinel the leave wrote to keep that panel quiet until the fetch
-/// answers. What the user saw was "No albums yet" on every pick into a grid tab, for the
-/// length of the query. Songs pays the same write without the lie: a second full-library
-/// row build on the event loop, on top of the one its fetch is already going to do.
+/// The pick runs ahead of the section gate, so the surface it dispatches into has
+/// already had its Rust cache wiped by its own leave. Dispatching unconditionally
+/// therefore rebuilds each grid tab from nothing — `total-count = 0` and an empty model,
+/// precisely the pair `GridEmptyState` mounts on, overwriting the `UNFETCHED_COUNT`
+/// sentinel the leave wrote to keep that panel quiet until the fetch answers. Songs pays
+/// the same write without the lie: a second full-library row build on the event loop.
 ///
-/// **And where it does dispatch, it puts the sentinel back.** The guard removes the common
-/// case and not the rare one: a tab left *filtered* is still cleared, still through the
-/// rebuild, so the `0` still lands. `rewind_grid_count` is what makes that honest — the
-/// leave already marked the view dirty, so the gate's re-fetch is on its way and all the
-/// pick owes is not to have said "there is nothing here" in the meantime. Songs is excluded
-/// because its model survives the leave and `refilter` re-derives a true count off it; the
-/// four details because a detail arm writes no grid count at all.
+/// **And where it does dispatch, it puts the sentinel back.** The guard removes the
+/// common case and not the rare one — a tab left *filtered* is still cleared through the
+/// rebuild, so the `0` still lands, and `rewind_grid_count` is what makes that honest.
+/// Songs is excluded because its model survives the leave and `refilter` re-derives a
+/// true count; the four details because a detail arm writes no grid count at all.
 ///
 /// The mutation to check is reinstating the bare `dispatch(&ui, "")`, which
-/// [`a_tab_pick_clears_the_filter_on_both_sides`] passes on just as happily — the box
-/// still clears, the routing is still nine-way, and the surface still ends up
-/// unfiltered. Only the frames in between are wrong, which is why the guard needs a pin
-/// of its own.
+/// [`a_tab_pick_clears_the_filter_on_both_sides`] passes on just as happily: the box
+/// clears, the routing is nine-way, and the surface ends up unfiltered. Only the frames
+/// in between are wrong.
 #[test]
 fn a_tab_pick_dispatches_only_into_a_tab_that_is_filtered() {
     let clear = FILTER
@@ -575,16 +566,15 @@ const OPEN_HANDLERS: [(&str, &str, &str); 4] = [
 
 /// **A fresh open clears the detail's own filter, and only that one.**
 ///
-/// The page's box is `MyLibrary.filter`, and the mirror that would announce the swap is
-/// the detail *id* — which `open_*` writes back at the value it already held whenever the
-/// call is a **section re-enter**, so there is no edge and nothing tells the box. Nav away
-/// from an open, filtered detail and back: the list comes up unfiltered under a box still
-/// holding the needle. The reseat rides the same `detail-scope-changed` seam.
+/// The mirror that would announce the swap is the detail *id*, which `open_*` writes
+/// back at the value it already held whenever the call is a **section re-enter** — so
+/// there is no edge and nothing tells the box, and a nav away from an open, filtered
+/// detail and back comes up unfiltered under a box still holding the needle. The reseat
+/// rides the same `detail-scope-changed` seam.
 ///
-/// **After the id write, not beside the clear**, which is the half a refactor loses: read
-/// earlier in the closure, `sync_box` answers for the grid the detail is still sitting over
-/// and writes *its* needle into the box, so a fresh drill would gain the bug the re-enter
-/// just lost.
+/// **After the id write, not beside the clear**, which is the half a refactor loses:
+/// read earlier in the closure, `sync_box` answers for the grid the detail is still
+/// sitting over and writes *its* needle into the box.
 #[test]
 fn a_fresh_open_reseats_the_shared_box_after_it_writes_the_id() {
     for (name, id_write, source) in OPEN_HANDLERS {
@@ -669,13 +659,13 @@ const CLOSE_HANDLERS: [(&str, &str); 4] = [
 
 /// **The band's hero reads a latched arm; everything else reads the live one.**
 ///
-/// The four `*-open` predicates flip on the frame the detail id clears, and that is the
-/// frame the exit morph *starts* — so a hero fact keyed on them falls through to whichever
-/// sibling global sits in its last ternary arm, and the band spends the whole collapse
-/// painting a fallback glyph, an empty title and `has-blur: false` instead of the banner it
-/// is collapsing out of. The latches lag by exactly one close. What must *not* lag is the
-/// body router, the pill row and the filter placeholder: which entity is painted is a
-/// question about the animation, which body is mounted is not.
+/// The four `*-open` predicates flip on the frame the detail id clears, which is the
+/// frame the exit morph *starts* — so a hero fact keyed on them falls through to
+/// whichever sibling global sits in its last ternary arm and the band spends the whole
+/// collapse painting a fallback glyph over an empty title. The latches lag by exactly
+/// one close. What must *not* lag is the body router, the pill row and the filter
+/// placeholder: which entity is painted is a question about the animation, which body is
+/// mounted is not.
 #[test]
 fn the_hero_reads_a_latched_arm_where_the_body_reads_the_live_one() {
     let code = code(VIEW);
@@ -752,14 +742,13 @@ fn the_hero_reads_a_latched_arm_where_the_body_reads_the_live_one() {
 /// image of the latch above — same idiom, complementary guard.
 ///
 /// The band eases the idle count out over the first half of the morph, so a drill has to
-/// fade the sentence that was *on screen*. Bound live it re-read the arriving tab instead,
-/// and the arrival brought two wrongs with it: the destination tab's leave had rewound its
-/// own count to `UNFETCHED_COUNT`, so the departing sentence vanished on frame one rather
-/// than fading, and the section-enter's `fetch_grid` then landed *inside* the fade and
-/// popped "7 playlists" onto a line still three-quarters opaque.
+/// fade the sentence that was *on screen*. Bound live it re-reads the arriving tab, whose
+/// leave has already rewound its count to `UNFETCHED_COUNT` — so the departing sentence
+/// vanishes on frame one rather than fading, and the section-enter's fetch then lands
+/// *inside* the fade and pops a new count onto a line still three-quarters opaque.
 ///
-/// The guard is `!detail-open` where `latch-hero`'s is `detail-open`: the hero half holds
-/// across a *close*, this holds across an *open*.
+/// The guard is `!detail-open` where `latch-hero`'s is `detail-open`: the hero half
+/// holds across a *close*, this holds across an *open*.
 #[test]
 fn the_count_line_holds_the_sentence_it_is_collapsing_out_of() {
     let view: String = code(VIEW).split_whitespace().collect::<Vec<_>>().join(" ");
@@ -866,15 +855,13 @@ const SORT_ROWS: [(&str, [&str; 3]); 3] = [
 
 /// Every field a sort pill can ask for has to be one the comparator handles.
 ///
-/// The token is a bare string on both sides — an element of the mount's `fields` array in
-/// the Slint, a `match` arm in Rust — so a typo or a rename on either side compiles, and
-/// the pill just quietly sorts by the default arm while painting its arrow as though it
-/// had worked. These three rows went unpinned for as long as they lived in three separate
-/// view files; one file holding all three is what makes the pin cheap.
+/// The token is a bare string on both sides — an element of the mount's `fields` array,
+/// a `match` arm in Rust — so a typo or a rename on either compiles and the pill quietly
+/// sorts by the default arm while painting its arrow as though it had worked.
 ///
-/// The per-pill contracts this used to count — `reserve-sort-slot`, and `sort-direction`
-/// bound to the active field — are `SortPillRow`'s now and unspellable at a mount, so they
-/// are pinned once, against the component, by [`the_sort_row_holds_every_per_pill_contract`].
+/// The per-pill contracts — `reserve-sort-slot`, `sort-direction` bound to the active
+/// field — are `SortPillRow`'s and unspellable at a mount, pinned once against the
+/// component by [`the_sort_row_holds_every_per_pill_contract`].
 #[test]
 fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     for (global, fields) in SORT_ROWS {
@@ -922,11 +909,11 @@ fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
 /// The three things every sort pill owes, now owned by the component rather than restated
 /// at each of eleven mounts.
 ///
-/// `reserve-sort-slot` holds the arrow's width whether or not this pill is the active one,
-/// so the labels don't jump sideways as the sort moves; `sort-direction` and `active` both
-/// have to compare against **this pill's** field rather than the row's first. Spelled per
-/// pill, any of the three could go missing at one site and the row would look right until
-/// the sort moved. There is one copy to get right now, and this is it.
+/// `reserve-sort-slot` holds the arrow's width whether or not this pill is active, so
+/// labels don't jump sideways as the sort moves; `sort-direction` and `active` both
+/// compare against **this pill's** field rather than the row's first. Spelled per pill,
+/// any of the three could go missing at one site and the row would look right until the
+/// sort moved.
 #[test]
 fn the_sort_row_holds_every_per_pill_contract() {
     for binding in [
@@ -1003,12 +990,11 @@ fn the_retired_indices_fold_onto_the_page_that_absorbed_them() {
 /// **A tab pick is the one tab move that enters the back/forward history**, and it is
 /// the only one that records.
 ///
-/// `NavEntry.tab` has always existed to tell two tabs of this page apart — without it
-/// `record`'s dedup swallows a same-section move — but no call site ever pushed one, so
-/// Mouse-4 walked straight past every grid the user reached by picking a tab. The moves
-/// made on the user's *behalf* (a cross-tab drill, a Mouse-4/5 step) go through
-/// `persist-tab-idx` instead and must stay silent: the first is followed by the drill's
-/// own `record_current`, and the second is a replay, which is suppressed anyway.
+/// `NavEntry.tab` is what tells two tabs of this page apart — without it `record`'s
+/// dedup swallows a same-section move and Mouse-4 walks straight past every grid reached
+/// by picking a tab. The moves made on the user's *behalf* — a cross-tab drill, a
+/// Mouse-4/5 step — go through `persist-tab-idx` and must stay silent: the first is
+/// followed by the drill's own `record_current`, the second is a suppressed replay.
 #[test]
 fn only_a_tab_pick_records_a_history_entry() {
     let pick = CALLBACKS
@@ -1044,17 +1030,15 @@ fn only_a_tab_pick_records_a_history_entry() {
 
 /// **A history walk lands the tab in the same tick as the detail id it is walking to.**
 ///
-/// `replay`'s cross-view arm used to write `persist_tab` synchronously and leave the
-/// matching `set_*_id` behind a DB fetch and an artwork decode. The body router is a pure
-/// function of `(tab-idx, the four ids)` with no third state, so for that whole window —
-/// tens to hundreds of ms, not a frame — it mounted the destination tab's **grid**, faded
-/// in by the sheet's `changed watched-tab-idx` at that. Reported as the playlists page
-/// flashing up on the way into a playlist.
+/// The body router is a pure function of `(tab-idx, the four ids)` with no third state,
+/// so a `persist_tab` written synchronously while the matching `set_*_id` waits on a DB
+/// fetch and an artwork decode mounts the destination tab's **grid** for that whole
+/// window — faded in by the sheet's `changed watched-tab-idx` at that.
 ///
 /// The cure is the shape `cross_tab_nav` has always had: hand the navigation to
 /// `open_*_with`'s hook, which runs inside the closure that writes the id. Hoisting
-/// `persist_tab` back above the spawn compiles, reads correctly, and is the whole bug —
-/// so the pin is on the *synchronous* body carrying neither write.
+/// `persist_tab` back above the spawn compiles and reads correctly, so the pin is on the
+/// *synchronous* body carrying neither write.
 #[test]
 fn a_history_walk_lands_the_tab_beside_the_detail_id() {
     let deferred = NAV_HISTORY
@@ -1117,11 +1101,11 @@ fn a_history_walk_lands_the_tab_beside_the_detail_id() {
 /// does: a detail opened by a cross-section drill carries an `origin-nav-index`, and its
 /// `close-detail` restores that section.
 ///
-/// So a walk between two My Library tabs, out of a detail that Favorites or Search had
+/// So a walk between two My Library tabs, out of a detail Favorites or Search had
 /// drilled into, ends on *that* origin page with the destination detail open behind it —
-/// the flip having been decided, before the close, that a same-section move needed none.
-/// A precomputed `section_moves` bool is the mutation: it compiles, it reads correctly,
-/// and it is the whole bug.
+/// the flip having decided before the close that a same-section move needed none. A
+/// precomputed `section_moves` bool is the mutation: it compiles, reads correctly, and
+/// is the whole bug.
 #[test]
 fn the_replay_flips_the_section_against_the_index_the_close_left_behind() {
     let apply = NAV_HISTORY
@@ -1145,20 +1129,20 @@ fn the_replay_flips_the_section_against_the_index_the_close_left_behind() {
     );
 }
 
-/// **No body may move while the band is moving it**, which is `slide: !band.morphing`
-/// on all nine. The band is the non-stretching sibling above the body, so a morph
-/// moves `body.y` by the whole distance between its two floors — and a body travelling
-/// at the same time is the diagonal of #45. Same-axis is deliberately not enough: the
-/// morph's entry curve is slow off the mark where `ViewTransition`'s is not, so a rise
-/// on top of the push sends the body up before it comes down.
+/// **No body may move while the band is moving it**, which is `slide: !band.morphing` on
+/// all nine. The band is the non-stretching sibling above the body, so a morph moves
+/// `body.y` by the whole distance between its two floors and a body travelling at the
+/// same time reads as a diagonal. Same-axis is deliberately not enough: the morph's
+/// entry curve is slow off the mark where `ViewTransition`'s is not, so a rise on top of
+/// the push sends the body up before it comes down.
 ///
-/// What the branches then differ on is only where they enter *from*. A tab pick with
-/// the band still is a move along the bar, so the five tab bodies take its direction;
-/// a drill is not, so the four details keep `below`.
+/// The branches then differ only on where they enter *from*: a tab pick with the band
+/// still is a move along the bar, so the five tab bodies take its direction, and a drill
+/// is not, so the four details keep `below`.
 ///
-/// Walking the branches rather than listing them is the point — a tenth added later
-/// with `enter-from: Nav.pending-enter-from` copied off a sibling page compiles,
-/// looks right in review, and is the bug.
+/// Walking the branches rather than listing them is the point — a tenth added later with
+/// `enter-from: Nav.pending-enter-from` copied off a sibling page compiles, looks right
+/// in review, and is the bug.
 #[test]
 fn every_body_branch_enters_on_an_axis_the_band_is_not_already_moving() {
     let view = code(VIEW);
@@ -1245,12 +1229,12 @@ fn the_fade_only_mode_suppresses_both_offsets() {
 /// is seeded `false` and never written, which silently retires the fade on the two
 /// arrivals the band's own `tab-anim-armed` doesn't cover.
 ///
-/// The seed is one of them and the two handlers are the others. `changed detail-open`
-/// arms the first drill out of the tab the page opened on; the `watched-tab-idx`
-/// mirror arms a tab move that isn't a pick, which `detail-open` cannot — a cross-tab
-/// drill writes the new detail id and moves the tab in one tick, so that property
-/// never transitions. Neither can fire on the page's own mount, `changed` not running
-/// on a first evaluation, which is what leaves the entrance uncompounded.
+/// The seed is one, the two handlers are the others: `changed detail-open` arms the
+/// first drill out of the tab the page opened on, and the `watched-tab-idx` mirror arms
+/// a tab move that isn't a pick, which `detail-open` cannot — a cross-tab drill writes
+/// the new id and moves the tab in one tick, so that property never transitions. Neither
+/// fires on the page's own mount, `changed` not running on a first evaluation, which is
+/// what leaves the entrance uncompounded.
 #[test]
 fn every_arrival_that_is_not_the_pages_own_entrance_arms_the_body_fade() {
     let view = code(VIEW);

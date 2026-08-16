@@ -8,10 +8,6 @@
 //! * [`columns`] — column-visibility persistence, under Browse's own `views.json` key.
 //! * [`view_mode`] — the list-versus-cards toggle and the private cover tier the grid
 //!   draws from.
-//!
-//! Browse and the Songs tab were the two slices the wiring fold moved into their views
-//! without splitting, so both kept a single `wire` where the other seven had a directory.
-//! The seams are the ones the file already had as comment banners.
 
 mod columns;
 mod lifecycle;
@@ -29,9 +25,9 @@ use crate::ui::browse::BrowseUi;
 /// shared state, plus a `library_changed_tx` subscriber that re-fetches the current path
 /// on watcher events.
 ///
-/// Called by [`super::install`], which is what guarantees the models are in place first;
-/// that pairing used to be two statements a boot-file reorder could separate. `wire_all`
-/// still has to have run before it.
+/// Called by [`super::install`], which is what guarantees the models are in place
+/// first — that pairing used to be two statements a boot-file reorder could separate.
+/// `wire_all` still has to have run before it.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
     lifecycle::wire(ui, state, browse_ui);
     navigation::wire(ui, state, browse_ui);

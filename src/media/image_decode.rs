@@ -1,17 +1,14 @@
 //! One bounded image decode, for every caller that needs one.
 //!
-//! Cover art reaches the app from files the user didn't write, so every decode
-//! has to be bounded before it runs: a forged dimension header in a tag can ask
-//! for gigabytes long before the downscale that follows would have capped it.
-//! `image` takes that bound as [`image::Limits`] on the reader, which means the
-//! same four-step preamble — open, guess the format, apply the limits, decode —
-//! in front of every decode in the tree.
+//! Cover art reaches the app from files the user didn't write, so every decode has
+//! to be bounded before it runs: a forged dimension header in a tag can ask for
+//! gigabytes long before the downscale that follows would have capped it. `image`
+//! takes that bound as [`image::Limits`] on the reader, so the same four-step
+//! preamble — open, guess the format, apply the limits, decode — belongs in front of
+//! every decode in the tree, and this is the single copy of it.
 //!
-//! It was written out six times. This is the single copy — plus
-//! [`capped_limits`] for the one decode that can't use it: `tag_writer` reads a
-//! picked cover into memory (it hands the original bytes through untouched when
-//! the format is already embeddable), so it builds its own reader and takes only
-//! the bound.
+//! [`capped_limits`] is for the one decode that can't use it: `tag_writer` reads a
+//! picked cover from memory, so it builds its own reader and takes only the bound.
 
 use std::path::Path;
 
@@ -19,7 +16,7 @@ use image::DynamicImage;
 
 /// Hard cap on accepted source resolution for artwork.
 ///
-/// Real album art is far under this; the limit only stops a malformed file from
+/// Real album art is far under this; the limit only stops a malformed file
 /// triggering an absurd allocation. Callers that downscale hard anyway (the
 /// Material You seed) pass their own, smaller cap.
 pub const MAX_SOURCE_DIM: u32 = 8192;
@@ -37,11 +34,10 @@ pub fn decode_capped(path: &Path, max_dim: u32) -> image::ImageResult<DynamicIma
 
 /// Source pixel count from the header alone, without decoding a pixel.
 ///
-/// `into_dimensions` stops after the decoder has parsed enough to answer, so
-/// this is a header read rather than a decode — cheap enough to ask before
-/// every decode, and the only way to know what a decode is about to cost. A
-/// forged header lies here exactly as it lies to `decode_capped`, which is why
-/// callers use it to *order* work rather than to trust a size.
+/// `into_dimensions` stops once the decoder has parsed enough to answer, so this is
+/// cheap enough to ask before every decode and the only way to know what one is
+/// about to cost. A forged header lies here exactly as it lies to `decode_capped`,
+/// which is why callers use it to *order* work rather than to trust a size.
 pub fn source_pixels(path: &Path) -> Option<u64> {
     let reader = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?;
     let (width, height) = reader.into_dimensions().ok()?;
@@ -50,9 +46,9 @@ pub fn source_pixels(path: &Path) -> Option<u64> {
 
 /// Decoder limits refusing anything wider or taller than `max_dim`.
 ///
-/// Everything else is left at `image`'s defaults, which already cap a single
-/// allocation — the dimension bound is what stops a forged header claiming a
-/// size no real cover has.
+/// Everything else stays at `image`'s defaults, which already cap a single
+/// allocation — the dimension bound is what stops a forged header claiming a size
+/// no real cover has.
 #[must_use]
 pub fn capped_limits(max_dim: u32) -> image::Limits {
     let mut limits = image::Limits::default();

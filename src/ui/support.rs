@@ -1,14 +1,11 @@
 //! The Ko-fi link, and the one prompt that makes it findable.
 //!
-//! A row in Settings → About is invisible to anyone who never opens that tab, so the
-//! link on its own is the same as no link. Hence a single toast, once ever, on an early
-//! launch that isn't the first — and hence this module rather than
-//! [`super::settings::about`]: the About row and the toast's action button fire the same
-//! `Settings.open-kofi`, so neither owns it.
-//!
-//! Nothing here changes what the player does. There is no paywall, no account, no
-//! recurring reminder and nothing modal; dismissing the toast is free, the flag having
-//! already been spent by the time it is on screen.
+//! A row in Settings → About is invisible to anyone who never opens that tab, so the link
+//! on its own is the same as no link. Hence a single toast, once ever, on an early launch
+//! that isn't the first — and hence this module rather than [`super::settings::about`]:
+//! the About row and the toast's action button fire the same `Settings.open-kofi`, so
+//! neither owns it. Nothing here is modal or recurring; dismissing is free, the flag
+//! having been spent by the time the toast is on screen.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -25,11 +22,10 @@ use crate::{AppWindow, Settings};
 /// of, unlike `about.rs`'s `CARGO_PKG_REPOSITORY`.
 const KOFI_URL: &str = "https://ko-fi.com/kenansalar";
 
-/// Routes the toast's action button. Must match the `kind ==` arm in the
-/// `Notifications.action` dispatcher (`globals/updater.slint`) — a mismatch still paints
-/// the button, since `notification-stack.slint` gates only on a non-empty action label,
-/// and clicking it falls off the end of a dispatcher with no `else`. Pinned by
-/// `tests/support_tests.rs`.
+/// Routes the toast's action button, and must match the `kind ==` arm in the
+/// `Notifications.action` dispatcher — a mismatch still paints the button,
+/// `notification-stack.slint` gating only on a non-empty action label, and clicking it
+/// falls off the end of a dispatcher with no `else`.
 const SUPPORT_TOAST_KIND: &str = "support-melodia";
 
 /// How long into the qualifying launch the toast waits. Long enough that it lands on
@@ -45,10 +41,8 @@ pub fn install(
     schedule_prompt(ui, state, notifications)
 }
 
-/// Open the Ko-fi page in the system browser, off the UI thread.
-///
-/// [`launcher::open_target`] owns the hop; `open::that_detached` still forks and execs a
-/// child launcher, which is not something to do on the event loop.
+/// Open the Ko-fi page in the system browser. [`launcher::open_target`] owns the hop off
+/// the UI thread — `open::that_detached` still forks and execs a child launcher.
 fn wire_open_kofi(ui: &AppWindow, state: &AppState) {
     let runtime = state.runtime.clone();
     ui.global::<Settings>().on_open_kofi(move || {
@@ -56,24 +50,17 @@ fn wire_open_kofi(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Count this launch and, if it is the one that asks, raise the toast a couple of
-/// minutes in.
-///
-/// Runs on the UI thread so it can hold the `Rc<NotificationsUi>` and resolve the
-/// strings through `Settings` at push time — the locale that is active when the toast
-/// appears, not the one that was active at boot. Both settings writes go out through the
-/// blocking pool.
+/// Count this launch and, if it is the one that asks, raise the toast a couple of minutes
+/// in. Runs on the UI thread so it can hold the `Rc<NotificationsUi>` and resolve the
+/// strings through `Settings` at push time — the locale active when the toast appears, not
+/// at boot.
 ///
 /// The two writes are deliberately not one. The count lands at boot, so a launch is a
 /// launch however short; the *seen* flag lands beside the `show`, so a session that ends
 /// inside the delay leaves the prompt for the next one instead of spending it on nobody.
-/// Neither is tied to the dismiss — a toast the user closes must not come back.
-///
-/// The message says so out loud ("You'll only see this once"), which makes that second
-/// write the one thing here that is a promise rather than a preference. It goes out
-/// through `persist_blocking`, which logs a failed write and swallows it, so a config
-/// directory that is read-only or full shows the toast again next launch. Accepted: a
-/// `settings.json` that won't write has broken more than this.
+/// Neither is tied to the dismiss — a toast the user closes must not come back. That
+/// second write goes through `persist_blocking`, which swallows a failure, so a read-only
+/// config directory shows the toast again next launch.
 fn schedule_prompt(
     ui: &AppWindow,
     state: &AppState,

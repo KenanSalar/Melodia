@@ -1,24 +1,12 @@
-//! Material You — Material 3 dynamic colour generation from album artwork.
+//! Material You — Material 3 dynamic colour generation from album artwork,
+//! over the [`material-colors`](https://docs.rs/material-colors) crate.
 //!
-//! Mirrors the Tauri version's `dynamicColor.ts` behaviour but in pure Rust
-//! using the [`material-colors`](https://docs.rs/material-colors) crate.
-//! The pipeline is:
+//! Decode and downscale to a fixed quantizer input, dropping the full-resolution
+//! buffer before quantization; take the seed off the clusters
+//! ([`seed_from_pixels`] argues the fallback); build a `DynamicScheme` of the
+//! requested style and map the M3 roles into a [`crate::themes::Palette`].
 //!
-//! 1. Decode the artwork file at native resolution and resize to 64×64 RGBA8
-//!    via [`image::imageops::FilterType::Triangle`] — the full-resolution
-//!    decode buffer is dropped before quantization, so we only ever hold
-//!    `64 × 64 × 4 = 16 KiB` of pixels.
-//! 2. Run `QuantizerCelebi::quantize` with up to 128 cluster centres, then
-//!    `Score::score(desired = 1)` to pick the best UI-suitable seed colour —
-//!    falling back to the *dominant* cluster rather than to the crate's own
-//!    Google Blue when the artwork has no colour above the scorer's chroma
-//!    bar. See [`seed_from_pixels`].
-//! 3. Build a `DynamicScheme` of the requested style (`SchemeTonalSpot`,
-//!    `SchemeVibrant`, …) at contrast 0.0 / `is_dark` matching the user's
-//!    variant, then map the M3 roles directly into a [`crate::themes::Palette`].
-//!
-//! All public functions are sync and may block — call from
-//! `tokio::task::spawn_blocking` only.
+//! All public functions are sync and may block — call from `spawn_blocking`.
 
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -38,10 +26,8 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 use crate::media::image_decode::decode_capped;
 use crate::themes::{Palette, material3};
 
-/// One of the seven Material 3 dynamic-colour scheme variants exposed by
-/// the [`material-colors`](https://docs.rs/material-colors) crate, plus a
-/// `None` value that disables Material You and falls back to the static
-/// M3 palette. Order matches Tauri's `AppearanceSection.tsx`.
+/// The seven Material 3 scheme variants, plus a `None` that disables Material
+/// You and falls back to the static M3 palette.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SchemeStyle {
     None,
@@ -55,7 +41,7 @@ pub enum SchemeStyle {
 }
 
 impl SchemeStyle {
-    /// Persisted id used in `settings.json` (matches Tauri).
+    /// The id persisted in `settings.json`.
     pub fn as_id(self) -> &'static str {
         match self {
             Self::None => "none",
@@ -99,29 +85,24 @@ impl SchemeStyle {
     }
 }
 
-/// Decoded source image down-sampled to a fixed 64×64 input for the
-/// quantizer. Tauri uses the same size; balances quantization quality and
-/// CPU/memory cost for an album-art-sized image.
+/// The square the source is down-sampled to before quantization — enough for a
+/// seed off album art, and cheap.
 const QUANTIZE_DIM: u32 = 64;
 
-/// Upper bound on cluster centres handed to `QuantizerCelebi`. Tauri uses
-/// 128; lower values muddy the scoring pass, higher values waste CPU.
+/// Cluster centres handed to `QuantizerCelebi`. Lower muddies the scoring pass,
+/// higher wastes CPU.
 const QUANTIZE_MAX_COLOURS: usize = 128;
 
-/// Defensive cap on source dimensions for the path-based
-/// [`extract_source_argb`] fallback. Real album art is well under this; the
-/// limit just prevents a 3000×3000+ embedded picture (common on Bandcamp /
-/// Apple Music releases) from spiking a multi-MB transient decode buffer
-/// the glibc heap then keeps reserved. The current-track path goes through
-/// `CoverThumbs::get_or_load_rgb8` (cap 8192 via `MAX_SOURCE_DIM`), so this
-/// only fires when a caller exercises the path-based variant directly —
-/// tests, the future palette debug tool, etc.
+/// Defensive source cap for the path-based [`extract_source_argb`]. Real album
+/// art is well under it; the limit stops an oversized embedded picture spiking a
+/// transient decode buffer the glibc heap then keeps reserved. The current-track
+/// path goes through `CoverThumbs` instead, so this only fires when a caller
+/// exercises the path-based variant directly.
 const MATERIAL_YOU_MAX_SOURCE_DIM: u32 = 2048;
 
-/// Decode `artwork_path`, downscale to 64×64 RGBA8, then take the seed off it
-/// via [`seed_from_pixels`]. Returns the seed colour as a 32-bit `0xAARRGGBB`
-/// ARGB integer, or `None` when the decode failed or left nothing opaque.
-/// **Blocking** — call from `tokio::task::spawn_blocking` only.
+/// Decode `artwork_path`, downscale, and take the seed off it via
+/// [`seed_from_pixels`]. `None` when the decode failed or left nothing opaque.
+/// **Blocking** — call from `spawn_blocking` only.
 pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
     let decoded = match decode_capped(artwork_path, MATERIAL_YOU_MAX_SOURCE_DIM) {
         Ok(d) => d,
@@ -131,22 +112,20 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
         }
     };
 
-    // Resize before converting to RGBA8 — the resized buffer is the only
-    // pixel data we keep beyond this point. `Triangle` is the sweet spot:
-    // good enough for colour quantization, much faster than Lanczos3, and
-    // markedly better than Nearest for averaged seed quality.
+    // Resize before converting, so the small buffer is the only pixel data kept
+    // past this point. `Triangle` is the sweet spot — good enough for colour
+    // quantization, far cheaper than Lanczos3, and much better than Nearest.
     let small = decoded.resize_exact(QUANTIZE_DIM, QUANTIZE_DIM, FilterType::Triangle).into_rgba8();
     drop(decoded);
 
     let mut pixels: Vec<Argb> = Vec::with_capacity((QUANTIZE_DIM * QUANTIZE_DIM) as usize);
     for chunk in small.chunks_exact(4) {
-        // chunks_exact(4) → [R, G, B, A]
         let r = chunk[0];
         let g = chunk[1];
         let b = chunk[2];
         let a = chunk[3];
-        // Skip nearly-transparent pixels so the alpha channel doesn't
-        // bias the seed toward whatever colour bleeds through edges.
+        // Skip near-transparent pixels, so alpha can't bias the seed toward
+        // whatever bleeds through the edges.
         if a < 128 {
             continue;
         }
@@ -158,31 +137,24 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
 
 /// Quantize `pixels` and score the best UI seed out of the resulting clusters.
 ///
-/// `Score` discards every cluster under its own chroma cutoff and answers
-/// Google Blue when nothing survives — a brand colour, not a fact about this
-/// artwork, which is how a greyscale sleeve came to paint vivid blue chrome
-/// over a grey banner. The *dominant* cluster is such a fact: what the image
-/// mostly is, whatever its chroma. Handed over as the fallback it leaves a
-/// colourless cover seeding its own grey — which every consumer then owns the
-/// lightness of — and, being the only fallback named here, keeps the crate's
-/// out of reach rather than merely unlikely.
+/// `Score` discards every cluster under its own chroma cutoff and answers Google
+/// Blue when nothing survives — a brand colour, not a fact about this artwork,
+/// which is how a greyscale sleeve painted vivid blue chrome. The *dominant*
+/// cluster is such a fact: what the image mostly is, whatever its chroma. Handed
+/// over as the fallback it leaves a colourless cover seeding its own grey, and
+/// being the only fallback named here it keeps the crate's out of reach.
 ///
-/// **The fallback reaches the app-wide palette too, not just the backdrop**, so
-/// which Color Style is picked decides how visible it is. [`SchemeStyle`]'s
-/// `TonalSpot`, `Vibrant`, `Expressive` and `Neutral` force their own primary
-/// chroma, and a neutral sRGB grey still has a CAM16 hue (≈203, the white
-/// point's own), so those land blue-ish much as the scorer's default did.
-/// `Content` and `Fidelity` take the *source's* chroma, which for a grey is
-/// nearly none — so a monochrome sleeve now themes the app near-neutral where
-/// it used to theme it blue. That is the faithful answer and the same one
-/// Android gives a greyscale wallpaper, but unlike [`crate::ui::backdrop`]'s
-/// tiers there is no tone band downstream to put a floor under it.
+/// **It reaches the app-wide palette too, not just the backdrop**, so which
+/// Color Style is picked decides how visible that is: the four variants that
+/// force their own primary chroma still land blue-ish, a neutral sRGB grey
+/// having the white point's CAM16 hue, while `Content` and `Fidelity` take the
+/// source's chroma and theme the app near-neutral. That is the faithful answer,
+/// and the one Android gives a greyscale wallpaper — but unlike
+/// [`crate::ui::backdrop`]'s tiers there is no tone band downstream to floor it.
 ///
-/// `None` means the quantizer had nothing to say, and both consumers already
-/// spell that as the theme accent ([`crate::ui::backdrop`]'s `unwrap_or`, and
-/// the static palette in `tasks::material_you`). So there is no last-resort
-/// colour to pick in here, and no layer-crossing theme dependency to acquire
-/// in order to pick one.
+/// `None` means the quantizer had nothing to say, which both consumers already
+/// spell as the theme accent. So there is no last-resort colour to pick here,
+/// and no layer-crossing theme dependency to acquire in order to pick one.
 fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
     if pixels.is_empty() {
         return None;
@@ -193,20 +165,16 @@ fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
     Some(argb_to_u32(seed))
 }
 
-/// Same quantization pipeline as [`extract_source_argb`] but starting from
-/// an already-decoded RGB8 buffer (the 72×72 thumbnail
-/// [`crate::media::cover_thumbs::CoverThumbs`] already keeps in memory for
-/// row rendering). The buffer is small enough that quantizing it directly
-/// is qualitatively equivalent to quantizing a 64×64 downsample of the
-/// source — and skips the multi-MB transient decode peak that the
-/// path-based variant produces on large embedded artwork.
+/// [`extract_source_argb`]'s pipeline starting from the RGB8 thumbnail
+/// [`crate::media::cover_thumbs::CoverThumbs`] already keeps for row rendering.
+/// Small enough that quantizing it directly is qualitatively the same as
+/// quantizing a downsample of the source, and it skips the transient decode peak
+/// the path-based variant produces on large embedded artwork.
 ///
-/// Returns `None` if the buffer is empty (zero-width or zero-height).
 /// **Blocking** (CPU-bound quantize) — call from `spawn_blocking`.
 pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<u32> {
     let bytes = buf.as_bytes();
-    // RGB8 has no alpha → every pixel is opaque, so the alpha-skip branch
-    // from `extract_source_argb` collapses to an unconditional push.
+    // No alpha here, so the sibling's alpha-skip collapses to a plain push.
     let mut pixels: Vec<Argb> = Vec::with_capacity(bytes.len() / 3);
     for chunk in bytes.chunks_exact(3) {
         pixels.push(Argb::new(0xff, chunk[0], chunk[1], chunk[2]));
@@ -217,28 +185,25 @@ pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Opti
 /// Move `argb` into the `min_tone..=max_tone` HCT lightness band, leaving hue
 /// and chroma alone; returns it unchanged when it is already inside.
 ///
-/// This is the M3 way to make an arbitrary extracted colour legible on a known
-/// surface: tone *is* the contrast axis, so flooring it lifts a near-black
-/// artwork accent into view while keeping the colour recognisably the album's.
-/// A naive multiplicative brighten (Slint's `.brighter()`) can't do this — it
-/// scales HSV value, so anything near black stays near black.
+/// The M3 way to make an extracted colour legible on a known surface: tone *is*
+/// the contrast axis, so flooring it lifts a near-black accent into view while
+/// keeping the colour recognisably the album's. A multiplicative brighten
+/// (Slint's `.brighter()`) can't — it scales HSV value, so near-black stays
+/// near-black.
 ///
-/// **The ceiling is not symmetric with the floor in what it's for.** The floor
-/// buys contrast; the ceiling stops a seed that is already near-white from
-/// out-shining everything solved beside it — a pure-white sleeve quantizes to
-/// tone 100, which is above every text band there is. Leaving the seed
-/// untouched *inside* the band is what keeps a bright accent's own chroma
-/// rather than dragging it to a bound it didn't need.
+/// **The two bounds are not symmetric in what they buy.** The floor buys
+/// contrast; the ceiling stops a near-white seed out-shining everything solved
+/// beside it, a pure-white sleeve quantizing above every text band there is.
+/// Leaving the seed untouched *inside* the band is what keeps a bright accent's
+/// own chroma rather than dragging it to a bound it didn't need.
 ///
-/// Note the round-trip is gamut-mapped: at high tones sRGB can't hold the
-/// original chroma, so a saturated seed comes back a little less saturated.
-/// That's the correct trade — legibility is the point.
+/// The round-trip is gamut-mapped, so a saturated seed comes back a little less
+/// saturated at high tones — the correct trade, legibility being the point.
 ///
-/// A bound outside the valid 0..=100 HCT range doesn't panic: `set_tone`
-/// forwards to the solver, which answers an out-of-range lightness with a plain
-/// greyscale `Argb::from_lstar`. An *inverted* band is the one shape that does
-/// — `f64::clamp` panics on `min > max`, and it runs before the solver ever
-/// sees the tone — so the ordering is asserted in debug.
+/// An out-of-range bound doesn't panic: `set_tone` forwards to the solver, which
+/// answers with a greyscale `Argb::from_lstar`. An *inverted* band does —
+/// `f64::clamp` panics on `min > max` before the solver sees the tone — hence
+/// the debug assertion.
 pub fn clamp_to_tone_band(argb: u32, min_tone: f64, max_tone: f64) -> u32 {
     debug_assert!(min_tone <= max_tone, "inverted tone band {min_tone}..={max_tone}");
     let mut hct = Hct::new(Argb::from_u32(argb));
@@ -253,16 +218,14 @@ pub fn clamp_to_tone_band(argb: u32, min_tone: f64, max_tone: f64) -> u32 {
 /// Drive `argb` to exactly `tone`, capping chroma at `max_chroma` and keeping
 /// the hue.
 ///
-/// The sibling of [`clamp_to_tone_band`] for surfaces that want the source
-/// colour's *identity* but not its saturation — Now-Playing body text, which
-/// should read as near-white carrying a whisper of the album's warmth rather
-/// than as coloured type. Tone is set unconditionally (not floored): the
-/// caller has already solved it for a contrast target, so landing above it
-/// would be as wrong as landing below.
+/// [`clamp_to_tone_band`]'s sibling, for surfaces wanting the source colour's
+/// *identity* but not its saturation — Now-Playing body text, which should read
+/// near-white with a whisper of the album's warmth rather than as coloured type.
+/// Tone is set rather than floored: the caller already solved it against a
+/// contrast target, so landing above would be as wrong as landing below.
 ///
-/// Order matters — chroma is capped *before* the tone is set, because the
-/// solver gamut-maps against the chroma it is given and a saturated seed
-/// pushed to a high tone comes back desaturated anyway.
+/// Chroma is capped *before* the tone is set, the solver gamut-mapping against
+/// whatever chroma it is given.
 pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
     let mut hct = Hct::new(Argb::from_u32(argb));
     if hct.get_chroma() > max_chroma {
@@ -272,18 +235,14 @@ pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
     argb_to_u32(Argb::from(hct))
 }
 
-/// Build a `DynamicScheme` of `style` × `is_dark` (contrast = default)
-/// from the seed and map the M3 roles to a [`crate::themes::Palette`] +
-/// accent hex. Matches the M3 → palette role mapping from Tauri's
-/// `dynamicColor.ts::generateDynamicColors`. Pure CPU, sub-millisecond —
-/// safe to call from a tokio worker without `spawn_blocking` if you've
-/// already got the seed.
+/// Build a `DynamicScheme` of `style` × `is_dark` from the seed and map the M3
+/// roles onto a [`crate::themes::Palette`] plus accent. Pure CPU and
+/// sub-millisecond, so a tokio worker can call it without `spawn_blocking`.
 pub fn generate_palette(source_argb: u32, is_dark: bool, style: SchemeStyle) -> (Palette, u32) {
     let hct = Hct::new(Argb::from_u32(source_argb));
-    // Each variant wraps a `DynamicScheme`; we pull it out and read the
-    // resolved-role accessors directly (no `Scheme::from(DynamicScheme)`
-    // intermediate clone — the accessors compute on demand and we only
-    // read each role once).
+    // Read the resolved-role accessors off the inner `DynamicScheme` directly —
+    // they compute on demand and each role is read once, so a
+    // `Scheme::from(DynamicScheme)` would only be an intermediate clone.
     let dyn_scheme = match style {
         SchemeStyle::Content => SchemeContent::new(hct, is_dark, None).scheme,
         SchemeStyle::Vibrant => SchemeVibrant::new(hct, is_dark, None).scheme,
@@ -291,16 +250,14 @@ pub fn generate_palette(source_argb: u32, is_dark: bool, style: SchemeStyle) -> 
         SchemeStyle::Fidelity => SchemeFidelity::new(hct, is_dark, None).scheme,
         SchemeStyle::Neutral => SchemeNeutral::new(hct, is_dark, None).scheme,
         SchemeStyle::Monochrome => SchemeMonochrome::new(hct, is_dark, None).scheme,
-        // None falls through to TonalSpot — the `None` variant is filtered
-        // earlier in the coordinator; reaching this branch is a logic bug
-        // upstream, but TonalSpot is the safe canonical default.
+        // The coordinator filters `None` out earlier, so reaching this arm
+        // through it is an upstream bug — but TonalSpot is the safe default.
         SchemeStyle::TonalSpot | SchemeStyle::None => {
             SchemeTonalSpot::new(hct, is_dark, None).scheme
         }
     };
 
-    // M3 → palette role mapping. Comment column shows the M3 source.
-    let surface = argb_to_u32(dyn_scheme.surface()); // surface
+    let surface = argb_to_u32(dyn_scheme.surface());
     let surface_container_low = argb_to_u32(dyn_scheme.surface_container_low());
     let surface_dim = argb_to_u32(dyn_scheme.surface_dim());
     let surface_container_high = argb_to_u32(dyn_scheme.surface_container_high());
@@ -312,17 +269,15 @@ pub fn generate_palette(source_argb: u32, is_dark: bool, style: SchemeStyle) -> 
     let primary = argb_to_u32(dyn_scheme.primary());
     let error = argb_to_u32(dyn_scheme.error());
 
-    // `surface2` and `subtext0` need an interpolated middle tone to keep
-    // the existing palette's depth range. Both midpoints ported from
-    // Tauri's `interpolateNeutral()`.
+    // Interpolated middle tones, so the dynamic palette keeps the static one's
+    // depth range.
     let surface2 = mix_rgb_u32(surface_container_highest, outline);
     let subtext0 = mix_rgb_u32(on_surface_variant, on_surface);
 
-    // Green and yellow come from the static M3 theme rather than the scheme.
-    // A dynamic scheme has no green or yellow role to map, and the three
-    // surfaces reading them — the maximize traffic light, the success/warning
-    // toasts, the star rating — are semantic signals that have to stay
-    // recognisable, so they get the same pair Color Style = None paints.
+    // From the static M3 theme, not the scheme: a dynamic scheme has no green or
+    // yellow role, and the three surfaces reading them — traffic light,
+    // success/warning toasts, star rating — are semantic signals that must stay
+    // recognisable, so they get the pair Color Style = None paints.
     let (green, yellow) = if is_dark {
         (material3::DARK_GREEN, material3::DARK_YELLOW)
     } else {
@@ -372,10 +327,8 @@ impl SeedCache {
         }
     }
 
-    /// Look up `path`'s cached seed; on miss invoke `f`, store the result
-    /// (only on `Some`), and return whichever value won. `f` may block
-    /// (file decode + quantize); callers should already be on a
-    /// `spawn_blocking` worker.
+    /// Look up `path`'s cached seed, invoking `f` on a miss and storing only a
+    /// `Some`. `f` may block, so callers should already be on a blocking worker.
     pub fn get_or_insert_with<F>(&mut self, path: &Path, f: F) -> Option<u32>
     where
         F: FnOnce() -> Option<u32>,
@@ -395,16 +348,12 @@ impl Default for SeedCache {
     }
 }
 
-/// Pack an `Argb { alpha, red, green, blue }` into the project's
-/// `0x00RRGGBB` u32 format (alpha discarded, top byte zero — matches the
-/// rest of the palette tables).
+/// Pack an `Argb` into the `0x00RRGGBB` the palette tables use, dropping alpha.
 fn argb_to_u32(a: Argb) -> u32 {
     (u32::from(a.red) << 16) | (u32::from(a.green) << 8) | u32::from(a.blue)
 }
 
-/// 50/50 mix of two `0x00RRGGBB` colours, channel-wise. Used for
-/// `surface2` and `subtext0` to keep the dynamic palette's depth range
-/// matching the static M3 palette.
+/// Channel-wise 50/50 mix of two `0x00RRGGBB` colours.
 fn mix_rgb_u32(a: u32, b: u32) -> u32 {
     let ar = (a >> 16) & 0xff;
     let ag = (a >> 8) & 0xff;

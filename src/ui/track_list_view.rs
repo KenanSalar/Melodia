@@ -1,30 +1,15 @@
 //! Per-view persistence of track-list column state.
 //!
-//! Each consumer of the reusable `TrackList` Slint component (Tracks,
-//! Browse, Favorites, Search and the Album / Artist / Genre / Playlist
-//! detail views) owns its own per-view Slint global mirroring the same
-//! column-width and column-visibility shape. This module captures the
-//! hydrate-on-startup / snapshot-on-shutdown flow generically, so adding a
-//! new view is a matter of:
+//! Every consumer of the reusable `TrackList` component owns a per-view Slint global
+//! mirroring the same column-width and column-visibility shape, and the
+//! hydrate-on-startup / snapshot-on-shutdown body is identical across all of them — the
+//! only variation is the global type, the view-id, and, for a detail view, the one
+//! column the UI can no longer toggle. `impl_track_list_column_state!` generates the
+//! `TrackListColumnState` impl and its two shorthand functions from those parameters, so
+//! a new view is a global, a `view_id::*` const, one invocation and two calls.
 //!
-//! 1. Declaring the new global in `melodia-ui/ui/globals/` mirroring `Tracks`.
-//! 2. Adding a `view_id::*` constant and one
-//!    `impl_track_list_column_state!` invocation below.
-//! 3. Calling the generated `hydrate_*_view` at startup and
-//!    `snapshot_*_view` on shutdown.
-//!
-//! Every view shares the identical hydrate/snapshot body — the only
-//! per-view variation is the Slint global type, the settings view-id, and
-//! (for detail views) one column the UI can no longer toggle. Rather than
-//! hand-copy that body eight times, `impl_track_list_column_state!`
-//! generates the `TrackListColumnState` impl plus the two shorthand
-//! functions from those few parameters.
-//!
-//! Persistence rides on `views.json`:
-//! `ViewStateData.view_column_widths: HashMap<String, ColumnWidths>` and
-//! `ViewStateData.view_columns: HashMap<String, Vec<String>>`. Both are
-//! already keyed by an arbitrary view-id, so adding a new view requires no
-//! schema change.
+//! Persistence rides on `views.json`'s `view_column_widths` and `view_columns`, both
+//! already keyed by an arbitrary view-id, so a new view needs no schema change.
 
 use std::collections::HashSet;
 
@@ -38,33 +23,26 @@ use crate::{
     Search, Tracks,
 };
 
-/// The Slint-side surface of a per-view track-list global, abstracted so the
-/// hydrate/snapshot helpers can drive any number of views with a single code
-/// path. Each generated global type (Tracks, Browse, …) gets its own `impl`
-/// block — emitted by `impl_track_list_column_state!` — that just routes
-/// through the auto-generated `get_*` / `set_*` accessors.
+/// The Slint-side surface of a per-view track-list global, so the hydrate and snapshot
+/// helpers drive any number of views down one path. Each generated global gets its own
+/// `impl` from `impl_track_list_column_state!`, routing through the accessors.
 pub trait TrackListColumnState {
     fn get_widths(&self) -> ColumnWidths;
     fn set_widths(&self, w: &ColumnWidths);
 
-    /// The user-toggleable column ids that are currently visible, in display
-    /// order. Always-visible columns (e.g. title and length on the Tracks
-    /// view) are excluded by design — they're not part of the toggle popup,
-    /// and per-view lock policies differ (Album Detail keeps `#` always-on,
-    /// Favorites locks nothing). Both write paths into
-    /// `views.json`'s `view_columns[view_id]` — toggle-column callbacks and the
-    /// shutdown snapshot — go through this method so the on-disk shape
-    /// stays consistent within a view.
+    /// The user-toggleable column ids currently visible, in display order.
+    /// Always-visible columns are excluded by design — they aren't in the toggle popup,
+    /// and the lock policy differs per view. Both writers into `view_columns[view_id]`
+    /// go through this, so the on-disk shape stays consistent within a view.
     fn snapshot_visible(&self) -> Vec<String>;
 
-    /// Apply a set of visible column ids to the global's `show-*` flags.
-    /// Ids not present in the set become `false`.
+    /// Apply a set of visible column ids to the global's `show-*` flags; anything absent
+    /// becomes `false`.
     fn apply_visible(&self, visible: &HashSet<&str>);
 }
 
-/// Apply persisted widths and visibility for a given view-id from
-/// `views.json` to the supplied handle. Missing entries leave the Slint
-/// defaults in place — matches first-launch behaviour.
+/// Apply `views.json`'s persisted widths and visibility for `view_id` to the handle. A
+/// missing entry leaves the Slint-declared default in place, as on first launch.
 pub fn hydrate(view_id: &str, vs: &ViewStateData, h: &dyn TrackListColumnState) {
     if let Some(w) = vs.view_column_widths.get(view_id) {
         h.set_widths(w);
@@ -75,17 +53,15 @@ pub fn hydrate(view_id: &str, vs: &ViewStateData, h: &dyn TrackListColumnState) 
     }
 }
 
-/// Snapshot the current column widths off the handle, ready to be written
-/// back into `views.json`'s `view_column_widths[view_id]` on shutdown. The
-/// resize-handle drag clamps to each column's min/max in
-/// `track-list-header.slint`, so the persisted values are always in range.
+/// The current column widths, for `view_column_widths[view_id]` on shutdown. The
+/// resize-handle drag clamps to each column's min/max in `track-list-header.slint`, so
+/// the persisted values are always in range.
 pub fn snapshot_widths(h: &dyn TrackListColumnState) -> ColumnWidths {
     h.get_widths()
 }
 
-/// Convenience: snapshot both widths and visibility into the matching
-/// `views.json` entries for `view_id`. Mutates `vs` in place; the caller
-/// is responsible for writing it back to disk.
+/// Snapshot both widths and visibility into `view_id`'s `views.json` entries, mutating
+/// `vs` in place — the caller writes it back to disk.
 pub fn snapshot_into_view_state(
     view_id: &str,
     vs: &mut ViewStateData,
@@ -114,17 +90,14 @@ pub mod view_id {
     pub const ARTISTS: &str = "artists";
     pub const GENRES: &str = "genres";
     /// The Favorites page's Favorite Artists *tab*, whose sort is its own —
-    /// [`FAVORITES`] is the Songs tab's, over track columns this grid has no
-    /// notion of. One page, two keys in the same `view_sort` map.
+    /// [`FAVORITES`] is the Songs tab's, over track columns this grid has no notion of.
     pub const FAVORITE_ARTISTS: &str = "favorite_artists";
 }
 
-/// Force a detail-view's locked column off, regardless of what
-/// `settings.json` says — guards against a hand-edited file re-enabling a
-/// column the UI can no longer toggle (Album Detail's `album`, Artist
-/// Detail's `artist`, Genre Detail's `genre`, all of which are redundant
-/// since every row shares that value). Matched against the literal column
-/// ident passed to `impl_track_list_column_state!`.
+/// Force a detail view's locked column off whatever the file says, against a hand-edit
+/// re-enabling a column the UI can no longer toggle — Album Detail's `album`, Artist
+/// Detail's `artist`, Genre Detail's `genre`, each redundant when every row shares that
+/// value. Matched against the ident passed to `impl_track_list_column_state!`.
 macro_rules! force_locked_column_off {
     ($self:ident, album) => {
         $self.set_show_album(false);
@@ -137,13 +110,10 @@ macro_rules! force_locked_column_off {
     };
 }
 
-/// Generate the [`TrackListColumnState`] impl for a Slint global plus the
-/// matching `hydrate_*_view` / `snapshot_*_view` shorthand functions.
-///
-/// `get_widths` / `set_widths` / `snapshot_visible` / `apply_visible` are
-/// byte-identical across every view; the only variation is an optional
-/// `locked = <column>` for the three detail views, where that column is
-/// excluded from the persisted visible set and force-disabled on apply.
+/// Generate the [`TrackListColumnState`] impl for a Slint global plus its
+/// `hydrate_*_view` / `snapshot_*_view` shorthands. All four methods are identical
+/// across views; the only variation is an optional `locked = <column>` for the three
+/// detail views, excluded from the persisted set and force-disabled on apply.
 macro_rules! impl_track_list_column_state {
     (
         $global:ident, $view_id:ident, $hydrate:ident, $snapshot:ident
@@ -192,9 +162,8 @@ macro_rules! impl_track_list_column_state {
                 if self.get_show_year() {
                     v.push("year".to_owned());
                 }
-                // A locked detail-view column is redundant (every row shares
-                // that value) and unreachable in the toggle popup — never
-                // write it back to settings.
+                // A locked column is redundant and unreachable in the toggle popup, so
+                // it is never written back.
                 $( v.retain(|c| c.as_str() != stringify!($locked)); )?
                 v
             }

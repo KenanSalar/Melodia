@@ -324,9 +324,7 @@ pub fn to_slint_playlist_row(p: &PlaylistStats) -> UiPlaylistRow {
     }
 }
 
-// Compile-time assertion, not runtime code: an anonymous `const _` is
-// type-checked but never dead-code-flagged, so the bound is enforced
-// without an `#[allow(dead_code)]` on a fn nothing calls.
+// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<PlaylistsUi>();

@@ -1,33 +1,15 @@
 //! Auto-updater backend.
 //!
-//! Wire shape:
-//! ```text
-//!   daily task ── check_for_update ──► fetch latest.json (ETag-aware)
-//!                                         │
-//!                                         ▼
-//!                                    is_upgrade (semver)
-//!                                         │
-//!                                         ▼
-//!                                       notify
-//!                                         │
-//!                                         ▼
-//!                                  download_and_install
-//!                                         │
-//!                                         ▼
-//!                                    verify_stream (prehashed minisign)
-//!                                         │
-//!                                         ▼
-//!                                    swap_in_place (atomic; cfg-branched)
-//!                                         │
-//!                                         ▼
-//!                                    request_respawn_and_quit
-//! ```
+//! The pipeline: the daily task's `check_for_update` fetches `latest.json`
+//! ETag-aware, `is_upgrade` decides on semver, and an accepted notification runs
+//! `download_and_install` → `verify_stream` (prehashed minisign) → `swap_in_place`
+//! (atomic, `cfg`-branched) → `request_respawn_and_quit`.
 //!
-//! The manifest schema lives in [`manifest`], signature verification in
-//! [`minisign`], and the threat model's trust boundary is the GitHub repo:
-//! `latest.json` and every artifact are minisign-signed with the key embedded
-//! at `assets/updater-pubkey.b64`, and the client fails closed on a missing
-//! or invalid signature.
+//! The manifest schema lives in [`manifest`] and signature verification in
+//! [`minisign`]. The threat model's trust boundary is the GitHub repo: `latest.json`
+//! and every artifact are minisign-signed with the key embedded at
+//! `assets/updater-pubkey.b64`, and the client fails closed on a missing or invalid
+//! signature.
 
 use std::path::PathBuf;
 
@@ -53,41 +35,31 @@ pub use install::{download_and_install, prune_stale_staging};
 pub use state::UpdaterState;
 pub use system_install::is_system_install;
 
-/// `<install_target>.old` — the rollback copy of the previously-running
-/// binary, retained by [`install::swap_in_place`] on Linux atomic-swap
-/// installs (`AppImage` / tarball) so (a) a failed post-swap smoke test
-/// can restore it before the user sees a broken installation and (b) a
-/// successful boot of the new binary can reap it from `main()`. Returns
-/// an error only if [`install_target`] itself fails (e.g. `current_exe()`
-/// denies, which is essentially never).
+/// `<install_target>.old` — the rollback copy [`install::swap_in_place`] retains on
+/// Linux atomic-swap installs (`AppImage` / tarball), so a failed post-swap smoke
+/// test can restore it before the user sees a broken installation and a successful
+/// boot can reap it from `main()`. Errors only if [`install_target`] does.
 ///
-/// Linux-only: Windows installs flow through `msiexec /i` of a signed
-/// MSI (`InstallMethod::WindowsMsi`), which lets Windows Installer's
-/// `MajorUpgrade` + Restart Manager own the replace — no `.old`
-/// snapshot is ever produced at the install target.
-///
-/// Path derivation is shared with [`install::old_path`] to keep the
-/// swap path and the reaping path bit-identical.
+/// Linux-only: a Windows install is `msiexec /i` of a signed MSI, so Windows
+/// Installer's `MajorUpgrade` + Restart Manager own the replace and no `.old` is
+/// ever produced. Derived through [`install::old_path`], which keeps the swap path
+/// and the reaping path bit-identical.
 #[cfg(target_os = "linux")]
 pub fn install_target_old() -> AppResult<PathBuf> {
     let target = install_target()?;
     Ok(install::old_path(&target))
 }
 
-/// Resolves to the file the swap actually replaces. On `AppImage` runs
-/// the executable path is the read-only squashfs mount
-/// (`/tmp/.mount_*/usr/bin/Melodia`); the replaceable `AppImage` file
-/// itself is at `$APPIMAGE`. Every path-touching module in this tree
-/// routes through this — it's the **only** function in the updater
-/// that asks for the running binary's path.
+/// The file the swap actually replaces. On an `AppImage` run the executable path is
+/// the read-only squashfs mount and the replaceable file is at `$APPIMAGE`; every
+/// path-touching module here routes through this, the **only** function in the
+/// updater that asks for the running binary's path.
 ///
-/// The non-`AppImage` arm goes through [`crate::services::current_exe`]
-/// rather than `std::env::current_exe()`, which on Linux hands back a
-/// `<path> (deleted)` string once the running binary has been replaced
-/// on disk — an RPM/DEB upgrade mid-session is exactly that, and it is
-/// this function's answer that `desktop_integration` bakes into the
-/// user's `Exec=` line and that `linux_pkg::detect` looks up in the
-/// package database.
+/// The other arm goes through [`crate::services::current_exe`] rather than
+/// `std::env::current_exe()`, which on Linux hands back a `<path> (deleted)` string
+/// once the binary has been replaced on disk — an RPM/DEB upgrade mid-session is
+/// exactly that, and this answer is what `desktop_integration` bakes into the user's
+/// `Exec=` line and what `linux_pkg::detect` looks up in the package database.
 pub fn install_target() -> AppResult<PathBuf> {
     if cfg!(target_os = "linux")
         && let Ok(p) = std::env::var("APPIMAGE")

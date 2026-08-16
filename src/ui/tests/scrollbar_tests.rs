@@ -1,20 +1,15 @@
 //! Source pin for the scrollbar convention: nothing in the Slint tree paints
 //! Slint's stock scrollbar.
 //!
-//! `CLAUDE.md` states the rule — both policies on every `ScrollView` / `ListView`
-//! set to `always-off`, with a sibling `OverlayScrollbar` pinned by absolute
-//! coordinates and round-tripped through `viewport-{x,y}` — because std-widgets'
-//! bar paints inside padded containers and can't be reskinned. Nothing enforced
-//! it, and three scrollers had drifted: the Artist Detail albums strip on
-//! `as-needed`, the smart-playlist rule list with neither policy spelled, and the
-//! playlist mosaic picker with only one. Each reads as a different app the moment
-//! its content overflows, and each looks fine in the file it lives in.
+//! `CLAUDE.md` states the rule — both policies `always-off` on every scroller, with a
+//! sibling `OverlayScrollbar` pinned by absolute coordinates — because std-widgets' bar
+//! paints inside padded containers and can't be reskinned. A drifted scroller reads as a
+//! different app the moment its content overflows, and looks fine in the file it lives in.
 //!
-//! Two checks, because the two failures are different shapes. A wrong *value* is
-//! the one you can grep for. An *omitted* policy is how two of the three got
-//! here, and only the per-block walk sees it — a flat search would let a scroller
-//! borrow the opt-out of the `TrackList` nested inside it, which is exactly the
-//! arrangement every composite view has.
+//! Two checks, because the two failures are different shapes. A wrong *value* is the one
+//! you can grep for. An *omitted* policy is what only the per-block walk sees: a flat
+//! search would let a scroller borrow the opt-out of the `TrackList` nested inside it,
+//! which is exactly the arrangement every composite view has.
 
 use crate::test_support::{
     MIN_SLINT_SOURCES, UI_DIR, block_body, normalize_ws as normalized, stripped_sources,
@@ -26,10 +21,9 @@ const SCROLLERS: [&str; 2] = ["ScrollView", "ListView"];
 const AXES: [&str; 2] = ["horizontal", "vertical"];
 const OPT_OUT: &str = "always-off";
 
-/// Everything under this directory is mounted inside the dialog card, so its
-/// scrollbars sit on `surface0` rather than on the page. `multiline-input.slint`
-/// is named beside it because it is only ever mounted there — the Lyrics tab and
-/// the playlist description — despite living a directory up.
+/// Everything under this directory mounts inside the dialog card, so its scrollbars sit
+/// on `surface0` rather than on the page. `multiline-input.slint` is named beside it
+/// because it is only ever mounted there, despite living a directory up.
 const DIALOG_DIR: &str = "components/dialog/";
 const DIALOG_STRAYS: [&str; 1] = ["multiline-input.slint"];
 const CARD_TRACK: &str = "track-color: Theme.scrollbar-track-on-card;";
@@ -42,16 +36,15 @@ const SCROLLBAR_COMPONENTS: [&str; 2] = [
     "components/composite-scrollbars.slint",
 ];
 
-/// The band a `TrackList`'s vertical bar has to clear, and the height of what's left —
-/// the two metrics **only** a `TrackList` publishes, since only it has a column header
+/// The band a `TrackList`'s vertical bar has to clear and the height of what's left —
+/// the two metrics **only** a `TrackList` publishes, only it having a column header
 /// above its scrolling region.
 ///
 /// Deliberately not `v-viewport-height` / `v-visible-height`, which every entity card
-/// grid publishes too: those mount a *single* vertical bar over a body with no header and
-/// no horizontal axis, which is a different shape and correctly not this component's.
-/// Either name inside an `OverlayScrollbar` block is a hand-rolled pair; both appear in
-/// the six converted hosts as hand-overs *outside* one, which is what the block walk
-/// separates.
+/// grid publishes too: those mount a *single* bar over a body with no header and no
+/// horizontal axis. Either name inside an `OverlayScrollbar` block is a hand-rolled
+/// pair; both appear in the converted hosts as hand-overs *outside* one, which is what
+/// the block walk separates.
 const TRACK_LIST_V_METRICS: [&str; 2] = ["body-y", "body-height"];
 
 /// The two bar pairs a `TrackList` page can mount, and the lane the list reserves under
@@ -84,10 +77,9 @@ fn mounts(src: &str, component: &str) -> bool {
     false
 }
 
-/// Every scroller declared in `src`, as `(element, body)`.
-///
-/// A declaration is the element name followed by `{`, which is what separates
-/// `sv := ScrollView {` from the `import { ScrollView } from …` line above it.
+/// Every scroller declared in `src`, as `(element, body)`. A declaration is the element
+/// name followed by `{`, which is what separates `sv := ScrollView {` from the
+/// `import { ScrollView } from …` line above it.
 fn scroller_blocks(src: &str) -> Vec<(&'static str, &str)> {
     let bytes = src.as_bytes();
     let mut out = Vec::new();
@@ -113,12 +105,9 @@ fn scroller_blocks(src: &str) -> Vec<(&'static str, &str)> {
     out
 }
 
-/// The `<axis>-scrollbar-policy` values `body` sets at its **own** nesting depth,
-/// as `(axis, value)`.
-///
-/// Depth is the whole point: the composite views nest a `TrackList`'s scrollers
-/// inside their own, so a scroller with no policy of its own would otherwise pass
-/// on its child's.
+/// The `<axis>-scrollbar-policy` values `body` sets at its **own** nesting depth. Depth
+/// is the whole point: the composite views nest a `TrackList`'s scrollers inside their
+/// own, so a scroller with no policy would otherwise pass on its child's.
 fn own_policies(body: &str) -> Vec<(&str, &str)> {
     let bytes = body.as_bytes();
     let mut out = Vec::new();
@@ -148,7 +137,7 @@ fn own_policies(body: &str) -> Vec<(&str, &str)> {
     out
 }
 
-/// The check that catches an omission — the shape two of the three drifted into.
+/// The check that catches an omission, which is the shape most drift takes.
 #[test]
 fn every_scroller_opts_out_of_the_stock_scrollbar() {
     let sources = sources();
@@ -178,13 +167,11 @@ fn every_scroller_opts_out_of_the_stock_scrollbar() {
     );
 }
 
-/// A bar on a dialog card takes a track colour of its own.
-///
-/// The default is `surface0` at half alpha, which over a `surface0` card
-/// composites to exactly `surface0` — zero contrast, so the thumb floats with
-/// nothing saying how far the list runs. It is the failure mode that *looks* like
-/// a missing feature rather than a wrong colour, and a new dialog scrollbar
-/// inherits it by writing nothing at all, which is why it is worth a pin.
+/// A bar on a dialog card takes a track colour of its own. The default is `surface0` at
+/// half alpha, which over a `surface0` card composites to exactly `surface0` — zero
+/// contrast, so the thumb floats with nothing saying how far the list runs. It looks
+/// like a missing feature rather than a wrong colour, and a new dialog scrollbar
+/// inherits it by writing nothing at all.
 #[test]
 fn every_dialog_scrollbar_takes_the_track_that_reads_on_a_card() {
     let sources = sources();

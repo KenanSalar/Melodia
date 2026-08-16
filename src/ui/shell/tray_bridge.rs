@@ -3,18 +3,14 @@
 //! Three pieces:
 //!
 //! 1. **Action receiver** — a tracked tokio task draining the tray's
-//!    `mpsc::Receiver<TrayAction>`. Playback actions are fed into the same
-//!    [`EventSink`] (`SlintEventSink`) the OS media controls use; window
-//!    actions hop to the UI thread via `slint::invoke_from_event_loop`.
-//! 2. **State subscriber** — watches `sinks.view_model` and pushes a
-//!    [`TraySnapshot`] (tooltip + play/pause label) into the tray. On Linux
-//!    this is a tokio task that owns the (`Send`) `LinuxTray`; on Windows /
-//!    macOS the tray handle is `!Send`, so it is a `slint::spawn_local`
-//!    future on the UI thread calling the `update_tray` free function.
-//! 3. **Close-to-tray state** — process-global atomics read by
-//!    `window_chrome` to decide whether a window-close hides to tray or
-//!    quits, plus the window-visibility shadow the tray "Show / Hide" toggles
-//!    against (`winit::Window::is_visible()` is `None` on Wayland).
+//!    `mpsc::Receiver<TrayAction>`. Playback actions feed the same [`EventSink`] the OS
+//!    media controls use; window actions hop to the UI thread.
+//! 2. **State subscriber** — watches `sinks.view_model` and pushes a [`TraySnapshot`]
+//!    into the tray. On Linux a tokio task owning the `Send` `LinuxTray`; on Windows and
+//!    macOS the handle is `!Send`, so a `spawn_local` future on the UI thread.
+//! 3. **Close-to-tray state** — process-global atomics `window_chrome` reads to decide
+//!    whether a close hides or quits, plus the visibility shadow the tray's Show / Hide
+//!    toggles against, `winit::Window::is_visible()` being `None` on Wayland.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -37,24 +33,22 @@ static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(false);
 /// `winit::Window::is_visible()` is `None` on Wayland.
 static WINDOW_VISIBLE: AtomicBool = AtomicBool::new(true);
 
-/// `true` once a tray icon exists. Close-to-tray falls back to quitting when it
-/// doesn't — on a session with no tray (vanilla GNOME) the setting would
-/// otherwise strand the user with a hidden window and no way back.
+/// `true` once a tray icon exists. Close-to-tray falls back to quitting when it doesn't
+/// — on a session with no tray the setting would otherwise strand the user with a hidden
+/// window and no way back.
 static TRAY_ACTIVE: AtomicBool = AtomicBool::new(false);
 
-/// Captured the instant the window is hidden, re-applied on the next show:
-/// hiding destroys the winit window, and Slint's first layout pass on the
-/// recreated one snaps to the content-preferred width and lets the compositor
-/// re-place it. Same reason `window_chrome::geometry::restore` exists at launch.
+/// Captured the instant the window is hidden, re-applied on the next show: hiding destroys
+/// the winit window, and Slint's first layout pass on the recreated one snaps to the
+/// content-preferred width and lets the compositor re-place it.
 static SAVED_WINDOW_GEOM: Mutex<Option<(slint::PhysicalSize, slint::PhysicalPosition)>> =
     Mutex::new(None);
 
-/// How many times a tray-show re-asserts the saved geometry before giving up.
-/// Each attempt is one 16 ms timer tick (see `reschedule_geometry_restore`).
+/// How many times a tray-show re-asserts the saved geometry before giving up, one timer
+/// tick each.
 const RESTORE_ATTEMPTS: u8 = 8;
 
-/// Update the close-to-tray preference. Called by the Settings toggle and
-/// once at startup to seed from `settings.json`.
+/// Update the close-to-tray preference — the Settings toggle, and one seed at startup.
 pub fn set_close_to_tray(on: bool) {
     CLOSE_TO_TRAY.store(on, Ordering::Relaxed);
 }
@@ -65,50 +59,44 @@ pub fn should_hide_to_tray() -> bool {
     CLOSE_TO_TRAY.load(Ordering::Relaxed) && TRAY_ACTIVE.load(Ordering::Relaxed)
 }
 
-/// Update the visibility shadow from outside this module. Three callers keep it
-/// honest — the titlebar minimize handler, the winit filter's deferred
-/// `is_minimized` probe after a focus loss (catching a minimize the OS chrome or
-/// taskbar drove), and the `Focused(true)` listener. Let it desynchronise and
-/// the next tray click does the wrong thing: after a button-minimize it hides
-/// the already-minimized surface, so restoring takes two clicks.
+/// Update the visibility shadow from outside this module. Three callers keep it honest —
+/// the titlebar minimize handler, the winit filter's deferred `is_minimized` probe, and
+/// the `Focused(true)` listener. Let it desynchronise and the next tray click hides an
+/// already-minimized surface, so restoring takes two.
 ///
-/// `Visualizer.window-shown` moves with it — the visualizer's Timer gates on the
-/// Slint half while its tick reads the atomic, so one writer rather than two.
-/// That gate is also why hiding hands the visualizer its own notice: lowering
-/// `window-shown` can stop the Timer that would have delivered it.
+/// `Visualizer.window-shown` moves with it — the strip's Timer gates on the Slint half
+/// while its tick reads the atomic, so one writer rather than two. That gate is also why
+/// hiding hands the visualizer its own notice: lowering `window-shown` can stop the Timer
+/// that would have delivered it.
 pub fn set_window_visible(ui: &AppWindow, visible: bool) {
     WINDOW_VISIBLE.store(visible, Ordering::Relaxed);
     let viz = ui.global::<Visualizer>();
     viz.set_window_shown(visible);
     if visible {
-        // The strip may have gone dormant off screen, leaving its Timer at the
-        // polling rate — half a second to work out it is being drawn again.
-        // This *is* that notice; don't make it infer the same thing.
+        // The strip may have gone dormant off screen, leaving its Timer at the polling
+        // rate. This *is* the notice; don't make it infer the same thing.
         viz.set_dormant(false);
     } else {
-        // The audio tap can't wait for the strip's next tick: `window-shown`
-        // gates that Timer too, so the call above may have just stopped it.
+        // The tap can't wait for the strip's next tick: `window-shown` gates that Timer
+        // too, so the call above may have just stopped it.
         viz.invoke_window_hidden();
     }
 }
 
-/// Read the visibility shadow. For UI work that keeps running off a `Timer`
-/// while the window is hidden — Slint timers fire off the event loop, which
-/// deliberately survives a close-to-tray hide. A cheap gate rather than a
-/// guarantee: Wayland tells a client nothing about being minimized, and
-/// `ui::visualizer::pulse` covers the rest.
+/// Read the visibility shadow, for UI work that keeps running off a `Timer` while the
+/// window is hidden — Slint timers fire off the event loop, which deliberately survives
+/// a close-to-tray hide. A cheap gate rather than a guarantee: Wayland tells a client
+/// nothing about being minimized, and `ui::visualizer::pulse` covers the rest.
 #[must_use]
 pub fn is_window_visible() -> bool {
     WINDOW_VISIBLE.load(Ordering::Relaxed)
 }
 
-/// Hide the main window to the tray, snapshotting geometry for `show_window`.
-/// UI thread.
+/// Hide the main window to the tray, snapshotting geometry for `show_window`. UI thread.
 ///
-/// Callers inside a winit `WindowEvent` dispatch (`on_close_window`,
-/// `CloseRequested`) must defer through `slint::invoke_from_event_loop`: hiding
-/// mid-dispatch leaves the window `Arc` borrowed by the dispatcher and Slint
-/// logs "references to the window still exist".
+/// A caller inside a winit `WindowEvent` dispatch must defer through
+/// `slint::invoke_from_event_loop`: hiding mid-dispatch leaves the window `Arc` borrowed
+/// by the dispatcher and Slint logs "references to the window still exist".
 pub fn hide_window(ui: &AppWindow) {
     let window = ui.window();
     if let Ok(mut slot) = SAVED_WINDOW_GEOM.lock() {
@@ -120,22 +108,17 @@ pub fn hide_window(ui: &AppWindow) {
     }
 }
 
-/// Show the main window and restore its pre-hide geometry. UI thread. Two
-/// hidden-states, told apart by whether `SAVED_WINDOW_GEOM` is populated:
+/// Show the main window and restore its pre-hide geometry. UI thread. Two hidden-states,
+/// told apart by whether `SAVED_WINDOW_GEOM` is populated: **`Some`** means `hide_window`
+/// unmapped the surface and `show()` re-maps it; **`None`** means the titlebar button
+/// minimized it, and Wayland has no client-side un-minimize — `xdg_toplevel::set_minimized`
+/// has no inverse and winit's `focus_window` is a no-op there — so the only way back is
+/// `hide()` + `show()`, geometry snapshotted first.
 ///
-/// 1. **`Some`** — `hide_window` unmapped the surface; `show()` re-maps it.
-/// 2. **`None`** — the surface is still mapped and the window was minimized by
-///    the titlebar button. Wayland has no client-side un-minimize:
-///    `xdg_toplevel::set_minimized` has no inverse and winit's `focus_window` is
-///    an empty no-op there, so the only way back is `hide()` + `show()` to
-///    destroy and recreate it. Geometry is snapshotted first so it lands where
-///    the minimized window was, not at the content-preferred minimum.
-///
-/// Both converge on `set_size` + `reschedule_geometry_restore`: the synchronous
-/// resize sets `has_explicit_size` against Slint's first layout pass snapping to
-/// the layout minimum, and the 16 ms tick re-asserts until it sticks. That
-/// correction must run from a timer, between frames — resizing mid-dispatch
-/// desyncs the renderer and stretches the UI.
+/// Both converge on `set_size` + `reschedule_geometry_restore`: the synchronous resize sets
+/// `has_explicit_size` against Slint's first layout pass snapping to the layout minimum,
+/// and the tick re-asserts until it sticks. That correction has to run from a timer,
+/// between frames — resizing mid-dispatch desyncs the renderer.
 fn show_window(ui: &AppWindow) {
     let window = ui.window();
     let from_tray_hide = SAVED_WINDOW_GEOM.lock().ok().and_then(|mut slot| slot.take());
@@ -147,8 +130,8 @@ fn show_window(ui: &AppWindow) {
         }
         g
     } else {
-        // Button-minimize path: snapshot current geometry before the hide
-        // tears the surface down; the recreate loses both otherwise.
+        // Button-minimize: snapshot before the hide tears the surface down, the
+        // recreate losing both otherwise.
         let g = (window.size(), window.position());
         if let Err(e) = window.hide() {
             log::warn!("tray: hide-for-restore failed: {e}");
@@ -176,12 +159,9 @@ fn show_window(ui: &AppWindow) {
     set_window_visible(ui, true);
 }
 
-/// Bring the window to the user, whatever put it out of reach.
-///
-/// Hidden — tray or minimize — goes through [`show_window`], the only path that
-/// knows about `SAVED_WINDOW_GEOM`. Merely buried is the window server's
-/// business, and Wayland gives a client no say: `focus_window` is a documented
-/// no-op there, the same asymmetry `show_window`'s second branch is built around.
+/// Bring the window to the user, whatever put it out of reach. Hidden — tray or minimize —
+/// goes through [`show_window`], the only path that knows about `SAVED_WINDOW_GEOM`.
+/// Merely buried is the window server's business, and Wayland gives a client no say.
 pub fn raise_window(ui: &AppWindow) {
     use slint::winit_030::{WinitWindowAccessor, winit::window::Window as WinitWindow};
 
@@ -192,14 +172,11 @@ pub fn raise_window(ui: &AppWindow) {
     ui.window().with_winit_window(WinitWindow::focus_window);
 }
 
-/// Re-assert `size` + `position` on the window from a 16 ms single-shot timer,
-/// rescheduling itself until the window's size matches (or `tries` is
-/// exhausted). The winit window is recreated asynchronously after `show()`, so
-/// the geometry has to be re-applied once it settles — and from a timer,
-/// between frames, so the renderer stays in sync (a resize inside event
-/// dispatch stretches the UI). Position is re-applied alongside size on every
-/// tick; it is idempotent, and only the size has the layout-snap race that
-/// drives the "settled" check.
+/// Re-assert `size` and `position` from a single-shot timer, rescheduling until the size
+/// matches or `tries` runs out. The winit window is recreated asynchronously after
+/// `show()`, so the geometry has to be re-applied once it settles, from a timer between
+/// frames. Position rides along on every tick, being idempotent; only the size has the
+/// layout-snap race the "settled" check is for.
 fn reschedule_geometry_restore(
     weak: slint::Weak<AppWindow>,
     size: slint::PhysicalSize,
@@ -221,8 +198,8 @@ fn reschedule_geometry_restore(
     });
 }
 
-/// Wire up the system tray: create it, spawn the action receiver and the
-/// state subscriber. Call once during startup, before `app.run()`.
+/// Create the tray and spawn the action receiver and state subscriber. Call once during
+/// startup, before `app.run()`.
 pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
     let (tx, rx) = tokio::sync::mpsc::channel::<TrayAction>(TRAY_ACTION_CHANNEL_CAP);
     spawn_action_receiver(spawner, state, ui.as_weak(), rx);
@@ -241,8 +218,8 @@ pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
     }
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
-        // `tray-icon` wants the UI thread with the event loop already running,
-        // so defer the same way `main.rs` defers the SMTC attach.
+        // `tray-icon` wants the UI thread with the event loop already running, so defer
+        // the way `main.rs` defers the SMTC attach.
         let sinks = state.sinks.clone();
         let weak = ui.as_weak();
         if let Err(e) = slint::invoke_from_event_loop(move || {
@@ -323,11 +300,10 @@ fn dispatch_action(
     }
 }
 
-/// Toggle the main window. UI thread, reached via `invoke_from_event_loop` so it
-/// runs in `user_event` context rather than a `WindowEvent` dispatch (see
-/// `hide_window`). Slint's `Window::show`/`hide` is the toolkit-level hide that
-/// actually unmaps the Wayland surface, as `KeePassXC` and `EasyEffects` do;
-/// winit's `set_visible` is a documented no-op there.
+/// Toggle the main window. UI thread, reached via `invoke_from_event_loop` so it runs in
+/// `user_event` context rather than a `WindowEvent` dispatch — see `hide_window`. Slint's
+/// `Window::show`/`hide` is the toolkit-level hide that actually unmaps the Wayland
+/// surface; winit's `set_visible` is a documented no-op there.
 fn toggle_window(ui_weak: &slint::Weak<AppWindow>) {
     let Some(ui) = ui_weak.upgrade() else { return };
     if WINDOW_VISIBLE.load(Ordering::Relaxed) {
@@ -349,20 +325,16 @@ fn snapshot_from_vm(vm: Option<&PlayerViewModelLight>) -> TraySnapshot {
     }
 }
 
-/// Linux state subscriber: a tokio task that owns the `Send` `LinuxTray` and
-/// refreshes it on every view-model change. Dropping the tray when the task
-/// ends (shutdown) removes the icon, so no explicit teardown is needed.
+/// Linux state subscriber: a tokio task owning the `Send` `LinuxTray`. Dropping the tray
+/// when the task ends removes the icon, so no explicit teardown is needed.
 #[cfg(target_os = "linux")]
 fn spawn_state_subscriber_linux(spawner: &TaskSpawner, state: &AppState, tray: tray::LinuxTray) {
     let mut rx = state.sinks.view_model.subscribe();
     spawner.spawn_cancellable(move |shutdown| async move {
-        // `tray` is owned here, so leaving the loop drops it and shuts ksni
-        // down. `update` is a blocking D-Bus round-trip to ksni's service
-        // thread; `block_in_place` lends the worker out for its duration rather
-        // than stalling the runtime. The view-model channel emits on *every*
-        // state change (volume steps mid-drag, seeks, queue edits) where the
-        // tray renders only title / artist / play-pause, so diff against the
-        // last snapshot to keep D-Bus traffic per-track.
+        // `update` is a blocking D-Bus round trip to ksni's service thread, so
+        // `block_in_place` lends the worker out rather than stalling the runtime. The
+        // channel emits on *every* state change where the tray renders only title, artist
+        // and play/pause, so diff against the last snapshot to keep traffic per-track.
         let mut last = snapshot_from_vm(rx.borrow_and_update().as_ref());
         tokio::task::block_in_place(|| tray.update(&last));
         loop {
@@ -385,15 +357,14 @@ fn spawn_state_subscriber_linux(spawner: &TaskSpawner, state: &AppState, tray: t
     });
 }
 
-/// Windows / macOS state subscriber: a `slint::spawn_local` future on the UI
-/// thread (the `tray-icon` handle is `!Send`). Must be spawned from the UI
-/// thread — `install` calls it from inside `invoke_from_event_loop`.
+/// Windows / macOS state subscriber: a `spawn_local` future on the UI thread, the
+/// `tray-icon` handle being `!Send`. Must be spawned from there — `install` calls it
+/// inside `invoke_from_event_loop`.
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn spawn_state_subscriber_local(sinks: &Arc<crate::player::event_sink::PlayerSinks>) {
     let mut rx = sinks.view_model.subscribe();
     let res = slint::spawn_local(async_compat::Compat::new(async move {
-        // Diff as the Linux subscriber does — the channel emits per state
-        // change, the tray renders only title / artist / play-pause.
+        // Diff as the Linux subscriber does.
         let mut last = snapshot_from_vm(rx.borrow_and_update().as_ref());
         tray::update_tray(&last);
         loop {
