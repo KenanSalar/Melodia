@@ -229,14 +229,52 @@ fn a_multi_coloured_cover_keeps_its_colours_apart() {
     ];
     let painted = tints(blue_and_red, COLOURFUL, THEME_ACCENT);
 
-    for (tint, seed) in painted.iter().zip(blue_and_red) {
-        let Some(seed) = seed else { continue };
-        let drift = hue_gap(hct_of(tint.rgb).get_hue(), hct_of(seed).get_hue());
-        assert!(drift < 10.0, "tint {:#08x} drifted {drift}° off the seed it came from", tint.rgb);
+    // Matched by hue rather than by slot: paint order is the hue wheel, not `Score`'s ranking.
+    for seed in blue_and_red.into_iter().flatten() {
+        let nearest = painted
+            .iter()
+            .map(|tint| hue_gap(hct_of(tint.rgb).get_hue(), hct_of(seed).get_hue()))
+            .fold(f64::INFINITY, f64::min);
+        assert!(nearest < 10.0, "seed {seed:#08x} has no wash within {nearest}° of it");
     }
 
-    let spread = hue_gap(hct_of(painted[0].rgb).get_hue(), hct_of(painted[1].rgb).get_hue());
-    assert!(spread > 90.0, "blue and red collapsed to {spread}° apart");
+    let hues: Vec<f64> = painted.iter().map(|tint| hct_of(tint.rgb).get_hue()).collect();
+    let widest = hues
+        .iter()
+        .flat_map(|hue| hues.iter().map(move |other| hue_gap(*hue, *other)))
+        .fold(0.0, f64::max);
+    assert!(widest > 90.0, "blue and red collapsed to {widest}° apart");
+}
+
+/// Consecutive washes are consecutive on the hue wheel: the blob positions are fixed, so the rank
+/// a colour arrives in decides which other colour it overlaps, and `Score`'s order once put two
+/// complementary pairs on top of each other. The failure is invisible in review — every colour in
+/// the solve is correct and only the composite is wrong.
+#[test]
+fn the_washes_are_seated_around_the_hue_wheel() {
+    // Deliberately adversarial: ranked so the two complementary pairs land adjacent.
+    let complementary_by_rank = [
+        Some(0x0063_4def),
+        Some(0x00e5_2508),
+        Some(0x00b7_eaed),
+        Some(0x00de_eacc),
+    ];
+    let painted = tints(complementary_by_rank, COLOURFUL, THEME_ACCENT);
+    let anchor = hct_of(painted[0].rgb).get_hue();
+    let turn = |rgb: u32| (hct_of(rgb).get_hue() - anchor).rem_euclid(360.0);
+
+    for pair in painted.windows(2) {
+        assert!(
+            turn(pair[0].rgb) <= turn(pair[1].rgb),
+            "the washes stopped walking one way round the wheel, so two of them can be \
+             complementary neighbours again"
+        );
+    }
+
+    // The anchor stays the top-ranked seed: it carries the strongest wash and the base gradient
+    // under it is solved from the same seed, so starting elsewhere strands the floor's own hue.
+    let dominant = hue_gap(anchor, hct_of(0x0063_4def).get_hue());
+    assert!(dominant < 10.0, "wash 0 is {dominant}° off the dominant seed");
 }
 
 /// No artwork at all is the only path that may reach for the theme, and it still owes a set of

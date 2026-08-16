@@ -230,10 +230,9 @@ export component LibraryTabBand inherits Rectangle {
     out property <bool> tip-visible <=> header.tip-visible;
 
     // Behind everything else, and one of the two. **`has-tints` is folded in** because this band
-    // carries Genre Detail as well as the three artwork details: a genre has no cover to wash, and
-    // its name-hashed stops are legible only under the scrim the blur arm solves. Flipping it
-    // remounts rather than eases, which is why the arms may only cross where nothing is on screen —
-    // every path into or out of a genre passes through the collapse below or through `reset`.
+    // carries Genre Detail as well as the three artwork details. Flipping it remounts rather than
+    // eases, so the arms may only cross where nothing is on screen — every path into or out of a
+    // genre passes through the collapse below or through `reset`.
     property <bool> aurora-shown: Theme.aurora-backdrop && HeroBackdrop.has-tints;
 
     // The gradient floor shows through with no blur image, which Genre Detail's procedural backdrop

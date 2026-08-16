@@ -32,9 +32,8 @@ pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
 }
 
 /// One tile for the process, shared by both aurora tiers: it answers to the renderer's
-/// lack of gradient dithering rather than to any artwork, so nothing later has cause to
-/// rewrite it. The `Image` is `Rc`-backed, so the second global holds a clone of the
-/// handle rather than a second buffer.
+/// lack of gradient dithering rather than to any artwork, so nothing later rewrites it.
+/// The `Image` is `Rc`-backed, so the second global clones a handle, not a buffer.
 pub fn install_backdrop_dither(app: &AppWindow) {
     let tile = slint::Image::from_rgba8(ui::aurora::dither_tile());
     app.global::<Player>().set_np_dither(tile.clone());

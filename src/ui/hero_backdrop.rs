@@ -24,8 +24,7 @@ use crate::{AppWindow, HeroBackdrop};
 
 /// What a hero's backdrop is derived from, and the one axis [`write`] branches on. A cover answers
 /// with washes and a solved floor; a genre has neither and keeps its own name-hashed stops. One
-/// value rather than two optional arguments, which could never disagree and now can't be spelled
-/// apart.
+/// value rather than two optional arguments that could never disagree.
 enum HeroFill {
     Artwork([Tint; SEED_COUNT]),
     Gradient { start_rgb: u32, end_rgb: u32 },
@@ -35,8 +34,7 @@ enum HeroFill {
 /// failed decode — takes the same path as every cover; what it falls back to, and why
 /// that isn't a guess, is on [`BackdropSample::solve`].
 pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
-    // One accent read for both halves — the fallback hue when there is no artwork, and the origin
-    // the washes rotate their fills around.
+    // One read for both halves: the fallback hue, and the origin the washes rotate their fills off.
     let accent = backdrop::theme_accent(ui);
     let colors = sample.solve(accent, backdrop::kind(ui));
     write(ui, &colors, HeroFill::Artwork(aurora::tints(sample.seeds, sample.chroma, accent)));
@@ -82,8 +80,7 @@ fn write(ui: &AppWindow, colors: &BackdropColors, fill: HeroFill) {
             g.set_tint_3(tint_3.to_color());
             g.set_tint_4(tint_4.to_color());
         }
-        // The washes are left where they are: nothing paints them while `has-tints` is false, and
-        // the next artwork hero overwrites them before it flips the gate back.
+        // The washes are left where they are: nothing paints them while `has-tints` is false.
         HeroFill::Gradient { start_rgb, end_rgb } => {
             g.set_floor_start(color(start_rgb));
             g.set_floor_end(color(end_rgb));

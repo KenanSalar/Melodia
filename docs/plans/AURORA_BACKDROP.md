@@ -357,6 +357,8 @@ constant, so this is the index rather than the reasoning.
   blue-and-red cover — more layers over the same area is more mixing — so span went 1.5 → 1.3
   diagonals and offsets 0.3 → 0.35, on the diagonals a quarter turn apart. That recovers the
   three-blob spread at the same coverage, chroma and tone headroom, with a fourth colour on top.
+  **The *diagonal* half of that was wrong and is reversed after Phase 5** — it holds only on the
+  shape it was tuned on. See "The band that painted itself grey" below.
 - **They are unequal, but only just** — 0.5 / 0.46 / 0.42 / 0.38. At one strength the eye has no
   reason to prefer any and reads the boundaries between them instead; at the usual 60/30/10 the
   dominant shows through the rest wherever they overlap and the later colours never get a region.
@@ -501,6 +503,35 @@ hydrates it from `settings.json` and deletes the shortcut, exactly as written th
   globals and never had anything to do with window chrome.
 - `hero_blur_backdrop_tests` lost its Now Playing arm — that file no longer has a floor of its own,
   and the shrink is the result rather than a cost.
+
+#### The band that painted itself grey
+
+The first mosaic banner on screen came out a flat grey-mauve, and the cause was neither the seeds
+nor the chroma band — the Favorites mosaic solves to violet `c48`, brick red `c48`, teal `c32` and
+olive `c36`, with the band fully open at artwork chroma 35.6. Two things were destroying them, both
+invisible on the shape the look gate ran against. Diagnosed by simulating the composite and matching
+it to a screenshot within 1–2 per channel, so the numbers below are measured rather than argued.
+
+- **Paint order was `Score`'s ranking, which has nothing to do with hue.** Blob *positions* are
+  fixed, so rank decides which colour overlaps which — and here it seated red 29° against teal 203°
+  and violet 291° against olive 132°. Two complementary pairs, and overlapping complementary washes
+  composite in sRGB toward grey. `aurora::tints` now walks the hue wheel from the dominant, which
+  lifts mean chroma across that band 11.4 → 17.5 and gains as much on a square host, so it is a
+  root-cause fix rather than a band tweak. Anchored at the dominant because the base gradient under
+  it is solved from the same seed.
+- **The layout was a fraction of the *diagonal*, which collapses as a host widens.** On an 887×231
+  banner the four centres sat 227 px either side of centre with their vertical pair 111 px *outside*
+  the element, so only two blobs reached any pixel and each covered the whole strip — no colour had
+  a region, and what showed was their average. Positions are now fractions of each axis, spread
+  evenly along the long one and alternating across the short one, with the reach sized off both.
+  A square host is where the spread is tightest, so it becomes the worst case for coverage: 0.643,
+  peaking at tone 29.8, still under `PEAK_TONE`. Today's geometry measured 0.597 → 29.0 at every
+  aspect, which reproduces the derivation already in `aurora.rs` exactly.
+
+Discarded on measurement: weighting each wash by its seed's population share. `Score`'s four seeds
+carry 0.22% / 0.20% / 4.61% / 0.18% of a 128-cluster quantize, which splits a photograph far too
+finely for share to mean prominence — it would have promoted a pale green over the dominant violet.
+`Score`'s own ranking is the prominence signal, and the weights already follow it.
 
 ### Phase 6 — The mosaic band is deleted, not ported
 

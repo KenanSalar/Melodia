@@ -1,24 +1,17 @@
 //! Source-level pins on the two backdrop stacks and the three sites that choose between
-//! them — `components/hero-blur-backdrop.slint`, `components/aurora-backdrop.slint`, and
-//! Now Playing plus the two shared bands.
+//! them — Now Playing and the two shared bands.
 //!
-//! The blur is a gradient floor, two cross-fading slots and a scrim solved against them,
-//! all riding one curve. The floor is the layer that shipped without an `animate` — and
-//! it is the layer that *is* the backdrop whenever the slots sit at 0: an art-less track,
-//! an artwork-less entity, Genre Detail's name-hashed stops, the window between a hero
-//! opening and its decode landing. So the failure is invisible on anything with artwork.
+//! The blur's floor is the layer that shipped without an `animate`, and it is the layer
+//! that *is* the backdrop whenever the slots sit at 0: an art-less track, an artwork-less
+//! entity, Genre Detail's stops, the window between a hero opening and its decode landing.
+//! So the failure is invisible on anything with artwork. That reach is also why it takes a
+//! gate, the globals behind it outliving the My Library tab that filled them.
 //!
-//! That reach is also why the floor takes a gate: the layer that *is* the backdrop is the
-//! one that eases, and on My Library the globals behind it outlive the tab that filled
-//! them.
-//!
-//! The pairing is pinned here rather than under a host because it is a property of no
-//! single site: three hosts, one stack each, and neither stack is allowed to know which
-//! tier it is painting from.
+//! The pairing is pinned here rather than under a host, being a property of no single site.
 
 // Comments dropped, so prose about a fix can neither satisfy a pin nor bound a region
-// early — particularly here, where every anchor is a gradient literal and the block above
-// the floor's own binding argues about gradients and stop counts.
+// early — every anchor here is a gradient literal, and the block above the floor's own
+// binding argues about gradients and stop counts.
 use crate::test_support::{
     MIN_SLINT_SOURCES, UI_DIR, strip_line_comments as code, stripped_sources,
 };
@@ -35,16 +28,13 @@ const SITES: [&str; 3] = [
     "components/hero/library-tab-band.slint",
 ];
 
-/// The gradient floor eases, on the same token the layers above it take.
+/// The gradient floor eases, on the same token the layers above it take. Anchored on the
+/// binding rather than searched loosely: what this catches is one line deleted from
+/// directly under the gradient.
 ///
-/// Anchored on the binding rather than searched loosely: what this exists to catch is one
-/// line deleted from directly under the gradient.
-///
-/// Safe to `animate` where a shared component's brush input is not, which is the
-/// distinction worth keeping straight: `Brush::interpolate` crosses gradients
-/// stop-for-stop and both sides are two stops at 135deg, and each pair has exactly one
-/// writer, writing discretely — so nothing can restart the binding mid-flight.
-/// `.claude/rules/slint-pitfalls.md` has the case where that isn't true.
+/// Safe to `animate` where a shared component's brush input is not — both sides are two
+/// stops at 135deg and the pair has one writer, writing discretely, so nothing can restart
+/// the binding mid-flight. `.claude/rules/slint-pitfalls.md` has the case where it can.
 #[test]
 fn the_backdrop_floor_eases_with_the_layers_above_it() {
     // On the gradient and then the end of its statement, rather than the line under
@@ -82,13 +72,11 @@ fn the_shared_backdrop_rides_one_duration() {
     );
 }
 
-/// The floor's gate defaults to "a hero is up", which is the whole of what keeps the two
-/// mosaic bands and Now Playing out of it: none of them ever stops painting one, so they
-/// pass nothing and are unchanged. Only `LibraryTabBand` morphs, and only it can hold a
-/// `HeroBackdrop` its band stopped painting a tab ago.
+/// The floor's gate defaults to "a hero is up", which is what keeps the mosaic bands and
+/// Now Playing out of it: none of them stops painting one, so they pass nothing. Defaulted
+/// the other way, every hero comes up on a transparent floor and stays there — on Genre
+/// Detail's, the one backdrop with no blur over it, that is the whole banner.
 ///
-/// Defaulted the other way, every hero comes up on a transparent floor and stays there —
-/// which on the one backdrop with no blur over it, Genre Detail's, is the whole banner.
 /// **The two arms are checked one at a time**, an inverted ternary being the same failure
 /// as an inverted default and reading correctly at a glance.
 #[test]
@@ -136,14 +124,10 @@ fn the_floors_hero_gate_defaults_to_shown() {
     );
 }
 
-/// Neither stack names a global, which is what lets one component serve tiers that are
-/// deliberately separate globals: `Player.np-*` for Now Playing, `HeroBackdrop` for the
-/// six bands. A single direct read ties the file to whichever it names and puts the other
-/// site's inline copy back. A `Theme.*` brush would be worse still — theme brushes flip
-/// polarity with the variant while the foreground stays solved for dark.
-///
-/// `AuroraBackdrop` carries its own copy of this in `aurora_backdrop_tests`, where the
-/// rest of its pins live; this is the half that stops the collapse regressing.
+/// Neither stack names a global, which is what lets one component serve two deliberately
+/// separate tiers — `Player.np-*` and `HeroBackdrop`. A single direct read ties the file
+/// to whichever it names and puts the other site's inline copy back. `AuroraBackdrop`'s
+/// half of this lives in `aurora_backdrop_tests`, with the rest of its pins.
 #[test]
 fn the_blur_stack_names_no_global() {
     for global in [

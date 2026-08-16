@@ -322,6 +322,12 @@ pub fn rotate_hue(argb: u32, degrees: f64) -> u32 {
     argb_to_u32(Argb::from(hct))
 }
 
+/// Where `argb` sits on the HCT hue wheel, in degrees. [`rotate_hue`]'s read-only half, for a
+/// caller ordering colours rather than making a new one.
+pub fn hue_of(argb: u32) -> f64 {
+    Hct::new(Argb::from_u32(argb)).get_hue()
+}
+
 /// Build a `DynamicScheme` of `style` × `is_dark` from the seed and map the M3
 /// roles onto a [`crate::themes::Palette`] plus accent. Pure CPU and
 /// sub-millisecond, so a tokio worker can call it without `spawn_blocking`.

@@ -55,9 +55,9 @@ export component NowPlayingView inherits Rectangle {
     // below is two `if`s over one property rather than two spellings of the condition.
     property <bool> aurora-shown: Theme.aurora-backdrop;
 
-    // The shared stack the six hero bands mount, on this view's own colour tier. **Both stops come
+    // The stack the six hero bands mount, on this view's own colour tier. **Both floor stops come
     // from Rust**, not a `Theme.accent` mix — this is the surface an art-less track's title sits on
-    // and the foreground is solved light, so a theme-derived floor would be bright on a light theme.
+    // and the foreground is solved light.
     if !root.aurora-shown: HeroBlurBackdrop {
         x: 0;
         y: 0;

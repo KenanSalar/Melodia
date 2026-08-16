@@ -2,16 +2,14 @@ import { Theme } from "../theme.slint";
 
 // Full-bleed hero blur: a gradient floor, two cross-fading `Image` slots, and a scrim. The Slint
 // half of the dual-slot contract `write_crossfade_slot` drives — the outgoing slot is never
-// cleared, so a refresh fades A↔B without flashing. `AuroraBackdrop`'s opposite number: one of the
+// cleared, so a refresh fades A↔B without flashing. `AuroraBackdrop`'s opposite number; one of the
 // two is mounted at each of the three sites.
 //
-// **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom, and what
-// lets one component serve the `HeroBackdrop` tier and Now Playing's `Player.np-*`, which are
-// deliberately separate globals. A `Theme.*` brush would be worse than wrong here: theme brushes
-// flip polarity with the variant, so the same cover would paint a dark banner under one and a
-// near-white one under another while the foreground stays solved for dark. `width/height: 100%` on
-// the children is mandatory — an `Image` does not auto-fill its parent and would draw at its
-// native buffer size.
+// **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom, and what lets
+// one component serve both the `HeroBackdrop` tier and Now Playing's `Player.np-*`. A `Theme.*`
+// brush would be worse than wrong: theme brushes flip polarity with the variant, so one cover would
+// paint a dark banner under one and a near-white one under another. `width/height: 100%` on the
+// children is mandatory — an `Image` does not auto-fill its parent.
 export component HeroBlurBackdrop inherits Rectangle {
     in property <color> floor-start: #2b2135;
     in property <color> floor-end: #14101a;
@@ -24,23 +22,21 @@ export component HeroBlurBackdrop inherits Rectangle {
     in property <bool> use-a;
     in property <bool> has-blur;
 
-    // Whether the host is painting a hero at all. The two mosaic bands always are and take the
-    // default; `LibraryTabBand` morphs, and on a tabbed page its globals outlive the tab that
-    // filled them, so the floor would ease *from* a banner nobody has seen since the tab changed —
-    // leave a genre, open a playlist elsewhere, and the genre's stops sit uncovered under the
-    // morph. While the host paints no hero this floor is nothing, and an opening one eases up.
+    // Whether the host is painting a hero at all. The mosaic bands and Now Playing always are and
+    // take the default; `LibraryTabBand` morphs, and its globals outlive the tab that filled them,
+    // so an ungated floor eases *from* a banner nobody has seen since — leave a genre, open a
+    // playlist elsewhere, and the genre's stops sit uncovered under the morph.
     in property <bool> hero-open: true;
 
-    // **The floor eases on the slots' own duration**, like the scrim below it — it is the layer
-    // that *is* the backdrop whenever there is no blur image: an artwork-less hero, Genre Detail's
-    // name-hashed stops, and the window between a hero opening and its decode landing.
-    // `Brush::interpolate` handles gradient↔gradient stop-for-stop and both sides here are two
-    // stops at 135deg — including the transparent pair, which is why the gate swaps the *stops*
-    // rather than the whole brush. Safe to `animate` where a tab-bar brush is not: Rust writes
-    // these discretely, so the binding can't be restarted by a moving source.
+    // **The floor eases on the slots' own duration**, being the layer that *is* the backdrop
+    // whenever there is no blur image: an artwork-less hero, Genre Detail's name-hashed stops, the
+    // window between a hero opening and its decode landing. Both arms are two stops at 135deg, the
+    // only shape `Brush::interpolate` blends stop-for-stop, which is why the gate swaps the *stops*
+    // rather than the whole brush. Safe to `animate` where a tab-bar brush is not: Rust writes these
+    // discretely, so no moving source can restart the binding.
     //
-    // The scrim below is deliberately *not* gated: solved at a tone holding almost no chroma, it
-    // is near-black at both ends, and draining it would brighten the artwork through the collapse.
+    // The scrim below is deliberately *not* gated: it carries almost no chroma, so draining it
+    // would only brighten the artwork through the collapse.
     background: root.hero-open
         ? @linear-gradient(135deg, root.floor-start, root.floor-end)
         : @linear-gradient(135deg, transparent, transparent);

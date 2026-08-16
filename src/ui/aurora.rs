@@ -1,50 +1,38 @@
 //! The colours an aurora backdrop washes over its base gradient, from the artwork's own seeds.
 //!
 //! [`crate::ui::backdrop`]'s counterpart: that module solves every *foreground* tone for contrast,
-//! this one owns the surface underneath. The split is what the WCAG solve needs — a ratio can only
-//! be targeted against a backdrop whose brightest point is known, and stating that point is the
-//! whole job here.
+//! this one owns the surface underneath and states its brightest point, which is the only thing a
+//! WCAG ratio can be targeted against.
 //!
-//! A fixed set, always. `Score` returns fewer when the artwork can't separate that many hues and
-//! never pads, so the filling rule below is load-bearing rather than defensive — and the count
-//! reaching Slint has to be fixed either way, `Brush::interpolate` blending gradients only at a
-//! matching stop and element count.
+//! A fixed set, always: `Score` returns fewer than asked and never pads, and `Brush::interpolate`
+//! blends gradients only at a matching stop and element count.
 
 use slint::{Color, Rgba8Pixel, SharedPixelBuffer};
 
-use crate::services::material_you::{rotate_hue, to_tone_with_chroma};
+use crate::services::material_you::{hue_of, rotate_hue, to_tone_with_chroma};
 use crate::themes::color_with_alpha;
 use crate::ui::backdrop::SEED_COUNT;
 
-/// Tone every tint is driven to — one for all of them, so hue is the only axis they differ on. A
-/// tint brighter than its neighbours turns its wash into a lightness ramp, which reads as light
-/// falling on the surface rather than as the surface's own colour.
+/// Tone every tint is driven to, so hue is the only axis they differ on — a brighter wash reads as
+/// light falling on the surface rather than as the surface's own colour.
 ///
-/// **Above [`crate::ui::backdrop::TARGET_BACKDROP_TONE`] on purpose.** That ceiling belongs to the
-/// composite the foreground is solved against, not to any single layer under it; no wash is ever
-/// opaque, so 36 over a floor at 18 peaks around 31. Holding each tint down to the ceiling instead
-/// spends the whole margin for nothing and is what made this grey — chroma is bounded by tone.
+/// **Above [`crate::ui::backdrop::TARGET_BACKDROP_TONE`] on purpose**: that ceiling belongs to the
+/// composite, not to a single layer under it, and no wash is opaque. Held down to it instead, this
+/// went grey — chroma is bounded by tone.
 pub(crate) const TINT_TONE: f64 = 36.0;
 
 /// The brightest tone the finished stack presents — what [`crate::ui::backdrop`] solves its
-/// foreground tiers against when this is the surface they sit on.
+/// foreground tiers against on this surface.
 ///
-/// **Stated rather than measured, there being no buffer to measure.** Two bounds fix it. Every
-/// wash is driven to [`TINT_TONE`], and compositing a colour over something darker lands between
-/// the two, so 36 is a ceiling no stacking can pass. And the geometry keeps coverage well under
-/// 1: the blob rects are 1.3 diagonals square, so their ramps die 0.643 diagonals out while their
-/// centres sit 0.35 out and 0.495 apart, leaving the strongest point its own 0.5 plus about a
-/// tenth from each neighbour. Six tenths of tone 36 over a base starting at
-/// `backdrop::FLOOR_TONE_START` lands near 29; this carries the headroom, and stays under
-/// [`crate::ui::backdrop::TARGET_BACKDROP_TONE`] so the tiers keep the bands they already solve in.
-///
-/// **Not a mean over the tint colours.** Understating bright regions is the exact failure the
-/// blur's percentile exists to avoid, and a blob centre is the smeared wordmark that argument was
-/// about.
+/// Stated rather than measured, there being no buffer. [`TINT_TONE`] bounds it absolutely, and the
+/// washes are spread far enough apart that coverage stays well under 1: over a base at
+/// `backdrop::FLOOR_TONE_START` the peak lands at tone 29.8 on a square host, the worst aspect
+/// because the spread is tightest there. Deliberately not a mean over the tint colours, which
+/// understates bright regions for [`crate::ui::backdrop::luma_p90`]'s reason.
 pub(crate) const PEAK_TONE: f64 = 31.0;
 
-// Both of [`PEAK_TONE`]'s bounds, as build failures rather than prose: a peak above either has no
-// symptom on screen, every tier saturating at its band floor across the whole legal range today.
+// Build failures rather than tests: a peak above either bound has no symptom on screen, every tier
+// saturating at its band floor across the whole legal range today.
 const _: () = assert!(
     PEAK_TONE <= TINT_TONE,
     "a stack of washes cannot be brighter than the tone every wash is driven to"
@@ -57,58 +45,42 @@ const _: () = assert!(
 /// Chroma floor, and the reason the surface carries the record's colour rather than a wash of it.
 ///
 /// `Score` ranks by how *usable* a colour is, not how saturated, so a cover's second and third
-/// seeds are routinely a near-white and a near-black — measured, a dominant at chroma 31 beside 12
-/// and 15. Taken as they came the dull two dilute the good one and the surface converges on grey,
-/// the harder they are laid on the greyer it gets, which is why reaching for more alpha makes this
-/// worse rather than better.
-///
-/// Both reached only by artwork that is itself colourful — see [`chroma_band`].
+/// seeds are routinely a near-white and a near-black. Taken as they came the dull two dilute the
+/// good one and the surface converges on grey — which more alpha makes worse, not better. Reached
+/// only by artwork that is itself colourful; see [`chroma_band`].
 const TINT_MIN_CHROMA: f64 = 36.0;
 
 /// Ceiling against a pathological seed; the floor above does the shaping. sRGB stops well short of
 /// it at this tone for most hues anyway.
 const TINT_MAX_CHROMA: f64 = 48.0;
 
-/// Artwork chroma at which the band above applies in full.
-///
-/// Measured, ordinary colourful sleeves sit at 22–24 and a black-and-white one at 5, so this is
-/// inside that gap with room either side — and near where `Score`'s own per-cluster cutoff puts
-/// the boundary between a hue and a rounding error.
+/// Artwork chroma at which the band above applies in full. Ordinary colourful sleeves measure
+/// 22–24 and a black-and-white one 5, so this sits in that gap with room either side.
 const TINT_CHROMA_REFERENCE: f64 = 20.0;
 
 /// The chroma band a tint is held to, scaled by how colourful `artwork_chroma` says the cover is.
 ///
 /// **The backdrop may not be more of a colour than the record is.** A black-and-white sleeve still
-/// quantizes to seeds carrying a few points of chroma — noise and a hint of tint in a near-black
-/// field — and neither bound may take them at face value: lifted to the floor they paint it red
-/// and violet, and left at their own 9 they still wash the whole surface mauve, because a tint
-/// covering everything needs very little chroma to read as a colour. Nor can the seeds be asked
-/// which case they are: measured, a greyscale cover's 9.4 sits *below* a colourful one's 12.6, and
-/// only the whole image separates them.
-///
-/// **Squared**, so colour falls away faster than the artwork does. Proportional scaling leaves a
-/// near-grey cover a proportional share of its tint, which is exactly the mauve being removed;
-/// squaring takes a cover at a quarter of the reference down to a sixteenth of the band. Still a
-/// curve rather than a threshold, so two near-identical covers can't land either side of a cliff.
+/// quantizes to seeds carrying a few points of chroma, and the seeds can't be asked which case they
+/// are — a greyscale cover's dimmest sits *below* a colourful one's, so only the whole image
+/// separates them. **Squared**, because a proportional share of a tint covering the whole surface
+/// still reads as a colour; still a curve, so near-identical covers can't land either side of a
+/// cliff.
 fn chroma_band(artwork_chroma: f64) -> (f64, f64) {
     let colourfulness = (artwork_chroma / TINT_CHROMA_REFERENCE).clamp(0.0, 1.0);
     let scale = colourfulness * colourfulness;
     (TINT_MIN_CHROMA * scale, TINT_MAX_CHROMA * scale)
 }
 
-/// Hue rotation for tint *n* when the quantizer had no seed for it, applied to the first colour
-/// that does exist — rotating from the previous tint instead would let the fills walk away from
-/// the album. A fan either side of the source at 25°, the analogous step, so an invented set is
-/// harmonious by construction; the fourth continues it rather than opening a second gap. Tint 0's
-/// entry is the identity: reaching it means no artwork at all, and the fallback hue is the answer.
+/// Hue rotation for tint *n* when the quantizer had no seed for it, always applied to the first
+/// colour that does exist — rotating from the previous fill would let the set walk away from the
+/// album. A fan either side at the analogous step, so an invented set is harmonious by
+/// construction; entry 0 is the identity, reaching it meaning no artwork at all.
 const FILL_HUES: [f64; SEED_COUNT] = [0.0, 25.0, -25.0, 50.0];
 
-/// How faintly a synthesized tint is laid on, against 1.0 for one the artwork offered.
-///
-/// **A backdrop may not invent variation the record doesn't have.** On a sleeve that quantized to
-/// one hue the rotated fills differ only in *direction*, and at full strength a stack of those is
-/// a lightness gradient the record never had. Weighted down, a monochrome sleeve settles onto its
-/// own base — which is what its blur looked like — while a many-hued cover still gets the full set.
+/// How faintly a synthesized tint is laid on, against 1.0 for one the artwork offered. **A backdrop
+/// may not invent variation the record doesn't have** — the fills of a one-hue sleeve differ only
+/// in direction, and at full strength a stack of those is a lightness gradient it never had.
 const FILL_WEIGHT: f32 = 0.3;
 
 /// One wash's colour and how strongly it is laid on.
@@ -120,9 +92,8 @@ pub(crate) struct Tint {
 }
 
 impl Tint {
-    /// The wash as both backdrop tiers take it: the weight rides in the alpha channel, which the
-    /// component's falloff multiplies — so how strongly a wash is laid on stays independent of the
-    /// shape it is laid on with.
+    /// The wash as both backdrop tiers take it, weight riding in the alpha channel so that how
+    /// strongly it is laid on stays independent of the shape it is laid on with.
     pub(crate) fn to_color(&self) -> Color {
         color_with_alpha(self.rgb, self.weight)
     }
@@ -131,19 +102,14 @@ impl Tint {
 /// The washes, in paint order.
 ///
 /// **A measured seed keeps its own hue.** An earlier pass pulled the set into an analogous arc,
-/// on the reasoning that overlapping washes composite in sRGB and its midpoint between distant
-/// hues is grey — but that answers the wrong question. A cover of blue *and* red is a cover of two
-/// colours, and clamping turned its red into a second violet: measured, three seeds 231°/17°/304°
-/// came out 231°/271°/270°, and the record's most vivid colour was the one thrown away. What keeps
-/// the overlaps from going grey is that the blobs are spread far enough apart to have regions of
-/// their own, which is the Slint side's business.
+/// reasoning that overlapping washes composite in sRGB and its midpoint between distant hues is
+/// grey. That answers the wrong question: a cover of blue *and* red is a cover of two colours, and
+/// clamping turned its red into a second violet. Separation is the Slint side's job, by giving each
+/// wash a region of its own.
 ///
-/// `artwork_chroma` is how colourful the cover is overall, and decides how far the floor is
-/// allowed to lift a dull seed — a greyscale sleeve keeps its greys.
-///
-/// `fallback` supplies the hue when the artwork gave nothing — the theme accent, as everywhere
-/// else on this surface. It is never used to *pad* a short list: a cover that quantized to one
-/// hue gets a full set of its own colours, not a short one padded with the app's.
+/// `artwork_chroma` decides how far the floor may lift a dull seed — a greyscale sleeve keeps its
+/// greys. `fallback` supplies the hue when the artwork gave nothing, and is never used to *pad* a
+/// short list: one hue's worth of cover gets a full set of its own colours, not the app's.
 pub(crate) fn tints(
     seeds: [Option<u32>; SEED_COUNT],
     artwork_chroma: f64,
@@ -152,7 +118,7 @@ pub(crate) fn tints(
     let origin = seeds.iter().flatten().next().copied().unwrap_or(fallback);
     let (floor, ceiling) = chroma_band(artwork_chroma);
 
-    std::array::from_fn(|tint| {
+    let ranked: [Tint; SEED_COUNT] = std::array::from_fn(|tint| {
         let (source, weight) = match seeds[tint] {
             Some(argb) => (argb, 1.0),
             None => (rotate_hue(origin, FILL_HUES[tint]), FILL_WEIGHT),
@@ -161,7 +127,26 @@ pub(crate) fn tints(
             rgb: to_tone_with_chroma(source, TINT_TONE, floor, ceiling),
             weight,
         }
-    })
+    });
+    around_the_wheel(ranked)
+}
+
+/// Seat the washes so neighbours here are neighbours on the hue wheel, top-ranked first.
+///
+/// The blob positions are fixed, so the rank a colour arrives in decides which other colour it
+/// overlaps — and `Score`'s ranking has nothing to do with hue. On a four-cover mosaic it put two
+/// complementary pairs on top of each other, which composite toward grey, and the band painted flat
+/// mauve out of four chroma-48 washes. Anchored at the dominant rather than sorted outright: it
+/// carries the strongest wash and the base gradient under it is solved from the same seed.
+fn around_the_wheel(ranked: [Tint; SEED_COUNT]) -> [Tint; SEED_COUNT] {
+    let anchor = hue_of(ranked[0].rgb);
+    let mut ordered = ranked;
+    // One turn from the anchor, so the sort can't wrap past it and reopen the gap it closes.
+    ordered[1..].sort_by(|a, b| {
+        let turn = |tint: &Tint| (hue_of(tint.rgb) - anchor).rem_euclid(360.0);
+        turn(a).total_cmp(&turn(b))
+    });
+    ordered
 }
 
 /// Side of the noise tile. Big enough that the repeat carries no structure to lock onto — the
@@ -170,32 +155,21 @@ const DITHER_TILE_SIDE: usize = 64;
 
 const DITHER_TILE_PIXELS: usize = DITHER_TILE_SIDE * DITHER_TILE_SIDE;
 
-/// Alpha the tile is composited at. **One, because one 8-bit level is the whole prescription** —
-/// the tile spans the full byte range, so `1/255` moves what is under it by exactly one
-/// quantization step, enough to break a contour and not enough to see. More is not more dithering
-/// but visible noise: at six this drew as a film of dust.
+/// Alpha the tile is composited at. **One 8-bit level is the whole prescription**: the tile spans
+/// the full byte range, so `1/255` moves what is under it by exactly one quantization step — enough
+/// to break a contour, not enough to see. At six this drew as a film of dust.
 const DITHER_ALPHA: u8 = 1;
 
-/// High-pass iterations shaping the noise toward blue. Measured on the tile's own neighbour
-/// contrast — white noise sits at 0.33, this reaches 0.39 by the eighth pass and then flattens,
-/// so anything past it is sorting for nothing.
+/// High-pass iterations shaping the noise toward blue. Neighbour contrast reaches 0.39 by the
+/// eighth pass against white noise's 0.33 and then flattens, so anything past it sorts for nothing.
 const BLUE_NOISE_PASSES: usize = 8;
 
 /// A tile of neutral blue noise, laid over the backdrop to break up 8-bit banding.
 ///
-/// **`FemtoVG` has no dithering pass**, so a ramp this wide and this shallow quantizes into
-/// visible bands — the aurora's base runs about two dozen sRGB levels across the diagonal, a flat
-/// stripe every eighty pixels or so. The blur this replaces escaped that only because a photograph
-/// carries its own grain, and grain is dither.
-///
-/// **Blue rather than white** is the difference between invisible and grubby: white noise keeps
-/// energy in the low frequencies the eye is most sensitive to and reads as blotches. That matters
-/// more than usual at one level of amplitude, where the tile is nearly a one-bit pattern and how
-/// it spaces itself is all there is to see.
-///
-/// Generated once, uniform by construction and mid-grey on average — the *variance* is the point.
-/// One tile serves every backdrop at every size, which is what separates it from the per-cover
-/// buffers this feature deletes.
+/// **`FemtoVG` has no dithering pass**, so a ramp this wide and this shallow quantizes into visible
+/// stripes; the blur beside it escapes that only because a photograph carries its own grain.
+/// **Blue rather than white** is the difference between invisible and grubby — white noise keeps
+/// energy in the low frequencies the eye is most sensitive to and reads as blotches.
 pub fn dither_tile() -> SharedPixelBuffer<Rgba8Pixel> {
     let levels = blue_noise_levels();
     let side = u32::try_from(DITHER_TILE_SIDE).unwrap_or(u32::MAX);

@@ -3,14 +3,12 @@ import { Theme } from "../theme.slint";
 // One blob of the aurora: album colour at a point, thinning out across the surface.
 //
 // **Radial, not linear.** Alpha-blending linear ramps composites to something still linear in
-// position, so any stack of them keeps straight parallel contours — which is why an earlier pass
-// banded into diagonal stripes and read as ramps rather than as anything blurred. Curvature needs
-// a primitive that isn't linear in position; offset radials are what a mesh gradient is made of.
+// position, so a stack of them keeps straight parallel contours — an earlier pass banded into
+// diagonal stripes and read as ramps rather than as anything blurred.
 //
 // **Two stops, the far one this tint at zero alpha — never the `transparent` keyword.** FemtoVG
-// interpolates stops in straight RGBA (`gradient_store.rs`, deliberately), so fading to
-// rgba(0,0,0,0) drags the colour toward black and the blob darkens instead of thinning. Amberol's
-// `color-mix(in srgb, <colour> 0%, transparent)` is the long way of writing the same thing.
+// interpolates stops in straight RGBA, so fading to rgba(0,0,0,0) drags the colour toward black and
+// the blob darkens instead of thinning.
 component AuroraBlob inherits Rectangle {
     in property <color> tint;
 
@@ -21,12 +19,9 @@ component AuroraBlob inherits Rectangle {
     in property <bool> shown: true;
 
     // **Gone by 70%, which is what lets a blob be local.** Slint's radius is the half-diagonal, so
-    // the edge midpoints sit at 1/√2: run the ramp to the corner and alpha is still ~0.3 of peak
-    // where the rectangle ends, and that draws as a straight seam. Reaching zero just inside
-    // instead frees the rectangle from having to cover the host at all, which is what allows blobs
-    // small and far apart enough to each own a region — no set of colours can be seen at once if
-    // every one of them covers the whole surface. FemtoVG holds the last stop out to 1.0, so this
-    // is still two stops and no interior slope break.
+    // running the ramp to the corner leaves ~0.3 of peak where the rectangle ends, which draws as a
+    // straight seam. Reaching zero just inside frees the rect from covering the host at all — no
+    // set of colours can be seen at once if every one of them covers the whole surface.
     //
     // Both arms one type at one stop count, the only shape `Brush::interpolate` blends
     // stop-for-stop. Safe to `animate` where a leaf's brush usually isn't: Rust writes the tint
@@ -69,40 +64,44 @@ export component AuroraBackdrop inherits Rectangle {
     clip: true;
 
     // Slint's radial gradient owns neither centre nor radius: always a circle in the middle of its
-    // element, radius the half-diagonal. Position and spread are therefore the rectangle's.
-    property <float> diagonal-px: Math.sqrt((root.width / 1px) * (root.width / 1px)
-        + (root.height / 1px) * (root.height / 1px));
-    property <length> diagonal: root.diagonal-px * 1px;
+    // element, radius the half-diagonal. Position and spread are therefore the rect's, and it stays
+    // square — the circle would otherwise expose only the first fifth of its ramp on the short axis
+    // and read as a band.
+    property <bool> wide: root.width >= root.height;
+    property <length> long-side: max(root.width, root.height);
+    property <length> short-side: min(root.width, root.height);
 
-    // Sized and spread so the four overlap in bands rather than everywhere. **The pair is one
-    // decision**: a blob's alpha reaches zero at roughly half its span, so a wide span with tight
-    // offsets puts every blob at strength over the whole surface, each colour is diluted by the
-    // rest, and what shows is their average. Adding a blob without tightening both is a net loss —
-    // measured on a blue-and-red cover, a fourth at the three-blob geometry *cost* a third of the
-    // hue variation across the panel, and these numbers win it back. Wider offsets alone would
-    // leave the floor bare between them; both move together.
-    property <length> blob-span: root.diagonal * 1.3;
-    property <length> blob-offset: root.diagonal * 0.35;
-    property <length> blob-home-x: (root.width - root.blob-span) / 2;
-    property <length> blob-home-y: (root.height - root.blob-span) / 2;
+    // **A fraction of each axis, never of the diagonal.** Against the diagonal the four centres
+    // converge horizontally and land off-element vertically as a host widens, so on a banner only
+    // two reach any pixel and each covers the whole strip — four vivid washes composited to a flat
+    // mauve. Spread along the long axis, each colour owns a stretch of it.
+    property <length> blob-reach: max(root.long-side * 0.315, root.short-side * 0.8);
 
-    // Four centres on the diagonals, a quarter turn apart, so each holds a corner of the panel.
-    property <length> blob-step: root.blob-offset * 0.707;
+    // `AuroraBlob`'s ramp dies at 0.495 of its side, so this is the side that paints `blob-reach`.
+    property <length> blob-span: root.blob-reach / 0.495;
+
+    pure function blob-x(along: float, across: float) -> length {
+        return (root.wide ? root.width * along : root.width * across) - root.blob-span / 2;
+    }
+    pure function blob-y(along: float, across: float) -> length {
+        return (root.wide ? root.height * across : root.height * along) - root.blob-span / 2;
+    }
 
     background: root.hero-open
         ? @linear-gradient(135deg, root.base-start, root.base-end)
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
-    // Ordered by `Score`'s ranking so the colour the artwork most is leads, but only just.
-    // A steeper hierarchy — 60/30/10, which is the usual advice — has the dominant showing through
-    // the rest everywhere they overlap, so a cover's later colours never get a region of their own;
-    // measured on a blue-and-red cover it cost a third of the hue variation across the panel. The
-    // advice is about *area*, and the geometry above already gives each an area, so the weights
-    // only have to break the tie.
+    // Evenly along the long axis, alternating across the short one, so each wash holds a stretch of
+    // the surface rather than all four covering it. Rust hands them over in hue-wheel order, so
+    // neighbours here are neighbours on the wheel — `ui::aurora::around_the_wheel` argues why.
+    //
+    // Weights descend with the ranking so the colour the artwork most is leads, but only just: the
+    // usual 60/30/10 has the dominant showing through everywhere the four overlap, and that advice
+    // is about *area*, which the geometry above already gives each of them.
     AuroraBlob {
-        x: root.blob-home-x - root.blob-step;
-        y: root.blob-home-y - root.blob-step;
+        x: root.blob-x(0.15, 0.2);
+        y: root.blob-y(0.15, 0.2);
         width: root.blob-span;
         height: root.blob-span;
         tint: root.tint-1;
@@ -110,8 +109,8 @@ export component AuroraBackdrop inherits Rectangle {
         shown: root.hero-open;
     }
     AuroraBlob {
-        x: root.blob-home-x + root.blob-step;
-        y: root.blob-home-y - root.blob-step;
+        x: root.blob-x(0.383, 0.8);
+        y: root.blob-y(0.383, 0.8);
         width: root.blob-span;
         height: root.blob-span;
         tint: root.tint-2;
@@ -119,8 +118,8 @@ export component AuroraBackdrop inherits Rectangle {
         shown: root.hero-open;
     }
     AuroraBlob {
-        x: root.blob-home-x + root.blob-step;
-        y: root.blob-home-y + root.blob-step;
+        x: root.blob-x(0.617, 0.2);
+        y: root.blob-y(0.617, 0.2);
         width: root.blob-span;
         height: root.blob-span;
         tint: root.tint-3;
@@ -128,8 +127,8 @@ export component AuroraBackdrop inherits Rectangle {
         shown: root.hero-open;
     }
     AuroraBlob {
-        x: root.blob-home-x - root.blob-step;
-        y: root.blob-home-y + root.blob-step;
+        x: root.blob-x(0.85, 0.8);
+        y: root.blob-y(0.85, 0.8);
         width: root.blob-span;
         height: root.blob-span;
         tint: root.tint-4;
@@ -137,11 +136,10 @@ export component AuroraBackdrop inherits Rectangle {
         shown: root.hero-open;
     }
 
-    // **Four stops, and the only place here where extra ones earn their keep.** Two give a
-    // constant slope, i.e. darkening that starts at the centre and dims the artwork it should be
-    // framing; easing in keeps the middle clear and puts the fall in the outer third. The usual
-    // objection — every junction is a slope break — barely applies to a monochrome overlay sitting
-    // at two percent where the first one is.
+    // **Four stops, the only place here where extra ones earn their keep.** Two give a constant
+    // slope, i.e. darkening that starts at the centre and dims the artwork it should be framing;
+    // easing in keeps the middle clear and puts the fall in the outer third. The usual objection —
+    // a slope break at every junction — barely applies to a monochrome overlay at two percent.
     Rectangle {
         x: 0;
         y: 0;
@@ -155,12 +153,11 @@ export component AuroraBackdrop inherits Rectangle {
         animate background { duration: Theme.dur-med; easing: ease-in-out; }
     }
 
-    // **`image-fit: preserve` is what makes this dither rather than decoration**: outside a layout
-    // the default is `fill`, which scales the tile before tiling it, and one texel becomes a block
-    // tens of pixels across. Only `preserve` maps a source texel to a physical pixel, the
-    // frequency dither has to run at to disappear; `pixelated` so filtering can't average it back
-    // toward the flat colour it breaks up. Alpha lives in the tile rather than in `opacity`, which
-    // would rasterize the whole backdrop into a layer.
+    // **`image-fit: preserve` is what makes this dither rather than decoration**: the default `fill`
+    // scales the tile before tiling it, turning one texel into a block tens of pixels across. Only
+    // `preserve` maps a source texel to a physical pixel, the frequency dither has to run at to
+    // disappear; `pixelated` so filtering can't average it back toward the flat colour it breaks up.
+    // Alpha lives in the tile rather than in `opacity`, which would rasterize this into a layer.
     Image {
         x: 0;
         y: 0;

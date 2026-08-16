@@ -109,8 +109,7 @@ export component MosaicTabHero inherits Rectangle {
     // show a genre, so `HeroBackdrop.has-tints` has nothing to say here.
     property <bool> aurora-shown: Theme.aurora-backdrop;
 
-    // The shared component owns the dual-slot crossfade contract; the gradient floor shows through
-    // when there is no blur image.
+    // The gradient floor shows through when there is no blur image.
     if !root.aurora-shown: HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: 100%;
@@ -123,9 +122,8 @@ export component MosaicTabHero inherits Rectangle {
         has-blur: root.has-blur;
     }
 
-    // No vignette: the component's is sized for a full page, and on a band this wide and short its
-    // circle lands ~0.37 black on the left and right ends and nothing top or bottom — an
-    // end-darkening under the tile and the search bar rather than a frame.
+    // No vignette: the component's is sized for a full page, and its circle on a strip this shape
+    // darkens the left and right ends and nothing else — end-caps rather than a frame.
     if root.aurora-shown: AuroraBackdrop {
         x: 0; y: 0;
         width: 100%; height: 100%;

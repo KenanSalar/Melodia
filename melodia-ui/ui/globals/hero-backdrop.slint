@@ -12,20 +12,20 @@ export global HeroBackdrop {
     in-out property <color> floor-start: #2b2135;
     in-out property <color> floor-end: #14101a;
 
-    // `Player.np-tint-*`'s twin, off the same solve — the count is `SEED_COUNT` for that block's
-    // reason, and the defaults have to agree with it and with `AuroraBackdrop`'s own.
+    // `Player.np-tint-*`'s twin, off the same solve — same `SEED_COUNT` reason, and the defaults
+    // have to agree with that block and with `AuroraBackdrop`'s own.
     in-out property <color> tint-1: #3a2d4a;
     in-out property <color> tint-2: #2d3a4a;
     in-out property <color> tint-3: #4a2d3a;
     in-out property <color> tint-4: #2d4a3a;
 
-    // False only for Genre Detail, which shares this band with three artwork heroes and has no
-    // artwork to wash — its name-hashed stops sit near L*50 and are legible only under the scrim
-    // the blur arm solves. `has-blur`'s twin: how a host says "not this one".
+    // `has-blur`'s twin: how a host says "not this one". False only for Genre Detail, which shares
+    // this band with three artwork heroes and has no artwork to wash — its name-hashed stops sit
+    // near L*50 and are legible only under the scrim the blur arm solves.
     in-out property <bool> has-tints: true;
 
-    // The aurora's grain, written once at boot. Here rather than beside the tints because it
-    // answers to the renderer rather than to the artwork; `ui::aurora::dither_tile` argues it.
+    // Written once at boot, answering to the renderer rather than to the artwork;
+    // `ui::aurora::dither_tile` argues it.
     in-out property <image> dither;
 
     // The hue-carrying tier, solved to 3:1 against the composited backdrop.

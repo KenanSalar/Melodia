@@ -82,20 +82,15 @@ fn the_dither_keeps_its_own_pitch() {
     }
 }
 
-/// The numbers `ui::aurora::PEAK_TONE` was derived from.
-///
-/// That constant is what the WCAG solve targets on this surface, and it is stated rather than
-/// measured — there is no buffer to measure. Its derivation reads the span and offset (which fix
-/// how far the ramps carry and how far apart their centres sit) and the four peaks (which fix how
-/// much alpha meets at the strongest point). Move any of them and the peak has to be re-derived,
-/// which is a change with no symptom on screen: the foreground stays legible right up until it
-/// isn't.
+/// The numbers `ui::aurora::PEAK_TONE` was derived from — how far the ramps carry, how far apart
+/// their centres sit, and how much alpha meets at the strongest point. Move any of them and the
+/// peak has to be re-derived, which is a change with no symptom on screen: the foreground stays
+/// legible right up until it isn't.
 #[test]
 fn the_peak_tone_is_derived_from_the_geometry_below() {
     for binding in [
-        "blob-span: root.diagonal * 1.3;",
-        "blob-offset: root.diagonal * 0.35;",
-        "blob-step: root.blob-offset * 0.707;",
+        "blob-reach: max(root.long-side * 0.315, root.short-side * 0.8);",
+        "blob-span: root.blob-reach / 0.495;",
         "peak: 0.5;",
         "peak: 0.46;",
         "peak: 0.42;",
@@ -104,6 +99,29 @@ fn the_peak_tone_is_derived_from_the_geometry_below() {
         assert!(
             code(AURORA).contains(binding),
             "`{binding}` moved — re-derive `ui::aurora::PEAK_TONE` before changing it here"
+        );
+    }
+}
+
+/// The washes are laid out as fractions of each axis, never of the diagonal.
+///
+/// A diagonal-derived layout is right on a square host and collapses on a wide one: the centres
+/// converge horizontally and land off-element vertically, so only two of the four reach any pixel
+/// and each covers the whole surface. It painted a banner flat mauve out of four vivid washes while
+/// looking perfectly right on Now Playing — the shape the numbers were tuned against.
+#[test]
+fn the_washes_are_laid_out_against_the_axes_rather_than_the_diagonal() {
+    assert!(
+        !code(AURORA).contains("diagonal"),
+        "the layout went back to the diagonal — it hides the failure on the shape it was tuned on"
+    );
+    // A pair sharing an along-fraction is two centres in one column, i.e. the same collapse
+    // wearing different arithmetic.
+    for along in ["0.15", "0.383", "0.617", "0.85"] {
+        assert_eq!(
+            code(AURORA).matches(&format!("blob-x({along},")).count(),
+            1,
+            "no wash sits at {along} along the long axis, so the four don't span it"
         );
     }
 }
