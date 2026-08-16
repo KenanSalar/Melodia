@@ -224,6 +224,9 @@ pub(crate) struct BackdropSample {
     /// The same quantize's ranked list, best first, short when the artwork couldn't separate that
     /// many hues. `ui::aurora` owns the filling rule.
     pub(crate) seeds: [Option<u32>; SEED_COUNT],
+    /// How colourful the cover is overall — the question no individual seed answers, since a
+    /// black-and-white sleeve still yields seeds carrying a few points of chroma.
+    pub(crate) chroma: f64,
     /// [`luma_p90`] of the same buffer.
     pub(crate) luma: Option<f64>,
 }
@@ -240,14 +243,17 @@ impl BackdropSample {
     /// `Theme.accent` path is for a missing cover and never a monochrome one — a greyscale sleeve
     /// answers with its own dominant grey.
     pub(crate) fn measure(cover: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
+        let quantized = extract_seeds_from_rgb8(cover, SEED_COUNT);
+
         let mut seeds = [None; SEED_COUNT];
-        for (slot, seed) in seeds.iter_mut().zip(extract_seeds_from_rgb8(cover, SEED_COUNT)) {
+        for (slot, seed) in seeds.iter_mut().zip(quantized.seeds) {
             *slot = Some(seed);
         }
 
         Self {
             accent_argb: seeds[0],
             seeds,
+            chroma: quantized.chroma,
             luma: luma_p90(cover),
         }
     }

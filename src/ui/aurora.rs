@@ -32,11 +32,40 @@ pub(crate) const TINT_TONE: f64 = 36.0;
 /// and 15. Taken as they came the dull two dilute the good one and the surface converges on grey,
 /// the harder they are laid on the greyer it gets, which is why reaching for more alpha makes this
 /// worse rather than better.
+///
+/// Both reached only by artwork that is itself colourful — see [`chroma_band`].
 const TINT_MIN_CHROMA: f64 = 36.0;
 
 /// Ceiling against a pathological seed; the floor above does the shaping. sRGB stops well short of
 /// it at this tone for most hues anyway.
 const TINT_MAX_CHROMA: f64 = 48.0;
+
+/// Artwork chroma at which the band above applies in full.
+///
+/// Measured, ordinary colourful sleeves sit at 22–24 and a black-and-white one at 5, so this is
+/// inside that gap with room either side — and near where `Score`'s own per-cluster cutoff puts
+/// the boundary between a hue and a rounding error.
+const TINT_CHROMA_REFERENCE: f64 = 20.0;
+
+/// The chroma band a tint is held to, scaled by how colourful `artwork_chroma` says the cover is.
+///
+/// **The backdrop may not be more of a colour than the record is.** A black-and-white sleeve still
+/// quantizes to seeds carrying a few points of chroma — noise and a hint of tint in a near-black
+/// field — and neither bound may take them at face value: lifted to the floor they paint it red
+/// and violet, and left at their own 9 they still wash the whole surface mauve, because a tint
+/// covering everything needs very little chroma to read as a colour. Nor can the seeds be asked
+/// which case they are: measured, a greyscale cover's 9.4 sits *below* a colourful one's 12.6, and
+/// only the whole image separates them.
+///
+/// **Squared**, so colour falls away faster than the artwork does. Proportional scaling leaves a
+/// near-grey cover a proportional share of its tint, which is exactly the mauve being removed;
+/// squaring takes a cover at a quarter of the reference down to a sixteenth of the band. Still a
+/// curve rather than a threshold, so two near-identical covers can't land either side of a cliff.
+fn chroma_band(artwork_chroma: f64) -> (f64, f64) {
+    let colourfulness = (artwork_chroma / TINT_CHROMA_REFERENCE).clamp(0.0, 1.0);
+    let scale = colourfulness * colourfulness;
+    (TINT_MIN_CHROMA * scale, TINT_MAX_CHROMA * scale)
+}
 
 /// Hue rotation for tint *n* when the quantizer had no seed for it, applied to the first colour
 /// that does exist — rotating from the previous tint instead would let two fills walk away from
@@ -71,11 +100,19 @@ pub(crate) struct Tint {
 /// the overlaps from going grey is that the blobs are spread far enough apart to have regions of
 /// their own, which is the Slint side's business.
 ///
+/// `artwork_chroma` is how colourful the cover is overall, and decides how far the floor is
+/// allowed to lift a dull seed — a greyscale sleeve keeps its greys.
+///
 /// `fallback` supplies the hue when the artwork gave nothing — the theme accent, as everywhere
 /// else on this surface. It is never used to *pad* a short list: a cover that quantized to one
 /// hue gets three of its own colours, not two of its own and a lick of the app's.
-pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], fallback: u32) -> [Tint; SEED_COUNT] {
+pub(crate) fn tints(
+    seeds: [Option<u32>; SEED_COUNT],
+    artwork_chroma: f64,
+    fallback: u32,
+) -> [Tint; SEED_COUNT] {
     let origin = seeds.iter().flatten().next().copied().unwrap_or(fallback);
+    let (floor, ceiling) = chroma_band(artwork_chroma);
 
     std::array::from_fn(|tint| {
         let (source, weight) = match seeds[tint] {
@@ -83,7 +120,7 @@ pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], fallback: u32) -> [Tint; S
             None => (rotate_hue(origin, FILL_HUES[tint]), FILL_WEIGHT),
         };
         Tint {
-            rgb: to_tone_with_chroma(source, TINT_TONE, TINT_MIN_CHROMA, TINT_MAX_CHROMA),
+            rgb: to_tone_with_chroma(source, TINT_TONE, floor, ceiling),
             weight,
         }
     })

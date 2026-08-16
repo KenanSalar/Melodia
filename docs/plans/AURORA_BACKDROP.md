@@ -311,6 +311,15 @@ constant, so this is the index rather than the reasoning.
   Chroma is bounded by tone, so asking a near-black seed for saturation *at its own tone* discards
   the request before the tone change can make room — the ordering bug that had a third tint stuck
   at chroma 15 against 36.
+- **The whole chroma band scales with how colourful the artwork is**, or the backdrop is more of a
+  colour than the record. A black-and-white sleeve still quantizes to seeds carrying a few points
+  of chroma: lifted to the floor they painted it red and violet, and left at their own 9 they still
+  washed it mauve, since a tint covering the whole surface needs very little chroma to read as one.
+  The seeds can't answer which case it is — a greyscale cover's 9.4 sits below a colourful one's
+  12.6 — so `BackdropSample` carries the image's own mean chroma, taken population-weighted over
+  the quantizer's clusters, which tracks the per-pixel mean to under a point at a hundredth of the
+  conversions. Scaled by its **square**, so colour falls away faster than the artwork does; the
+  greyscale cover lands at chroma 2–3 and the colourful ones are untouched.
 - **Tint tone sits above `TARGET_BACKDROP_TONE`, not on it.** That ceiling belongs to the
   composite, not to any single layer under it. Holding each tint down to it spent the whole margin
   for nothing and, chroma being bounded by tone, cost most of the colour.

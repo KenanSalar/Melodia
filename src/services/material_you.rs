@@ -155,10 +155,22 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
 /// spell as the theme accent. So there is no last-resort colour to pick here,
 /// and no layer-crossing theme dependency to acquire in order to pick one.
 fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
-    ranked_seeds(pixels, 1).into_iter().next()
+    ranked_seeds(pixels, 1).seeds.into_iter().next()
 }
 
-/// The best `desired` hue-separated seeds, best first.
+/// What one quantize pass has to say about an image.
+#[derive(Default)]
+pub struct Quantized {
+    /// Hue-separated seeds, best first, and shorter than asked when the artwork couldn't separate
+    /// that many.
+    pub seeds: Vec<u32>,
+    /// How colourful the image is overall, as population-weighted mean chroma over the clusters.
+    /// A cluster mean tracks the true per-pixel one to well under a chroma point at a hundredth of
+    /// the conversions, the quantizer's output being a compressed form of the same distribution.
+    pub chroma: f64,
+}
+
+/// The best `desired` hue-separated seeds, plus how colourful the source was.
 ///
 /// `desired` is `Score`'s own parameter forwarded: it walks the required hue separation down from
 /// 90° and takes the first that yields this many, returning **fewer** rather than reaching for
@@ -167,20 +179,35 @@ fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
 /// **Entry 0 doesn't depend on `desired`** — the walk clears its shortlist each pass and pushes
 /// the top-scored survivor unconditionally — so widening the ask changes no colour anything
 /// paints.
-fn ranked_seeds(pixels: &[Argb], desired: usize) -> Vec<u32> {
+///
+/// [`Quantized::chroma`] rides along because it is the one question a *seed* cannot answer: a
+/// black-and-white sleeve still yields seeds with a few points of chroma, indistinguishable
+/// per-seed from a genuinely tinted cover's dimmest, and only the whole image says which it was.
+fn ranked_seeds(pixels: &[Argb], desired: usize) -> Quantized {
     if pixels.is_empty() {
-        return Vec::new();
+        return Quantized::default();
     }
     let counts = QuantizerCelebi::quantize(pixels, QUANTIZE_MAX_COLOURS).color_to_count;
     let Some(dominant) = counts.iter().max_by_key(|(_, count)| **count).map(|(argb, _)| *argb)
     else {
-        return Vec::new();
+        return Quantized::default();
     };
+
+    let population: f64 = counts.values().map(|count| f64::from(*count)).sum();
+    let chroma = counts
+        .iter()
+        .map(|(argb, count)| Hct::new(*argb).get_chroma() * f64::from(*count))
+        .sum::<f64>()
+        / population;
+
     let desired = i32::try_from(desired).unwrap_or(i32::MAX);
-    Score::score(&counts, Some(desired), Some(dominant), None)
-        .into_iter()
-        .map(argb_to_u32)
-        .collect()
+    Quantized {
+        seeds: Score::score(&counts, Some(desired), Some(dominant), None)
+            .into_iter()
+            .map(argb_to_u32)
+            .collect(),
+        chroma,
+    }
 }
 
 /// [`extract_source_argb`]'s pipeline starting from the RGB8 thumbnail
@@ -191,7 +218,7 @@ fn ranked_seeds(pixels: &[Argb], desired: usize) -> Vec<u32> {
 ///
 /// **Blocking** (CPU-bound quantize) — call from `spawn_blocking`.
 pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<u32> {
-    extract_seeds_from_rgb8(buf, 1).into_iter().next()
+    extract_seeds_from_rgb8(buf, 1).seeds.into_iter().next()
 }
 
 /// [`extract_source_argb_from_rgb8`] for a caller that wants the whole ranked list — the
@@ -199,7 +226,7 @@ pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Opti
 /// [`ranked_seeds`] for why the first entry is the same either way.
 ///
 /// **Blocking** (CPU-bound quantize) — call from `spawn_blocking`.
-pub fn extract_seeds_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>, desired: usize) -> Vec<u32> {
+pub fn extract_seeds_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>, desired: usize) -> Quantized {
     let bytes = buf.as_bytes();
     // No alpha here, so the path-based sibling's alpha-skip collapses to a plain push.
     let mut pixels: Vec<Argb> = Vec::with_capacity(bytes.len() / 3);
