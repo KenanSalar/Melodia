@@ -137,12 +137,11 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
 
 /// Quantize `pixels` and score the best UI seed out of the resulting clusters.
 ///
-/// `Score` discards every cluster under its own chroma cutoff and answers Google
-/// Blue when nothing survives — a brand colour, not a fact about this artwork,
-/// which is how a greyscale sleeve painted vivid blue chrome. The *dominant*
-/// cluster is such a fact: what the image mostly is, whatever its chroma. Handed
-/// over as the fallback it leaves a colourless cover seeding its own grey, and
-/// being the only fallback named here it keeps the crate's out of reach.
+/// `Score` discards every cluster under its own chroma cutoff and answers Google Blue when nothing
+/// survives — a brand colour, not a fact about this artwork, so a greyscale sleeve gets vivid blue
+/// chrome. The *dominant* cluster is such a fact: what the image mostly is, whatever its chroma.
+/// Handed over as the fallback it leaves a colourless cover seeding its own grey, and being the
+/// only fallback named here it keeps the crate's out of reach.
 ///
 /// **It reaches the app-wide palette too, not just the backdrop**, so which
 /// Color Style is picked decides how visible that is: the four variants that

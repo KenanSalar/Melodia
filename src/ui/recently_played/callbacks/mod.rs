@@ -27,9 +27,9 @@ const VIEW_ID: &str = crate::ui::track_list_view::view_id::RECENTLY_PLAYED;
 
 /// Wire every `RecentlyPlayed.*` callback.
 ///
-/// Called by [`super::install`], which is what guarantees the models are in
-/// place first; that pairing used to be two statements a boot-file reorder
-/// could separate. `wire_all` still has to have run before it.
+/// Called by [`super::install`], which is what guarantees the models are in place first — a
+/// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
+/// have run before it.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
     covers::wire(ui, rp_ui);
     subviews::wire(ui, state, rp_ui);

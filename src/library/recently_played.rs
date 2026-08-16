@@ -21,12 +21,10 @@ pub async fn get_recently_played(state: &AppState) -> Result<Vec<track::TrackLis
 
 /// The most-played tracks across the whole library, for the "Most Played" tab.
 ///
-/// Uncapped: a virtualized grid has nothing to gain by truncating, and the `[1, 100]`
-/// clamp it used to take was the right shape for the ten-card carousel it replaced,
-/// not a ceiling to scroll into. `favorites::get_most_played_favorites` makes the same
-/// call over a set that is a strict subset of its own Songs tab, where this one is
-/// everything ever played — the query's own doc comment says what that costs per
-/// `stats_changed` tick.
+/// Uncapped: a virtualized grid has nothing to gain by truncating, and a clamp would be a ceiling
+/// to scroll into rather than a bound. `favorites::get_most_played_favorites` makes the same call
+/// over a strict subset of its own Songs tab, where this one is everything ever played — the
+/// query's own doc comment says what that costs per `stats_changed` tick.
 pub async fn get_most_played(state: &AppState) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
     queries::track::get_most_played(&state.db).await
 }

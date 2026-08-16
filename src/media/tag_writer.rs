@@ -1,39 +1,32 @@
-//! Writing tags back to audio files (lofty): a per-field tri-state edit
-//! (`Keep` / `Clear` / `Set`) applied to a file's **primary** tag, plus the
-//! cover-art normalizer that turns a user-picked image into something every
-//! container we ship can store.
+//! Writing tags back to audio files (lofty): a per-field tri-state edit (`Keep` / `Clear` / `Set`)
+//! applied to a file's **primary** tag, plus the cover-art normalizer that turns a user-picked
+//! image into something every container we ship can store.
 //!
-//! Nothing here touches the DB, the UI or `AppState`. [`apply_edit`] is pure,
-//! which is what makes the per-format key tables below testable;
-//! [`apply_to_file`] is the blocking read-modify-write around it and every
-//! caller goes through `spawn_blocking`.
+//! Nothing here touches the DB, the UI or `AppState`. [`apply_edit`] is pure, which is what makes
+//! the per-format key mappings below testable; [`apply_to_file`] is the blocking
+//! read-modify-write around it and every caller goes through `spawn_blocking`.
 //!
 //! ## Why the primary tag, and only the primary tag
 //!
 //! [`TaggedFileExt::primary_tag_type`] is the format's canonical tag — `ID3v2`,
-//! `VorbisComments` or `Ilst`, the whole set across the seven containers Melodia
-//! scans, and all three map every field this module exposes.
-//!
-//! **Never `first_tag_mut()`**: an MP3 carrying only an `ID3v1` tag would take
-//! the edit into a key set of eight items, so album-artist, composer, BPM,
-//! lyrics and original year would vanish without a word. Creating a fresh
-//! primary tag instead also matches the reader (`metadata.rs` reads
-//! `primary_tag().or(first_tag())`), so the next `extract_metadata` reads back
-//! what we wrote. **Never [`Tag::re_map`]** either — it discards the
-//! format-specific companion tag, throwing away every frame with no `ItemKey`:
-//! `ReplayGain`, `MusicBrainz` ids, `POPM`.
+//! `VorbisComments` or `Ilst`, the whole set across the seven containers Melodia scans, and all
+//! three map every field this module exposes. **Never `first_tag_mut()`**, which
+//! `.claude/rules/library-data.md` argues; creating a fresh primary tag instead also matches the
+//! reader (`metadata.rs` reads `primary_tag().or(first_tag())`), so the next `extract_metadata`
+//! reads back what we wrote. **Never [`Tag::re_map`]** either — it discards the format-specific
+//! companion tag, throwing away every frame with no `ItemKey`: `ReplayGain`, `MusicBrainz` ids,
+//! `POPM`.
 //!
 //! ## What survives an edit
 //!
-//! `GlobalOptions::preserve_format_specific_items` defaults on, stashing those
-//! keyless frames in a companion tag and merging them back on save — so
-//! `FieldEdit::Keep` genuinely means keep for fields this module never heard of.
+//! `GlobalOptions::preserve_format_specific_items` defaults on, stashing those keyless frames in a
+//! companion tag and merging them back on save — so `FieldEdit::Keep` genuinely means keep for
+//! fields this module never heard of.
 //!
-//! `TaggedFile::save_to` re-serializes *every* tag in the file, so an MP3's
-//! companion `ID3v1` or a WAV's RIFF INFO chunk survives, rewritten unchanged
-//! and now stale against the primary tag. That is the trade, and it is why
-//! `WriteOptions::default()`'s `remove_others: false` must stay: flipping it
-//! strips those tags outright, a bigger change than a stale `ID3v1`.
+//! `TaggedFile::save_to` re-serializes *every* tag in the file, so an MP3's companion `ID3v1` or a
+//! WAV's RIFF INFO chunk survives, rewritten unchanged and now stale against the primary tag. That
+//! is the trade, and it is why `WriteOptions::default()`'s `remove_others: false` must stay:
+//! flipping it strips those tags outright, a bigger change than a stale `ID3v1`.
 
 use std::io::Cursor;
 use std::path::Path;
@@ -48,14 +41,13 @@ use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 use super::image_decode;
 use crate::error::AppError;
 
-/// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and
-/// a tag holding a 12-digit "tempo" is worse than one holding none.
+/// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and a tag holding a
+/// 12-digit "tempo" is worse than one holding none.
 const MAX_BPM: f64 = 1000.0;
 
-/// A per-field tri-state. The dialog reports what the user *did*, not just the
-/// value they left behind, because empty is not clear: `extract_metadata`
-/// filters whitespace-only tags to `None`, so writing `""` leaves a ghost tag
-/// our own reader ignores and other players happily display.
+/// A per-field tri-state. The dialog reports what the user *did*, not just the value they left
+/// behind, because empty is not clear: `extract_metadata` filters whitespace-only tags to `None`,
+/// so writing `""` leaves a ghost tag our own reader ignores and other players happily display.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum FieldEdit<T> {
     /// Never touched — leave the file's tag exactly as it is.
@@ -76,8 +68,8 @@ pub enum ArtworkEdit {
     Replace,
 }
 
-/// One dialog's worth of edits. Every field defaults to [`FieldEdit::Keep`], so
-/// a caller only sets what the user actually changed.
+/// One dialog's worth of edits. Every field defaults to [`FieldEdit::Keep`], so a caller only sets
+/// what the user actually changed.
 #[derive(Debug, Clone, Default)]
 pub struct TagEdit {
     pub title: FieldEdit<String>,
@@ -92,8 +84,8 @@ pub struct TagEdit {
     pub disc_number: FieldEdit<u32>,
     pub composer: FieldEdit<String>,
     pub comment: FieldEdit<String>,
-    /// Written by the auto-tag backfill so `ListenBrainz` loves — which key on
-    /// it — work. Not surfaced in the Edit-Tags dialog.
+    /// Written by the auto-tag backfill so `ListenBrainz` loves — which key on it — work. Not
+    /// surfaced in the Edit-Tags dialog.
     pub musicbrainz_track_id: FieldEdit<String>,
     pub bpm: FieldEdit<f64>,
     pub lyrics: FieldEdit<String>,
@@ -101,10 +93,9 @@ pub struct TagEdit {
 }
 
 impl TagEdit {
-    /// True when the user changed nothing at all; the caller short-circuits on
-    /// it. lofty rewrites the tag whether or not anything differs, so a
-    /// reflexive open-then-Save on a 200-track album would otherwise rewrite 200
-    /// files — and, through the watcher, risk re-ingesting them.
+    /// True when the user changed nothing at all; the caller short-circuits on it. lofty rewrites
+    /// the tag whether or not anything differs, so a reflexive open-then-Save on a 200-track album
+    /// would otherwise rewrite 200 files — and, through the watcher, risk re-ingesting them.
     pub fn is_noop(&self) -> bool {
         self.title == FieldEdit::Keep
             && self.artist == FieldEdit::Keep
@@ -124,13 +115,11 @@ impl TagEdit {
     }
 }
 
-/// Fields the file's tag format has no key for. Never an error — the rest of the
-/// edit still lands — but the user is told, so "BPM didn't save" is a message
-/// rather than a mystery.
+/// Fields the file's tag format has no key for. Never an error — the rest of the edit still lands
+/// — but the user is told, so "BPM didn't save" is a message rather than a mystery.
 ///
-/// A safety net rather than a routine outcome: all three primary tag types map
-/// every field [`TagEdit`] exposes. It costs one bool check and is what makes
-/// the BPM strategy below correct, but don't build UI around it being populated.
+/// A safety net rather than a routine outcome: all three primary tag types map every field
+/// [`TagEdit`] exposes. Don't build UI around it being populated.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct UnsupportedFields(pub Vec<&'static str>);
 
@@ -142,11 +131,10 @@ impl UnsupportedFields {
 
 /// Write one text item, recording the field name when the key doesn't map.
 ///
-/// **Every write goes through here**, because [`Tag::insert_text`] silently
-/// drops an item whose `ItemKey` has no mapping for the target `TagType` and
-/// says so only in its return — the bool that makes the BPM and lyrics fallbacks
-/// below expressible. It is also why the [`Accessor`] setters are unused: they
-/// throw that bool away, and their default bodies are empty no-ops, so a
+/// **Every write goes through here**, because [`Tag::insert_text`] silently drops an item whose
+/// `ItemKey` has no mapping for the target `TagType` and says so only in its return — the bool
+/// that makes the BPM and lyrics fallbacks below expressible. It is also why the [`Accessor`]
+/// setters are unused: they throw that bool away, and their default bodies are empty no-ops, so a
 /// non-overriding impl would discard the whole write.
 fn set_text(
     tag: &mut Tag,
@@ -178,10 +166,9 @@ fn apply_string(
 /// Write the `MusicBrainz` **Recording** id.
 ///
 /// Its own function because `ID3v2` stores it in a binary `UFID` frame, which
-/// [`Tag::insert_text`]'s support check has no mapping for and would refuse.
-/// `insert_unchecked` stores it regardless — lofty's `Tag → Id3v2Tag` conversion
-/// makes the `UFID` frame on save — and `VorbisComments` and MP4 map the key
-/// directly, so the same path writes them too.
+/// [`Tag::insert_text`]'s support check has no mapping for and would refuse. `insert_unchecked`
+/// stores it regardless — lofty's `Tag → Id3v2Tag` conversion makes the `UFID` frame on save — and
+/// `VorbisComments` and MP4 map the key directly, so the same path writes them too.
 fn apply_recording_id(tag: &mut Tag, edit: &FieldEdit<String>) {
     match edit {
         FieldEdit::Keep => {}
@@ -210,34 +197,26 @@ fn apply_number<T: std::fmt::Display>(
 
 /// Remove the front cover — **both** `CoverFront` and `Other`.
 ///
-/// MP4 has no picture-type concept: `Ilst` flattens every `pic_type` to
-/// [`PictureType::Other`] on read, so keying the removal on `CoverFront` alone
-/// matches nothing on an M4A. The tag then holds both pictures, both get written
-/// to `covr`, and on the next read our own `CoverFront > CoverBack > first`
-/// reader falls through to the *old* cover — a Replace that silently reverts and
-/// a Remove that does nothing. lofty 0.24 has no clear-all, so two calls it is.
+/// MP4 has no picture-type concept: `Ilst` flattens every `pic_type` to [`PictureType::Other`] on
+/// read, so keying the removal on `CoverFront` alone matches nothing on an M4A, and our own
+/// `CoverFront > CoverBack > first` reader then falls through to the *old* cover — a Replace that
+/// silently reverts and a Remove that does nothing. lofty 0.24 has no clear-all, so two calls.
 ///
-/// Accepted collateral: a FLAC deliberately storing a non-cover image as `Other`
-/// loses it. `CoverBack`, booklet and artist pictures survive, and Melodia's
-/// data model has one cover per track anyway.
+/// Accepted collateral: a FLAC deliberately storing a non-cover image as `Other` loses it.
+/// `CoverBack`, booklet and artist pictures survive, and Melodia's data model has one cover per
+/// track anyway.
 fn clear_front_cover(tag: &mut Tag) {
     tag.remove_picture_type(PictureType::CoverFront);
     tag.remove_picture_type(PictureType::Other);
 }
 
-/// BPM: the key differs per format, and `ItemKey::Bpm` **does not exist on `ID3v2`**.
+/// BPM: the key differs per format, and `ItemKey::Bpm` **does not exist on `ID3v2`** while
+/// `IntegerBpm` has no Vorbis mapping — so `insert_text(Bpm, …)` on an MP3 is a no-op returning
+/// `false`, and `insert_text(IntegerBpm, …)` on a FLAC is the same.
 ///
-/// | Format               | `ItemKey::Bpm`          | `ItemKey::IntegerBpm` |
-/// |----------------------|-------------------------|-----------------------|
-/// | Vorbis (FLAC / OGG)  | `BPM` ✓                 | —                     |
-/// | `ID3v2` (MP3/WAV/AIFF) | **absent**            | `TBPM` ✓              |
-/// | MP4 (`Ilst`)        | freeform `…iTunes:BPM`  | `tmpo` ✓              |
-///
-/// So `insert_text(Bpm, …)` on an MP3 is a no-op returning `false`, and
-/// `insert_text(IntegerBpm, …)` on a FLAC is the same. Write `IntegerBpm`
-/// always, `Bpm` additionally where it maps, and report BPM unsupported only
-/// when *both* come back `false` — the one field where that bool is load-bearing
-/// on a format we ship.
+/// Write `IntegerBpm` always, `Bpm` additionally where it maps, and report BPM unsupported only
+/// when *both* come back `false` — the one field where that bool is load-bearing on a format we
+/// ship.
 fn apply_bpm(tag: &mut Tag, edit: &FieldEdit<f64>, out: &mut Vec<&'static str>) {
     match edit {
         FieldEdit::Keep => {}
@@ -246,17 +225,11 @@ fn apply_bpm(tag: &mut Tag, edit: &FieldEdit<f64>, out: &mut Vec<&'static str>) 
             tag.remove_key(ItemKey::IntegerBpm);
         }
         FieldEdit::Set(v) => {
-            // Bound once and write the *same* value to both keys — the integer
-            // and decimal forms of one BPM must not disagree.
-            //
-            // `f64::clamp` does not absorb NaN (both its comparisons are false),
-            // so it would pass straight through and render as the literal
-            // "NaN" — and a field parsed with `str::parse::<f64>()` accepts
-            // "nan" and "inf". Hence the explicit guard.
-            //
-            // `.round()` before formatting is load-bearing: `{:.0}` rounds
-            // half-to-even and would render 128.5 as "128", where
-            // half-away-from-zero is what "rounded BPM" means everywhere else.
+            // Bound once and write the *same* value to both keys — the integer and decimal forms
+            // of one BPM must not disagree. `f64::clamp` does not absorb NaN (both its comparisons
+            // are false) and `str::parse::<f64>()` accepts "nan"/"inf", hence the explicit guard;
+            // and `.round()` before formatting is load-bearing, `{:.0}` rounding half-to-even
+            // where half-away-from-zero is what "rounded BPM" means everywhere else.
             let bpm = if v.is_nan() {
                 0.0
             } else {
@@ -271,18 +244,12 @@ fn apply_bpm(tag: &mut Tag, edit: &FieldEdit<f64>, out: &mut Vec<&'static str>) 
     }
 }
 
-/// Lyrics: `ItemKey::Lyrics` still exists — it's **`ID3v2`** that lacks the mapping.
+/// Lyrics: `ItemKey::Lyrics` still exists — it's **`ID3v2`** that lacks the mapping, the key being
+/// overloaded there across `SYLT`/`USLT`.
 ///
-/// | Format   | `ItemKey::Lyrics`        | `ItemKey::UnsyncLyrics` |
-/// |----------|--------------------------|-------------------------|
-/// | Vorbis   | `LYRICS` ✓               | `UNSYNCEDLYRICS` ✓      |
-/// | `ID3v2`  | **absent** (overloaded across SYLT/USLT) | `USLT` ✓ |
-/// | MP4      | `©lyr` ✓                 | `©lyr` ✓                |
-///
-/// `LYRICS` is what Picard, `foobar2000` and `MusicBee` write in Vorbis
-/// comments, so writing only `UnsyncLyrics` would put our FLAC lyrics under
-/// `UNSYNCEDLYRICS` where no other player looks — and leave theirs invisible to
-/// us. Write keyed by tag type, clear *both*.
+/// `LYRICS` is what Picard, `foobar2000` and `MusicBee` write in Vorbis comments, so writing only
+/// `UnsyncLyrics` would put our FLAC lyrics under `UNSYNCEDLYRICS` where no other player looks —
+/// and leave theirs invisible to us. Write keyed by tag type, clear *both*.
 fn apply_lyrics(tag: &mut Tag, edit: &FieldEdit<String>, out: &mut Vec<&'static str>) {
     match edit {
         FieldEdit::Keep => {}
@@ -301,13 +268,11 @@ fn apply_lyrics(tag: &mut Tag, edit: &FieldEdit<String>, out: &mut Vec<&'static 
     }
 }
 
-/// Year, done by hand: [`Accessor`] exposes `date: Timestamp` rather than
-/// `year`, and `set_date` discards the `insert_text` bool — so do what it does
-/// with the bool visible.
+/// Year, done by hand: [`Accessor`] exposes `date: Timestamp` rather than `year`, and `set_date`
+/// discards the `insert_text` bool — so do what it does with the bool visible.
 ///
-/// Seeding from the existing `tag.date()` is what preserves a month/day through
-/// a year-only edit; `Timestamp`'s `Display` appends `-MM-DD` only when those
-/// parts are present.
+/// Seeding from the existing `tag.date()` is what preserves a month/day through a year-only edit;
+/// `Timestamp`'s `Display` appends `-MM-DD` only when those parts are present.
 fn apply_year(tag: &mut Tag, edit: &FieldEdit<u16>, out: &mut Vec<&'static str>) {
     match edit {
         FieldEdit::Keep => {}
@@ -325,10 +290,8 @@ fn apply_year(tag: &mut Tag, edit: &FieldEdit<u16>, out: &mut Vec<&'static str>)
     }
 }
 
-/// Apply `edit` to an in-memory tag. **Pure — no I/O at all**; the `Replace`
-/// image is decoded by the caller and handed in already built.
-///
-/// Returns the fields this tag format had no key for.
+/// Apply `edit` to an in-memory tag, returning the fields this tag format had no key for.
+/// **Pure — no I/O at all**; the `Replace` image is decoded by the caller and handed in built.
 pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> UnsupportedFields {
     let mut out: Vec<&'static str> = Vec::new();
 
@@ -343,9 +306,8 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
 
     apply_number(tag, &edit.track_number, ItemKey::TrackNumber, "track_number", &mut out);
     apply_number(tag, &edit.disc_number, ItemKey::DiscNumber, "disc_number", &mut out);
-    // `OriginalReleaseDate` maps on all three primary tag types, and
-    // `extract_metadata` reads it back with `s.get(..4)` — so a bare 4-digit
-    // year is the right shape.
+    // `OriginalReleaseDate` maps on all three primary tag types, and `extract_metadata` reads it
+    // back with `s.get(..4)` — so a bare 4-digit year is the right shape.
     apply_number(tag, &edit.original_year, ItemKey::OriginalReleaseDate, "original_year", &mut out);
 
     apply_year(tag, &edit.year, &mut out);
@@ -356,10 +318,9 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
         ArtworkEdit::Keep => {}
         ArtworkEdit::Remove => clear_front_cover(tag),
         ArtworkEdit::Replace => {
-            // Clear only with a replacement in hand: `Replace` is a unit variant
-            // and the picture travels beside the edit, so a caller *could* hand
-            // over `None` — and clearing first would turn a Replace into a
-            // Remove across the whole batch.
+            // Clear only with a replacement in hand: `Replace` is a unit variant and the picture
+            // travels beside the edit, so a caller *could* hand over `None` — and clearing first
+            // would turn a Replace into a Remove across the whole batch.
             debug_assert!(picture.is_some(), "ArtworkEdit::Replace requires a Picture");
             if let Some(pic) = picture {
                 clear_front_cover(tag);
@@ -371,26 +332,24 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
     UnsupportedFields(out)
 }
 
-/// Read-modify-write `path`'s tags in place. **Blocking** — callers go through
-/// `spawn_blocking`.
+/// Read-modify-write `path`'s tags in place. **Blocking** — callers go through `spawn_blocking`.
 pub fn apply_to_file(
     path: &Path,
     edit: &TagEdit,
     picture: Option<&Picture>,
 ) -> Result<UnsupportedFields, AppError> {
-    // Default `ParseOptions`, so `read_cover_art` stays on. NEVER reuse
-    // `extract_metadata`'s `skip_artwork` branch: it skips picture frames at
-    // *parse*, and pictures live in `Tag.pictures` rather than the companion
-    // tag — so `save_to_path` would silently delete every embedded picture.
+    // Default `ParseOptions`, so `read_cover_art` stays on. NEVER reuse `extract_metadata`'s
+    // `skip_artwork` branch: it skips picture frames at *parse*, and pictures live in
+    // `Tag.pictures` rather than the companion tag — so `save_to_path` would silently delete
+    // every embedded picture.
     let mut tagged = lofty::probe::read_from_path(path).map_err(|e| {
         AppError::metadata(format!("Failed to read tags from {}", path.display()), e)
     })?;
 
     let tag_type = tagged.primary_tag_type();
 
-    // `insert_tag` no-ops when the `FileType` doesn't support the `TagType`, so
-    // without this pre-flight the unsupported case surfaces as a confusing "no
-    // writable tag" below.
+    // `insert_tag` no-ops when the `FileType` doesn't support the `TagType`, so without this
+    // pre-flight the unsupported case surfaces as a confusing "no writable tag" below.
     if !tagged.tag_support(tag_type).is_writable() {
         return Err(AppError::metadata_msg(format!(
             "{tag_type:?} tags are read-only for {}",
@@ -416,19 +375,18 @@ pub fn apply_to_file(
 
 /// Decode-validate a user-picked cover and produce an embeddable [`Picture`].
 ///
-/// Two constraints that don't agree: lofty sniffs the mime from 8 bytes and
-/// rejects anything outside PNG / JPEG / GIF / BMP / TIFF outright, while MP4's
-/// `covr` writer hard-errors on TIFF — which lofty happily sniffs — but only on
-/// M4A/ALAC. No single picker filter can express that, so normalize rather than
-/// filter: JPEG and PNG embed byte-for-byte, everything else is re-encoded to
-/// JPEG, which every container accepts.
+/// Two constraints that don't agree: lofty sniffs the mime from 8 bytes and rejects anything
+/// outside PNG / JPEG / GIF / BMP / TIFF outright, while MP4's `covr` writer hard-errors on TIFF —
+/// which lofty happily sniffs — but only on M4A/ALAC. No single picker filter can express that, so
+/// normalize rather than filter: JPEG and PNG embed byte-for-byte, everything else is re-encoded
+/// to JPEG, which every container accepts.
 ///
-/// The decode is also the **validation**: `Picture::from_reader` never decodes,
-/// so a truncated JPEG would embed into N files and only blow up at thumbnail
-/// time. Failing here aborts the batch before any file is touched.
+/// The decode is also the **validation**: `Picture::from_reader` never decodes, so a truncated
+/// JPEG would embed into N files and only blow up at thumbnail time. Failing here aborts the batch
+/// before any file is touched.
 ///
-/// Call it **once per batch**, before any fan-out — it reads the image into
-/// memory, so per-track would re-read the file N times.
+/// Call it **once per batch**, before any fan-out — it reads the image into memory, so per-track
+/// would re-read the file N times.
 pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
     let bytes = std::fs::read(path)
         .map_err(|e| AppError::metadata(format!("Failed to read cover {}", path.display()), e))?;
@@ -437,9 +395,9 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
         image::ImageReader::new(Cursor::new(&bytes)).with_guessed_format().map_err(|e| {
             AppError::metadata(format!("Unrecognized image format: {}", path.display()), e)
         })?;
-    // The same bound every other artwork decode runs under. Reading from memory
-    // rather than a path, this one can't go through `decode_capped` — but a
-    // forged header shouldn't get a bigger allocation for being hand-picked.
+    // The same bound every other artwork decode runs under. Reading from memory rather than a
+    // path, this one can't go through `decode_capped` — but a forged header shouldn't get a
+    // bigger allocation for being hand-picked.
     reader.limits(image_decode::capped_limits(image_decode::MAX_SOURCE_DIM));
 
     let format = reader.format();
@@ -447,8 +405,8 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
         .decode()
         .map_err(|e| AppError::metadata(format!("Failed to decode cover {}", path.display()), e))?;
 
-    // Every container we target embeds JPEG and PNG as-is, so hand the original
-    // bytes through — `decoded` was only ever the validator.
+    // Every container we target embeds JPEG and PNG as-is, so hand the original bytes through —
+    // `decoded` was only ever the validator.
     let passthrough = matches!(format, Some(image::ImageFormat::Jpeg | image::ImageFormat::Png));
 
     let data = if passthrough {

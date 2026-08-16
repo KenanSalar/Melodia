@@ -19,9 +19,9 @@ use crate::ui::tracks::TracksUi;
 /// Wire every `Tracks.*` callback to its `library::*` counterpart and the `tracks_ui`
 /// shared state.
 ///
-/// Called by [`super::install`], which is what guarantees the models are in place
-/// first — that pairing used to be two statements a boot-file reorder could separate.
-/// `wire_all` still has to have run before it.
+/// Called by [`super::install`], which is what guarantees the models are in place first — a
+/// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
+/// have run before it.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     lifecycle::wire(ui, state, tracks_ui);
     tracklist::wire(ui, state, tracks_ui);

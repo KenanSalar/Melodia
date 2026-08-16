@@ -1,22 +1,20 @@
 //! How bright a blurred-artwork backdrop is, and which colours survive on it.
 //!
-//! Two surfaces float their chrome directly on a blurred cover, so nothing about their
-//! legibility is knowable until the cover is. **Measure** the blur ([`luma_p90`]) and
-//! solve a scrim opacity driving the *composited* result into a known dark band
-//! ([`scrim_alpha`], [`composited_tone`]), then **solve** each foreground tier's HCT tone
-//! against that for a WCAG target.
+//! Two surfaces float their chrome directly on a blurred cover, so nothing about their legibility
+//! is knowable until the cover is. **Measure** the blur ([`luma_p90`]) and solve a scrim opacity
+//! driving the *composited* result into a known dark band ([`scrim_alpha`], [`composited_tone`]),
+//! then **solve** each foreground tier's HCT tone against that for a WCAG target.
 //!
-//! That order is load-bearing. Adapting the foreground first means a bright cover is
-//! answered by a *polarity flip* past the black/white crossover rather than a darker
-//! accent — the album's colour thrown away and reversed between tracks — and a blurred
-//! cover isn't uniform besides, so no global foreground decision serves a backdrop bright
-//! in one corner and dark in another. Pin the backdrop and every cover ends up dark, so
-//! one light hue-carrying foreground is correct everywhere.
+//! That order is load-bearing. Adapting the foreground first means a bright cover is answered by a
+//! *polarity flip* past the black/white crossover rather than a darker accent, and a blurred cover
+//! isn't uniform besides, so no global foreground decision serves a backdrop bright in one corner
+//! and dark in another. Pin the backdrop and every cover ends up dark, so one light hue-carrying
+//! foreground is correct everywhere.
 //!
-//! **The measurement comes off the decoded blur buffer, never the rendered frame** — the
-//! chrome tints itself off the same accent feeding the backdrop, so sampling the composite
-//! closes a feedback loop. A consumer borrows only the artwork's *hue* and owns every
-//! lightness decision, which is why these surfaces look the same under every theme.
+//! **The measurement comes off the decoded blur buffer, never the rendered frame** — the chrome
+//! tints itself off the same accent feeding the backdrop, so sampling the composite closes a
+//! feedback loop. A consumer borrows only the artwork's *hue* and owns every lightness decision,
+//! which is why these surfaces look the same under every theme.
 
 use std::sync::LazyLock;
 
@@ -29,67 +27,64 @@ use crate::services::material_you::{
 };
 use crate::themes::brush_with_alpha;
 
-/// HCT tone the composited backdrop is driven down to. Below it a light hue-carrying
-/// chrome tone clears WCAG's 3:1 non-text bar with margin and body text clears 4.5:1
-/// without washing out. Raising it shows more artwork and costs contrast headroom.
+/// HCT tone the composited backdrop is driven down to. Below it a light hue-carrying chrome tone
+/// clears WCAG's 3:1 non-text bar with margin and body text clears 4.5:1 without washing out.
+/// Raising it shows more artwork and costs contrast headroom.
 const TARGET_BACKDROP_TONE: f64 = 32.0;
 
-/// Floor on the solved scrim opacity, deliberately light: below the target tone there is
-/// nothing left to darken, so a black sleeve shows more of itself.
+/// Floor on the solved scrim opacity, deliberately light: below the target tone there is nothing
+/// left to darken, so a black sleeve shows more of itself.
 const SCRIM_ALPHA_MIN: f32 = 0.30;
 
 /// Ceiling, keeping a pathological cover from flattening into a plain dark rectangle.
 const SCRIM_ALPHA_MAX: f32 = 0.82;
 
-/// Two covers from the same album differ by a fraction of a percent; snapping keeps them
-/// on one value rather than shimmering between neighbours as the user skips.
+/// Two covers from the same album differ by a fraction of a percent; snapping keeps them on one
+/// value rather than shimmering between neighbours as the user skips.
 const SCRIM_ALPHA_STEP: f32 = 0.01;
 
-/// Scrim fill tone — album-tinted near-black. sRGB holds almost no chroma this low, so
-/// the tint is a hint and the opacity solve is unaffected by which hue it is.
+/// Scrim fill tone — album-tinted near-black. sRGB holds almost no chroma this low, so the tint is
+/// a hint and the opacity solve is unaffected by which hue it is.
 const SCRIM_TONE: f64 = 8.0;
 
-/// Gradient-floor stops, in HCT tone — what shows with no artwork and both blur slots
-/// faded out. Owning both is what keeps the polarity ours: the `Theme.accent` →
-/// `Theme.base` pair they replaced is bright on a light theme, and so unreadable under
-/// the light foreground this module solves for.
+/// Gradient-floor stops, in HCT tone — what shows with no artwork and both blur slots faded out.
+/// Owning both is what keeps the polarity ours: a `Theme.accent` → `Theme.base` pair is bright on
+/// a light theme, and so unreadable under the light foreground this module solves for.
 const FLOOR_TONE_START: f64 = 18.0;
 const FLOOR_TONE_END: f64 = 8.0;
 
-/// Chroma ceiling for the scrim and the gradient floor. At these tones sRGB gamut-maps
-/// almost everything away regardless — a guard against a pathological seed, not a
-/// shaping parameter.
+/// Chroma ceiling for the scrim and the gradient floor. At these tones sRGB gamut-maps almost
+/// everything away regardless — a guard against a pathological seed, not a shaping parameter.
 const BACKDROP_MAX_CHROMA: f64 = 24.0;
 
-/// WCAG 1.4.11 non-text contrast: icons, the visualizer bars, the stars and the heart
-/// carry no linguistic content, so 3:1 is the bar they must clear.
+/// WCAG 1.4.11 non-text contrast: icons, the visualizer bars, the stars and the heart carry no
+/// linguistic content, so 3:1 is the bar they must clear.
 const CHROME_RATIO: f64 = 3.0;
 /// WCAG 1.4.3 body-text contrast.
 const TEXT_RATIO: f64 = 4.5;
 
-/// Tone band for the hue-carrying chrome tier. The worst permitted backdrop only asks for
-/// tone 63, so the floor means the tier cannot regress on any cover; the ceiling stops a
-/// very dark sleeve pushing the accent far enough up the scale for gamut mapping to wash
-/// the hue out, and — `clamp_to_tone_band` reading it too — stops a near-white *seed*
-/// arriving above it.
+/// Tone band for the hue-carrying chrome tier. The worst permitted backdrop only asks for tone 63,
+/// so the floor means the tier cannot regress on any cover; the ceiling stops a very dark sleeve
+/// pushing the accent far enough up the scale for gamut mapping to wash the hue out, and —
+/// `clamp_to_tone_band` reading it too — stops a near-white *seed* arriving above it.
 const CHROME_MIN_TONE: f64 = 70.0;
 const CHROME_MAX_TONE: f64 = 92.0;
 
-/// Tone band for primary body text. Both bounds sit above the chrome band's and 4.5:1 is
-/// the stricter target, so whenever both tiers are *solved* the title is the brighter. The
-/// bands overlap, so a naturally light cover can pass chrome straight through above the
-/// solved text tone — bounded by `CHROME_MAX_TONE` rather than closed, closing it meaning
-/// a narrower band and a different answer on every cover.
+/// Tone band for primary body text. Both bounds sit above the chrome band's and 4.5:1 is the
+/// stricter target, so whenever both tiers are *solved* the title is the brighter. The bands
+/// overlap, so a naturally light cover can pass chrome straight through above the solved text tone
+/// — bounded by `CHROME_MAX_TONE` rather than closed, closing it meaning a narrower band and a
+/// different answer on every cover.
 const TEXT_MIN_TONE: f64 = 78.0;
 const TEXT_MAX_TONE: f64 = 96.0;
 
-/// Secondary text: the chrome tier's 3:1 target in its own dimmer band, so the two-line
-/// hierarchy under the cover survives on every backdrop.
+/// Secondary text: the chrome tier's 3:1 target in its own dimmer band, so the two-line hierarchy
+/// under the cover survives on every backdrop.
 const MUTED_MIN_TONE: f64 = 70.0;
 const MUTED_MAX_TONE: f64 = 88.0;
 
-/// Body text reads as near-white carrying a whisper of the album's warmth, not as
-/// coloured type — the chrome tier is where the hue gets to be loud.
+/// Body text reads as near-white carrying a whisper of the album's warmth, not as coloured type —
+/// the chrome tier is where the hue gets to be loud.
 const TEXT_MAX_CHROMA: f64 = 10.0;
 const MUTED_MAX_CHROMA: f64 = 8.0;
 
@@ -99,9 +94,9 @@ const HISTOGRAM_BINS: usize = 64;
 /// Fraction of the brightest pixels the percentile deliberately steps over.
 const PERCENTILE_TAIL: f64 = 0.10;
 
-/// [`linearized`] over its whole domain — it takes a `u8`, so there are only 256 answers
-/// and each is a `powf(2.4)`, called three times per pixel. The `lab_f` inside
-/// [`lstar_from_y`] is left alone: one call rather than three, over a continuous input.
+/// [`linearized`] over its whole domain — it takes a `u8`, so there are only 256 answers and each
+/// is a `powf(2.4)`, called three times per pixel. The `lab_f` inside [`lstar_from_y`] is left
+/// alone: one call rather than three, over a continuous input.
 static LINEARIZED: LazyLock<[f64; 256]> = LazyLock::new(|| {
     let mut table = [0.0_f64; 256];
     for (slot, byte) in table.iter_mut().zip(0u8..=u8::MAX) {
@@ -119,9 +114,9 @@ fn pixel_lstar(r: u8, g: u8, b: u8) -> f64 {
     lstar_from_y(y)
 }
 
-/// sRGB transfer function over a *fractional* channel byte → linear 0..100. Same curve as
-/// the crate's `linearized`, whose `u8` domain would make the opacity solve below round to
-/// a whole byte mid-calculation and quantize its own answer.
+/// sRGB transfer function over a *fractional* channel byte → linear 0..100. Same curve as the
+/// crate's `linearized`, whose `u8` domain would make the opacity solve below round to a whole
+/// byte mid-calculation and quantize its own answer.
 fn linear_from_byte(byte: f64) -> f64 {
     let n = (byte / 255.0).clamp(0.0, 1.0);
     if n <= 0.040_449_936 {
@@ -174,11 +169,11 @@ fn bin_centre(bin: usize) -> f64 {
 
 /// The 90th-percentile lightness of a decoded blur buffer.
 ///
-/// **Not the mean, and that is the whole point.** A mostly-black sleeve with a white
-/// wordmark has a low mean — "dark backdrop, brighten the chrome" — while the region the
-/// title sits on is near-white, a heavy blur smearing that wordmark into a large
-/// mid-bright blob rather than averaging it away. Sizing the scrim against the bright
-/// *regions* is what keeps one global decision honest on a non-uniform backdrop.
+/// **Not the mean, and that is the whole point.** A mostly-black sleeve with a white wordmark has
+/// a low mean — "dark backdrop, brighten the chrome" — while the region the title sits on is
+/// near-white, a heavy blur smearing that wordmark into a large mid-bright blob rather than
+/// averaging it away. Sizing the scrim against the bright *regions* is what keeps one global
+/// decision honest on a non-uniform backdrop.
 fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
     let bytes = buf.as_bytes();
     if bytes.is_empty() {
@@ -208,13 +203,13 @@ fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
     Some(bin_centre(0))
 }
 
-/// Everything a solve needs off a decoded blur. Both are `None` when there is no blur —
-/// no artwork, or a failed decode — and the publisher falls back to the live
-/// `Theme.accent` and [`floor_luma`].
+/// Everything a solve needs off a decoded blur. Both are `None` when there is no blur — no
+/// artwork, or a failed decode — and the publisher falls back to the live `Theme.accent` and
+/// [`floor_luma`].
 #[derive(Clone, Copy, Default)]
 pub(crate) struct BackdropSample {
-    /// Dominant colour quantized out of the blur, supplying the *hue* for every colour
-    /// [`solve`] returns.
+    /// Dominant colour quantized out of the blur, supplying the *hue* for every colour [`solve`]
+    /// returns.
     pub(crate) accent_argb: Option<u32>,
     /// [`luma_p90`] of the same buffer.
     pub(crate) luma: Option<f64>,
@@ -222,14 +217,13 @@ pub(crate) struct BackdropSample {
 
 impl BackdropSample {
     /// Measure a decoded blur. CPU-bound — the quantize dominates — so it belongs in the
-    /// `spawn_blocking` task that produced the blur, never on the UI thread. Quantizing
-    /// the *blur* rather than the sharp source is deliberate: a downscaled, blurred buffer
-    /// is plenty of pixels for `QuantizerCelebi`.
+    /// `spawn_blocking` task that produced the blur, never on the UI thread. Quantizing the *blur*
+    /// rather than the sharp source is deliberate: a downscaled, blurred buffer is plenty of
+    /// pixels for `QuantizerCelebi`.
     ///
     /// An empty `accent_argb` means there was no buffer at all, so [`Self::solve`]'s
-    /// `Theme.accent` path is for a missing cover and never a monochrome one — a greyscale
-    /// sleeve answers with its own dominant grey, where the quantizer's own fallback is
-    /// Google Blue.
+    /// `Theme.accent` path is for a missing cover and never a monochrome one — a greyscale sleeve
+    /// answers with its own dominant grey.
     pub(crate) fn measure(blur: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
         Self {
             accent_argb: extract_source_argb_from_rgb8(blur),
@@ -239,32 +233,32 @@ impl BackdropSample {
 
     /// Solve the whole colour set from this measurement.
     ///
-    /// `theme_accent` supplies the hue when there was no artwork, so a missing-artwork
-    /// entry doesn't strand the surface on the previous one's colour. Only the hue is
-    /// borrowed — [`solve`] owns every tone.
+    /// `theme_accent` supplies the hue when there was no artwork, so a missing-artwork entry
+    /// doesn't strand the surface on the previous one's colour. Only the hue is borrowed —
+    /// [`solve`] owns every tone.
     pub(crate) fn solve(self, theme_accent: u32) -> BackdropColors {
         solve(self.accent_argb.unwrap_or(theme_accent), self.luma.unwrap_or_else(floor_luma))
     }
 }
 
-/// Lightness the gradient floor presents when an entry has no artwork — a known quantity
-/// rather than a measurement, both stops being ours, which is what lets the artwork-less
-/// path run through the *same* solve as every cover.
+/// Lightness the gradient floor presents when an entry has no artwork — a known quantity rather
+/// than a measurement, both stops being ours, which is what lets the artwork-less path run through
+/// the *same* solve as every cover.
 fn floor_luma() -> f64 {
     gradient_luma_lstar(FLOOR_TONE_START, FLOOR_TONE_END)
 }
 
-/// Lightness of a two-stop gradient whose stops are given as sRGB. The Genre hero has no
-/// artwork and no floor of ours either, painting a name-hashed gradient
-/// (`ui::genres::color`); measuring its stops is what keeps it on the same solve as every
-/// cover rather than special-cased into a fixed scrim.
+/// Lightness of a two-stop gradient whose stops are given as sRGB. The Genre hero has no artwork
+/// and no floor of ours either, painting a name-hashed gradient (`ui::genres::color`); measuring
+/// its stops is what keeps it on the same solve as every cover rather than special-cased into a
+/// fixed scrim.
 pub(crate) fn gradient_luma(start_rgb: u32, end_rgb: u32) -> f64 {
     gradient_luma_lstar(rgb_lstar(start_rgb), rgb_lstar(end_rgb))
 }
 
 /// Midpoint lightness of two stops, averaged in **linear** Y rather than L\* — averaging
-/// perceptual lightness understates a gradient between a very dark and a very bright
-/// stop, the case the scrim most needs to get right.
+/// perceptual lightness understates a gradient between a very dark and a very bright stop, the
+/// case the scrim most needs to get right.
 fn gradient_luma_lstar(start_lstar: f64, end_lstar: f64) -> f64 {
     lstar_from_y(f64::midpoint(y_from_lstar(start_lstar), y_from_lstar(end_lstar)))
 }
@@ -281,10 +275,9 @@ fn rgb_lstar(rgb: u32) -> f64 {
 /// Scrim opacity that lands `backdrop_luma` on [`TARGET_BACKDROP_TONE`].
 ///
 /// Closed form rather than a search: the renderer composites in gamma space
-/// (`c = α·scrim + (1−α)·backdrop` on the encoded bytes) and lightness is monotone in the
-/// byte, so with `g` the backdrop's grey byte, `s` the scrim's and `t` the target's,
-/// `α = (g − t) / (g − s)`. The scrim's residual chroma makes it an approximation on the
-/// order of a tenth of an L*.
+/// (`c = α·scrim + (1−α)·backdrop` on the encoded bytes) and lightness is monotone in the byte, so
+/// with `g` the backdrop's grey byte, `s` the scrim's and `t` the target's, `α = (g − t) / (g − s)`.
+/// The scrim's residual chroma makes it an approximation on the order of a tenth of an L*.
 fn scrim_alpha(backdrop_luma: f64) -> f32 {
     let g = grey_byte(backdrop_luma);
     let t = grey_byte(TARGET_BACKDROP_TONE);
@@ -313,9 +306,9 @@ fn composited_tone(backdrop_luma: f64, alpha: f32) -> f64 {
 
 /// Lowest tone above `backdrop_tone` that reaches `ratio`, clamped into `min..=max`.
 ///
-/// `contrast::lighter` inverts the WCAG ratio algebraically. It answers `-1.0` when the
-/// ratio is unreachable, which can only happen if the scrim under-darkened, and the band
-/// floor is the right degradation there.
+/// `contrast::lighter` inverts the WCAG ratio algebraically. It answers `-1.0` when the ratio is
+/// unreachable, which can only happen if the scrim under-darkened, and the band floor is the right
+/// degradation there.
 fn solve_tone(backdrop_tone: f64, ratio: f64, min: f64, max: f64) -> f64 {
     let wanted = contrast::lighter(backdrop_tone, ratio);
     if wanted < 0.0 {
@@ -339,8 +332,8 @@ fn muted_tone(backdrop_tone: f64) -> f64 {
     solve_tone(backdrop_tone, CHROME_RATIO, MUTED_MIN_TONE, MUTED_MAX_TONE)
 }
 
-/// Every artwork-derived colour the Now Playing view paints, solved together so they
-/// can't drift apart. Plain `u32` RGB — the caller packs them into Slint brushes.
+/// Every artwork-derived colour the Now Playing view paints, solved together so they can't drift
+/// apart. Plain `u32` RGB — the caller packs them into Slint brushes.
 pub(crate) struct BackdropColors {
     /// Scrim fill, alpha in `scrim_alpha`.
     pub scrim: u32,
@@ -358,9 +351,9 @@ pub(crate) struct BackdropColors {
 
 /// Solve the whole set from one seed hue and one backdrop measurement.
 ///
-/// Reach for [`BackdropSample::solve`] rather than calling this directly — it resolves
-/// both fallbacks in one place, which is what keeps the two consumers from drifting.
-/// Genre Detail's procedural gradient is the sole caller here, having no artwork.
+/// Reach for [`BackdropSample::solve`] rather than calling this directly — it resolves both
+/// fallbacks in one place, which is what keeps the two consumers from drifting. Genre Detail's
+/// procedural gradient is the sole caller here, having no artwork.
 pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
     let alpha = scrim_alpha(backdrop_luma);
     let tone = composited_tone(backdrop_luma, alpha);
@@ -370,17 +363,17 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
         scrim_alpha: alpha,
         floor_start: to_tone_capped_chroma(seed_argb, FLOOR_TONE_START, BACKDROP_MAX_CHROMA),
         floor_end: to_tone_capped_chroma(seed_argb, FLOOR_TONE_END, BACKDROP_MAX_CHROMA),
-        // *Clamps* rather than sets: a cover already brighter than the solve asks for
-        // keeps its own tone, and so its own chroma, up to `CHROME_MAX_TONE`.
+        // *Clamps* rather than sets: a cover already brighter than the solve asks for keeps its
+        // own tone, and so its own chroma, up to `CHROME_MAX_TONE`.
         chrome: clamp_to_tone_band(seed_argb, chrome_tone(tone), CHROME_MAX_TONE),
         text: to_tone_capped_chroma(seed_argb, text_tone(tone), TEXT_MAX_CHROMA),
         muted: to_tone_capped_chroma(seed_argb, muted_tone(tone), MUTED_MAX_CHROMA),
     }
 }
 
-/// The scrim as a Slint brush, opacity baked into the alpha channel. Here rather than at
-/// each publisher because the bound making the lossy cast safe is [`scrim_alpha`]'s
-/// clamp, which neither call site can see.
+/// The scrim as a Slint brush, opacity baked into the alpha channel. Here rather than at each
+/// publisher because the bound making the lossy cast safe is [`scrim_alpha`]'s clamp, which
+/// neither call site can see.
 pub(crate) fn scrim_brush(colors: &BackdropColors) -> Brush {
     #[expect(
         clippy::cast_possible_truncation,

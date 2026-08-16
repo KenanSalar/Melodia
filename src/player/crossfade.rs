@@ -1,31 +1,11 @@
-//! Audio crossfade: the ramp cell the audio thread reads, the master settings
-//! cell the control layer writes, and the two pure predicates that decide when a
-//! transition becomes a crossfade.
+//! Audio crossfade: the ramp cell the audio thread reads, the master settings cell the control
+//! layer writes, and the two pure predicates that decide when a transition becomes a crossfade.
 //!
-//! # Why the ramp lives in the source
+//! **`src/player/CLAUDE.md` argues the design** — why the ramp lives inside [`EqSource`] rather
+//! than on `Player::set_volume`, and why the curve is complementary linear (the mixer sums with no
+//! clamping, so `g_out + g_in ≡ 1` is what stops it clipping). The constants below carry the
+//! bounds a later edit could reverse.
 //!
-//! Rodio's `Player` *sequences* sources, so overlapping needs two of them on one
-//! [`Mixer`](rodio::mixer::Mixer) — which is what [`RodioPlayer`]'s decks are.
-//! The obvious way to fade one is `Player::set_volume` from a ticker; putting
-//! the ramp in the innermost [`EqSource`] instead buys four things. It is
-//! **sample-accurate**, with no `periodic_access` quantization or ticker jitter.
-//! It counts **media samples**, the same clock `remaining_ms` uses, so the fade
-//! lands on the track end at any playback speed where a wall-clock ramp
-//! desyncs. It leaves `Player::set_volume` as purely the *user's* volume rather
-//! than racing one. And it lands **after** that source's `clamp(-1.0, 1.0)`,
-//! which is what makes the mixer sum safe.
-//!
-//! # Why the curve is linear
-//!
-//! `Mixer::sum_current_sources` sums its voices with **no clamping**. A
-//! complementary linear curve satisfies `g_out + g_in ≡ 1`, so post-clamp
-//! samples sum to at most 1.0 and the mixer can't clip — the same
-//! never-exceed-unity invariant `MAX_VOLUME` keeps. Equal-power would hold
-//! perceived loudness across the overlap but peaks at √2; the cost of linear is
-//! the familiar midpoint dip on uncorrelated material, the trade-off
-//! `GStreamer`'s linear ramps make in Strawberry and Clementine.
-//!
-//! [`RodioPlayer`]: super::rodio_backend::RodioPlayer
 //! [`EqSource`]: super::equalizer::EqSource
 
 use std::sync::Arc;
@@ -36,12 +16,10 @@ use crate::entities::track::TrackSummary;
 
 /// Shortest crossfade the user can select.
 ///
-/// **Bounded from below by the playback monitor's poll interval.**
-/// [`should_crossfade`]'s window is sampled once per poll, so a narrower one can
-/// be stepped clean over and the crossfade simply never happens — and since
-/// [`crossfade_eligible`] has already suppressed the gapless preload by then,
-/// the miss degrades to a *gapped* hard cut, worse than the behaviour the user
-/// had before enabling crossfade. `handlers.rs` pins
+/// **Bounded from below by the playback monitor's poll interval.** [`should_crossfade`]'s window
+/// is sampled once per poll, so a narrower one can be stepped clean over and the crossfade never
+/// happens — and since [`crossfade_eligible`] has already suppressed the gapless preload, the miss
+/// degrades to a *gapped* hard cut. `handlers.rs` pins
 /// `MIN_CROSSFADE_MS >= MIN_FADE_MS + POLL_INTERVAL_MS` with a `const` assert.
 pub const MIN_CROSSFADE_MS: u32 = 1_000;
 /// Longest crossfade the user can select.
@@ -49,23 +27,22 @@ pub const MAX_CROSSFADE_MS: u32 = 12_000;
 /// Default crossfade length. Matches Strawberry's default.
 pub const DEFAULT_CROSSFADE_MS: u32 = 2_000;
 
-/// Below this much remaining media, don't start a crossfade at all — let the
-/// track drain to `EndOfStream` normally. Keeps the fade from being clamped
-/// *up* past the real remaining audio, which would cut the outgoing track at a
-/// non-zero gain (an audible click).
+/// Below this much remaining media, don't start a crossfade at all — let the track drain to
+/// `EndOfStream` normally. Keeps the fade from being clamped *up* past the real remaining audio,
+/// which would cut the outgoing track at a non-zero gain (an audible click).
 pub const MIN_FADE_MS: u64 = 250;
 
-/// How long the surviving deck takes to climb back to unity when a crossfade is
-/// aborted (seek, or a new track picked mid-overlap). Long enough to avoid a
-/// step discontinuity, short enough to be imperceptible.
+/// How long the surviving deck takes to climb back to unity when a crossfade is aborted (seek, or
+/// a new track picked mid-overlap). Long enough to avoid a step discontinuity, short enough to be
+/// imperceptible.
 pub const ABORT_RAMP_MS: u64 = 40;
 
-/// Fade length for pause / resume / user-initiated stop when
-/// [`CrossfadeSettings::fade_on_pause`] is on. Matches Strawberry's default.
+/// Fade length for pause / resume / user-initiated stop when [`CrossfadeSettings::fade_on_pause`]
+/// is on. Matches Strawberry's default.
 pub const PAUSE_FADE_MS: u64 = 250;
 
-/// A target gain this close to unity lets the source disengage the fade stage
-/// entirely and fall back to its bit-identical bypass path.
+/// A target gain this close to unity lets the source disengage the fade stage entirely and fall
+/// back to its bit-identical bypass path.
 const UNITY_EPSILON: f32 = 1e-4;
 
 /// Clamp a user-supplied crossfade duration into the supported range.
@@ -74,8 +51,8 @@ pub fn clamp_crossfade_ms(ms: u32) -> u32 {
     ms.clamp(MIN_CROSSFADE_MS, MAX_CROSSFADE_MS)
 }
 
-/// The settings slider's seconds → the milliseconds everything else stores.
-/// Clamped in float space, so the narrowing cast always lands in range.
+/// The settings slider's seconds → the milliseconds everything else stores. Clamped in float
+/// space, so the narrowing cast always lands in range.
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
@@ -99,8 +76,8 @@ pub fn crossfade_ms_to_secs(ms: u32) -> f32 {
     clamp_crossfade_ms(ms) as f32 / 1000.0
 }
 
-/// Gain at ramp position `pos` of `total`, interpolating `start` → `target`. A
-/// zero `total`, or a `pos` past the end, lands on `target`.
+/// Gain at ramp position `pos` of `total`, interpolating `start` → `target`. A zero `total`, or a
+/// `pos` past the end, lands on `target`.
 #[allow(
     clippy::cast_precision_loss,
     reason = "pos <= total and both are bounded by a few seconds of samples, well inside f32's exact-integer range"
@@ -120,44 +97,41 @@ pub fn is_unity_target(target: f32) -> bool {
     (target - 1.0).abs() < UNITY_EPSILON
 }
 
-/// Two tracks belong to the same album. Requires the album tag to be *present* —
-/// two `None` albums comparing equal would mark every transition in an untagged
-/// library same-album, and it would never crossfade.
+/// Two tracks belong to the same album. Requires the album tag to be *present* — two `None` albums
+/// comparing equal would mark every transition in an untagged library same-album, and it would
+/// never crossfade.
 #[must_use]
 pub fn same_album(a: &TrackSummary, b: &TrackSummary) -> bool {
     a.album.is_some() && a.album == b.album && a.artist == b.artist
 }
 
-/// `kind` discriminants, raw `u8` because the cell is read on the audio thread
-/// through an [`AtomicU8`].
+/// `kind` discriminants, raw `u8` because the cell is read on the audio thread through an
+/// [`AtomicU8`].
 const KIND_IDLE: u8 = 0;
 const KIND_RAMP: u8 = 1;
 
 /// A ramp command, read by the source when the generation advances.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct FadeCmd {
-    /// `None` means "ramp from whatever gain the source is currently at" — used
-    /// to fade out a track already playing at unity, and to recover a partially
-    /// faded-in track when a crossfade is aborted.
+    /// `None` means "ramp from whatever gain the source is currently at" — used to fade out a
+    /// track already playing at unity, and to recover a partially faded-in track on abort.
     pub start: Option<f32>,
     pub target: f32,
-    /// Ramp length in **media** milliseconds. Only the source can convert it —
-    /// the two decks may hold tracks at different sample rates.
+    /// Ramp length in **media** milliseconds. Only the source can convert it — the two decks may
+    /// hold tracks at different sample rates.
     pub ramp_ms: u64,
-    /// Fade-out only: the source ends once the ramp lands, draining its deck,
-    /// which is how [`RodioPlayer::is_crossfading`] sees the overlap finish.
+    /// Fade-out only: the source ends once the ramp lands, draining its deck, which is how
+    /// [`RodioPlayer::is_crossfading`] sees the overlap finish.
     ///
     /// [`RodioPlayer::is_crossfading`]: super::rodio_backend::RodioPlayer::is_crossfading
     pub end_on_complete: bool,
 }
 
-/// Lock-free ramp state on [`EqShared`](super::equalizer::EqShared)'s
-/// generation-poll pattern.
+/// Lock-free ramp state on [`EqShared`](super::equalizer::EqShared)'s generation-poll pattern.
 ///
-/// The cell is **deck-scoped**, not source-scoped: exactly two exist for the
-/// app's lifetime, each cloned into every [`EqSource`] appended to its deck. So
-/// a fade armed on a deck applies to whatever that deck is playing, a
-/// gapless-appended successor included.
+/// The cell is **deck-scoped**, not source-scoped: exactly two exist for the app's lifetime, each
+/// cloned into every [`EqSource`] appended to its deck. So a fade armed on a deck applies to
+/// whatever that deck is playing, a gapless-appended successor included.
 ///
 /// [`EqSource`]: super::equalizer::EqSource
 pub struct FadeShared {
@@ -171,8 +145,8 @@ pub struct FadeShared {
 }
 
 impl FadeShared {
-    /// A cell in the idle state — the source applies no gain and keeps its
-    /// bit-identical bypass path.
+    /// A cell in the idle state — the source applies no gain and keeps its bit-identical bypass
+    /// path.
     #[must_use]
     pub fn idle() -> Arc<Self> {
         Arc::new(Self {
@@ -200,8 +174,8 @@ impl FadeShared {
         self.bump();
     }
 
-    /// Return the deck to transparency. Any source on it drops back to its
-    /// bypass fast path on the next sample.
+    /// Return the deck to transparency. Any source on it drops back to its bypass fast path on the
+    /// next sample.
     pub fn reset(&self) {
         self.kind.store(KIND_IDLE, Ordering::Relaxed);
         self.bump();
@@ -228,8 +202,8 @@ impl FadeShared {
     }
 }
 
-/// A `Copy` snapshot of the settings, taken once per decision so the flags
-/// can't shear against each other mid-evaluation.
+/// A `Copy` snapshot of the settings, taken once per decision so the flags can't shear against
+/// each other mid-evaluation.
 #[allow(
     clippy::struct_excessive_bools,
     reason = "one field per independent user-facing toggle; a bitflags wrapper would only obscure them"
@@ -246,9 +220,9 @@ pub struct CrossfadeSettings {
     pub fade_on_pause: bool,
 }
 
-/// Lock-free crossfade settings. Unlike [`FadeShared`] this is read by the
-/// *control* layer (the playback monitor and the backend), never by the audio
-/// thread, so it needs no generation counter.
+/// Lock-free crossfade settings. Unlike [`FadeShared`] this is read by the *control* layer (the
+/// playback monitor and the backend), never by the audio thread, so it needs no generation
+/// counter.
 pub struct CrossfadeShared {
     enabled: AtomicBool,
     duration_ms: AtomicU32,
@@ -313,11 +287,10 @@ impl CrossfadeShared {
 
 /// **Timing-independent**: is this transition a crossfade transition at all?
 ///
-/// The monitor gates its late gapless preload on `!crossfade_eligible`, which is
-/// why this must not read the current position. Gated on [`should_crossfade`]
-/// instead, any crossfade shorter than `PRELOAD_LEAD_MS` would fire the preload
-/// first — setting `gapless_pending` and permanently blocking the crossfade
-/// through its own `!gapless_pending` gate, or staging the next track twice.
+/// The monitor gates its late gapless preload on `!crossfade_eligible`, which is why this must not
+/// read the current position. Gated on [`should_crossfade`] instead, any crossfade shorter than
+/// `PRELOAD_LEAD_MS` would fire the preload first — setting `gapless_pending` and permanently
+/// blocking the crossfade through its own `!gapless_pending` gate.
 #[must_use]
 pub fn crossfade_eligible(
     xf: CrossfadeSettings,
@@ -328,24 +301,21 @@ pub fn crossfade_eligible(
     xf.enabled
         && xf.duration_ms > 0
         && has_next
-        // Sleep-timer "pause at end of track" needs the track to drain to
-        // `EndOfStream`, the only boundary that gate can catch.
+        // Sleep-timer "pause at end of track" needs the track to drain to `EndOfStream`, the only
+        // boundary that gate can catch.
         && !pause_at_end
         && !(xf.skip_same_album && same_album)
 }
 
-/// Adds the timing and liveness terms to [`crossfade_eligible`], returning the
-/// fade length in **media** milliseconds or `None` to leave this tick alone.
+/// Adds the timing and liveness terms to [`crossfade_eligible`], returning the fade length in
+/// **media** milliseconds or `None` to leave this tick alone.
 ///
-/// The length is the *actual* remaining media, never clamped up to the
-/// configured duration, so the ramp lands exactly on the declared track end —
-/// which self-corrects for poll granularity: the trigger fires on the first tick
-/// inside the window and the fade shortens to match.
+/// The length is the *actual* remaining media, never clamped up to the configured duration, so the
+/// ramp lands exactly on the declared track end — which self-corrects for poll granularity.
 ///
-/// The window doubles as a stale-position filter. rodio only zeroes a `Player`'s
-/// tracked position when it actually clears a source, so a drained deck can
-/// report its *previous* track's position for a few milliseconds: too high
-/// saturates `remaining` to zero, too low pushes it past the cap.
+/// The window doubles as a stale-position filter. rodio only zeroes a `Player`'s tracked position
+/// when it actually clears a source, so a drained deck can report its *previous* track's position
+/// for a few milliseconds: too high saturates `remaining` to zero, too low pushes it past the cap.
 #[must_use]
 pub fn should_crossfade(
     eligible: bool,
@@ -370,12 +340,11 @@ pub fn should_crossfade(
 
 /// What the playback monitor decided, plus the state it decided *against*.
 ///
-/// The monitor reads that state under the `PlayerState` lock but executes only
-/// after taking `exec_lock`, so any control op can land in the gap;
+/// The monitor reads that state under the `PlayerState` lock but executes only after taking
+/// `exec_lock`, so any control op can land in the gap;
 /// [`PlayerState::build_crossfade_actions`](super::state::PlayerState::build_crossfade_actions)
-/// re-verifies the whole snapshot under the emit lock and drops the crossfade if
-/// anything moved. A struct rather than loose scalars so the two `u64`s can't be
-/// swapped at a call site.
+/// re-verifies the whole snapshot under the emit lock and drops the crossfade if anything moved. A
+/// struct rather than loose scalars so the two `u64`s can't be swapped at a call site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CrossfadeDecision {
     /// The real remaining media, per [`should_crossfade`].
@@ -387,15 +356,11 @@ pub struct CrossfadeDecision {
 
 /// Fade length for a **manual** track change, or `0` for a hard cut.
 ///
-/// - `resuming_at_position`: a restored position should start clean, not fade
-///   in from silence.
+/// - `resuming_at_position`: a restored position should start clean, not fade in from silence.
 /// - `deck_busy`: something is actually playing to fade *out* of.
-/// - `gapless_pending`: a staged source shares the active deck's fade cell, so a
-///   self-ending fade-out armed there would be inherited the moment the current
-///   source ends — starting at full volume and audibly fading out. Hard-cut
-///   instead. Only reachable from the manual path: the automatic one suppresses
-///   the preload for crossfade transitions, and [`should_crossfade`] refuses to
-///   fire while one is staged.
+/// - `gapless_pending`: a staged source shares the active deck's fade cell, so a self-ending
+///   fade-out armed there would be inherited the moment the current source ends — starting at full
+///   volume and audibly fading out. Hard-cut instead. Only reachable from the manual path.
 #[must_use]
 pub fn manual_fade_ms(
     xf: CrossfadeSettings,

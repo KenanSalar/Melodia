@@ -23,9 +23,9 @@ use crate::ui::artists::ArtistsUi;
 /// slice's, plus an `ArtistDetail.open-album` that moves to the Albums tab and
 /// opens that album's detail.
 ///
-/// Called by [`super::install`], which is what guarantees the models are in
-/// place first; that pairing used to be two statements a boot-file reorder
-/// could separate. `wire_all` still has to have run before it.
+/// Called by [`super::install`], which is what guarantees the models are in place first — a
+/// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
+/// have run before it.
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,

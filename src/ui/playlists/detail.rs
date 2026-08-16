@@ -1,7 +1,6 @@
-//! Playlist Detail header + track list: fetch, artwork pair decode,
-//! re-sort, refresh-preserving, startup seed. Mirrors `albums::detail`,
-//! with a `"position"` sort that rebuilds the display order from the
-//! canonical position-order cache instead of re-fetching.
+//! Playlist Detail header + track list: fetch, artwork pair decode, re-sort, refresh-preserving,
+//! startup seed. Mirrors `albums::detail`, with a `"position"` sort that rebuilds the display
+//! order from the canonical position-order cache instead of re-fetching.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -27,9 +26,8 @@ use crate::ui::tracks::PreparedTrackRow;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{AppWindow, NavEnterFrom, PlaylistDetail, TrackListRow as UiTrackListRow};
 
-// `apply_detail_artwork` (cover + hero-blur write) and
-// `replace_tracks_model` (in-place `tracks` `VecModel` swap) — see
-// `src/ui/detail_view.rs`. Playlist Detail keeps its own position-aware
+// `apply_detail_artwork` (cover + hero-blur write) and `replace_tracks_model` (in-place `tracks`
+// `VecModel` swap) — see `src/ui/detail_view.rs`. Playlist Detail keeps its own position-aware
 // `sort_playlist_tracks` below.
 impl_detail_view_helpers!(artwork PlaylistDetail);
 
@@ -39,11 +37,10 @@ pub const POSITION_FIELD: &str = "position";
 
 /// Whether the rows on screen are in canonical position order, ascending.
 ///
-/// The drag hands over *display* indices and [`apply_optimistic_reorder`] writes
-/// them straight into `position_order`, so this is the whole precondition for
-/// that mapping being the identity. The direction half is the easy one to miss:
-/// [`sort_playlist_tracks`] reverses on `"desc"`, which would make every drag
-/// write the inverse permutation.
+/// The drag hands over *display* indices and [`apply_optimistic_reorder`] writes them straight
+/// into `position_order`, so this is the whole precondition for that mapping being the identity.
+/// The direction half is the easy one to miss: [`sort_playlist_tracks`] reverses on `"desc"`,
+/// which would make every drag write the inverse permutation.
 pub(super) fn is_manual_order(field: &str, dir: &str) -> bool {
     field == POSITION_FIELD && dir != "desc"
 }
@@ -55,10 +52,9 @@ async fn fetch_playlist_detail(
 ) -> AppResult<(PlaylistStats, Vec<RsTrackListRow>)> {
     let mut detail = library::playlists::get_playlist_detail(state, playlist_id).await?;
     let tracks = if detail.is_smart {
-        // Smart playlists have no `playlist_items` rows — resolve membership
-        // live from the stored criteria, and derive the header stats from the
-        // resolved set (the junction-maintained `track_count`/`total_duration_ms`
-        // stay 0 for a virtual playlist).
+        // Smart playlists have no `playlist_items` rows — resolve membership live from the stored
+        // criteria, and derive the header stats from the resolved set, the junction-maintained
+        // `track_count`/`total_duration_ms` staying 0 for a virtual playlist.
         let criteria = crate::entities::smart_criteria::SmartCriteria::from_json_opt(
             detail.smart_criteria.as_deref(),
         );
@@ -84,12 +80,10 @@ async fn fetch_playlist_detail(
     Ok((detail, tracks))
 }
 
-/// Fetch a playlist's header + track list and populate the `PlaylistDetail`
-/// global — which flips `playlist-id >= 0`, swapping the grid for the detail
-/// view. Async; the UI write hops back via `upgrade_in_event_loop`.
-/// Fresh-open semantics: restores the persisted detail sort and clears any
-/// prior selection. The watcher-driven refresh uses [`refresh_detail`]
-/// instead, which preserves both.
+/// Fetch a playlist's header + track list and populate the `PlaylistDetail` global — which flips
+/// `playlist-id >= 0`, swapping the grid for the detail view. Fresh-open semantics: restores the
+/// persisted detail sort and clears any prior selection. The watcher-driven refresh uses
+/// [`refresh_detail`] instead, which preserves both.
 pub async fn open_playlist(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
@@ -100,17 +94,14 @@ pub async fn open_playlist(
     open_playlist_with(state, playlists_ui, weak, playlist_id, enter_from, |_ui| {}).await
 }
 
-/// Same as [`open_playlist`] but the caller can hook into the **same**
-/// `upgrade_in_event_loop` closure that writes `playlist-id`. The hook runs
-/// after every detail property is set, so a follow-on global write — the tab
-/// and section flip a `nav_history` replay owes — lands in the same frame,
-/// and Slint paints `PlaylistDetailBody` with no Playlists-grid frame in
-/// between. See `albums::detail::open_album_with`, which this mirrors.
+/// Same as [`open_playlist`] but the caller can hook into the **same** `upgrade_in_event_loop`
+/// closure that writes `playlist-id`. The hook runs after every detail property is set, so a
+/// follow-on global write — the tab and section flip a `nav_history` replay owes — lands in the
+/// same frame, and Slint paints `PlaylistDetailBody` with no Playlists-grid frame in between.
 ///
-/// `enter_from` chooses the enter direction for the **page** mount a
-/// cross-section arrival produces; `PlaylistDetailBody` itself takes a fixed
-/// `below`, so it reaches nothing when `Nav.selected-index` doesn't move in
-/// the same tick.
+/// `enter_from` chooses the enter direction for the **page** mount a cross-section arrival
+/// produces; `PlaylistDetailBody` itself takes a fixed `below`, so it reaches nothing when
+/// `Nav.selected-index` doesn't move in the same tick.
 pub async fn open_playlist_with<F>(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
@@ -124,11 +115,9 @@ where
 {
     let (detail, mut tracks) = fetch_playlist_detail(state, playlists_ui, playlist_id).await?;
 
-    // `fetch_playlist_detail` returns tracks in playlist position order —
-    // capture that as the canonical `position_order` before applying the
-    // persisted detail sort. `position` is the fresh-install default
-    // (the playlist's own curated order); a persisted non-`position` sort
-    // is restored across opens and restarts.
+    // `fetch_playlist_detail` returns tracks in playlist position order — capture that as the
+    // canonical `position_order` before applying the persisted detail sort. `position` is the
+    // fresh-install default; a persisted non-`position` sort is restored across restarts.
     let position_order: Vec<i64> = tracks.iter().map(|t| t.id).collect();
     let (sort_field, sort_dir) = resolve_view_sort(state, view_id::PLAYLIST_DETAIL, POSITION_FIELD);
     sort_playlist_tracks(&mut tracks, &position_order, &sort_field, &sort_dir);
@@ -143,17 +132,14 @@ where
     let prepared: Vec<PreparedTrackRow> =
         tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
 
-    // Seed both caches before the UI hop so resort / drag-reorder /
-    // play-row callbacks that may fire on the next tick already see
-    // consistent state.
+    // Seed both caches before the UI hop so resort / drag-reorder / play-row callbacks firing on
+    // the next tick already see consistent state.
     *playlists_ui.detail.playlist_id.lock() = playlist_id;
     *playlists_ui.detail.position_order.lock() = position_order;
 
-    // Inform the OS file-drop coalescer that this playlist is the
-    // current drop target — used only when the Queue Sheet is closed
-    // (queue takes priority when both are open). Smart playlists can't
-    // accept manual file drops (membership is derived), so a smart detail
-    // registers no drop target — drops fall through to the library import.
+    // Inform the OS file-drop coalescer that this playlist is the current drop target — used only
+    // when the Queue Sheet is closed, the queue taking priority when both are open. A smart
+    // playlist's membership is derived, so it registers none and drops fall through to import.
     crate::ui::window_chrome::set_current_playlist_id(if detail.is_smart {
         -1
     } else {
@@ -173,50 +159,41 @@ where
         g.set_playlist(header);
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &playlists_ui);
-        // Fresh open clears the filter so the user lands on the full
-        // track set, not a stale needle from the previous detail.
+        // Fresh open clears the filter so the user lands on the full track set, not a stale needle
+        // from the previous detail.
         g.set_filter(SharedString::from(""));
         playlists_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
         // Set the page's enter direction before the `on_applied` hook can flip
-        // `Nav.selected-index`, so a cross-section arrival's new page samples it
-        // on first paint. Inert on a same-page open, whose body reads a fixed
-        // `below` — see `ui::nav_transition`.
+        // `Nav.selected-index`, so a cross-section arrival's new page samples it on first paint.
+        // Inert on a same-page open, whose body reads a fixed `below`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_playlist_id(clamp_i64_to_i32(playlist_id));
-        // Fresh open: no filter, so the displayed cache equals the
-        // canonical full set.
+        // Fresh open: no filter, so the displayed cache equals the canonical full set.
         playlists_ui.detail.all_tracks.lock().clone_from(&tracks);
         *playlists_ui.detail.tracks.lock() = tracks;
-        // Run after `playlist-id` is set so any global writes the hook performs
-        // (the tab and section a history replay lands) share this tick with the
-        // detail flip — the router then never sees the Playlists grid.
+        // Run after `playlist-id` is set so any global writes the hook performs share this tick
+        // with the detail flip — the router then never sees the Playlists grid.
         on_applied(&ui);
-        // The two globals six heroes share, written last because their gate is the
-        // **live** tab rather than the `section_active` shadow, which the
-        // `SectionActiveGate` only updates next frame. Read before the hook above
-        // it answers for the tab being *left*, and both are dropped outright.
+        // The two globals six heroes share, written last because their gate is the **live** tab
+        // rather than the `section_active` shadow, which the `SectionActiveGate` only updates next
+        // frame. Read before the hook above, it answers for the tab being *left*.
         let on_screen = tab_is_mounted(&ui, MyLibraryTab::Playlists);
         crate::ui::hero_chips::publish_playlist(&ui, &detail, fold, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
-        // Record a browser-style history entry — see the matching
-        // `record_current` in `albums::detail::open_album_with` for
-        // the rationale.
+        // Record a browser-style history entry — see `albums::detail::open_album_with`.
         crate::ui::nav_history::record_current(&state_for_history, &ui);
-        // Reseat the page's shared filter box, which the clear above
-        // doesn't reach — same reasoning, and same closure position, as
-        // `albums::detail::open_album_with`.
+        // Reseat the page's shared filter box, which the clear above doesn't reach — same
+        // reasoning, and same closure position, as `albums::detail::open_album_with`.
         ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }
 
-/// Re-fetch an already-open playlist's header + tracks after a library
-/// change (or a CRUD operation like add/remove/rename), preserving the
-/// user's current sort column and selection. Same shape as
-/// `albums::detail::refresh_detail`, plus the canonical position-order
-/// cache is also refreshed.
+/// Re-fetch an already-open playlist's header + tracks after a library change or a CRUD operation,
+/// preserving the user's current sort column and selection. Same shape as
+/// `albums::detail::refresh_detail`, plus the canonical position-order cache is refreshed too.
 pub async fn refresh_detail(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
@@ -232,8 +209,8 @@ pub async fn refresh_detail(
     )
     .await;
 
-    // The DB query returns tracks in position order, so capture that
-    // before we permute `tracks` to the user's chosen sort.
+    // The DB query returns tracks in position order, so capture that before permuting `tracks` to
+    // the user's chosen sort.
     let position_order_snapshot: Vec<i64> = tracks.iter().map(|t| t.id).collect();
 
     let fold = crate::ui::hero_folds::fold_tracks(&tracks);
@@ -254,9 +231,8 @@ pub async fn refresh_detail(
         crate::ui::hero_chips::publish_playlist(&ui, &detail, fold, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
-        // With an active filter the displayed model is a subset, so the
-        // id-slice fast path below (which assumes an unfiltered model)
-        // would drop the needle. Route the swap through
+        // With an active filter the displayed model is a subset, so the id-slice fast path below
+        // (which assumes an unfiltered model) would drop the needle. Route the swap through
         // `apply_filtered_detail` instead so the filter survives.
         if !playlists_ui.detail.filter.lock().is_empty() {
             let valid: std::collections::HashSet<i32> =
@@ -264,8 +240,8 @@ pub async fn refresh_detail(
             let pruned: Vec<i32> =
                 g.get_selected_ids().iter().filter(|id| valid.contains(id)).collect();
             write_selection(&g, pruned);
-            // Refresh the canonical full set; `apply_filtered_detail`
-            // re-derives the displayed `tracks` cache + model from it.
+            // Refresh the canonical full set; `apply_filtered_detail` re-derives the displayed
+            // `tracks` cache and model from it.
             *playlists_ui.detail.all_tracks.lock() = tracks;
             *playlists_ui.detail.position_order.lock() = position_order_snapshot;
             apply_filtered_detail(&ui, &playlists_ui);
@@ -303,11 +279,10 @@ pub async fn refresh_detail(
             let ui_tracks: Vec<UiTrackListRow> =
                 tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
             replace_tracks_model(&g, ui_tracks);
-            // Abort any in-flight drag-reorder: the row indices it was
-            // computed against no longer describe the playlist, and the
-            // model swap destroys the row instance holding the pointer
-            // grab, so it can never clear this state itself. Left set,
-            // the source row stays ghosted and the drop line stranded.
+            // Abort any in-flight drag-reorder: the row indices it was computed against no longer
+            // describe the playlist, and the model swap destroys the row instance holding the
+            // pointer grab, so it can never clear this state itself. Left set, the source row
+            // stays ghosted and the drop line stranded.
             g.set_drag_source(-1);
             g.set_drop_slot(-1);
             playlists_ui.detail.applied_selection.lock().clear();
@@ -326,18 +301,15 @@ pub async fn refresh_detail(
     Ok(())
 }
 
-/// Sort both cached track lists to `field` / `dir` and permute the visible
-/// `tracks` model to match. `"position"` rebuilds from the canonical
-/// position-order cache via an O(N) `HashMap` lookup per row; any other field
-/// falls through to the shared `sort_track_rows_by` helper.
+/// Sort both cached track lists to `field` / `dir` and permute the visible `tracks` model to
+/// match. `"position"` rebuilds from the canonical position-order cache via a `HashMap` lookup per
+/// row; any other field falls through to the shared `sort_track_rows_by` helper.
 ///
-/// Reconciling the selection is the caller's, and only [`resort_detail`] owes
-/// it: a permutation carries each row's `selected` with it, so the drag path
-/// has nothing to reconcile.
+/// Reconciling the selection is the caller's, and only [`resort_detail`] owes it: a permutation
+/// carries each row's `selected` with it, so the drag path has nothing to reconcile.
 fn reapply_order(g: &PlaylistDetail, playlists_ui: &PlaylistsUi, field: &str, dir: &str) {
-    // Sort the canonical full set + the displayed subset in lockstep so
-    // `play-row` / range-select read consistent order and widening the
-    // filter later still yields sorted rows.
+    // Sort the canonical full set and the displayed subset in lockstep so `play-row` /
+    // range-select read a consistent order and widening the filter still yields sorted rows.
     let order: Vec<i32> = {
         let position_order = playlists_ui.detail.position_order.lock();
         sort_playlist_tracks(
@@ -375,10 +347,9 @@ pub fn resort_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
     apply_selection_to_rows(&g, playlists_ui);
 }
 
-/// Optimistically reorder the cached detail state for a drag-and-drop
-/// commit *before* the DB write lands. Mutates `position_order` and the
-/// visible `tracks` Vec. Returns the pre-mutation pair so the caller can roll
-/// back on a DB error, or `None` when nothing was touched.
+/// Optimistically reorder the cached detail state for a drag-and-drop commit *before* the DB write
+/// lands. Returns the pre-mutation pair so the caller can roll back on a DB error, or `None` when
+/// nothing was touched.
 pub fn apply_optimistic_reorder(
     ui: &AppWindow,
     playlists_ui: &PlaylistsUi,
@@ -388,11 +359,10 @@ pub fn apply_optimistic_reorder(
     let g = ui.global::<PlaylistDetail>();
     let field = g.get_sort_field();
     let dir = g.get_sort_dir();
-    // Asked here as well as in `reorder-enabled`, this being where the display
-    // indices reach the cache. The filter term is the sharp one: filtered,
-    // `tracks` is a subset of the canonical `position_order`, so `from` names a
-    // different track — and the write still lands, a filtered index being in
-    // range. (`is_smart` needs no term: the query refuses an empty item set.)
+    // Asked here as well as in `reorder-enabled`, this being where the display indices reach the
+    // cache. The filter term is the sharp one: filtered, `tracks` is a subset of the canonical
+    // `position_order`, so `from` names a different track — and the write still lands, a filtered
+    // index being in range.
     if !is_manual_order(&field, &dir) || !playlists_ui.detail.filter.lock().is_empty() {
         return None;
     }
@@ -414,15 +384,15 @@ pub fn apply_optimistic_reorder(
         pos.insert(insert_at, id);
     }
 
-    // The guard above rules out a filter, so the displayed `tracks` cache equals
-    // the canonical `all_tracks` here and both re-sort off the same order.
+    // The guard above rules out a filter, so the displayed `tracks` cache equals the canonical
+    // `all_tracks` here and both re-sort off the same order.
     reapply_order(&g, playlists_ui, &field, &dir);
 
     Some(saved)
 }
 
-/// Roll back the cached state to the snapshot returned by
-/// [`apply_optimistic_reorder`]. Called when the DB write fails.
+/// Roll back the cached state to the snapshot returned by [`apply_optimistic_reorder`]. Called
+/// when the DB write fails.
 pub fn rollback_reorder(
     ui: &AppWindow,
     playlists_ui: &PlaylistsUi,
@@ -430,8 +400,8 @@ pub fn rollback_reorder(
 ) {
     let (pos, tracks) = snapshot;
     *playlists_ui.detail.position_order.lock() = pos;
-    // Reorder is disabled while filtered, so the displayed `tracks`
-    // cache equals the canonical `all_tracks` — restore both.
+    // Reorder is disabled while filtered, so the displayed `tracks` cache equals the canonical
+    // `all_tracks` — restore both.
     playlists_ui.detail.all_tracks.lock().clone_from(&tracks);
     *playlists_ui.detail.tracks.lock() = tracks;
     // Force a UI rebuild of the visible rows from the rolled-back cache.
@@ -448,12 +418,10 @@ pub fn clear_detail(playlists_ui: &PlaylistsUi) {
     crate::ui::window_chrome::set_current_playlist_id(-1);
 }
 
-/// Update the cached filter needle. Nothing binds the Slint half to this one —
-/// the page's single box reaches nine surfaces through Rust, so
-/// `ui::my_library::filter::dispatch` writes both sides. This mirror is what
-/// lets the re-fetch path (`refresh_detail`) re-apply the filter to fresh data
-/// without round-tripping the UI thread for the property read. Always stored
-/// folded so the per-keystroke walk doesn't re-fold per row.
+/// Update the cached filter needle. Nothing binds the Slint half to this one — the page's single
+/// box reaches nine surfaces through Rust, so `ui::my_library::filter::dispatch` writes both
+/// sides. This mirror is what lets `refresh_detail` re-apply the filter to fresh data without
+/// round-tripping the UI thread for the property read. Always stored folded.
 pub fn set_filter(playlists_ui: &PlaylistsUi, needle: &str) {
     *playlists_ui.detail.filter.lock() = crate::ui::row_match::fold_needle(needle);
 }

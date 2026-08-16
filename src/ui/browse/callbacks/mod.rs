@@ -25,9 +25,9 @@ use crate::ui::browse::BrowseUi;
 /// shared state, plus a `library_changed_tx` subscriber that re-fetches the current path
 /// on watcher events.
 ///
-/// Called by [`super::install`], which is what guarantees the models are in place
-/// first — that pairing used to be two statements a boot-file reorder could separate.
-/// `wire_all` still has to have run before it.
+/// Called by [`super::install`], which is what guarantees the models are in place first — a
+/// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
+/// have run before it.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
     lifecycle::wire(ui, state, browse_ui);
     navigation::wire(ui, state, browse_ui);

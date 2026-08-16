@@ -1,20 +1,17 @@
 //! The Recently Played page: a `MosaicTabHero` banner over two tabs.
 //!
-//! Songs is a capped `TrackList` of the most-recently-played tracks, fetched
-//! once per refresh and re-walked in memory on a keystroke — membership being
-//! fixed to that cap. It mounts `sortable: false`: recency *is* the page, so its
-//! headers resize and toggle but never re-order. Most Played is a virtualized
-//! grid over an uncapped fetch of the library's played tracks by count.
+//! Songs is a capped `TrackList` of the most-recently-played tracks, fetched once per refresh and
+//! re-walked in memory on a keystroke. It mounts `sortable: false`: recency *is* the page, so its
+//! headers resize and toggle but never re-order. Most Played is a virtualized grid over an
+//! uncapped fetch of the library's played tracks by count.
 //!
-//! Cache discipline is `src/ui/favorites`': per-tier `CoverThumbs` LRUs released
-//! on section leave, and for the grid on tab-leave too, so a hidden page holds
-//! nothing.
+//! The page's shared contract is `.claude/rules/ui-patterns.md`'s "three tabbed pages" block; the
+//! deltas below are this page's.
 //!
-//! The tree is split by the question each file answers rather than by tab. This
-//! file is the handle and its teardown; `tabs.rs` the sub-view enum and its
-//! seeding, `covers.rs` the three tiers, `rows.rs` the Slint models, `hero.rs`
-//! the band, `songs.rs` the Songs tab, and `grid/` the Most Played tab in three
-//! parts — `fetch`, `apply` and `warm`.
+//! The tree is split by the question each file answers rather than by tab. This file is the handle
+//! and its teardown; `tabs.rs` the sub-view enum and its seeding, `covers.rs` the three tiers,
+//! `rows.rs` the Slint models, `hero.rs` the band, `songs.rs` the Songs tab, and `grid/` the Most
+//! Played tab in three parts — `fetch`, `apply` and `warm`.
 
 mod callbacks;
 mod covers;
@@ -44,8 +41,8 @@ pub const NAV_RECENTLY_PLAYED: i32 = 8;
 // `boot::ui_setup` retunes the cover cap once the window is live.
 pub use covers::tune_cache_for_display;
 
-// `pub(super)` is `pub(in crate::ui)` here, which is exactly the reach these
-// need: this slice's own `callbacks/`, plus `ui::hero_chips`.
+// `pub(super)` is `pub(in crate::ui)` here, exactly the reach these need: this slice's own
+// `callbacks/`, plus `ui::hero_chips`.
 pub(super) use grid::{
     apply_filtered_grid_now, apply_filtered_grid_settled, mark_covers_warm, refresh_grid,
 };
@@ -58,12 +55,12 @@ pub(super) use songs::{
 pub use tabs::RecentlyPlayedTab;
 pub(super) use tabs::{seed_tab, tab_from_index};
 
-/// Install the Recently-Played models, build the handle, wire every
-/// `RecentlyPlayed.*` callback, and seed the persisted tab.
+/// Install the Recently-Played models, build the handle, wire every `RecentlyPlayed.*` callback,
+/// and seed the persisted tab.
 ///
 /// A trimmed Favorites. Its row-menu "Go to …" entries are wired centrally by
-/// `wire_cross_tab_nav`, so it takes no peer handle; the tab seed folds in here
-/// for the reason it does there — see [`crate::ui::favorites::install`].
+/// `wire_cross_tab_nav`, so it takes no peer handle; the tab seed folds in here for the reason it
+/// does there — see [`crate::ui::favorites::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<RecentlyPlayedUi> {
     rows::install_recently_played_models(cx.app);
     let rp_ui = Arc::new(RecentlyPlayedUi::new(cx.cover_thumbs.clone()));
@@ -74,8 +71,8 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RecentlyPlayedUi> {
     rp_ui
 }
 
-/// Rust-side state for the Recently Played view, shared between the UI callbacks
-/// and the async fetchers behind an `Arc`.
+/// Rust-side state for the Recently Played view, shared between the UI callbacks and the async
+/// fetchers behind an `Arc`.
 pub struct RecentlyPlayedUi {
     inner: RecentlyPlayedUiState,
     /// The shared row tier, for the Songs tab's `TrackList` column.
@@ -84,34 +81,29 @@ pub struct RecentlyPlayedUi {
     pub(super) mosaic_thumbs: Arc<CoverThumbs>,
     /// Released on section leave *and* on tab-leave.
     pub(super) most_played_thumbs: Arc<CoverThumbs>,
-    /// Visibility + staleness + the mutation gate, the unit every entity grid
-    /// carries. Also gates the refresh subscriber, so a background tick can't
-    /// repaint a hidden view.
+    /// Visibility + staleness + the mutation gate, the unit every entity grid carries. Also gates
+    /// the refresh subscriber, so a background tick can't repaint a hidden view.
     section: SectionState,
-    /// Synchronous shadow of `RecentlyPlayed.tab-idx`. The off-thread fetchers
-    /// pick which model to fill and which tier to warm from it — only one
-    /// sub-view is ever mounted, so doing both is twice the work and twice the
-    /// resident buffers for a surface nobody can scroll.
+    /// Synchronous shadow of `RecentlyPlayed.tab-idx`. The off-thread fetchers pick which model to
+    /// fill and which tier to warm from it — only one sub-view is ever mounted, so doing both is
+    /// twice the resident buffers for a surface nobody can scroll.
     active_tab: AtomicU8,
     /// [`SectionState`]'s dirty flag one level down, for Most Played alone.
     ///
-    /// **The section flag can't answer this, the page having one
-    /// `SectionActiveGate` where My Library has one per tab.** Ungated, both
-    /// fetches ran on every `stats_changed` tick — one per finished track — so
-    /// the Songs tab paid a library-wide `get_most_played`, a fold over every
-    /// played row and a store of the lot, for a grid the user can't see. This is
-    /// where a skipped tick is remembered, so the pick that mounts the grid
-    /// knows to fetch. Seeded `true`, so the first pick always does.
+    /// **The section flag can't answer this, the page having one `SectionActiveGate` where My
+    /// Library has one per tab.** Ungated, both fetches ran on every `stats_changed` tick, so the
+    /// Songs tab paid a library-wide `get_most_played` and a fold over every played row for a grid
+    /// the user can't see. This is where a skipped tick is remembered, so the pick that mounts the
+    /// grid knows to fetch. Seeded `true`, so the first pick always does.
     grid_dirty: AtomicBool,
-    /// Bumped by every write to the filter needle, so a grid build running off
-    /// the UI thread can tell whether it still answers the current one.
+    /// Bumped by every write to the filter needle, so a grid build running off the UI thread can
+    /// tell whether it still answers the current one.
     ///
-    /// The Most Played walk is the app's one uncapped library-wide filter pass,
-    /// so it builds on a worker — and once a build outlives its keystroke, two
-    /// can finish in either order and the loser paints a needle the user has
-    /// moved past. `write_filtered_grid`'s signature check can't see it: a stale
-    /// set has a *different* signature, which is exactly what it reads as "apply
-    /// this". `BrowseUi::fetch_token`'s shape, one view over.
+    /// The Most Played walk is the app's one uncapped library-wide filter pass, so it builds on a
+    /// worker — and once a build outlives its keystroke, two can finish in either order and the
+    /// loser paints a needle the user has moved past. `write_filtered_grid`'s signature check
+    /// can't see it: a stale set has a *different* signature, which is exactly what it reads as
+    /// "apply this".
     filter_generation: AtomicU64,
 }
 
@@ -140,8 +132,8 @@ impl RecentlyPlayedUi {
         self.section.active()
     }
 
-    /// Mirror the mounted sub-view. Written on the UI thread, from the tab bar's
-    /// pick and from the section-lifecycle seed.
+    /// Mirror the mounted sub-view. Written on the UI thread, from the tab bar's pick and from the
+    /// section-lifecycle seed.
     pub fn set_active_tab(&self, tab: RecentlyPlayedTab) {
         self.active_tab.store(tab.as_code(), Ordering::Relaxed);
     }
@@ -158,8 +150,7 @@ impl RecentlyPlayedUi {
         self.section.take_dirty()
     }
 
-    /// Remember that a refresh tick reached the page with Most Played not
-    /// mounted. See [`Self::grid_dirty`].
+    /// Remember that a refresh tick reached the page with Most Played not mounted.
     pub fn mark_grid_dirty(&self) {
         self.grid_dirty.store(true, Ordering::Release);
     }
@@ -169,8 +160,8 @@ impl RecentlyPlayedUi {
         self.grid_dirty.swap(false, Ordering::AcqRel)
     }
 
-    /// Record that the needle moved, handing back the token a deferred build
-    /// carries so it can tell whether it is still the current answer.
+    /// Record that the needle moved, handing back the token a deferred build carries so it can
+    /// tell whether it is still the current answer.
     pub(super) fn bump_filter_generation(&self) -> u64 {
         self.filter_generation.fetch_add(1, Ordering::AcqRel).wrapping_add(1)
     }
@@ -180,36 +171,32 @@ impl RecentlyPlayedUi {
         self.filter_generation.load(Ordering::Acquire)
     }
 
-    /// Serialize a bulk-state wipe against a data write. Held only around
-    /// the write; never across an `.await`.
+    /// Serialize a bulk-state wipe against a data write. Held only around the write; never across
+    /// an `.await`.
     pub(super) fn gate(&self) -> parking_lot::MutexGuard<'_, ()> {
         self.section.gate()
     }
 
-    /// Forget the mosaic recorded as on screen, so the next refresh recomposes
-    /// the hero blur. Paired with the leave handler's `blur-img-*` wipe rather
-    /// than with [`Self::release_section_state`] — see
-    /// [`crate::ui::favorites::FavoritesUi::forget_mosaic`].
+    /// Forget the mosaic recorded as on screen, so the next refresh recomposes the hero blur.
+    /// Paired with the leave handler's `blur-img-*` wipe rather than with
+    /// [`Self::release_section_state`] — see [`crate::ui::favorites::FavoritesUi::forget_mosaic`].
     pub fn forget_mosaic(&self) {
         self.inner.last_mosaic_paths.lock().clear();
     }
 
-    /// Forget what the grid last painted, so the next apply rebuilds instead of
-    /// recognising its own output and skipping. Sits beside
-    /// [`Self::forget_mosaic`] and is unconditional for the same reason: the
-    /// model is emptied there, so a surviving signature would match the
-    /// identical data on re-enter and leave the grid blank.
+    /// Forget what the grid last painted, so the next apply rebuilds instead of recognising its
+    /// own output and skipping. Sits beside [`Self::forget_mosaic`] and is unconditional for the
+    /// same reason: the model is emptied there, so a surviving signature would match the identical
+    /// data on re-enter and leave the grid blank.
     pub fn forget_grid_signature(&self) {
         self.inner.last_grid_signature.lock().take();
     }
 
-    /// Drop every section-local buffer so a hidden page holds nothing. Runs off
-    /// the UI thread on section leave, which set `mark_dirty()` synchronously.
-    /// Release order matches `FavoritesUi::release_section_state`, gate
-    /// included, so no fetch can land halfway through the wipe — and each
-    /// fetcher's own `section_active()` bail, plus the one inside each apply's
-    /// closure, is what stops one resolving *after* the leave from repopulating
-    /// it.
+    /// Drop every section-local buffer so a hidden page holds nothing. Runs off the UI thread on
+    /// section leave, which set `mark_dirty()` synchronously. Release order matches
+    /// `FavoritesUi::release_section_state`, gate included, so no fetch can land halfway through
+    /// the wipe — and each fetcher's own `section_active()` bail, plus the one inside each apply's
+    /// closure, is what stops one resolving *after* the leave from repopulating it.
     pub fn release_section_state(&self) {
         if self.section_active() {
             return;
@@ -220,20 +207,16 @@ impl RecentlyPlayedUi {
             let _gate = self.gate();
             self.inner.tracks_all.lock().clear();
             self.inner.most_played.lock().clear();
-            // The folds go with the caches they summarise: a derived value
-            // outliving its source is the one thing the band can state that is
-            // *wrong* rather than merely absent. The two fetches run
-            // concurrently, so whichever lands first on a re-enter would
-            // otherwise pair a fresh count with a pre-leave spread.
+            // The folds go with the caches they summarise: a derived value outliving its source is
+            // the one thing the band can state that is *wrong* rather than merely absent.
             *self.inner.songs_totals.lock() = SongsTotals::default();
             *self.inner.songs_fold.lock() = HeroFold::default();
             *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
             self.inner.applied_selection.lock().clear();
         }
-        // Re-armed where the wipe is rather than left to the caller: this
-        // empties the very cache the flag guards, and relying on the leave's own
-        // `mark_dirty` is a coupling two files apart that a second caller of
-        // this function would not know to honour.
+        // Re-armed where the wipe is rather than left to the caller: this empties the very cache
+        // the flag guards, and relying on the leave's own `mark_dirty` is a coupling two files
+        // apart that a second caller of this function would not know to honour.
         self.mark_grid_dirty();
         crate::tasks::heap_trim::trim();
     }
@@ -242,10 +225,10 @@ impl RecentlyPlayedUi {
         &self.inner
     }
 
-    /// Track ids of the Most Played grid, in card order, so a card there loads
-    /// that grid rather than the recency list on the other tab. Filtered through
-    /// the same predicate `grid::apply::build_filtered_grid` builds the model
-    /// with — the raw cache would enqueue cards that aren't on screen.
+    /// Track ids of the Most Played grid, in card order, so a card there loads that grid rather
+    /// than the recency list on the other tab. Filtered through the same predicate
+    /// `grid::apply::build_filtered_grid` builds the model with — the raw cache would enqueue
+    /// cards that aren't on screen.
     pub fn most_played_track_ids(&self) -> Vec<i64> {
         let needle = self.inner.filter.lock().clone();
         self.inner
@@ -257,9 +240,8 @@ impl RecentlyPlayedUi {
             .collect()
     }
 
-    /// Track ids of the post-filter Songs tab in **display order** — recency,
-    /// less whatever the search bar has narrowed away — so `shuffle-all` /
-    /// `play-row` enqueue what the user sees.
+    /// Track ids of the post-filter Songs tab in **display order** — recency, less whatever the
+    /// search bar has narrowed away — so `shuffle-all` / `play-row` enqueue what the user sees.
     pub fn filtered_track_ids(&self) -> Vec<i64> {
         let needle = self.inner.filter.lock().clone();
         self.inner

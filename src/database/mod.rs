@@ -177,10 +177,9 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
 
     log::info!("Database path: {}", db_path.display());
 
-    // Asked before the write pool opens, because `create_if_missing` below turns
-    // it true right there. The equivalent guard used to sit inside the backup
-    // itself, where it could only ever see `true` — so a genuine first launch
-    // snapshotted an empty schema and kept the file forever.
+    // Asked before the write pool opens, because `create_if_missing` below turns it true right
+    // there. Inside the backup it could only ever read `true`, and a first launch would snapshot
+    // an empty schema and keep the file forever.
     let db_existed = db_path.exists();
 
     // One connection, so writes serialize; `busy_timeout` lets a writer wait out
