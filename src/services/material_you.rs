@@ -155,13 +155,32 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
 /// spell as the theme accent. So there is no last-resort colour to pick here,
 /// and no layer-crossing theme dependency to acquire in order to pick one.
 fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
+    ranked_seeds(pixels, 1).into_iter().next()
+}
+
+/// The best `desired` hue-separated seeds, best first.
+///
+/// `desired` is `Score`'s own parameter forwarded: it walks the required hue separation down from
+/// 90° and takes the first that yields this many, returning **fewer** rather than reaching for
+/// near-duplicates. Asking for more than the artwork holds is safe, and the caller fills the gap.
+///
+/// **Entry 0 doesn't depend on `desired`** — the walk clears its shortlist each pass and pushes
+/// the top-scored survivor unconditionally — so widening the ask changes no colour anything
+/// paints.
+fn ranked_seeds(pixels: &[Argb], desired: usize) -> Vec<u32> {
     if pixels.is_empty() {
-        return None;
+        return Vec::new();
     }
     let counts = QuantizerCelebi::quantize(pixels, QUANTIZE_MAX_COLOURS).color_to_count;
-    let dominant = *counts.iter().max_by_key(|(_, count)| **count)?.0;
-    let seed = *Score::score(&counts, Some(1), Some(dominant), None).first()?;
-    Some(argb_to_u32(seed))
+    let Some(dominant) = counts.iter().max_by_key(|(_, count)| **count).map(|(argb, _)| *argb)
+    else {
+        return Vec::new();
+    };
+    let desired = i32::try_from(desired).unwrap_or(i32::MAX);
+    Score::score(&counts, Some(desired), Some(dominant), None)
+        .into_iter()
+        .map(argb_to_u32)
+        .collect()
 }
 
 /// [`extract_source_argb`]'s pipeline starting from the RGB8 thumbnail
@@ -172,13 +191,22 @@ fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
 ///
 /// **Blocking** (CPU-bound quantize) — call from `spawn_blocking`.
 pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<u32> {
+    extract_seeds_from_rgb8(buf, 1).into_iter().next()
+}
+
+/// [`extract_source_argb_from_rgb8`] for a caller that wants the whole ranked list — the
+/// backdrop, which washes one colour per seed across the surface. One quantize serves both; see
+/// [`ranked_seeds`] for why the first entry is the same either way.
+///
+/// **Blocking** (CPU-bound quantize) — call from `spawn_blocking`.
+pub fn extract_seeds_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>, desired: usize) -> Vec<u32> {
     let bytes = buf.as_bytes();
-    // No alpha here, so the sibling's alpha-skip collapses to a plain push.
+    // No alpha here, so the path-based sibling's alpha-skip collapses to a plain push.
     let mut pixels: Vec<Argb> = Vec::with_capacity(bytes.len() / 3);
     for chunk in bytes.chunks_exact(3) {
         pixels.push(Argb::new(0xff, chunk[0], chunk[1], chunk[2]));
     }
-    seed_from_pixels(&pixels)
+    ranked_seeds(&pixels, desired)
 }
 
 /// Move `argb` into the `min_tone..=max_tone` HCT lightness band, leaving hue
@@ -231,6 +259,45 @@ pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
         hct.set_chroma(max_chroma);
     }
     hct.set_tone(tone);
+    argb_to_u32(Argb::from(hct))
+}
+
+/// Drive `argb` to exactly `tone`, then bring its chroma into `min_chroma..=max_chroma`, keeping
+/// the hue.
+///
+/// [`to_tone_capped_chroma`]'s sibling for a caller needing a chroma *floor* as well as a ceiling
+/// — the aurora's washes, which must carry colour whatever the quantizer handed over.
+///
+/// **The order is reversed from that function's, and the reversal is the point.** Chroma is
+/// bounded by tone, so asking a near-black seed for chroma 36 *at its own tone* gamut-maps the
+/// request away to nothing, and the later tone change can't restore what was already discarded.
+/// Measured on a real cover: a third seed stuck at chroma 15, against 36 this way round.
+pub fn to_tone_with_chroma(argb: u32, tone: f64, min_chroma: f64, max_chroma: f64) -> u32 {
+    debug_assert!(min_chroma <= max_chroma, "inverted chroma band {min_chroma}..={max_chroma}");
+    let mut hct = Hct::new(Argb::from_u32(argb));
+    hct.set_tone(tone);
+    hct.set_chroma(hct.get_chroma().clamp(min_chroma, max_chroma));
+    argb_to_u32(Argb::from(hct))
+}
+
+/// `argb`'s HCT hue, in degrees. The reader beside [`rotate_hue`], for a caller deciding *how
+/// far* to turn rather than turning by a fixed amount.
+pub fn hue_of(argb: u32) -> f64 {
+    Hct::new(Argb::from_u32(argb)).get_hue()
+}
+
+/// Turn `argb` `degrees` around the HCT hue wheel, keeping tone and chroma.
+///
+/// The round trip for making a *second* colour out of a first rather than making one legible:
+/// [`crate::ui::aurora`] fills a short seed list this way, an album that quantized to one hue
+/// still owing three washes. HCT rather than HSL is what keeps the sibling at the same apparent
+/// lightness, which is why the tint band can state one tone ceiling.
+///
+/// Wraps, so any `degrees` is in range; chroma is gamut-mapped, so a saturated seed can come back
+/// less so at a hue sRGB has less room for.
+pub fn rotate_hue(argb: u32, degrees: f64) -> u32 {
+    let mut hct = Hct::new(Argb::from_u32(argb));
+    hct.set_hue((hct.get_hue() + degrees).rem_euclid(360.0));
     argb_to_u32(Argb::from(hct))
 }
 

@@ -1,0 +1,150 @@
+import { Theme } from "../theme.slint";
+
+// One blob of the aurora: album colour at a point, thinning out across the surface.
+//
+// **Radial, not linear.** Alpha-blending linear ramps composites to something still linear in
+// position, so any stack of them keeps straight parallel contours — which is why an earlier pass
+// banded into diagonal stripes and read as ramps rather than as anything blurred. Curvature needs
+// a primitive that isn't linear in position; offset radials are what a mesh gradient is made of.
+//
+// **Two stops, the far one this tint at zero alpha — never the `transparent` keyword.** FemtoVG
+// interpolates stops in straight RGBA (`gradient_store.rs`, deliberately), so fading to
+// rgba(0,0,0,0) drags the colour toward black and the blob darkens instead of thinning. Amberol's
+// `color-mix(in srgb, <colour> 0%, transparent)` is the long way of writing the same thing.
+component AuroraBlob inherits Rectangle {
+    in property <color> tint;
+
+    // Alpha at the centre. The blob tints the base rather than lighting it — near opaque it stops
+    // being album colour over a dark floor and becomes a lightness ramp.
+    in property <float> peak;
+
+    in property <bool> shown: true;
+
+    // Both arms one type at one stop count, the only shape `Brush::interpolate` blends
+    // stop-for-stop. Safe to `animate` where a leaf's brush usually isn't: Rust writes the tint
+    // discretely, so no host can restart the binding.
+    background: root.shown
+        ? @radial-gradient(circle, root.tint.transparentize(1.0 - root.peak), root.tint.transparentize(1.0))
+        : @radial-gradient(circle, root.tint.transparentize(1.0), root.tint.transparentize(1.0));
+    animate background { duration: Theme.dur-med; easing: ease-in-out; }
+}
+
+// The artwork-derived backdrop: a base gradient in the album's hue under three broad blobs of
+// album colour, a vignette, and a grain of noise. Replaces a blurred cover, so it *is* the surface
+// the foreground is solved against rather than a tint over one.
+//
+// **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom. They exist
+// so this file imports no global: one mount reads the `Player` tier and the others `HeroBackdrop`,
+// and naming either would tie the component to one. A `Theme.*` brush would be worse than wrong,
+// flipping polarity with the variant while the foreground stays solved for dark.
+export component AuroraBackdrop inherits Rectangle {
+    in property <color> base-start: #2b2135;
+    in property <color> base-end: #14101a;
+    in property <color> tint-1: #3a2d4a;
+    in property <color> tint-2: #2d3a4a;
+    in property <color> tint-3: #4a2d3a;
+
+    // Alpha carries the strength, so a transparent value is the layer switched off.
+    in property <color> vignette: #00000066;
+
+    // Grain over everything below; `ui::aurora::dither_tile` argues it. An unset image draws
+    // nothing, so a mount without one degrades to undithered gradients rather than to a hole.
+    in property <image> dither;
+
+    // Whether the host paints a hero at all. The mosaic bands always do and take the default;
+    // `LibraryTabBand` morphs, and its globals outlive the tab that filled them, so an ungated
+    // layer would ease out of a banner nobody has seen. **Discrete bool** — a leaf can't tell an
+    // eased input from a stepped one, and a `hero-t` float would restart every binding per frame.
+    in property <bool> hero-open: true;
+
+    clip: true;
+
+    // Slint's radial gradient owns neither centre nor radius: always a circle in the middle of its
+    // element, radius the half-diagonal. Position and spread are therefore the rectangle's.
+    property <float> diagonal-px: Math.sqrt((root.width / 1px) * (root.width / 1px)
+        + (root.height / 1px) * (root.height / 1px));
+    property <length> diagonal: root.diagonal-px * 1px;
+
+    // Far larger than the host so the rectangle's own edge is never on screen — whatever alpha is
+    // left there draws as a straight seam, which is what forced an earlier pass to stop its ramp
+    // short and pick up a slope break instead.
+    property <length> blob-span: root.diagonal * 1.4;
+
+    // Offset on three axes 120° apart, small enough that every blob still covers the panel.
+    // Centred they would agree everywhere and flatten back to something linear.
+    property <length> blob-offset: root.diagonal * 0.15;
+    property <length> blob-home-x: (root.width - root.blob-span) / 2;
+    property <length> blob-home-y: (root.height - root.blob-span) / 2;
+
+    background: root.hero-open
+        ? @linear-gradient(135deg, root.base-start, root.base-end)
+        : @linear-gradient(135deg, transparent, transparent);
+    animate background { duration: Theme.dur-med; easing: ease-in-out; }
+
+    // **Deliberately unequal** — dominant, supporting, accent, the usual 60/30/10. Three colours
+    // at one strength give the eye no reason to prefer any, so it reads the boundaries between
+    // them instead. Order is `Score`'s ranking, so what the artwork most is gets the most surface.
+    AuroraBlob {
+        x: root.blob-home-x - root.blob-offset * 0.866;
+        y: root.blob-home-y - root.blob-offset * 0.5;
+        width: root.blob-span;
+        height: root.blob-span;
+        tint: root.tint-1;
+        peak: 0.5;
+        shown: root.hero-open;
+    }
+    AuroraBlob {
+        x: root.blob-home-x + root.blob-offset * 0.866;
+        y: root.blob-home-y - root.blob-offset * 0.5;
+        width: root.blob-span;
+        height: root.blob-span;
+        tint: root.tint-2;
+        peak: 0.34;
+        shown: root.hero-open;
+    }
+    AuroraBlob {
+        x: root.blob-home-x;
+        y: root.blob-home-y + root.blob-offset;
+        width: root.blob-span;
+        height: root.blob-span;
+        tint: root.tint-3;
+        peak: 0.2;
+        shown: root.hero-open;
+    }
+
+    // **Four stops, and the only place here where extra ones earn their keep.** Two give a
+    // constant slope, i.e. darkening that starts at the centre and dims the artwork it should be
+    // framing; easing in keeps the middle clear and puts the fall in the outer third. The usual
+    // objection — every junction is a slope break — barely applies to a monochrome overlay sitting
+    // at two percent where the first one is.
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: @radial-gradient(circle,
+            root.vignette.transparentize(1.0) 0%,
+            root.vignette.transparentize(0.95) 45%,
+            root.vignette.transparentize(0.7) 75%,
+            root.vignette 100%);
+        animate background { duration: Theme.dur-med; easing: ease-in-out; }
+    }
+
+    // **`image-fit: preserve` is what makes this dither rather than decoration**: outside a layout
+    // the default is `fill`, which scales the tile before tiling it, and one texel becomes a block
+    // tens of pixels across. Only `preserve` maps a source texel to a physical pixel, the
+    // frequency dither has to run at to disappear; `pixelated` so filtering can't average it back
+    // toward the flat colour it breaks up. Alpha lives in the tile rather than in `opacity`, which
+    // would rasterize the whole backdrop into a layer.
+    Image {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        source: root.dither;
+        image-fit: ImageFit.preserve;
+        image-rendering: ImageRendering.pixelated;
+        horizontal-tiling: ImageTiling.repeat;
+        vertical-tiling: ImageTiling.repeat;
+    }
+}

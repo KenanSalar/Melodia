@@ -23,14 +23,17 @@ use material_colors::contrast;
 use slint::{Brush, Rgb8Pixel, SharedPixelBuffer};
 
 use crate::services::material_you::{
-    clamp_to_tone_band, extract_source_argb_from_rgb8, to_tone_capped_chroma,
+    clamp_to_tone_band, extract_seeds_from_rgb8, to_tone_capped_chroma,
 };
 use crate::themes::brush_with_alpha;
 
 /// HCT tone the composited backdrop is driven down to. Below it a light hue-carrying chrome tone
 /// clears WCAG's 3:1 non-text bar with margin and body text clears 4.5:1 without washing out.
 /// Raising it shows more artwork and costs contrast headroom.
-const TARGET_BACKDROP_TONE: f64 = 32.0;
+///
+/// It is the *composite* that must respect this, not any single layer: [`crate::ui::aurora`]'s
+/// tints sit above it and arrive underneath once their alpha is applied.
+pub(crate) const TARGET_BACKDROP_TONE: f64 = 32.0;
 
 /// Floor on the solved scrim opacity, deliberately light: below the target tone there is nothing
 /// left to darken, so a black sleeve shows more of itself.
@@ -55,6 +58,8 @@ const FLOOR_TONE_END: f64 = 8.0;
 
 /// Chroma ceiling for the scrim and the gradient floor. At these tones sRGB gamut-maps almost
 /// everything away regardless — a guard against a pathological seed, not a shaping parameter.
+/// Deliberately not shared with [`crate::ui::aurora`]'s washes, which sit high enough for a
+/// ceiling to bind and so answer how loud the album gets rather than what the gamut passes.
 const BACKDROP_MAX_CHROMA: f64 = 24.0;
 
 /// WCAG 1.4.11 non-text contrast: icons, the visualizer bars, the stars and the heart carry no
@@ -203,31 +208,47 @@ fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
     Some(bin_centre(0))
 }
 
-/// Everything a solve needs off a decoded blur. Both are `None` when there is no blur — no
-/// artwork, or a failed decode — and the publisher falls back to the live `Theme.accent` and
+/// How many hue-separated seeds a backdrop asks the quantizer for — one per aurora wash, so
+/// `ui::aurora` has to agree. Three because `Score` typically still holds 60–90° of separation
+/// there, where six forces it toward its 15° floor and hands back near-duplicates.
+pub(crate) const SEED_COUNT: usize = 3;
+
+/// Everything a solve needs off a decoded cover. All are `None` when there is none — no artwork,
+/// or a failed decode — and the publisher falls back to the live `Theme.accent` and
 /// [`floor_luma`].
 #[derive(Clone, Copy, Default)]
 pub(crate) struct BackdropSample {
-    /// Dominant colour quantized out of the blur, supplying the *hue* for every colour [`solve`]
-    /// returns.
+    /// Dominant colour quantized out of the cover, supplying the *hue* for every colour [`solve`]
+    /// returns. Always `seeds[0]`, which keeps this tier and the washes on one hue family.
     pub(crate) accent_argb: Option<u32>,
+    /// The same quantize's ranked list, best first, short when the artwork couldn't separate that
+    /// many hues. `ui::aurora` owns the filling rule.
+    pub(crate) seeds: [Option<u32>; SEED_COUNT],
     /// [`luma_p90`] of the same buffer.
     pub(crate) luma: Option<f64>,
 }
 
 impl BackdropSample {
-    /// Measure a decoded blur. CPU-bound — the quantize dominates — so it belongs in the
-    /// `spawn_blocking` task that produced the blur, never on the UI thread. Quantizing the *blur*
-    /// rather than the sharp source is deliberate: a downscaled, blurred buffer is plenty of
-    /// pixels for `QuantizerCelebi`.
+    /// Measure a decoded cover. CPU-bound — the quantize dominates — so it belongs in the
+    /// `spawn_blocking` task that decoded it, never on the UI thread.
+    ///
+    /// **Hand it the sharp downscale, never a blurred one.** Blur averages away exactly the hue
+    /// separation `Score` looks for: measured on a real cover, two seeds against three, and the
+    /// two nearly a shared hue. Amberol quantizes the cover itself for the same reason.
     ///
     /// An empty `accent_argb` means there was no buffer at all, so [`Self::solve`]'s
     /// `Theme.accent` path is for a missing cover and never a monochrome one — a greyscale sleeve
     /// answers with its own dominant grey.
-    pub(crate) fn measure(blur: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
+    pub(crate) fn measure(cover: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
+        let mut seeds = [None; SEED_COUNT];
+        for (slot, seed) in seeds.iter_mut().zip(extract_seeds_from_rgb8(cover, SEED_COUNT)) {
+            *slot = Some(seed);
+        }
+
         Self {
-            accent_argb: extract_source_argb_from_rgb8(blur),
-            luma: luma_p90(blur),
+            accent_argb: seeds[0],
+            seeds,
+            luma: luma_p90(cover),
         }
     }
 

@@ -166,6 +166,13 @@ export component ShortcutScope inherits FocusScope {
                 Queue.select-all();
                 return accept;
             }
+            // **Temporary**: swaps the aurora backdrop for the blur it replaces, so both can be
+            // judged on one track; goes with the blur. Ahead of plain Ctrl+B, whose arm doesn't
+            // exclude Shift, and both cases because platforms disagree on what Ctrl+Shift yields.
+            if (ev.modifiers.shift && (ev.text == "b" || ev.text == "B")) {
+                Player.np-aurora = !Player.np-aurora;
+                return accept;
+            }
             if (ev.text == "b") {
                 Nav.sidebar-collapsed = !Nav.sidebar-collapsed;
                 return accept;

@@ -76,8 +76,9 @@ pub(crate) fn compose_mosaic_blur(paths: &[String]) -> Option<MosaicBlur> {
         }
     }
 
+    // Off the sharp atlas, never the blur — see [`BackdropSample::measure`].
+    let sample = BackdropSample::measure(&buffer_from_rgb(&atlas));
     let blur = buffer_from_rgb(&fast_blur(&atlas, BLUR_SIGMA));
-    let sample = BackdropSample::measure(&blur);
     Some(MosaicBlur { blur, sample })
 }
 

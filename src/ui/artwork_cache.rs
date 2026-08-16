@@ -113,11 +113,13 @@ fn decode_artwork(path: &Path, blur_spec: &BlurSpec) -> CachedArtwork {
     // fast path and its aspect distortion is invisible once blurred and re-cropped;
     // `fast_blur`'s 3-pass box blur is indistinguishable from a true Gaussian here.
     let small = decoded.thumbnail_exact(BLUR_TARGET, blur_spec.height).to_rgb8();
-    let blur = buffer_from_rgb(&fast_blur(&small, blur_spec.sigma));
 
-    // Here rather than at the publisher: this runs on the blocking pool and the result is
-    // cached, so the quantize is paid once per cover rather than once per open.
-    let sample = BackdropSample::measure(&blur);
+    // Off the *sharp* downscale, never the blur — see [`BackdropSample::measure`]. Here rather
+    // than at the publisher: this runs on the blocking pool and is cached, so the quantize is
+    // paid once per cover rather than once per open.
+    let sample = BackdropSample::measure(&buffer_from_rgb(&small));
+
+    let blur = buffer_from_rgb(&fast_blur(&small, blur_spec.sigma));
 
     Some(ArtworkPair {
         cover,

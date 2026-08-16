@@ -27,6 +27,9 @@ pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
     if let Err(e) = ui::window_chrome::install(app, state) {
         log::warn!("window_chrome::install: {e}");
     }
+    // One tile for the process: it answers to the renderer's lack of gradient dithering rather
+    // than to any artwork, so nothing later has cause to rewrite it.
+    app.global::<Player>().set_np_dither(slint::Image::from_rgba8(ui::aurora::dither_tile()));
 }
 
 /// The per-view handles `install_views` hands back for the wiring `main()` still

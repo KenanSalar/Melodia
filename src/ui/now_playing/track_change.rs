@@ -14,7 +14,8 @@ use super::write_crossfade_slot;
 use crate::entities::track::TrackSummary;
 use crate::library;
 use crate::state::AppState;
-use crate::themes::{brush, brush_to_rgb, color};
+use crate::themes::{brush, brush_to_rgb, color, color_with_alpha};
+use crate::ui::aurora;
 use crate::ui::backdrop;
 use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
@@ -158,7 +159,8 @@ pub(super) async fn apply_track_change(
     // Every colour the view paints on the backdrop, solved together from one hue and
     // one measurement. Both fallbacks live on `BackdropSample::solve`, so this tier and
     // the hero's resolve them identically.
-    let colors = sample.solve(brush_to_rgb(&ui.global::<ThemeGlobal>().get_accent()));
+    let theme_accent = brush_to_rgb(&ui.global::<ThemeGlobal>().get_accent());
+    let colors = sample.solve(theme_accent);
 
     player.set_np_accent_bright(brush(colors.chrome));
     player.set_np_on_backdrop(brush(colors.text));
@@ -166,6 +168,13 @@ pub(super) async fn apply_track_change(
     player.set_np_floor_start(color(colors.floor_start));
     player.set_np_floor_end(color(colors.floor_end));
     player.set_np_scrim(backdrop::scrim_brush(&colors));
+
+    // Weight rides in the alpha channel, which the Slint side's falloff *multiplies* — so how
+    // strongly a wash is laid on stays independent of the shape it is laid on with.
+    let [tint_1, tint_2, tint_3] = aurora::tints(sample.seeds, theme_accent);
+    player.set_np_tint_1(color_with_alpha(tint_1.rgb, tint_1.weight));
+    player.set_np_tint_2(color_with_alpha(tint_2.rgb, tint_2.weight));
+    player.set_np_tint_3(color_with_alpha(tint_3.rgb, tint_3.weight));
 
     write_crossfade_slot(
         blurred,

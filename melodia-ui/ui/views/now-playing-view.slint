@@ -10,6 +10,7 @@ import { NowPlayingCover } from "../components/now-playing/now-playing-cover.sli
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
 import { NowPlayingViewMenu } from "../components/now-playing/view-menu.slint";
 import { VisualizerStrip } from "../components/now-playing/visualizer-strip.slint";
+import { AuroraBackdrop } from "../components/aurora-backdrop.slint";
 
 // The full-screen Now Playing view, rendered inside the content panel — sidebar and now-playing
 // bar stay visible — when `Nav.now-playing-open`. A large centred artwork, title / artist / album,
@@ -96,6 +97,23 @@ export component NowPlayingView inherits Rectangle {
         height: 100%;
         background: Player.np-scrim;
         animate background { duration: Theme.dur-med; easing: ease-in-out; }
+    }
+
+    // The replacement for all four layers above; both it and they go once the look is settled.
+    // **`Player.np-aurora` is temporary scaffolding**, and mounts *over* rather than instead — its
+    // base gradient is opaque, so the toggle is one gate rather than four and swapping doesn't
+    // remount the image slots underneath.
+    if Player.np-aurora: AuroraBackdrop {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        base-start: Player.np-floor-start;
+        base-end: Player.np-floor-end;
+        tint-1: Player.np-tint-1;
+        tint-2: Player.np-tint-2;
+        tint-3: Player.np-tint-3;
+        dither: Player.np-dither;
     }
 
     // **Padding is per-section, not uniform on this layout**: the Up Next column has to
