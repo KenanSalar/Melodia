@@ -292,11 +292,15 @@ constant, so this is the index rather than the reasoning.
   so fading to rgba(0,0,0,0) drags the colour toward black and a layer darkens across its own
   length instead of thinning. Amberol's odd-looking `color-mix(in srgb, <colour> 0%, transparent)`
   exists precisely for this, which the prior-art survey read past.
-- **Blob rects are ~1.4× the host diagonal.** Sized near the panel, the rectangle's own edge lands
-  on screen and whatever alpha remains there draws as a seam — which is what Amberol's 70.71% stop
-  is working around, and that stop is itself a slope break. Oversized, neither problem exists.
-- **The three are unequal** — 0.5 / 0.34 / 0.2, dominant, supporting, accent. Three colours at one
-  strength give the eye no reason to prefer any, so it reads the boundaries between them.
+- **Alpha reaches zero at 70% of the radius, and Amberol's stop was right after all.** Run the ramp
+  to the corner and the rectangle's own edge carries ~0.3 of peak, which draws as a straight seam;
+  reaching zero just inside frees the rect from covering the host and is what allows blobs small
+  and far apart enough to each own a region. It reads as a slope break only when paired with the
+  `transparent` bug above — the two were removed together and only one deserved it.
+- **The three are unequal, but only just** — 0.5 / 0.46 / 0.42. At one strength the eye has no
+  reason to prefer any and reads the boundaries between them instead; at the usual 60/30/10 the
+  dominant shows through the other two wherever they overlap and the second and third colours never
+  get a region. That advice is about *area*, which the geometry now supplies.
 - **Seeds come off the sharp downscale, not the blur.** Measured on a real cover: two seeds against
   three, and the two nearly a shared hue. Blur averages away exactly the separation `Score` looks
   for. This was deferred to Phase 7 above to keep the A/B honest; the A/B had outlived that by the
@@ -310,9 +314,12 @@ constant, so this is the index rather than the reasoning.
 - **Tint tone sits above `TARGET_BACKDROP_TONE`, not on it.** That ceiling belongs to the
   composite, not to any single layer under it. Holding each tint down to it spent the whole margin
   for nothing and, chroma being bounded by tone, cost most of the colour.
-- **Hue arc is clamped to 40°.** `Score` optimises for separation; overlapping washes composite in
-  sRGB, whose midpoint between distant hues is grey. Left raw, the more colourful the cover the
-  muddier the result.
+- **Seeds keep their own hues, and separation is geometry's job.** An arc clamp was tried first —
+  the reasoning being that overlapping washes composite in sRGB, whose midpoint between distant
+  hues is grey. It answered the wrong question: a blue-and-red cover came out three violets, its
+  most vivid colour discarded. Blobs spread far enough to hold regions of their own is what keeps
+  the overlaps honest, so span, offset and the weight hierarchy are one decision — measured on that
+  cover, 6° of hue variation across the panel before, 85° after.
 - **A blue-noise dither tile, at one 8-bit level.** FemtoVG has no dithering pass, and the blur
   escaped banding only because photographs carry grain. Amplitude is the whole game: six levels
   read as dust, one is invisible. `image-fit: preserve` is load-bearing — the default `fill` scales

@@ -12,7 +12,7 @@
 
 use slint::{Rgba8Pixel, SharedPixelBuffer};
 
-use crate::services::material_you::{hue_of, rotate_hue, to_tone_with_chroma};
+use crate::services::material_you::{rotate_hue, to_tone_with_chroma};
 use crate::ui::backdrop::SEED_COUNT;
 
 /// Tone every tint is driven to — one for all three, so hue is the only axis they differ on. A
@@ -37,16 +37,6 @@ const TINT_MIN_CHROMA: f64 = 36.0;
 /// Ceiling against a pathological seed; the floor above does the shaping. sRGB stops well short of
 /// it at this tone for most hues anyway.
 const TINT_MAX_CHROMA: f64 = 48.0;
-
-/// How far from the dominant hue any tint may sit.
-///
-/// **`Score` optimises for the opposite of what a backdrop wants** — its whole job is hue
-/// separation, starting at 90° and walking down only when the artwork can't supply it. Overlapping
-/// washes composite in sRGB, whose midpoint between distant hues is the desaturated grey every
-/// gradient guide warns about, so raw seeds make the *more* colourful cover the muddier one.
-/// Pulling the set into an analogous arc is what keeps three washes reading as one field; the
-/// dominant keeps its own hue and only the others move.
-const TINT_HUE_ARC: f64 = 40.0;
 
 /// Hue rotation for tint *n* when the quantizer had no seed for it, applied to the first colour
 /// that does exist — rotating from the previous tint instead would let two fills walk away from
@@ -73,16 +63,23 @@ pub(crate) struct Tint {
 
 /// The three washes, in paint order.
 ///
+/// **A measured seed keeps its own hue.** An earlier pass pulled the set into an analogous arc,
+/// on the reasoning that overlapping washes composite in sRGB and its midpoint between distant
+/// hues is grey — but that answers the wrong question. A cover of blue *and* red is a cover of two
+/// colours, and clamping turned its red into a second violet: measured, three seeds 231°/17°/304°
+/// came out 231°/271°/270°, and the record's most vivid colour was the one thrown away. What keeps
+/// the overlaps from going grey is that the blobs are spread far enough apart to have regions of
+/// their own, which is the Slint side's business.
+///
 /// `fallback` supplies the hue when the artwork gave nothing — the theme accent, as everywhere
 /// else on this surface. It is never used to *pad* a short list: a cover that quantized to one
 /// hue gets three of its own colours, not two of its own and a lick of the app's.
 pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], fallback: u32) -> [Tint; SEED_COUNT] {
     let origin = seeds.iter().flatten().next().copied().unwrap_or(fallback);
-    let anchor = hue_of(origin);
 
     std::array::from_fn(|tint| {
         let (source, weight) = match seeds[tint] {
-            Some(argb) => (pull_toward_hue(argb, anchor), 1.0),
+            Some(argb) => (argb, 1.0),
             None => (rotate_hue(origin, FILL_HUES[tint]), FILL_WEIGHT),
         };
         Tint {
@@ -90,15 +87,6 @@ pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], fallback: u32) -> [Tint; S
             weight,
         }
     })
-}
-
-/// `argb` turned back toward `anchor` until it is inside [`TINT_HUE_ARC`], along the short way
-/// round. Already inside, it keeps its own hue exactly.
-fn pull_toward_hue(argb: u32, anchor: f64) -> u32 {
-    // Into (-180, 180], so a pair straddling 0° is measured as the few degrees it is apart
-    // rather than as most of the wheel.
-    let offset = (hue_of(argb) - anchor + 540.0).rem_euclid(360.0) - 180.0;
-    rotate_hue(argb, offset.clamp(-TINT_HUE_ARC, TINT_HUE_ARC) - offset)
 }
 
 /// Side of the noise tile. Big enough that the repeat carries no structure to lock onto — the

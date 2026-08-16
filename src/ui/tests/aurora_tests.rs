@@ -159,26 +159,26 @@ fn the_two_fills_land_either_side_of_the_seed() {
     );
 }
 
-/// `Score` optimises for hue *separation* — it starts at 90° and walks down only when the artwork
-/// can't supply it — which is the opposite of what a backdrop wants: overlapping washes composite
-/// in sRGB, whose midpoint between distant hues is grey, so raw seeds make the more colourful
-/// cover the muddier one. The dominant keeps its own hue; the others are pulled to it.
+/// A cover of two colours must come out as two colours.
+///
+/// An earlier pass pulled every seed into a 40° arc of the dominant, on the reasoning that
+/// overlapping washes composite in sRGB and its midpoint between distant hues is grey. Measured on
+/// a real blue-and-red sleeve, that turned seeds at 231°/17°/304° into 231°/271°/270° — three
+/// violets, the record's most vivid colour discarded. Separation is the Slint side's job, by
+/// giving each blob a region; the solve's job is to hand over what the artwork had.
 #[test]
-fn widely_separated_seeds_are_pulled_into_one_arc() {
-    // A quadrant apart, which `Score` will happily return from a colourful sleeve.
-    let scattered = [Some(0x00c0_3030), Some(0x0030_c030), Some(0x0030_30c0)];
-    let [first, second, third] = tints(scattered, THEME_ACCENT);
+fn a_multi_coloured_cover_keeps_its_colours_apart() {
+    let blue_and_red = [Some(0x0038_718b), Some(0x00cc_2841), Some(0x0024_1e2e)];
+    let painted = tints(blue_and_red, THEME_ACCENT);
 
-    let anchor = hct_of(first.rgb).get_hue();
-    assert!(
-        hue_gap(anchor, hct_of(0x00c0_3030).get_hue()) < 5.0,
-        "the dominant must keep its own hue, got {:#08x}",
-        first.rgb
-    );
-    for pulled in [second, third] {
-        let gap = hue_gap(hct_of(pulled.rgb).get_hue(), anchor);
-        assert!(gap <= 45.0, "tint {:#08x} sits {gap}° off the dominant", pulled.rgb);
+    for (tint, seed) in painted.iter().zip(blue_and_red) {
+        let Some(seed) = seed else { continue };
+        let drift = hue_gap(hct_of(tint.rgb).get_hue(), hct_of(seed).get_hue());
+        assert!(drift < 10.0, "tint {:#08x} drifted {drift}° off the seed it came from", tint.rgb);
     }
+
+    let spread = hue_gap(hct_of(painted[0].rgb).get_hue(), hct_of(painted[1].rgb).get_hue());
+    assert!(spread > 90.0, "blue and red collapsed to {spread}° apart");
 }
 
 /// No artwork at all is the only path that may reach for the theme, and it still owes three

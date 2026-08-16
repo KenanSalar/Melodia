@@ -20,12 +20,20 @@ component AuroraBlob inherits Rectangle {
 
     in property <bool> shown: true;
 
+    // **Gone by 70%, which is what lets a blob be local.** Slint's radius is the half-diagonal, so
+    // the edge midpoints sit at 1/√2: run the ramp to the corner and alpha is still ~0.3 of peak
+    // where the rectangle ends, and that draws as a straight seam. Reaching zero just inside
+    // instead frees the rectangle from having to cover the host at all, which is what allows blobs
+    // small and far apart enough to each own a region — three colours can't be seen at once if
+    // every one of them covers the whole surface. FemtoVG holds the last stop out to 1.0, so this
+    // is still two stops and no interior slope break.
+    //
     // Both arms one type at one stop count, the only shape `Brush::interpolate` blends
     // stop-for-stop. Safe to `animate` where a leaf's brush usually isn't: Rust writes the tint
     // discretely, so no host can restart the binding.
     background: root.shown
-        ? @radial-gradient(circle, root.tint.transparentize(1.0 - root.peak), root.tint.transparentize(1.0))
-        : @radial-gradient(circle, root.tint.transparentize(1.0), root.tint.transparentize(1.0));
+        ? @radial-gradient(circle, root.tint.transparentize(1.0 - root.peak) 0%, root.tint.transparentize(1.0) 70%)
+        : @radial-gradient(circle, root.tint.transparentize(1.0) 0%, root.tint.transparentize(1.0) 70%);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 }
 
@@ -65,14 +73,14 @@ export component AuroraBackdrop inherits Rectangle {
         + (root.height / 1px) * (root.height / 1px));
     property <length> diagonal: root.diagonal-px * 1px;
 
-    // Far larger than the host so the rectangle's own edge is never on screen — whatever alpha is
-    // left there draws as a straight seam, which is what forced an earlier pass to stop its ramp
-    // short and pick up a slope break instead.
-    property <length> blob-span: root.diagonal * 1.4;
-
-    // Offset on three axes 120° apart, small enough that every blob still covers the panel.
-    // Centred they would agree everywhere and flatten back to something linear.
-    property <length> blob-offset: root.diagonal * 0.15;
+    // Sized and spread so the three overlap in bands rather than everywhere. **The pair is one
+    // decision**: a blob's alpha reaches zero at roughly half its span, so a wide span with tight
+    // offsets puts all three at strength over the whole surface, every colour is diluted by the
+    // other two, and what shows is their average — measured on a blue-and-red cover, 6° of hue
+    // variation across the entire panel against 85° at these numbers. Wider offsets alone would
+    // leave the floor bare between them; both move together.
+    property <length> blob-span: root.diagonal * 1.5;
+    property <length> blob-offset: root.diagonal * 0.3;
     property <length> blob-home-x: (root.width - root.blob-span) / 2;
     property <length> blob-home-y: (root.height - root.blob-span) / 2;
 
@@ -81,9 +89,12 @@ export component AuroraBackdrop inherits Rectangle {
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
-    // **Deliberately unequal** — dominant, supporting, accent, the usual 60/30/10. Three colours
-    // at one strength give the eye no reason to prefer any, so it reads the boundaries between
-    // them instead. Order is `Score`'s ranking, so what the artwork most is gets the most surface.
+    // Ordered by `Score`'s ranking so the colour the artwork most is leads, but only just.
+    // A steeper hierarchy — 60/30/10, which is the usual advice — has the dominant showing through
+    // the other two everywhere they overlap, so a cover's second and third colours never get a
+    // region of their own; measured on a blue-and-red cover it cost a third of the hue variation
+    // across the panel. The advice is about *area*, and the geometry above already gives each an
+    // area, so the weights only have to break the tie.
     AuroraBlob {
         x: root.blob-home-x - root.blob-offset * 0.866;
         y: root.blob-home-y - root.blob-offset * 0.5;
@@ -99,7 +110,7 @@ export component AuroraBackdrop inherits Rectangle {
         width: root.blob-span;
         height: root.blob-span;
         tint: root.tint-2;
-        peak: 0.34;
+        peak: 0.46;
         shown: root.hero-open;
     }
     AuroraBlob {
@@ -108,7 +119,7 @@ export component AuroraBackdrop inherits Rectangle {
         width: root.blob-span;
         height: root.blob-span;
         tint: root.tint-3;
-        peak: 0.2;
+        peak: 0.42;
         shown: root.hero-open;
     }
 

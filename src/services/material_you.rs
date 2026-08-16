@@ -280,12 +280,6 @@ pub fn to_tone_with_chroma(argb: u32, tone: f64, min_chroma: f64, max_chroma: f6
     argb_to_u32(Argb::from(hct))
 }
 
-/// `argb`'s HCT hue, in degrees. The reader beside [`rotate_hue`], for a caller deciding *how
-/// far* to turn rather than turning by a fixed amount.
-pub fn hue_of(argb: u32) -> f64 {
-    Hct::new(Argb::from_u32(argb)).get_hue()
-}
-
 /// Turn `argb` `degrees` around the HCT hue wheel, keeping tone and chroma.
 ///
 /// The round trip for making a *second* colour out of a first rather than making one legible:
