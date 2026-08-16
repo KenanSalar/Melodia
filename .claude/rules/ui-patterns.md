@@ -161,6 +161,22 @@ silently miss the other.
   it — **`chip-fill-at(fade)` when the surface is morphing**, `with-alpha` *setting* alpha where
   the tier needs it multiplied.
 
+- **Two backdrop stacks, and neither knows which tier it is painting from.** `HeroBlurBackdrop`
+  and `AuroraBackdrop` take every colour as a defaulted `in property` — `MetaChip`'s idiom — which
+  is what lets one component serve `HeroBackdrop` on the six bands and `Player.np-*` on Now
+  Playing, two globals kept separate because a band stays mounted behind an open Now Playing.
+  Reading either global from inside a stack ties it to one tier and puts the other site's inline
+  copy back; `hero_blur_backdrop_tests` pins both directions. **Three mount sites, one
+  `aurora-shown` property and two `if`s each** — Slint has no element-level `else`, and a second
+  spelling of the condition can invert alone. Whichever arm is unmounted costs nothing.
+
+- **`has-tints` is the Genre gate, and only `LibraryTabBand` folds it in.** `apply_gradient` is its
+  one `false`: a genre has no artwork to wash, and its name-hashed stops are legible only under the
+  scrim the blur arm solves, so Genre Detail keeps the blur under both settings. The mosaic heroes
+  gate on the setting alone, never being able to show a genre. Flipping it *remounts* rather than
+  eases, which is why the arms may only cross where nothing is on screen — every path into or out
+  of a genre passes through the band's collapse or through `reset`.
+
 - **`ActionPill`/`SearchBar` inside a hero are the deliberate exception** and stay on
   `Theme.floating-chrome-bg`, still mostly their own surface — safe only because the backdrop is
   *pinned*. A `chrome`-tinted placeholder is the opposite case: translucent enough that whatever
@@ -172,16 +188,20 @@ silently miss the other.
   the band stopped painting several tabs ago, so an eased layer bound to them settles on it and
   interpolates out the moment a hero opens — a genre's pink under a playlist. **Make the idle
   value honest rather than suppressing the animation at the right instant**: the palette mirrors
-  fall back to their idle half on `root.detail-open`, the shared floor swaps its stops for a
-  transparent pair on a `hero-open` input defaulting `true`. **`detail-open`, not `hero-shown`** —
-  gated on the latter they drain toward idle for `dur-med` *after* the collapse ends. The scrim
-  stays ungated, carrying almost no chroma.
+  fall back to their idle half on `root.detail-open`, and both stacks swap their stops for a
+  transparent pair on a `hero-open` input defaulting `true` — the blur's floor, and the aurora's
+  base plus all four washes. **`detail-open`, not `hero-shown`** — gated on the latter they drain
+  toward idle for `dur-med` *after* the collapse ends. The two neutral layers stay ungated: the
+  blur's scrim, which carries almost no chroma, and the aurora's vignette, which the bands switch
+  off outright rather than gate (sized for a full page, its circle draws as an end-darkening on a
+  strip that shape).
 
 - **`has-cover` is how a host says "not this one".** The `cover:` ternary must bind *some* global
   on every arm, Slint having no empty-`image` literal, and Genre owns no cover — so the Genre hero
   painted whichever other detail was open, which `seed_detail_from_settings` makes routine.
   `ArtworkImage` takes `has-cover` defaulting `true`. The blur quartet needs no equivalent,
-  `has-blur: false` being exactly what a procedural backdrop is for.
+  `has-blur: false` being exactly what a procedural backdrop is for — where the washes do, hence
+  `has-tints` above: an unset tint is a colour rather than an absence.
 
 - **A hero may publish into either shared global only while it is the one on screen.**
   `install_views` seeds **all four** detail views unconditionally, so a cold start fetches up to

@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **accepted** · Created: 2026-08-16 · Phases 0–4 landed; 5–8 remaining
+Status: **accepted** · Created: 2026-08-16 · Phases 0–5 landed; 6–8 remaining
 
 > Slint facts below were verified **2026-08-16** against the pinned `slint 1.16.1`
 > sources in the registry (`i-slint-core-1.16.1/graphics/brush.rs`,
@@ -207,11 +207,12 @@ Ownership rules, so this doesn't sprawl:
   Both are full-bleed stacks that own their own layering, and a component asked to be either
   would carry both. Three sites end up with the pair: Now Playing, `MosaicTabHero`,
   `LibraryTabBand`. Whichever is unmounted costs nothing, Slint dropping the branch outright.
-- **The blur keeps its inline copy on Now Playing, and that stays a known wart.** Collapsing
-  it was Phase 5's, and it can't happen while `HeroBlurBackdrop` reads `HeroBackdrop.*` and
-  Now Playing needs `Player.np-*`. Fixing it means giving that component the same defaulted
-  inputs `AuroraBackdrop` has — worth doing, but it is a change to the blur rather than to
-  this feature, and bundling it here would put the riskiest edit in the least-related phase.
+- ~~**The blur keeps its inline copy on Now Playing, and that stays a known wart.**~~ **Reversed
+  in Phase 5.** The argument for deferring was that bundling it would put the riskiest edit in the
+  least-related phase; Phase 5 turned out to be the phase that rewrites all three mounts, so it was
+  the most related one. `HeroBlurBackdrop` took the same defaulted inputs `AuroraBackdrop` has and
+  the inline copy went. **Both stacks name no global** — that is now the rule, not a property of
+  one of them.
 - **The two globals stay separate, and that is deliberate.** `Player.np-*` and
   `HeroBackdrop.*` have different lifetimes: a band stays mounted behind an open Now
   Playing, so merging them would let a track change repaint the hero underneath. Share the
@@ -469,15 +470,37 @@ hydrates it from `settings.json` and deletes the shortcut, exactly as written th
    folds `has-tints` in; the mosaic hero gates on the setting alone, never being able to show a
    genre and a stale `false` there only costing it a frame of blur stack.
 4. Same at Now Playing, on the setting alone. The aurora stops mounting *over* the blur and
-   becomes one of the two arms; the blur arm promotes the existing floor `Rectangle` to be its
-   own root, so no element is added. The inline stack stays — collapsing it is its own change,
-   argued in Structure.
-4. `hero_backdrop::apply` publishes tints; the `hero-open` gate carries over to every gated
+   becomes one of the two arms. **The inline stack was collapsed rather than kept** — see below.
+5. `hero_backdrop::apply` publishes tints; the `hero-open` gate carries over to every gated
    layer (the don't-ease-out-of-a-held-tier rule in `ui-patterns.md` is unchanged and
    still applies — a brush that eases is a brush that can ease out of a stale value).
    **It has to stay a discrete bool input**, as it is today: the band's instinct is a
    `hero-t` ternary, and a leaf cannot tell an eased input from a stepped one — it would
    restart its own `animate` every frame and arrive in one late rush.
+
+#### What landed, and the two departures from the above
+
+- **Now Playing's inline blur stack is gone, and the Open Question with it.** Structure argued the
+  collapse was "the riskiest edit in the least-related phase" — but this is the phase that rewrites
+  all three mounts, which makes it the *most* related one. `HeroBlurBackdrop` now takes
+  `floor-start` / `floor-end` / `scrim` as defaulted `in property`s, the same `MetaChip` idiom
+  `AuroraBackdrop` already carried, so Now Playing mounts it off `Player.np-*` and the four
+  duplicated layers went. Both stacks now name no global, which is the property that lets either
+  serve either tier and is pinned in both directions.
+- **The bands pass `vignette: transparent`.** The vignette is a full-page device: Slint's circle is
+  centred with radius = half the diagonal, so on a wide short band it puts ~0.37 black on the left
+  and right ends and nothing top or bottom — an end-darkening over the back button, tile and search
+  bar rather than a frame.
+- **`write`'s two arguments became one.** It carried `floor_override: Option<(u32, u32)>` and would
+  have gained `Option<[Tint; 4]>` — two options that can never disagree, since a genre's floor
+  override *is* the absence of washes. One `HeroFill` enum, and the impossible state stops being
+  spellable.
+- `aurora::Tint::to_color()` is now the single spelling of "the weight rides in the alpha, which
+  the component's falloff multiplies"; both publishers call it.
+- The dither tile left `install_app_chrome` for `install_backdrop_dither`, now that it writes two
+  globals and never had anything to do with window chrome.
+- `hero_blur_backdrop_tests` lost its Now Playing arm — that file no longer has a floor of its own,
+  and the shrink is the result rather than a cost.
 
 ### Phase 6 — The mosaic band is deleted, not ported
 
@@ -565,17 +588,17 @@ gated, and deletes the scaffolding that stood in for it.
 
 ### Phase 8 — Tests, docs, exit
 
-1. **Six test files, and the two obvious ones are the ones that mostly survive.**
-   `backdrop_tests.rs` (550 lines) is numerical and **survives whole** now the measurement half
-   is staying. So do `hero_backdrop_tests.rs`'s section-gating walks and
-   `hero_blur_backdrop_tests.rs`, which pins a component that is no longer being replaced —
-   the earlier plan had all three losing large parts of themselves. What still needs edits is
-   only what gains a sibling: `artwork_cache_tests.rs` for the optional buffer, and the two band
-   walks for the second mount beside the first. `mosaic_blur_tests.rs` is not edited but
-   **deleted**, with the module it pins, by Phase 6.
-2. Walks worth keeping in new form: no surface spells a `Theme.*` brush on a backdrop, and
-   **each of the three sites mounts exactly one of the two stacks** — the regression being a
-   mount that grows a third, or one that forgets the `else`.
+1. **Phase 5 took most of this.** `backdrop_tests.rs` survived whole and gained the tint-default
+   agreement pin; `hero_backdrop_tests.rs`'s section-gating walks were untouched;
+   `hero_blur_backdrop_tests.rs` lost its Now Playing arm to the collapse and gained the pairing
+   walks, and `library_tab_band_tests.rs`'s `hero-open` window now covers both arms. What is left
+   for this phase is only what the *setting* brings: `artwork_cache_tests.rs` for the optional
+   buffer. `mosaic_blur_tests.rs` is not edited but **deleted**, with the module it pins, by
+   Phase 6.
+2. Walks that landed in Phase 5: **each of the three sites mounts exactly one of the two stacks**
+   under one condition and its negation, nowhere else mounts either, and **neither stack names a
+   global** — the regression being a site that grows a third mount, one that forgets an arm, or a
+   stack that reaches for a tier and so pins itself to one host.
 3. **`aurora_tests.rs` and `aurora_backdrop_tests.rs` already exist** and were written as Phase 3
    settled each rule — the tint count agreeing between Slint and Rust, no ramp ending on
    `transparent`, the dither's `image-fit`/tiling quartet, the component naming no global, the
@@ -585,8 +608,9 @@ gated, and deletes the scaffolding that stood in for it.
    regression is a blur nobody can see still being computed), and flipping it invalidates both
    artwork tiers.
 5. `CLAUDE.md` — the `ui/` bullet's artwork-tier paragraph gains the second backdrop.
-   `ui-patterns.md` — the hero-bands bullets; "Releasing what the UI pins" is unchanged, the
-   blur still being there to release.
+   `ui-patterns.md`'s hero-bands bullets landed with Phase 5, the mount contract being what that
+   file catalogues; "Releasing what the UI pins" is unchanged, the blur still being there to
+   release.
 6. `README.md:23` calls the artist detail screenshot "a hero-blur backdrop" — still true, now
    as one of two.
 7. `docs/plans/ARTWORK_STORE.md` — its Phase 2 item 3 stops
@@ -628,9 +652,9 @@ owns, and the blob count went to four everywhere rather than per mount — `Scor
 four by 25–44°, and a per-instance count would have made the Slint/Rust contract a range instead
 of a number.
 
-- **Does the blur want to keep its inline copy on Now Playing?** Giving `HeroBlurBackdrop` the
-  same defaulted inputs `AuroraBackdrop` has would collapse it, and now that the blur is staying
-  the duplication is permanent rather than temporary. Its own change; see Structure.
+Phase 5 answered the third: the inline copy is gone, `HeroBlurBackdrop` taking its colours as
+defaulted inputs like its opposite number.
+
 - **Do seeds want persisting?** A `tint_seeds` column on `tracks`/`albums` would make every
   aurora hero instant on a cold open with no decode at all — and with the blur optional, a user
   on the default would rarely decode a cover for the backdrop at all. Real, and out of scope —

@@ -14,7 +14,7 @@ use super::write_crossfade_slot;
 use crate::entities::track::TrackSummary;
 use crate::library;
 use crate::state::AppState;
-use crate::themes::{brush, color, color_with_alpha};
+use crate::themes::{brush, color};
 use crate::ui::aurora;
 use crate::ui::backdrop;
 use crate::ui::chips;
@@ -169,13 +169,11 @@ pub(super) async fn apply_track_change(
     player.set_np_floor_end(color(colors.floor_end));
     player.set_np_scrim(backdrop::scrim_brush(&colors));
 
-    // Weight rides in the alpha channel, which the Slint side's falloff *multiplies* — so how
-    // strongly a wash is laid on stays independent of the shape it is laid on with.
     let [tint_1, tint_2, tint_3, tint_4] = aurora::tints(sample.seeds, sample.chroma, theme_accent);
-    player.set_np_tint_1(color_with_alpha(tint_1.rgb, tint_1.weight));
-    player.set_np_tint_2(color_with_alpha(tint_2.rgb, tint_2.weight));
-    player.set_np_tint_3(color_with_alpha(tint_3.rgb, tint_3.weight));
-    player.set_np_tint_4(color_with_alpha(tint_4.rgb, tint_4.weight));
+    player.set_np_tint_1(tint_1.to_color());
+    player.set_np_tint_2(tint_2.to_color());
+    player.set_np_tint_3(tint_3.to_color());
+    player.set_np_tint_4(tint_4.to_color());
 
     write_crossfade_slot(
         blurred,

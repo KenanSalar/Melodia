@@ -1,6 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
 import { NavEnterFrom } from "../../globals/nav.slint";
+import { AuroraBackdrop } from "../aurora-backdrop.slint";
 import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
 import { HeroChipStrip } from "../hero-chip-strip.slint";
 import { MosaicHeroTile } from "mosaic-hero-tile.slint";
@@ -104,15 +105,38 @@ export component MosaicTabHero inherits Rectangle {
     vertical-stretch: 0;
     height: root.hero-height;
 
-    // Behind everything else. The shared component owns the dual-slot crossfade contract; the
-    // gradient floor shows through when there is no blur image.
-    HeroBlurBackdrop {
+    // Behind everything else, and one of the two. The setting alone gates it: this band can never
+    // show a genre, so `HeroBackdrop.has-tints` has nothing to say here.
+    property <bool> aurora-shown: Theme.aurora-backdrop;
+
+    // The shared component owns the dual-slot crossfade contract; the gradient floor shows through
+    // when there is no blur image.
+    if !root.aurora-shown: HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: 100%;
+        floor-start: HeroBackdrop.floor-start;
+        floor-end: HeroBackdrop.floor-end;
+        scrim: HeroBackdrop.scrim;
         blur-a: root.blur-a;
         blur-b: root.blur-b;
         use-a: root.use-a;
         has-blur: root.has-blur;
+    }
+
+    // No vignette: the component's is sized for a full page, and on a band this wide and short its
+    // circle lands ~0.37 black on the left and right ends and nothing top or bottom — an
+    // end-darkening under the tile and the search bar rather than a frame.
+    if root.aurora-shown: AuroraBackdrop {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        base-start: HeroBackdrop.floor-start;
+        base-end: HeroBackdrop.floor-end;
+        tint-1: HeroBackdrop.tint-1;
+        tint-2: HeroBackdrop.tint-2;
+        tint-3: HeroBackdrop.tint-3;
+        tint-4: HeroBackdrop.tint-4;
+        dither: HeroBackdrop.dither;
+        vignette: transparent;
     }
 
     VerticalLayout {

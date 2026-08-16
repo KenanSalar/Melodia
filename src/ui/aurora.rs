@@ -10,9 +10,10 @@
 //! reaching Slint has to be fixed either way, `Brush::interpolate` blending gradients only at a
 //! matching stop and element count.
 
-use slint::{Rgba8Pixel, SharedPixelBuffer};
+use slint::{Color, Rgba8Pixel, SharedPixelBuffer};
 
 use crate::services::material_you::{rotate_hue, to_tone_with_chroma};
+use crate::themes::color_with_alpha;
 use crate::ui::backdrop::SEED_COUNT;
 
 /// Tone every tint is driven to — one for all of them, so hue is the only axis they differ on. A
@@ -116,6 +117,15 @@ pub(crate) struct Tint {
     pub rgb: u32,
     /// Multiplies the falloff the Slint side paints, rather than replacing it.
     pub weight: f32,
+}
+
+impl Tint {
+    /// The wash as both backdrop tiers take it: the weight rides in the alpha channel, which the
+    /// component's falloff multiplies — so how strongly a wash is laid on stays independent of the
+    /// shape it is laid on with.
+    pub(crate) fn to_color(&self) -> Color {
+        color_with_alpha(self.rgb, self.weight)
+    }
 }
 
 /// The washes, in paint order.

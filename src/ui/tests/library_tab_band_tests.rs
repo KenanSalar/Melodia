@@ -288,16 +288,21 @@ fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
         );
     }
 
-    let mount = code
-        .split_once("HeroBlurBackdrop {")
-        .and_then(|(_, rest)| rest.split_once('}'))
-        .map_or(String::new(), |(body, _)| body.to_owned());
-    assert!(
-        mount.contains("hero-open: root.detail-open;"),
-        "the band must gate the shared floor on the same predicate — it defaults to ungated for \
-         the two mosaic bands, which never stop painting a hero, and an ungated floor here is the \
-         whole backdrop of an artwork-less detail easing out of the previous tab's stops"
-    );
+    // Both arms, not the first mount: whichever the setting leaves unmounted is the one an
+    // edit forgets, and it looks right on the setting it was written under.
+    for stack in ["HeroBlurBackdrop {", "AuroraBackdrop {"] {
+        let mount = code
+            .split_once(stack)
+            .and_then(|(_, rest)| rest.split_once('}'))
+            .map_or("", |(body, _)| body);
+        assert!(
+            mount.contains("hero-open: root.detail-open;"),
+            "the band must gate `{stack}` on the same predicate — it defaults to ungated for the \
+             two mosaic bands and Now Playing, which never stop painting a hero, and an ungated \
+             layer here is the backdrop of an artwork-less detail easing out of the previous \
+             tab's stops"
+        );
+    }
 }
 
 /// The band forwards everything the shared header publishes **that this page consumes**,

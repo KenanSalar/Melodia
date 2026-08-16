@@ -11,20 +11,35 @@
 //! way, which is what keeps the band equally dark under every theme — so a theme change
 //! reaches an already-open artwork-less hero only on its next open.
 //!
-//! The whole set is published — scrim, gradient floor, hue-carrying chrome and both text
-//! tiers — so a hero and the Now Playing view solve identically.
+//! The whole set is published — scrim, gradient floor, the aurora's four washes,
+//! hue-carrying chrome and both text tiers — so a hero and the Now Playing view solve
+//! identically whichever backdrop the band is painting.
 
 use slint::ComponentHandle;
 
 use crate::themes::{brush, color};
-use crate::ui::backdrop::{self, BackdropColors, BackdropKind, BackdropSample};
+use crate::ui::aurora::{self, Tint};
+use crate::ui::backdrop::{self, BackdropColors, BackdropKind, BackdropSample, SEED_COUNT};
 use crate::{AppWindow, HeroBackdrop};
+
+/// What a hero's backdrop is derived from, and the one axis [`write`] branches on. A cover answers
+/// with washes and a solved floor; a genre has neither and keeps its own name-hashed stops. One
+/// value rather than two optional arguments, which could never disagree and now can't be spelled
+/// apart.
+enum HeroFill {
+    Artwork([Tint; SEED_COUNT]),
+    Gradient { start_rgb: u32, end_rgb: u32 },
+}
 
 /// Solve and publish from a cover's measurement. An empty sample — no artwork, or a
 /// failed decode — takes the same path as every cover; what it falls back to, and why
 /// that isn't a guess, is on [`BackdropSample::solve`].
 pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
-    write(ui, &sample.solve(backdrop::theme_accent(ui), backdrop::kind(ui)), None);
+    // One accent read for both halves — the fallback hue when there is no artwork, and the origin
+    // the washes rotate their fills around.
+    let accent = backdrop::theme_accent(ui);
+    let colors = sample.solve(accent, backdrop::kind(ui));
+    write(ui, &colors, HeroFill::Artwork(aurora::tints(sample.seeds, sample.chroma, accent)));
 }
 
 /// Solve and publish for a hero whose backdrop *is* a gradient — Genre Detail, which has
@@ -41,7 +56,7 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
 pub(crate) fn apply_gradient(ui: &AppWindow, start_rgb: u32, end_rgb: u32) {
     let luma = backdrop::gradient_luma(start_rgb, end_rgb);
     let colors = backdrop::solve(start_rgb, luma, BackdropKind::Blur);
-    write(ui, &colors, Some((start_rgb, end_rgb)));
+    write(ui, &colors, HeroFill::Gradient { start_rgb, end_rgb });
 }
 
 /// Reset to the floor solve on hero teardown, so backing out of one detail and into
@@ -50,17 +65,31 @@ pub(crate) fn reset(ui: &AppWindow) {
     apply(ui, BackdropSample::default());
 }
 
-/// `floor_override` keeps a caller-supplied gradient instead of the solved one.
-fn write(ui: &AppWindow, colors: &BackdropColors, floor_override: Option<(u32, u32)>) {
-    let (floor_start, floor_end) = floor_override.unwrap_or((colors.floor_start, colors.floor_end));
-
+fn write(ui: &AppWindow, colors: &BackdropColors, fill: HeroFill) {
     let g = ui.global::<HeroBackdrop>();
-    g.set_floor_start(color(floor_start));
-    g.set_floor_end(color(floor_end));
     g.set_chrome(brush(colors.chrome));
     g.set_scrim(backdrop::scrim_brush(colors));
     g.set_on_backdrop(brush(colors.text));
     g.set_on_backdrop_muted(brush(colors.muted));
+
+    match fill {
+        HeroFill::Artwork([tint_1, tint_2, tint_3, tint_4]) => {
+            g.set_floor_start(color(colors.floor_start));
+            g.set_floor_end(color(colors.floor_end));
+            g.set_has_tints(true);
+            g.set_tint_1(tint_1.to_color());
+            g.set_tint_2(tint_2.to_color());
+            g.set_tint_3(tint_3.to_color());
+            g.set_tint_4(tint_4.to_color());
+        }
+        // The washes are left where they are: nothing paints them while `has-tints` is false, and
+        // the next artwork hero overwrites them before it flips the gate back.
+        HeroFill::Gradient { start_rgb, end_rgb } => {
+            g.set_floor_start(color(start_rgb));
+            g.set_floor_end(color(end_rgb));
+            g.set_has_tints(false);
+        }
+    }
 }
 
 #[cfg(test)]

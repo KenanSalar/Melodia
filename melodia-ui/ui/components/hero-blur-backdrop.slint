@@ -1,15 +1,24 @@
 import { Theme } from "../theme.slint";
-import { HeroBackdrop } from "../globals/hero-backdrop.slint";
 
 // Full-bleed hero blur: a gradient floor, two cross-fading `Image` slots, and a scrim. The Slint
 // half of the dual-slot contract `write_crossfade_slot` drives — the outgoing slot is never
-// cleared, so a refresh fades A↔B without flashing. Mounted by both shared bands.
+// cleared, so a refresh fades A↔B without flashing. `AuroraBackdrop`'s opposite number: one of the
+// two is mounted at each of the three sites.
 //
-// **Every colour comes from `HeroBackdrop`, solved per artwork, and none may be a `Theme.*`
-// brush** — theme brushes flip polarity with the variant, so the same cover would paint a dark
-// banner under one and a near-white one under another. `width/height: 100%` on the children is
-// mandatory: an `Image` does not auto-fill its parent and would draw at its native buffer size.
+// **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom, and what
+// lets one component serve the `HeroBackdrop` tier and Now Playing's `Player.np-*`, which are
+// deliberately separate globals. A `Theme.*` brush would be worse than wrong here: theme brushes
+// flip polarity with the variant, so the same cover would paint a dark banner under one and a
+// near-white one under another while the foreground stays solved for dark. `width/height: 100%` on
+// the children is mandatory — an `Image` does not auto-fill its parent and would draw at its
+// native buffer size.
 export component HeroBlurBackdrop inherits Rectangle {
+    in property <color> floor-start: #2b2135;
+    in property <color> floor-end: #14101a;
+
+    // Alpha baked in — see `HeroBackdrop.scrim`.
+    in property <brush> scrim: #0a0a0e73;
+
     in property <image> blur-a;
     in property <image> blur-b;
     in property <bool> use-a;
@@ -33,7 +42,7 @@ export component HeroBlurBackdrop inherits Rectangle {
     // The scrim below is deliberately *not* gated: solved at a tone holding almost no chroma, it
     // is near-black at both ends, and draining it would brighten the artwork through the collapse.
     background: root.hero-open
-        ? @linear-gradient(135deg, HeroBackdrop.floor-start, HeroBackdrop.floor-end)
+        ? @linear-gradient(135deg, root.floor-start, root.floor-end)
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
@@ -65,7 +74,7 @@ export component HeroBlurBackdrop inherits Rectangle {
         y: 0;
         width: 100%;
         height: 100%;
-        background: HeroBackdrop.scrim;
+        background: root.scrim;
         animate background { duration: Theme.dur-med; easing: ease-in-out; }
     }
 }

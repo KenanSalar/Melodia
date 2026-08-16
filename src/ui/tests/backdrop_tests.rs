@@ -4,9 +4,9 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::ui::aurora;
 use crate::ui::backdrop::{
-    BackdropColors, BackdropKind, BackdropSample, CHROME_MAX_TONE, CHROME_RATIO, TEXT_RATIO,
-    chrome_tone, composited_tone, floor_luma, gradient_luma, luma_p90, muted_tone, rgb_lstar,
-    scrim_alpha, solve, text_tone,
+    BackdropColors, BackdropKind, BackdropSample, CHROME_MAX_TONE, CHROME_RATIO, SEED_COUNT,
+    TEXT_RATIO, chrome_tone, composited_tone, floor_luma, gradient_luma, luma_p90, muted_tone,
+    rgb_lstar, scrim_alpha, solve, text_tone,
 };
 
 /// A Catppuccin-Mocha-ish mauve, the default accent — a realistic seed for the
@@ -592,5 +592,46 @@ fn the_hero_text_defaults_match_hero_backdrop_slint() {
              `out`, `hero_backdrop::write` can no longer publish it and the band is stuck on \
              this default; if the literal moved, update the constant here too"
         );
+    }
+}
+
+/// One fallback set, spelled in three places, and all three have to agree.
+///
+/// The two globals are the tiers Rust publishes into and `AuroraBackdrop`'s inputs are what
+/// a mount that forgot one would paint — so a drift here shows only on the surface that
+/// hasn't been solved yet, which is the first frame of a cold open and nothing else.
+#[test]
+fn the_tint_defaults_agree_across_both_tiers_and_the_component() {
+    const TINTS: [&str; SEED_COUNT] = ["#3a2d4a", "#2d3a4a", "#4a2d3a", "#2d4a3a"];
+
+    for (file, source, prefix, kind) in [
+        (
+            "globals/player.slint",
+            include_str!("../../../melodia-ui/ui/globals/player.slint"),
+            "np-tint",
+            "in-out",
+        ),
+        (
+            "globals/hero-backdrop.slint",
+            include_str!("../../../melodia-ui/ui/globals/hero-backdrop.slint"),
+            "tint",
+            "in-out",
+        ),
+        (
+            "components/aurora-backdrop.slint",
+            include_str!("../../../melodia-ui/ui/components/aurora-backdrop.slint"),
+            "tint",
+            "in",
+        ),
+    ] {
+        for (index, literal) in TINTS.iter().enumerate() {
+            let declaration = format!("{kind} property <color> {prefix}-{}: {literal};", index + 1);
+            assert!(
+                source.contains(&declaration),
+                "{file} no longer declares `{declaration}` — the three copies are one fallback \
+                 set, and a drift paints a different backdrop on whichever surface hasn't been \
+                 solved yet"
+            );
+        }
     }
 }

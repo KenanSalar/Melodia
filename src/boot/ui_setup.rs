@@ -3,7 +3,9 @@
 
 use std::sync::Arc;
 
-use melodia::{AppWindow, ArtistDetail, Nav, Player, media, services, state::AppState, ui};
+use melodia::{
+    AppWindow, ArtistDetail, HeroBackdrop, Nav, Player, media, services, state::AppState, ui,
+};
 use slint::ComponentHandle;
 
 /// Hydrate Slint's bundled-translation runtime from the persisted
@@ -27,9 +29,16 @@ pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
     if let Err(e) = ui::window_chrome::install(app, state) {
         log::warn!("window_chrome::install: {e}");
     }
-    // One tile for the process: it answers to the renderer's lack of gradient dithering rather
-    // than to any artwork, so nothing later has cause to rewrite it.
-    app.global::<Player>().set_np_dither(slint::Image::from_rgba8(ui::aurora::dither_tile()));
+}
+
+/// One tile for the process, shared by both aurora tiers: it answers to the renderer's
+/// lack of gradient dithering rather than to any artwork, so nothing later has cause to
+/// rewrite it. The `Image` is `Rc`-backed, so the second global holds a clone of the
+/// handle rather than a second buffer.
+pub fn install_backdrop_dither(app: &AppWindow) {
+    let tile = slint::Image::from_rgba8(ui::aurora::dither_tile());
+    app.global::<Player>().set_np_dither(tile.clone());
+    app.global::<HeroBackdrop>().set_dither(tile);
 }
 
 /// The per-view handles `install_views` hands back for the wiring `main()` still
