@@ -37,7 +37,7 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
     // One read for both halves: the fallback hue, and the origin the washes rotate their fills off.
     let accent = backdrop::theme_accent(ui);
     let colors = sample.solve(accent, backdrop::kind(ui));
-    write(ui, &colors, HeroFill::Artwork(aurora::tints(sample.seeds, sample.chroma, accent)));
+    write(ui, &colors, HeroFill::Artwork(aurora::tints(sample.seeds, accent)));
 }
 
 /// Solve and publish for a hero whose backdrop *is* a gradient — Genre Detail, which has

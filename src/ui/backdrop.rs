@@ -28,9 +28,7 @@ use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast;
 use slint::{Brush, ComponentHandle, Rgb8Pixel, SharedPixelBuffer};
 
-use crate::services::material_you::{
-    clamp_to_tone_band, extract_seeds_from_rgb8, to_tone_capped_chroma,
-};
+use crate::services::material_you::{clamp_to_tone_band, population_seeds, to_tone_capped_chroma};
 use crate::themes::{brush_to_rgb, brush_with_alpha};
 use crate::ui::aurora;
 use crate::{AppWindow, Theme as ThemeGlobal};
@@ -216,14 +214,13 @@ fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
     Some(bin_centre(0))
 }
 
-/// How many hue-separated seeds a backdrop asks the quantizer for — one per aurora wash, so
-/// `ui::aurora` has to agree.
+/// How many colours a backdrop asks the quantizer for — one per aurora wash, so `ui::aurora` has
+/// to agree.
 ///
-/// Four is where `Score` still answers with colours worth telling apart. It walks its required
-/// separation down from 90° until it can supply this many, so the ask sets how close the set is
-/// allowed to get: measured across three covers, four keeps the nearest pair 25–44° apart where
-/// five drops it to 19–31° and six is forced toward the 15° floor, returning near-duplicates by
-/// construction.
+/// Four is the geometry's number rather than the quantizer's: the washes anchor at the corners of
+/// their host, and a rectangle has four. Median cut is happy to be asked for more, but each extra
+/// box is a finer split of a region already represented, so a fifth colour would have nowhere of
+/// its own to sit and would only dilute a neighbour.
 pub(crate) const SEED_COUNT: usize = 4;
 
 /// Which of the two backdrops a foreground will sit on. They differ in how the brightest point is
@@ -243,42 +240,37 @@ pub(crate) enum BackdropKind {
 /// [`floor_luma`].
 #[derive(Clone, Copy, Default)]
 pub(crate) struct BackdropSample {
-    /// Dominant colour quantized out of the cover, supplying the *hue* for every colour [`solve`]
-    /// returns. Always `seeds[0]`, which keeps this tier and the washes on one hue family.
+    /// Most prominent colour quantized out of the cover, supplying the *hue* for every colour
+    /// [`solve`] returns. Always `seeds[0]`, which keeps this tier and the washes on one hue
+    /// family.
     pub(crate) accent_argb: Option<u32>,
-    /// The same quantize's ranked list, best first, short when the artwork couldn't separate that
-    /// many hues. `ui::aurora` owns the filling rule.
+    /// The same quantize's list, most prominent first, and short whenever the artwork had fewer
+    /// regions than that. `ui::aurora` owns the filling rule.
     pub(crate) seeds: [Option<u32>; SEED_COUNT],
-    /// How colourful the cover is overall — the question no individual seed answers, since a
-    /// black-and-white sleeve still yields seeds carrying a few points of chroma.
-    pub(crate) chroma: f64,
     /// [`luma_p90`] of the same buffer.
     pub(crate) luma: Option<f64>,
 }
 
 impl BackdropSample {
-    /// Measure a decoded cover. CPU-bound — the quantize dominates — so it belongs in the
-    /// `spawn_blocking` task that decoded it, never on the UI thread.
+    /// Measure a decoded cover. Belongs in the `spawn_blocking` task that decoded it — the buffer
+    /// is already there, and the percentile below still walks every pixel.
     ///
-    /// **Hand it the sharp downscale, never a blurred one.** Blur averages away exactly the hue
-    /// separation `Score` looks for: measured on a real cover, two seeds against three, and the
-    /// two nearly a shared hue. Amberol quantizes the cover itself for the same reason.
+    /// **Hand it the sharp downscale, never a blurred one.** Blur averages the cover's regions
+    /// into each other, which is exactly what median cut is looking for; Amberol quantizes the
+    /// cover itself for the same reason.
     ///
     /// An empty `accent_argb` means there was no buffer at all, so [`Self::solve`]'s
     /// `Theme.accent` path is for a missing cover and never a monochrome one — a greyscale sleeve
-    /// answers with its own dominant grey.
+    /// answers with its own greys.
     pub(crate) fn measure(cover: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
-        let quantized = extract_seeds_from_rgb8(cover, SEED_COUNT);
-
         let mut seeds = [None; SEED_COUNT];
-        for (slot, seed) in seeds.iter_mut().zip(quantized.seeds) {
+        for (slot, seed) in seeds.iter_mut().zip(population_seeds(cover, SEED_COUNT)) {
             *slot = Some(seed);
         }
 
         Self {
             accent_argb: seeds[0],
             seeds,
-            chroma: quantized.chroma,
             luma: luma_p90(cover),
         }
     }

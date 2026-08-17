@@ -169,7 +169,7 @@ pub(super) async fn apply_track_change(
     player.set_np_floor_end(color(colors.floor_end));
     player.set_np_scrim(backdrop::scrim_brush(&colors));
 
-    let [tint_1, tint_2, tint_3, tint_4] = aurora::tints(sample.seeds, sample.chroma, theme_accent);
+    let [tint_1, tint_2, tint_3, tint_4] = aurora::tints(sample.seeds, theme_accent);
     player.set_np_tint_1(tint_1.to_color());
     player.set_np_tint_2(tint_2.to_color());
     player.set_np_tint_3(tint_3.to_color());

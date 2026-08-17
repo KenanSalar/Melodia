@@ -4,12 +4,16 @@
 //! the count has to be fixed or `Brush::interpolate` crosses mismatched gradients, a ramp ending
 //! on the `transparent` keyword darkens instead of thinning, the dither's `image-fit` decides
 //! whether it dithers or mottles, a mount reading a global directly is what stops one component
-//! serving both backdrop tiers, and the blob geometry is what `ui::aurora::PEAK_TONE` is derived
-//! from.
+//! serving both backdrop tiers, and the blob geometry is what `ui::aurora`'s coverage — and so
+//! `PEAK_TONE`, and so every foreground tier — is derived from.
 
-// Comments dropped: every anchor here is a gradient literal, and the prose above them argues
-// about gradients, stop counts and `transparent`.
-use crate::test_support::strip_line_comments as code;
+// Comments dropped: every anchor here is a gradient literal or a geometry binding, and the prose
+// above them argues about gradients, stop counts, corners and `transparent`.
+use crate::test_support::{
+    MIN_SLINT_SOURCES, UI_DIR, binding_value, normalize_ws as normalized,
+    strip_line_comments as code, stripped_sources,
+};
+use crate::ui::aurora::{BLOB_PEAKS, REACH_FRACTION};
 use crate::ui::backdrop::SEED_COUNT;
 
 const AURORA: &str = include_str!("../../../melodia-ui/ui/components/aurora-backdrop.slint");
@@ -82,47 +86,78 @@ fn the_dither_keeps_its_own_pitch() {
     }
 }
 
-/// The numbers `ui::aurora::PEAK_TONE` was derived from — how far the ramps carry, how far apart
-/// their centres sit, and how much alpha meets at the strongest point. Move any of them and the
-/// peak has to be re-derived, which is a change with no symptom on screen: the foreground stays
-/// legible right up until it isn't.
+/// Slint and Rust state the same geometry, `ui::aurora`'s coverage figures being a closed form over
+/// exactly these numbers and `PEAK_TONE` a closed form over those. Moving one here is a change with
+/// no symptom on screen: the foreground stays legible right up until it isn't.
 #[test]
-fn the_peak_tone_is_derived_from_the_geometry_below() {
-    for binding in [
-        "blob-reach: max(root.long-side * 0.315, root.short-side * 0.8);",
-        "blob-span: root.blob-reach / 0.495;",
-        "peak: 0.5;",
-        "peak: 0.46;",
-        "peak: 0.42;",
-        "peak: 0.38;",
-    ] {
+fn the_coverage_constants_describe_the_geometry_below() {
+    let src = code(AURORA);
+    let reach = normalized(binding_value(&src, "blob-reach:"));
+    let fraction =
+        reach.strip_prefix("root.host-diagonal * ").and_then(|number| number.parse::<f64>().ok());
+    // Loose enough for however many places the `.slint` spells 1/√2 to, tight enough that another
+    // fraction is another geometry.
+    assert!(
+        fraction.is_some_and(|f| (f - REACH_FRACTION).abs() < 1e-3),
+        "`blob-reach` is `{reach}` — re-derive `ui::aurora`'s coverage before changing it here"
+    );
+
+    // The side of a square whose gradient reaches zero at `blob-reach`; the ramp and the rect are
+    // one number apart, so a stop moved without it silently rescales every wash.
+    assert!(code(AURORA).contains("blob-span: root.blob-reach / 0.495;"));
+
+    for peak in BLOB_PEAKS {
+        let binding = format!("peak: {peak};");
+        assert!(code(AURORA).contains(&binding), "no wash carries `{binding}`");
+    }
+}
+
+/// The washes anchor at the four corners, walking round the rectangle.
+///
+/// Fractions of each axis put all four centres *inside* the element with the reach floored on the
+/// short one, so every ramp covered every pixel: four vivid washes averaged to one flat tone, on a
+/// banner and on Now Playing alike. From a corner each wash owns the region nearest it and meets
+/// only its two edge neighbours — which is the adjacency `around_the_wheel` hands them, four
+/// corners being a cycle exactly as the hue wheel is.
+#[test]
+fn the_washes_are_anchored_at_the_corners() {
+    const LEFT: &str = "x: -root.blob-span / 2;";
+    const RIGHT: &str = "x: root.width - root.blob-span / 2;";
+    const TOP: &str = "y: -root.blob-span / 2;";
+    const BOTTOM: &str = "y: root.height - root.blob-span / 2;";
+
+    let src = normalized(&code(AURORA));
+    for gone in ["blob-x(", "blob-y(", "long-side", "short-side"] {
         assert!(
-            code(AURORA).contains(binding),
-            "`{binding}` moved — re-derive `ui::aurora::PEAK_TONE` before changing it here"
+            !src.contains(gone),
+            "`{gone}` is back, so the centres are inside the element again"
+        );
+    }
+
+    // Walking round rather than down a list: two washes at one corner is two colours nothing
+    // separates, and a diagonal pair as neighbours is the grey composite the ordering exists to
+    // avoid.
+    for (across, down) in [(LEFT, TOP), (RIGHT, TOP), (RIGHT, BOTTOM), (LEFT, BOTTOM)] {
+        let anchored = format!("{across} {down}");
+        assert_eq!(
+            src.matches(&anchored).count(),
+            1,
+            "no wash anchors at `{anchored}`, so the four don't take a corner each"
         );
     }
 }
 
-/// The washes are laid out as fractions of each axis, never of the diagonal.
+/// Nothing darkens the periphery.
 ///
-/// A diagonal-derived layout is right on a square host and collapses on a wide one: the centres
-/// converge horizontally and land off-element vertically, so only two of the four reach any pixel
-/// and each covers the whole surface. It painted a banner flat mauve out of four vivid washes while
-/// looking perfectly right on Now Playing — the shape the numbers were tuned against.
+/// A vignette sat over this stack while the model was a self-contained dark surface, where the only
+/// question was how to frame a bright middle. Under washes anchored at the corners it is the direct
+/// inverse: the corners are where the album's colour now is, and neutral black over them is what the
+/// backdrop was dull for. Deleted rather than defaulted off, a property nothing sets being a layer
+/// waiting to be switched back on.
 #[test]
-fn the_washes_are_laid_out_against_the_axes_rather_than_the_diagonal() {
-    assert!(
-        !code(AURORA).contains("diagonal"),
-        "the layout went back to the diagonal — it hides the failure on the shape it was tuned on"
-    );
-    // A pair sharing an along-fraction is two centres in one column, i.e. the same collapse
-    // wearing different arithmetic.
-    for along in ["0.15", "0.383", "0.617", "0.85"] {
-        assert_eq!(
-            code(AURORA).matches(&format!("blob-x({along},")).count(),
-            1,
-            "no wash sits at {along} along the long axis, so the four don't span it"
-        );
+fn no_layer_darkens_the_periphery() {
+    for (path, src) in stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES) {
+        assert!(!src.contains("vignette"), "{path} paints a vignette over an aurora corner");
     }
 }
 

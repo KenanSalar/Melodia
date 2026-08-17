@@ -10,6 +10,7 @@ dependencies = [
  "biquad",
  "blake3",
  "chrono",
+ "color-thief",
  "dirs",
  "dunce",
  "flexi_logger",
@@ -1018,6 +1019,15 @@ dependencies = [
  "core-graphics-types",
  "libc",
  "objc",
+]
+
+[[package]]
+name = "color-thief"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6460d760cf38ce67c9e0318f896538820acc54f2d0a3bfc5b2c557211066c98"
+dependencies = [
+ "rgb",
 ]
 
 [[package]]

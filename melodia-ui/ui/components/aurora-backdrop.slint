@@ -33,8 +33,8 @@ component AuroraBlob inherits Rectangle {
 }
 
 // The artwork-derived backdrop: a base gradient in the album's hue under four broad blobs of
-// album colour, a vignette, and a grain of noise. Replaces a blurred cover, so it *is* the surface
-// the foreground is solved against rather than a tint over one.
+// album colour and a grain of noise. Replaces a blurred cover, so it *is* the surface the
+// foreground is solved against rather than a tint over one.
 //
 // **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom. They exist
 // so this file imports no global: one mount reads the `Player` tier and the others `HeroBackdrop`,
@@ -47,9 +47,6 @@ export component AuroraBackdrop inherits Rectangle {
     in property <color> tint-2: #2d3a4a;
     in property <color> tint-3: #4a2d3a;
     in property <color> tint-4: #2d4a3a;
-
-    // Alpha carries the strength, so a transparent value is the layer switched off.
-    in property <color> vignette: #00000066;
 
     // Grain over everything below; `ui::aurora::dither_tile` argues it. An unset image draws
     // nothing, so a mount without one degrades to undithered gradients rather than to a hole.
@@ -67,41 +64,39 @@ export component AuroraBackdrop inherits Rectangle {
     // element, radius the half-diagonal. Position and spread are therefore the rect's, and it stays
     // square — the circle would otherwise expose only the first fifth of its ramp on the short axis
     // and read as a band.
-    property <bool> wide: root.width >= root.height;
-    property <length> long-side: max(root.width, root.height);
-    property <length> short-side: min(root.width, root.height);
+    //
+    // Length arithmetic has no squares, hence the round trip through `1px`.
+    property <length> host-diagonal: Math.sqrt((root.width / 1px) * (root.width / 1px)
+        + (root.height / 1px) * (root.height / 1px)) * 1px;
 
-    // **A fraction of each axis, never of the diagonal.** Against the diagonal the four centres
-    // converge horizontally and land off-element vertically as a host widens, so on a banner only
-    // two reach any pixel and each covers the whole strip — four vivid washes composited to a flat
-    // mauve. Spread along the long axis, each colour owns a stretch of it.
-    property <length> blob-reach: max(root.long-side * 0.315, root.short-side * 0.8);
+    // **1/√2 of the diagonal, where this was fractions of each axis.** Those put all four centres
+    // inside the element with the reach floored on the *short* one, so every ramp covered every
+    // pixel and four vivid washes averaged to one flat tone whatever the record was. Over half the
+    // diagonal so the middle still isn't a hole — each ramp reaches the centre at under a third of
+    // its peak, which is Amberol's coverage there. `ui::aurora::REACH_FRACTION` mirrors it, what
+    // the composite covers being what the foreground is solved against.
+    property <length> blob-reach: root.host-diagonal * 0.7071;
 
     // `AuroraBlob`'s ramp dies at 0.495 of its side, so this is the side that paints `blob-reach`.
     property <length> blob-span: root.blob-reach / 0.495;
-
-    pure function blob-x(along: float, across: float) -> length {
-        return (root.wide ? root.width * along : root.width * across) - root.blob-span / 2;
-    }
-    pure function blob-y(along: float, across: float) -> length {
-        return (root.wide ? root.height * across : root.height * along) - root.blob-span / 2;
-    }
 
     background: root.hero-open
         ? @linear-gradient(135deg, root.base-start, root.base-end)
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
-    // Evenly along the long axis, alternating across the short one, so each wash holds a stretch of
-    // the surface rather than all four covering it. Rust hands them over in hue-wheel order, so
-    // neighbours here are neighbours on the wheel — `ui::aurora::around_the_wheel` argues why.
+    // **Round the rectangle, not down a list** — top-left, top-right, bottom-right, bottom-left.
+    // Rust hands the washes over in hue-wheel order (`ui::aurora::around_the_wheel`) and four
+    // corners are a cycle as the wheel is, so the pairs meeting along an edge are hue neighbours
+    // rather than complements compositing toward grey; the diagonal pairs never meet at all.
     //
-    // Weights descend with the ranking so the colour the artwork most is leads, but only just: the
+    // Peaks descend with the ranking so the colour the artwork most is leads, but only just: the
     // usual 60/30/10 has the dominant showing through everywhere the four overlap, and that advice
     // is about *area*, which the geometry above already gives each of them.
+    // `ui::aurora::BLOB_PEAKS` mirrors them, the peak tone being derived from what they cover.
     AuroraBlob {
-        x: root.blob-x(0.15, 0.2);
-        y: root.blob-y(0.15, 0.2);
+        x: -root.blob-span / 2;
+        y: -root.blob-span / 2;
         width: root.blob-span;
         height: root.blob-span;
         tint: root.tint-1;
@@ -109,8 +104,8 @@ export component AuroraBackdrop inherits Rectangle {
         shown: root.hero-open;
     }
     AuroraBlob {
-        x: root.blob-x(0.383, 0.8);
-        y: root.blob-y(0.383, 0.8);
+        x: root.width - root.blob-span / 2;
+        y: -root.blob-span / 2;
         width: root.blob-span;
         height: root.blob-span;
         tint: root.tint-2;
@@ -118,8 +113,8 @@ export component AuroraBackdrop inherits Rectangle {
         shown: root.hero-open;
     }
     AuroraBlob {
-        x: root.blob-x(0.617, 0.2);
-        y: root.blob-y(0.617, 0.2);
+        x: root.width - root.blob-span / 2;
+        y: root.height - root.blob-span / 2;
         width: root.blob-span;
         height: root.blob-span;
         tint: root.tint-3;
@@ -127,30 +122,13 @@ export component AuroraBackdrop inherits Rectangle {
         shown: root.hero-open;
     }
     AuroraBlob {
-        x: root.blob-x(0.85, 0.8);
-        y: root.blob-y(0.85, 0.8);
+        x: -root.blob-span / 2;
+        y: root.height - root.blob-span / 2;
         width: root.blob-span;
         height: root.blob-span;
         tint: root.tint-4;
         peak: 0.38;
         shown: root.hero-open;
-    }
-
-    // **Four stops, the only place here where extra ones earn their keep.** Two give a constant
-    // slope, i.e. darkening that starts at the centre and dims the artwork it should be framing;
-    // easing in keeps the middle clear and puts the fall in the outer third. The usual objection —
-    // a slope break at every junction — barely applies to a monochrome overlay at two percent.
-    Rectangle {
-        x: 0;
-        y: 0;
-        width: 100%;
-        height: 100%;
-        background: @radial-gradient(circle,
-            root.vignette.transparentize(1.0) 0%,
-            root.vignette.transparentize(0.95) 45%,
-            root.vignette.transparentize(0.7) 75%,
-            root.vignette 100%);
-        animate background { duration: Theme.dur-med; easing: ease-in-out; }
     }
 
     // **`image-fit: preserve` is what makes this dither rather than decoration**: the default `fill`

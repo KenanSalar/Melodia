@@ -3,7 +3,7 @@
 Working doc. Delete when the feature ships.
 
 Status: **accepted, v2** · Created: 2026-08-16 · Rewritten: 2026-08-17
-Phases 1–5 landed. Phases 6–11 below replace the old 6–8.
+Phases 1–7 landed; 8–11 remain. Phases 6–11 replaced the old 6–8.
 
 > **v2 reverses this doc's central premise.** The aurora shipped as a *self-contained
 > surface* — every wash driven to one tone, the composite pinned into a dark band, and the
@@ -134,6 +134,12 @@ on the same track change. `color_thief` at quality 1 (every pixel) is still 0.11
 
 ## Five findings that decide v2's shape
 
+Measured against the tree as it stood on 2026-08-17 and left as taken. **2 and 3 are fixed** —
+by Phase 7's corner anchoring and Phase 6's extractor. **1, 4 and 5 are Phase 8's**, and 1's
+figures move by a tenth of a ratio point now that `PEAK_TONE` is 32 (3.79:1 chrome, 4.82:1
+text); its conclusion — that the constants rather than the contrast machinery are what makes
+the surface dark — is what still stands.
+
 1. **The aurora sits ~16 L\* below its own legal ceiling.** `PEAK_TONE = 31` puts the solved
    chrome tier at **3.93:1** against a 3:1 target and the text tier at **5.0:1** against
    4.5:1 — both over target, both saturated at their band floors. Working the solve
@@ -242,17 +248,19 @@ Ownership rules, so this doesn't sprawl:
   `composited_tone` → the three tone solves become the *blur's* path and stop having an
   aurora arm. `BackdropKind::Aurora` stops meaning "skip the scrim solve" and starts meaning
   "there are no solved tones here" — the whole `BackdropColors` tier set is blur-only.
-- **`ui/aurora.rs` owns the cap and nothing else.** `wash_cap(base, ink, accent, coverage)`
-  is the one new function: it takes the live theme colours, the geometry's stated worst-case
-  coverage, and returns the tone bound each wash is clamped into. Pure, closed form, fully
-  unit-testable against the palette table above. **It caps against the worse of `Theme.text`
-  and `Theme.accent`** — the accent is a user setting and a marginal one would otherwise slip
-  under on a washed surface.
-- **Deleted from `ui/aurora.rs`:** `TINT_TONE`, `PEAK_TONE` and both its const-asserts,
-  `TINT_MIN_CHROMA`, `TINT_MAX_CHROMA`, `TINT_CHROMA_REFERENCE`, `chroma_band`, `FILL_HUES`,
-  `FILL_WEIGHT`, `Tint::weight` and `Tint::to_color`'s alpha fold. The `Option`s in
-  `BackdropSample::seeds` go with them — a population extractor fills the list. `dither_tile`
-  and everything under it **stays**; see *What we keep that Amberol doesn't have*.
+- **`ui/aurora.rs` owns the cap and the geometry it is a function of.**
+  `wash_cap(base, ink, accent, coverage)` is the one function still to write: it takes the live
+  theme colours and `peak_coverage()`, and returns the tone bound each wash is clamped into.
+  Pure, closed form, fully unit-testable against the palette table above. **It caps against the
+  worse of `Theme.text` and `Theme.accent`** — the accent is a user setting and a marginal one
+  would otherwise slip under on a washed surface.
+- **Still to delete from `ui/aurora.rs`:** `TINT_TONE`, `TINT_MAX_CHROMA`, `PEAK_TONE` and its
+  two tone const-asserts, `Tint::weight` and `Tint::to_color`'s alpha fold. `FILL_HUES` /
+  `FILL_WEIGHT` were to go with them on the reasoning that a population extractor fills the
+  list — **it does not**: a near-white sleeve returns one colour, so the `Option`s and the fill
+  rule both stay. `BLOB_PEAKS` / `REACH_FRACTION` / the two coverage functions stay, being what
+  `wash_cap` takes; `mid_coverage`'s only consumer today is a const-assert. `dither_tile` and
+  everything under it **stays**; see *What we keep that Amberol doesn't have*.
 - **Deleted from `backdrop.rs`:** nothing yet. The tone bands, the scrim solve and
   `luma_p90` are all still the blur's. `TARGET_BACKDROP_TONE`'s doc comment stops naming the
   aurora.
@@ -262,9 +270,10 @@ Ownership rules, so this doesn't sprawl:
   from compositing toward grey. Same code, better reason.
 - **The extractor splits by question, not by crate.** `color_thief` answers "what is this
   image mostly made of" for the backdrop; `material-colors` keeps answering "what is the best
-  UI seed" for Material You theming and the app-wide palette. `Quantized::chroma` had exactly
-  one consumer — `chroma_band` — and goes with it, so the backdrop stops calling
-  `QuantizerCelebi` entirely. **Material You is out of scope and does not change.**
+  UI seed" for Material You theming and the app-wide palette. Both live in
+  `services/material_you.rs`, which is where a cover is turned into colours. `Quantized::chroma`
+  had exactly one consumer — `chroma_band` — and went with it, so the backdrop no longer calls
+  `QuantizerCelebi` at all. **Material You is out of scope and does not change.**
 - **Genre Detail is still out of scope**, and still for the original reason: it has no
   artwork, so neither backdrop has anything to derive from, and its name-hashed gradient *is*
   the genre's identity. `apply_gradient`, `gradient_luma` and `rgb_lstar` are untouched.
@@ -297,42 +306,63 @@ Four departures, each forced by our stack rather than chosen:
 
 Each phase leaves the tree working. Phase 8 is a human look gate, as Phase 3 was.
 
-### Phase 6 — The extractor · mechanical, one visible change
+### Phase 6 — The extractor · **landed**
 
-1. Add `color-thief = "0.2.2"` (latest as of 2026-08-17; one transitive dep, `rgb`).
-   It builds under the 1.97.0 pin — verified by the benchmark above, not assumed.
-2. `material_you.rs` gains `population_seeds(rgb, desired) -> Vec<u32>` beside
-   `ranked_seeds`, wrapping `color_thief::get_palette` at quality 1. **Quality 1, not
-   Amberol's 5** — 0.11 ms against 0.087 ms is not a trade worth taking, and sampling every
-   pixel makes the result independent of stride artefacts on tiled art.
-3. `BackdropSample::measure` calls it instead of `extract_seeds_from_rgb8`. `seeds` becomes
-   `[u32; SEED_COUNT]`; `accent_argb` stays `seeds[0]` and stays `Option` for the empty-buffer
-   case. `chroma` goes.
-4. `extract_source_argb_from_rgb8` and everything Material You touches is **untouched**.
+1. `color-thief = "0.2.2"`, beside `material-colors` rather than instead of it.
+2. `material_you.rs` gains `population_seeds(buf, desired) -> Vec<u32>` over
+   `color_thief::get_palette` at quality 1, reading the buffer in place — no `Vec<Argb>`.
+   **Quality 1 is not "every pixel"**, as this doc claimed: the crate advances its cursor by
+   `bytes-per-pixel × quality` pixels, so 1 on RGB samples every third. It is still right,
+   being the finest stride on offer, but the reason is cost rather than exhaustiveness.
+3. `BackdropSample::measure` calls it; `chroma` goes. **`seeds` stays
+   `[Option<u32>; SEED_COUNT]`** — median cut returns at most `max_colors` and a near-white
+   sleeve returns *one*, the crate dropping every pixel over 250 on all three channels. The
+   `FILL_HUES` / `FILL_WEIGHT` rule stays with it.
+4. **An empty buffer is guarded in the wrapper**, `get_palette` answering `Ok([white])` on
+   zero pixels where every caller here spells "no artwork" as an empty list.
+5. **`chroma_band` went in this phase, not in 8** — `Quantized::chroma` was a walk over
+   Celebi's clusters and could not outlive the Celebi call. Deleted: `Quantized`,
+   `ranked_seeds`, `extract_seeds_from_rgb8` (its `desired` was always 1, so it folded into
+   `seed_from_pixels`), `to_tone_with_chroma`, `TINT_MIN_CHROMA`, `TINT_CHROMA_REFERENCE`.
+   **`TINT_MAX_CHROMA` stays** as the pathological-seed ceiling. The floor's whole argument was
+   about `Score` handing over a near-white and a near-black; a population extractor answers
+   with what the cover is made of, so lifting it would make the backdrop more of a colour than
+   the record is. Phase 8 removes the ceiling and the tone with it.
+6. `extract_source_argb` / `extract_source_argb_from_rgb8` keep their signatures, and Material
+   You is untouched.
 
-**Exit:** clippy and tests clean. New tests pin that a greyscale buffer yields four distinct
-seeds (the case that returned one), and that the first seed is the population mode. The
-visible change is seed *character* — expect the backdrop to shift hue on many covers.
+**Landed:** four new pins — a greyscale ramp yielding a full set of seeds (the case that
+returned one), the first seed being the bulk colour rather than the vivid stripe, and the
+empty/white pair being told apart. `a_washed_out_seed_is_lifted_to_carry_colour` and
+`the_first_seed_is_the_same_however_many_are_asked_for` were retired with their subjects.
 
-### Phase 7 — Geometry · coverage becomes a number the cap can use
+### Phase 7 — Geometry · **landed**
 
-1. Move the four blob anchors to the four **corners**, and shrink `blob-reach` so each ramp
-   dies before mid-element. This is what makes overlaps pairwise instead of four-way, and it
-   is the property being ported from Amberol — not its angles.
-2. **State worst-case and mid-element coverage as constants in `ui/aurora.rs`**, derived from
-   the anchor set and the 0.7 stop rather than measured on screen. Phase 8's cap is a function
-   of them, so they stop being an implementation detail of the `.slint` file and become part
-   of the contract between the two halves. A test pins the Slint geometry against them.
-3. **The vignette goes.** Neutral black at the periphery is the direct inverse of the light
-   model being adopted — the corners are now where the colour is. `AuroraBackdrop.vignette`
-   and its four-stop rect are deleted rather than defaulted to `transparent`; both bands
-   already pass `transparent` and Now Playing was the only taker.
-4. `blob-reach`'s `max(long, short)` form goes with it — corner anchoring makes the
-   short-axis rescue unnecessary, and it was the term that produced the overlap in finding 2.
+1. The four blobs anchor at the four **corners**, walking round the rectangle (TL, TR, BR, BL)
+   so consecutive washes are edge neighbours — the same adjacency `around_the_wheel` gives
+   them, four corners being a cycle exactly as the hue wheel is. `wide`, `long-side`,
+   `short-side`, `blob-x` and `blob-y` are gone; corners are corners whatever the aspect.
+2. `blob-reach` is **1/√2 of the host diagonal**, not a shrunken axis fraction. **"Dies before
+   mid-element", as this doc asked for, would leave the centre bare `Theme.base`** — under the
+   Now Playing cover, of all places. Amberol's own washes reach its centre at ~29 % strength
+   for the ~41 % coverage cited above, and that is what is matched.
+3. `ui/aurora.rs` states the geometry as the contract Phase 8's cap is a function of:
+   `BLOB_PEAKS`, `REACH_FRACTION`, and `const fn` `mid_coverage()` (**0.424**, all four washes
+   at the centre but each at 29 % of its peak) and `peak_coverage()` (**0.73**, the supremum
+   over aspect of a corner pair sharing a short edge). Real hosts sit at 0.50 on a square and
+   ~0.64–0.67 on the bands; over-stating the peak only costs brightness.
+4. **`PEAK_TONE` 31 → 32, and it is now a derivation.** A `TINT_TONE` wash at `peak_coverage()`
+   over `FLOOR_TONE_START` composites to L\*31.3, which `backdrop_tests` computes rather than
+   restates. Nothing on screen moves — every tier saturates at its band floor until the
+   backdrop reaches L\*33.9.
+5. **The vignette is gone**, property and rect both, at all three mounts. A whole-tree pin says
+   so: neutral black at the periphery is the direct inverse of a model whose colour now lives
+   in the corners.
 
-**Exit:** the backdrop is still solved to the old dark band (Phase 8 has not landed), so this
-phase is judged on *structure*, not looks: four distinguishable colour regions instead of one
-average. `aurora_backdrop_tests.rs` gains the geometry pin.
+**Landed:** `the_washes_are_laid_out_against_the_axes_rather_than_the_diagonal` retired (it
+asserted the string `diagonal` was *absent*), replaced by `the_washes_are_anchored_at_the_
+corners`; the peak-tone pin now reads `blob-reach` numerically and compares the four `peak`
+bindings against `BLOB_PEAKS`.
 
 ### Phase 8 — The composite model · the look gate
 
@@ -340,11 +370,12 @@ The phase that changes what the feature is. **Gate it on screen before Phase 9.*
 
 1. `ui::aurora::wash_cap(base, ink, accent, coverage) -> (min_tone, max_tone)` — the closed
    form from finding 5, capping against the worse of ink and accent, in whichever direction
-   the theme's polarity puts the danger.
-2. `tints()` stops driving washes to a fixed tone and stops touching chroma. Each seed keeps
-   its own tone and chroma, clamped into the band `wash_cap` returned. `Tint` loses `weight`;
-   the per-blob `peak` hierarchy in the `.slint` file **stays**, being about area rather than
-   about colour.
+   the theme's polarity puts the danger. `coverage` is `peak_coverage()`, already stated.
+2. `tints()` stops driving washes to `TINT_TONE` and stops capping chroma at all — Phase 6 took
+   the floor, this takes the ceiling. Each seed keeps its own tone and chroma, clamped into the
+   band `wash_cap` returned, which is `clamp_to_tone_band` rather than a new primitive. `Tint`
+   loses `weight`; the per-blob `peak` hierarchy in the `.slint` file **stays**, being about
+   area rather than about colour, and `BLOB_PEAKS` mirrors it.
 3. `AuroraBackdrop`'s base gradient stops taking solved floor stops and takes **`Theme.base`
    and `Theme.mantle`**. Both are `in` properties already, so this is a mount-site change at
    three sites, not a component change.
@@ -410,14 +441,14 @@ decodes both shapes already pay.
 
 ### Phase 11 — Tests, docs, exit
 
-1. **New pins v2 brings:** `wash_cap` against the palette table in finding 5, on both
-   polarities; a white cover's composite staying inside the cap; the geometry constants
-   agreeing between `ui/aurora.rs` and `aurora-backdrop.slint`; `backdrop.rs` publishing
-   theme tokens on the aurora arm and solved tones on the blur arm.
-2. **Pins that must be retired, not left passing vacuously:** everything in
-   `aurora_tests.rs` covering the chroma band opening and closing with the artwork, and the
-   `backdrop_tests.rs` cases asserting a solved chrome tone on an aurora surface. A test that
-   still passes because its subject was deleted is worse than none.
+1. **New pins still owed:** `wash_cap` against the palette table in finding 5, on both
+   polarities; a white cover's composite staying inside the cap; `backdrop.rs` publishing
+   theme tokens on the aurora arm and solved tones on the blur arm. The geometry constants
+   agreeing between `ui/aurora.rs` and `aurora-backdrop.slint` landed in Phase 7.
+2. **Pins that must be retired, not left passing vacuously:** the two `backdrop_tests.rs` cases
+   asserting a solved chrome tone on an aurora surface, and — with `PEAK_TONE` — the peak-tone
+   derivation Phase 7 added. A test that still passes because its subject was deleted is worse
+   than none. The chroma-band tests went with the band in Phase 6.
 3. **Pins that survive whole:** the dither tile's flat histogram, blue spectrum and one-level
    alpha; no ramp ending on `transparent`; the `image-fit`/tiling quartet; each of the three
    sites mounting exactly one of the two stacks; neither stack naming a global.
@@ -433,11 +464,13 @@ decodes both shapes already pay.
 
 ## Cross-cutting
 
-- **Memory.** Strictly better than v1 on the aurora setting: the `Vec<Argb>` of every pixel
-  that `extract_seeds_from_rgb8` built (≈590 KB transient at 192²) goes with the Celebi call,
-  and `Quantized::chroma`'s cluster walk with it. Take one `/usr/bin/time -v` on each setting
-  after Phase 10 to confirm neither regressed, and don't tune against it — we are well under
-  the ceiling either way.
+- **Memory.** Strictly better than v1 on the aurora setting: `population_seeds` reads the
+  buffer in place, so the `Vec<Argb>` of every pixel the backdrop used to build (≈590 KB
+  transient at 192²) went with the Celebi call, and `Quantized::chroma`'s cluster walk with it.
+  **Material You still builds its own** on the same cover when a Color Style is picked, so the
+  saving is the backdrop's alone. Take one `/usr/bin/time -v` on each setting after Phase 10 to
+  confirm neither regressed, and don't tune against it — we are well under the ceiling either
+  way.
 - **Latency.** The user-visible one: 30–45 ms between a track change and the backdrop landing
   becomes ~0.1 ms. Material You's own Celebi pass is untouched and still runs on the same
   change, so the *page* does not become instant — only the backdrop.

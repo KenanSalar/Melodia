@@ -6,11 +6,17 @@
 //! ([`seed_from_pixels`] argues the fallback); build a `DynamicScheme` of the
 //! requested style and map the M3 roles into a [`crate::themes::Palette`].
 //!
+//! **[`population_seeds`] answers to none of that**, and is here because this is
+//! where a cover becomes colours. The backdrop asks what the artwork mostly *is*
+//! where everything else here asks what makes the best UI seed — different
+//! questions, hence a different quantizer.
+//!
 //! All public functions are sync and may block — call from `spawn_blocking`.
 
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
+use color_thief::ColorFormat;
 use image::imageops::FilterType;
 use lru::LruCache;
 use material_colors::color::Argb;
@@ -155,59 +161,12 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
 /// spell as the theme accent. So there is no last-resort colour to pick here,
 /// and no layer-crossing theme dependency to acquire in order to pick one.
 fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
-    ranked_seeds(pixels, 1).seeds.into_iter().next()
-}
-
-/// What one quantize pass has to say about an image.
-#[derive(Default)]
-pub struct Quantized {
-    /// Hue-separated seeds, best first, and shorter than asked when the artwork couldn't separate
-    /// that many.
-    pub seeds: Vec<u32>,
-    /// How colourful the image is overall, as population-weighted mean chroma over the clusters.
-    /// A cluster mean tracks the true per-pixel one to well under a chroma point at a hundredth of
-    /// the conversions, the quantizer's output being a compressed form of the same distribution.
-    pub chroma: f64,
-}
-
-/// The best `desired` hue-separated seeds, plus how colourful the source was.
-///
-/// `desired` is `Score`'s own parameter forwarded: it walks the required hue separation down from
-/// 90° and takes the first that yields this many, returning **fewer** rather than reaching for
-/// near-duplicates. Asking for more than the artwork holds is safe, and the caller fills the gap.
-///
-/// **Entry 0 doesn't depend on `desired`** — the walk clears its shortlist each pass and pushes
-/// the top-scored survivor unconditionally — so widening the ask changes no colour anything
-/// paints.
-///
-/// [`Quantized::chroma`] rides along because it is the one question a *seed* cannot answer: a
-/// black-and-white sleeve still yields seeds with a few points of chroma, indistinguishable
-/// per-seed from a genuinely tinted cover's dimmest, and only the whole image says which it was.
-fn ranked_seeds(pixels: &[Argb], desired: usize) -> Quantized {
     if pixels.is_empty() {
-        return Quantized::default();
+        return None;
     }
     let counts = QuantizerCelebi::quantize(pixels, QUANTIZE_MAX_COLOURS).color_to_count;
-    let Some(dominant) = counts.iter().max_by_key(|(_, count)| **count).map(|(argb, _)| *argb)
-    else {
-        return Quantized::default();
-    };
-
-    let population: f64 = counts.values().map(|count| f64::from(*count)).sum();
-    let chroma = counts
-        .iter()
-        .map(|(argb, count)| Hct::new(*argb).get_chroma() * f64::from(*count))
-        .sum::<f64>()
-        / population;
-
-    let desired = i32::try_from(desired).unwrap_or(i32::MAX);
-    Quantized {
-        seeds: Score::score(&counts, Some(desired), Some(dominant), None)
-            .into_iter()
-            .map(argb_to_u32)
-            .collect(),
-        chroma,
-    }
+    let dominant = counts.iter().max_by_key(|(_, count)| **count).map(|(argb, _)| *argb)?;
+    Score::score(&counts, Some(1), Some(dominant), None).into_iter().next().map(argb_to_u32)
 }
 
 /// [`extract_source_argb`]'s pipeline starting from the RGB8 thumbnail
@@ -218,22 +177,56 @@ fn ranked_seeds(pixels: &[Argb], desired: usize) -> Quantized {
 ///
 /// **Blocking** (CPU-bound quantize) — call from `spawn_blocking`.
 pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<u32> {
-    extract_seeds_from_rgb8(buf, 1).seeds.into_iter().next()
-}
-
-/// [`extract_source_argb_from_rgb8`] for a caller that wants the whole ranked list — the
-/// backdrop, which washes one colour per seed across the surface. One quantize serves both; see
-/// [`ranked_seeds`] for why the first entry is the same either way.
-///
-/// **Blocking** (CPU-bound quantize) — call from `spawn_blocking`.
-pub fn extract_seeds_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>, desired: usize) -> Quantized {
     let bytes = buf.as_bytes();
     // No alpha here, so the path-based sibling's alpha-skip collapses to a plain push.
     let mut pixels: Vec<Argb> = Vec::with_capacity(bytes.len() / 3);
     for chunk in bytes.chunks_exact(3) {
         pixels.push(Argb::new(0xff, chunk[0], chunk[1], chunk[2]));
     }
-    ranked_seeds(&pixels, desired)
+    seed_from_pixels(&pixels)
+}
+
+/// Up to `desired` colours the cover is mostly *made of*, most prominent first.
+///
+/// [`seed_from_pixels`]'s opposite number, and the one the backdrop washes across its surface.
+/// `Score` ranks by how *usable* a colour is: on a photographic sleeve that picks the reddest thing
+/// in the frame over what the frame mostly is, and on a greyscale one its chroma cutoff filters
+/// almost everything out and it answers **once**, leaving a backdrop to invent three of its four
+/// washes. Median cut has no such cutoff and asks the other question.
+///
+/// **A short list is rare but real, so the caller still owes a filling rule**: a near-white sleeve is
+/// dropped to nothing — the crate discards every pixel over 250 on all three channels — and comes
+/// back as a single white. Everything else fills the list, median cut going on splitting past the
+/// point where a box holds one colour, so even a flat two-tone poster answers with four: its two,
+/// and two more off further cuts of the same boxes.
+///
+/// Quality 1 is the finest stride on offer and costs a fraction of a millisecond; it is **not**
+/// every pixel, the crate advancing its cursor by `bytes-per-pixel × quality` pixels.
+///
+/// Reads the buffer in place — there is no intermediate pixel vector, which is most of why this
+/// costs what it does.
+///
+/// **Blocking** — cheap, but it belongs on the worker that decoded the cover either way.
+pub fn population_seeds(buf: &SharedPixelBuffer<Rgb8Pixel>, desired: usize) -> Vec<u32> {
+    let bytes = buf.as_bytes();
+    // Guarded rather than left to the crate: on an empty slice it builds an inverted box and
+    // answers `Ok([white])`, where every caller here spells "no artwork" as an empty list.
+    if bytes.is_empty() {
+        return Vec::new();
+    }
+
+    // The crate asserts below two, and a backdrop asking for one wash is not a caller's error to
+    // report from here.
+    let max_colors = u8::try_from(desired).unwrap_or(u8::MAX).max(2);
+    match color_thief::get_palette(bytes, ColorFormat::Rgb, 1, max_colors) {
+        Ok(palette) => palette
+            .into_iter()
+            .map(|c| (u32::from(c.r) << 16) | (u32::from(c.g) << 8) | u32::from(c.b))
+            .collect(),
+        // A box it could neither cut nor average. Nothing to say about this cover, which is the
+        // same answer as no cover — and not worth a log line on a path that runs per track.
+        Err(_) => Vec::new(),
+    }
 }
 
 /// Move `argb` into the `min_tone..=max_tone` HCT lightness band, leaving hue
@@ -286,24 +279,6 @@ pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
         hct.set_chroma(max_chroma);
     }
     hct.set_tone(tone);
-    argb_to_u32(Argb::from(hct))
-}
-
-/// Drive `argb` to exactly `tone`, then bring its chroma into `min_chroma..=max_chroma`, keeping
-/// the hue.
-///
-/// [`to_tone_capped_chroma`]'s sibling for a caller needing a chroma *floor* as well as a ceiling
-/// — the aurora's washes, which must carry colour whatever the quantizer handed over.
-///
-/// **The order is reversed from that function's, and the reversal is the point.** Chroma is
-/// bounded by tone, so asking a near-black seed for chroma 36 *at its own tone* gamut-maps the
-/// request away to nothing, and the later tone change can't restore what was already discarded.
-/// Measured on a real cover: a third seed stuck at chroma 15, against 36 this way round.
-pub fn to_tone_with_chroma(argb: u32, tone: f64, min_chroma: f64, max_chroma: f64) -> u32 {
-    debug_assert!(min_chroma <= max_chroma, "inverted chroma band {min_chroma}..={max_chroma}");
-    let mut hct = Hct::new(Argb::from_u32(argb));
-    hct.set_tone(tone);
-    hct.set_chroma(hct.get_chroma().clamp(min_chroma, max_chroma));
     argb_to_u32(Argb::from(hct))
 }
 

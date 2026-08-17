@@ -251,8 +251,6 @@ export component LibraryTabBand inherits Rectangle {
         hero-open: root.detail-open;
     }
 
-    // No vignette — sized for a full page, it draws as an end-darkening on a strip this shape;
-    // `mosaic-tab-hero.slint` argues it.
     if root.aurora-shown: AuroraBackdrop {
         x: 0; y: 0;
         width: 100%; height: 100%;
@@ -263,7 +261,6 @@ export component LibraryTabBand inherits Rectangle {
         tint-3: HeroBackdrop.tint-3;
         tint-4: HeroBackdrop.tint-4;
         dither: HeroBackdrop.dither;
-        vignette: transparent;
         hero-open: root.detail-open;
     }
 

@@ -191,10 +191,9 @@ silently miss the other.
   fall back to their idle half on `root.detail-open`, and both stacks swap their stops for a
   transparent pair on a `hero-open` input defaulting `true` — the blur's floor, and the aurora's
   base plus all four washes. **`detail-open`, not `hero-shown`** — gated on the latter they drain
-  toward idle for `dur-med` *after* the collapse ends. The two neutral layers stay ungated: the
-  blur's scrim, which carries almost no chroma, and the aurora's vignette, which the bands switch
-  off outright rather than gate (sized for a full page, its circle draws as an end-darkening on a
-  strip that shape).
+  toward idle for `dur-med` *after* the collapse ends. The one ungated layer is the blur's scrim,
+  which carries almost no chroma; the aurora's neutral layer is gone with the vignette, the washes
+  having moved to the corners it used to darken.
 
 - **`has-cover` is how a host says "not this one".** The `cover:` ternary must bind *some* global
   on every arm, Slint having no empty-`image` literal, and Genre owns no cover — so the Genre hero

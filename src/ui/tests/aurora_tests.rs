@@ -2,7 +2,7 @@ use material_colors::color::Argb;
 use material_colors::hct::Hct;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::services::material_you::{extract_seeds_from_rgb8, extract_source_argb_from_rgb8};
+use crate::services::material_you::{extract_source_argb_from_rgb8, population_seeds};
 use crate::ui::aurora::{TINT_TONE, dither_tile, tints};
 use crate::ui::backdrop::SEED_COUNT;
 
@@ -17,11 +17,12 @@ const MANY_HUES: [Option<u32>; SEED_COUNT] = [
     Some(0x007d_5c79),
 ];
 
-/// Mean chroma of a cover with real colour in it — measured, two ordinary sleeves sit at 22–24.
-const COLOURFUL: f64 = 22.0;
-
 /// A monochrome sleeve: one seed, the rest owed to the filling rule.
 const ONE_HUE: [Option<u32>; SEED_COUNT] = [Some(0x00c0_3030), None, None, None];
+
+/// Side of every fixture buffer. Spelled so a test can hand [`buffer_of`] exactly this many
+/// entries and place rows verbatim rather than cycling.
+const FIXTURE_SIDE: u32 = 32;
 
 fn hct_of(rgb: u32) -> Hct {
     Hct::new(Argb::from_u32(rgb))
@@ -34,56 +35,101 @@ fn hue_gap(a: f64, b: f64) -> f64 {
     raw.min(360.0 - raw)
 }
 
-/// A buffer of `colours`, tiled one per row — enough distinct pixels for `QuantizerCelebi` to
-/// find each as a cluster.
+/// A buffer of `colours`, cycled one per row. At [`FIXTURE_SIDE`] entries the cycle is the identity
+/// and the caller is stating each row, which is how the weighted fixtures below get their
+/// proportions.
 fn buffer_of(colours: &[[u8; 3]]) -> SharedPixelBuffer<Rgb8Pixel> {
-    let side = 32u32;
-    let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(side, side);
+    let side = FIXTURE_SIDE as usize;
+    let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(FIXTURE_SIDE, FIXTURE_SIDE);
     let px = buf.make_mut_slice();
     for (i, slot) in px.iter_mut().enumerate() {
-        let [r, g, b] = colours[(i / side as usize) % colours.len()];
+        let [r, g, b] = colours[(i / side) % colours.len()];
         *slot = Rgb8Pixel { r, g, b };
     }
     buf
 }
 
-// --- the seed list ------------------------------------------------------------
-
-/// The invariant the whole widening rests on: `Score` clears its shortlist on every hue-separation
-/// pass and pushes the top-scored survivor unconditionally, so entry 0 can't depend on how many
-/// were asked for. Without this, moving the backdrop to three seeds would silently re-colour every
-/// tier solved off `accent_argb`.
-#[test]
-fn the_first_seed_is_the_same_however_many_are_asked_for() {
-    let buf = buffer_of(&[[200, 40, 40], [40, 200, 40], [40, 40, 200], [200, 200, 40]]);
-
-    let one = extract_source_argb_from_rgb8(&buf);
-    let many = extract_seeds_from_rgb8(&buf, SEED_COUNT).seeds.into_iter().next();
-
-    assert_eq!(one, many);
-    assert!(one.is_some(), "a four-hue buffer must quantize to something");
+/// A neutral ramp, one grey per row — the case that used to yield a single seed.
+fn greyscale_ramp() -> SharedPixelBuffer<Rgb8Pixel> {
+    let rows: Vec<[u8; 3]> = (0..FIXTURE_SIDE)
+        .map(|row| {
+            let level = 24 + u8::try_from(row).unwrap_or(0) * 7;
+            [level, level, level]
+        })
+        .collect();
+    buffer_of(&rows)
 }
 
-/// A greyscale sleeve is filtered out by `Score`'s chroma cutoff, and the crate's own answer there
-/// is Google Blue — a brand colour, not a fact about this record. `seed_from_pixels` hands the real
-/// dominant over as the fallback, and the ranked call has to keep doing so.
+// --- the seed list ------------------------------------------------------------
+
+/// The finding the extractor was swapped for. `Score` discards every cluster under its own chroma
+/// cutoff, so a neutral sleeve survives it once — leaving three of four washes invented by hue
+/// rotation off the fourth, at a third of its strength. Median cut has no such cutoff and answers
+/// with the greys the record is made of.
+#[test]
+fn a_greyscale_ramp_yields_a_full_set_of_seeds() {
+    let seeds = population_seeds(&greyscale_ramp(), SEED_COUNT);
+
+    assert_eq!(seeds.len(), SEED_COUNT, "got {seeds:#08x?}");
+    for (index, seed) in seeds.iter().enumerate() {
+        for other in seeds.iter().skip(index + 1) {
+            assert_ne!(seed, other, "two seeds off a ramp came back identical");
+        }
+    }
+}
+
+/// A backdrop wants what the cover mostly *is*, and that is a different question from what makes
+/// the best accent. `Score` picks the vivid stripe here — defensible for a seed, wrong for a
+/// surface meant to feel like the record.
+#[test]
+fn the_first_seed_is_what_the_cover_mostly_is() {
+    const SLATE: [u8; 3] = [48, 52, 70];
+    const VIVID: [u8; 3] = [204, 40, 65];
+
+    let mut rows = vec![SLATE; FIXTURE_SIDE as usize - 1];
+    rows.push(VIVID);
+
+    let seeds = population_seeds(&buffer_of(&rows), SEED_COUNT);
+
+    let Some(&first) = seeds.first() else {
+        unreachable!("a two-colour buffer must quantize to something")
+    };
+    // Loosely: median cut answers with a box average off a 5-bit histogram, not with the input.
+    let channels = [(first >> 16) & 0xff, (first >> 8) & 0xff, first & 0xff];
+    for (got, want) in channels.iter().zip(SLATE) {
+        let gap = got.abs_diff(u32::from(want));
+        assert!(gap <= 8, "seed {first:#08x} is not the bulk colour ({gap} off on a channel)");
+    }
+    assert!(
+        seeds.iter().any(|&seed| (seed >> 16) & 0xff > 0xc0),
+        "the vivid stripe went missing entirely, got {seeds:#08x?}"
+    );
+}
+
+/// The two shapes that aren't a cover, and the crate answers them the same way unless one is
+/// caught: a near-white sleeve is filtered down to nothing, and so is an empty buffer, but only the
+/// second means "there is no artwork here".
+#[test]
+fn an_empty_buffer_and_a_white_one_are_told_apart() {
+    let empty = SharedPixelBuffer::<Rgb8Pixel>::new(0, 0);
+    assert!(population_seeds(&empty, SEED_COUNT).is_empty());
+
+    let white = population_seeds(&buffer_of(&[[255, 255, 255]]), SEED_COUNT);
+    assert_eq!(white, vec![0x00ff_ffff], "a white cover answers with its own white");
+}
+
+/// Material You's seed keeps `Score`, so it keeps needing the dominant handed over as the
+/// fallback — the crate's own answer on a colourless sleeve is Google Blue, a brand colour rather
+/// than a fact about this record.
 #[test]
 fn a_monochrome_sleeve_seeds_from_its_own_grey() {
-    let buf = buffer_of(&[[90, 90, 90], [120, 120, 120]]);
+    let seed = extract_source_argb_from_rgb8(&buffer_of(&[[90, 90, 90], [120, 120, 120]]));
 
-    let quantized = extract_seeds_from_rgb8(&buf, SEED_COUNT);
-
-    let chroma = quantized.seeds.first().map(|&first| hct_of(first).get_chroma());
+    let chroma = seed.map(|first| hct_of(first).get_chroma());
     assert!(chroma.is_some(), "the dominant fallback means a grey buffer still answers");
     assert!(
         chroma.is_some_and(|c| c < 5.0),
-        "a grey buffer must not answer with a hue, got {:#08x?}",
-        quantized.seeds
-    );
-    assert!(
-        quantized.chroma < 5.0,
-        "a grey buffer must read as colourless overall, got {}",
-        quantized.chroma
+        "a grey buffer must not answer with a hue, got {seed:#08x?}"
     );
 }
 
@@ -95,7 +141,7 @@ fn a_monochrome_sleeve_seeds_from_its_own_grey() {
 #[test]
 fn every_tint_lands_on_one_tone() {
     for seeds in [MANY_HUES, ONE_HUE, [None; SEED_COUNT]] {
-        for tint in tints(seeds, COLOURFUL, THEME_ACCENT) {
+        for tint in tints(seeds, THEME_ACCENT) {
             let tone = hct_of(tint.rgb).get_tone();
             assert!(
                 (tone - TINT_TONE).abs() < 1.0,
@@ -106,49 +152,29 @@ fn every_tint_lands_on_one_tone() {
     }
 }
 
-/// `Score` ranks by usability rather than by saturation, so an ordinary cover's second and third
-/// seeds are a near-white and a near-black carrying almost no chroma. Taken as they came they
-/// dilute the dominant and the surface converges on grey — the floor is what stops that, and it
-/// only works because the tone is set *before* the chroma is asked for.
-#[test]
-fn a_washed_out_seed_is_lifted_to_carry_colour() {
-    // Tone 96 and tone 3: the shapes `Score` actually returns beside a vivid dominant.
-    let washed_out = [
-        Some(0x00c0_3030),
-        Some(0x00f2_efee),
-        Some(0x0005_0408),
-        Some(0x00ee_ecef),
-    ];
-
-    for tint in tints(washed_out, COLOURFUL, THEME_ACCENT) {
-        let chroma = hct_of(tint.rgb).get_chroma();
-        assert!(chroma > 20.0, "tint {:#08x} came back grey at chroma {chroma}", tint.rgb);
-    }
-}
-
 /// The rule that keeps a monochrome record looking monochrome: a rotated hue is a guess, and on a
 /// low-chroma sleeve it survives gamut mapping as almost nothing, so washing it on at full
 /// strength would stack near-identical ramps into a lightness gradient the record never had.
 #[test]
 fn a_synthesized_tint_is_washed_on_more_faintly_than_a_real_one() {
-    let real = tints(MANY_HUES, COLOURFUL, THEME_ACCENT);
+    let real = tints(MANY_HUES, THEME_ACCENT);
     assert!(real.iter().all(|t| t.weight >= 1.0), "a separated cover washes every tint in full");
 
-    let [seeded, fills @ ..] = tints(ONE_HUE, COLOURFUL, THEME_ACCENT);
+    let [seeded, fills @ ..] = tints(ONE_HUE, THEME_ACCENT);
     assert!(seeded.weight >= 1.0, "the seed the artwork gave is not a guess");
     for fill in fills {
         assert!(fill.weight < seeded.weight, "a fill matched the seed's weight");
     }
 }
 
-/// `Score` returns fewer than asked rather than reaching for near-duplicates, and never pads. A
-/// duotone cover therefore arrives two seeds short of a tint and the filling rule owes the rest.
+/// A near-white sleeve is filtered down to a single box, so a short list is still a shape the
+/// quantizer produces and the filling rule still owes the rest.
 #[test]
 fn a_short_list_is_filled_from_its_own_hue_and_not_the_theme() {
     let accent_hue = hct_of(THEME_ACCENT).get_hue();
     let seed_hue = hct_of(0x00c0_3030).get_hue();
 
-    for tint in tints(ONE_HUE, COLOURFUL, THEME_ACCENT) {
+    for tint in tints(ONE_HUE, THEME_ACCENT) {
         let gap_from_seed = hue_gap(hct_of(tint.rgb).get_hue(), seed_hue);
         let gap_from_accent = hue_gap(hct_of(tint.rgb).get_hue(), accent_hue);
         // The fan reaches two analogous steps at its far end, which is what four of them costs
@@ -165,7 +191,7 @@ fn a_short_list_is_filled_from_its_own_hue_and_not_the_theme() {
 /// side of the source is what keeps four washes reading as four.
 #[test]
 fn the_fills_fan_out_around_the_seed() {
-    let painted = tints(ONE_HUE, COLOURFUL, THEME_ACCENT);
+    let painted = tints(ONE_HUE, THEME_ACCENT);
     let hues: Vec<f64> = painted.iter().map(|tint| hct_of(tint.rgb).get_hue()).collect();
 
     assert!(
@@ -183,33 +209,22 @@ fn the_fills_fan_out_around_the_seed() {
 
 /// A black-and-white record gets a black-and-white backdrop.
 ///
-/// Such a sleeve still quantizes to seeds carrying a few points of chroma — noise and a hint of
-/// tint in a near-black field — and **neither bound may take them at face value**: lifted to the
-/// floor they painted it red and violet, and left at their own 9 they still washed the whole
-/// surface mauve, a tint covering everything needing very little chroma to read as a colour. The
-/// seeds can't be asked which case they are, this one's 9.4 sitting below a colourful cover's
-/// 12.6; only the image separates them.
+/// This used to take a chroma floor scaled by how colourful the whole image measured, because
+/// `Score` handed over seeds carrying a few points of chroma either way and a wash covering the
+/// surface needs very little of it to read as a colour. **The property is now the extractor's**:
+/// what comes back is what the cover is made of, so a grey record yields greys and nothing lifts
+/// them. Run end to end rather than off recorded seeds — the claim is about the pair.
 #[test]
 fn a_greyscale_cover_stays_grey() {
-    // The real seeds off `Fade Into Darkness`, whose mean chroma measures ~5.
-    let greyscale = [
-        Some(0x0005_0103),
-        Some(0x0069_94a0),
-        Some(0x005b_84a4),
-        Some(0x0003_0611),
-    ];
+    let mut seeds = [None; SEED_COUNT];
+    for (slot, seed) in seeds.iter_mut().zip(population_seeds(&greyscale_ramp(), SEED_COUNT)) {
+        *slot = Some(seed);
+    }
 
-    for tint in tints(greyscale, 5.1, THEME_ACCENT) {
+    for tint in tints(seeds, THEME_ACCENT) {
         let chroma = hct_of(tint.rgb).get_chroma();
         assert!(chroma < 6.0, "tint {:#08x} carries chroma {chroma} off a grey cover", tint.rgb);
     }
-
-    // The same seeds under colourful artwork still get the lift — the image decides, not the seed.
-    let lifted = tints(greyscale, COLOURFUL, THEME_ACCENT);
-    assert!(
-        hct_of(lifted[0].rgb).get_chroma() > 30.0,
-        "the band stopped opening for artwork that has colour"
-    );
 }
 
 /// A cover of two colours must come out as two colours.
@@ -227,9 +242,9 @@ fn a_multi_coloured_cover_keeps_its_colours_apart() {
         Some(0x0030_3446),
         Some(0x007d_5c79),
     ];
-    let painted = tints(blue_and_red, COLOURFUL, THEME_ACCENT);
+    let painted = tints(blue_and_red, THEME_ACCENT);
 
-    // Matched by hue rather than by slot: paint order is the hue wheel, not `Score`'s ranking.
+    // Matched by hue rather than by slot: paint order is the hue wheel, not the quantizer's.
     for seed in blue_and_red.into_iter().flatten() {
         let nearest = painted
             .iter()
@@ -246,10 +261,10 @@ fn a_multi_coloured_cover_keeps_its_colours_apart() {
     assert!(widest > 90.0, "blue and red collapsed to {widest}° apart");
 }
 
-/// Consecutive washes are consecutive on the hue wheel: the blob positions are fixed, so the rank
-/// a colour arrives in decides which other colour it overlaps, and `Score`'s order once put two
-/// complementary pairs on top of each other. The failure is invisible in review — every colour in
-/// the solve is correct and only the composite is wrong.
+/// Consecutive washes are consecutive on the hue wheel: the blobs anchor at fixed corners, so the
+/// rank a colour arrives in decides which other colour it meets along an edge, and a ranking by
+/// prominence has nothing to do with hue. The failure is invisible in review — every colour in the
+/// solve is correct and only the composite is wrong.
 #[test]
 fn the_washes_are_seated_around_the_hue_wheel() {
     // Deliberately adversarial: ranked so the two complementary pairs land adjacent.
@@ -259,7 +274,7 @@ fn the_washes_are_seated_around_the_hue_wheel() {
         Some(0x00b7_eaed),
         Some(0x00de_eacc),
     ];
-    let painted = tints(complementary_by_rank, COLOURFUL, THEME_ACCENT);
+    let painted = tints(complementary_by_rank, THEME_ACCENT);
     let anchor = hct_of(painted[0].rgb).get_hue();
     let turn = |rgb: u32| (hct_of(rgb).get_hue() - anchor).rem_euclid(360.0);
 
@@ -281,7 +296,7 @@ fn the_washes_are_seated_around_the_hue_wheel() {
 /// distinguishable tints rather than one colour washed on repeatedly.
 #[test]
 fn no_seeds_at_all_falls_back_to_the_theme_accent() {
-    let [first, fills @ ..] = tints([None; SEED_COUNT], COLOURFUL, THEME_ACCENT);
+    let [first, fills @ ..] = tints([None; SEED_COUNT], THEME_ACCENT);
 
     let accent_hue = hct_of(THEME_ACCENT).get_hue();
     assert!(

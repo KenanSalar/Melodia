@@ -4,12 +4,13 @@
 //! this one owns the surface underneath and states its brightest point, which is the only thing a
 //! WCAG ratio can be targeted against.
 //!
-//! A fixed set, always: `Score` returns fewer than asked and never pads, and `Brush::interpolate`
-//! blends gradients only at a matching stop and element count.
+//! A fixed set, always — `Brush::interpolate` blends gradients only at a matching stop and element
+//! count — and the quantizer can still answer short, a near-white sleeve coming back as one colour.
+//! Hence [`tints`]'s filling rule.
 
 use slint::{Color, Rgba8Pixel, SharedPixelBuffer};
 
-use crate::services::material_you::{hue_of, rotate_hue, to_tone_with_chroma};
+use crate::services::material_you::{hue_of, rotate_hue, to_tone_capped_chroma};
 use crate::themes::color_with_alpha;
 use crate::ui::backdrop::SEED_COUNT;
 
@@ -24,12 +25,12 @@ pub(crate) const TINT_TONE: f64 = 36.0;
 /// The brightest tone the finished stack presents — what [`crate::ui::backdrop`] solves its
 /// foreground tiers against on this surface.
 ///
-/// Stated rather than measured, there being no buffer. [`TINT_TONE`] bounds it absolutely, and the
-/// washes are spread far enough apart that coverage stays well under 1: over a base at
-/// `backdrop::FLOOR_TONE_START` the peak lands at tone 29.8 on a square host, the worst aspect
-/// because the spread is tightest there. Deliberately not a mean over the tint colours, which
-/// understates bright regions for [`crate::ui::backdrop::luma_p90`]'s reason.
-pub(crate) const PEAK_TONE: f64 = 31.0;
+/// Stated rather than measured, there being no buffer, but derived rather than guessed: a
+/// [`TINT_TONE`] wash at [`peak_coverage`] over the brightest gradient-floor stop composites here,
+/// which `backdrop_tests` pins because the transfer functions it needs are that module's.
+/// Deliberately not a mean over the tint colours, which understates bright regions for
+/// [`crate::ui::backdrop::luma_p90`]'s reason.
+pub(crate) const PEAK_TONE: f64 = 32.0;
 
 // Build failures rather than tests: a peak above either bound has no symptom on screen, every tier
 // saturating at its band floor across the whole legal range today.
@@ -42,35 +43,66 @@ const _: () = assert!(
     "the peak sits above the band the foreground tiers are solved for"
 );
 
-/// Chroma floor, and the reason the surface carries the record's colour rather than a wash of it.
+/// Alpha each wash carries at its own corner, mirroring `aurora-backdrop.slint`'s four `peak`
+/// bindings. Here because coverage is what a foreground is solved against, so it stops being an
+/// implementation detail of the paint the moment a tone is derived from it.
+pub(crate) const BLOB_PEAKS: [f64; SEED_COUNT] = [0.5, 0.46, 0.42, 0.38];
+
+/// How far a wash reaches, as a fraction of the host's diagonal — the same 1/√2 `aurora-backdrop`
+/// spells to four places, and Amberol's own stop.
 ///
-/// `Score` ranks by how *usable* a colour is, not how saturated, so a cover's second and third
-/// seeds are routinely a near-white and a near-black. Taken as they came the dull two dilute the
-/// good one and the surface converges on grey — which more alpha makes worse, not better. Reached
-/// only by artwork that is itself colourful; see [`chroma_band`].
-const TINT_MIN_CHROMA: f64 = 36.0;
+/// Over half the diagonal, so every ramp reaches the centre and the middle of the surface is not a
+/// hole; under the whole of it, so the pair across a diagonal never meet and no pixel is all four
+/// washes at strength.
+pub(crate) const REACH_FRACTION: f64 = std::f64::consts::FRAC_1_SQRT_2;
 
-/// Ceiling against a pathological seed; the floor above does the shaping. sRGB stops well short of
-/// it at this tone for most hues anyway.
-const TINT_MAX_CHROMA: f64 = 48.0;
-
-/// Artwork chroma at which the band above applies in full. Ordinary colourful sleeves measure
-/// 22–24 and a black-and-white one 5, so this sits in that gap with room either side.
-const TINT_CHROMA_REFERENCE: f64 = 20.0;
-
-/// The chroma band a tint is held to, scaled by how colourful `artwork_chroma` says the cover is.
+/// What the washes cover at the centre of the host: all four, each at the strength
+/// [`REACH_FRACTION`] leaves it half a diagonal from its corner.
 ///
-/// **The backdrop may not be more of a colour than the record is.** A black-and-white sleeve still
-/// quantizes to seeds carrying a few points of chroma, and the seeds can't be asked which case they
-/// are — a greyscale cover's dimmest sits *below* a colourful one's, so only the whole image
-/// separates them. **Squared**, because a proportional share of a tint covering the whole surface
-/// still reads as a colour; still a curve, so near-identical covers can't land either side of a
-/// cliff.
-fn chroma_band(artwork_chroma: f64) -> (f64, f64) {
-    let colourfulness = (artwork_chroma / TINT_CHROMA_REFERENCE).clamp(0.0, 1.0);
-    let scale = colourfulness * colourfulness;
-    (TINT_MIN_CHROMA * scale, TINT_MAX_CHROMA * scale)
+/// Alpha composites multiplicatively, so coverage is one minus what gets through all four. Spelled
+/// as a loop because `Iterator::product` is not const, and it has to be for the assertions below.
+pub(crate) const fn mid_coverage() -> f64 {
+    let at_centre = 1.0 - 0.5 / REACH_FRACTION;
+    let mut through = 1.0;
+    let mut blob = 0;
+    while blob < SEED_COUNT {
+        through *= 1.0 - BLOB_PEAKS[blob] * at_centre;
+        blob += 1;
+    }
+    1.0 - through
 }
+
+/// The most any pixel can be covered, over every host shape rather than any one of them.
+///
+/// The maximum is always at a corner, and the only wash that can reach it beside its own is the one
+/// across the *short* edge — the far corners sit past the reach. As a host stretches that edge
+/// shrinks against a diagonal that doesn't, so the neighbour's falloff goes to nothing and its
+/// contribution to its own peak: the two strongest peaks bound every aspect there is. Real hosts sit
+/// well under it — half on a square, two thirds on the bands — and over-stating it only costs the
+/// surface brightness.
+pub(crate) const fn peak_coverage() -> f64 {
+    1.0 - (1.0 - BLOB_PEAKS[0]) * (1.0 - BLOB_PEAKS[1])
+}
+
+// The geometry's own two bounds, as build failures for the reason above.
+const _: () = assert!(
+    peak_coverage() < 1.0,
+    "a wash covering a pixel outright leaves the base showing nowhere, and the peak is TINT_TONE"
+);
+const _: () = assert!(
+    mid_coverage() < peak_coverage(),
+    "the middle of the surface is covered harder than a corner, so the anchors have inverted"
+);
+
+/// Ceiling against a pathological seed. sRGB stops well short of it at this tone for most hues
+/// anyway, so it binds on almost nothing.
+///
+/// **There is no floor, and that is a property of the extractor rather than a taste.** A chroma
+/// floor sat here while `Score` picked the seeds, because it ranks by how *usable* a colour is and
+/// routinely handed over a near-white and a near-black that dragged the surface toward grey. Median
+/// cut answers with what the cover is made of, so a dull wash means a dull record — and lifting it
+/// would make the backdrop more of a colour than the record is.
+const TINT_MAX_CHROMA: f64 = 48.0;
 
 /// Hue rotation for tint *n* when the quantizer had no seed for it, always applied to the first
 /// colour that does exist — rotating from the previous fill would let the set walk away from the
@@ -107,16 +139,10 @@ impl Tint {
 /// clamping turned its red into a second violet. Separation is the Slint side's job, by giving each
 /// wash a region of its own.
 ///
-/// `artwork_chroma` decides how far the floor may lift a dull seed — a greyscale sleeve keeps its
-/// greys. `fallback` supplies the hue when the artwork gave nothing, and is never used to *pad* a
-/// short list: one hue's worth of cover gets a full set of its own colours, not the app's.
-pub(crate) fn tints(
-    seeds: [Option<u32>; SEED_COUNT],
-    artwork_chroma: f64,
-    fallback: u32,
-) -> [Tint; SEED_COUNT] {
+/// `fallback` supplies the hue when the artwork gave nothing, and is never used to *pad* a short
+/// list: one hue's worth of cover gets a full set of its own colours, not the app's.
+pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], fallback: u32) -> [Tint; SEED_COUNT] {
     let origin = seeds.iter().flatten().next().copied().unwrap_or(fallback);
-    let (floor, ceiling) = chroma_band(artwork_chroma);
 
     let ranked: [Tint; SEED_COUNT] = std::array::from_fn(|tint| {
         let (source, weight) = match seeds[tint] {
@@ -124,7 +150,7 @@ pub(crate) fn tints(
             None => (rotate_hue(origin, FILL_HUES[tint]), FILL_WEIGHT),
         };
         Tint {
-            rgb: to_tone_with_chroma(source, TINT_TONE, floor, ceiling),
+            rgb: to_tone_capped_chroma(source, TINT_TONE, TINT_MAX_CHROMA),
             weight,
         }
     });

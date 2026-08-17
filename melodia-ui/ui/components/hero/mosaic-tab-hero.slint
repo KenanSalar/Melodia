@@ -122,8 +122,6 @@ export component MosaicTabHero inherits Rectangle {
         has-blur: root.has-blur;
     }
 
-    // No vignette: the component's is sized for a full page, and its circle on a strip this shape
-    // darkens the left and right ends and nothing else — end-caps rather than a frame.
     if root.aurora-shown: AuroraBackdrop {
         x: 0; y: 0;
         width: 100%; height: 100%;
@@ -134,7 +132,6 @@ export component MosaicTabHero inherits Rectangle {
         tint-3: HeroBackdrop.tint-3;
         tint-4: HeroBackdrop.tint-4;
         dither: HeroBackdrop.dither;
-        vignette: transparent;
     }
 
     VerticalLayout {

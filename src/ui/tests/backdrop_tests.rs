@@ -4,9 +4,9 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::ui::aurora;
 use crate::ui::backdrop::{
-    BackdropColors, BackdropKind, BackdropSample, CHROME_MAX_TONE, CHROME_RATIO, SEED_COUNT,
-    TEXT_RATIO, chrome_tone, composited_tone, floor_luma, gradient_luma, luma_p90, muted_tone,
-    rgb_lstar, scrim_alpha, solve, text_tone,
+    BackdropColors, BackdropKind, BackdropSample, CHROME_MAX_TONE, CHROME_RATIO, FLOOR_TONE_START,
+    SEED_COUNT, TEXT_RATIO, byte_tone, chrome_tone, composited_tone, floor_luma, gradient_luma,
+    grey_byte, luma_p90, muted_tone, rgb_lstar, scrim_alpha, solve, text_tone,
 };
 
 /// A Catppuccin-Mocha-ish mauve, the default accent — a realistic seed for the
@@ -445,9 +445,27 @@ fn a_white_cover_now_clears_the_non_text_bar() {
 
 // --- the aurora's stated peak -----------------------------------------------
 //
-// The peak's own bounds are `const _: () = assert!(…)` in `ui::aurora`, since both sides are
-// constants and a build failure beats a test failure. What is left here is what they can't
-// reach: that the tiers solved against it actually clear their targets.
+// The peak's bounds against the tone bands either side of it are `const _: () = assert!(…)` in
+// `ui::aurora`, since both sides are constants and a build failure beats a test failure. What is
+// left here is what they can't reach: the composite the geometry actually produces, which needs
+// this module's transfer functions, and that the tiers solved against it clear their targets.
+
+/// The peak is stated rather than measured — there is no buffer — but it is not a guess: it is what
+/// a wash at `TINT_TONE` composites to over the brightest gradient-floor stop at the coverage the
+/// blob geometry produces. Move an anchor, a reach or a peak alpha and this is what says so.
+#[test]
+fn the_stated_peak_bounds_the_composite_the_geometry_produces() {
+    let coverage = aurora::peak_coverage();
+    let composited = coverage
+        .mul_add(grey_byte(aurora::TINT_TONE), (1.0 - coverage) * grey_byte(FLOOR_TONE_START));
+    let tone = byte_tone(composited);
+
+    assert!(
+        tone <= aurora::PEAK_TONE,
+        "the washes reach L*{tone:.1} at {coverage:.2} coverage, over the stated {}",
+        aurora::PEAK_TONE
+    );
+}
 
 /// What `a_white_cover_now_clears_the_non_text_bar` does for the blur, on the surface whose
 /// brightest point is stated rather than measured.
