@@ -22,7 +22,7 @@ use std::cell::Cell;
 
 use slint::ComponentHandle;
 
-use crate::themes::{brush, color};
+use crate::themes::color;
 use crate::ui::aurora::{self, Tint, WASH_COUNT};
 use crate::ui::backdrop::{self, BackdropColors, BackdropSample};
 use crate::{AppWindow, HeroBackdrop};
@@ -108,8 +108,8 @@ fn write(ui: &AppWindow, colors: &BackdropColors, fill: HeroFill) {
     g.set_chrome_text(backdrop::chrome_text_brush(colors));
     g.set_chip_fill(backdrop::chip_fill_brush(colors));
     g.set_scrim(backdrop::scrim_brush(colors));
-    g.set_on_backdrop(brush(colors.text));
-    g.set_on_backdrop_muted(brush(colors.muted));
+    g.set_on_backdrop(backdrop::text_brush(colors));
+    g.set_on_backdrop_muted(backdrop::muted_brush(colors));
 
     match fill {
         // A `None` leaves the washes where they are, as the gradient arm does: nothing paints them

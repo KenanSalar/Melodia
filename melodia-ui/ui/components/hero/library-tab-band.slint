@@ -138,7 +138,7 @@ export component LibraryTabBand inherits Rectangle {
     property <brush> hero-label: root.detail-open ? HeroBackdrop.on-backdrop : Theme.text;
     property <brush> hero-active: root.detail-open ? HeroBackdrop.chrome : Theme.accent;
     property <brush> hero-hover:
-        root.detail-open ? HeroBackdrop.on-backdrop.with-alpha(0.12) : Theme.surface0;
+        root.detail-open ? HeroBackdrop.on-backdrop.transparentize(0.88) : Theme.surface0;
     property <brush> hero-divider: root.detail-open ? HeroBackdrop.tile-edge : Theme.surface1;
     animate hero-label, hero-active, hero-hover, hero-divider {
         duration: Theme.dur-med;
@@ -404,7 +404,7 @@ export component LibraryTabBand inherits Rectangle {
 
                         Text {
                             text: "\u{200e}" + root.title;
-                            color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);
+                            color: HeroBackdrop.on-backdrop.transparentize(1.0 - root.hero-t);
                             font-size: Theme.hero-title-size;
                             font-weight: Theme.page-title-weight;
                             horizontal-alignment: left;
@@ -415,7 +415,7 @@ export component LibraryTabBand inherits Rectangle {
                     if root.subtitle != "": Text {
                         vertical-stretch: 0;
                         text: "\u{200e}" + root.subtitle;
-                        color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);
+                        color: HeroBackdrop.on-backdrop.transparentize(1.0 - root.hero-t);
                         font-size: Theme.font-size-md;
                         horizontal-alignment: left;
                         overflow: elide;

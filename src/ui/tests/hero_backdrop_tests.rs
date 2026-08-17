@@ -534,17 +534,21 @@ fn the_palette_is_never_written_without_re_solving_the_backdrops() {
 /// `with-alpha` replaces where `transparentize` multiplies, so a fill spelled that way discards
 /// whatever alpha `chrome` carries — which on the aurora is the neutral ink's, and the whole
 /// mechanism by which the wash reads through it. It looks right on the blur arm, where the tier is
-/// opaque and the two spellings agree. All three weights are held, not just the glyphs': the
-/// lettering and its pill each carry an alpha Rust solved per arm.
+/// opaque and the two spellings agree. Every tier is held, not just the chrome's: the lettering,
+/// its pill and both body-text weights each carry an alpha Rust solved per arm.
 #[test]
 fn no_fill_derived_from_the_chrome_tier_sets_its_alpha() {
-    const TIERS: [&str; 6] = [
+    const TIERS: [&str; 10] = [
         "chrome",
         "chrome-text",
         "chip-fill",
+        "on-backdrop",
+        "on-backdrop-muted",
         "np-accent-bright",
         "np-chrome-text",
         "np-chip-fill",
+        "np-on-backdrop",
+        "np-on-backdrop-muted",
     ];
 
     for (path, src) in crate::test_support::stripped_sources(

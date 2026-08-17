@@ -15,7 +15,6 @@ fn mocha() -> ThemeTokens {
     ThemeTokens {
         base: 0x001e_1e2e,
         text: 0x00cd_d6f4,
-        subtext: 0x00ba_c2de,
         accent: THEME_ACCENT,
     }
 }

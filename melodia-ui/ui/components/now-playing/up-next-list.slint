@@ -217,7 +217,7 @@ export component UpNextList inherits Rectangle {
                         icon-size: compact ? 28px : 40px;
                         icon-color: compact
                             ? Theme.surface2
-                            : Player.np-on-backdrop-muted.with-alpha(0.5);
+                            : Player.np-on-backdrop-muted.transparentize(0.5);
                     }
                 }
                 Text {

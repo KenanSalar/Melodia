@@ -21,7 +21,6 @@ fn mocha() -> ThemeTokens {
     ThemeTokens {
         base: 0x001e_1e2e,
         text: 0x00cd_d6f4,
-        subtext: 0x00ba_c2de,
         accent: SEED,
     }
 }
@@ -30,7 +29,6 @@ fn latte() -> ThemeTokens {
     ThemeTokens {
         base: 0x00ef_f1f5,
         text: 0x004c_4f69,
-        subtext: 0x005c_5f77,
         accent: 0x0088_39ef,
     }
 }
@@ -490,16 +488,23 @@ fn the_aurora_arm_publishes_the_theme_and_the_blur_arm_solves() {
         (theme.base, theme.base),
         "the aurora's gradient is the theme's own base"
     );
+    // Both text tiers are the same neutral ink as the chrome, told apart by weight alone — the
+    // theme's own `text`/`subtext1` carry their palette's cast, which over an album's washes is a
+    // second hue arguing with them.
     assert_eq!(
         (aurora_arm.text, aurora_arm.muted),
-        (theme.text, theme.subtext),
-        "the aurora's text tiers are the theme's own ink"
+        (aurora_arm.chrome, aurora_arm.chrome),
+        "the aurora's text tiers left the neutral ink"
+    );
+    assert!(
+        aurora_arm.muted_alpha < aurora_arm.text_alpha,
+        "the aurora's two text tiers are one colour, so a weight gap is the only hierarchy left"
     );
 
     let blur_arm = sample.solve(&theme, BackdropKind::Blur);
     assert_ne!(
         (blur_arm.chrome, blur_arm.text, blur_arm.muted),
-        (theme.accent, theme.text, theme.subtext),
+        (theme.accent, theme.text, theme.text),
         "the blur still solves its foreground against what it measured"
     );
 }

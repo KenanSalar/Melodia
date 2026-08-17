@@ -111,6 +111,16 @@ const CHIP_FILL_WEIGHT: f32 = 0.16;
 /// a darker surface to clear.
 const AURORA_CHIP_FILL_ALPHA: f32 = 0.08;
 
+/// Body text on the aurora — neutral ink like the chrome, not the theme's own. `Theme.text` carries
+/// its palette's cast (Mocha's is blue), which over an album's washes reads as a second hue arguing
+/// with them. Level with the chip lettering: a title is already the largest and heaviest thing on
+/// the surface, so weight on top of that reads as shouting rather than as hierarchy.
+const AURORA_TEXT_ALPHA: f32 = 0.85;
+
+/// Its secondary half — artist, album, the Up-Next lines. The gap to [`AURORA_TEXT_ALPHA`] is what
+/// carries the hierarchy now that both are one colour.
+const AURORA_MUTED_ALPHA: f32 = 0.70;
+
 /// Far finer than the tone bands care about, and small enough to live on the stack.
 const HISTOGRAM_BINS: usize = 64;
 
@@ -433,6 +443,10 @@ pub(crate) struct BackdropColors {
     pub text: u32,
     /// Secondary body text.
     pub muted: u32,
+    /// Alphas for the two above — 1.0 on the blur, where each is a tone solved per cover, and
+    /// partial on the aurora, where both are the same neutral ink the washes colour.
+    pub text_alpha: f32,
+    pub muted_alpha: f32,
 }
 
 /// Solve the blur's whole set from one seed hue and one backdrop measurement.
@@ -458,6 +472,8 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
         chip_fill_alpha: CHIP_FILL_WEIGHT,
         text: to_tone_capped_chroma(seed_argb, text_tone(tone), TEXT_MAX_CHROMA),
         muted: to_tone_capped_chroma(seed_argb, muted_tone(tone), MUTED_MAX_CHROMA),
+        text_alpha: 1.0,
+        muted_alpha: 1.0,
     }
 }
 
@@ -486,8 +502,10 @@ fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
         chrome_alpha: NEUTRAL_CHROME_ALPHA,
         chrome_text_alpha: AURORA_CHROME_TEXT_ALPHA,
         chip_fill_alpha: AURORA_CHIP_FILL_ALPHA,
-        text: theme.text,
-        muted: theme.subtext,
+        text: neutral_ink(theme),
+        muted: neutral_ink(theme),
+        text_alpha: AURORA_TEXT_ALPHA,
+        muted_alpha: AURORA_MUTED_ALPHA,
     }
 }
 
@@ -536,9 +554,6 @@ pub(crate) struct ThemeTokens {
     pub base: u32,
     /// Primary ink.
     pub text: u32,
-    /// Secondary ink. `subtext1` rather than `Theme.text-muted`, which carries its dimming in
-    /// alpha and would arrive here as plain `text`.
-    pub subtext: u32,
     /// The hue-carrying tier, and the hue [`BackdropSample::solve`]'s blur arm falls back to for
     /// an entry with no artwork.
     pub accent: u32,
@@ -549,7 +564,6 @@ pub(crate) fn theme_tokens(ui: &AppWindow) -> ThemeTokens {
     ThemeTokens {
         base: brush_to_rgb(&theme.get_base()),
         text: brush_to_rgb(&theme.get_text()),
-        subtext: brush_to_rgb(&theme.get_subtext1()),
         accent: brush_to_rgb(&theme.get_accent()),
     }
 }
@@ -583,15 +597,29 @@ pub(crate) fn chip_fill_brush(colors: &BackdropColors) -> Brush {
     chrome_at(colors, colors.chip_fill_alpha)
 }
 
-/// One colour at one of its three weights — the tier differs only in how much wash reads through.
+/// Primary and secondary body text. Opaque on the blur, where each is its own solved tone; one
+/// neutral ink at two weights on the aurora, the wash supplying what the ink doesn't carry.
+pub(crate) fn text_brush(colors: &BackdropColors) -> Brush {
+    tier(colors.text, colors.text_alpha)
+}
+
+pub(crate) fn muted_brush(colors: &BackdropColors) -> Brush {
+    tier(colors.muted, colors.muted_alpha)
+}
+
+/// One colour at one of its weights — a tier differs only in how much wash reads through.
 fn chrome_at(colors: &BackdropColors, alpha: f32) -> Brush {
+    tier(colors.chrome, alpha)
+}
+
+fn tier(rgb: u32, alpha: f32) -> Brush {
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
         reason = "every arm sets a literal in 0..=1"
     )]
     let alpha = (alpha * 255.0).round() as u8;
-    brush_with_alpha(colors.chrome, alpha)
+    brush_with_alpha(rgb, alpha)
 }
 
 #[cfg(test)]

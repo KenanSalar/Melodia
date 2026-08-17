@@ -62,5 +62,5 @@ export global HeroBackdrop {
     // The mosaic heroes' square, the only bordered hero surface. A `Theme.border` hairline is
     // solved for neither backdrop — it vanishes over the blur's dark floor and turns a hard ring
     // over a light aurora — so the edge is a hero token for the same reason the fill is.
-    out property <brush> tile-edge: root.on-backdrop.with-alpha(0.12);
+    out property <brush> tile-edge: root.on-backdrop.transparentize(0.88);
 }

@@ -231,7 +231,7 @@ export component NowPlayingView inherits Rectangle {
                     // cell, so an album-less track reserved a full text line for nothing.
                     if Player.vm.has_track && Player.vm.track.album != "": Text {
                         text: "‎" + Player.vm.track.album;
-                        color: Player.np-on-backdrop-muted.with-alpha(0.75);
+                        color: Player.np-on-backdrop-muted.transparentize(0.25);
                         font-size: Theme.font-size-md;
                         horizontal-alignment: center;
                         overflow: elide;

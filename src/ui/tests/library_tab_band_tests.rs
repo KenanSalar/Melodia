@@ -565,16 +565,15 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
          whole of the bug"
     );
     assert_eq!(
-        title.matches("color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);").count(),
+        title.matches("color: HeroBackdrop.on-backdrop.transparentize(1.0 - root.hero-t);").count(),
         2,
         "the title *and* the subtitle must carry the fade in their own brush. The subtitle is the \
          block's last child, so it is the edge a layer cut from below — fixing only the title \
          moves the crop rather than removing it"
     );
-    // `transparentize` where the two text tiers take `with-alpha`, and the asymmetry is the point:
-    // `on-backdrop` is opaque on both arms, where `chrome` carries alpha of its own on the aurora's
-    // — setting it here would paint the badge opaque at rest and drop the neutral tier's whole
-    // mechanism, which is the wash reading through it.
+    // Every tier here carries alpha of its own on the aurora arm, so a fade multiplies into it;
+    // `with-alpha` would set it instead and paint the block opaque at rest, dropping the whole
+    // mechanism, which is the wash reading through.
     assert!(
         title.contains("icon-color: HeroBackdrop.chrome.transparentize(1.0 - root.hero-t);"),
         "the smart-playlist badge fades with the text beside it — left on a flat brush it is the \

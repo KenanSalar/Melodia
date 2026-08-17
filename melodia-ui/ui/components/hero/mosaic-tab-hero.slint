@@ -79,7 +79,7 @@ export component MosaicTabHero inherits Rectangle {
     // anchor. The bar itself must not ease these — see `tab-bar.slint`'s two floats.
     property <brush> hero-label: HeroBackdrop.on-backdrop;
     property <brush> hero-active: HeroBackdrop.chrome;
-    property <brush> hero-hover: HeroBackdrop.on-backdrop.with-alpha(0.12);
+    property <brush> hero-hover: HeroBackdrop.on-backdrop.transparentize(0.88);
     property <brush> hero-divider: HeroBackdrop.tile-edge;
     animate hero-label, hero-active, hero-hover, hero-divider {
         duration: Theme.dur-med;
