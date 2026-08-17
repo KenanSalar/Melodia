@@ -53,7 +53,9 @@ export component NowPlayingView inherits Rectangle {
 
     // Which of the two backdrops this view paints. Slint has no element-level `else`, so the pair
     // below is two `if`s over one property rather than two spellings of the condition.
-    property <bool> aurora-shown: Theme.aurora-backdrop;
+    // **`np-has-tints` is folded in**: a track with no artwork has no colours to wash, so it keeps
+    // the blur — whose art-less arm is the accent-seeded floor this view was built on.
+    property <bool> aurora-shown: Theme.aurora-backdrop && Player.np-has-tints;
 
     // The stack the six hero bands mount, on this view's own colour tier. **Both floor stops come
     // from Rust**, not a `Theme.accent` mix — this is the surface an art-less track's title sits on

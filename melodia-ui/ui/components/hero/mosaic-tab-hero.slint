@@ -104,9 +104,10 @@ export component MosaicTabHero inherits Rectangle {
     vertical-stretch: 0;
     height: root.hero-height;
 
-    // Behind everything else, and one of the two. The setting alone gates it: this band can never
-    // show a genre, so `HeroBackdrop.has-tints` has nothing to say here.
-    property <bool> aurora-shown: Theme.aurora-backdrop;
+    // Behind everything else, and one of the two. **`has-tints` is folded in** — it means "there
+    // was artwork to wash", so a curated set whose every entry lacks a cover keeps the blur here
+    // just as a genre does on the sibling band.
+    property <bool> aurora-shown: Theme.aurora-backdrop && HeroBackdrop.has-tints;
 
     // The gradient floor shows through when there is no blur image.
     if !root.aurora-shown: HeroBlurBackdrop {

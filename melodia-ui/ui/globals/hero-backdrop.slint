@@ -20,9 +20,10 @@ export global HeroBackdrop {
     in-out property <color> tint-3: #4a2d3a;
     in-out property <color> tint-4: #2d4a3a;
 
-    // `has-blur`'s twin: how a host says "not this one". False only for Genre Detail, which shares
-    // this band with three artwork heroes and has no artwork to wash — its name-hashed stops sit
-    // near L*50 and are legible only under the scrim the blur arm solves.
+    // `has-blur`'s twin: how a host says "not this one". False wherever there was no artwork to
+    // wash — Genre Detail, whose name-hashed stops sit near L*50 and are legible only under the
+    // scrim the blur arm solves, and any entry showing the placeholder, whose only alternative
+    // would be washing the app's own accent. All three mount sites fold it in.
     in-out property <bool> has-tints: true;
 
     // Written once at boot, answering to the renderer rather than to the artwork;

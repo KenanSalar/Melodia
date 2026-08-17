@@ -28,6 +28,15 @@ const SITES: [&str; 3] = [
     "components/hero/library-tab-band.slint",
 ];
 
+/// The artwork gate each site folds into `aurora-shown`, beside the setting. Two globals rather
+/// than one: Now Playing paints its own `np-*` tier, the two bands the shared one, and they are
+/// kept separate because a band stays mounted behind an open Now Playing.
+const TINT_GATES: [(&str, &str); 3] = [
+    ("views/now-playing-view.slint", "Player.np-has-tints"),
+    ("components/hero/mosaic-tab-hero.slint", "HeroBackdrop.has-tints"),
+    ("components/hero/library-tab-band.slint", "HeroBackdrop.has-tints"),
+];
+
 /// The gradient floor eases, on the same token the layers above it take. Anchored on the
 /// binding rather than searched loosely: what this catches is one line deleted from
 /// directly under the gradient.
@@ -174,6 +183,38 @@ fn every_backdrop_site_mounts_one_of_the_two() {
                  one setting painting nothing, and a second mount covers the arm being judged"
             );
         }
+    }
+}
+
+/// Every site gates the aurora on artwork as well as on the setting.
+///
+/// The washes are the record's own colours, so an entry showing the placeholder leaves the aurora
+/// no subject — and what it fell back to was four rotations of `Theme.accent` over `Theme.base`.
+/// The Rust half is unspellable (`HeroFill::Artwork` carries the washes or nothing, and `solve`
+/// answers with the blur's tiers for an empty sample), but the *mount* is three independent
+/// conditions reading two different globals, and it shipped with two of the three missing —
+/// visible only on an entry with no cover, which is not what a backdrop gets judged on.
+#[test]
+fn every_backdrop_site_gates_the_aurora_on_artwork() {
+    let tree = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);
+    for (site, gate) in TINT_GATES {
+        let src = tree
+            .iter()
+            .find(|(path, _)| path.ends_with(site))
+            .map(|(_, src)| src.as_str())
+            .unwrap_or_default();
+        // The binding's own text, so a mention of the gate anywhere else in the file can't
+        // stand in for folding it into the condition.
+        let binding = src
+            .split_once("property <bool> aurora-shown:")
+            .and_then(|(_, rest)| rest.split_once(';'))
+            .map(|(binding, _)| binding)
+            .unwrap_or_default();
+        assert!(
+            binding.contains(gate),
+            "{site} reads `aurora-shown:{binding}` — it must fold `{gate}` in, or an entry with \
+             no artwork washes the app's accent over the app's base"
+        );
     }
 }
 

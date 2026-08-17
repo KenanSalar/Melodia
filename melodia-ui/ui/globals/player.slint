@@ -73,6 +73,11 @@ export global Player {
     in-out property <color> np-tint-3: #4a2d3a;
     in-out property <color> np-tint-4: #2d4a3a;
 
+    // `HeroBackdrop.has-tints`' twin, and the same axis: whether the track had artwork to wash at
+    // all. False leaves the washes above unread and the view on the blur, since a placeholder has
+    // no colours of its own and the aurora's whole subject is the record's.
+    in-out property <bool> np-has-tints: true;
+
     // The aurora's grain, written once at boot. Here rather than beside the tints because it
     // answers to the renderer rather than to the artwork; `ui::aurora::dither_tile` argues it.
     in-out property <image> np-dither;

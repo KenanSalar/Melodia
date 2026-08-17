@@ -71,7 +71,8 @@ const _: () = assert!(
 /// Hue rotation for tint *n* when the quantizer had no seed for it, always applied to the first
 /// colour that does exist — rotating from the previous fill would let the set walk away from the
 /// album. A fan either side at the analogous step, so an invented set is harmonious by
-/// construction; entry 0 is the identity, reaching it meaning no artwork at all.
+/// construction. Entry 0 is the identity and unreachable: `seeds[0]` empty means no artwork, and
+/// both publishers keep the blur for that rather than calling [`tints`] at all.
 const FILL_HUES: [f64; SEED_COUNT] = [0.0, 25.0, -25.0, 50.0];
 
 /// How faintly a synthesized tint is laid on, against 1.0 for one the artwork offered. **A backdrop
@@ -108,8 +109,10 @@ impl Tint {
 /// is the theme's: bright enough that a dark variant's ink still clears its bar over the composite,
 /// pastel enough that a light variant's does.
 ///
-/// `theme`'s accent supplies the hue when the artwork gave nothing, and is never used to *pad* a
-/// short list: one hue's worth of cover gets a full set of its own colours, not the app's.
+/// `theme`'s accent is never used to *pad* a short list: one hue's worth of cover gets a full set
+/// of its own colours, not the app's. It only stands in for an *empty* one, which keeps this total
+/// but is no longer a case either publisher produces — an entry with no artwork keeps the blur, and
+/// the app's accent washed over the app's base was the reason.
 pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], theme: &ThemeTokens) -> [Tint; SEED_COUNT] {
     let origin = seeds.iter().flatten().next().copied().unwrap_or(theme.accent);
     let (min_tone, max_tone) = wash_cap(theme, peak_coverage());

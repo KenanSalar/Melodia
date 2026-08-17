@@ -169,11 +169,17 @@ pub(super) async fn apply_track_change(
     player.set_np_floor_end(color(colors.floor_end));
     player.set_np_scrim(backdrop::scrim_brush(&colors));
 
-    let [tint_1, tint_2, tint_3, tint_4] = aurora::tints(sample.seeds, &theme);
-    player.set_np_tint_1(tint_1.to_color());
-    player.set_np_tint_2(tint_2.to_color());
-    player.set_np_tint_3(tint_3.to_color());
-    player.set_np_tint_4(tint_4.to_color());
+    // A track with no artwork keeps the blur, `hero_backdrop::apply`'s rule on this view's own
+    // tier: `solve` above has already answered with the blur's colours, and this is what stops the
+    // mount laying the aurora over them.
+    let tints = sample.carries_artwork().then(|| aurora::tints(sample.seeds, &theme));
+    player.set_np_has_tints(tints.is_some());
+    if let Some([tint_1, tint_2, tint_3, tint_4]) = tints {
+        player.set_np_tint_1(tint_1.to_color());
+        player.set_np_tint_2(tint_2.to_color());
+        player.set_np_tint_3(tint_3.to_color());
+        player.set_np_tint_4(tint_4.to_color());
+    }
 
     write_crossfade_slot(
         blurred,

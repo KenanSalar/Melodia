@@ -271,6 +271,17 @@ impl BackdropSample {
         }
     }
 
+    /// Whether there was artwork to measure — the second axis the aurora turns on, over and above
+    /// the setting.
+    ///
+    /// `accent_argb` is `seeds[0]`, so this asks whether the quantizer answered at all and never
+    /// whether the cover was colourful: a greyscale sleeve carries its own greys and washes with
+    /// them. Publishers hand it to `has-tints` / `np-has-tints` so the mount and [`Self::solve`]
+    /// can't disagree about which arm is painting.
+    pub(crate) fn carries_artwork(self) -> bool {
+        self.accent_argb.is_some()
+    }
+
     /// The whole colour set for whichever surface is mounted.
     ///
     /// On the blur arm only the *hue* is borrowed from `theme` — its accent stands in when there
@@ -278,10 +289,16 @@ impl BackdropSample {
     /// one's colour, and [`solve`] owns every tone. On the aurora arm the measurement is not
     /// consulted at all: [`theme_backdrop`] answers, and the washes are bounded rather than
     /// solved against.
+    ///
+    /// **An entry with no artwork keeps the blur under either setting**, which is why the aurora
+    /// arm is guarded rather than reached on the flag alone. Its whole subject is the record's own
+    /// colours, and a placeholder has none — washing the app's accent instead paints the theme
+    /// twice and says nothing about what is playing. Genre Detail reaches the same conclusion
+    /// through [`apply_gradient`](crate::ui::hero_backdrop::apply_gradient), one step earlier.
     pub(crate) fn solve(self, theme: &ThemeTokens, kind: BackdropKind) -> BackdropColors {
         match kind {
-            BackdropKind::Aurora => theme_backdrop(theme),
-            BackdropKind::Blur => solve(
+            BackdropKind::Aurora if self.carries_artwork() => theme_backdrop(theme),
+            BackdropKind::Aurora | BackdropKind::Blur => solve(
                 self.accent_argb.unwrap_or(theme.accent),
                 self.luma.unwrap_or_else(floor_luma),
             ),

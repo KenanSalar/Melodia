@@ -183,12 +183,21 @@ silently miss the other.
   `aurora-shown` property and two `if`s each** — Slint has no element-level `else`, and a second
   spelling of the condition can invert alone. Whichever arm is unmounted costs nothing.
 
-- **`has-tints` is the Genre gate, and only `LibraryTabBand` folds it in.** `apply_gradient` is its
-  one `false`: a genre has no artwork to wash, and its name-hashed stops are legible only under the
-  scrim the blur arm solves, so Genre Detail keeps the blur under both settings. The mosaic heroes
-  gate on the setting alone, never being able to show a genre. Flipping it *remounts* rather than
-  eases, which is why the arms may only cross where nothing is on screen — every path into or out
-  of a genre passes through the band's collapse or through `reset`.
+- **`has-tints` means "there was artwork to wash", and all three mount sites fold it in** — the two
+  bands off `HeroBackdrop.has-tints`, Now Playing off its own `Player.np-has-tints`. Two things set
+  it `false`: `apply_gradient`, a genre having no artwork and its name-hashed stops being legible
+  only under the scrim the blur arm solves; and **any entry showing the placeholder**, whose only
+  alternative was four rotations of `Theme.accent` over `Theme.base` — the theme painted twice,
+  saying nothing about what is playing. **One decision with two halves that must agree**:
+  `BackdropSample::solve` already answers with the blur's tiers for an empty sample, so a mount
+  skipping the gate laid the aurora over colours solved for the other arm. Rust's half is
+  unspellable (`hero_backdrop::HeroFill::Artwork` carries the washes or nothing); the mount half is
+  three independent conditions over two globals and shipped with two of them missing, so it is
+  pinned by `hero_blur_backdrop_tests::every_backdrop_site_gates_the_aurora_on_artwork`.
+  Flipping it *remounts* rather than eases, so the arms cut rather than cross. On the bands that is
+  unobservable — a detail can only be swapped through the collapse or through `reset` — and on Now
+  Playing it is a hard cut at the art→no-art track boundary, taken as the price of not washing the
+  accent.
 
 - **`ActionPill`/`SearchBar` inside a hero are the deliberate exception** and stay on
   `Theme.floating-chrome-bg`, still mostly their own surface — safe only because the backdrop is

@@ -625,6 +625,43 @@ fn the_aurora_arm_publishes_the_theme_and_the_blur_arm_solves() {
     );
 }
 
+/// With nothing to wash, the aurora arm *is* the blur arm.
+///
+/// The washes are the record's own colours, so a placeholder leaves the aurora no subject — and
+/// what it fell back to was four rotations of `Theme.accent` over `Theme.base`, which paints the
+/// theme twice and says nothing about what is playing. Genre Detail reached the same conclusion one
+/// step earlier, through `apply_gradient`; this is the same rule for every art-less entry. Asserted
+/// against the theme's own pair as well, so the equality can't pass on an arm that stopped solving.
+#[test]
+fn an_entry_with_no_artwork_keeps_the_blur_under_either_setting() {
+    let theme = mocha();
+    let empty = BackdropSample::default();
+    assert!(!empty.carries_artwork(), "the default sample is what a missing cover reaches");
+
+    let aurora_arm = empty.solve(&theme, BackdropKind::Aurora);
+    let blur_arm = empty.solve(&theme, BackdropKind::Blur);
+    assert_eq!(
+        (aurora_arm.floor_start, aurora_arm.floor_end, aurora_arm.chrome, aurora_arm.text),
+        (blur_arm.floor_start, blur_arm.floor_end, blur_arm.chrome, blur_arm.text),
+        "with no artwork the setting decides nothing — both arms are the blur's solve"
+    );
+    assert_ne!(
+        (aurora_arm.floor_start, aurora_arm.floor_end),
+        (theme.base, theme.mantle),
+        "an art-less surface takes the blur's own floor, not the theme's base"
+    );
+
+    // The guard is on the artwork, not on the theme: a measured cover still reaches the aurora.
+    let measured = BackdropSample::measure(&solid(32, 0x80));
+    assert!(measured.carries_artwork());
+    let measured_aurora = measured.solve(&theme, BackdropKind::Aurora);
+    assert_eq!(
+        (measured_aurora.floor_start, measured_aurora.floor_end),
+        (theme.base, theme.mantle),
+        "a cover that was measured still publishes the theme's own base"
+    );
+}
+
 /// A white and a black cover leave the aurora identical — the surface is the theme's, and the
 /// measurement reaches nothing on this arm. The blur's own scrim still moves, which is what keeps
 /// the equality from comparing one input with itself.

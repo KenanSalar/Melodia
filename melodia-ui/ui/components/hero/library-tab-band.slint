@@ -229,10 +229,11 @@ export component LibraryTabBand inherits Rectangle {
     out property <string> tip-label <=> header.tip-label;
     out property <bool> tip-visible <=> header.tip-visible;
 
-    // Behind everything else, and one of the two. **`has-tints` is folded in** because this band
-    // carries Genre Detail as well as the three artwork details. Flipping it remounts rather than
-    // eases, so the arms may only cross where nothing is on screen — every path into or out of a
-    // genre passes through the collapse below or through `reset`.
+    // Behind everything else, and one of the two. **`has-tints` is folded in**: it means "there was
+    // artwork to wash", so both Genre Detail and an album with no cover keep the blur. Flipping it
+    // remounts rather than eases, so the arms may only cross where nothing is on screen — which
+    // holds here because a detail can only be swapped through the collapse below or through
+    // `reset`.
     property <bool> aurora-shown: Theme.aurora-backdrop && HeroBackdrop.has-tints;
 
     // The gradient floor shows through with no blur image, which Genre Detail's procedural backdrop
