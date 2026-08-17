@@ -229,17 +229,17 @@ export component LibraryTabBand inherits Rectangle {
     out property <string> tip-label <=> header.tip-label;
     out property <bool> tip-visible <=> header.tip-visible;
 
-    // Behind everything else, and one of the two. **`has-tints` is folded in**: it means "there was
-    // artwork to wash", so both Genre Detail and an album with no cover keep the blur. Flipping it
-    // remounts rather than eases, so the arms may only cross where nothing is on screen — which
-    // holds here because a detail can only be swapped through the collapse below or through
-    // `reset`.
+    // Behind everything else. **`has-tints` is folded in**: it means "there was artwork to wash",
+    // so both Genre Detail and an album with no cover keep the blur. Both stacks stay mounted and
+    // the loser goes transparent, so a change of arm cross-fades — which on this band is belt and
+    // braces, a detail only being swappable through the collapse below or through `reset`.
     property <bool> aurora-shown: Theme.aurora-backdrop && HeroBackdrop.has-tints;
 
-    // The gradient floor shows through with no blur image, which Genre Detail's procedural backdrop
-    // relies on. **`hero-open` is this band's alone** — the mosaic heroes never stop painting one,
-    // and nothing may ease *from* a tier the band wasn't painting.
-    if !root.aurora-shown: HeroBlurBackdrop {
+    // Both mounted, the loser transparent. The gradient floor shows through with no blur image,
+    // which Genre Detail's procedural backdrop relies on. **`detail-open` is this band's alone** —
+    // the mosaic heroes never stop painting a hero, and nothing may ease *from* a tier the band
+    // wasn't painting, so it ANDs into both `shown` terms rather than replacing them.
+    HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: 100%;
         floor-start: HeroBackdrop.floor-start;
@@ -249,10 +249,11 @@ export component LibraryTabBand inherits Rectangle {
         blur-b: root.blur-b;
         use-a: root.use-a;
         has-blur: root.has-blur;
-        hero-open: root.detail-open;
+        shown: root.detail-open && !root.aurora-shown;
     }
 
-    if root.aurora-shown: AuroraBackdrop {
+    // Second, so it covers the blur when it wins — both bases are opaque, so paint order decides.
+    AuroraBackdrop {
         x: 0; y: 0;
         width: 100%; height: 100%;
         base-start: HeroBackdrop.floor-start;
@@ -262,7 +263,7 @@ export component LibraryTabBand inherits Rectangle {
         tint-3: HeroBackdrop.tint-3;
         tint-4: HeroBackdrop.tint-4;
         dither: HeroBackdrop.dither;
-        hero-open: root.detail-open;
+        shown: root.detail-open && root.aurora-shown;
     }
 
     // The idle pane, over the backdrop rather than instead of it. **The alpha is folded into the

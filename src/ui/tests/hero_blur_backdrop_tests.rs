@@ -81,33 +81,34 @@ fn the_shared_backdrop_rides_one_duration() {
     );
 }
 
-/// The floor's gate defaults to "a hero is up", which is what keeps the mosaic bands and
-/// Now Playing out of it: none of them stops painting one, so they pass nothing. Defaulted
-/// the other way, every hero comes up on a transparent floor and stays there — on Genre
-/// Detail's, the one backdrop with no blur over it, that is the whole banner.
+/// The stack defaults to shown, and every layer it paints drains with that gate.
+///
+/// The default is what a mount that passes nothing gets, and the other way round it comes up
+/// transparent and stays there — on Genre Detail's, the one backdrop with no blur over it, that
+/// is the whole banner. All three sites do pass it now, so this is the fourth mount's answer
+/// rather than theirs.
 ///
 /// **The two arms are checked one at a time**, an inverted ternary being the same failure
 /// as an inverted default and reading correctly at a glance.
 #[test]
-fn the_floors_hero_gate_defaults_to_shown() {
+fn the_stack_defaults_to_shown_and_drains_every_layer() {
     let code = code(HERO_BLUR);
 
     assert!(
-        code.contains("in property <bool> hero-open: true;"),
-        "`HeroBlurBackdrop.hero-open` must default to `true` — the mosaic bands and Now \
-         Playing pass no value and always have a hero up, so the default is their whole \
-         answer"
+        code.contains("in property <bool> shown: true;"),
+        "`HeroBlurBackdrop.shown` must default to `true` — a mount that passes nothing has to \
+         come up painting, not blank"
     );
 
     // At the ternary's own separators: neither arm is anything but a two-stop gradient,
     // so neither carries a `?` or a `:` and this lands exactly on the two halves.
     let arms = code
-        .split_once("background: root.hero-open")
+        .split_once("background: root.shown")
         .and_then(|(_, rest)| rest.split_once(";\n"))
         .map_or("", |(arms, _)| arms);
     assert!(
         !arms.is_empty(),
-        "the floor no longer gates its gradient on `hero-open` — both pins below bound \
+        "the floor no longer gates its gradient on `shown` — both pins below bound \
          against that ternary, and with nothing to split they report an inversion instead"
     );
     let (shown_arm, idle_arm) =
@@ -126,10 +127,10 @@ fn the_floors_hero_gate_defaults_to_shown() {
     );
 
     assert!(
-        code.contains("background: root.scrim;"),
-        "the scrim stays ungated — it is solved to a tone that carries almost no chroma, so \
-         it has nothing to flash, and draining it would brighten the artwork for the length \
-         of every collapse"
+        code.contains("background: root.shown ? root.scrim : transparent;"),
+        "the scrim drains with the floor — it was the one exempt layer while this stack was \
+         alone on screen, and it now cross-fades against the aurora, where a scrim left at full \
+         strength under a half-faded pair darkens the midpoint of every crossing"
     );
 }
 
@@ -155,14 +156,20 @@ fn the_blur_stack_names_no_global() {
     }
 }
 
-/// Each site mounts exactly one of each stack, under one condition and its negation.
+/// Each site mounts both stacks once and hands each the negation of the other's `shown`.
 ///
-/// Slint has no element-level `else`, so the pair is two `if`s and the local property is
-/// what keeps the condition single-sourced. Two regressions: a site that forgets an arm
-/// (one setting paints nothing), and a site that keeps both mounted (the opaque one covers
-/// the other, which is exactly how the aurora shipped before it became an arm).
+/// **They are mounted together and cross-fade rather than swapped**, an `if` pair having nothing to
+/// fade from: the loser goes transparent through its own `shown`, which is what the two components
+/// spend their gated brushes on. So what a site can now get wrong is different from what it could
+/// before — a stack missing its `shown` takes the `true` default and sits opaque over the other
+/// forever, and two terms of the same sign leave the pair either blank or permanently blurred.
+/// Both read correctly in the source and are only visible on the setting the author wasn't using.
+///
+/// The local `aurora-shown` property is still what keeps the condition single-sourced; the terms
+/// are checked for the `!` rather than for equality with a whole string, since `LibraryTabBand`
+/// folds its own `detail-open` into both.
 #[test]
-fn every_backdrop_site_mounts_one_of_the_two() {
+fn every_backdrop_site_cross_fades_between_the_two() {
     let tree = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);
     for site in SITES {
         let src = tree
@@ -172,15 +179,39 @@ fn every_backdrop_site_mounts_one_of_the_two() {
             .unwrap_or_default();
         assert!(
             src.contains("property <bool> aurora-shown:"),
-            "{site} must name its choice once — two `if`s over one property, since Slint has \
-             no element-level `else` and a second spelling of the condition can invert alone"
+            "{site} must name its choice once — both stacks read it, and a second spelling of \
+             the condition can invert alone"
         );
-        for (stack, arm) in STACKS.iter().zip(["if !root.aurora-shown:", "if root.aurora-shown:"]) {
+        for (stack, sign) in STACKS.iter().zip(["!root.aurora-shown", "root.aurora-shown"]) {
+            let mounts: Vec<&str> =
+                src.lines().filter(|line| line.contains(&format!("{stack} {{"))).collect();
             assert_eq!(
-                src.matches(&format!("{arm} {stack} {{")).count(),
+                mounts.len(),
                 1,
-                "{site} must mount exactly one `{stack}` under `{arm}` — a missing arm leaves \
-                 one setting painting nothing, and a second mount covers the arm being judged"
+                "{site} must mount exactly one `{stack}` — it is the cross-fade's other half, \
+                 and an unmounted stack has nothing to fade from"
+            );
+            // The mount is unconditional, which is the whole of the cross-fade: an `if` in front
+            // of it reads exactly like the pair this replaced, still satisfies every `shown`
+            // assertion below, and cuts.
+            assert!(
+                mounts.iter().all(|line| !line.contains("if ")),
+                "{site} mounts `{stack}` behind an `if` — a branch destroys the stack outright, \
+                 so there is nothing left to fade and the arms cut as they did before"
+            );
+            // `!root.aurora-shown` contains `root.aurora-shown`, so the blur's term is checked
+            // first and the aurora's is checked for the negation's *absence*.
+            let mount = src
+                .split_once(&format!("{stack} {{"))
+                .and_then(|(_, rest)| rest.split_once("\n    }"))
+                .map(|(mount, _)| mount)
+                .unwrap_or_default();
+            let has_term =
+                mount.contains(&format!("shown: {sign}")) || mount.contains(&format!("&& {sign}"));
+            assert!(
+                has_term,
+                "{site}'s `{stack}` must take `shown:` carrying `{sign}` — without it the stack \
+                 defaults to `true` and sits over the other one for good"
             );
         }
     }

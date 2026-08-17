@@ -109,8 +109,10 @@ export component MosaicTabHero inherits Rectangle {
     // just as a genre does on the sibling band.
     property <bool> aurora-shown: Theme.aurora-backdrop && HeroBackdrop.has-tints;
 
-    // The gradient floor shows through when there is no blur image.
-    if !root.aurora-shown: HeroBlurBackdrop {
+    // Both mounted, the loser transparent, so the arms cross-fade rather than cut — the top four
+    // covers move as the user listens, so a set losing its last cover is reachable with the band
+    // on screen. The gradient floor shows through when there is no blur image.
+    HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: 100%;
         floor-start: HeroBackdrop.floor-start;
@@ -120,9 +122,11 @@ export component MosaicTabHero inherits Rectangle {
         blur-b: root.blur-b;
         use-a: root.use-a;
         has-blur: root.has-blur;
+        shown: !root.aurora-shown;
     }
 
-    if root.aurora-shown: AuroraBackdrop {
+    // Second, so it covers the blur when it wins — both bases are opaque, so paint order decides.
+    AuroraBackdrop {
         x: 0; y: 0;
         width: 100%; height: 100%;
         base-start: HeroBackdrop.floor-start;
@@ -132,6 +136,7 @@ export component MosaicTabHero inherits Rectangle {
         tint-3: HeroBackdrop.tint-3;
         tint-4: HeroBackdrop.tint-4;
         dither: HeroBackdrop.dither;
+        shown: root.aurora-shown;
     }
 
     VerticalLayout {

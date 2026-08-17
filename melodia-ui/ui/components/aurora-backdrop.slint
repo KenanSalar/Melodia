@@ -55,11 +55,13 @@ export component AuroraBackdrop inherits Rectangle {
     // nothing, so a mount without one degrades to undithered gradients rather than to a hole.
     in property <image> dither;
 
-    // Whether the host paints a hero at all. The mosaic bands always do and take the default;
-    // `LibraryTabBand` morphs, and its globals outlive the tab that filled them, so an ungated
-    // layer would ease out of a banner nobody has seen. **Discrete bool** — a leaf can't tell an
-    // eased input from a stepped one, and a `hero-t` float would restart every binding per frame.
-    in property <bool> hero-open: true;
+    // Whether this stack is the one on screen — `HeroBlurBackdrop.shown`'s twin, and the same two
+    // questions ANDed: the arm the setting and the artwork picked, and (`LibraryTabBand` alone)
+    // whether the band is painting a hero at all. The two stacks mount together and cross-fade
+    // through this rather than being swapped, an unmounted stack having nothing to fade from.
+    // **Discrete bool** — a leaf can't tell an eased input from a stepped one, and a float would
+    // restart every binding below per frame.
+    in property <bool> shown: true;
 
     clip: true;
 
@@ -83,7 +85,7 @@ export component AuroraBackdrop inherits Rectangle {
     // `AuroraBlob`'s ramp dies at 0.495 of its side, so this is the side that paints `blob-reach`.
     property <length> blob-span: root.blob-reach / 0.495;
 
-    background: root.hero-open
+    background: root.shown
         ? @linear-gradient(135deg, root.base-start, root.base-end)
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
@@ -104,7 +106,7 @@ export component AuroraBackdrop inherits Rectangle {
         height: root.blob-span;
         tint: root.tint-1;
         peak: 0.5;
-        shown: root.hero-open;
+        shown: root.shown;
     }
     AuroraBlob {
         x: root.width - root.blob-span / 2;
@@ -113,7 +115,7 @@ export component AuroraBackdrop inherits Rectangle {
         height: root.blob-span;
         tint: root.tint-2;
         peak: 0.46;
-        shown: root.hero-open;
+        shown: root.shown;
     }
     AuroraBlob {
         x: root.width - root.blob-span / 2;
@@ -122,7 +124,7 @@ export component AuroraBackdrop inherits Rectangle {
         height: root.blob-span;
         tint: root.tint-3;
         peak: 0.42;
-        shown: root.hero-open;
+        shown: root.shown;
     }
     AuroraBlob {
         x: -root.blob-span / 2;
@@ -131,7 +133,7 @@ export component AuroraBackdrop inherits Rectangle {
         height: root.blob-span;
         tint: root.tint-4;
         peak: 0.38;
-        shown: root.hero-open;
+        shown: root.shown;
     }
 
     // **`image-fit: preserve` is what makes this dither rather than decoration**: the default `fill`
@@ -139,7 +141,13 @@ export component AuroraBackdrop inherits Rectangle {
     // `preserve` maps a source texel to a physical pixel, the frequency dither has to run at to
     // disappear; `pixelated` so filtering can't average it back toward the flat colour it breaks up.
     // Alpha lives in the tile rather than in `opacity`, which would rasterize this into a layer.
-    Image {
+    //
+    // **Behind the `if` rather than eased with everything else**, alpha living in the tile leaving
+    // nothing to fade: unmounting is the only way to stop it, and this is the one layer that can
+    // afford it — a one-level 8-bit grain is invisible by construction, so it cannot pop. Ungated
+    // it would sit on top of the blur for the whole of every crossing, graining a stack that isn't
+    // supposed to be on screen at all.
+    if root.shown: Image {
         x: 0;
         y: 0;
         width: 100%;

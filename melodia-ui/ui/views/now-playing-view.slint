@@ -51,16 +51,17 @@ export component NowPlayingView inherits Rectangle {
     // negative.
     property <length> strip-w: max(root.cover-size, min(root.content-width * 0.75, root.strip-w-max));
 
-    // Which of the two backdrops this view paints. Slint has no element-level `else`, so the pair
-    // below is two `if`s over one property rather than two spellings of the condition.
-    // **`np-has-tints` is folded in**: a track with no artwork has no colours to wash, so it keeps
-    // the blur — whose art-less arm is the accent-seeded floor this view was built on.
+    // Which of the two backdrops this view paints. **`np-has-tints` is folded in**: a track with no
+    // artwork has no colours to wash, so it keeps the blur — whose art-less arm is the accent-seeded
+    // floor this view was built on. Both stacks are mounted and the loser goes transparent, so the
+    // arms cross-fade; this is the one site where the answer can change with the view on screen,
+    // a skip landing on an art-less track, and an `if` pair would cut.
     property <bool> aurora-shown: Theme.aurora-backdrop && Player.np-has-tints;
 
     // The stack the six hero bands mount, on this view's own colour tier. **Both floor stops come
     // from Rust**, not a `Theme.accent` mix — this is the surface an art-less track's title sits on
     // and the foreground is solved light.
-    if !root.aurora-shown: HeroBlurBackdrop {
+    HeroBlurBackdrop {
         x: 0;
         y: 0;
         width: 100%;
@@ -72,9 +73,12 @@ export component NowPlayingView inherits Rectangle {
         blur-b: Player.blur-img-b;
         use-a: Player.blur-use-a;
         has-blur: Player.blur-has-image;
+        shown: !root.aurora-shown;
     }
 
-    if root.aurora-shown: AuroraBackdrop {
+    // Second, so it covers the blur when it wins — both bases are opaque, so paint order is what
+    // decides the midpoint rather than any alpha maths.
+    AuroraBackdrop {
         x: 0;
         y: 0;
         width: 100%;
@@ -86,6 +90,7 @@ export component NowPlayingView inherits Rectangle {
         tint-3: Player.np-tint-3;
         tint-4: Player.np-tint-4;
         dither: Player.np-dither;
+        shown: root.aurora-shown;
     }
 
     // **Padding is per-section, not uniform on this layout**: the Up Next column has to

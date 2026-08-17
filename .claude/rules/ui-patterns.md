@@ -180,8 +180,18 @@ silently miss the other.
   Playing, two globals kept separate because a band stays mounted behind an open Now Playing.
   Reading either global from inside a stack ties it to one tier and puts the other site's inline
   copy back; `hero_blur_backdrop_tests` pins both directions. **Three mount sites, one
-  `aurora-shown` property and two `if`s each** — Slint has no element-level `else`, and a second
-  spelling of the condition can invert alone. Whichever arm is unmounted costs nothing.
+  `aurora-shown` property, and both stacks mounted unconditionally at each** — the loser goes
+  transparent through its own `shown` input, which is what the two components spend their gated
+  brushes on, so a change of arm **cross-fades**. They were an `if` pair until an art-less track
+  made the arm change with the view on screen: a branch destroys the stack outright, leaving
+  nothing to fade from. The blur is declared first and the aurora second, both bases being opaque,
+  so paint order decides the midpoint rather than any alpha arithmetic. Both `shown` terms come off
+  the one `aurora-shown` property and must be each other's negation — a stack missing its term
+  takes the `true` default and sits over the other for good, and an `if` restored in front of one
+  reads exactly like what this replaced;
+  `hero_blur_backdrop_tests::every_backdrop_site_cross_fades_between_the_two` holds all three.
+  The cost is that the transparent stack still builds its paths every frame, where an unmounted arm
+  cost nothing.
 
 - **`has-tints` means "there was artwork to wash", and all three mount sites fold it in** — the two
   bands off `HeroBackdrop.has-tints`, Now Playing off its own `Player.np-has-tints`. Two things set
@@ -194,10 +204,6 @@ silently miss the other.
   unspellable (`hero_backdrop::HeroFill::Artwork` carries the washes or nothing); the mount half is
   three independent conditions over two globals and shipped with two of them missing, so it is
   pinned by `hero_blur_backdrop_tests::every_backdrop_site_gates_the_aurora_on_artwork`.
-  Flipping it *remounts* rather than eases, so the arms cut rather than cross. On the bands that is
-  unobservable — a detail can only be swapped through the collapse or through `reset` — and on Now
-  Playing it is a hard cut at the art→no-art track boundary, taken as the price of not washing the
-  accent.
 
 - **`ActionPill`/`SearchBar` inside a hero are the deliberate exception** and stay on
   `Theme.floating-chrome-bg`, still mostly their own surface — safe only because the backdrop is
@@ -211,11 +217,16 @@ silently miss the other.
   interpolates out the moment a hero opens — a genre's pink under a playlist. **Make the idle
   value honest rather than suppressing the animation at the right instant**: the palette mirrors
   fall back to their idle half on `root.detail-open`, and both stacks swap their stops for a
-  transparent pair on a `hero-open` input defaulting `true` — the blur's floor, and the aurora's
-  base plus all four washes. **`detail-open`, not `hero-shown`** — gated on the latter they drain
-  toward idle for `dur-med` *after* the collapse ends. The one ungated layer is the blur's scrim,
-  which carries almost no chroma; the aurora's neutral layer is gone with the vignette, the washes
-  having moved to the corners it used to darken.
+  transparent pair on a `shown` input defaulting `true` — the blur's floor and scrim, and the
+  aurora's base plus all four washes. **`detail-open`, not `hero-shown`** — gated on the latter
+  they drain toward idle for `dur-med` *after* the collapse ends; the band folds it into `shown`
+  beside the arm term rather than owning that input outright. **The scrim used to be the one
+  exempt layer** and is gated now: draining it could only brighten the artwork while this stack
+  was alone on screen, and it now cross-fades against the aurora, where a scrim at full strength
+  under a half-faded pair darkens the midpoint of every crossing. The aurora's neutral layer is
+  gone with the vignette, the washes having moved to the corners it used to darken; its **dither
+  is the one layer behind an `if`**, alpha living in the tile leaving nothing to fade, and a
+  one-level grain being invisible enough to afford the cut.
 
 - **`has-cover` is how a host says "not this one".** The `cover:` ternary must bind *some* global
   on every arm, Slint having no empty-`image` literal, and Genre owns no cover — so the Genre hero

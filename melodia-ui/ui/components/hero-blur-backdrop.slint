@@ -22,11 +22,14 @@ export component HeroBlurBackdrop inherits Rectangle {
     in property <bool> use-a;
     in property <bool> has-blur;
 
-    // Whether the host is painting a hero at all. The mosaic bands and Now Playing always are and
-    // take the default; `LibraryTabBand` morphs, and its globals outlive the tab that filled them,
-    // so an ungated floor eases *from* a banner nobody has seen since — leave a genre, open a
-    // playlist elsewhere, and the genre's stops sit uncovered under the morph.
-    in property <bool> hero-open: true;
+    // Whether this stack is the one on screen. Two questions AND together into it, and the host
+    // owns both: **is it the arm the setting and the artwork picked** — the two stacks are mounted
+    // together and cross-fade through this rather than being swapped, a remount having nothing to
+    // ease — and, for `LibraryTabBand` alone, **is the band painting a hero at all**, its globals
+    // outliving the tab that filled them, so an ungated floor eases *from* a banner nobody has seen
+    // since. Both sit here rather than in an `if`: whichever stack is at `false` is transparent and
+    // paints nothing, which an unmounted one cannot fade to.
+    in property <bool> shown: true;
 
     // **The floor eases on the slots' own duration**, being the layer that *is* the backdrop
     // whenever there is no blur image: an artwork-less hero, Genre Detail's name-hashed stops, the
@@ -34,10 +37,7 @@ export component HeroBlurBackdrop inherits Rectangle {
     // only shape `Brush::interpolate` blends stop-for-stop, which is why the gate swaps the *stops*
     // rather than the whole brush. Safe to `animate` where a tab-bar brush is not: Rust writes these
     // discretely, so no moving source can restart the binding.
-    //
-    // The scrim below is deliberately *not* gated: it carries almost no chroma, so draining it
-    // would only brighten the artwork through the collapse.
-    background: root.hero-open
+    background: root.shown
         ? @linear-gradient(135deg, root.floor-start, root.floor-end)
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
@@ -65,12 +65,17 @@ export component HeroBlurBackdrop inherits Rectangle {
     // The opacity is solved per artwork and baked into the brush, hence no `with-alpha`: a white
     // sleeve needs roughly twice what a black one does. Animated on the slots' own duration, so a
     // swap and its scrim land together instead of the scrim snapping ahead.
+    //
+    // **Gated with the floor, where it used to be exempt.** The old reasoning was that draining it
+    // through the band's collapse could only brighten the artwork above — true while this stack was
+    // alone. It now cross-fades against the aurora, and a scrim left at full strength under a
+    // half-faded pair darkens the midpoint of every crossing.
     Rectangle {
         x: 0;
         y: 0;
         width: 100%;
         height: 100%;
-        background: root.scrim;
+        background: root.shown ? root.scrim : transparent;
         animate background { duration: Theme.dur-med; easing: ease-in-out; }
     }
 }
