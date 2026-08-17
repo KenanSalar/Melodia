@@ -35,7 +35,7 @@ use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
 
-use state::{FavoritesUiState, GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE};
+use state::{FavoritesUiState, GRID_THUMB_CAP};
 
 /// This page's `Nav.selected-index`. **The single definition**, beside the view it names, the way
 /// [`crate::ui::my_library::NAV_MY_LIBRARY`] sits beside its page — the cross-tab hand-off stamps
@@ -89,8 +89,6 @@ pub struct FavoritesUi {
     inner: FavoritesUiState,
     /// The shared row tier, for the Songs tab's `TrackList` column.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
-    /// Released on section leave; warm across mosaic refreshes inside a visit.
-    pub(super) mosaic_thumbs: Arc<CoverThumbs>,
     /// The two grid tiers, released on section leave *and* on tab-leave.
     pub(super) most_played_thumbs: Arc<CoverThumbs>,
     pub(super) artist_thumbs: Arc<CoverThumbs>,
@@ -117,7 +115,6 @@ impl FavoritesUi {
         Self {
             inner: FavoritesUiState::new(),
             cover_thumbs,
-            mosaic_thumbs: Arc::new(CoverThumbs::with_config(MOSAIC_THUMB_SIZE, MOSAIC_THUMB_CAP)),
             most_played_thumbs: Arc::new(CoverThumbs::with_config(
                 crate::ui::grid_prewarm::GRID_COVER_SIZE,
                 GRID_THUMB_CAP,
@@ -187,15 +184,15 @@ impl FavoritesUi {
         self.section.gate()
     }
 
-    /// Forget the mosaic recorded as on screen, so the next refresh recomposes the hero blur
-    /// instead of skipping on an unchanged cover set.
+    /// Forget the collage recorded as on screen, so the next refresh recomposes instead of
+    /// skipping on an unchanged cover set.
     ///
-    /// The section leave is the only caller, and it sits beside the `blur-img-*` wipe rather than
-    /// in [`Self::release_section_state`] — that one bails when the user has already come back,
-    /// where the wipe is unconditional and would leave the guard set against a hero with no blur
-    /// left to guard.
+    /// The section leave is the only caller, and it sits beside the hero-slot wipe rather than in
+    /// [`Self::release_section_state`] — that one bails when the user has already come back, where
+    /// the wipe is unconditional and would leave the guard set against a hero with no artwork left
+    /// to guard.
     pub fn forget_mosaic(&self) {
-        self.inner.last_mosaic_paths.lock().clear();
+        self.inner.last_mosaic_paths.forget();
     }
 
     /// Forget what the grids last painted, so the next apply rebuilds instead of recognising its
@@ -222,7 +219,6 @@ impl FavoritesUi {
         if self.section_active() {
             return;
         }
-        self.mosaic_thumbs.clear();
         self.most_played_thumbs.clear();
         self.artist_thumbs.clear();
         {

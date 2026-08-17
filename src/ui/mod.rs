@@ -24,7 +24,6 @@ pub mod launcher;
 pub mod list_selection;
 pub mod model_diff;
 pub mod model_patch;
-pub mod mosaic_blur;
 pub mod mosaic_hero;
 pub mod my_library;
 pub mod nav_history;

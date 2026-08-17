@@ -1,38 +1,30 @@
-//! Hero stats + live cover mosaic refresh.
+//! Hero stats + the banner artwork refresh.
 //!
-//! On every `library_changed_tx` tick the Favorites view is visible
-//! for, this re-fetches `library::favorites::get_favorite_stats` and
-//! produces a fresh hero blur from the top-4 most-played covers via the
-//! shared [`crate::ui::mosaic_blur`] atlas+blur recipe. Write goes
-//! through `write_crossfade_slot` so switching mosaics fades the
-//! previous blur to the new one — outgoing slot stays painted for the
-//! full fade so the hero never flashes empty.
+//! On every `library_changed_tx` tick the Favorites view is visible for, this re-fetches
+//! `library::favorites::get_favorite_stats` and composes the top-4 most-played covers into
+//! one collage through [`crate::ui::mosaic_hero`]. Past that the banner is an ordinary
+//! single-artwork hero: `apply_detail_artwork` writes the cover slot directly and the blur
+//! through `write_crossfade_slot`, so switching collages fades rather than flashing.
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
+use slint::{ComponentHandle, Weak};
 
 use super::FavoritesUi;
 use crate::entities::track::FavoriteStats;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
-use crate::ui::mosaic_blur::compose_mosaic_blur;
-use crate::ui::mosaic_hero::impl_mosaic_hero;
+use crate::ui::detail_artwork::DetailPair;
+use crate::ui::detail_view::impl_detail_view_helpers;
 use crate::{AppWindow, Favorites};
 
-// The apply/clear pair is shared with the Recently-Played hero — same guard
-// placement, same cross-fade, different global. Overlapping composes are rare
-// on this side: `refresh_hero` awaits its own `spawn_blocking` and the channel
-// subscriber awaits `refresh_hero`, so ticks can't overlap each other. What
-// can race one is the section-enter fetch, which is spawned detached — the
-// first-enter kick at wire time, and every re-enter after that.
-impl_mosaic_hero!(Favorites, FavoritesUi);
+// Only the artwork half — this page's track model is not a detail `tracks` list.
+impl_detail_view_helpers!(artwork_only Favorites);
 
-/// Fetch fresh stats, push the count + mosaic paths into `Favorites` and the
-/// band's chips with them, then kick a blocking composition+blur task whose
-/// result lands on the UI thread via `upgrade_in_event_loop`.
-/// `animate` fades the cross-fade between the old mosaic and the new.
+/// Fetch fresh stats, push the count and the band's chips with it, then kick a blocking
+/// compose whose result lands on the UI thread via `invoke_from_event_loop`. `animate`
+/// fades the cross-fade between the old banner blur and the new.
 ///
 /// The running time reaches the band as a chip rather than as a property: the
 /// millisecond total is already on the stats struct, so routing a formatted
@@ -64,68 +56,62 @@ pub async fn refresh_hero(
     push_stats_to_slint(&stats, fav_ui, weak);
 
     let paths = stats.artwork_paths.clone();
-    if paths.is_empty() {
-        clear_hero_blur(fav_ui, weak);
+
+    // Skip the compose when those covers are already the ones on screen — a library or
+    // stats tick usually returns the same top four, and an unchanged banner is still
+    // correct. The matching *claim* is in `publish_hero_artwork`, for `MosaicGuard`'s
+    // reason.
+    if !fav_ui.state().last_mosaic_paths.is_stale(&paths) {
         return Ok(());
     }
 
-    // Skip the decode+blur when the mosaic covers are already the ones on
-    // screen — the blur is still correct, so a library/stats tick with the same
-    // top-4 costs nothing. Reset on section-leave so a genuine re-enter
-    // recomposes. The matching *record* is in `apply_hero_blur`, not here: the
-    // guard means "this mosaic is what's painted", and recording a compose
-    // whose apply is then dropped would wedge the hero on the gradient floor
-    // for every later refresh of the same covers.
-    if *fav_ui.state().last_mosaic_paths.lock() == paths {
+    let Some(pair) = crate::ui::mosaic_hero::compose_off_thread(state, paths.clone()).await else {
         return Ok(());
-    }
-
-    // Composition, blur and the colour measurement are all CPU-bound — they
-    // run on the blocking pool to keep the tokio worker free. What comes back
-    // is a raw `SharedPixelBuffer` and its measurement, so it can cross the
-    // `upgrade_in_event_loop` boundary (`slint::Image` is `!Send`, so the wrap
-    // happens on the UI thread).
-    let compose_paths = paths.clone();
-    let composed = state
-        .runtime
-        .spawn_blocking(move || compose_mosaic_blur(&compose_paths))
-        .await
-        .ok()
-        .flatten();
-
-    apply_hero_blur(fav_ui, weak, composed, animate, paths);
+    };
+    publish_hero_artwork(fav_ui, weak, pair, animate, paths);
     Ok(())
 }
 
-// The atlas composition itself lives in `crate::ui::mosaic_blur` — shared
-// with the Recently-Played hero so both surfaces read identically.
-
-fn push_stats_to_slint(stats: &FavoriteStats, fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
-    let count = i32::try_from(stats.count).unwrap_or(i32::MAX);
-    let paths = stats.artwork_paths.clone();
+/// Publish a composed banner and claim it as the one on screen.
+///
+/// **Gated whole, where a detail view fills its own slots even while hidden.** This page's
+/// leave wipes its models and forgets the guard, so slots written behind it have nothing to
+/// be ready for and their claim would suppress the re-enter's recompose. What the gate
+/// mainly protects is still `HeroBackdrop`, shared by all six heroes: a compose finishing
+/// after a nav away would paint this page's solve under whichever hero mounted next.
+fn publish_hero_artwork(
+    fav_ui: &Arc<FavoritesUi>,
+    weak: &Weak<AppWindow>,
+    pair: DetailPair,
+    animate: bool,
+    paths: Vec<String>,
+) {
     let fav_ui = fav_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        // The leave can land while this post is in flight, and it empties the
-        // mosaic-path model on its way out — the same guard, in the same place,
-        // as `songs::apply_filtered_tracks`.
+        if !fav_ui.section_active() || !fav_ui.state().last_mosaic_paths.claim(paths) {
+            return;
+        }
+        apply_detail_artwork(&ui, &ui.global::<Favorites>(), pair, animate, true);
+    });
+}
+
+fn push_stats_to_slint(stats: &FavoriteStats, fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
+    let count = i32::try_from(stats.count).unwrap_or(i32::MAX);
+    let fav_ui = fav_ui.clone();
+    let weak = weak.clone();
+    let _ = slint::invoke_from_event_loop(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        // The leave can land while this post is in flight, and it rewinds the count on its
+        // way out — the same guard, in the same place, as `songs::apply_filtered_tracks`.
         if !fav_ui.section_active() {
             return;
         }
-        let g = ui.global::<Favorites>();
-        g.set_track_count(count);
+        ui.global::<Favorites>().set_track_count(count);
         // Order-free: the chips take their facts off the handle's own state,
         // not back off the properties written around them.
         crate::ui::hero_chips::publish_favorites(&ui, &fav_ui);
-        let model = g.get_mosaic_paths();
-        let Some(vec) = model.as_any().downcast_ref::<VecModel<SharedString>>() else {
-            log::warn!("Favorites.mosaic-paths: VecModel<SharedString> downcast failed");
-            return;
-        };
-        let rendered: Vec<SharedString> =
-            paths.iter().map(|p| SharedString::from(p.as_str())).collect();
-        vec.set_vec(rendered);
     });
 }
 

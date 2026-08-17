@@ -16,9 +16,8 @@ pub const COVER_SIZE: u32 = 384;
 pub const BLUR_TARGET: u32 = 192;
 
 /// `fast_blur` sigma at [`BLUR_TARGET`] — a soft wash of colour with no recognisable
-/// shapes left in it. Taken by the Now Playing tier and the mosaic composition, the two
-/// backdrops with nothing painted over them; the detail heroes run lighter and say so at
-/// their own `BlurSpec`.
+/// shapes left in it. The Now Playing tier's, that being the one backdrop with nothing
+/// painted over it; every band runs lighter and says so at its own `BlurSpec`.
 pub const BLUR_SIGMA: f32 = 24.0;
 
 /// Copy an `image` RGB8 buffer into a Slint `SharedPixelBuffer`. Both are tightly packed,

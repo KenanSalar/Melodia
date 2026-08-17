@@ -31,9 +31,7 @@ use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
 
-use state::{
-    GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE, RecentlyPlayedUiState, SongsTotals,
-};
+use state::{GRID_THUMB_CAP, RecentlyPlayedUiState, SongsTotals};
 
 /// This page's `Nav.selected-index` — see [`crate::ui::favorites::NAV_FAVORITES`].
 pub const NAV_RECENTLY_PLAYED: i32 = 8;
@@ -77,8 +75,6 @@ pub struct RecentlyPlayedUi {
     inner: RecentlyPlayedUiState,
     /// The shared row tier, for the Songs tab's `TrackList` column.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
-    /// Released on section leave.
-    pub(super) mosaic_thumbs: Arc<CoverThumbs>,
     /// Released on section leave *and* on tab-leave.
     pub(super) most_played_thumbs: Arc<CoverThumbs>,
     /// Visibility + staleness + the mutation gate, the unit every entity grid carries. Also gates
@@ -112,7 +108,6 @@ impl RecentlyPlayedUi {
         Self {
             inner: RecentlyPlayedUiState::new(),
             cover_thumbs,
-            mosaic_thumbs: Arc::new(CoverThumbs::with_config(MOSAIC_THUMB_SIZE, MOSAIC_THUMB_CAP)),
             most_played_thumbs: Arc::new(CoverThumbs::with_config(
                 crate::ui::grid_prewarm::GRID_COVER_SIZE,
                 GRID_THUMB_CAP,
@@ -177,11 +172,11 @@ impl RecentlyPlayedUi {
         self.section.gate()
     }
 
-    /// Forget the mosaic recorded as on screen, so the next refresh recomposes the hero blur.
-    /// Paired with the leave handler's `blur-img-*` wipe rather than with
-    /// [`Self::release_section_state`] — see [`crate::ui::favorites::FavoritesUi::forget_mosaic`].
+    /// Forget the collage recorded as on screen, so the next refresh recomposes. Paired with the
+    /// leave handler's hero-slot wipe rather than with [`Self::release_section_state`] — see
+    /// [`crate::ui::favorites::FavoritesUi::forget_mosaic`].
     pub fn forget_mosaic(&self) {
-        self.inner.last_mosaic_paths.lock().clear();
+        self.inner.last_mosaic_paths.forget();
     }
 
     /// Forget what the grid last painted, so the next apply rebuilds instead of recognising its
@@ -201,7 +196,6 @@ impl RecentlyPlayedUi {
         if self.section_active() {
             return;
         }
-        self.mosaic_thumbs.clear();
         self.most_played_thumbs.clear();
         {
             let _gate = self.gate();

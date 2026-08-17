@@ -14,14 +14,10 @@ use slint::ComponentHandle;
 use crate::ui::favorites::FavoritesUi;
 use crate::{AppWindow, Favorites};
 
-/// Wire the three `request-*-cover` callbacks.
+/// Wire the two `request-*-cover` callbacks.
 pub(super) fn wire(ui: &AppWindow, fav_ui: &Arc<FavoritesUi>) {
     let g = ui.global::<Favorites>();
 
-    {
-        let fu = fav_ui.clone();
-        g.on_request_mosaic_cover(move |path| fu.mosaic_cover(path.as_str()));
-    }
     {
         let fu = fav_ui.clone();
         g.on_request_most_played_cover(move |path, generation| {

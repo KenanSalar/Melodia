@@ -1,18 +1,21 @@
-//! Shared detail-view helper macro.
+//! Shared hero-header helper macro.
 //!
-//! The four detail views are distinct Slint-generated global types, so the two helpers
-//! every detail module needs — `apply_detail_artwork` for the cover and hero-blur pair,
+//! Every global carrying a hero is a distinct Slint-generated type, so the two helpers
+//! their modules need — `apply_detail_artwork` for the cover and hero-blur pair,
 //! `replace_tracks_model` for the `tracks` `VecModel` — can't be generic functions. This
 //! stamps the typed body once per module, as `impl_track_list_column_state!` does.
 
-/// Generate the per-view detail helpers for a Slint detail global.
+/// Generate the per-view hero helpers for a Slint global.
 ///
-/// `artwork $Global` is a view with a cover / hero-blur header and emits both;
+/// `artwork $Global` is a detail view with a cover / hero-blur header and emits both;
+/// `artwork_only $Global` is a curated page, whose track model is its own tabbed cache's;
 /// `no_artwork $Global` is the procedural `GenreDetail` and emits only the model swap.
 macro_rules! impl_detail_view_helpers {
     (artwork $Global:ty) => {
         impl_detail_view_helpers!(@tracks_model $Global);
-
+        impl_detail_view_helpers!(artwork_only $Global);
+    };
+    (artwork_only $Global:ty) => {
         /// Push a decoded `(cover, blur)` pair into the detail global from the UI
         /// thread: the cover slot directly, the blur through `write_crossfade_slot` so
         /// switching entities fades rather than flashes. `animate: true` is the

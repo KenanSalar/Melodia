@@ -16,6 +16,7 @@
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
+use image::DynamicImage;
 use image::imageops::fast_blur;
 use lru::LruCache;
 use parking_lot::Mutex;
@@ -103,8 +104,15 @@ impl ArtworkCache {
 
 /// Decode `path` **once**, then derive both halves from that single `DynamicImage`.
 fn decode_artwork(path: &Path, blur_spec: &BlurSpec) -> CachedArtwork {
-    let decoded = decode_capped(path, MAX_SOURCE_DIM).ok()?;
+    Some(pair_from_image(&decode_capped(path, MAX_SOURCE_DIM).ok()?, blur_spec))
+}
 
+/// Both halves plus the measurement, from an image already in hand.
+///
+/// Split out for the curated heroes, whose source is a composed collage rather than a
+/// file — nothing about the tiers they publish into differs, so nothing about how the
+/// pair is derived should either.
+pub(crate) fn pair_from_image(decoded: &DynamicImage, blur_spec: &BlurSpec) -> ArtworkPair {
     // `thumbnail`, not `thumbnail_exact`: aspect-preserving, so a non-square cover keeps
     // its ratio and the Slint side's `image-fit: cover` crops it to the square tile.
     let cover = buffer_from_rgb(&decoded.thumbnail(COVER_SIZE, COVER_SIZE).to_rgb8());
@@ -121,11 +129,11 @@ fn decode_artwork(path: &Path, blur_spec: &BlurSpec) -> CachedArtwork {
 
     let blur = buffer_from_rgb(&fast_blur(&small, blur_spec.sigma));
 
-    Some(ArtworkPair {
+    ArtworkPair {
         cover,
         blur,
         sample,
-    })
+    }
 }
 
 #[cfg(test)]

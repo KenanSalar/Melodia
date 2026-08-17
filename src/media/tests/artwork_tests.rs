@@ -254,3 +254,103 @@ fn extract_and_cache_artwork_empty_pictures() -> Result<(), AppError> {
     assert!(result.is_none());
     Ok(())
 }
+
+// ── compose_cover ──
+
+/// A solid-colour square PNG, so a sampled pixel names the source it came from.
+fn solid_source(
+    dir: &Path,
+    name: &str,
+    rgb: [u8; 3],
+    width: u32,
+    height: u32,
+) -> Result<PathBuf, AppError> {
+    let path = dir.join(name);
+    image::RgbImage::from_pixel(width, height, image::Rgb(rgb))
+        .save(&path)
+        .map_err(|e| AppError::Validation(format!("write {name}: {e}")))?;
+    Ok(path)
+}
+
+/// The four layouts, pinned against composed pixels. This is the arrangement `CoverMosaic`
+/// used to draw in Slint, and the collage is now the only place it is stated.
+///
+/// The sample points are spelled here rather than read off `COMPOSITE_LAYOUTS`: sampling the
+/// table the compose loop walks proves only that the loop honours it, and passes just as
+/// happily when two of its rows are swapped.
+#[test]
+fn each_layout_puts_every_source_in_its_own_rect() -> Result<(), AppError> {
+    const COLOURS: [[u8; 3]; 4] = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0]];
+
+    const NEAR: u32 = COMPOSITE_SIZE / 4;
+    const FAR: u32 = COMPOSITE_SIZE * 3 / 4;
+    const MID: u32 = COMPOSITE_SIZE / 2;
+    /// Where each source's colour must land, by set size: full bleed; left | right;
+    /// left | right-top over right-bottom; 2×2 read across then down.
+    const SAMPLES: [&[(u32, u32)]; 4] = [
+        &[(MID, MID)],
+        &[(NEAR, MID), (FAR, MID)],
+        &[(NEAR, MID), (FAR, NEAR), (FAR, FAR)],
+        &[(NEAR, NEAR), (FAR, NEAR), (NEAR, FAR), (FAR, FAR)],
+    ];
+
+    let tmp = tempfile::tempdir()?;
+    let sources = COLOURS
+        .iter()
+        .enumerate()
+        .map(|(i, rgb)| solid_source(tmp.path(), &format!("{i}.png"), *rgb, 64, 64))
+        .collect::<Result<Vec<PathBuf>, AppError>>()?;
+
+    for (count, points) in (1..=4).zip(SAMPLES) {
+        let canvas = compose_cover(&sources[..count])
+            .ok_or_else(|| AppError::Validation(format!("compose of {count} returned None")))?;
+        assert_eq!((canvas.width(), canvas.height()), (COMPOSITE_SIZE, COMPOSITE_SIZE));
+
+        for (slot, &(x, y)) in points.iter().enumerate() {
+            assert_eq!(
+                canvas.get_pixel(x, y).0,
+                COLOURS[slot],
+                "{count}-up layout, slot {slot} at ({x}, {y})"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compose_cover_refuses_a_set_it_has_no_layout_for() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let one = solid_source(tmp.path(), "one.png", [255, 0, 0], 64, 64)?;
+
+    assert!(compose_cover(&[]).is_none());
+    assert!(compose_cover(&vec![one; 5]).is_none());
+    Ok(())
+}
+
+/// All-or-nothing: a blank quarter would read as a bug where an absent collage reads
+/// as no artwork.
+#[test]
+fn one_unreadable_source_fails_the_whole_compose() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let good = solid_source(tmp.path(), "good.png", [255, 0, 0], 64, 64)?;
+
+    let broken = tmp.path().join("broken.png");
+    std::fs::write(&broken, b"not an image")?;
+
+    assert!(compose_cover(&[good, broken]).is_none());
+    Ok(())
+}
+
+/// The forged-header guard every other decode in the tree carries. One pixel over on
+/// the long axis only, `decode_capped` bounding each dimension independently — a
+/// square at the cap would be a 200 MB fixture.
+#[test]
+fn a_source_past_the_decode_cap_is_refused() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let ok = solid_source(tmp.path(), "ok.png", [255, 0, 0], 64, 64)?;
+    let over = solid_source(tmp.path(), "over.png", [0, 255, 0], MAX_SOURCE_DIM + 1, 1)?;
+
+    assert!(compose_cover(std::slice::from_ref(&over)).is_none());
+    assert!(compose_cover(&[ok, over]).is_none());
+    Ok(())
+}

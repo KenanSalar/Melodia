@@ -10,13 +10,9 @@ use slint::ComponentHandle;
 use crate::ui::recently_played::RecentlyPlayedUi;
 use crate::{AppWindow, RecentlyPlayed};
 
-/// Wire the `request-mosaic-cover` + `request-most-played-cover` callbacks.
+/// Wire the `request-most-played-cover` callback.
 pub(super) fn wire(ui: &AppWindow, rp_ui: &Arc<RecentlyPlayedUi>) {
     let g = ui.global::<RecentlyPlayed>();
-    {
-        let ru = rp_ui.clone();
-        g.on_request_mosaic_cover(move |path| ru.mosaic_cover(path.as_str()));
-    }
     {
         // The second argument is `RecentlyPlayed.covers-generation`: reading it
         // is what makes the card's `pure` binding re-evaluate once the tier is

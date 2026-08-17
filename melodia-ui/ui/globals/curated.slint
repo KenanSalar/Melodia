@@ -1,8 +1,9 @@
 import { TrackListRow, EntityStripRow, EntityGridRow } from "../models.slint";
 
-// The two hero-mosaic pages, both wearing `MosaicTabHero` over their sub-views. Two globals rather
+// The two curated pages, both wearing `MosaicTabHero` over their sub-views. Two globals rather
 // than one because a Slint component can't be parameterised over a global — the wall
-// `impl_mosaic_hero!` works around in Rust; what the pages genuinely share is in the component.
+// `impl_detail_view_helpers!` works around in Rust; what the pages genuinely share is in the
+// component.
 
 // Three mutually exclusive sub-views: Songs (a sortable, filterable `TrackList`), Most Played and
 // Favorite Artists (both virtualized `EntityCardGrid`s). No Favorite Albums tab by design — albums
@@ -25,9 +26,10 @@ export global Favorites {
     // and share their card geometry. Pushed down from the view's `GridGeometry`.
     in-out property <int> columns: 4;
     callback columns-changed(int);
-    // The top-4 cover paths by play count; an empty list renders the empty state. The running
-    // time isn't here — it reaches the band as a chip built by `ui::hero_chips`.
-    in-out property <[string]> mosaic-paths;
+    // The top four covers by play count, composed into one collage by Rust; empty renders the
+    // empty state. The running time isn't here — it reaches the band as a chip built by
+    // `ui::hero_chips`.
+    in-out property <image> cover;
     // **`-1` is "not fetched yet", and every count on both curated globals carries it.** A section
     // leave empties the models these number, so a count left at its last real value outlives its
     // source and suppresses an empty state; resetting to `0` asserts "No favorites yet" for the
@@ -92,7 +94,6 @@ export global Favorites {
     // the queue sheet's two reasons — reading it makes a `pure` binding re-evaluate once the tier
     // warms behind a mounted grid, and its *value* is the is-it-warm flag. At 0, cache-only.
     in-out property <int> covers-generation: 0;
-    pure callback request-mosaic-cover(string)           -> image;
     pure callback request-most-played-cover(string, int) -> image;
     pure callback request-artist-cover(string, int)      -> image;
 
@@ -155,8 +156,9 @@ export global RecentlyPlayed {
     in-out property <int> columns: 4;
     callback columns-changed(int);
 
-    // Up to four distinct most-recently-played covers; an empty list renders the empty-state tile.
-    in-out property <[string]> mosaic-paths;
+    // Up to four distinct most-recently-played covers, composed into one collage by Rust; empty
+    // renders the empty-state tile.
+    in-out property <image> cover;
 
     // The `Favorites` dual-slot contract.
     in-out property <image> blur-img-a;
@@ -201,10 +203,9 @@ export global RecentlyPlayed {
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;
 
-    // The mosaic tiles and the grid cards; Songs rows go through `RowCovers`. The grid lookup
-    // takes `covers-generation` for the reason `Favorites`' pair do.
+    // The grid cards; Songs rows go through `RowCovers`. The lookup takes `covers-generation`
+    // for the reason `Favorites`' pair do.
     in-out property <int> covers-generation: 0;
-    pure callback request-mosaic-cover(string)           -> image;
     pure callback request-most-played-cover(string, int) -> image;
 
     // Hero actions. The pill is per-tab: Songs shuffles the filtered recency list, Most

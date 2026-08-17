@@ -8,6 +8,8 @@ use lofty::tag::Tag;
 use lru::LruCache;
 use parking_lot::Mutex;
 
+use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
+
 /// Pipes every byte to both the wrapped writer and a BLAKE3 hasher. Used by
 /// `compose_artwork` to encode a JPEG into a temp file while computing its
 /// content hash on the fly — so the dedup filename can be derived without
@@ -263,7 +265,40 @@ fn resize_to_cover(img: &image::DynamicImage, width: u32, height: u32) -> image:
     resized.crop_imm(x, y, width, height).to_rgb8()
 }
 
-/// Composes 1-4 source images into a single 600x600 composite image.
+/// Side of the composed collage. Every consumer draws it far smaller — it is sized
+/// so the playlist thumbnail it persists survives a detail hero at full resolution.
+pub(crate) const COMPOSITE_SIZE: u32 = 600;
+
+const COMPOSITE_HALF: u32 = COMPOSITE_SIZE / 2;
+
+/// Destination `(x, y, width, height)` per source, indexed by `len - 1`.
+///
+/// Data rather than a `match` arm each, so the decode loop can walk it one source at
+/// a time; a four-cover collage never holds four full-size decodes at once.
+const COMPOSITE_LAYOUTS: [&[(u32, u32, u32, u32)]; 4] = [
+    // the whole canvas
+    &[(0, 0, COMPOSITE_SIZE, COMPOSITE_SIZE)],
+    // left | right
+    &[
+        (0, 0, COMPOSITE_HALF, COMPOSITE_SIZE),
+        (COMPOSITE_HALF, 0, COMPOSITE_HALF, COMPOSITE_SIZE),
+    ],
+    // left | right top over right bottom
+    &[
+        (0, 0, COMPOSITE_HALF, COMPOSITE_SIZE),
+        (COMPOSITE_HALF, 0, COMPOSITE_HALF, COMPOSITE_HALF),
+        (COMPOSITE_HALF, COMPOSITE_HALF, COMPOSITE_HALF, COMPOSITE_HALF),
+    ],
+    // 2x2
+    &[
+        (0, 0, COMPOSITE_HALF, COMPOSITE_HALF),
+        (COMPOSITE_HALF, 0, COMPOSITE_HALF, COMPOSITE_HALF),
+        (0, COMPOSITE_HALF, COMPOSITE_HALF, COMPOSITE_HALF),
+        (COMPOSITE_HALF, COMPOSITE_HALF, COMPOSITE_HALF, COMPOSITE_HALF),
+    ],
+];
+
+/// Composes 1-4 source images into a single [`COMPOSITE_SIZE`] square.
 ///
 /// Layouts:
 /// - 1 image: fills the entire canvas
@@ -271,58 +306,27 @@ fn resize_to_cover(img: &image::DynamicImage, width: u32, height: u32) -> image:
 /// - 3 images: left half = image 1, right top/bottom = images 2, 3
 /// - 4 images: 2x2 grid
 ///
+/// All-or-nothing: one source that won't decode fails the whole compose, a collage
+/// with a blank quarter reading as a bug where an absent one reads as no artwork.
+///
+/// **Blocking** — call from `spawn_blocking` or a Rayon worker, never the UI thread.
+pub(crate) fn compose_cover(source_paths: &[PathBuf]) -> Option<image::RgbImage> {
+    let rects = *COMPOSITE_LAYOUTS.get(source_paths.len().checked_sub(1)?)?;
+
+    let mut canvas = image::RgbImage::new(COMPOSITE_SIZE, COMPOSITE_SIZE);
+    for (path, &(x, y, width, height)) in source_paths.iter().zip(rects) {
+        let source = decode_capped(path, MAX_SOURCE_DIM).ok()?;
+        let tile = resize_to_cover(&source, width, height);
+        image::imageops::overlay(&mut canvas, &tile, i64::from(x), i64::from(y));
+    }
+    Some(canvas)
+}
+
+/// [`compose_cover`] persisted into `artwork_dir` under its own content hash.
+///
 /// Returns the cached path to the composite image, or None on failure.
 pub(crate) fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> Option<String> {
-    use image::{DynamicImage, RgbImage};
-
-    const SIZE: u32 = 600;
-
-    if source_paths.is_empty() || source_paths.len() > 4 {
-        return None;
-    }
-
-    // Load all source images
-    let images: Vec<DynamicImage> =
-        source_paths.iter().filter_map(|p| image::open(p).ok()).collect();
-
-    if images.len() != source_paths.len() {
-        return None;
-    }
-
-    let half = SIZE / 2;
-    let mut canvas = RgbImage::new(SIZE, SIZE);
-
-    match images.len() {
-        1 => {
-            let cropped = resize_to_cover(&images[0], SIZE, SIZE);
-            image::imageops::overlay(&mut canvas, &cropped, 0, 0);
-        }
-        2 => {
-            let left = resize_to_cover(&images[0], half, SIZE);
-            let right = resize_to_cover(&images[1], half, SIZE);
-            image::imageops::overlay(&mut canvas, &left, 0, 0);
-            image::imageops::overlay(&mut canvas, &right, i64::from(half), 0);
-        }
-        3 => {
-            let left = resize_to_cover(&images[0], half, SIZE);
-            let rt = resize_to_cover(&images[1], half, half);
-            let rb = resize_to_cover(&images[2], half, half);
-            image::imageops::overlay(&mut canvas, &left, 0, 0);
-            image::imageops::overlay(&mut canvas, &rt, i64::from(half), 0);
-            image::imageops::overlay(&mut canvas, &rb, i64::from(half), i64::from(half));
-        }
-        4 => {
-            let tl = resize_to_cover(&images[0], half, half);
-            let tr = resize_to_cover(&images[1], half, half);
-            let bl = resize_to_cover(&images[2], half, half);
-            let br = resize_to_cover(&images[3], half, half);
-            image::imageops::overlay(&mut canvas, &tl, 0, 0);
-            image::imageops::overlay(&mut canvas, &tr, i64::from(half), 0);
-            image::imageops::overlay(&mut canvas, &bl, 0, i64::from(half));
-            image::imageops::overlay(&mut canvas, &br, i64::from(half), i64::from(half));
-        }
-        _ => return None,
-    }
+    let canvas = compose_cover(source_paths)?;
 
     // Stream the JPEG into a temp file in the artwork directory while a tee
     // writer feeds every byte to a BLAKE3 hasher. This avoids holding the
@@ -338,7 +342,7 @@ pub(crate) fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> O
     let hash_hex = {
         let mut hashing = HashingWriter::new(BufWriter::new(tmp.as_file()));
         let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut hashing, 90);
-        if let Err(e) = DynamicImage::ImageRgb8(canvas).write_with_encoder(encoder) {
+        if let Err(e) = image::DynamicImage::ImageRgb8(canvas).write_with_encoder(encoder) {
             log::warn!("Failed to encode composite JPEG: {e}");
             return None;
         }

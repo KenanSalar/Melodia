@@ -3,8 +3,8 @@
 Working doc. Delete when the feature ships.
 
 Status: **accepted, v2** · Created: 2026-08-16 · Rewritten: 2026-08-17
-Phases 1–8 landed; **Phase 8's look gate is open** and 9–11 wait on it. Phases 6–11 replaced the
-old 6–8.
+Phases 1–9 landed; **Phase 8's look gate passed on 2026-08-17**. 10–11 remain. Phases 6–11
+replaced the old 6–8.
 
 > **v2 reverses this doc's central premise.** The aurora shipped as a *self-contained
 > surface* — every wash driven to one tone, the composite pinned into a dark band, and the
@@ -411,37 +411,61 @@ The cap has real headroom — mutating the ceiling by +2 L\* still passes, +10 f
 cover — the conservatism coming from `contrast::darker` returning a verified rather than an exact
 answer.
 
-**Exit / gate — still open:** side by side with Amberol on the same four records, on **Mocha and
-Latte both**. Latte is the case that has never existed and the one that can fail outright. Worth a
-specific look: the mosaic heroes' square, now `Theme.base` against a brighter surround;
-`LibraryTabBand`'s morph, whose `idle-pane` crossfades `Theme.base` over a backdrop that is now
-the same colour at `hero-t` 0; and a greyscale sleeve, which should read tonal rather than flat.
-`Ctrl+Shift+B` toggles the two models live. If the look fails here, v2 stops and the doc records
-why — reverting is reverting the aurora, the blur having never been touched.
+**Exit / gate — passed 2026-08-17**, side by side with Amberol on Mocha and Latte both. Latte was
+the case that had never existed and the one that could have failed outright; it holds. The three
+things worth the specific look — the mosaic heroes' square now on `Theme.base` against a brighter
+surround, `LibraryTabBand`'s morph crossfading `idle-pane` over a backdrop that is now the same
+colour at `hero-t` 0, and a greyscale sleeve reading tonal rather than flat — all read correctly.
+v2 continues; the blur was never touched, so nothing here was ever at risk.
 
-### Phase 9 — The mosaic band is deleted, not ported
+### Phase 9 — The mosaic band is deleted, not ported · **landed**
 
-**Unchanged from v1's Phase 6 and still valid** — it is orthogonal to the colour model. The
-two mosaic heroes compose artwork three times (`CoverMosaic` live in Slint,
-`compose_mosaic_blur` at 192², `media::artwork::compose_artwork` at 600²), and Playlist
-Detail already demonstrates the shape: compose **once** into a 600² collage, after which the
-entity is an ordinary single-artwork hero.
+Orthogonal to the colour model, and a deletion. The two curated heroes composed the same four
+covers twice — `CoverMosaic` live in Slint over a third cache tier, and `compose_mosaic_blur` into
+a 192² atlas — where Playlist Detail already demonstrated the shape: compose **once** into a 600²
+collage, after which the entity is an ordinary single-artwork hero.
 
-1. Split `compose_artwork` into a pure `compose_cover(sources) -> canvas` plus the
-   encode-hash-persist tail, which stays playlist-only — Recently Played's top four moves on
-   nearly every track and would leave a ~50 KB file per distinct set with nothing to reap it.
-2. The hero takes that buffer through the ordinary path. `mosaic_blur.rs` goes whole:
-   `MosaicBlur`, `compose_mosaic_blur`, `blit`, `PER_TILE`, `mosaic_blur_tests.rs`.
-3. `impl_mosaic_hero!` goes with it. **`last_mosaic_paths` stays and changes meaning** —
-   it stops guarding a paint and starts guarding a *recompose*.
-4. `MosaicHeroTile`'s `CoverMosaic` branch retires; `CoverMosaic` itself stays, the mosaic
-   *picker* being its other consumer.
-5. **No aurora work in this phase**, which is the point of it being a deletion.
+1. `media::artwork::compose_cover(sources) -> RgbImage` split out of `compose_artwork`, whose
+   encode-hash-persist tail stays playlist-only — Recently Played's top four moves on nearly every
+   track and would leave a ~50 KB file per distinct set with nothing to reap it. **Two corrections
+   came with the extraction**: it decodes through `decode_capped`, this being the one composition
+   path outside the tree's bounded-decode preamble; and it decodes one source at a time against its
+   own destination rect, where the original held four full-size `DynamicImage`s at once. Composed
+   pixels are unchanged — `resize_to_cover` only ever read its own image.
+2. `ui::artwork_cache::pair_from_image` split out of `decode_artwork` the same way, so the collage
+   takes the ordinary path from an image already in hand. `mosaic_blur.rs` went whole:
+   `MosaicBlur`, `compose_mosaic_blur`, `blit`, `PER_TILE`, `decode_tile`, `mosaic_blur_tests.rs`.
+3. **`impl_mosaic_hero!` went, and its replacement is `impl_detail_view_helpers!`** — a new
+   `artwork_only` arm, the curated pages wanting the header helper without the detail `tracks`
+   swap. `ui::mosaic_hero` survives as what the two pages genuinely share: `compose_off_thread`
+   and **`MosaicGuard`**, the `last_mosaic_paths` field given a type. It stops guarding a paint and
+   starts guarding a recompose, and the invariant that made it correct — claim past the section
+   check, never beside the compose — now has a doc home instead of being restated at four sites.
+   `claim` is check-and-set under one lock, so the second of two in-flight composes is a no-op.
+4. `MosaicHeroTile` draws an `Image`; `CoverMosaic` stays for the playlist *picker*, which wants
+   the live form because its tiles follow a selection nothing has composed yet. A source walk pins
+   that it is the picker's alone. **The arm moved from `count` to the cover**: a set whose every
+   entry lacks artwork is populated and has nothing to paint, so `count` now picks between the
+   page's glyph and the placeholder note rather than between the two arms. `tile-count` went with
+   the hero, its whole reason having been the hero.
+5. Also deleted: the two `mosaic_thumbs` `CoverThumbs` tiers (128 px, cap 16) with
+   `MOSAIC_THUMB_SIZE`/`MOSAIC_THUMB_CAP`, `mosaic_cover`, `request-mosaic-cover` on both globals,
+   the two `mosaic-paths` `VecModel`s and their clears. Both leaves now route through
+   `release_hero_slots!`, which hands back the new `cover` slot beside the blur pair.
+6. **No aurora work in this phase**, which was the point of it being a deletion.
 
-**The cost, stated rather than buried:** a 600² compose-and-measure where there was a 192²
-one. v2 makes this cheaper than v1 costed it — the measure is now `color_thief` at 0.1 ms
-rather than Celebi at 45 ms on a 384² input, so the recompose is dominated by the four
-decodes both shapes already pay.
+**The cost, as costed:** a 600² compose-and-measure where there was a 192² one, dominated by the
+four decodes both shapes already paid — the measure has been `color_thief` at ~0.1 ms since
+Phase 6. Against it: one cache tier per page gone, and the four-full-size-decodes spike removed
+from the playlist path too.
+
+**Landed:** `compose_cover` had *no* test at all, so its four layouts are now pinned against
+composed pixels (`each_layout_puts_every_source_in_its_own_rect`) along with the empty/5-source,
+unreadable-source and past-the-decode-cap refusals; `mosaic_hero_tests` covers the composed pair
+and the guard's claim-once contract; `the_cover_mosaic_is_the_pickers_alone` walks the tree.
+Retired with their subject: the five `mosaic_blur_tests`. Two stale comments fixed in passing —
+`BLUR_SIGMA`'s doc naming the mosaic composition, and a `pad-to-four` property named in
+`track.rs` and `track_tests.rs` that `CoverMosaic` had already replaced with `tile-count`.
 
 ### Phase 10 — The setting
 
@@ -477,12 +501,13 @@ decodes both shapes already pay.
 1. **New pins: all landed in Phase 8**, which is where they belong — `wash_cap` against the
    palette table on both polarities, the composite staying legible over five covers × two
    polarities, and the two arms not leaking into each other. The geometry constants agreeing
-   between `ui/aurora.rs` and `aurora-backdrop.slint` landed in Phase 7. Nothing further is owed
-   here unless Phase 9 or 10 adds a surface.
+   between `ui/aurora.rs` and `aurora-backdrop.slint` landed in Phase 7, and Phase 9's own —
+   the collage layouts, the guard, the `CoverMosaic` walk — with it. Nothing further is owed here
+   unless Phase 10 adds a surface.
 2. **Retirements: done.** The two `backdrop_tests.rs` cases asserting a solved chrome tone on an
    aurora surface and the peak-tone derivation went with `PEAK_TONE` in Phase 8, and
    `every_tint_lands_on_one_tone` with `TINT_TONE`. The chroma-band tests went with the band in
-   Phase 6.
+   Phase 6, and the five `mosaic_blur_tests` with their module in Phase 9.
 3. **Pins that survive whole:** the dither tile's flat histogram, blue spectrum and one-level
    alpha; no ramp ending on `transparent`; the `image-fit`/tiling quartet; each of the three
    sites mounting exactly one of the two stacks; neither stack naming a global.

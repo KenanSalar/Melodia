@@ -269,9 +269,8 @@ fn the_grid_card_reads_the_covers_generation() {
 /// the tier is warm enough to decode on. A mount that forgets either one pins
 /// its grid at generation 0 — permanently coverless.
 ///
-/// Counted by arity rather than by name, because the hero's `CoverMosaic` wires
-/// a `request-cover` too and deliberately keeps the one-argument form: its tier
-/// is warmed by `refresh_hero`, not by a tab.
+/// Counted by arity rather than by name: the one-argument form is a live signature
+/// elsewhere in the tree, so a mount wired to it builds and only misbehaves on a cold tab.
 #[test]
 fn every_grid_mount_forwards_the_covers_generation() {
     // The two grid tabs live in their own files under `views/favorites/`; the

@@ -140,10 +140,14 @@ silently miss the other.
 - **The play-count badge lives on `EntityCard`**, not on whichever host wants it, and renders a
   `MaterialIcon` rather than a `"▶"` in the string (the fallback-font line-box pitfall).
 
-- **`MosaicHeroTile`** is the 140 px artwork square both mosaic heroes draw. **Every brush in it
-  is a `HeroBackdrop` tier on both arms of the ternary** — with no mosaic the hero is the dark
-  gradient floor where a light theme's accent lands dark-on-dark, and the populated fill matters
-  just as much, the placeholder slots being translucent.
+- **`MosaicHeroTile`** is the 140 px artwork square both curated heroes draw, and it draws **one
+  composed collage, never a live `CoverMosaic`** — `media::artwork::compose_cover` owns the 1/2/3/4
+  arrangement, so the square, the banner blur and a playlist thumbnail are all the same
+  composition. **Every brush in it is a `HeroBackdrop` tier and none may become a `Theme.*`
+  token** — with no collage the hero is the dark gradient floor where a light theme's accent lands
+  dark-on-dark. **What decides the arm is the cover, not the count**: a set whose every entry lacks
+  artwork is populated and has nothing to paint, so `count` picks between the page's own glyph and
+  the placeholder note rather than between the two arms.
 
 ### Hero bands
 
@@ -284,14 +288,16 @@ silently miss the other.
     its band and growing no title, chip strip or artwork size of its own — the detail bodies being
     the half worth pinning, one regrowing a header passing every other check.
 
-- **The mosaic heroes' `last_mosaic_paths` guard means "this mosaic is what's painted", so it moves
-  only *past* the check that decides whether anything is** — inside `apply_hero_blur` and
-  `clear_hero_blur`, never at the fetch that kicked them. Both bail when the section went inactive
-  mid-compose, so a guard written beforehand records a paint that never happened and every later
-  refresh for the same top-4 early-returns, leaving the banner on the accent-seeded floor until a
-  section leave's `forget_mosaic`. **The pair is one source**: `impl_mosaic_hero!($Global, $Ui)`
-  generates it into each view's `hero.rs` — a macro rather than a generic fn, two distinct Slint
-  globals having no trait between them.
+- **The curated heroes' `MosaicGuard` means "this collage is what's painted", so the claim moves
+  only *past* the check that decides whether anything is** — inside each view's
+  `publish_hero_artwork`, never at the fetch that kicked it. Both bail when the section went
+  inactive mid-compose, so a set claimed beforehand records a paint that never happened and every
+  later refresh for the same top-4 early-returns, leaving the banner on the accent-seeded floor
+  until a section leave's `forget_mosaic`. **`claim` is check-and-set under one lock**, the second
+  of two in-flight composes for one set being a no-op rather than a second paint.
+  **The publish is gated whole, where a detail view fills its own slots even while hidden**: this
+  page's leave wipes its models and forgets the guard, so slots written behind it have nothing to
+  be ready for and their claim would suppress the re-enter's recompose.
 
 - **Now-Playing accent tiers are derived on the `Player` global, not at the call site** — one
   solved brush plus three named translucent tiers off it. Reach for the tier, never a fresh
@@ -701,8 +707,10 @@ Data-agnostic: parallel `labels`/`icons`, `avail-width`, `selected-index`, `sele
 the mounted tab's count; with a detail open it grows into that entity's hero at `MosaicTabHero`'s
 `hero-height` exactly — the same formula, so the two bands agree on what a hero is. One animated
 `hero-t` drives the height, backdrop reveal, back slot, palette and count exit. **The two bands are
-siblings, not one parameterised component**, differing in mosaic-square-versus-artwork-tile and
-fixed-height-versus-morph, which Slint can't abstract over — so the header-row fixes are *ported
+siblings, not one parameterised component**, differing in which artwork square they draw (a
+`MosaicHeroTile`, whose fallback is the page's own Material Symbols glyph, against an
+`ArtworkImage`, whose fallback is an SVG asset) and in fixed-height-versus-morph, neither of which
+Slint can abstract over — so the header-row fixes are *ported
 verbatim* and `ui::library_tab_band_tests` holds the copy to a contract a copy is exactly how you
 lose. **Two things stay at each host**: the per-tab `ActionPill` rows (`@children`, placed after the
 trailing spacer, which is also the slack `HERO_MAX_ROWS` is measured against) and the tooltip frame.
@@ -746,7 +754,8 @@ block first; each page's section below is deltas only.** The nav-index map is in
   beside the model clears. A count outliving its model suppresses an empty state over an emptied
   model; resetting to `0` asserts "nothing here" for the length of the re-fetch. `-1` matches
   neither `== 0` nor `> 0`, so every existing gate keeps working — the one reader splitting on both
-  is `MosaicHeroTile`, which clamps. The five library counts are interpolated into gettext plurals,
+  is `MosaicHeroTile`, whose two mounts clamp it. The five library counts are interpolated into
+  gettext plurals,
   so each is read through a `>= 0` ternary (a ternary, not an `if`, so the `Text` keeps its slot).
   **Tracks is the exception, and the exception is the rule read precisely** — what obliges the
   rewind is the leave dropping the rows, and its leave doesn't. **Rewind if and only if you clear,
@@ -791,7 +800,7 @@ block first; each page's section below is deltas only.** The nav-index map is in
 
 - Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, should_announce_warm, UNFETCHED_COUNT}`,
   `ui::grid_rows::{chunk_entity_rows, write_grid}`, `ui::track_list_cache`,
-  `ui::mosaic_hero::impl_mosaic_hero!`.
+  `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 
 ### Per-page deltas
 
@@ -799,7 +808,7 @@ Each page's own tree is the reference for how it fills; what follows is only the
 edit would otherwise reverse.
 
 - **Favorites** (three tabs) — `refresh_hero` stays **ungated**, answering the count, running time
-  and mosaic the band states on all three tabs, which is why Songs owes no count rewind. Both sorts
+  and collage the band states on all three tabs, which is why Songs owes no count rewind. Both sorts
   resolve **in memory**, the fetch having lost its sort parameters entirely. **The artist sort
   applies to the cached `Vec`, not the filtered copy** — `first_screenful_paths` picks prewarm
   targets off that cache, so sorting downstream warms the covers of whichever artists SQL returned

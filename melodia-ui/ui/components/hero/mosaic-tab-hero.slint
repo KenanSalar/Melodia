@@ -12,8 +12,9 @@ import { TabSearchHeader } from "tab-search-header.slint";
 // strings, their tab list and the pills they pass as `@children`.
 //
 // **Data-agnostic on purpose.** A Slint component can't be parameterised over a global and
-// `Favorites` / `RecentlyPlayed` are distinct generated types — the same wall `impl_mosaic_hero!`
-// works around in Rust, and the reason this is a component rather than a third copy.
+// `Favorites` / `RecentlyPlayed` are distinct generated types — the same wall
+// `impl_detail_view_helpers!` works around in Rust, and the reason this is a component rather
+// than a third copy.
 export component MosaicTabHero inherits Rectangle {
     // **Inline `[@tr("…"), …]` at the call site** — an array populated from Rust renders
     // untranslated. Forwarding one through here keeps the literal in a `.slint` file.
@@ -30,7 +31,7 @@ export component MosaicTabHero inherits Rectangle {
     in property <string> empty-copy;
 
     in property <int> mosaic-count;
-    in property <[string]> mosaic-paths;
+    in property <image> mosaic-cover;
     in property <string> empty-glyph;
     in property <bool> empty-glyph-filled: false;
 
@@ -42,8 +43,6 @@ export component MosaicTabHero inherits Rectangle {
     in-out property <string> filter;
     in property <int> blur-tick;
 
-    // `pure` because `MosaicHeroTile`'s is, which is because `CoverMosaic`'s is.
-    pure callback request-cover(string) -> image;
     // Fires *after* the direction and arming have settled, so a host handler that clears its
     // filter and calls into Rust can't be sequenced ahead of them.
     callback tab-selected(int);
@@ -165,7 +164,7 @@ export component MosaicTabHero inherits Rectangle {
             search-edited(t) => { root.search-edited(t); }
         }
 
-        // Mosaic tile + title block.
+        // Artwork tile + title block.
         HorizontalLayout {
             vertical-stretch: 1;
             spacing: Theme.pad-lg;
@@ -176,12 +175,9 @@ export component MosaicTabHero inherits Rectangle {
 
                 MosaicHeroTile {
                     count: root.mosaic-count;
-                    paths: root.mosaic-paths;
+                    cover: root.mosaic-cover;
                     empty-glyph: root.empty-glyph;
                     empty-glyph-filled: root.empty-glyph-filled;
-                    request-cover(p) => {
-                        return root.request-cover(p);
-                    }
                 }
             }
 

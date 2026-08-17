@@ -80,13 +80,13 @@ export component FavoritesView inherits Rectangle {
                 && Favorites.track-count == 0;
             empty-copy: @tr("No favorites yet");
 
-            // Clamped, unlike every other reader of this count: `MosaicHeroTile` splits
-            // on `== 0` and `> 0`, so the not-yet-fetched `-1` would satisfy neither and
-            // the square would paint nothing at all. Folding it onto 0 draws the empty
-            // glyph, which is what a section re-enter should show while `mosaic-paths` —
-            // cleared on the same tick this count is — is still empty.
+            // Clamped, unlike every other reader of this count: `MosaicHeroTile` picks its
+            // fallback glyph on `== 0`, so the not-yet-fetched `-1` would draw the generic
+            // placeholder note where the page's own glyph belongs — which is what a section
+            // re-enter shows while the collage, cleared on the same tick this count is, is
+            // still empty.
             mosaic-count: max(Favorites.track-count, 0);
-            mosaic-paths: Favorites.mosaic-paths;
+            mosaic-cover: Favorites.cover;
             empty-glyph: "favorite";
             empty-glyph-filled: true;
 
@@ -98,9 +98,6 @@ export component FavoritesView inherits Rectangle {
             filter <=> Favorites.filter;
             blur-tick: Favorites.blur-search-tick;
 
-            request-cover(p) => {
-                return Favorites.request-mosaic-cover(p);
-            }
             search-edited(t) => { root.filter-tick-pending += 1; }
             tab-selected(i) => {
                 // A Songs filter carried into the Artists grid would silently
