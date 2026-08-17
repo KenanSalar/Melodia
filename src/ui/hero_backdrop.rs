@@ -5,16 +5,14 @@
 //! writes the answer. Six views share one global, so every hero opens by calling
 //! exactly one of these.
 //!
-//! The washes are the artwork's own colours whichever backdrop is mounted. What the tiers
-//! over them are depends on the arm: the blur solves them off the cover's hue, the aurora
-//! takes the theme's own. Either way the set is a snapshot of the palette that was live when the
-//! hero opened, which is what [`republish_for_palette`] exists to refresh.
+//! **Every hero has washes**, and they are the artwork's own wherever there is artwork: a genre
+//! substitutes its name-hashed pair through [`apply_gradient`], and anything else with no cover
+//! substitutes the accent inside [`aurora::tints`]. What the tiers over them are depends on the
+//! arm — the blur solves them off the cover's hue, the aurora takes the theme's own — and either
+//! way the set is a snapshot of the palette that was live when the hero opened, which is what
+//! [`republish_for_palette`] exists to refresh.
 //!
-//! **An entry with no artwork has no aurora to paint**, so it publishes `has-tints: false` and the
-//! blur's own tiers, exactly as Genre Detail does — see [`BackdropSample::solve`] for why washing
-//! the app's accent instead is the wrong answer.
-//!
-//! The whole set is published — scrim, gradient floor, the aurora's four washes,
+//! The whole set is published — scrim, gradient floor, the aurora's three washes,
 //! hue-carrying chrome and both text tiers — so a hero and the Now Playing view answer
 //! identically whichever backdrop the band is painting.
 
@@ -28,41 +26,56 @@ use crate::ui::backdrop::{self, BackdropColors, BackdropSample};
 use crate::{AppWindow, HeroBackdrop};
 
 thread_local! {
-    /// The measurement behind whatever is in `HeroBackdrop` now, so a palette change can re-solve
-    /// it. `None` for a genre — [`apply_gradient`]'s stops are theme-independent and re-solving
-    /// them would only overwrite the banner on screen with the last *artwork* hero's.
+    /// What the set now in `HeroBackdrop` was derived from, so a palette change can re-solve it.
+    /// `None` until the first hero opens.
     ///
     /// A thread-local because it shadows a global that is itself process-wide, and both are the
     /// UI thread's alone.
-    static PUBLISHED_SAMPLE: Cell<Option<BackdropSample>> = const { Cell::new(None) };
+    static PUBLISHED_HERO: Cell<Option<PublishedHero>> = const { Cell::new(None) };
 }
 
-/// What a hero's backdrop is derived from, and the one axis [`write`] branches on. A cover answers
-/// with washes and a floor to lay them over; a genre has neither and keeps its own name-hashed
-/// stops. One value rather than two optional arguments that could never disagree — and the
-/// `Option` inside `Artwork` is the same argument one level down, `has-tints` being exactly
-/// "are there washes" rather than a flag a caller could set against the colours it passed.
-enum HeroFill {
-    Artwork(Option<[Tint; WASH_COUNT]>),
-    Gradient { start_rgb: u32, end_rgb: u32 },
+/// The two inputs a hero can be published from, kept so [`republish_for_palette`] can re-run
+/// whichever one it was. **A genre belongs here too now**: its tiers were theme-independent while
+/// it was permanently on the blur, and the aurora arm hands it `Theme.base` and a neutral ink.
+#[derive(Clone, Copy)]
+enum PublishedHero {
+    Artwork(BackdropSample),
+    Genre(GenreStops),
+}
+
+/// Genre Detail's two name-hashed pairs, from [`crate::ui::genres::genre_accent`].
+///
+/// Two, because the arms want different ones: the blur paints `floor` verbatim — the dimmed pair,
+/// picked so the scrim it solves leaves the foreground legible — where the aurora washes `wash`,
+/// the saturated pair the genre's own square and grid card paint, having no scrim for the dimming
+/// to survive. A struct rather than four arguments, two same-typed pairs being swappable in
+/// silence.
+#[derive(Clone, Copy)]
+pub(crate) struct GenreStops {
+    pub floor: (u32, u32),
+    pub wash: (u32, u32),
+}
+
+/// Which stops the gradient floor takes.
+#[derive(Clone, Copy)]
+enum Floor {
+    /// The tier set's own — every hero but one.
+    FromTiers,
+    /// Genre Detail's dimmed pair, which only the blur arm ever paints: the aurora's floor is flat
+    /// `Theme.base` like every other hero's, the genre's colours reaching it through the washes.
+    Own(u32, u32),
 }
 
 /// Solve and publish from a cover's measurement. An empty sample — no artwork, or a
-/// failed decode — takes the same path as every cover; what it falls back to, and why
-/// that isn't a guess, is on [`BackdropSample::solve`].
-///
-/// **No washes without a cover to take them from**, so an entry showing the placeholder keeps the
-/// blur whatever the setting says. That is one decision with two halves: `solve` already picks the
-/// blur's tiers for an empty sample, and `has-tints` is what stops the mount painting the aurora
-/// over them.
+/// failed decode — takes the same path as every cover; what it falls back to on each arm, and why
+/// that isn't a guess, is on [`BackdropSample::solve`] and [`aurora::tints`].
 pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
-    // One read for both halves: the tier set on the aurora arm, and the band the washes are
-    // clamped into over it.
+    // One read for both halves: the tier set, and the seed the washes fall back to.
     let theme = backdrop::theme_tokens(ui);
     let colors = sample.solve(&theme, backdrop::kind(ui));
-    let tints = sample.carries_artwork().then(|| aurora::tints(sample.seeds, &theme));
-    PUBLISHED_SAMPLE.set(Some(sample));
-    write(ui, &colors, HeroFill::Artwork(tints));
+    let tints = aurora::tints(sample.seeds, &theme);
+    PUBLISHED_HERO.set(Some(PublishedHero::Artwork(sample)));
+    write(ui, &colors, &tints, Floor::FromTiers);
 }
 
 /// Re-solve the open hero against a palette that has just changed.
@@ -73,27 +86,41 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
 /// next drill, and the ink over an open hero would keep the *old* theme's tones against the base
 /// the new one paints.
 pub(crate) fn republish_for_palette(ui: &AppWindow) {
-    if let Some(sample) = PUBLISHED_SAMPLE.get() {
-        apply(ui, sample);
+    match PUBLISHED_HERO.get() {
+        Some(PublishedHero::Artwork(sample)) => apply(ui, sample),
+        // Idempotent on the blur, whose stops are the genre's own — no second gate for an arm
+        // that re-solves to the colours it already published.
+        Some(PublishedHero::Genre(stops)) => apply_gradient(ui, stops),
+        None => {}
     }
 }
 
-/// Solve and publish for a hero whose backdrop *is* a gradient — Genre Detail, which has
-/// no artwork by nature and paints the name-hashed stops from
-/// [`crate::ui::genres::genre_accent`]. Those are already theme-independent, so they are
-/// kept verbatim and only measured.
+/// Solve and publish for the one hero with colours of its own rather than a cover — Genre Detail,
+/// whose name-hashed stops come from [`crate::ui::genres::genre_accent`].
 ///
-/// `start_rgb` doubles as the hue seed, so the chrome tier stays recognisably that
-/// genre's rather than reverting to the theme accent.
+/// The washes are the saturated pair whichever arm runs — two opaque colours a quantizer could have
+/// answered with, so [`aurora::tints`] fans a third off them and needs no genre case. What the arms
+/// disagree about is the floor and the tiers over it, and the branch is here rather than at the call
+/// site because [`backdrop::kind`] is the only place allowed to ask which surface is mounted:
 ///
-/// **Reaches [`backdrop::solve`] directly, which is the blur's path, whatever the rest of
-/// the app is painting.** The aurora washes a record's own colours over the theme's base; a
-/// genre has no record, and these stops are only legible under the scrim that arm solves.
-pub(crate) fn apply_gradient(ui: &AppWindow, start_rgb: u32, end_rgb: u32) {
-    let luma = backdrop::gradient_luma(start_rgb, end_rgb);
-    let colors = backdrop::solve(start_rgb, luma);
-    PUBLISHED_SAMPLE.set(None);
-    write(ui, &colors, HeroFill::Gradient { start_rgb, end_rgb });
+/// - **Blur** — the dimmed pair verbatim as the floor, `stops.floor.0` doubling as the hue seed so
+///   the chrome tier stays recognisably that genre's rather than reverting to the theme accent.
+/// - **Aurora** — the theme's own tiers over a flat base, exactly as a cover gets.
+pub(crate) fn apply_gradient(ui: &AppWindow, stops: GenreStops) {
+    let theme = backdrop::theme_tokens(ui);
+    let tints = aurora::tints([Some(stops.wash.0), Some(stops.wash.1), None, None], &theme);
+    PUBLISHED_HERO.set(Some(PublishedHero::Genre(stops)));
+
+    match backdrop::kind(ui) {
+        backdrop::BackdropKind::Aurora => {
+            write(ui, &backdrop::theme_backdrop(&theme), &tints, Floor::FromTiers);
+        }
+        backdrop::BackdropKind::Blur => {
+            let luma = backdrop::gradient_luma(stops.floor.0, stops.floor.1);
+            let colors = backdrop::solve(stops.floor.0, luma);
+            write(ui, &colors, &tints, Floor::Own(stops.floor.0, stops.floor.1));
+        }
+    }
 }
 
 /// Reset to the floor solve on hero teardown, so backing out of one detail and into
@@ -102,7 +129,7 @@ pub(crate) fn reset(ui: &AppWindow) {
     apply(ui, BackdropSample::default());
 }
 
-fn write(ui: &AppWindow, colors: &BackdropColors, fill: HeroFill) {
+fn write(ui: &AppWindow, colors: &BackdropColors, tints: &[Tint; WASH_COUNT], floor: Floor) {
     let g = ui.global::<HeroBackdrop>();
     g.set_chrome(backdrop::chrome_brush(colors));
     g.set_chrome_text(backdrop::chrome_text_brush(colors));
@@ -111,25 +138,17 @@ fn write(ui: &AppWindow, colors: &BackdropColors, fill: HeroFill) {
     g.set_on_backdrop(backdrop::text_brush(colors));
     g.set_on_backdrop_muted(backdrop::muted_brush(colors));
 
-    match fill {
-        // A `None` leaves the washes where they are, as the gradient arm does: nothing paints them
-        // while `has-tints` is false, and the floor is the blur's own either way.
-        HeroFill::Artwork(tints) => {
-            g.set_floor_start(color(colors.floor_start));
-            g.set_floor_end(color(colors.floor_end));
-            g.set_has_tints(tints.is_some());
-            if let Some([tint_1, tint_2, tint_3]) = tints {
-                g.set_tint_1(tint_1.to_color());
-                g.set_tint_2(tint_2.to_color());
-                g.set_tint_3(tint_3.to_color());
-            }
-        }
-        HeroFill::Gradient { start_rgb, end_rgb } => {
-            g.set_floor_start(color(start_rgb));
-            g.set_floor_end(color(end_rgb));
-            g.set_has_tints(false);
-        }
-    }
+    let (floor_start, floor_end) = match floor {
+        Floor::FromTiers => (colors.floor_start, colors.floor_end),
+        Floor::Own(start_rgb, end_rgb) => (start_rgb, end_rgb),
+    };
+    g.set_floor_start(color(floor_start));
+    g.set_floor_end(color(floor_end));
+
+    let [tint_1, tint_2, tint_3] = tints;
+    g.set_tint_1(tint_1.to_color());
+    g.set_tint_2(tint_2.to_color());
+    g.set_tint_3(tint_3.to_color());
 }
 
 #[cfg(test)]

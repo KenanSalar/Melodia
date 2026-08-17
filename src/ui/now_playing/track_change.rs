@@ -188,11 +188,9 @@ pub(super) async fn apply_track_change(
 }
 
 /// Every colour this view paints on the backdrop, answered together. Which arm runs and both of
-/// its fallbacks live on [`BackdropSample::solve`], so this tier and the hero's resolve them
-/// identically.
-///
-/// A track with no artwork keeps the blur: `solve` has already answered with its colours, and
-/// `np-has-tints` is what stops the mount laying the aurora over them.
+/// its fallbacks live on [`BackdropSample::solve`] and [`aurora::tints`], so this tier and the
+/// hero's resolve them identically — including for a track with no artwork, which washes the
+/// accent rather than dropping to the other backdrop.
 fn write_backdrop_tiers(ui: &AppWindow, sample: BackdropSample) {
     let theme = backdrop::theme_tokens(ui);
     let colors = sample.solve(&theme, backdrop::kind(ui));
@@ -210,13 +208,10 @@ fn write_backdrop_tiers(ui: &AppWindow, sample: BackdropSample) {
     player.set_np_floor_end(color(colors.floor_end));
     player.set_np_scrim(backdrop::scrim_brush(&colors));
 
-    let tints = sample.carries_artwork().then(|| aurora::tints(sample.seeds, &theme));
-    player.set_np_has_tints(tints.is_some());
-    if let Some([tint_1, tint_2, tint_3]) = tints {
-        player.set_np_tint_1(tint_1.to_color());
-        player.set_np_tint_2(tint_2.to_color());
-        player.set_np_tint_3(tint_3.to_color());
-    }
+    let [tint_1, tint_2, tint_3] = aurora::tints(sample.seeds, &theme);
+    player.set_np_tint_1(tint_1.to_color());
+    player.set_np_tint_2(tint_2.to_color());
+    player.set_np_tint_3(tint_3.to_color());
 }
 
 /// Re-solve the view's tiers against a palette that has just changed.

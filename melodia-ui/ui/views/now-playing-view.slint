@@ -51,12 +51,12 @@ export component NowPlayingView inherits Rectangle {
     // negative.
     property <length> strip-w: max(root.cover-size, min(root.content-width * 0.75, root.strip-w-max));
 
-    // Which of the two backdrops this view paints. **`np-has-tints` is folded in**: a track with no
-    // artwork has no colours to wash, so it keeps the blur — whose art-less arm is the accent-seeded
-    // floor this view was built on. Both stacks are mounted and the loser goes transparent, so the
-    // arms cross-fade; this is the one site where the answer can change with the view on screen,
-    // a skip landing on an art-less track, and an `if` pair would cut.
-    property <bool> aurora-shown: Theme.aurora-backdrop && Player.np-has-tints;
+    // Which of the two backdrops this view paints — the setting alone, a track with no artwork
+    // washing `Theme.accent` rather than dropping to the other arm. Both stacks are mounted and the
+    // loser goes transparent, so the arms cross-fade; nothing can change the answer with the view
+    // on screen any more, the setting being restart-gated, but an `if` pair would still cut on the
+    // sibling bands and the three sites are held to one shape.
+    property <bool> aurora-shown: Theme.aurora-backdrop;
 
     // The stack the six hero bands mount, on this view's own colour tier. **Both floor stops come
     // from Rust**, not a `Theme.accent` mix — this is the surface an art-less track's title sits on

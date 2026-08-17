@@ -301,6 +301,24 @@ fn no_seeds_at_all_falls_back_to_the_theme_accent() {
     }
 }
 
+/// The accent stands in as a **seed**, not as a rotation origin — the whole of why an art-less hero
+/// is worth painting at all.
+///
+/// Left as the origin, every wash comes out at the fill weight and the surface reads as unpainted
+/// `Theme.base`. Asserted against a one-colour sleeve rather than against the numbers, since what
+/// is claimed is that the two are the same case: one seed in, one wash at full weight and a fan of
+/// two behind it.
+#[test]
+fn an_empty_set_washes_like_a_sleeve_that_quantized_to_one_colour() {
+    let art_less = tints([None; SEED_COUNT], &mocha());
+    let one_hue = tints(ONE_HUE, &mocha());
+
+    let weights: Vec<f32> = art_less.iter().map(|tint| tint.weight).collect();
+    let reference: Vec<f32> = one_hue.iter().map(|tint| tint.weight).collect();
+    assert_eq!(weights, reference, "an art-less set must carry a real seed's weights");
+    assert!(weights[0] >= 1.0, "the accent is the seed, so its wash is laid on in full");
+}
+
 // --- the dither tile -----------------------------------------------------------
 
 /// Uniform by construction, because the tile is composited at one 8-bit level: whether a pixel

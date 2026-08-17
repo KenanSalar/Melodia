@@ -262,8 +262,8 @@ pub(crate) enum BackdropKind {
 }
 
 /// Everything a solve needs off a decoded cover. All are `None` when there is none — no artwork,
-/// or a failed decode — and the publisher falls back to the live `Theme.accent` and
-/// [`floor_luma`].
+/// or a failed decode — and both arms fall back to the live `Theme.accent`: the blur seeds its floor
+/// from that hue at [`floor_luma`], the aurora washes it through [`crate::ui::aurora::tints`].
 #[derive(Clone, Copy, Default)]
 pub(crate) struct BackdropSample {
     /// Most prominent colour quantized out of the cover, supplying the *hue* for every colour
@@ -300,34 +300,23 @@ impl BackdropSample {
         }
     }
 
-    /// Whether there was artwork to measure — the second axis the aurora turns on, over and above
-    /// the setting.
-    ///
-    /// `accent_argb` is `seeds[0]`, so this asks whether the quantizer answered at all and never
-    /// whether the cover was colourful: a greyscale sleeve carries its own greys and washes with
-    /// them. Publishers hand it to `has-tints` / `np-has-tints` so the mount and [`Self::solve`]
-    /// can't disagree about which arm is painting.
-    pub(crate) fn carries_artwork(self) -> bool {
-        self.accent_argb.is_some()
-    }
-
     /// The whole colour set for whichever surface is mounted.
     ///
     /// The blur borrows only the *hue* from `theme`, its accent standing in when there was no
     /// artwork so a missing cover doesn't strand the surface on the previous one's colour; [`solve`]
     /// owns every tone. The aurora consults the measurement for nothing at all: [`theme_backdrop`]
-    /// answers, and the washes are bounded rather than solved against.
+    /// answers, and what the cover was reaches the surface only through the washes.
     ///
-    /// **An entry with no artwork keeps the blur under either setting**, hence the match on the
-    /// seed rather than on `kind` alone: the aurora's subject is the record's colours and a
-    /// placeholder has none. Genre Detail reaches the same conclusion one step earlier, through
-    /// [`apply_gradient`](crate::ui::hero_backdrop::apply_gradient).
+    /// **The setting is the whole of the branch.** An entry with no artwork used to keep the blur
+    /// under either, the aurora's only fallback then being a set of fills with no seed behind them;
+    /// `tints` now takes the accent as that seed, so every hero has an aurora to paint.
     pub(crate) fn solve(self, theme: &ThemeTokens, kind: BackdropKind) -> BackdropColors {
-        match (kind, self.accent_argb) {
-            (BackdropKind::Aurora, Some(_)) => theme_backdrop(theme),
-            (BackdropKind::Aurora | BackdropKind::Blur, seed) => {
-                solve(seed.unwrap_or(theme.accent), self.luma.unwrap_or_else(floor_luma))
-            }
+        match kind {
+            BackdropKind::Aurora => theme_backdrop(theme),
+            BackdropKind::Blur => solve(
+                self.accent_argb.unwrap_or(theme.accent),
+                self.luma.unwrap_or_else(floor_luma),
+            ),
         }
     }
 }
@@ -458,8 +447,8 @@ pub(crate) struct BackdropColors {
 ///
 /// Reach for [`BackdropSample::solve`] rather than calling this directly — it resolves both
 /// fallbacks in one place *and* picks the arm, which is what keeps the two consumers from
-/// drifting. Genre Detail's procedural gradient is the sole caller here, being permanently on the
-/// blur whatever the setting says.
+/// drifting. Genre Detail's procedural gradient is the sole caller here, having stops of its own
+/// to measure where a sample has a cover.
 pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
     let alpha = scrim_alpha(backdrop_luma);
     let tone = composited_tone(backdrop_luma, alpha);
@@ -486,7 +475,9 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
 /// The aurora's tier set: the theme's own colours, and a neutral chrome the washes read through.
 ///
 /// A theme is a constant where a cover is not, so this needs no solve, and nothing bounds the
-/// washes over it — [`crate::ui::aurora::tints`] argues what that trade buys.
+/// washes over it — [`crate::ui::aurora::tints`] argues what that trade buys. Reachable past
+/// [`BackdropSample::solve`] for the one hero that has washes without a sample to solve from,
+/// Genre Detail.
 ///
 /// **The chrome carries no hue of its own**, the answer that survived two attempts at a derived
 /// one: a colour taken from the artwork argues with the washes rather than belonging to them, the
@@ -498,7 +489,7 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
 /// direction to a surface whose whole structure is which way each sweep runs. The scrim is `base`
 /// at the alpha floor — nothing mounts the blur stack on this arm, and base over base is inert
 /// even if something did.
-fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
+pub(crate) fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
     BackdropColors {
         scrim: theme.base,
         scrim_alpha: SCRIM_ALPHA_MIN,

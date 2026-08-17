@@ -104,14 +104,15 @@ export component MosaicTabHero inherits Rectangle {
     vertical-stretch: 0;
     height: root.hero-height;
 
-    // Behind everything else, and one of the two. **`has-tints` is folded in** — it means "there
-    // was artwork to wash", so a curated set whose every entry lacks a cover keeps the blur here
-    // just as a genre does on the sibling band.
-    property <bool> aurora-shown: Theme.aurora-backdrop && HeroBackdrop.has-tints;
+    // Behind everything else, and one of the two. The setting alone: a curated set whose every
+    // entry lacks a cover washes `Theme.accent`, which on these two pages is the honest colour —
+    // they are the app's own, not a record's.
+    property <bool> aurora-shown: Theme.aurora-backdrop;
 
-    // Both mounted, the loser transparent, so the arms cross-fade rather than cut — the top four
-    // covers move as the user listens, so a set losing its last cover is reachable with the band
-    // on screen. The gradient floor shows through when there is no blur image.
+    // Both mounted, the loser transparent, so a change of arm cross-fades rather than cutting.
+    // Nothing moves the arm live now that the setting is its only term, but a branch in front of
+    // either stack would leave nothing to fade from if one ever did. The gradient floor shows
+    // through when there is no blur image.
     HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: 100%;

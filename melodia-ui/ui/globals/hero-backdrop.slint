@@ -6,31 +6,27 @@ export global HeroBackdrop {
     // Alpha baked in — see `np-scrim`.
     in-out property <brush> scrim: #0a0a0e73;
 
-    // The no-artwork fill, Genre Detail's whole backdrop, and the aurora's base gradient —
-    // `Theme.base` → `mantle` on that arm. **`floor-start` has a third reader**: the mosaic heroes
-    // fill their square with it even when populated, the placeholder slots over it being
+    // The no-artwork fill, Genre Detail's blur-arm backdrop, and the aurora's base — flat
+    // `Theme.base` in both stops on that arm. **`floor-start` has a third reader**: the mosaic
+    // heroes fill their square with it even when populated, the placeholder slots over it being
     // translucent, so the square and the surface around it move together whichever arm is live.
     in-out property <color> floor-start: #2b2135;
     in-out property <color> floor-end: #14101a;
 
     // `Player.np-tint-*`'s twin, off the same solve — same `WASH_COUNT` reason, and the defaults
-    // have to agree with that block and with `AuroraBackdrop`'s own.
+    // have to agree with that block and with `AuroraBackdrop`'s own. Always populated: a cover
+    // supplies them, a genre substitutes its saturated hashed pair, and anything with no colours
+    // of its own substitutes `Theme.accent`.
     in-out property <color> tint-1: #3a2d4a;
     in-out property <color> tint-2: #2d3a4a;
     in-out property <color> tint-3: #4a2d3a;
-
-    // `has-blur`'s twin: how a host says "not this one". False wherever there was no artwork to
-    // wash — Genre Detail, whose name-hashed stops sit near L*50 and are legible only under the
-    // scrim the blur arm solves, and any entry showing the placeholder, whose only alternative
-    // would be washing the app's own accent. All three mount sites fold it in.
-    in-out property <bool> has-tints: true;
 
     // Written once at boot, answering to the renderer rather than to the artwork;
     // `ui::aurora::dither_tile` argues it.
     in-out property <image> dither;
 
-    // The hue-carrying tier. Solved to 3:1 against the composited backdrop on the blur, and
-    // `Theme.accent` on the aurora, where the washes are bounded to clear it instead.
+    // The hue-carrying tier. Solved to 3:1 against the composited backdrop on the blur, and a
+    // neutral ink at partial alpha on the aurora, where the wash beneath supplies the colour.
     in-out property <brush> chrome: #cba6f7;
 
     // The same tier at the weight lettering wants, and the pill behind it at its own. Solved in

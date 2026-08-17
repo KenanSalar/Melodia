@@ -229,14 +229,14 @@ export component LibraryTabBand inherits Rectangle {
     out property <string> tip-label <=> header.tip-label;
     out property <bool> tip-visible <=> header.tip-visible;
 
-    // Behind everything else. **`has-tints` is folded in**: it means "there was artwork to wash",
-    // so both Genre Detail and an album with no cover keep the blur. Both stacks stay mounted and
+    // Behind everything else, and the setting alone: every hero has washes, a genre substituting
+    // its saturated hashed pair and an album with no cover the accent. Both stacks stay mounted and
     // the loser goes transparent, so a change of arm cross-fades — which on this band is belt and
     // braces, a detail only being swappable through the collapse below or through `reset`.
-    property <bool> aurora-shown: Theme.aurora-backdrop && HeroBackdrop.has-tints;
+    property <bool> aurora-shown: Theme.aurora-backdrop;
 
     // Both mounted, the loser transparent. The gradient floor shows through with no blur image,
-    // which Genre Detail's procedural backdrop relies on. **`detail-open` is this band's alone** —
+    // which is how Genre Detail paints on this arm. **`detail-open` is this band's alone** —
     // the mosaic heroes never stop painting a hero, and nothing may ease *from* a tier the band
     // wasn't painting, so it ANDs into both `shown` terms rather than replacing them.
     HeroBlurBackdrop {

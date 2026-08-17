@@ -95,7 +95,7 @@ pub(super) fn read_last_static_accent(state: &AppState, theme_id: &str) -> Optio
 ///
 /// **The only place `themes::apply` may be called from.** Both tiers are snapshots taken when a
 /// hero or a track landed, so a palette change reaches neither on its own — visibly, since the
-/// aurora publishes `Theme.accent` verbatim and Now Playing republishes only on the next track.
+/// aurora's whole tier set is the theme's own and Now Playing republishes only on the next track.
 pub(super) fn apply_palette(
     ui: &AppWindow,
     theme_id: &str,

@@ -9,7 +9,8 @@
 //!
 //! A fixed set, always — `Brush::interpolate` blends gradients only at a matching stop and element
 //! count — and the quantizer can still answer short, a near-white sleeve coming back as one colour.
-//! Hence [`tints`]'s filling rule.
+//! Hence [`tints`]'s filling rule, which an entry with no cover at all reaches through the same
+//! door: the accent stands in as its one seed.
 
 use slint::{Color, Rgba8Pixel, SharedPixelBuffer};
 
@@ -32,8 +33,8 @@ const _: () = assert!(
 /// Hue rotation for wash *n* when the quantizer had no seed for it, always applied to the first
 /// colour that does exist — rotating from the previous fill would let the set walk away from the
 /// album. A fan either side at the analogous step, so an invented set is harmonious by
-/// construction. Entry 0 is the identity and unreachable: `seeds[0]` empty means no artwork, and
-/// both publishers keep the blur for that rather than calling [`tints`] at all.
+/// construction. Entry 0 is the identity and unreachable, [`tints`] never leaving the first slot
+/// empty.
 const FILL_HUES: [f64; WASH_COUNT] = [0.0, 25.0, -25.0];
 
 /// How faintly a synthesized tint is laid on, against 1.0 for one the artwork offered. **A backdrop
@@ -66,10 +67,16 @@ impl Tint {
 /// sweeps' geometry no longer needs, each owning an edge rather than a corner.
 ///
 /// `theme`'s accent never *pads* a short list: one hue's worth of cover gets a full set of its own
-/// colours, not the app's. It stands in only for an *empty* one, which keeps this total but is a
-/// case neither publisher produces — an entry with no artwork keeps the blur instead.
+/// colours, not the app's. It stands in only for an *empty* one — an entry with no artwork — and it
+/// stands in as a **seed** rather than as a rotation origin: three fills with nothing at full weight
+/// behind them wash at [`FILL_WEIGHT`] throughout and read as an unpainted surface, where one seed
+/// and two fills is the set a sleeve that quantized to a single colour already gets.
 pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], theme: &ThemeTokens) -> [Tint; WASH_COUNT] {
     let origin = seeds.iter().flatten().next().copied().unwrap_or(theme.accent);
+    let mut seeds = seeds;
+    if seeds.iter().all(Option::is_none) {
+        seeds[0] = Some(origin);
+    }
 
     std::array::from_fn(|wash| match seeds[wash] {
         Some(argb) => Tint {

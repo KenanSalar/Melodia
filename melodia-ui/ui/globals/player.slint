@@ -47,16 +47,16 @@ export global Player {
     // The Now Playing backdrop colour set, written together by the `track_change` subscriber from
     // `ui::backdrop`, which answers twice over: on the blur these take their *hue* from the accent
     // quantized out of the cover (`Theme.accent` when art-less) and their *tone* from a solve
-    // against how bright it measured; on the aurora they are the theme's own tokens, the washes
-    // being bounded against them instead. **Read the tier, never a `Theme.*` brush** — which of
-    // the two is live is `backdrop::kind`'s answer and no consumer's. The literal defaults exist
+    // against how bright it measured; on the aurora they are the theme's own base under a neutral
+    // ink, nothing bounding the washes at all. **Read the tier, never a `Theme.*` brush** — which
+    // of the two is live is `backdrop::kind`'s answer and no consumer's. The literal defaults exist
     // for the same reason and are never taken.
 
     // Alpha baked in. Solved so the *composited* backdrop lands in a known dark band whatever
     // the cover, which is what lets one light foreground be correct on all of them.
     in-out property <brush> np-scrim: #0a0a0e73;
 
-    // The floor under the blur slots, and the aurora's base gradient — `Theme.base` → `mantle` on
+    // The floor under the blur slots, and the aurora's base — flat `Theme.base` in both stops on
     // that arm. Two `color`s rather than one `brush`: gradient stops and `.mix()` need `color`
     // operands.
     in-out property <color> np-floor-start: #2b2135;
@@ -64,18 +64,13 @@ export global Player {
 
     // The aurora's washes: the cover's own colours off the same quantize as everything above, with
     // nothing done to them — so what survives here is the record's value structure, not one tone
-    // with three hues on it.
+    // with three hues on it. A track with no cover substitutes `Theme.accent` as its one seed.
     // `color` for the floor's gradient-stop reason, each carrying its own weight in the alpha.
     // **The count matches `ui::aurora::WASH_COUNT`** — a brush animates stop-for-stop only against
     // one of the same type and length, so a varying count would cross through a flat solid mid-fade.
     in-out property <color> np-tint-1: #3a2d4a;
     in-out property <color> np-tint-2: #2d3a4a;
     in-out property <color> np-tint-3: #4a2d3a;
-
-    // `HeroBackdrop.has-tints`' twin, and the same axis: whether the track had artwork to wash at
-    // all. False leaves the washes above unread and the view on the blur, since a placeholder has
-    // no colours of its own and the aurora's whole subject is the record's.
-    in-out property <bool> np-has-tints: true;
 
     // The aurora's grain, written once at boot. Here rather than beside the tints because it
     // answers to the renderer rather than to the artwork; `ui::aurora::dither_tile` argues it.

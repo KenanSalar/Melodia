@@ -157,7 +157,7 @@ silently miss the other.
   `hero_backdrop.rs` publishes it from the same `backdrop.rs` answer the Now Playing `np-*` tier
   runs, and **`backdrop::kind` decides which of two unrelated answers that is**: the blur measures
   the cover and solves a scrim driving the *composite* into a known dark band, seeding every tier
-  from the artwork's hue; the aurora publishes `Theme.base` / `text` / `subtext1` verbatim, a
+  from the artwork's hue; the aurora publishes `Theme.base` as a flat floor under a
   **neutral chrome** — black or white at partial alpha, the wash beneath supplying its colour, which
   is Amberol's answer and survived two attempts to derive that tier from the artwork — and does
   **nothing at all** to the washes over them, which is the other half of that port: a tone band
@@ -193,7 +193,10 @@ silently miss the other.
   transparent through its own `shown` input, which is what the two components spend their gated
   brushes on, so a change of arm **cross-fades**. They were an `if` pair until an art-less track
   made the arm change with the view on screen: a branch destroys the stack outright, leaving
-  nothing to fade from. The blur is declared first and the aurora second, both bases being opaque,
+  nothing to fade from. Nothing moves the arm live any more — the setting is restart-gated and the
+  artwork term is gone — but the `shown` inputs stay load-bearing for the idle drain below, and a
+  branch in front of either stack is still the wrong shape. The blur is declared first and the
+  aurora second, both bases being opaque,
   so paint order decides the midpoint rather than any alpha arithmetic. Both `shown` terms come off
   the one `aurora-shown` property and must be each other's negation — a stack missing its term
   takes the `true` default and sits over the other for good, and an `if` restored in front of one
@@ -202,24 +205,29 @@ silently miss the other.
   The cost is that the transparent stack still builds its paths every frame, where an unmounted arm
   cost nothing.
 
-- **`has-tints` means "there was artwork to wash", and all three mount sites fold it in** — the two
-  bands off `HeroBackdrop.has-tints`, Now Playing off its own `Player.np-has-tints`. Two things set
-  it `false`: `apply_gradient`, a genre having no artwork and its name-hashed stops being legible
-  only under the scrim the blur arm solves; and **any entry showing the placeholder**, whose only
-  alternative was four rotations of `Theme.accent` over `Theme.base` — the theme painted twice,
-  saying nothing about what is playing. **One decision with two halves that must agree**:
-  `BackdropSample::solve` already answers with the blur's tiers for an empty sample, so a mount
-  skipping the gate laid the aurora over colours solved for the other arm. Rust's half is
-  unspellable (`hero_backdrop::HeroFill::Artwork` carries the washes or nothing); the mount half is
-  three independent conditions over two globals and shipped with two of them missing, so it is
-  pinned by `hero_blur_backdrop_tests::every_backdrop_site_gates_the_aurora_on_artwork`.
+- **Every hero has washes, so the mount gates on the setting and nothing else.** What differs is
+  where the three colours come from: a cover's quantize, or — for the two heroes that have no
+  cover — a substitute seed. Genre Detail hands over `genre_accent`'s **saturated tile pair**
+  (`hero_backdrop::GenreStops`), the one its own square and grid card paint; the dimmed *hero* pair
+  in the same struct is the blur floor's alone, and swapping them builds and paints a plausible band
+  on both arms, hence a pin. Anything else with no artwork substitutes `Theme.accent`, and
+  **as a seed rather than as a rotation origin** — left as the origin every wash comes out at
+  `FILL_WEIGHT` and the surface reads as unpainted `Theme.base`, where one seed and two fills is
+  exactly the set a sleeve that quantized to one colour gets. This retired a `has-tints` /
+  `np-has-tints` pair the three mounts had to fold in; a term put back strands one site on the blur
+  under a setting its siblings honour, which
+  `hero_blur_backdrop_tests::no_backdrop_site_gates_the_aurora_on_anything_but_the_setting` reads
+  off each binding's own text. **A genre publishes through `apply_gradient`, which picks its arm
+  from `backdrop::kind` itself** — it has no `BackdropSample` for `solve` to pick from — and is in
+  `republish_for_palette` for the first time, its tiers having been theme-independent only while it
+  was permanently on the blur.
 
 - **`ActionPill`/`SearchBar` inside a hero are the deliberate exception** and stay on
   `Theme.floating-chrome-bg`, still mostly their own surface — safe only because the backdrop is
   *pinned*. A `chrome`-tinted placeholder is the opposite case: translucent enough that whatever
   fills the rectangle behind it is most of what its glyph composites against, so that fill has to
-  be a hero token too. Genre Detail is the other exception, `apply_gradient` keeping its own
-  name-hashed floor, already theme-independent.
+  be a hero token too. Genre Detail's square is the other exception, keeping the name-hashed
+  gradient and white glyph it shares with the grid card, already theme-independent.
 
 - **No layer may ease *out of* a held tier.** On My Library the globals routinely describe a hero
   the band stopped painting several tabs ago, so an eased layer bound to them settles on it and
@@ -242,9 +250,9 @@ silently miss the other.
 - **`has-cover` is how a host says "not this one".** The `cover:` ternary must bind *some* global
   on every arm, Slint having no empty-`image` literal, and Genre owns no cover — so the Genre hero
   painted whichever other detail was open, which `seed_detail_from_settings` makes routine.
-  `ArtworkImage` takes `has-cover` defaulting `true`. The blur quartet needs no equivalent,
-  `has-blur: false` being exactly what a procedural backdrop is for — where the washes do, hence
-  `has-tints` above: an unset tint is a colour rather than an absence.
+  `ArtworkImage` takes `has-cover` defaulting `true`. Neither the blur quartet nor the washes need
+  an equivalent: `has-blur: false` is exactly what a procedural backdrop is for, and a tint is
+  always a colour — an entry with nothing of its own substitutes a seed rather than going absent.
 
 - **A hero may publish into either shared global only while it is the one on screen.**
   `install_views` seeds **all four** detail views unconditionally, so a cold start fetches up to

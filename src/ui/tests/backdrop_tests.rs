@@ -596,40 +596,35 @@ fn no_neutral_weight_goes_opaque_or_outshines_what_sits_on_it() {
     assert!(blur.chip_fill_alpha < blur.chrome_alpha, "the blur's pill reached its glyph weight");
 }
 
-/// With nothing to wash, the aurora arm *is* the blur arm.
+/// An entry with no artwork takes the arm the setting picked, like every other entry.
 ///
-/// The washes are the record's own colours, so a placeholder leaves the aurora no subject — and
-/// what it fell back to was four rotations of `Theme.accent` over `Theme.base`, which paints the
-/// theme twice and says nothing about what is playing. Genre Detail reached the same conclusion one
-/// step earlier, through `apply_gradient`; this is the same rule for every art-less entry. Asserted
-/// against the theme's own pair as well, so the equality can't pass on an arm that stopped solving.
+/// It used to keep the blur under either, the aurora's only fallback then being fills with no seed
+/// behind them; `aurora::tints` takes the accent as that seed now, so the surface has something to
+/// wash and the tiers under it are the theme's. Both arms are asserted, since a guard put back
+/// would leave the aurora arm solving the blur's colours and nothing else would notice — the mount
+/// gate that used to agree with it is gone.
 #[test]
-fn an_entry_with_no_artwork_keeps_the_blur_under_either_setting() {
+fn an_entry_with_no_artwork_still_follows_the_setting() {
     let theme = mocha();
     let empty = BackdropSample::default();
-    assert!(!empty.carries_artwork(), "the default sample is what a missing cover reaches");
 
     let aurora_arm = empty.solve(&theme, BackdropKind::Aurora);
-    let blur_arm = empty.solve(&theme, BackdropKind::Blur);
     assert_eq!(
-        (aurora_arm.floor_start, aurora_arm.floor_end, aurora_arm.chrome, aurora_arm.text),
-        (blur_arm.floor_start, blur_arm.floor_end, blur_arm.chrome, blur_arm.text),
-        "with no artwork the setting decides nothing — both arms are the blur's solve"
-    );
-    assert_ne!(
         (aurora_arm.floor_start, aurora_arm.floor_end),
         (theme.base, theme.base),
-        "an art-less surface takes the blur's own floor, not the theme's base"
+        "an art-less surface takes the theme's own flat base on the aurora"
     );
 
-    // The guard is on the artwork, not on the theme: a measured cover still reaches the aurora.
-    let measured = BackdropSample::measure(&solid(32, 0x80));
-    assert!(measured.carries_artwork());
-    let measured_aurora = measured.solve(&theme, BackdropKind::Aurora);
-    assert_eq!(
-        (measured_aurora.floor_start, measured_aurora.floor_end),
+    let blur_arm = empty.solve(&theme, BackdropKind::Blur);
+    assert_ne!(
+        (blur_arm.floor_start, blur_arm.floor_end),
         (theme.base, theme.base),
-        "a cover that was measured still publishes the theme's own base"
+        "the blur arm keeps the accent-seeded floor this view was built on"
+    );
+    assert_ne!(
+        (aurora_arm.chrome, aurora_arm.text),
+        (blur_arm.chrome, blur_arm.text),
+        "the two arms must differ, or the equality above passes on an arm that stopped solving"
     );
 }
 

@@ -9,6 +9,8 @@
 
 const DETAIL_VIEW: &str = include_str!("../detail_view.rs");
 const HERO_CHIPS: &str = include_str!("../hero_chips.rs");
+const HERO_BACKDROP: &str = include_str!("../hero_backdrop.rs");
+const GENRE_DETAIL: &str = include_str!("../genres/detail.rs");
 
 /// The four detail modules, the tab each one's gate has to name, and the helpers
 /// in each that must carry that gate.
@@ -26,7 +28,7 @@ const DETAILS: [(&str, &str, &str, &[&str]); 4] = [
         &["apply_detail_artwork(", "publish_artist("],
     ),
     (
-        include_str!("../genres/detail.rs"),
+        GENRE_DETAIL,
         "genres/detail.rs",
         "MyLibraryTab::Genres",
         &["apply_genre_hero(", "publish_genre("],
@@ -565,4 +567,73 @@ fn no_fill_derived_from_the_chrome_tier_sets_its_alpha() {
             );
         }
     }
+}
+
+/// Genre Detail hands over its two hashed pairs the right way round.
+///
+/// `genre_accent` dims the hero pair so the blur's scrim leaves the foreground legible, and leaves
+/// the tile pair saturated for the square and the grid card. The aurora has no scrim, so it washes
+/// the saturated one. Swap them and both arms still build and still paint a plausible band — dull
+/// sweeps under the aurora, a floor too bright for its own solve under the blur — which is the
+/// shape of mistake no runtime assertion here can reach, both fields being `(u32, u32)`.
+#[test]
+fn the_genre_hero_washes_the_saturated_pair_and_floors_on_the_dimmed_one() {
+    let stops = GENRE_DETAIL
+        .split_once("GenreStops {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map(|(stops, _)| stops)
+        .unwrap_or_default();
+
+    // Each field is bounded by the other rather than by a paren or a line end: the stops are
+    // wrapped in `color_to_rgb(…)` calls, and rustfmt is free to break the tuple across lines.
+    let field_of = |field: &str, other: &str| {
+        let after = stops.split_once(field).map_or("", |(_, rest)| rest);
+        after.split_once(other).map_or(after, |(bound, _)| bound)
+    };
+
+    for (field, other, pair) in [
+        ("floor:", "wash:", "hero_color_"),
+        ("wash:", "floor:", "tile_color_"),
+    ] {
+        let bound = field_of(field, other);
+        assert_eq!(
+            bound.matches(pair).count(),
+            2,
+            "`apply_genre_hero` binds `{field}` to `{bound}` — it owes both `{pair}` stops"
+        );
+    }
+}
+
+/// The genre's arm is `backdrop::kind`'s answer, like every other hero's.
+///
+/// It reaches `backdrop::solve` directly, having no sample for `BackdropSample::solve` to pick the
+/// arm from, so nothing above it can catch a branch that stopped branching — and dropping one is
+/// how the genre spent every release before this one painting the blur under a setting the five
+/// other heroes honoured.
+#[test]
+fn the_genre_hero_picks_its_arm_off_the_setting() {
+    let body = HERO_BACKDROP
+        .split_once("pub(crate) fn apply_gradient(")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+
+    for needle in [
+        "backdrop::kind(ui)",
+        "backdrop::theme_backdrop(",
+        "backdrop::solve(",
+    ] {
+        assert!(
+            body.contains(needle),
+            "`apply_gradient` no longer reaches `{needle}` — a genre that solves one arm for both \
+             paints the other backdrop's colours under whichever stack is mounted"
+        );
+    }
+
+    // The palette half: an aurora genre's tiers are the theme's, so a pick has to reach them.
+    assert!(
+        HERO_BACKDROP.contains("PublishedHero::Genre(stops)) => apply_gradient(ui, stops)"),
+        "`republish_for_palette` no longer re-runs a genre — its tiers were theme-independent \
+         only while it was permanently on the blur"
+    );
 }

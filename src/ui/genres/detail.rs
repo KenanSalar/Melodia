@@ -1,8 +1,8 @@
 //! Genre Detail header + track list: fetch, re-sort, refresh-preserving, startup seed. Mirror of
 //! `src/ui/albums/detail.rs` minus everything related to artwork (`decode_detail_pair`,
 //! `apply_detail_artwork`, `write_crossfade_slot`): genres have no intrinsic image. In its place
-//! [`apply_genre_hero`] publishes the name-hashed gradient as the hero's backdrop and solves the
-//! rest of the band against it.
+//! [`apply_genre_hero`] hands the name-hashed colours to the backdrop, which paints them as its
+//! gradient floor or washes them as an aurora depending on the arm.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -20,6 +20,7 @@ use crate::state::AppState;
 use crate::themes::color_to_rgb;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
+use crate::ui::hero_backdrop::GenreStops;
 use crate::ui::model_patch;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::view_id;
@@ -30,12 +31,8 @@ use crate::{
     AppWindow, GenreDetail, GenreRow as UiGenreRow, NavEnterFrom, TrackListRow as UiTrackListRow,
 };
 
-/// Publish the genre's hero band: its two hash-derived stops become the gradient floor verbatim,
-/// and the scrim + foreground tiers are solved against how bright that gradient measures.
-///
-/// The stops are already theme-independent (`super::color::genre_accent` picks them off a name
-/// hash and deliberately dims the hero pair), so unlike every other hero this one keeps its own
-/// floor rather than taking the solved one.
+/// Publish the genre's hero band from both of its hash-derived pairs — `super::color::genre_accent`
+/// picks them off a name hash, and which one reaches the surface is the backdrop's to decide.
 ///
 /// `section_active` is the same gate `apply_detail_artwork` takes, and for the same reason:
 /// `HeroBackdrop` is one global shared by six heroes, and the boot path seeds every persisted
@@ -46,8 +43,10 @@ fn apply_genre_hero(ui: &AppWindow, header: &UiGenreRow, section_active: bool) {
     }
     crate::ui::hero_backdrop::apply_gradient(
         ui,
-        color_to_rgb(header.hero_color_1),
-        color_to_rgb(header.hero_color_2),
+        GenreStops {
+            floor: (color_to_rgb(header.hero_color_1), color_to_rgb(header.hero_color_2)),
+            wash: (color_to_rgb(header.tile_color_1), color_to_rgb(header.tile_color_2)),
+        },
     );
 }
 
