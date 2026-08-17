@@ -459,6 +459,12 @@ decodes both shapes already pay.
    `ArtworkPair.blur` becomes `Option`, so one place answers whether a blur exists at all.
    **Gating only the mount would leave every cover still decoded, blurred and uploaded** —
    the cost the setting exists to let a user avoid.
+   **The flag must be raised before the first publish, not merely before `app.show()`.** Since
+   Phase 8 the two arms write genuinely different tiers, so a mount and a publish that disagree
+   are now visible — flipping `Theme.aurora-backdrop` mid-session leaves the blur stack painting
+   `Theme.base` and `Theme.text`, which is why `Ctrl+Shift+B` misreports the blur today and why
+   the restart gate is the fix rather than a convenience. `install_views` seeds all four detail
+   views, so hydration has to land ahead of `wire_all`, beside the persisted nav index.
 5. Delete the scaffolding: `Player.np-aurora` and the `Ctrl+Shift+B` arm in
    `shortcut-scope.slint`.
 6. **The row's copy changes with the model.** v1's subtext was "no cover blurred per track,
