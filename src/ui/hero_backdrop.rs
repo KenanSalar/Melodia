@@ -105,6 +105,8 @@ pub(crate) fn reset(ui: &AppWindow) {
 fn write(ui: &AppWindow, colors: &BackdropColors, fill: HeroFill) {
     let g = ui.global::<HeroBackdrop>();
     g.set_chrome(backdrop::chrome_brush(colors));
+    g.set_chrome_text(backdrop::chrome_text_brush(colors));
+    g.set_chip_fill(backdrop::chip_fill_brush(colors));
     g.set_scrim(backdrop::scrim_brush(colors));
     g.set_on_backdrop(brush(colors.text));
     g.set_on_backdrop_muted(brush(colors.muted));

@@ -148,12 +148,10 @@ fn a_monochrome_sleeve_seeds_from_its_own_grey() {
 
 /// A measured wash is the quantizer's colour, bit for bit, in the quantizer's own slot.
 ///
-/// **The pin the whole arm rests on.** Every pass that ever sat between the two — a tone band to
-/// hold the composite legible, a hue seating to choose which wash met which — took the record's
-/// value structure with it: the band merged every wash above it onto one tone, so a four-colour
-/// sleeve painted as two and the surface read as a tint rather than as light across a plane. This
-/// is what Amberol does and the reason its backdrop looks the way it does. Anything reintroduced
-/// between `population_seeds` and here has to argue with this test.
+/// **The pin the whole arm rests on.** Every pass that ever sat between the two — a tone band, a
+/// hue seating — took the record's value structure with it: the band merged every wash above it
+/// onto one tone, so a four-colour sleeve painted as two and the surface read as a tint. Anything
+/// reintroduced between `population_seeds` and here has to argue with this test.
 #[test]
 fn a_measured_wash_is_the_seed_untouched() {
     let painted = tints(MANY_HUES, &mocha());
@@ -172,8 +170,8 @@ fn a_measured_wash_is_the_seed_untouched() {
 
 /// The paint takes three where the quantizer is asked for four, and the two counts are not one
 /// number. Median cut splits to a target, so asking it for three gives different boxes rather than
-/// these minus the last — Amberol extracts four and paints three for the same reason. That the
-/// paint is a *subset* is a `const _: () = assert!` in `ui::aurora`; this is that it is the front.
+/// these minus the last. That the paint is a *subset* is a `const _: () = assert!` in
+/// `ui::aurora`; this is that it is the front.
 #[test]
 fn the_paint_takes_the_quantizers_first_three() {
     assert_eq!(tints(MANY_HUES, &mocha()).len(), WASH_COUNT);

@@ -1,28 +1,24 @@
 import { Theme } from "../theme.slint";
 
 // One of the three sweeps: album colour along one edge of the surface, gone by 70.71% of the
-// gradient line.
-//
-// **A port of Amberol's `.main-window` background, angles and stops included.** Three broad linear
-// ramps at 127°, 217° and 336° — near-orthogonal, so each owns a different edge and one corner is
-// left showing the floor. That asymmetry is the whole effect: four symmetric corner washes cover
-// every corner about equally and average to one flat tone whatever the record was.
+// gradient line. The three headings — 127°, 217°, 336° — are near-orthogonal, so each sweep owns a
+// different edge and one corner is left showing the floor. That asymmetry is the whole effect: four
+// symmetric corner washes cover every corner about equally and average to one flat tone whatever
+// the record was.
 //
 // **Two stops, the far one this tint at zero alpha — never the `transparent` keyword.** FemtoVG
 // interpolates stops in straight RGBA, so fading to rgba(0,0,0,0) drags the colour toward black and
-// the ramp darkens instead of thinning. Amberol spells the same thing the long way, as
-// `color-mix(in srgb, <colour> 0%, transparent)`.
+// the ramp darkens instead of thinning.
 //
-// Slint's gradient angle is CSS's — `line_for_angle` adds 90° and takes the same magic-corner
-// construction — so these are Amberol's numbers unconverted, and 70.71% means the same fraction of
-// the same line.
+// Headings are CSS-convention degrees needing no conversion — Slint's `line_for_angle` adds 90° and
+// takes the same magic-corner construction — so 70.71% is the same fraction of the same line.
 component AuroraSweep inherits Rectangle {
     in property <color> tint;
     in property <angle> heading;
     in property <bool> shown: true;
 
-    // 0.55 at the near edge, Amberol's `color-mix(… 55%, transparent)`. `transparentize` multiplies,
-    // so a synthesized wash keeps the lower weight `ui::aurora` gave it rather than overriding it.
+    // 0.55 at the near edge. `transparentize` multiplies, so a synthesized wash keeps the lower
+    // weight `ui::aurora` gave it rather than overriding it.
     //
     // Both arms one type at one stop count, the only shape `Brush::interpolate` blends
     // stop-for-stop. Safe to `animate` where a leaf's brush usually isn't: Rust writes the tint
@@ -34,19 +30,16 @@ component AuroraSweep inherits Rectangle {
 }
 
 // The artwork-derived backdrop: three broad sweeps of album colour over the theme's own base, and a
-// grain of noise.
-//
-// **Unbounded, which is the trade this arm makes.** The washes are the quantizer's own answer with
-// no tone cap over them, so a surface keeps the record's value structure — that is what makes it
-// read as light falling across a plane rather than as a tint. The cost is that contrast against the
-// theme's ink is whatever the cover gives, and a pale sleeve gives less of it.
+// grain of noise. Nothing caps the washes, so a surface keeps the record's value structure and
+// reads as light falling across a plane rather than as a tint; `ui::aurora` argues the trade.
 //
 // **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom. They exist
 // so this file imports no global: one mount reads the `Player` tier and the others `HeroBackdrop`,
-// and naming either would tie the component to one. **`base-start` / `base-end` carry `Theme.base`
-// and `Theme.mantle` and still may not read them here**: the tier is what `MosaicHeroTile` fills
-// its square from, so a component reaching past it is how the square and the surface under it
-// start disagreeing.
+// and naming either would tie the component to one. **`base-start` / `base-end` both carry
+// `Theme.base` on this arm and still may not read it here**: the tier is what `MosaicHeroTile`
+// fills its square from, so a component reaching past it is how the square and the surface under
+// it start disagreeing. The pair stays two properties because the blur arm behind the cross-fade
+// solves a real ramp into them.
 export component AuroraBackdrop inherits Rectangle {
     in property <color> base-start: #2b2135;
     in property <color> base-end: #14101a;
@@ -73,9 +66,9 @@ export component AuroraBackdrop inherits Rectangle {
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
-    // **Declared back to front.** CSS lists the topmost layer first and Slint paints the last child
-    // on top, so tint-3 goes down first and tint-1 — the colour the artwork most is — lands over
-    // both. Source-over throughout, as in the stylesheet; no blend mode.
+    // **Declared back to front.** Slint paints the last child on top, so tint-3 goes down first and
+    // tint-1 — the colour the artwork most is — lands over both. Source-over throughout, no blend
+    // mode.
     AuroraSweep {
         width: 100%;
         height: 100%;
@@ -104,11 +97,10 @@ export component AuroraBackdrop inherits Rectangle {
     // disappear; `pixelated` so filtering can't average it back toward the flat colour it breaks up.
     // Alpha lives in the tile rather than in `opacity`, which would rasterize this into a layer.
     //
-    // **Behind the `if` rather than eased with everything else**, alpha living in the tile leaving
-    // nothing to fade: unmounting is the only way to stop it, and this is the one layer that can
-    // afford it — a one-level 8-bit grain is invisible by construction, so it cannot pop. Ungated
-    // it would sit on top of the blur for the whole of every crossing, graining a stack that isn't
-    // supposed to be on screen at all.
+    // **Behind the `if` rather than eased with everything else** — with the alpha in the tile there
+    // is nothing to fade, so unmounting is the only way to stop it, and a one-level grain is the one
+    // layer that can vanish without being seen to. Ungated it would grain the blur through every
+    // crossing.
     if root.shown: Image {
         x: 0;
         y: 0;

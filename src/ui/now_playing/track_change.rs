@@ -201,6 +201,8 @@ fn write_backdrop_tiers(ui: &AppWindow, sample: BackdropSample) {
     PUBLISHED_SAMPLE.set(Some(sample));
 
     player.set_np_accent_bright(backdrop::chrome_brush(&colors));
+    player.set_np_chrome_text(backdrop::chrome_text_brush(&colors));
+    player.set_np_chip_fill(backdrop::chip_fill_brush(&colors));
     player.set_np_on_backdrop(brush(colors.text));
     player.set_np_on_backdrop_muted(brush(colors.muted));
     player.set_np_floor_start(color(colors.floor_start));

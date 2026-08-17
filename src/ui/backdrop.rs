@@ -15,11 +15,9 @@
 //!
 //! **The aurora neither measures nor bounds.** Its washes are the quantizer's answer untouched and
 //! the tiers over them are the theme's own tokens, the chrome a neutral ink the washes read
-//! through. That is Amberol's arrangement, and the reason it isn't the blur's: three broad ramps of
-//! album colour at partial alpha over the theme's own base stay near that base, where a blurred
-//! photograph fills the surface and can be any brightness at all. What it gives up is the
-//! guarantee — contrast against the theme's ink is whatever the cover offers — and what it buys is
-//! the cover's value structure, which a band across the washes is precisely what flattens.
+//! through. It can afford that where the blur can't: three ramps of album colour at partial alpha
+//! over the theme's own base stay near that base, where a blurred photograph fills the surface and
+//! can be any brightness at all. [`crate::ui::aurora`] argues what the missing guarantee buys.
 //!
 //! **The blur's measurement comes off the decoded cover, never the rendered frame** — the chrome
 //! tints itself off the same accent feeding the backdrop, so sampling the composite closes a
@@ -101,6 +99,17 @@ const MUTED_MAX_CHROMA: f64 = 8.0;
 /// reading *through* it is what makes a neutral tier belong to the record, so opaque is a bug
 /// rather than a tuning miss.
 const NEUTRAL_CHROME_ALPHA: f32 = 0.75;
+
+/// Chip lettering, a step above [`NEUTRAL_CHROME_ALPHA`] and not a leap — it sits on a pill rather
+/// than on the backdrop, but solid white beside neutral-ink glyphs stops reading as one family.
+const AURORA_CHROME_TEXT_ALPHA: f32 = 0.85;
+
+/// The pill behind that lettering, as laid on the blur. The disc buttons take it too.
+const CHIP_FILL_WEIGHT: f32 = 0.16;
+
+/// The aurora's own, well under it: a fainter pill both lets the wash through and leaves the label
+/// a darker surface to clear.
+const AURORA_CHIP_FILL_ALPHA: f32 = 0.08;
 
 /// Far finer than the tone bands care about, and small enough to live on the stack.
 const HISTOGRAM_BINS: usize = 64;
@@ -259,8 +268,7 @@ impl BackdropSample {
     /// is already there, and the percentile below still walks every pixel.
     ///
     /// **Hand it the sharp downscale, never a blurred one.** Blur averages the cover's regions
-    /// into each other, which is exactly what median cut is looking for; Amberol quantizes the
-    /// cover itself for the same reason.
+    /// into each other, which is exactly what median cut is looking for.
     ///
     /// An empty `accent_argb` means there was no buffer at all, so [`Self::solve`]'s
     /// `Theme.accent` path is for a missing cover and never a monochrome one — a greyscale sleeve
@@ -415,6 +423,12 @@ pub(crate) struct BackdropColors {
     /// Alpha `chrome` is laid on at — 1.0 on the blur, where the tier *is* the colour, and
     /// [`NEUTRAL_CHROME_ALPHA`] on the aurora, where the wash under it supplies the colour.
     pub chrome_alpha: f32,
+    /// Alpha for the lettering on that tier — a different question from the glyphs, WCAG holding
+    /// text to [`TEXT_RATIO`] where non-text chrome answers to [`CHROME_RATIO`].
+    pub chrome_text_alpha: f32,
+    /// Alpha for the pill behind that lettering, under both: it is the label's backing as well as
+    /// a surface, so lightening it costs contrast twice.
+    pub chip_fill_alpha: f32,
     /// Primary body text.
     pub text: u32,
     /// Secondary body text.
@@ -440,6 +454,8 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
         // own tone, and so its own chroma, up to `CHROME_MAX_TONE`.
         chrome: clamp_to_tone_band(seed_argb, chrome_tone(tone), CHROME_MAX_TONE),
         chrome_alpha: 1.0,
+        chrome_text_alpha: 1.0,
+        chip_fill_alpha: CHIP_FILL_WEIGHT,
         text: to_tone_capped_chroma(seed_argb, text_tone(tone), TEXT_MAX_CHROMA),
         muted: to_tone_capped_chroma(seed_argb, muted_tone(tone), MUTED_MAX_CHROMA),
     }
@@ -450,17 +466,16 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
 /// A theme is a constant where a cover is not, so this needs no solve, and nothing bounds the
 /// washes over it — [`crate::ui::aurora::tints`] argues what that trade buys.
 ///
-/// **The chrome carries no hue of its own**, which is Amberol's answer and the one that survived
-/// trying ours: deriving it from the artwork gets a colour that argues with the washes rather than
-/// belonging to them, because the surface is three of them and any single seed is at best one.
-/// Black or white at [`NEUTRAL_CHROME_ALPHA`] takes its colour from whatever wash it happens to sit
-/// on, which is the same answer everywhere on the surface and never the wrong one — and with no cap
-/// over the washes it is the tier carrying the readable half.
+/// **The chrome carries no hue of its own**, the answer that survived two attempts at a derived
+/// one: a colour taken from the artwork argues with the washes rather than belonging to them, the
+/// surface being three of them and any single seed at best one. Black or white at
+/// [`NEUTRAL_CHROME_ALPHA`] takes its colour from whichever wash it sits on, so it is right
+/// everywhere at once — and with nothing bounding the washes it carries the readable half.
 ///
-/// **The floor is flat**, both stops `base`: Amberol composites over one window colour, and a ramp
-/// under three of its own adds a fourth direction to a surface whose whole structure is which way
-/// each sweep runs. The scrim is `base` at the alpha floor: nothing mounts the blur stack on this
-/// arm, and base over base is inert even if something did.
+/// **The floor is flat**, both stops `base`: a ramp under three sweeps of its own adds a fourth
+/// direction to a surface whose whole structure is which way each sweep runs. The scrim is `base`
+/// at the alpha floor — nothing mounts the blur stack on this arm, and base over base is inert
+/// even if something did.
 fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
     BackdropColors {
         scrim: theme.base,
@@ -469,6 +484,8 @@ fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
         floor_end: theme.base,
         chrome: neutral_ink(theme),
         chrome_alpha: NEUTRAL_CHROME_ALPHA,
+        chrome_text_alpha: AURORA_CHROME_TEXT_ALPHA,
+        chip_fill_alpha: AURORA_CHIP_FILL_ALPHA,
         text: theme.text,
         muted: theme.subtext,
     }
@@ -553,12 +570,27 @@ pub(crate) fn scrim_brush(colors: &BackdropColors) -> Brush {
 /// The chrome tier as a Slint brush. Opaque on the blur; on the aurora the alpha is the whole
 /// mechanism, the wash beneath supplying the colour a neutral ink doesn't carry.
 pub(crate) fn chrome_brush(colors: &BackdropColors) -> Brush {
+    chrome_at(colors, colors.chrome_alpha)
+}
+
+/// The same tier at the weight its *lettering* wants. See [`BackdropColors::chrome_text_alpha`].
+pub(crate) fn chrome_text_brush(colors: &BackdropColors) -> Brush {
+    chrome_at(colors, colors.chrome_text_alpha)
+}
+
+/// The same tier at the weight the pill behind that lettering wants.
+pub(crate) fn chip_fill_brush(colors: &BackdropColors) -> Brush {
+    chrome_at(colors, colors.chip_fill_alpha)
+}
+
+/// One colour at one of its three weights — the tier differs only in how much wash reads through.
+fn chrome_at(colors: &BackdropColors, alpha: f32) -> Brush {
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
-        reason = "both arms set a literal in 0..=1"
+        reason = "every arm sets a literal in 0..=1"
     )]
-    let alpha = (colors.chrome_alpha * 255.0).round() as u8;
+    let alpha = (alpha * 255.0).round() as u8;
     brush_with_alpha(colors.chrome, alpha)
 }
 

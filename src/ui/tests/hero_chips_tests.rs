@@ -478,7 +478,7 @@ fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
     // handler's own body can't end the window early.
     let mounts = [
         (WRAPPER, "hero-chip-strip.slint", "HeroBackdrop."),
-        (NOW_PLAYING, "now-playing-view.slint", "Player.np-accent-"),
+        (NOW_PLAYING, "now-playing-view.slint", "Player.np-"),
     ];
     for (src, name, tier) in mounts {
         let mount = src

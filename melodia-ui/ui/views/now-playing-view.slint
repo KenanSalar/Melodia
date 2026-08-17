@@ -247,8 +247,8 @@ export component NowPlayingView inherits Rectangle {
                     rows: Player.chip-rows;
                     show-rows: Player.track-meta.track_id == Player.vm.track.id;
                     centred: true;
-                    chip-fill: Player.np-accent-pill;
-                    chip-label-color: Player.np-accent-bright;
+                    chip-fill: Player.np-chip-fill;
+                    chip-label-color: Player.np-chrome-text;
                     measured(w) => { Player.recompute-chip-rows(w); }
                 }
 

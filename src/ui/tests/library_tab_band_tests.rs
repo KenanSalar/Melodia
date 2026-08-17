@@ -604,12 +604,12 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
     assert!(
         strip.contains("chip-fill: HeroBackdrop.chip-fill-at(root.fade * root.arrive-t);")
             && strip.contains(
-                "chip-label-color: HeroBackdrop.chrome\
+                "chip-label-color: HeroBackdrop.chrome-text\
                  .transparentize(1.0 - root.fade * root.arrive-t);"
             ),
         "both of the strip's brushes must carry the fade: the pill through the global's own \
          function so its weight is stated once, the label through `transparentize`, since \
-         `with-alpha` *sets* alpha and `chrome` carries its own on the aurora arm"
+         `with-alpha` *sets* alpha and `chrome-text` carries its own on the aurora arm"
     );
 }
 
@@ -866,7 +866,7 @@ fn the_back_button_takes_every_brush_from_the_backdrop() {
     );
 
     for (prop, tier) in [
-        ("idle-bg", "HeroBackdrop.chip-fill"),
+        ("idle-bg", "HeroBackdrop.disc-fill"),
         ("hover-bg", "HeroBackdrop.disc-hover"),
         ("idle-fg", "HeroBackdrop.chrome"),
     ] {

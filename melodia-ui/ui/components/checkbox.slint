@@ -10,9 +10,9 @@ import { MaterialIcon } from "material-icon.slint";
 // click.
 export component Checkbox inherits Rectangle {
     in property <bool> checked;
-    // The empty box's rim, a knob because the Settings overflow grid wants it as
-    // present as the label beside it, where the row and queue boxes only appear on
-    // hover and should stay quiet when they do.
+    // The empty box's rim, a knob because hosts disagree: the Settings overflow grid
+    // and the track row want it as present as the text beside them, where the popup
+    // and queue boxes stay quiet.
     in property <brush> unchecked-border: Theme.surface1;
 
     width: 16px;

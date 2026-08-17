@@ -1,14 +1,13 @@
 //! Source-level pins on `components/aurora-backdrop.slint`.
 //!
-//! Nothing pinned here shows on screen until an edge case arrives, and each was paid for once:
-//! the count has to be fixed or `Brush::interpolate` crosses mismatched gradients, a ramp ending
-//! on the `transparent` keyword darkens instead of thinning, the dither's `image-fit` decides
-//! whether it dithers or mottles, a mount reading a global directly is what stops one component
-//! serving both backdrop tiers, and the three headings are what leave one corner showing the floor
-//! rather than covering the surface evenly and averaging back to a tint.
+//! Nothing pinned here shows on screen until an edge case arrives, and each was paid for once: a
+//! varying stop count crosses mismatched gradients in `Brush::interpolate`, a ramp ending on the
+//! `transparent` keyword darkens instead of thinning, the dither's `image-fit` decides whether it
+//! dithers or mottles, a mount reading a global directly is what stops one component serving both
+//! backdrop tiers, and the three headings are what leave a corner showing the floor.
 
-// Comments dropped: every anchor here is a gradient literal or a geometry binding, and the prose
-// above them argues about gradients, stop counts, headings and `transparent`.
+// Comments stripped: every anchor is a gradient literal or a geometry binding, and the prose above
+// them names the same tokens.
 use crate::test_support::{
     MIN_SLINT_SOURCES, UI_DIR, normalize_ws as normalized, strip_line_comments as code,
     stripped_sources,
@@ -44,8 +43,7 @@ fn slint_paints_exactly_the_tints_rust_solves() {
 /// `FemtoVG` interpolates stops in straight RGBA, so fading to rgba(0,0,0,0) drags red, green and
 /// blue toward black on the way: the layer darkens across its own length instead of thinning, and
 /// three of those at three angles read as wedges painted onto the surface. Ending on the same
-/// colour at zero alpha keeps RGB flat and lets alpha do the work — which is what Amberol's
-/// `color-mix(in srgb, <colour> 0%, transparent)` spells out the long way.
+/// colour at zero alpha keeps RGB flat and lets alpha do the work.
 ///
 /// The base gradient's own gated arm is the exception and stays legible as one: both its stops are
 /// `transparent`, so there is no colour to drag anywhere.
@@ -85,22 +83,20 @@ fn the_dither_keeps_its_own_pitch() {
     }
 }
 
-/// The three sweeps carry Amberol's own angles, and they are three rather than four.
+/// The three sweeps keep their headings, and they are three rather than four.
 ///
 /// **The asymmetry is the effect.** Near-orthogonal headings leave each sweep owning a different
 /// edge and one corner showing the floor; a fourth, or three evenly spaced, covers the surface
-/// about equally again and the washes average back to the one flat tone this replaced. The numbers
-/// are load-bearing rather than decorative, and Slint's gradient angle is CSS's — `line_for_angle`
-/// adds 90° and takes the same magic-corner construction — so they need no conversion.
+/// about equally again and the washes average back to the one flat tone this replaced.
 #[test]
-fn the_sweeps_carry_amberols_angles() {
+fn the_sweeps_keep_their_headings() {
     let src = normalized(&code(AURORA));
 
     for heading in ["heading: 127deg;", "heading: 217deg;", "heading: 336deg;"] {
         assert_eq!(
             src.matches(heading).count(),
             1,
-            "no sweep carries `{heading}` — the three headings are Amberol's stylesheet verbatim"
+            "no sweep carries `{heading}` — the near-orthogonal set is what leaves a corner bare"
         );
     }
     assert_eq!(
@@ -112,16 +108,16 @@ fn the_sweeps_carry_amberols_angles() {
 
 /// Each ramp is 55% at its near edge and gone by 70.71% of the gradient line.
 ///
-/// `transparentize` *multiplies*, so 0.45 leaves a measured wash at Amberol's 55% while a
-/// synthesized one keeps the lower weight `ui::aurora` gave it — `with-alpha` would overwrite it
-/// and wash a guess on as hard as a fact. The far stop is 1/√2, the fraction of the line at which a
-/// 45° traversal reaches the opposite corner, which is why nothing bands at the edges.
+/// `transparentize` *multiplies*, so 0.45 leaves a measured wash at 55% while a synthesized one
+/// keeps the lower weight `ui::aurora` gave it — `with-alpha` would overwrite it and wash a guess
+/// on as hard as a fact. The far stop is 1/√2, where a 45° traversal reaches the opposite corner,
+/// which is why nothing bands at the edges.
 #[test]
-fn each_sweep_fades_at_amberols_stop() {
+fn each_sweep_fades_between_the_same_two_stops() {
     let src = normalized(&code(AURORA));
     assert!(
         src.contains("root.tint.transparentize(0.45) 0%"),
-        "the near edge left 55% — `transparentize(0.45)` is Amberol's `color-mix(… 55%)`"
+        "the near edge left 55%, so a measured wash lands at a weight the set wasn't tuned for"
     );
     assert_eq!(
         src.matches("root.tint.transparentize(1.0) 70.71%").count(),

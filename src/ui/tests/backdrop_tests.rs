@@ -506,12 +506,11 @@ fn the_aurora_arm_publishes_the_theme_and_the_blur_arm_solves() {
 
 /// The aurora's chrome is neutral ink at partial alpha, and takes its polarity from the theme.
 ///
-/// **Amberol's answer, arrived at the hard way.** Two attempts to derive this tier from the artwork
-/// shipped and were reverted: the dominant seed is one of four washes and argues with the other
-/// three, and the hue they composite to is a mean nothing on screen actually is. A neutral ink lets
-/// the wash it happens to sit on supply the colour, which is right everywhere on the surface at
-/// once — and the alpha is the whole mechanism, so an opaque one would be the bug rather than a
-/// tuning miss.
+/// **Arrived at the hard way.** Two attempts to derive this tier from the artwork shipped and were
+/// reverted: the dominant seed is one of four washes and argues with the other three, and the hue
+/// they composite to is a mean nothing on screen actually is. A neutral ink lets the wash it
+/// happens to sit on supply the colour, which is right everywhere on the surface at once — and the
+/// alpha is the whole mechanism, so an opaque one would be the bug rather than a tuning miss.
 ///
 /// Polarity comes off base-versus-ink, not a variant id: two of the six palettes are generated at
 /// runtime and have none to match on.
@@ -541,6 +540,42 @@ fn the_auroras_chrome_is_neutral_ink_the_wash_reads_through() {
         (blur.chrome_alpha - 1.0).abs() < f32::EPSILON,
         "the blur's chrome is the colour itself and must stay opaque"
     );
+}
+
+/// Pill under glyph under lettering, and the ordering is the design where the three numbers are
+/// taste: text answers to 4.5:1 where non-text chrome answers to 3:1, and the pill is the label's
+/// backing as well as a surface, so alpha on it costs contrast twice.
+#[test]
+fn the_chrome_tiers_weights_are_ordered_pill_glyph_text() {
+    let aurora = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]))
+        .solve(&mocha(), BackdropKind::Aurora);
+
+    assert!(
+        aurora.chip_fill_alpha < aurora.chrome_alpha,
+        "the chip pill ({}) reached the glyph weight ({})",
+        aurora.chip_fill_alpha,
+        aurora.chrome_alpha
+    );
+    assert!(
+        aurora.chrome_alpha < aurora.chrome_text_alpha,
+        "the lettering ({}) dropped to the glyph weight ({})",
+        aurora.chrome_text_alpha,
+        aurora.chrome_alpha
+    );
+    assert!(
+        aurora.chrome_text_alpha < 1.0,
+        "the lettering went opaque and the record stopped tinting it"
+    );
+
+    // The blur's tier *is* the colour, so only the pill sits under its lettering — asserted here so
+    // the ordering above can't be read as a property of both arms.
+    let blur = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]))
+        .solve(&mocha(), BackdropKind::Blur);
+    assert!(
+        (blur.chrome_text_alpha - 1.0).abs() < f32::EPSILON,
+        "the blur's lettering is its solved chrome and must stay opaque"
+    );
+    assert!(blur.chip_fill_alpha < blur.chrome_alpha, "the blur's pill reached its glyph weight");
 }
 
 /// With nothing to wash, the aurora arm *is* the blur arm.

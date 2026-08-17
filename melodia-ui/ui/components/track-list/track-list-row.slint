@@ -356,6 +356,9 @@ export component TrackListRowItem inherits Rectangle {
                     // TouchArea so the box drives selection independently of the row.
                     if touch.has-hover || root.selected: Checkbox {
                         checked: root.selected;
+                        // The rim stands in for the number it replaced, so it takes
+                        // that cell's ink rather than the quieter default.
+                        unchecked-border: root.playing ? Theme.accent : Theme.text;
 
                         cb-touch := TouchArea {
                             mouse-cursor: pointer;

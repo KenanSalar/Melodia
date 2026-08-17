@@ -1,14 +1,11 @@
 //! The colours an aurora backdrop washes over its base, from the artwork's own seeds.
 //!
-//! **Each wash is the quantizer's answer, untouched.** No tone band, no hue seating, no reordering
-//! — Amberol applies none of those and the surface reads the way it does because of it: a sleeve's
-//! value structure reaches the backdrop intact, so one region is genuinely light and another
-//! genuinely dark. Bounding the set to keep the theme's ink legible everywhere is what flattens it,
-//! every wash above the bound landing on the bound and a four-colour record painting as two.
-//!
-//! What that costs is a guarantee. Contrast against `Theme.text` is now whatever the cover gives,
-//! and a pale sleeve gives less of it; the neutral chrome tier
-//! ([`crate::ui::backdrop::theme_backdrop`]) is what carries the readable half.
+//! **Each wash is the quantizer's answer, untouched.** No tone band, no hue seating, no reordering:
+//! a sleeve's value structure reaches the backdrop intact, so one region is genuinely light and
+//! another genuinely dark. Bounding the set to keep the theme's ink legible everywhere is what
+//! flattens it — every wash above the bound lands on the bound and a four-colour record paints as
+//! two — so contrast against `Theme.text` is whatever the cover gives, and the neutral chrome tier
+//! ([`crate::ui::backdrop::theme_backdrop`]) carries the readable half.
 //!
 //! A fixed set, always — `Brush::interpolate` blends gradients only at a matching stop and element
 //! count — and the quantizer can still answer short, a near-white sleeve coming back as one colour.
@@ -23,9 +20,8 @@ use crate::ui::backdrop::{SEED_COUNT, ThemeTokens};
 /// Washes the paint lays down, against [`SEED_COUNT`] the quantizer is asked for.
 ///
 /// **Three, and the two numbers are deliberately not one.** `aurora-backdrop.slint` mounts three
-/// sweeps; median cut is still asked for four boxes because that is the split Amberol takes its
-/// three from, and cutting a palette to three directly yields different boxes rather than the same
-/// ones minus the last.
+/// sweeps; median cut is still asked for four boxes because it splits to a target, so cutting a
+/// palette to three directly yields different boxes rather than the same ones minus the last.
 pub(crate) const WASH_COUNT: usize = 3;
 
 const _: () = assert!(
@@ -63,20 +59,15 @@ impl Tint {
 
 /// The washes, in the order the quantizer ranked them.
 ///
-/// **Nothing is done to them.** Not the tone band that used to hold the composite legible, not the
-/// hue seating that used to decide which wash overlapped which — median cut's own answer, in median
-/// cut's own order, at the alpha the paint gives it. Every one of those passes was a way of making
-/// the surface safe to put the theme's ink on, and each cost the thing the backdrop is for: the cap
-/// merged every wash above it onto one tone, and the seating spent the ranking on hue adjacency
-/// that the sweeps' geometry no longer needs, each owning an edge rather than a corner.
+/// **Nothing is done to them** — median cut's own answer, in median cut's own order, at the alpha
+/// the paint gives it. The tone band and the hue seating that used to sit here each made the
+/// surface safe for the theme's ink at the cost of the thing the backdrop is for: the band merged
+/// every wash above it onto one tone, and the seating spent the ranking on hue adjacency the
+/// sweeps' geometry no longer needs, each owning an edge rather than a corner.
 ///
-/// So a sleeve's value structure arrives intact, and contrast against `Theme.text` is whatever the
-/// record gives. The chrome tier is where the guarantee lives now.
-///
-/// `theme`'s accent is never used to *pad* a short list: one hue's worth of cover gets a full set
-/// of its own colours, not the app's. It only stands in for an *empty* one, which keeps this total
-/// but is no longer a case either publisher produces — an entry with no artwork keeps the blur, and
-/// the app's accent washed over the app's base was the reason.
+/// `theme`'s accent never *pads* a short list: one hue's worth of cover gets a full set of its own
+/// colours, not the app's. It stands in only for an *empty* one, which keeps this total but is a
+/// case neither publisher produces — an entry with no artwork keeps the blur instead.
 pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], theme: &ThemeTokens) -> [Tint; WASH_COUNT] {
     let origin = seeds.iter().flatten().next().copied().unwrap_or(theme.accent);
 
