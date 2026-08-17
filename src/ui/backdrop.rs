@@ -95,30 +95,34 @@ const MUTED_MAX_TONE: f64 = 88.0;
 const TEXT_MAX_CHROMA: f64 = 10.0;
 const MUTED_MAX_CHROMA: f64 = 8.0;
 
-/// Alpha the aurora's chrome is laid on at, and everything derived from it multiplies. The wash
-/// reading *through* it is what makes a neutral tier belong to the record, so opaque is a bug
-/// rather than a tuning miss.
-const NEUTRAL_CHROME_ALPHA: f32 = 0.75;
+// One neutral ink at several weights, a knob per kind of element so tuning one can't drag the
+// others. All under 1.0 — the wash reading through is what makes a hueless tier belong to the
+// record. Their order is taste and lives only in the values.
 
-/// Chip lettering, a step above [`NEUTRAL_CHROME_ALPHA`] and not a leap — it sits on a pill rather
-/// than on the backdrop, but solid white beside neutral-ink glyphs stops reading as one family.
-const AURORA_CHROME_TEXT_ALPHA: f32 = 0.85;
+/// Icons, stars, the heart, the disc buttons. Everything derived from the tier multiplies this.
+const NEUTRAL_CHROME_ALPHA: f32 = 0.85;
 
-/// The pill behind that lettering, as laid on the blur. The disc buttons take it too.
+/// Chip lettering — held to WCAG's text bar where the glyphs answer to the non-text one, and
+/// sitting on a pill rather than on the backdrop.
+const AURORA_CHROME_TEXT_ALPHA: f32 = 0.75;
+
+/// The visualizer — the only chrome that animates, and motion carries attention on its own.
+const AURORA_VIZ_ALPHA: f32 = 0.70;
+
+/// The pill behind a chip label, as laid on the blur. The disc buttons take it through the globals.
 const CHIP_FILL_WEIGHT: f32 = 0.16;
 
-/// The aurora's own, well under it: a fainter pill both lets the wash through and leaves the label
-/// a darker surface to clear.
+/// The aurora's own. A surface and the label's backing at once, so the one weight that trades
+/// against something else's legibility.
 const AURORA_CHIP_FILL_ALPHA: f32 = 0.08;
 
-/// Body text on the aurora — neutral ink like the chrome, not the theme's own. `Theme.text` carries
-/// its palette's cast (Mocha's is blue), which over an album's washes reads as a second hue arguing
-/// with them. Level with the chip lettering: a title is already the largest and heaviest thing on
-/// the surface, so weight on top of that reads as shouting rather than as hierarchy.
+/// Title and the Up-Next song name. Neutral ink rather than `Theme.text`, which carries its
+/// palette's cast (Mocha's is blue) and over an album's washes reads as a second hue arguing with
+/// them.
 const AURORA_TEXT_ALPHA: f32 = 0.85;
 
-/// Its secondary half — artist, album, the Up-Next lines. The gap to [`AURORA_TEXT_ALPHA`] is what
-/// carries the hierarchy now that both are one colour.
+/// Its secondary half — artist, album, the lines under them. One colour with the tier above, so
+/// this gap is the only hierarchy between the two.
 const AURORA_MUTED_ALPHA: f32 = 0.70;
 
 /// Far finer than the tone bands care about, and small enough to live on the stack.
@@ -436,9 +440,10 @@ pub(crate) struct BackdropColors {
     /// Alpha for the lettering on that tier — a different question from the glyphs, WCAG holding
     /// text to [`TEXT_RATIO`] where non-text chrome answers to [`CHROME_RATIO`].
     pub chrome_text_alpha: f32,
-    /// Alpha for the pill behind that lettering, under both: it is the label's backing as well as
-    /// a surface, so lightening it costs contrast twice.
+    /// Alpha for the pill behind that lettering.
     pub chip_fill_alpha: f32,
+    /// Alpha for the visualizer, off the same colour.
+    pub viz_alpha: f32,
     /// Primary body text.
     pub text: u32,
     /// Secondary body text.
@@ -470,6 +475,7 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
         chrome_alpha: 1.0,
         chrome_text_alpha: 1.0,
         chip_fill_alpha: CHIP_FILL_WEIGHT,
+        viz_alpha: 1.0,
         text: to_tone_capped_chroma(seed_argb, text_tone(tone), TEXT_MAX_CHROMA),
         muted: to_tone_capped_chroma(seed_argb, muted_tone(tone), MUTED_MAX_CHROMA),
         text_alpha: 1.0,
@@ -502,6 +508,7 @@ fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
         chrome_alpha: NEUTRAL_CHROME_ALPHA,
         chrome_text_alpha: AURORA_CHROME_TEXT_ALPHA,
         chip_fill_alpha: AURORA_CHIP_FILL_ALPHA,
+        viz_alpha: AURORA_VIZ_ALPHA,
         text: neutral_ink(theme),
         muted: neutral_ink(theme),
         text_alpha: AURORA_TEXT_ALPHA,
@@ -595,6 +602,11 @@ pub(crate) fn chrome_text_brush(colors: &BackdropColors) -> Brush {
 /// The same tier at the weight the pill behind that lettering wants.
 pub(crate) fn chip_fill_brush(colors: &BackdropColors) -> Brush {
     chrome_at(colors, colors.chip_fill_alpha)
+}
+
+/// The same tier at the visualizer's weight.
+pub(crate) fn viz_brush(colors: &BackdropColors) -> Brush {
+    chrome_at(colors, colors.viz_alpha)
 }
 
 /// Primary and secondary body text. Opaque on the blur, where each is its own solved tone; one

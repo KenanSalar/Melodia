@@ -538,7 +538,7 @@ fn the_palette_is_never_written_without_re_solving_the_backdrops() {
 /// its pill and both body-text weights each carry an alpha Rust solved per arm.
 #[test]
 fn no_fill_derived_from_the_chrome_tier_sets_its_alpha() {
-    const TIERS: [&str; 10] = [
+    const TIERS: [&str; 11] = [
         "chrome",
         "chrome-text",
         "chip-fill",
@@ -547,6 +547,7 @@ fn no_fill_derived_from_the_chrome_tier_sets_its_alpha() {
         "np-accent-bright",
         "np-chrome-text",
         "np-chip-fill",
+        "np-viz",
         "np-on-backdrop",
         "np-on-backdrop-muted",
     ];

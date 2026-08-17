@@ -40,7 +40,9 @@ export component SpectrumBars inherits Rectangle {
                 border-radius: min(self.width, self.height) / 2;
                 // The per-artwork accent, so the strip harmonizes with the blur, but the
                 // tone-floored variant — a dark album's raw accent sinks into the scrimmed backdrop.
-                background: Player.np-accent-bright;
+                // `np-viz` rather than the tier itself: the bars move, and motion reads louder than
+                // the weight the still chrome around them wants.
+                background: Player.np-viz;
             }
         }
     }

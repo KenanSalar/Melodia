@@ -547,39 +547,52 @@ fn the_auroras_chrome_is_neutral_ink_the_wash_reads_through() {
     );
 }
 
-/// Pill under glyph under lettering, and the ordering is the design where the three numbers are
-/// taste: text answers to 4.5:1 where non-text chrome answers to 3:1, and the pill is the label's
-/// backing as well as a surface, so alpha on it costs contrast twice.
+/// What holds across every retune of the neutral weights, which is deliberately not their order.
+///
+/// Two things are structural: no weight may go opaque, the wash reading through being the whole
+/// mechanism, and a chip's pill may not reach the lettering on it, a backing that outshines its own
+/// label having stopped being a backing. Everything else about how the weights rank is taste, so
+/// pinning it here would only make a tune fail a test that agreed with it.
 #[test]
-fn the_chrome_tiers_weights_are_ordered_pill_glyph_text() {
+fn no_neutral_weight_goes_opaque_or_outshines_what_sits_on_it() {
     let aurora = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]))
         .solve(&mocha(), BackdropKind::Aurora);
 
+    for (name, alpha) in [
+        ("chrome", aurora.chrome_alpha),
+        ("chrome-text", aurora.chrome_text_alpha),
+        ("chip-fill", aurora.chip_fill_alpha),
+        ("viz", aurora.viz_alpha),
+        ("text", aurora.text_alpha),
+        ("muted", aurora.muted_alpha),
+    ] {
+        assert!(
+            alpha > 0.0 && alpha < 1.0,
+            "the aurora's {name} weight is {alpha} — opaque ink stops letting the record through, \
+             and nothing at all is not a tier"
+        );
+    }
     assert!(
-        aurora.chip_fill_alpha < aurora.chrome_alpha,
-        "the chip pill ({}) reached the glyph weight ({})",
+        aurora.chip_fill_alpha < aurora.chrome_text_alpha,
+        "the chip pill ({}) reached the lettering on it ({})",
         aurora.chip_fill_alpha,
-        aurora.chrome_alpha
-    );
-    assert!(
-        aurora.chrome_alpha < aurora.chrome_text_alpha,
-        "the lettering ({}) dropped to the glyph weight ({})",
-        aurora.chrome_text_alpha,
-        aurora.chrome_alpha
-    );
-    assert!(
-        aurora.chrome_text_alpha < 1.0,
-        "the lettering went opaque and the record stopped tinting it"
+        aurora.chrome_text_alpha
     );
 
-    // The blur's tier *is* the colour, so only the pill sits under its lettering — asserted here so
-    // the ordering above can't be read as a property of both arms.
+    // The blur's tier *is* the colour, so everything but the pill is opaque there — asserted so the
+    // partial weights above can't be read as a property of both arms.
     let blur = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]))
         .solve(&mocha(), BackdropKind::Blur);
-    assert!(
-        (blur.chrome_text_alpha - 1.0).abs() < f32::EPSILON,
-        "the blur's lettering is its solved chrome and must stay opaque"
-    );
+    for (name, alpha) in [
+        ("chrome-text", blur.chrome_text_alpha),
+        ("viz", blur.viz_alpha),
+        ("text", blur.text_alpha),
+    ] {
+        assert!(
+            (alpha - 1.0).abs() < f32::EPSILON,
+            "the blur's {name} is a tone it solved per cover and must stay opaque, got {alpha}"
+        );
+    }
     assert!(blur.chip_fill_alpha < blur.chrome_alpha, "the blur's pill reached its glyph weight");
 }
 
