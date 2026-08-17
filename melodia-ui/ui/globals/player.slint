@@ -45,22 +45,26 @@ export global Player {
     callback recompute-chip-rows(length);
 
     // The Now Playing backdrop colour set, written together by the `track_change` subscriber from
-    // `ui::now_playing::backdrop::solve`. **None of these can be a theme constant**: they take their
-    // *hue* from the accent quantized out of the cover (`Theme.accent` when art-less) and their
-    // *tone* from a solve against how bright the backdrop measured — the theme lends its colour,
-    // never its polarity. Don't reach for `Theme.text` / `subtext0` / `crust` / `base` on anything
-    // painting on the blur; the literal defaults are for the same reason.
+    // `ui::backdrop`, which answers twice over: on the blur these take their *hue* from the accent
+    // quantized out of the cover (`Theme.accent` when art-less) and their *tone* from a solve
+    // against how bright it measured; on the aurora they are the theme's own tokens, the washes
+    // being bounded against them instead. **Read the tier, never a `Theme.*` brush** — which of
+    // the two is live is `backdrop::kind`'s answer and no consumer's. The literal defaults exist
+    // for the same reason and are never taken.
 
     // Alpha baked in. Solved so the *composited* backdrop lands in a known dark band whatever
     // the cover, which is what lets one light foreground be correct on all of them.
     in-out property <brush> np-scrim: #0a0a0e73;
 
-    // The floor under the blur slots. Two `color`s rather than one `brush`: gradient stops and
-    // `.mix()` need `color` operands.
+    // The floor under the blur slots, and the aurora's base gradient — `Theme.base` → `mantle` on
+    // that arm. Two `color`s rather than one `brush`: gradient stops and `.mix()` need `color`
+    // operands.
     in-out property <color> np-floor-start: #2b2135;
     in-out property <color> np-floor-end: #14101a;
 
-    // The aurora's washes, solved by `ui::aurora` off the same quantize as everything above.
+    // The aurora's washes: the cover's own colours off the same quantize as everything above,
+    // clamped only where `ui::backdrop::wash_cap` binds — so what survives here is the record's
+    // value structure, not one tone with four hues on it.
     // `color` for the floor's gradient-stop reason, each carrying its own weight in the alpha.
     // **The count matches `SEED_COUNT`** — a brush animates stop-for-stop only against one of the
     // same type and length, so a varying count would cross through a flat solid mid-fade.
@@ -73,10 +77,10 @@ export global Player {
     // answers to the renderer rather than to the artwork; `ui::aurora::dither_tile` argues it.
     in-out property <image> np-dither;
 
-    // The hue-carrying tier — visualizer, stars, heart, back button, chips, Up-Next chrome. Solved
-    // for the 3:1 non-text bar then floored, so a brighter accent keeps its own tone; one brush
-    // serves solid and translucent alike. **Never `.brighter()`** — that scales HSV value and
-    // can't lift a near-black accent at all.
+    // The hue-carrying tier — visualizer, stars, heart, back button, chips, Up-Next chrome. On the
+    // blur, solved for the 3:1 non-text bar then floored, so a brighter accent keeps its own tone;
+    // one brush serves solid and translucent alike. **Never `.brighter()`** — that scales HSV value
+    // and can't lift a near-black accent at all.
     in-out property <brush> np-accent-bright: #cba6f7;
 
     // Derived here so surfaces meant to match can't drift. Genuine one-offs stay inline;
@@ -85,11 +89,11 @@ export global Player {
     out property <brush> np-accent-disc-hover: root.np-accent-bright.with-alpha(0.3);
     out property <brush> np-accent-dim: root.np-accent-bright.with-alpha(0.6);
 
-    // Body text, solved for 4.5:1 and chroma-capped, so it reads as near-white carrying a
-    // whisper of the album's warmth — the tier above is where the hue gets to be loud.
+    // Body text. On the blur, solved for 4.5:1 and chroma-capped, so it reads as near-white
+    // carrying a whisper of the album's warmth — the tier above is where the hue gets to be loud.
     in-out property <brush> np-on-backdrop: #c4c0cc;
 
-    // Secondary text at 3:1 in its own dimmer band, so the hierarchy survives every backdrop.
+    // Secondary text, at 3:1 in its own dimmer band so the hierarchy survives every backdrop.
     in-out property <brush> np-on-backdrop-muted: #ada9b5;
 
     callback play-pause();

@@ -5,7 +5,7 @@
 //! on the `transparent` keyword darkens instead of thinning, the dither's `image-fit` decides
 //! whether it dithers or mottles, a mount reading a global directly is what stops one component
 //! serving both backdrop tiers, and the blob geometry is what `ui::aurora`'s coverage — and so
-//! `PEAK_TONE`, and so every foreground tier — is derived from.
+//! `wash_cap`, and so how bright the surface is allowed to get — is derived from.
 
 // Comments dropped: every anchor here is a gradient literal or a geometry binding, and the prose
 // above them argues about gradients, stop counts, corners and `transparent`.
@@ -87,7 +87,7 @@ fn the_dither_keeps_its_own_pitch() {
 }
 
 /// Slint and Rust state the same geometry, `ui::aurora`'s coverage figures being a closed form over
-/// exactly these numbers and `PEAK_TONE` a closed form over those. Moving one here is a change with
+/// exactly these numbers and `wash_cap` a closed form over those. Moving one here is a change with
 /// no symptom on screen: the foreground stays legible right up until it isn't.
 #[test]
 fn the_coverage_constants_describe_the_geometry_below() {

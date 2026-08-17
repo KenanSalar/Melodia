@@ -32,14 +32,17 @@ component AuroraBlob inherits Rectangle {
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 }
 
-// The artwork-derived backdrop: a base gradient in the album's hue under four broad blobs of
-// album colour and a grain of noise. Replaces a blurred cover, so it *is* the surface the
-// foreground is solved against rather than a tint over one.
+// The artwork-derived backdrop: four broad blobs of album colour over the theme's own base, and a
+// grain of noise. Bounded rather than pinned — `ui::backdrop::wash_cap` holds the composite inside
+// the band where the theme's own ink stays legible, so the foreground over this is `Theme.*` and
+// the surface follows the variant's polarity.
 //
 // **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom. They exist
 // so this file imports no global: one mount reads the `Player` tier and the others `HeroBackdrop`,
-// and naming either would tie the component to one. A `Theme.*` brush would be worse than wrong,
-// flipping polarity with the variant while the foreground stays solved for dark.
+// and naming either would tie the component to one. **`base-start` / `base-end` carry `Theme.base`
+// and `Theme.mantle` and still may not read them here**: the tier is what `MosaicHeroTile` fills
+// its square from, so a component reaching past it is how the square and the surface under it
+// start disagreeing.
 export component AuroraBackdrop inherits Rectangle {
     in property <color> base-start: #2b2135;
     in property <color> base-end: #14101a;

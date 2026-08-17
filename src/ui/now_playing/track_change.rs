@@ -156,11 +156,11 @@ pub(super) async fn apply_track_change(
     *np_state.chip_texts.borrow_mut() = chip_texts;
     player.set_track_meta(meta);
 
-    // Every colour the view paints on the backdrop, solved together from one hue and
-    // one measurement. Both fallbacks live on `BackdropSample::solve`, so this tier and
-    // the hero's resolve them identically.
-    let theme_accent = backdrop::theme_accent(&ui);
-    let colors = sample.solve(theme_accent, backdrop::kind(&ui));
+    // Every colour the view paints on the backdrop, answered together. Which arm runs and both
+    // of its fallbacks live on `BackdropSample::solve`, so this tier and the hero's resolve
+    // them identically.
+    let theme = backdrop::theme_tokens(&ui);
+    let colors = sample.solve(&theme, backdrop::kind(&ui));
 
     player.set_np_accent_bright(brush(colors.chrome));
     player.set_np_on_backdrop(brush(colors.text));
@@ -169,7 +169,7 @@ pub(super) async fn apply_track_change(
     player.set_np_floor_end(color(colors.floor_end));
     player.set_np_scrim(backdrop::scrim_brush(&colors));
 
-    let [tint_1, tint_2, tint_3, tint_4] = aurora::tints(sample.seeds, theme_accent);
+    let [tint_1, tint_2, tint_3, tint_4] = aurora::tints(sample.seeds, &theme);
     player.set_np_tint_1(tint_1.to_color());
     player.set_np_tint_2(tint_2.to_color());
     player.set_np_tint_3(tint_3.to_color());

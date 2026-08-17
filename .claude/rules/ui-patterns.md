@@ -147,13 +147,16 @@ silently miss the other.
 
 ### Hero bands
 
-- **Anything painting on a hero blur reads `HeroBackdrop`, never a `Theme.*` brush.** Six views
-  share **one** global, only one hero being mountable at a time. `hero_backdrop.rs` publishes it
-  from the same `backdrop.rs` solve the Now Playing `np-*` tier runs: measure the cover, solve a
-  scrim driving the *composite* into a known dark band. Both seed from the hue quantized out of
-  their own cover, `Theme.accent` only when there is no artwork. **`backdrop::kind` decides which
-  half of that runs** — the aurora states its brightest point rather than measuring one, and is
-  the sole reader of the flag so no publisher can solve for a surface the mount isn't painting.
+- **Anything painting on a hero reads `HeroBackdrop`, never a `Theme.*` brush** — including where
+  the tier now *carries* a theme token, since a consumer reaching past it is how the layers start
+  disagreeing. Six views share **one** global, only one hero being mountable at a time.
+  `hero_backdrop.rs` publishes it from the same `backdrop.rs` answer the Now Playing `np-*` tier
+  runs, and **`backdrop::kind` decides which of two unrelated answers that is**: the blur measures
+  the cover and solves a scrim driving the *composite* into a known dark band, seeding every tier
+  from the artwork's hue; the aurora publishes `Theme.base` / `text` / `subtext1` / `accent`
+  verbatim and bounds the washes over them instead, so it follows theme polarity where the blur
+  pins its own. `kind` is the sole reader of the flag, so no publisher can answer for a surface
+  the mount isn't painting.
   **Producing the `BackdropSample` is the decoder's job, never the publisher's** — it runs in
   whichever `spawn_blocking` already decoded the cover, the quantize being the heaviest thing on
   that path and `apply` running on the UI thread. `on-backdrop` for title and secondary line, `on-backdrop-muted` for empty-state copy,

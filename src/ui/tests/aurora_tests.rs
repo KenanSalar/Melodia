@@ -3,11 +3,23 @@ use material_colors::hct::Hct;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::services::material_you::{extract_source_argb_from_rgb8, population_seeds};
-use crate::ui::aurora::{TINT_TONE, dither_tile, tints};
-use crate::ui::backdrop::SEED_COUNT;
+use crate::ui::aurora::{dither_tile, peak_coverage, tints};
+use crate::ui::backdrop::{SEED_COUNT, ThemeTokens, wash_cap};
 
 /// The default accent, standing in for "no artwork" wherever a fallback is exercised.
 const THEME_ACCENT: u32 = 0x00cb_a6f7;
+
+/// Catppuccin Mocha — the shipped default, and a dark polarity, so the cap below is a ceiling.
+/// `backdrop_tests` owns the light half; what these tests are about is what the washes keep.
+fn mocha() -> ThemeTokens {
+    ThemeTokens {
+        base: 0x001e_1e2e,
+        mantle: 0x0018_1825,
+        text: 0x00cd_d6f4,
+        subtext: 0x00ba_c2de,
+        accent: THEME_ACCENT,
+    }
+}
 
 /// A cover whose quantize separated a full set of hues — the real seeds off `Real for Me`.
 const MANY_HUES: [Option<u32>; SEED_COUNT] = [
@@ -135,20 +147,39 @@ fn a_monochrome_sleeve_seeds_from_its_own_grey() {
 
 // --- the washes ---------------------------------------------------------------
 
-/// Every tint sits at one tone, so the only axis they differ on is hue. A tint brighter than its
-/// neighbours turns its wash into a lightness ramp, which is the one thing a blurred cover never
-/// produced.
+/// Every tint lands inside the theme's band. This replaced a pin that every tint landed on one
+/// *tone*: hue was the only axis they were allowed to differ on, which is what flattened a bright
+/// ochre and a deep navy into the same mid-grey-violet.
 #[test]
-fn every_tint_lands_on_one_tone() {
+fn every_tint_lands_inside_the_theme_band() {
+    let (min_tone, max_tone) = wash_cap(&mocha(), peak_coverage());
+
     for seeds in [MANY_HUES, ONE_HUE, [None; SEED_COUNT]] {
-        for tint in tints(seeds, THEME_ACCENT) {
+        for tint in tints(seeds, &mocha()) {
             let tone = hct_of(tint.rgb).get_tone();
             assert!(
-                (tone - TINT_TONE).abs() < 1.0,
-                "tint {:#08x} at tone {tone}, wanted {TINT_TONE}",
+                tone >= min_tone - 1.0 && tone <= max_tone + 1.0,
+                "tint {:#08x} at tone {tone}, outside L*{min_tone:.1}..={max_tone:.1}",
                 tint.rgb
             );
         }
+    }
+}
+
+/// The other half, and the reason the cap *clamps* rather than sets: a colour already inside the
+/// band comes back bit-identical, chroma included. Without it the model is still a flattening —
+/// just to a different number.
+#[test]
+fn a_wash_inside_the_band_keeps_its_own_colour() {
+    // Every seed here sits under Mocha's ceiling, so the whole set has to survive untouched.
+    // Matched by membership rather than by slot: paint order is the hue wheel.
+    let painted = tints(MANY_HUES, &mocha());
+
+    for seed in MANY_HUES.into_iter().flatten() {
+        assert!(
+            painted.iter().any(|tint| tint.rgb == seed),
+            "seed {seed:#08x} was moved by a cap that does not bind on it"
+        );
     }
 }
 
@@ -157,10 +188,10 @@ fn every_tint_lands_on_one_tone() {
 /// strength would stack near-identical ramps into a lightness gradient the record never had.
 #[test]
 fn a_synthesized_tint_is_washed_on_more_faintly_than_a_real_one() {
-    let real = tints(MANY_HUES, THEME_ACCENT);
+    let real = tints(MANY_HUES, &mocha());
     assert!(real.iter().all(|t| t.weight >= 1.0), "a separated cover washes every tint in full");
 
-    let [seeded, fills @ ..] = tints(ONE_HUE, THEME_ACCENT);
+    let [seeded, fills @ ..] = tints(ONE_HUE, &mocha());
     assert!(seeded.weight >= 1.0, "the seed the artwork gave is not a guess");
     for fill in fills {
         assert!(fill.weight < seeded.weight, "a fill matched the seed's weight");
@@ -174,7 +205,7 @@ fn a_short_list_is_filled_from_its_own_hue_and_not_the_theme() {
     let accent_hue = hct_of(THEME_ACCENT).get_hue();
     let seed_hue = hct_of(0x00c0_3030).get_hue();
 
-    for tint in tints(ONE_HUE, THEME_ACCENT) {
+    for tint in tints(ONE_HUE, &mocha()) {
         let gap_from_seed = hue_gap(hct_of(tint.rgb).get_hue(), seed_hue);
         let gap_from_accent = hue_gap(hct_of(tint.rgb).get_hue(), accent_hue);
         // The fan reaches two analogous steps at its far end, which is what four of them costs
@@ -191,7 +222,7 @@ fn a_short_list_is_filled_from_its_own_hue_and_not_the_theme() {
 /// side of the source is what keeps four washes reading as four.
 #[test]
 fn the_fills_fan_out_around_the_seed() {
-    let painted = tints(ONE_HUE, THEME_ACCENT);
+    let painted = tints(ONE_HUE, &mocha());
     let hues: Vec<f64> = painted.iter().map(|tint| hct_of(tint.rgb).get_hue()).collect();
 
     assert!(
@@ -221,7 +252,7 @@ fn a_greyscale_cover_stays_grey() {
         *slot = Some(seed);
     }
 
-    for tint in tints(seeds, THEME_ACCENT) {
+    for tint in tints(seeds, &mocha()) {
         let chroma = hct_of(tint.rgb).get_chroma();
         assert!(chroma < 6.0, "tint {:#08x} carries chroma {chroma} off a grey cover", tint.rgb);
     }
@@ -242,7 +273,7 @@ fn a_multi_coloured_cover_keeps_its_colours_apart() {
         Some(0x0030_3446),
         Some(0x007d_5c79),
     ];
-    let painted = tints(blue_and_red, THEME_ACCENT);
+    let painted = tints(blue_and_red, &mocha());
 
     // Matched by hue rather than by slot: paint order is the hue wheel, not the quantizer's.
     for seed in blue_and_red.into_iter().flatten() {
@@ -274,7 +305,7 @@ fn the_washes_are_seated_around_the_hue_wheel() {
         Some(0x00b7_eaed),
         Some(0x00de_eacc),
     ];
-    let painted = tints(complementary_by_rank, THEME_ACCENT);
+    let painted = tints(complementary_by_rank, &mocha());
     let anchor = hct_of(painted[0].rgb).get_hue();
     let turn = |rgb: u32| (hct_of(rgb).get_hue() - anchor).rem_euclid(360.0);
 
@@ -296,7 +327,7 @@ fn the_washes_are_seated_around_the_hue_wheel() {
 /// distinguishable tints rather than one colour washed on repeatedly.
 #[test]
 fn no_seeds_at_all_falls_back_to_the_theme_accent() {
-    let [first, fills @ ..] = tints([None; SEED_COUNT], THEME_ACCENT);
+    let [first, fills @ ..] = tints([None; SEED_COUNT], &mocha());
 
     let accent_hue = hct_of(THEME_ACCENT).get_hue();
     assert!(

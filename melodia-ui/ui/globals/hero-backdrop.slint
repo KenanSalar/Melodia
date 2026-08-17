@@ -1,14 +1,15 @@
-// The hero band's solved colour set — the same `ui/backdrop.rs` solve the `np-*` tier runs, applied
-// to the detail / Favorites / Recently-Played heroes. **One global for six views**, only one hero
-// being mountable at a time; whoever opens last owns the set. The `np-*` block's hue-not-polarity
+// The hero band's colour set — the same `ui/backdrop.rs` answer the `np-*` tier runs, applied to
+// the detail / Favorites / Recently-Played heroes. **One global for six views**, only one hero
+// being mountable at a time; whoever opens last owns the set. The `np-*` block's read-the-tier
 // argument applies verbatim, defaults included.
 export global HeroBackdrop {
     // Alpha baked in — see `np-scrim`.
     in-out property <brush> scrim: #0a0a0e73;
 
-    // The no-artwork fill, and Genre Detail's whole backdrop. **`floor-start` has a third reader**:
-    // the mosaic heroes fill their square with it even when populated, the placeholder slots over
-    // it being translucent and needing a known-dark base.
+    // The no-artwork fill, Genre Detail's whole backdrop, and the aurora's base gradient —
+    // `Theme.base` → `mantle` on that arm. **`floor-start` has a third reader**: the mosaic heroes
+    // fill their square with it even when populated, the placeholder slots over it being
+    // translucent, so the square and the surface around it move together whichever arm is live.
     in-out property <color> floor-start: #2b2135;
     in-out property <color> floor-end: #14101a;
 
@@ -28,7 +29,8 @@ export global HeroBackdrop {
     // `ui::aurora::dither_tile` argues it.
     in-out property <image> dither;
 
-    // The hue-carrying tier, solved to 3:1 against the composited backdrop.
+    // The hue-carrying tier. Solved to 3:1 against the composited backdrop on the blur, and
+    // `Theme.accent` on the aurora, where the washes are bounded to clear it instead.
     in-out property <brush> chrome: #cba6f7;
 
     // Derived here so surfaces meant to match can't drift, at `np-accent-pill`'s alpha. **The
@@ -45,14 +47,14 @@ export global HeroBackdrop {
     // that forgets it flashes grey over the blur.
     out property <brush> disc-hover: root.chrome.with-alpha(0.3);
 
-    // Title, secondary and meta lines, solved per artwork exactly as `np-*` is — fixed constants
-    // read as another app beside a Now Playing view that tints. The hairline below is
-    // `on-backdrop`'s one non-text reader, hence the edge deriving from it.
+    // Title, secondary and meta lines, answered exactly as `np-*` is — per artwork on the blur,
+    // the theme's own ink on the aurora. The hairline below is `on-backdrop`'s one non-text
+    // reader, hence the edge deriving from it.
     in-out property <brush> on-backdrop: #f0eef5;
     in-out property <brush> on-backdrop-muted: #c9c5d3;
 
-    // The mosaic heroes' square, the only bordered hero surface. Against a fill pinned dark a
-    // `Theme.border` hairline vanishes under Mocha and turns a hard bright ring under every light
-    // theme, so the edge is a hero token for the same reason the fill is.
+    // The mosaic heroes' square, the only bordered hero surface. A `Theme.border` hairline is
+    // solved for neither backdrop — it vanishes over the blur's dark floor and turns a hard ring
+    // over a light aurora — so the edge is a hero token for the same reason the fill is.
     out property <brush> tile-edge: root.on-backdrop.with-alpha(0.12);
 }

@@ -3,7 +3,8 @@
 Working doc. Delete when the feature ships.
 
 Status: **accepted, v2** · Created: 2026-08-16 · Rewritten: 2026-08-17
-Phases 1–7 landed; 8–11 remain. Phases 6–11 replaced the old 6–8.
+Phases 1–8 landed; **Phase 8's look gate is open** and 9–11 wait on it. Phases 6–11 replaced the
+old 6–8.
 
 > **v2 reverses this doc's central premise.** The aurora shipped as a *self-contained
 > surface* — every wash driven to one tone, the composite pinned into a dark band, and the
@@ -45,12 +46,13 @@ washed over `Theme.base`**, capped so the composite cannot leave the band where 
 own ink stays legible. Consequences, in the order they bite:
 
 - **The foreground stops adapting to the cover.** Titles, secondary lines and chrome on a
-  hero become `Theme.text` / `Theme.subtext` / `Theme.accent` — the same tokens every other
+  hero become `Theme.text` / `Theme.subtext1` / `Theme.accent` — the same tokens every other
   page uses. Polarity is the theme's, which is a constant, so one foreground is correct over
   the whole surface *by construction* rather than by measurement.
 - **The backdrop follows theme polarity.** On Mocha it is dark with colour; on Latte it is
-  light with colour and dark ink. Today a Latte user gets a dark island on two surfaces.
-  **This is the product call the rest of v2 rests on** — see *Open questions*.
+  light with colour and dark ink, where a Latte user used to get a dark island on two
+  surfaces. **This is the product call the rest of v2 rests on**, taken deliberately on
+  2026-08-17 — see *Open questions*.
 - **Washes keep their own tone and chroma**, clamped only where the cap binds. The album's
   value structure survives: a bright ochre stays brighter than a deep navy.
 - **Seeds come from population, not from a usability score**, so the backdrop is what the
@@ -134,11 +136,12 @@ on the same track change. `color_thief` at quality 1 (every pixel) is still 0.11
 
 ## Five findings that decide v2's shape
 
-Measured against the tree as it stood on 2026-08-17 and left as taken. **2 and 3 are fixed** —
-by Phase 7's corner anchoring and Phase 6's extractor. **1, 4 and 5 are Phase 8's**, and 1's
-figures move by a tenth of a ratio point now that `PEAK_TONE` is 32 (3.79:1 chrome, 4.82:1
-text); its conclusion — that the constants rather than the contrast machinery are what makes
-the surface dark — is what still stands.
+Measured against the tree as it stood on 2026-08-17 and left as taken. **All five are now
+fixed** — 2 and 3 by Phase 7's corner anchoring and Phase 6's extractor, 1, 4 and 5 by Phase 8.
+Kept because they are the argument the gate is judged against, not a to-do list. Two figures to
+read carefully: 1's ratios moved by a tenth of a point once `PEAK_TONE` reached 32, and 5's
+wash-tone column was computed at 68 % coverage where the shipped geometry states **0.73**, which
+puts Mocha's real ceiling at L\*≈49 and Latte's floor at L\*≈72. `backdrop_tests` pins those.
 
 1. **The aurora sits ~16 L\* below its own legal ceiling.** `PEAK_TONE = 31` puts the solved
    chrome tier at **3.93:1** against a 3:1 target and the text tier at **5.0:1** against
@@ -240,30 +243,31 @@ Ownership rules, so this doesn't sprawl:
 - **The two backdrops publish into the *same tier names*, and that is what keeps the blur
   free.** `HeroBackdrop.on-backdrop` / `on-backdrop-muted` / `chrome` and `Player.np-*` stay
   exactly as they are; what changes is only what Rust writes into them. Blur mounted →
-  today's solved tones. Aurora mounted → `Theme.text` / `Theme.subtext` / `Theme.accent`.
+  today's solved tones. Aurora mounted → `Theme.text` / `Theme.subtext1` / `Theme.accent`, and
+  `Theme.base` / `Theme.mantle` into `floor-start` / `floor-end`.
   **No `.slint` consumer changes at all** — not `TabBar`'s four brushes, not `MetaChip`,
   not `MosaicHeroTile`, not the `ui-patterns.md` hero contract. `backdrop::kind` is already
-  the single place that asks which surface is painted, and it is already the sole reader.
-- **`ui/backdrop.rs` narrows rather than splits.** `luma_p90` → `scrim_alpha` →
-  `composited_tone` → the three tone solves become the *blur's* path and stop having an
-  aurora arm. `BackdropKind::Aurora` stops meaning "skip the scrim solve" and starts meaning
-  "there are no solved tones here" — the whole `BackdropColors` tier set is blur-only.
-- **`ui/aurora.rs` owns the cap and the geometry it is a function of.**
-  `wash_cap(base, ink, accent, coverage)` is the one function still to write: it takes the live
-  theme colours and `peak_coverage()`, and returns the tone bound each wash is clamped into.
-  Pure, closed form, fully unit-testable against the palette table above. **It caps against the
-  worse of `Theme.text` and `Theme.accent`** — the accent is a user setting and a marginal one
-  would otherwise slip under on a washed surface.
-- **Still to delete from `ui/aurora.rs`:** `TINT_TONE`, `TINT_MAX_CHROMA`, `PEAK_TONE` and its
-  two tone const-asserts, `Tint::weight` and `Tint::to_color`'s alpha fold. `FILL_HUES` /
-  `FILL_WEIGHT` were to go with them on the reasoning that a population extractor fills the
-  list — **it does not**: a near-white sleeve returns one colour, so the `Option`s and the fill
-  rule both stay. `BLOB_PEAKS` / `REACH_FRACTION` / the two coverage functions stay, being what
-  `wash_cap` takes; `mid_coverage`'s only consumer today is a const-assert. `dither_tile` and
-  everything under it **stays**; see *What we keep that Amberol doesn't have*.
-- **Deleted from `backdrop.rs`:** nothing yet. The tone bands, the scrim solve and
-  `luma_p90` are all still the blur's. `TARGET_BACKDROP_TONE`'s doc comment stops naming the
-  aurora.
+  the single place that asks which surface is painted, and it is already the sole reader. This
+  is also why Phase 8's item 3 went through the tier rather than the mounts: `MosaicHeroTile`
+  reads `floor-start` too, so a mount-site `Theme.base` would have left the square behind.
+- **`ui/backdrop.rs` narrowed rather than split.** `luma_p90` → `scrim_alpha` →
+  `composited_tone` → the three tone solves are the *blur's* path, and `solve` no longer takes a
+  `kind` at all. `BackdropKind::Aurora` stopped meaning "skip the scrim solve" and now means
+  "there are no solved tones here": `BackdropSample::solve` picks between `solve` and
+  `theme_backdrop`, and the tier set on that arm is the theme's own.
+- **`ui/aurora.rs` owns the geometry the cap is a function of; `backdrop.rs` owns the cap** —
+  reasoning in Phase 8. `BLOB_PEAKS` / `REACH_FRACTION` / the two coverage functions stay, being
+  what `wash_cap` takes, and `peak_coverage()` gained a `> 0.0` const-assert now the cap divides
+  by it; `mid_coverage`'s only consumer is still a const-assert. `dither_tile` and everything
+  under it **stays**; see *What we keep that Amberol doesn't have*.
+- **Deleted from `ui/aurora.rs`:** `TINT_TONE`, `TINT_MAX_CHROMA`, `PEAK_TONE` and its two tone
+  const-asserts. `FILL_HUES` / `FILL_WEIGHT` were to go with them on the reasoning that a
+  population extractor fills the list — **it does not**: a near-white sleeve returns one colour,
+  so the `Option`s and the fill rule stay, and `Tint::weight` and `to_color`'s alpha fold stay
+  with them.
+- **Deleted from `backdrop.rs`:** nothing. The tone bands, the scrim solve and `luma_p90` are all
+  still the blur's; `theme_accent` widened into `ThemeTokens` rather than being replaced, and
+  `TARGET_BACKDROP_TONE`'s doc comment stopped naming the aurora.
 - **`around_the_wheel` stays, and its justification changes.** It was there because the blob
   positions were fixed and rank decided which colour overlapped which. Under corner anchoring
   the overlaps are pairwise and adjacent, so hue-wheel ordering is what keeps each *pair*
@@ -364,33 +368,56 @@ asserted the string `diagonal` was *absent*), replaced by `the_washes_are_anchor
 corners`; the peak-tone pin now reads `blob-reach` numerically and compares the four `peak`
 bindings against `BLOB_PEAKS`.
 
-### Phase 8 — The composite model · the look gate
+### Phase 8 — The composite model · **landed, gate open**
 
 The phase that changes what the feature is. **Gate it on screen before Phase 9.**
 
-1. `ui::aurora::wash_cap(base, ink, accent, coverage) -> (min_tone, max_tone)` — the closed
-   form from finding 5, capping against the worse of ink and accent, in whichever direction
-   the theme's polarity puts the danger. `coverage` is `peak_coverage()`, already stated.
-2. `tints()` stops driving washes to `TINT_TONE` and stops capping chroma at all — Phase 6 took
-   the floor, this takes the ceiling. Each seed keeps its own tone and chroma, clamped into the
-   band `wash_cap` returned, which is `clamp_to_tone_band` rather than a new primitive. `Tint`
-   loses `weight`; the per-blob `peak` hierarchy in the `.slint` file **stays**, being about
-   area rather than about colour, and `BLOB_PEAKS` mirrors it.
-3. `AuroraBackdrop`'s base gradient stops taking solved floor stops and takes **`Theme.base`
-   and `Theme.mantle`**. Both are `in` properties already, so this is a mount-site change at
-   three sites, not a component change.
-4. `backdrop.rs` publishes theme tokens into the hero and Now Playing tiers whenever
-   `kind()` is `Aurora`, and today's solved tones whenever it is `Blur`. One branch, in the
-   one function that already asks.
-5. **`Theme.base` / `text` / `accent` must reach the solve.** They are already read there
-   (`theme_accent` does exactly this), so this is three more reads through the same handle
-   and no new layer dependency.
+1. `ui::backdrop::wash_cap(theme, coverage) -> (min_tone, max_tone)` — the closed form from
+   finding 5. **In `backdrop.rs`, not `aurora.rs`**: the geometry it takes is aurora's and stays
+   there (`peak_coverage()` is the argument), but `grey_byte`, `byte_tone`, `contrast::darker` and
+   the two ratios are all private to `backdrop.rs`, so siting it there would have promoted four of
+   them to move one function away from its own test helpers. Leaves a one-way `aurora → backdrop`
+   edge now `PEAK_TONE` is gone. Polarity comes off `base` vs `text` — the *relationship*, not a
+   threshold, so the two generated palettes are covered. It caps against **three** tiers rather
+   than two (`text` @4.5, `subtext1` @3, `accent` @3), which costs one array entry and removes a
+   "the third is dominated" claim nobody could check; an unreachable tier is **skipped**, a theme
+   whose own ink fails everywhere not being the backdrop's to rescue.
+2. `tints()` stops driving washes to `TINT_TONE` and stops capping chroma at all. Each seed keeps
+   its own tone and chroma, clamped into the band through `clamp_to_tone_band`, which returns a
+   colour inside the band **untouched** — that pass-through is what makes this a bound rather than
+   a second flattening, and it has its own pin. **`Tint::weight` stays**, against this doc's own
+   line: Phase 6 kept `FILL_WEIGHT`, `weight` is how it reaches the paint, and a weighted wash is
+   strictly safe against the cap in both directions.
+3. **No `.slint` change beyond a comment.** The three mounts already read `floor-start`/`floor-end`
+   off their tier, so publishing `Theme.base`/`Theme.mantle` *into* the tier reaches all three plus
+   `MosaicHeroTile`'s square — which reads `floor-start` too and would otherwise disagree with the
+   surface under it. That is what this doc's own Structure section asks for, and it keeps
+   `the_backdrop_names_no_global` passing where a mount-site `Theme.base` would have broken it.
+4. `BackdropSample::solve` grew the branch and `solve` lost its `kind`, so `solve` *is* the blur's
+   path and `theme_backdrop` is the aurora's. `BackdropColors` is unchanged, so both publishers and
+   `write` are one token wider and nothing else.
+5. `theme_accent` widened into `ThemeTokens` + `theme_tokens(ui)`, keeping its one-read property.
+   **`subtext1`, not `subtext`** — there is no such getter, and `Theme.text-muted` carries its
+   dimming in alpha, which `brush_to_rgb` drops.
 
-**Exit / gate:** side by side with Amberol on the same four records, on **Mocha and Latte
-both** — Latte being the case that has never existed before and the one that can fail
-outright. Confirm by measurement, not by eye, that the composite stays inside the caps in
-finding 5 on a white cover, a black cover and a saturated one. If the look fails here, v2
-stops and the doc records why.
+**Landed:** `the_cap_matches_the_derivation_on_both_polarities` (Mocha ≈ L\*49, Latte ≈ L\*72 at
+the shipped 0.73 coverage — finding 5's table was computed at 0.68),
+`every_theme_tier_survives_the_washes_on_both_polarities` (five covers × two polarities × the four
+edge pairs, composited per channel the way FemtoVG does rather than through the grey proxy the cap
+reasons with), the two arms not leaking into each other, and the `clamp_to_tone_band`
+pass-through. Retired with their subjects: `the_stated_peak_bounds_the_composite_the_geometry_
+produces`, `every_tier_clears_its_target_on_the_aurora`, `every_tint_lands_on_one_tone`.
+The cap has real headroom — mutating the ceiling by +2 L\* still passes, +10 fails on a white
+cover — the conservatism coming from `contrast::darker` returning a verified rather than an exact
+answer.
+
+**Exit / gate — still open:** side by side with Amberol on the same four records, on **Mocha and
+Latte both**. Latte is the case that has never existed and the one that can fail outright. Worth a
+specific look: the mosaic heroes' square, now `Theme.base` against a brighter surround;
+`LibraryTabBand`'s morph, whose `idle-pane` crossfades `Theme.base` over a backdrop that is now
+the same colour at `hero-t` 0; and a greyscale sleeve, which should read tonal rather than flat.
+`Ctrl+Shift+B` toggles the two models live. If the look fails here, v2 stops and the doc records
+why — reverting is reverting the aurora, the blur having never been touched.
 
 ### Phase 9 — The mosaic band is deleted, not ported
 
@@ -441,14 +468,15 @@ decodes both shapes already pay.
 
 ### Phase 11 — Tests, docs, exit
 
-1. **New pins still owed:** `wash_cap` against the palette table in finding 5, on both
-   polarities; a white cover's composite staying inside the cap; `backdrop.rs` publishing
-   theme tokens on the aurora arm and solved tones on the blur arm. The geometry constants
-   agreeing between `ui/aurora.rs` and `aurora-backdrop.slint` landed in Phase 7.
-2. **Pins that must be retired, not left passing vacuously:** the two `backdrop_tests.rs` cases
-   asserting a solved chrome tone on an aurora surface, and — with `PEAK_TONE` — the peak-tone
-   derivation Phase 7 added. A test that still passes because its subject was deleted is worse
-   than none. The chroma-band tests went with the band in Phase 6.
+1. **New pins: all landed in Phase 8**, which is where they belong — `wash_cap` against the
+   palette table on both polarities, the composite staying legible over five covers × two
+   polarities, and the two arms not leaking into each other. The geometry constants agreeing
+   between `ui/aurora.rs` and `aurora-backdrop.slint` landed in Phase 7. Nothing further is owed
+   here unless Phase 9 or 10 adds a surface.
+2. **Retirements: done.** The two `backdrop_tests.rs` cases asserting a solved chrome tone on an
+   aurora surface and the peak-tone derivation went with `PEAK_TONE` in Phase 8, and
+   `every_tint_lands_on_one_tone` with `TINT_TONE`. The chroma-band tests went with the band in
+   Phase 6.
 3. **Pins that survive whole:** the dither tile's flat histogram, blue spectrum and one-level
    alpha; no ramp ending on `transparent`; the `image-fit`/tiling quartet; each of the three
    sites mounting exactly one of the two stacks; neither stack naming a global.
@@ -485,13 +513,10 @@ decodes both shapes already pay.
 
 ## Open questions
 
-- **Does the backdrop follow theme polarity?** This is the product call the whole of v2 rests
-  on. Today Now Playing and the hero bands are dark under all six palettes; under v2 they
-  follow the theme, so a Latte user gets a light pastel-washed Now Playing with dark ink
-  instead of a dark island. I think that is the right answer — it is what makes one fixed
-  foreground correct by construction, and it is why Amberol needs no contrast machinery at
-  all — but it changes two surfaces for every light-theme user and should be decided
-  deliberately rather than arrived at.
+- ~~**Does the backdrop follow theme polarity?**~~ **Decided 2026-08-17: yes.** Mocha stays
+  dark-with-colour, Latte becomes light-with-colour with dark ink. It is what makes one fixed
+  foreground correct by construction, and why Amberol needs no contrast machinery at all. It
+  changes two surfaces for every light-theme user, which is what Phase 8's gate is for.
 - **Should the blur move to the same model?** G4Music draws its blurred cover at a flat
   `opacity: 0.25` over the theme background and has no contrast machinery either. If the blur
   went there, `backdrop.rs` would collapse to `wash_cap` alone — `luma_p90`, `scrim_alpha`,

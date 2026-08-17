@@ -5,26 +5,25 @@
 //! writes the answer. Six views share one global, so every hero opens by calling
 //! exactly one of these.
 //!
-//! The seed is the hue quantized out of the hero's own cover, so the band carries the
-//! *artwork's* colour and changing the app accent leaves it where it is; `Theme.accent` is
-//! the fallback for an entity with no hue to take. Every tone comes from the solve either
-//! way, which is what keeps the band equally dark under every theme — so a theme change
-//! reaches an already-open artwork-less hero only on its next open.
+//! The washes are the artwork's own colours whichever backdrop is mounted. What the tiers
+//! over them are depends on the arm: the blur solves them off the cover's hue, the aurora
+//! takes the theme's own. **Either way the whole set is read at open time**, so a theme or
+//! accent change reaches an already-open hero only on its next open.
 //!
 //! The whole set is published — scrim, gradient floor, the aurora's four washes,
-//! hue-carrying chrome and both text tiers — so a hero and the Now Playing view solve
+//! hue-carrying chrome and both text tiers — so a hero and the Now Playing view answer
 //! identically whichever backdrop the band is painting.
 
 use slint::ComponentHandle;
 
 use crate::themes::{brush, color};
 use crate::ui::aurora::{self, Tint};
-use crate::ui::backdrop::{self, BackdropColors, BackdropKind, BackdropSample, SEED_COUNT};
+use crate::ui::backdrop::{self, BackdropColors, BackdropSample, SEED_COUNT};
 use crate::{AppWindow, HeroBackdrop};
 
 /// What a hero's backdrop is derived from, and the one axis [`write`] branches on. A cover answers
-/// with washes and a solved floor; a genre has neither and keeps its own name-hashed stops. One
-/// value rather than two optional arguments that could never disagree.
+/// with washes and a floor to lay them over; a genre has neither and keeps its own name-hashed
+/// stops. One value rather than two optional arguments that could never disagree.
 enum HeroFill {
     Artwork([Tint; SEED_COUNT]),
     Gradient { start_rgb: u32, end_rgb: u32 },
@@ -34,10 +33,11 @@ enum HeroFill {
 /// failed decode — takes the same path as every cover; what it falls back to, and why
 /// that isn't a guess, is on [`BackdropSample::solve`].
 pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
-    // One read for both halves: the fallback hue, and the origin the washes rotate their fills off.
-    let accent = backdrop::theme_accent(ui);
-    let colors = sample.solve(accent, backdrop::kind(ui));
-    write(ui, &colors, HeroFill::Artwork(aurora::tints(sample.seeds, accent)));
+    // One read for both halves: the tier set on the aurora arm, and the band the washes are
+    // clamped into over it.
+    let theme = backdrop::theme_tokens(ui);
+    let colors = sample.solve(&theme, backdrop::kind(ui));
+    write(ui, &colors, HeroFill::Artwork(aurora::tints(sample.seeds, &theme)));
 }
 
 /// Solve and publish for a hero whose backdrop *is* a gradient — Genre Detail, which has
@@ -48,12 +48,12 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
 /// `start_rgb` doubles as the hue seed, so the chrome tier stays recognisably that
 /// genre's rather than reverting to the theme accent.
 ///
-/// **Always [`BackdropKind::Blur`], whatever the rest of the app is painting.** The
-/// aurora washes a record's own colours over a floor it owns; a genre has neither, and
-/// these stops are only legible under the scrim that arm solves.
+/// **Reaches [`backdrop::solve`] directly, which is the blur's path, whatever the rest of
+/// the app is painting.** The aurora washes a record's own colours over the theme's base; a
+/// genre has no record, and these stops are only legible under the scrim that arm solves.
 pub(crate) fn apply_gradient(ui: &AppWindow, start_rgb: u32, end_rgb: u32) {
     let luma = backdrop::gradient_luma(start_rgb, end_rgb);
-    let colors = backdrop::solve(start_rgb, luma, BackdropKind::Blur);
+    let colors = backdrop::solve(start_rgb, luma);
     write(ui, &colors, HeroFill::Gradient { start_rgb, end_rgb });
 }
 
