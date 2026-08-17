@@ -39,17 +39,20 @@ const ARTWORK_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(12) {
     None => panic!("ARTWORK_CACHE_CAP > 0"),
 };
 
-pub struct DetailArtwork(ArtworkCache);
-
-impl Default for DetailArtwork {
-    fn default() -> Self {
-        Self(ArtworkCache::new(ARTWORK_CACHE_CAP, BLUR))
-    }
+/// This tier's spec, or `None` under the aurora setting. The three detail views each build
+/// their own tier, so the pairing of [`BLUR`] with the live setting lives here rather than
+/// three times at their `install`s.
+pub fn blur_spec(ui: &crate::AppWindow) -> Option<BlurSpec> {
+    crate::ui::backdrop::blur_spec(ui, BLUR)
 }
 
+pub struct DetailArtwork(ArtworkCache);
+
 impl DetailArtwork {
-    pub fn new() -> Self {
-        Self::default()
+    /// Takes the spec rather than reading the setting itself, so the tests can build a tier
+    /// without a window. [`blur_spec`] is what the three production callers pass.
+    pub fn new(blur: Option<BlurSpec>) -> Self {
+        Self(ArtworkCache::new(ARTWORK_CACHE_CAP, blur))
     }
 
     /// See [`ArtworkCache::get_or_decode`].
@@ -81,7 +84,7 @@ impl From<ArtworkPair> for DetailPair {
     fn from(pair: ArtworkPair) -> Self {
         Self {
             cover: Some(pair.cover),
-            blur: Some(pair.blur),
+            blur: pair.blur,
             sample: pair.sample,
         }
     }

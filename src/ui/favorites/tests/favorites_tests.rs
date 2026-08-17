@@ -310,7 +310,7 @@ fn a_prewarm_outliving_the_leave_keeps_nothing() -> TestResult {
     let (_tmp, path) = write_test_png(512)?;
     let path = path.to_str().ok_or("temp path is not UTF-8")?;
 
-    let fav_ui = FavoritesUi::new(Arc::new(CoverThumbs::new()));
+    let fav_ui = FavoritesUi::new(Arc::new(CoverThumbs::new()), None);
     fav_ui.set_active_tab(FavoritesTab::Artists);
     *fav_ui.state().fav_artists.lock() = vec![FavoriteArtist {
         id: 1,

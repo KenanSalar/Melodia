@@ -90,6 +90,9 @@ export global Dialog {
         } else if (root.kind == "restart-tray") {
             // Likewise: 1 enabled, 0 disabled.
             WindowChrome.restart-tray();
+        } else if (root.kind == "restart-backdrop") {
+            // Likewise: 1 aurora, 0 blurred cover.
+            WindowChrome.restart-backdrop();
         } else if (root.kind == "clear-queue") {
             Queue.clear-queue();
         } else if (root.kind == "remove-queue-selected") {

@@ -31,6 +31,7 @@ use slint::{Brush, ComponentHandle, Rgb8Pixel, SharedPixelBuffer};
 
 use crate::services::material_you::{clamp_to_tone_band, population_seeds, to_tone_capped_chroma};
 use crate::themes::{brush_to_rgb, brush_with_alpha};
+use crate::ui::artwork_cache::BlurSpec;
 use crate::{AppWindow, Theme as ThemeGlobal};
 
 /// HCT tone the composited blur is driven down to. Below it a light hue-carrying chrome tone
@@ -511,6 +512,17 @@ pub(crate) fn kind(ui: &AppWindow) -> BackdropKind {
         BackdropKind::Aurora
     } else {
         BackdropKind::Blur
+    }
+}
+
+/// The blur half a tier builds, or `None` when the aurora is mounted and nothing paints one.
+///
+/// Beside [`kind`] rather than at each tier so the branch is written once — the setting is
+/// restart-gated, so this is asked exactly as often as a tier is constructed.
+pub(crate) fn blur_spec(ui: &AppWindow, tier: BlurSpec) -> Option<BlurSpec> {
+    match kind(ui) {
+        BackdropKind::Blur => Some(tier),
+        BackdropKind::Aurora => None,
     }
 }
 

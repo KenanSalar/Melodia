@@ -172,4 +172,23 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             super::request_respawn_and_quit();
         });
     }
+
+    {
+        let weak = app.as_weak();
+        let state = state.clone();
+        chrome.on_restart_backdrop(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            // As above: read `target-id` before the dispatcher wipes it.
+            let target = ui.global::<crate::Dialog>().get_target_id();
+            let on = target == 1;
+
+            if let Err(e) = crate::library::window::set_aurora_backdrop(&state, on) {
+                log::warn!("persist aurora_backdrop failed: {e}");
+                return;
+            }
+
+            // Deferred for `on_restart_app`'s reason.
+            super::request_respawn_and_quit();
+        });
+    }
 }

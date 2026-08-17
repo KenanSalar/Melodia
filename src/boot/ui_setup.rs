@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use melodia::{
-    AppWindow, ArtistDetail, HeroBackdrop, Nav, Player, media, services, state::AppState, ui,
+    AppWindow, ArtistDetail, HeroBackdrop, Nav, Player, Theme, media, services, state::AppState, ui,
 };
 use slint::ComponentHandle;
 
@@ -28,6 +28,23 @@ pub fn install_locale(
 pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
     if let Err(e) = ui::window_chrome::install(app, state) {
         log::warn!("window_chrome::install: {e}");
+    }
+}
+
+/// Raise the persisted backdrop choice, and do it **before `install_views`**.
+///
+/// The flag has to be up before the first tier exists, not merely before `app.show()`:
+/// `install_views` constructs the three `DetailArtwork` caches — whose blur half is built or
+/// skipped on this answer — and then seeds all four detail views, whose fetches end in
+/// `ui::backdrop::kind`. The two obvious homes, `ui::appearance::install` and
+/// `hydrate_ui_from_settings`, both run after it. A failed settings read leaves the
+/// Slint-declared default, which is the same value.
+pub fn apply_backdrop_style(
+    app: &AppWindow,
+    startup_settings: Option<&services::settings::SettingsData>,
+) {
+    if let Some(settings) = startup_settings {
+        app.global::<Theme>().set_aurora_backdrop(settings.backdrop.aurora_backdrop);
     }
 }
 

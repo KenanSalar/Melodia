@@ -402,6 +402,15 @@ msgstr "Neutral"
 msgid "Monochrome"
 msgstr "Monocromo"
 
+msgid "Aurora Backdrop"
+msgstr "Fondo aurora"
+
+msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
+msgstr "Pinta las cabeceras de álbum, lista de reproducción y «Reproduciendo» con los colores del propio álbum, en lugar de con una copia difuminada de su portada. No hay nada que difuminar, así que las cabeceras aparecen antes y Melodia se mantiene más ligero. Requiere reiniciar para aplicarse."
+
+msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
+msgstr "Cambiar el estilo del fondo requiere reiniciar Melodia. ¿Reiniciar ahora?"
+
 # ---- Motion section ---------------------------------------------------------
 
 msgid "Motion"

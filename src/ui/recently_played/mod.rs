@@ -27,6 +27,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::artwork_cache::BlurSpec;
+use crate::ui::detail_artwork;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
@@ -61,7 +63,8 @@ pub(super) use tabs::{seed_tab, tab_from_index};
 /// does there — see [`crate::ui::favorites::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<RecentlyPlayedUi> {
     rows::install_recently_played_models(cx.app);
-    let rp_ui = Arc::new(RecentlyPlayedUi::new(cx.cover_thumbs.clone()));
+    let rp_ui =
+        Arc::new(RecentlyPlayedUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, &rp_ui);
     if let Some(vs) = cx.view_state {
         seed_tab(cx.app, &rp_ui, vs.recently_played_tab);
@@ -75,6 +78,9 @@ pub struct RecentlyPlayedUi {
     inner: RecentlyPlayedUiState,
     /// The shared row tier, for the Songs tab's `TrackList` column.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
+    /// The band's blur shape, or `None` under the aurora setting — read once at install, the
+    /// setting being restart-gated, because the compose runs where no window handle is in reach.
+    pub(super) hero_blur: Option<BlurSpec>,
     /// Released on section leave *and* on tab-leave.
     pub(super) most_played_thumbs: Arc<CoverThumbs>,
     /// Visibility + staleness + the mutation gate, the unit every entity grid carries. Also gates
@@ -104,10 +110,11 @@ pub struct RecentlyPlayedUi {
 }
 
 impl RecentlyPlayedUi {
-    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>, hero_blur: Option<BlurSpec>) -> Self {
         Self {
             inner: RecentlyPlayedUiState::new(),
             cover_thumbs,
+            hero_blur,
             most_played_thumbs: Arc::new(CoverThumbs::with_config(
                 crate::ui::grid_prewarm::GRID_COVER_SIZE,
                 GRID_THUMB_CAP,

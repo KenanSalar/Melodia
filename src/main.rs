@@ -240,6 +240,8 @@ fn main() -> AppResult<()> {
 
     boot::ui_setup::install_locale(&app, &state, startup_settings.as_ref());
     boot::ui_setup::install_app_chrome(&app, &state);
+    // Ahead of `install_views`, which builds the artwork tiers this decides the shape of.
+    boot::ui_setup::apply_backdrop_style(&app, startup_settings.as_ref());
     boot::ui_setup::install_backdrop_dither(&app);
     let views = boot::ui_setup::install_views(&app, &state, startup_view_state.as_ref());
     let notifications = boot::ui_setup::install_library_settings_and_friends(&app, &state)?;
@@ -296,7 +298,9 @@ fn main() -> AppResult<()> {
 
     // Now Playing owns its own small `(cover, blur)` tier, separate from
     // `cover_thumbs`.
-    let np_artwork = Arc::new(ui::now_playing_artwork::NowPlayingArtwork::new());
+    let np_artwork = Arc::new(ui::now_playing_artwork::NowPlayingArtwork::new(
+        ui::now_playing_artwork::blur_spec(&app),
+    ));
     let np_state = match ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork) {
         Ok(s) => Some(s),
         Err(e) => {

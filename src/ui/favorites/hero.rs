@@ -65,7 +65,9 @@ pub async fn refresh_hero(
         return Ok(());
     }
 
-    let Some(pair) = crate::ui::mosaic_hero::compose_off_thread(state, paths.clone()).await else {
+    let Some(pair) =
+        crate::ui::mosaic_hero::compose_off_thread(state, paths.clone(), fav_ui.hero_blur).await
+    else {
         return Ok(());
     };
     publish_hero_artwork(fav_ui, weak, pair, animate, paths);

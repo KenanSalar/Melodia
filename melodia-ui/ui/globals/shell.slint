@@ -6,7 +6,8 @@
 // shortcuts that bypass our buttons. **Window dragging is not handled inside Slint** — a
 // `TouchArea` calling `drag_window()` leaks its mouse grab and wedges the window; Rust intercepts
 // the press at the winit layer. `restart-app` persists then respawns, Slint reading `no-frame` only
-// at first show; `restart-tray` mirrors it so `main.rs`'s startup gate re-evaluates.
+// at first show; `restart-tray` and `restart-backdrop` mirror it so the startup gates each reads
+// once — `main.rs`'s tray install, and `boot::ui_setup::apply_backdrop_style` — re-evaluate.
 export global WindowChrome {
     in property <bool> is-maximized;
 
@@ -24,6 +25,7 @@ export global WindowChrome {
     callback drag-region-hover-changed(bool);
     callback restart-app();
     callback restart-tray();
+    callback restart-backdrop();
 }
 
 // The compact player replacing the full UI once the window shrinks past a threshold, and the

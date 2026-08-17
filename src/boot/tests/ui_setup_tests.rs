@@ -4,6 +4,7 @@
 //! paints either way, and only the *section it boots into* behaves wrongly.
 
 const UI_SETUP: &str = include_str!("../ui_setup.rs");
+const MAIN: &str = include_str!("../../main.rs");
 
 /// The persisted nav index has to reach `Nav.selected-index` before any
 /// `wire_*` runs.
@@ -39,6 +40,34 @@ fn the_persisted_nav_index_is_hydrated_before_any_view_is_wired() {
         hydrate < wire_all,
         "the persisted nav index must be written before `wire_all`: every \
          section's `section_active` shadow seeds off `Nav.selected-index`"
+    );
+}
+
+/// The backdrop setting has to reach `Theme.aurora-backdrop` before `install_views`.
+///
+/// Unlike its two siblings the anchors are in `main.rs`, the flag being raised there rather
+/// than inside `install_views` — which is the call it has to precede. `install_views` builds
+/// the three `DetailArtwork` tiers, and whether each holds a `BlurSpec` at all is decided from
+/// this flag; it then seeds all four detail views, whose fetches reach `ui::backdrop::kind`.
+/// Raise it later and the tiers blur every cover the aurora will never paint, while the first
+/// publish solves for the surface the mount isn't drawing.
+///
+/// The mutation this catches is the obvious one: moving the read into
+/// `hydrate_ui_from_settings`, where every other `settings.json`-to-Slint apply lives and
+/// which runs some thirty lines too late.
+#[test]
+fn the_backdrop_setting_is_hydrated_before_the_views_are_installed() {
+    let hydrations = MAIN.matches("apply_backdrop_style(").count();
+    assert_eq!(hydrations, 1, "expected exactly one backdrop-style hydration site in `main`");
+    let installs = MAIN.matches("install_views(").count();
+    assert_eq!(installs, 1, "boot no longer calls `install_views`");
+
+    let hydrate = MAIN.find("apply_backdrop_style(").unwrap_or(usize::MAX);
+    let install_views = MAIN.find("install_views(").unwrap_or(0);
+    assert!(
+        hydrate < install_views,
+        "the persisted backdrop style must be raised before `install_views`: the artwork \
+         tiers it builds decide there whether to hold a blur spec at all"
     );
 }
 

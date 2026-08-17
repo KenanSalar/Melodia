@@ -13,16 +13,20 @@ use parking_lot::Mutex;
 
 use crate::media::artwork::compose_cover;
 use crate::state::AppState;
-use crate::ui::artwork_cache::pair_from_image;
-use crate::ui::detail_artwork::{BLUR, DetailPair};
+use crate::ui::artwork_cache::{BlurSpec, pair_from_image};
+use crate::ui::detail_artwork::DetailPair;
 
 /// [`compose_hero_pair`] on the blocking pool.
 ///
 /// `None` only when the task itself failed, and the caller returns rather than publishing:
 /// an empty pair would blank the banner *and* claim the set, where leaving the
 /// [`MosaicGuard`] unclaimed lets the next tick try the same covers again.
-pub(crate) async fn compose_off_thread(state: &AppState, paths: Vec<String>) -> Option<DetailPair> {
-    match state.runtime.spawn_blocking(move || compose_hero_pair(&paths)).await {
+pub(crate) async fn compose_off_thread(
+    state: &AppState,
+    paths: Vec<String>,
+    blur: Option<BlurSpec>,
+) -> Option<DetailPair> {
+    match state.runtime.spawn_blocking(move || compose_hero_pair(&paths, blur)).await {
         Ok(pair) => Some(pair),
         Err(e) => {
             log::warn!("curated hero compose: {e}");
@@ -36,12 +40,12 @@ pub(crate) async fn compose_off_thread(state: &AppState, paths: Vec<String>) -> 
 /// **Blocking** — the compose, the blur and the measurement are all CPU-bound. An empty
 /// list or one source that won't decode gives an empty pair, which the publisher spends as
 /// "no artwork" rather than as a failure.
-fn compose_hero_pair(paths: &[String]) -> DetailPair {
+fn compose_hero_pair(paths: &[String], blur: Option<BlurSpec>) -> DetailPair {
     let sources: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     let Some(canvas) = compose_cover(&sources) else {
         return DetailPair::default();
     };
-    pair_from_image(&image::DynamicImage::ImageRgb8(canvas), &BLUR).into()
+    pair_from_image(&image::DynamicImage::ImageRgb8(canvas), blur).into()
 }
 
 /// The covers whose collage is on screen, so an unchanged top-4 costs no recompose.

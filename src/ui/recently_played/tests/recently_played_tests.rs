@@ -432,9 +432,10 @@ fn a_superseded_filter_build_does_not_reach_the_grid() {
 /// equality: a counter that repeated a value would let a stale build match.
 #[test]
 fn every_filter_write_moves_the_token_the_deferred_build_carries() {
-    let rp_ui = super::RecentlyPlayedUi::new(std::sync::Arc::new(
-        crate::media::cover_thumbs::CoverThumbs::new(),
-    ));
+    let rp_ui = super::RecentlyPlayedUi::new(
+        std::sync::Arc::new(crate::media::cover_thumbs::CoverThumbs::new()),
+        None,
+    );
 
     let mut seen = vec![rp_ui.filter_generation()];
     for needle in ["a", "ab", "ab", ""] {

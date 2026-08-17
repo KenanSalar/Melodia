@@ -161,6 +161,23 @@ fn no_layer_darkens_the_periphery() {
     }
 }
 
+/// Nothing in Slint writes the backdrop choice.
+///
+/// The `in` qualifier on `Theme.aurora-backdrop` already makes a write fail to compile, so what
+/// this holds is the *reason*: the two arms publish unrelated tiers, so a live flip leaves one
+/// stack painting the other's colours, and the tiers decide at construction whether to build a
+/// blurred half at all. A `Ctrl+Shift+B` arm did exactly that while both models were being
+/// judged; the pin outlives a later loosening of the qualifier.
+#[test]
+fn nothing_in_slint_writes_the_backdrop_choice() {
+    for (path, src) in stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES) {
+        assert!(
+            !src.contains("Theme.aurora-backdrop ="),
+            "{path} writes `Theme.aurora-backdrop`, which the two tiers already read once at boot"
+        );
+    }
+}
+
 /// Every colour arrives as an input, so one component can serve both backdrop tiers.
 ///
 /// Now Playing reads `Player.np-*` and the two bands read `HeroBackdrop.*`; a component naming

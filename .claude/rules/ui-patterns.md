@@ -159,8 +159,14 @@ silently miss the other.
   the cover and solves a scrim driving the *composite* into a known dark band, seeding every tier
   from the artwork's hue; the aurora publishes `Theme.base` / `text` / `subtext1` / `accent`
   verbatim and bounds the washes over them instead, so it follows theme polarity where the blur
-  pins its own. `kind` is the sole reader of the flag, so no publisher can answer for a surface
-  the mount isn't painting.
+  pins its own. `kind` is the sole **Rust** reader of the flag, so no publisher can answer for a
+  surface the mount isn't painting — the Settings switch reads `Theme.aurora-backdrop` too, as
+  Native Title Bar reads its own, rather than carrying a `Settings` mirror beside it.
+  **Which is also why the setting is restart-gated rather than live**: the two arms publish
+  unrelated tiers, so a flip mid-session leaves one stack painting the other's colours, and the
+  artwork tiers decide at construction whether to build a blurred half at all
+  (`boot::ui_setup::apply_backdrop_style` raises the flag ahead of `install_views` for that
+  reason; `boot::tests::ui_setup_tests` pins the order).
   **Producing the `BackdropSample` is the decoder's job, never the publisher's** — it runs in
   whichever `spawn_blocking` already decoded the cover, the quantize being the heaviest thing on
   that path and `apply` running on the UI thread. `on-backdrop` for title and secondary line, `on-backdrop-muted` for empty-state copy,

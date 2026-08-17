@@ -1,8 +1,12 @@
 import { Settings } from "../../settings.slint";
+import { Theme } from "../../theme.slint";
+import { Dialog } from "../../globals/dialog.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
 import { ColorDotGrid } from "../../components/settings/color-dot-grid.slint";
 
@@ -30,6 +34,10 @@ export component AppearanceSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    // The switch reads the same property `ui::backdrop::kind` does, `Native Title Bar`'s idiom —
+    // one bool with no `Settings` mirror beside it.
+    out property <bool> aurora-backdrop: Theme.aurora-backdrop;
+
     pure function row-visible(label: string, desc: string) -> bool {
         return SettingsPage.row-visible(root.tab-name, @tr("Appearance"),
                                         label + " " + desc,
@@ -48,14 +56,18 @@ export component AppearanceSection inherits Rectangle {
                 ? @tr("Active — palette derived from the current track's artwork.")
                 : @tr("Generate theme colors from album artwork."));
 
+    property <bool> show-backdrop: row-visible(@tr("Aurora Backdrop"),
+        @tr("Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."));
+
     out property <bool> has-matches:
-        show-theme || show-variant || show-accent || show-color-style;
+        show-theme || show-variant || show-accent || show-color-style || show-backdrop;
 
     // A divider needs a visible row on both sides; filtering down to one row
     // would otherwise leave one dangling above it and another below.
     property <bool> any-above-variant: show-theme;
     property <bool> any-above-accent: show-theme || show-variant;
     property <bool> any-above-color-style: show-theme || show-variant || show-accent;
+    property <bool> any-above-backdrop: any-above-color-style || show-color-style;
 
     // Wrapper so the root's preferred-height tracks the card's natural height —
     // see `language-section.slint`.
@@ -139,6 +151,32 @@ export component AppearanceSection inherits Rectangle {
                 ];
                 selected-index <=> Settings.color-style-idx;
                 selected(i) => { Settings.color-style-changed(i); }
+            }
+        }
+
+        // Restart-gated for the reason the two backdrops don't share a contract: the blur solves
+        // its tiers off the artwork where the aurora publishes the theme's own, so a live flip
+        // leaves one stack painting the other's colours. `boot::ui_setup::apply_backdrop_style`
+        // raises the flag before the artwork tiers exist, which is also what lets the blur half
+        // go unbuilt — the cost the setting is for.
+        if root.any-above-backdrop && root.show-backdrop: SectionDivider {}
+        if root.show-backdrop: SettingRow {
+            icon: "tonality";
+            label: @tr("Aurora Backdrop");
+            description: @tr("Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply.");
+            ToggleSwitch {
+                checked: root.aurora-backdrop;
+                manual: true;
+                toggled(new-value) => {
+                    Dialog.kind = "restart-backdrop";
+                    Dialog.target-id = new-value ? 1 : 0;
+                    Dialog.title = @tr("Restart Required");
+                    Dialog.message = @tr("Changing the backdrop style requires restarting Melodia. Restart now?");
+                    Dialog.confirm-label = @tr("Restart");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.open = true;
+                }
             }
         }
     }

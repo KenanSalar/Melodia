@@ -2,6 +2,7 @@ use image::{ImageBuffer, Rgb, RgbImage};
 
 use super::*;
 use crate::error::AppError;
+use crate::ui::detail_artwork::BLUR as DETAIL_BLUR;
 use crate::ui::util::{BLUR_TARGET, COVER_SIZE};
 
 fn solid(width: u32, height: u32, rgb: [u8; 3]) -> RgbImage {
@@ -16,13 +17,13 @@ fn a_composed_collage_carries_both_halves_and_a_hue_to_seed_from() -> Result<(),
         .save(&path)
         .map_err(|e| AppError::Validation(format!("write png: {e}")))?;
 
-    let pair = compose_hero_pair(&[path.to_string_lossy().into_owned()]);
+    let pair = compose_hero_pair(&[path.to_string_lossy().into_owned()], Some(DETAIL_BLUR));
 
     let cover = pair.cover.ok_or_else(|| AppError::Validation("no cover half".into()))?;
     let blur = pair.blur.ok_or_else(|| AppError::Validation("no blur half".into()))?;
     assert_eq!(cover.width(), COVER_SIZE);
     assert_eq!(blur.width(), BLUR_TARGET);
-    assert_eq!(blur.height(), BLUR.height);
+    assert_eq!(blur.height(), DETAIL_BLUR.height);
     // Without a seed the banner falls back to `Theme.accent` and silently tracks the theme
     // again instead of the record.
     assert!(pair.sample.accent_argb.is_some());
@@ -36,11 +37,30 @@ fn a_composed_collage_carries_both_halves_and_a_hue_to_seed_from() -> Result<(),
 #[test]
 fn nothing_to_compose_gives_an_empty_pair() {
     for paths in [vec![], vec!["/nonexistent/one.png".to_owned()]] {
-        let pair = compose_hero_pair(&paths);
+        let pair = compose_hero_pair(&paths, Some(DETAIL_BLUR));
         assert!(pair.cover.is_none());
         assert!(pair.blur.is_none());
         assert!(pair.sample.accent_argb.is_none());
     }
+}
+
+/// Under the aurora setting the band mounts no blur stack, so the collage builds no blurred
+/// half — but the seeds it washes with come off the same measurement, which must survive.
+#[test]
+fn a_specless_collage_keeps_its_seeds_and_builds_no_blur() -> Result<(), AppError> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("tile.png");
+    solid(8, 8, [10, 200, 30])
+        .save(&path)
+        .map_err(|e| AppError::Validation(format!("write png: {e}")))?;
+
+    let pair = compose_hero_pair(&[path.to_string_lossy().into_owned()], None);
+
+    assert!(pair.blur.is_none());
+    assert!(pair.cover.is_some());
+    assert!(pair.sample.accent_argb.is_some());
+    assert!(pair.sample.seeds.iter().any(Option::is_some));
+    Ok(())
 }
 
 #[test]

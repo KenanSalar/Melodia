@@ -26,7 +26,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::album::AlbumStats;
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::ui::detail_artwork::DetailArtwork;
+use crate::ui::artwork_cache::BlurSpec;
+use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
@@ -72,7 +73,8 @@ pub(super) use selection::{clear_selection, handle_select_row};
 /// owned by the `AppWindow` for the life of the app.
 pub fn install(cx: ViewCtx<'_>) -> Arc<AlbumsUi> {
     install_models(cx.app);
-    let albums_ui = Arc::new(AlbumsUi::new(cx.cover_thumbs.clone()));
+    let albums_ui =
+        Arc::new(AlbumsUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, &albums_ui);
     albums_ui
 }
@@ -98,7 +100,7 @@ pub struct AlbumsUi {
 }
 
 impl AlbumsUi {
-    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>, hero_blur: Option<BlurSpec>) -> Self {
         Self {
             grid: AlbumGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
@@ -116,7 +118,7 @@ impl AlbumsUi {
                 GRID_COVER_SIZE,
                 DEFAULT_GRID_COVER_CAP,
             )),
-            detail_artwork: Arc::new(DetailArtwork::new()),
+            detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),
         }
     }

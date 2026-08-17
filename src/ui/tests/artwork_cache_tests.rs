@@ -6,10 +6,10 @@ fn test_cache(capacity: usize) -> ArtworkCache {
     let cap = NonZeroUsize::new(capacity).unwrap_or(NonZeroUsize::MIN);
     ArtworkCache::new(
         cap,
-        BlurSpec {
+        Some(BlurSpec {
             height: BLUR_TARGET,
             sigma: 24.0,
-        },
+        }),
     )
 }
 
@@ -51,14 +51,30 @@ fn clear_empties_the_cache() {
     assert_eq!(artwork.len(), 0);
 }
 
+/// A tier with no spec is the aurora setting, where nothing paints a blur — but the aurora is
+/// exactly what wants the seeds, so the measurement has to survive the skipped blur.
+#[test]
+fn a_specless_pair_skips_the_blur_and_keeps_the_measurement() {
+    let source = DynamicImage::ImageRgb8(image::ImageBuffer::from_fn(64, 64, |x, _| {
+        image::Rgb(if x < 32 { [200, 30, 40] } else { [30, 50, 200] })
+    }));
+
+    let pair = pair_from_image(&source, None);
+
+    assert!(pair.blur.is_none());
+    assert!(pair.sample.accent_argb.is_some());
+    assert!(pair.sample.luma.is_some());
+    assert!(pair.sample.seeds.iter().any(Option::is_some));
+}
+
 /// Both tiers are newtypes whose whole content is a capacity and a
 /// [`BlurSpec`], so nothing about them fails to compile — this walks each one's
 /// two forwards so a tier wired to nothing is a failing test rather than a
 /// silently coverless one.
 #[test]
 fn both_tiers_forward_to_the_cache_they_wrap() {
-    let np = crate::ui::now_playing_artwork::NowPlayingArtwork::new();
-    let detail = crate::ui::detail_artwork::DetailArtwork::new();
+    let np = crate::ui::now_playing_artwork::NowPlayingArtwork::new(None);
+    let detail = crate::ui::detail_artwork::DetailArtwork::new(None);
     let missing = Path::new("/nonexistent/melodia/tier-forward.jpg");
 
     assert!(np.get_or_decode(missing).is_none());

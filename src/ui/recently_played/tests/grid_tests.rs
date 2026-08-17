@@ -24,7 +24,7 @@ fn most_played(play_count: i32) -> MostPlayedFavorite {
 
 /// A handle with one played track cached and `tab` mounted.
 fn seeded(tab: RecentlyPlayedTab, play_count: i32) -> RecentlyPlayedUi {
-    let rp_ui = RecentlyPlayedUi::new(std::sync::Arc::new(CoverThumbs::new()));
+    let rp_ui = RecentlyPlayedUi::new(std::sync::Arc::new(CoverThumbs::new()), None);
     *rp_ui.state().most_played.lock() = vec![most_played(play_count)];
     rp_ui.set_active_tab(tab);
     rp_ui

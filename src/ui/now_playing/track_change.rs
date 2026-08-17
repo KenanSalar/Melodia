@@ -117,7 +117,7 @@ pub(super) async fn apply_track_change(
             match state.runtime.spawn_blocking(move || np.get_or_decode(Path::new(&path))).await {
                 Ok(Some(pair)) => (
                     Some(Image::from_rgb8(pair.cover)),
-                    Some(Image::from_rgb8(pair.blur)),
+                    pair.blur.map(Image::from_rgb8),
                     pair.sample,
                 ),
                 Ok(None) => (None, None, backdrop::BackdropSample::default()),

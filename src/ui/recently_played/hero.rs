@@ -88,7 +88,9 @@ pub async fn refresh_artwork(
     weak: &Weak<AppWindow>,
     animate: bool,
 ) {
-    let Some(pair) = crate::ui::mosaic_hero::compose_off_thread(state, mosaic_paths.clone()).await
+    let Some(pair) =
+        crate::ui::mosaic_hero::compose_off_thread(state, mosaic_paths.clone(), rp_ui.hero_blur)
+            .await
     else {
         return;
     };

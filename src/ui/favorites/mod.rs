@@ -31,6 +31,8 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use crate::entities::track::FavoriteStats;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::artists::ArtistsUi;
+use crate::ui::artwork_cache::BlurSpec;
+use crate::ui::detail_artwork;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
@@ -75,7 +77,8 @@ pub(super) use tabs::{seed_tab, tab_from_index};
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi> {
     rows::install_favorites_models(cx.app);
-    let favorites_ui = Arc::new(FavoritesUi::new(cx.cover_thumbs.clone()));
+    let favorites_ui =
+        Arc::new(FavoritesUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, &favorites_ui, artists_ui);
     if let Some(vs) = cx.view_state {
         seed_tab(cx.app, &favorites_ui, vs.favorites_tab);
@@ -89,6 +92,9 @@ pub struct FavoritesUi {
     inner: FavoritesUiState,
     /// The shared row tier, for the Songs tab's `TrackList` column.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
+    /// The band's blur shape, or `None` under the aurora setting — read once at install, the
+    /// setting being restart-gated, because the compose runs where no window handle is in reach.
+    pub(super) hero_blur: Option<BlurSpec>,
     /// The two grid tiers, released on section leave *and* on tab-leave.
     pub(super) most_played_thumbs: Arc<CoverThumbs>,
     pub(super) artist_thumbs: Arc<CoverThumbs>,
@@ -111,10 +117,11 @@ pub struct FavoritesUi {
 }
 
 impl FavoritesUi {
-    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>, hero_blur: Option<BlurSpec>) -> Self {
         Self {
             inner: FavoritesUiState::new(),
             cover_thumbs,
+            hero_blur,
             most_played_thumbs: Arc::new(CoverThumbs::with_config(
                 crate::ui::grid_prewarm::GRID_COVER_SIZE,
                 GRID_THUMB_CAP,
