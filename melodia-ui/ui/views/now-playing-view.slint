@@ -287,7 +287,7 @@ export component NowPlayingView inherits Rectangle {
                     height: 1px;
                     // Weaker than the stars and heart above: a hairline, not a glyph, so it carries
                     // at a lower alpha without turning into a stripe.
-                    background: Player.np-accent-bright.with-alpha(0.45);
+                    background: Player.np-accent-bright.transparentize(0.55);
                 }
 
                 // The mini-player mounts the same component with `compact: true`.

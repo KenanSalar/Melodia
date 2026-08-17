@@ -14,10 +14,11 @@
 //! everywhere.
 //!
 //! **The aurora is bounded instead.** [`wash_cap`] answers the inverse question — given the
-//! theme's base and its own ink, how bright may a wash be — and the tiers are then the theme's
-//! tokens verbatim. Nothing is measured because nothing needs to be: the composite is held inside
-//! a known band of `Theme.base` *everywhere*, so one fixed foreground is correct by construction,
-//! and it follows the theme's polarity rather than pinning its own.
+//! theme's base and its own ink, how bright may a wash be — and the text tiers are then the theme's
+//! tokens verbatim, the chrome a neutral ink the washes read through. Nothing is measured because
+//! nothing needs to be: the composite is held inside a known band of `Theme.base` *everywhere*, so
+//! one fixed foreground is correct by construction, and it follows the theme's polarity rather
+//! than pinning its own.
 //!
 //! **The blur's measurement comes off the decoded cover, never the rendered frame** — the chrome
 //! tints itself off the same accent feeding the backdrop, so sampling the composite closes a
@@ -94,6 +95,11 @@ const MUTED_MAX_TONE: f64 = 88.0;
 /// the chrome tier is where the hue gets to be loud.
 const TEXT_MAX_CHROMA: f64 = 10.0;
 const MUTED_MAX_CHROMA: f64 = 8.0;
+
+/// Alpha the aurora's chrome is laid on at, and everything derived from it multiplies. The wash
+/// reading *through* it is what makes a neutral tier belong to the record, so opaque is a bug
+/// rather than a tuning miss.
+const NEUTRAL_CHROME_ALPHA: f32 = 0.75;
 
 /// Far finer than the tone bands care about, and small enough to live on the stack.
 const HISTOGRAM_BINS: usize = 64;
@@ -284,24 +290,21 @@ impl BackdropSample {
 
     /// The whole colour set for whichever surface is mounted.
     ///
-    /// On the blur arm only the *hue* is borrowed from `theme` — its accent stands in when there
-    /// was no artwork, so a missing-artwork entry doesn't strand the surface on the previous
-    /// one's colour, and [`solve`] owns every tone. On the aurora arm the measurement is not
-    /// consulted at all: [`theme_backdrop`] answers, and the washes are bounded rather than
-    /// solved against.
+    /// The blur borrows only the *hue* from `theme`, its accent standing in when there was no
+    /// artwork so a missing cover doesn't strand the surface on the previous one's colour; [`solve`]
+    /// owns every tone. The aurora consults the measurement for nothing at all: [`theme_backdrop`]
+    /// answers, and the washes are bounded rather than solved against.
     ///
-    /// **An entry with no artwork keeps the blur under either setting**, which is why the aurora
-    /// arm is guarded rather than reached on the flag alone. Its whole subject is the record's own
-    /// colours, and a placeholder has none — washing the app's accent instead paints the theme
-    /// twice and says nothing about what is playing. Genre Detail reaches the same conclusion
-    /// through [`apply_gradient`](crate::ui::hero_backdrop::apply_gradient), one step earlier.
+    /// **An entry with no artwork keeps the blur under either setting**, hence the match on the
+    /// seed rather than on `kind` alone: the aurora's subject is the record's colours and a
+    /// placeholder has none. Genre Detail reaches the same conclusion one step earlier, through
+    /// [`apply_gradient`](crate::ui::hero_backdrop::apply_gradient).
     pub(crate) fn solve(self, theme: &ThemeTokens, kind: BackdropKind) -> BackdropColors {
-        match kind {
-            BackdropKind::Aurora if self.carries_artwork() => theme_backdrop(theme),
-            BackdropKind::Aurora | BackdropKind::Blur => solve(
-                self.accent_argb.unwrap_or(theme.accent),
-                self.luma.unwrap_or_else(floor_luma),
-            ),
+        match (kind, self.accent_argb) {
+            (BackdropKind::Aurora, Some(_)) => theme_backdrop(theme),
+            (BackdropKind::Aurora | BackdropKind::Blur, seed) => {
+                solve(seed.unwrap_or(theme.accent), self.luma.unwrap_or_else(floor_luma))
+            }
         }
     }
 }
@@ -406,8 +409,11 @@ pub(crate) struct BackdropColors {
     /// Gradient-floor stops, shown when the track has no artwork.
     pub floor_start: u32,
     pub floor_end: u32,
-    /// Hue-carrying tier: visualizer, stars, heart, chips, buttons.
+    /// Visualizer, stars, heart, chips, buttons. Hue-carrying on the blur, neutral on the aurora.
     pub chrome: u32,
+    /// Alpha `chrome` is laid on at — 1.0 on the blur, where the tier *is* the colour, and
+    /// [`NEUTRAL_CHROME_ALPHA`] on the aurora, where the wash under it supplies the colour.
+    pub chrome_alpha: f32,
     /// Primary body text.
     pub text: u32,
     /// Secondary body text.
@@ -432,15 +438,22 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
         // *Clamps* rather than sets: a cover already brighter than the solve asks for keeps its
         // own tone, and so its own chroma, up to `CHROME_MAX_TONE`.
         chrome: clamp_to_tone_band(seed_argb, chrome_tone(tone), CHROME_MAX_TONE),
+        chrome_alpha: 1.0,
         text: to_tone_capped_chroma(seed_argb, text_tone(tone), TEXT_MAX_CHROMA),
         muted: to_tone_capped_chroma(seed_argb, muted_tone(tone), MUTED_MAX_CHROMA),
     }
 }
 
-/// The aurora's tier set: the theme's own colours, verbatim.
+/// The aurora's tier set: the theme's own colours, and a neutral chrome the washes read through.
 ///
 /// A theme is a constant where a cover is not, so this needs no solve — [`wash_cap`] does the
 /// work, holding the composite inside the band where these already clear their bars.
+///
+/// **The chrome carries no hue of its own**, which is Amberol's answer and the one that survived
+/// trying ours: deriving it from the artwork gets a colour that argues with the washes rather than
+/// belonging to them, because the surface is four of them and any single seed is at best one. Black
+/// or white at [`NEUTRAL_CHROME_ALPHA`] takes its colour from whatever wash it happens to sit on,
+/// which is the same answer everywhere on the surface and never the wrong one.
 ///
 /// `base` is the lighter stop under both polarities, so the gradient keeps its direction across
 /// the flip. The scrim is `base` at the alpha floor: nothing mounts the blur stack on this arm,
@@ -451,9 +464,23 @@ fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
         scrim_alpha: SCRIM_ALPHA_MIN,
         floor_start: theme.base,
         floor_end: theme.mantle,
-        chrome: theme.accent,
+        chrome: neutral_ink(theme),
+        chrome_alpha: NEUTRAL_CHROME_ALPHA,
         text: theme.text,
         muted: theme.subtext,
+    }
+}
+
+/// White on a dark theme, black on a light one.
+///
+/// Off the *relationship* between base and ink rather than a threshold on either — the same reason
+/// [`wash_cap`] reads it that way, two of the six palettes being generated at runtime with no
+/// variant id to match on.
+fn neutral_ink(theme: &ThemeTokens) -> u32 {
+    if rgb_lstar(theme.text) > rgb_lstar(theme.base) {
+        0x00ff_ffff
+    } else {
+        0x0000_0000
     }
 }
 
@@ -476,6 +503,11 @@ pub(crate) fn wash_cap(theme: &ThemeTokens, coverage: f64) -> (f64, f64) {
     // no variant id to match on, which is the same reason `Theme.is-light` exists.
     let ink_is_lighter = rgb_lstar(theme.text) > base_tone;
 
+    // The accent stopped painting this surface when the chrome went neutral, and stays in the list
+    // as conservatism: dropping it would *widen* the band and brighten every wash, which is a
+    // change to a backdrop nobody asked to change. The chrome needs no entry of its own —
+    // `neutral_ink` at `NEUTRAL_CHROME_ALPHA` composites past `theme.text` in both polarities, so
+    // the text bound already covers it.
     let tiers = [
         (theme.text, TEXT_RATIO),
         (theme.subtext, CHROME_RATIO),
@@ -586,6 +618,18 @@ pub(crate) fn scrim_brush(colors: &BackdropColors) -> Brush {
     )]
     let alpha = (colors.scrim_alpha * 255.0).round() as u8;
     brush_with_alpha(colors.scrim, alpha)
+}
+
+/// The chrome tier as a Slint brush. Opaque on the blur; on the aurora the alpha is the whole
+/// mechanism, the wash beneath supplying the colour a neutral ink doesn't carry.
+pub(crate) fn chrome_brush(colors: &BackdropColors) -> Brush {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "both arms set a literal in 0..=1"
+    )]
+    let alpha = (colors.chrome_alpha * 255.0).round() as u8;
+    brush_with_alpha(colors.chrome, alpha)
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 //! `sinks.view_model` subscriber + the (decode + metadata fetch + write)
 //! apply step. Skipped while the view is closed; seeded on open.
 
+use std::cell::Cell;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -16,10 +17,16 @@ use crate::library;
 use crate::state::AppState;
 use crate::themes::{brush, color};
 use crate::ui::aurora;
-use crate::ui::backdrop;
+use crate::ui::backdrop::{self, BackdropSample};
 use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Player, TrackMetaRow};
+
+thread_local! {
+    /// The measurement behind whatever is in the `Player.np-*` tier now, so a palette change can
+    /// re-solve it. `hero_backdrop::PUBLISHED_SAMPLE`'s twin, `None` until the first track lands.
+    static PUBLISHED_SAMPLE: Cell<Option<BackdropSample>> = const { Cell::new(None) };
+}
 
 /// What one artwork decode hands back to the UI thread: the sharp cover, the
 /// blurred backdrop, and the hue + brightness measured off the sharp downscale.
@@ -156,30 +163,7 @@ pub(super) async fn apply_track_change(
     *np_state.chip_texts.borrow_mut() = chip_texts;
     player.set_track_meta(meta);
 
-    // Every colour the view paints on the backdrop, answered together. Which arm runs and both
-    // of its fallbacks live on `BackdropSample::solve`, so this tier and the hero's resolve
-    // them identically.
-    let theme = backdrop::theme_tokens(&ui);
-    let colors = sample.solve(&theme, backdrop::kind(&ui));
-
-    player.set_np_accent_bright(brush(colors.chrome));
-    player.set_np_on_backdrop(brush(colors.text));
-    player.set_np_on_backdrop_muted(brush(colors.muted));
-    player.set_np_floor_start(color(colors.floor_start));
-    player.set_np_floor_end(color(colors.floor_end));
-    player.set_np_scrim(backdrop::scrim_brush(&colors));
-
-    // A track with no artwork keeps the blur, `hero_backdrop::apply`'s rule on this view's own
-    // tier: `solve` above has already answered with the blur's colours, and this is what stops the
-    // mount laying the aurora over them.
-    let tints = sample.carries_artwork().then(|| aurora::tints(sample.seeds, &theme));
-    player.set_np_has_tints(tints.is_some());
-    if let Some([tint_1, tint_2, tint_3, tint_4]) = tints {
-        player.set_np_tint_1(tint_1.to_color());
-        player.set_np_tint_2(tint_2.to_color());
-        player.set_np_tint_3(tint_3.to_color());
-        player.set_np_tint_4(tint_4.to_color());
-    }
+    write_backdrop_tiers(&ui, sample);
 
     write_crossfade_slot(
         blurred,
@@ -201,4 +185,46 @@ pub(super) async fn apply_track_change(
     );
 
     np_state.applied_track_id.set(track_id);
+}
+
+/// Every colour this view paints on the backdrop, answered together. Which arm runs and both of
+/// its fallbacks live on [`BackdropSample::solve`], so this tier and the hero's resolve them
+/// identically.
+///
+/// A track with no artwork keeps the blur: `solve` has already answered with its colours, and
+/// `np-has-tints` is what stops the mount laying the aurora over them.
+fn write_backdrop_tiers(ui: &AppWindow, sample: BackdropSample) {
+    let theme = backdrop::theme_tokens(ui);
+    let colors = sample.solve(&theme, backdrop::kind(ui));
+    let player = ui.global::<Player>();
+
+    PUBLISHED_SAMPLE.set(Some(sample));
+
+    player.set_np_accent_bright(backdrop::chrome_brush(&colors));
+    player.set_np_on_backdrop(brush(colors.text));
+    player.set_np_on_backdrop_muted(brush(colors.muted));
+    player.set_np_floor_start(color(colors.floor_start));
+    player.set_np_floor_end(color(colors.floor_end));
+    player.set_np_scrim(backdrop::scrim_brush(&colors));
+
+    let tints = sample.carries_artwork().then(|| aurora::tints(sample.seeds, &theme));
+    player.set_np_has_tints(tints.is_some());
+    if let Some([tint_1, tint_2, tint_3, tint_4]) = tints {
+        player.set_np_tint_1(tint_1.to_color());
+        player.set_np_tint_2(tint_2.to_color());
+        player.set_np_tint_3(tint_3.to_color());
+        player.set_np_tint_4(tint_4.to_color());
+    }
+}
+
+/// Re-solve the view's tiers against a palette that has just changed.
+///
+/// `hero_backdrop::republish_for_palette`'s twin, and the one that matters more: a band republishes
+/// on every detail open, where all three callers of [`apply_track_change`] dedup on
+/// `applied_track_id` — even the seed-on-open path — so without this the tiers hold until the next
+/// *track*, which on a paused player is until the app restarts.
+pub(crate) fn republish_for_palette(ui: &AppWindow) {
+    if let Some(sample) = PUBLISHED_SAMPLE.get() {
+        write_backdrop_tiers(ui, sample);
+    }
 }

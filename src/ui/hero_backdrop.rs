@@ -7,8 +7,8 @@
 //!
 //! The washes are the artwork's own colours whichever backdrop is mounted. What the tiers
 //! over them are depends on the arm: the blur solves them off the cover's hue, the aurora
-//! takes the theme's own. **Either way the whole set is read at open time**, so a theme or
-//! accent change reaches an already-open hero only on its next open.
+//! takes the theme's own. Either way the set is a snapshot of the palette that was live when the
+//! hero opened, which is what [`republish_for_palette`] exists to refresh.
 //!
 //! **An entry with no artwork has no aurora to paint**, so it publishes `has-tints: false` and the
 //! blur's own tiers, exactly as Genre Detail does — see [`BackdropSample::solve`] for why washing
@@ -18,12 +18,24 @@
 //! hue-carrying chrome and both text tiers — so a hero and the Now Playing view answer
 //! identically whichever backdrop the band is painting.
 
+use std::cell::Cell;
+
 use slint::ComponentHandle;
 
 use crate::themes::{brush, color};
 use crate::ui::aurora::{self, Tint};
 use crate::ui::backdrop::{self, BackdropColors, BackdropSample, SEED_COUNT};
 use crate::{AppWindow, HeroBackdrop};
+
+thread_local! {
+    /// The measurement behind whatever is in `HeroBackdrop` now, so a palette change can re-solve
+    /// it. `None` for a genre — [`apply_gradient`]'s stops are theme-independent and re-solving
+    /// them would only overwrite the banner on screen with the last *artwork* hero's.
+    ///
+    /// A thread-local because it shadows a global that is itself process-wide, and both are the
+    /// UI thread's alone.
+    static PUBLISHED_SAMPLE: Cell<Option<BackdropSample>> = const { Cell::new(None) };
+}
 
 /// What a hero's backdrop is derived from, and the one axis [`write`] branches on. A cover answers
 /// with washes and a floor to lay them over; a genre has neither and keeps its own name-hashed
@@ -49,7 +61,21 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
     let theme = backdrop::theme_tokens(ui);
     let colors = sample.solve(&theme, backdrop::kind(ui));
     let tints = sample.carries_artwork().then(|| aurora::tints(sample.seeds, &theme));
+    PUBLISHED_SAMPLE.set(Some(sample));
     write(ui, &colors, HeroFill::Artwork(tints));
+}
+
+/// Re-solve the open hero against a palette that has just changed.
+///
+/// Every tier here is derived from the live theme — the aurora's verbatim, the blur's only where a
+/// missing cover falls back to `Theme.accent` — and nothing else republishes: a hero is written at
+/// open time and holds until the next one. A new accent would otherwise reach the band only on the
+/// next drill, and the washes would stay clamped into the *old* theme's [`backdrop::wash_cap`]
+/// band, which a variant flip can make illegible.
+pub(crate) fn republish_for_palette(ui: &AppWindow) {
+    if let Some(sample) = PUBLISHED_SAMPLE.get() {
+        apply(ui, sample);
+    }
 }
 
 /// Solve and publish for a hero whose backdrop *is* a gradient — Genre Detail, which has
@@ -66,6 +92,7 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
 pub(crate) fn apply_gradient(ui: &AppWindow, start_rgb: u32, end_rgb: u32) {
     let luma = backdrop::gradient_luma(start_rgb, end_rgb);
     let colors = backdrop::solve(start_rgb, luma);
+    PUBLISHED_SAMPLE.set(None);
     write(ui, &colors, HeroFill::Gradient { start_rgb, end_rgb });
 }
 
@@ -77,7 +104,7 @@ pub(crate) fn reset(ui: &AppWindow) {
 
 fn write(ui: &AppWindow, colors: &BackdropColors, fill: HeroFill) {
     let g = ui.global::<HeroBackdrop>();
-    g.set_chrome(brush(colors.chrome));
+    g.set_chrome(backdrop::chrome_brush(colors));
     g.set_scrim(backdrop::scrim_brush(colors));
     g.set_on_backdrop(brush(colors.text));
     g.set_on_backdrop_muted(brush(colors.muted));

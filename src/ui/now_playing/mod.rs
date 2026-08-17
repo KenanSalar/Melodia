@@ -31,6 +31,7 @@ use crate::{AppWindow, Nav, NowPlaying, Player, QueueRow};
 
 use async_compat::Compat;
 
+pub(crate) use track_change::republish_for_palette;
 use track_change::{apply_track_change, spawn_track_change_subscriber};
 use up_next::{rebuild_up_next, spawn_up_next_subscriber, wire_now_playing_open};
 

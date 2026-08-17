@@ -288,7 +288,7 @@ export component MyLibraryView inherits Rectangle {
                 ? @linear-gradient(135deg,
                     GenreDetail.genre.tile_color_1,
                     GenreDetail.genre.tile_color_2)
-                : HeroBackdrop.chrome.with-alpha(0.15);
+                : HeroBackdrop.chrome.transparentize(0.85);
             tile-icon-color: root.hero-genre
                 ? #ffffff.with-alpha(0.3)
                 : HeroBackdrop.chrome;

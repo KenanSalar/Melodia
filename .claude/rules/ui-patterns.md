@@ -157,11 +157,13 @@ silently miss the other.
   `hero_backdrop.rs` publishes it from the same `backdrop.rs` answer the Now Playing `np-*` tier
   runs, and **`backdrop::kind` decides which of two unrelated answers that is**: the blur measures
   the cover and solves a scrim driving the *composite* into a known dark band, seeding every tier
-  from the artwork's hue; the aurora publishes `Theme.base` / `text` / `subtext1` / `accent`
-  verbatim and bounds the washes over them instead, so it follows theme polarity where the blur
-  pins its own. `kind` is the sole **Rust** reader of the flag, so no publisher can answer for a
-  surface the mount isn't painting — the Settings switch reads `Theme.aurora-backdrop` too, as
-  Native Title Bar reads its own, rather than carrying a `Settings` mirror beside it.
+  from the artwork's hue; the aurora publishes `Theme.base` / `text` / `subtext1` verbatim, a
+  **neutral chrome** — black or white at partial alpha, the wash beneath supplying its colour, which
+  is Amberol's answer and survived two attempts to derive that tier from the artwork — and bounds
+  the washes over them instead, so it follows theme polarity where the blur pins its own. `kind` is
+  the sole **Rust** reader of the flag, so no publisher can answer for a surface the mount isn't
+  painting — the Settings switch reads `Theme.aurora-backdrop` too, as Native Title Bar reads its
+  own, rather than carrying a `Settings` mirror beside it.
   **Which is also why the setting is restart-gated rather than live**: the two arms publish
   unrelated tiers, so a flip mid-session leaves one stack painting the other's colours, and the
   artwork tiers decide at construction whether to build a blurred half at all
@@ -169,10 +171,14 @@ silently miss the other.
   reason; `boot::tests::ui_setup_tests` pins the order).
   **Producing the `BackdropSample` is the decoder's job, never the publisher's** — it runs in
   whichever `spawn_blocking` already decoded the cover, the quantize being the heaviest thing on
-  that path and `apply` running on the UI thread. `on-backdrop` for title and secondary line, `on-backdrop-muted` for empty-state copy,
-  `chrome` for a placeholder fill or glyph and for a chip label, `chip-fill` for the pill behind
-  it — **`chip-fill-at(fade)` when the surface is morphing**, `with-alpha` *setting* alpha where
-  the tier needs it multiplied.
+  that path and `apply` running on the UI thread.
+  `on-backdrop` for title and secondary line, `on-backdrop-muted` for empty-state copy, `chrome`
+  for a placeholder fill or glyph and for a chip label, `chip-fill` for the pill behind it —
+  **`chip-fill-at(fade)` when the surface is morphing**, so the pill's weight is stated once.
+  **Anything derived from `chrome` fades with `transparentize`, never `with-alpha`**: the tier
+  carries alpha of its own on the aurora arm, so *setting* it paints the neutral ink opaque and the
+  wash stops reading through. Both spellings agree on the blur, which is what makes the mistake
+  invisible where it is written; `hero_backdrop_tests` walks the tree for it.
 
 - **Two backdrop stacks, and neither knows which tier it is painting from.** `HeroBlurBackdrop`
   and `AuroraBackdrop` take every colour as a defaulted `in property` — `MetaChip`'s idiom — which
@@ -690,9 +696,10 @@ Data-agnostic: parallel `labels`/`icons`, `avail-width`, `selected-index`, `sele
   **`active-color` is the one worth spelling out**, being one input for the selected label, its
   FILL=1 icon *and* the underline: `Theme.accent` carries **no contrast floor** against a pinned
   band — Latte's mauve lands near 1.7:1, under even the 3:1 non-text bar — where
-  `HeroBackdrop.chrome` is solved to clear 3:1 whatever the cover. The trade before "fixing" it
-  back: `chrome` is the 3:1 tier and `on-backdrop` the 4.5:1 one, so the honest repair is a second
-  input separating label from indicator, not a token swap at the call site.
+  `HeroBackdrop.chrome` clears 3:1 whatever the cover, by a solve on the blur and by being the
+  theme's own ink on the aurora. The trade before "fixing" it back: `chrome` is the 3:1 tier and
+  `on-backdrop` the 4.5:1 one, so the honest repair is a second input separating label from
+  indicator, not a token swap at the call site.
 
 - **The cells are equal width, sized to the widest tab, and that is what makes the underline
   arithmetic** — a `for` loop exposes no per-tab element to read a position off, so a content-sized

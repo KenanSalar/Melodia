@@ -101,5 +101,5 @@ pub fn apply_and_seed(
     g.set_kde_system_active(theme_picker::kde_system_active(theme.id, variant_id, system));
     g.set_material_you_active(my_active);
 
-    themes::apply(ui, theme.id, resolved_variant, effective_id, system);
+    super::apply_palette(ui, theme.id, resolved_variant, effective_id, system);
 }

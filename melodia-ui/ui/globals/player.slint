@@ -90,9 +90,14 @@ export global Player {
 
     // Derived here so surfaces meant to match can't drift. Genuine one-offs stay inline;
     // naming them would move the number without sharing it.
-    out property <brush> np-accent-pill: root.np-accent-bright.with-alpha(0.16);
-    out property <brush> np-accent-disc-hover: root.np-accent-bright.with-alpha(0.3);
-    out property <brush> np-accent-dim: root.np-accent-bright.with-alpha(0.6);
+    //
+    // **`transparentize`, not `with-alpha`** — it multiplies, so all three inherit whatever alpha
+    // the tier carries: opaque on the blur, partial on the aurora, where the wash reading through
+    // is the whole point. Setting alpha here would pin them and leave the pills heavier than the
+    // glyphs they sit behind.
+    out property <brush> np-accent-pill: root.np-accent-bright.transparentize(0.84);
+    out property <brush> np-accent-disc-hover: root.np-accent-bright.transparentize(0.7);
+    out property <brush> np-accent-dim: root.np-accent-bright.transparentize(0.4);
 
     // Body text. On the blur, solved for 4.5:1 and chroma-capped, so it reads as near-white
     // carrying a whisper of the album's warmth — the tier above is where the hue gets to be loud.

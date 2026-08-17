@@ -484,3 +484,72 @@ fn no_leave_clears_the_chips_behind_the_macro() {
          leave stopped handing its hero back"
     );
 }
+
+/// `themes::apply` is reached only through `ui::appearance::apply_palette`.
+///
+/// Both artwork-derived tiers are snapshots of the palette that was live when a hero or a track
+/// landed, so a pick reaches neither on its own. The band recovers on the next drill; Now Playing
+/// doesn't recover at all, its three publish paths all deduping on `applied_track_id`. The wrapper
+/// is what pairs the write with the two re-solves, and a fourth caller reaching past it is a
+/// palette that half-applies — visible only on the aurora, and only until you navigate.
+#[test]
+fn the_palette_is_never_written_without_re_solving_the_backdrops() {
+    /// Floor on the walk, so a broken corpus reads as a broken corpus.
+    const MIN_SOURCES: usize = 200;
+
+    // This file spells the needle, so it is its own first hit — comment-stripping doesn't help
+    // when the string lives in the assertion.
+    const SELF: &str = "ui/tests/hero_backdrop_tests.rs";
+
+    let mut callers = Vec::new();
+    for (rel, code) in
+        crate::test_support::stripped_sources(crate::test_support::SRC_DIR, "rs", MIN_SOURCES)
+    {
+        if rel != SELF && code.contains("themes::apply(") {
+            callers.push(rel);
+        }
+    }
+    assert_eq!(
+        callers,
+        ["ui/appearance/mod.rs"],
+        "`themes::apply` must be called only from `apply_palette`, which re-solves \
+         `HeroBackdrop` and `Player.np-*` against the palette it just wrote"
+    );
+
+    let wrapper = include_str!("../appearance/mod.rs");
+    for republish in [
+        "hero_backdrop::republish_for_palette(ui)",
+        "now_playing::republish_for_palette(ui)",
+    ] {
+        assert!(
+            wrapper.contains(republish),
+            "`apply_palette` no longer calls `{republish}` — the tier it feeds holds the previous \
+             palette until its own view is reopened"
+        );
+    }
+}
+
+/// Nothing derived from the chrome tier may *set* its alpha.
+///
+/// `with-alpha` replaces where `transparentize` multiplies, so a fill spelled that way discards
+/// whatever alpha `chrome` carries — which on the aurora is the neutral ink's, and the whole
+/// mechanism by which the wash reads through it. It looks right on the blur arm, where the tier is
+/// opaque and the two spellings agree.
+#[test]
+fn no_fill_derived_from_the_chrome_tier_sets_its_alpha() {
+    const TIERS: [&str; 2] = ["chrome", "np-accent-bright"];
+
+    for (path, src) in crate::test_support::stripped_sources(
+        crate::test_support::UI_DIR,
+        "slint",
+        crate::test_support::MIN_SLINT_SOURCES,
+    ) {
+        for tier in TIERS {
+            assert!(
+                !src.contains(&format!("{tier}.with-alpha(")),
+                "{path} sets alpha on `{tier}` — use `transparentize`, which multiplies, or the \
+                 aurora's neutral tier is painted opaque and stops letting the wash through"
+            );
+        }
+    }
+}

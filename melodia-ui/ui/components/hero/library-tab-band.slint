@@ -49,7 +49,7 @@ export component LibraryTabBand inherits Rectangle {
     // Genre Detail's name-hashed gradient overrides both. The defaults take solved
     // `HeroBackdrop.chrome`, never `Theme.accent` — the tile sits *on* the hero, where a light
     // theme's accent lands dark-on-dark.
-    in property <brush> tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
+    in property <brush> tile-bg: HeroBackdrop.chrome.transparentize(0.85);
     in property <brush> tile-icon-color: HeroBackdrop.chrome;
 
     in property <image> blur-a;
@@ -396,7 +396,9 @@ export component LibraryTabBand inherits Rectangle {
                             MaterialIcon {
                                 name: "auto_awesome";
                                 icon-size: 22px;
-                                icon-color: HeroBackdrop.chrome.with-alpha(root.hero-t);
+                                // Multiplied, not set: `chrome` carries its own alpha on the
+                                // aurora arm.
+                                icon-color: HeroBackdrop.chrome.transparentize(1.0 - root.hero-t);
                                 filled: true;
                             }
                         }

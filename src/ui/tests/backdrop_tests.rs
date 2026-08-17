@@ -612,9 +612,9 @@ fn the_aurora_arm_publishes_the_theme_and_the_blur_arm_solves() {
         "the aurora's gradient is the theme's own base"
     );
     assert_eq!(
-        (aurora_arm.chrome, aurora_arm.text, aurora_arm.muted),
-        (theme.accent, theme.text, theme.subtext),
-        "the aurora's foreground is the theme's own ink"
+        (aurora_arm.text, aurora_arm.muted),
+        (theme.text, theme.subtext),
+        "the aurora's text tiers are the theme's own ink"
     );
 
     let blur_arm = sample.solve(&theme, BackdropKind::Blur);
@@ -622,6 +622,45 @@ fn the_aurora_arm_publishes_the_theme_and_the_blur_arm_solves() {
         (blur_arm.chrome, blur_arm.text, blur_arm.muted),
         (theme.accent, theme.text, theme.subtext),
         "the blur still solves its foreground against what it measured"
+    );
+}
+
+/// The aurora's chrome is neutral ink at partial alpha, and takes its polarity from the theme.
+///
+/// **Amberol's answer, arrived at the hard way.** Two attempts to derive this tier from the artwork
+/// shipped and were reverted: the dominant seed is one of four washes and argues with the other
+/// three, and the hue they composite to is a mean nothing on screen actually is. A neutral ink lets
+/// the wash it happens to sit on supply the colour, which is right everywhere on the surface at
+/// once — and the alpha is the whole mechanism, so an opaque one would be the bug rather than a
+/// tuning miss.
+///
+/// Polarity comes off base-versus-ink, not a variant id: two of the six palettes are generated at
+/// runtime and have none to match on.
+#[test]
+fn the_auroras_chrome_is_neutral_ink_the_wash_reads_through() {
+    for (name, theme, expected) in [
+        ("mocha", mocha(), 0x00ff_ffff),
+        ("latte", latte(), 0x0000_0000),
+    ] {
+        let colors = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]))
+            .solve(&theme, BackdropKind::Aurora);
+
+        assert_eq!(
+            colors.chrome, expected,
+            "{name}'s aurora chrome must be the ink its own base calls for, not a colour"
+        );
+        assert!(
+            colors.chrome_alpha > 0.0 && colors.chrome_alpha < 1.0,
+            "{name}'s aurora chrome is opaque — the wash beneath is what colours it, so an opaque \
+             tier is a white or black glyph sitting on the surface rather than belonging to it"
+        );
+    }
+
+    let blur = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]))
+        .solve(&mocha(), BackdropKind::Blur);
+    assert!(
+        (blur.chrome_alpha - 1.0).abs() < f32::EPSILON,
+        "the blur's chrome is the colour itself and must stay opaque"
     );
 }
 

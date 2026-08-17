@@ -29,7 +29,7 @@ export component MosaicHeroTile inherits Rectangle {
     // reads as one giant placeholder tile rather than as a bare surface.
     background: root.shows-cover
         ? HeroBackdrop.floor-start
-        : HeroBackdrop.chrome.with-alpha(0.15);
+        : HeroBackdrop.chrome.transparentize(0.85);
     border-radius: Theme.radius-lg;
     border-width: 1px;
     border-color: HeroBackdrop.tile-edge;

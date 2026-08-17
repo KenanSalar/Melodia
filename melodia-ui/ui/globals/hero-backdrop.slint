@@ -35,18 +35,22 @@ export global HeroBackdrop {
     in-out property <brush> chrome: #cba6f7;
 
     // Derived here so surfaces meant to match can't drift, at `np-accent-pill`'s alpha. **The
-    // function is what lets a morphing band fade the tier without respelling it**: `with-alpha`
-    // *sets* alpha, so a caller wanting a fraction would need a second copy of the 0.16.
-    // `LibraryTabBand` is the one caller, fading by brush because its chip strip stays mounted.
+    // function is what lets a morphing band fade the tier without respelling it**: a caller wanting
+    // a fraction would otherwise need a second copy of the 0.16. `LibraryTabBand` is the one
+    // caller, fading by brush because its chip strip stays mounted.
+    //
+    // **`transparentize`, not `with-alpha`** — it multiplies, so the fill inherits whatever alpha
+    // `chrome` carries. That is what makes the pill lighter on the aurora, where the tier is a
+    // neutral ink at partial alpha, without a second number that would have to track it.
     public pure function chip-fill-at(alpha: float) -> brush {
-        return root.chrome.with-alpha(0.16 * alpha);
+        return root.chrome.transparentize(1.0 - 0.16 * alpha);
     }
     out property <brush> chip-fill: root.chip-fill-at(1.0);
 
     // The band's back disc on hover, at `np-accent-disc-hover`'s weight. Named despite the one
     // reader because `IconButton` defaults `hover-bg` to an opaque `Theme.surface0`, so a mount
     // that forgets it flashes grey over the blur.
-    out property <brush> disc-hover: root.chrome.with-alpha(0.3);
+    out property <brush> disc-hover: root.chrome.transparentize(0.7);
 
     // Title, secondary and meta lines, answered exactly as `np-*` is — per artwork on the blur,
     // the theme's own ink on the aurora. The hairline below is `on-backdrop`'s one non-text
