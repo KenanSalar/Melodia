@@ -1,9 +1,14 @@
-//! The colours an aurora backdrop washes over its base gradient, from the artwork's own seeds.
+//! The colours an aurora backdrop washes over its base, from the artwork's own seeds.
 //!
-//! **Each wash keeps the tone and chroma the record gave it**, clamped only where
-//! [`crate::ui::backdrop::wash_cap`] binds — so a bright ochre stays brighter than a deep navy and
-//! the album's value structure survives into the surface. The cap is a function of the geometry
-//! below, which is why the coverage constants live here rather than in the paint.
+//! **Each wash is the quantizer's answer, untouched.** No tone band, no hue seating, no reordering
+//! — Amberol applies none of those and the surface reads the way it does because of it: a sleeve's
+//! value structure reaches the backdrop intact, so one region is genuinely light and another
+//! genuinely dark. Bounding the set to keep the theme's ink legible everywhere is what flattens it,
+//! every wash above the bound landing on the bound and a four-colour record painting as two.
+//!
+//! What that costs is a guarantee. Contrast against `Theme.text` is now whatever the cover gives,
+//! and a pale sleeve gives less of it; the neutral chrome tier
+//! ([`crate::ui::backdrop::theme_backdrop`]) is what carries the readable half.
 //!
 //! A fixed set, always — `Brush::interpolate` blends gradients only at a matching stop and element
 //! count — and the quantizer can still answer short, a near-white sleeve coming back as one colour.
@@ -11,69 +16,29 @@
 
 use slint::{Color, Rgba8Pixel, SharedPixelBuffer};
 
-use crate::services::material_you::{clamp_to_tone_band, hue_of, rotate_hue};
+use crate::services::material_you::rotate_hue;
 use crate::themes::color_with_alpha;
-use crate::ui::backdrop::{SEED_COUNT, ThemeTokens, wash_cap};
+use crate::ui::backdrop::{SEED_COUNT, ThemeTokens};
 
-/// Alpha each wash carries at its own corner, mirroring `aurora-backdrop.slint`'s four `peak`
-/// bindings. Here because [`crate::ui::backdrop::wash_cap`] is a function of the coverage these
-/// produce, so they stop being an implementation detail of the paint.
-pub(crate) const BLOB_PEAKS: [f64; SEED_COUNT] = [0.5, 0.46, 0.42, 0.38];
-
-/// How far a wash reaches, as a fraction of the host's diagonal — the same 1/√2 `aurora-backdrop`
-/// spells to four places, and Amberol's own stop.
+/// Washes the paint lays down, against [`SEED_COUNT`] the quantizer is asked for.
 ///
-/// Over half the diagonal, so every ramp reaches the centre and the middle of the surface is not a
-/// hole; under the whole of it, so the pair across a diagonal never meet and no pixel is all four
-/// washes at strength.
-pub(crate) const REACH_FRACTION: f64 = std::f64::consts::FRAC_1_SQRT_2;
+/// **Three, and the two numbers are deliberately not one.** `aurora-backdrop.slint` mounts three
+/// sweeps; median cut is still asked for four boxes because that is the split Amberol takes its
+/// three from, and cutting a palette to three directly yields different boxes rather than the same
+/// ones minus the last.
+pub(crate) const WASH_COUNT: usize = 3;
 
-/// What the washes cover at the centre of the host: all four, each at the strength
-/// [`REACH_FRACTION`] leaves it half a diagonal from its corner.
-///
-/// Alpha composites multiplicatively, so coverage is one minus what gets through all four. Spelled
-/// as a loop because `Iterator::product` is not const, and it has to be for the assertions below.
-pub(crate) const fn mid_coverage() -> f64 {
-    let at_centre = 1.0 - 0.5 / REACH_FRACTION;
-    let mut through = 1.0;
-    let mut blob = 0;
-    while blob < SEED_COUNT {
-        through *= 1.0 - BLOB_PEAKS[blob] * at_centre;
-        blob += 1;
-    }
-    1.0 - through
-}
-
-/// The most any pixel can be covered, over every host shape rather than any one of them.
-///
-/// The maximum is always at a corner, and the only wash that can reach it beside its own is the one
-/// across the *short* edge — the far corners sit past the reach. As a host stretches that edge
-/// shrinks against a diagonal that doesn't, so the neighbour's falloff goes to nothing and its
-/// contribution to its own peak: the two strongest peaks bound every aspect there is. Real hosts sit
-/// well under it — half on a square, two thirds on the bands — and over-stating it only costs the
-/// surface brightness.
-pub(crate) const fn peak_coverage() -> f64 {
-    1.0 - (1.0 - BLOB_PEAKS[0]) * (1.0 - BLOB_PEAKS[1])
-}
-
-// The geometry's own bounds, as build failures rather than tests — `wash_cap` inverts through this
-// coverage, so both ends are arithmetic rather than taste.
-const _: () = assert!(peak_coverage() > 0.0, "the cap divides by the coverage");
 const _: () = assert!(
-    peak_coverage() < 1.0,
-    "a wash covering a pixel outright leaves the theme's base showing nowhere"
-);
-const _: () = assert!(
-    mid_coverage() < peak_coverage(),
-    "the middle of the surface is covered harder than a corner, so the anchors have inverted"
+    WASH_COUNT <= SEED_COUNT,
+    "the paint wants more washes than the quantizer is asked for, so one would be a default"
 );
 
-/// Hue rotation for tint *n* when the quantizer had no seed for it, always applied to the first
+/// Hue rotation for wash *n* when the quantizer had no seed for it, always applied to the first
 /// colour that does exist — rotating from the previous fill would let the set walk away from the
 /// album. A fan either side at the analogous step, so an invented set is harmonious by
 /// construction. Entry 0 is the identity and unreachable: `seeds[0]` empty means no artwork, and
 /// both publishers keep the blur for that rather than calling [`tints`] at all.
-const FILL_HUES: [f64; SEED_COUNT] = [0.0, 25.0, -25.0, 50.0];
+const FILL_HUES: [f64; WASH_COUNT] = [0.0, 25.0, -25.0];
 
 /// How faintly a synthesized tint is laid on, against 1.0 for one the artwork offered. **A backdrop
 /// may not invent variation the record doesn't have** — the fills of a one-hue sleeve differ only
@@ -82,7 +47,7 @@ const FILL_WEIGHT: f32 = 0.3;
 
 /// One wash's colour and how strongly it is laid on.
 pub(crate) struct Tint {
-    /// `0x00RRGGBB`, already clamped into the theme's wash band.
+    /// `0x00RRGGBB`, exactly as the quantizer answered.
     pub rgb: u32,
     /// Multiplies the falloff the Slint side paints, rather than replacing it.
     pub weight: f32,
@@ -96,56 +61,35 @@ impl Tint {
     }
 }
 
-/// The washes, in paint order.
+/// The washes, in the order the quantizer ranked them.
 ///
-/// **A measured seed keeps its own hue.** An earlier pass pulled the set into an analogous arc,
-/// reasoning that overlapping washes composite in sRGB and its midpoint between distant hues is
-/// grey. That answers the wrong question: a cover of blue *and* red is a cover of two colours, and
-/// clamping turned its red into a second violet. Separation is the Slint side's job, by giving each
-/// wash a region of its own.
+/// **Nothing is done to them.** Not the tone band that used to hold the composite legible, not the
+/// hue seating that used to decide which wash overlapped which — median cut's own answer, in median
+/// cut's own order, at the alpha the paint gives it. Every one of those passes was a way of making
+/// the surface safe to put the theme's ink on, and each cost the thing the backdrop is for: the cap
+/// merged every wash above it onto one tone, and the seating spent the ranking on hue adjacency
+/// that the sweeps' geometry no longer needs, each owning an edge rather than a corner.
 ///
-/// **It keeps its own tone and chroma too**, `clamp_to_tone_band` returning a colour inside the
-/// band untouched — most album colours pass through it and only the extremes are moved. The band
-/// is the theme's: bright enough that a dark variant's ink still clears its bar over the composite,
-/// pastel enough that a light variant's does.
+/// So a sleeve's value structure arrives intact, and contrast against `Theme.text` is whatever the
+/// record gives. The chrome tier is where the guarantee lives now.
 ///
 /// `theme`'s accent is never used to *pad* a short list: one hue's worth of cover gets a full set
 /// of its own colours, not the app's. It only stands in for an *empty* one, which keeps this total
 /// but is no longer a case either publisher produces — an entry with no artwork keeps the blur, and
 /// the app's accent washed over the app's base was the reason.
-pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], theme: &ThemeTokens) -> [Tint; SEED_COUNT] {
+pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], theme: &ThemeTokens) -> [Tint; WASH_COUNT] {
     let origin = seeds.iter().flatten().next().copied().unwrap_or(theme.accent);
-    let (min_tone, max_tone) = wash_cap(theme, peak_coverage());
 
-    let ranked: [Tint; SEED_COUNT] = std::array::from_fn(|tint| {
-        let (source, weight) = match seeds[tint] {
-            Some(argb) => (argb, 1.0),
-            None => (rotate_hue(origin, FILL_HUES[tint]), FILL_WEIGHT),
-        };
-        Tint {
-            rgb: clamp_to_tone_band(source, min_tone, max_tone),
-            weight,
-        }
-    });
-    around_the_wheel(ranked)
-}
-
-/// Seat the washes so neighbours here are neighbours on the hue wheel, top-ranked first.
-///
-/// The blob positions are fixed, so the rank a colour arrives in decides which other colour it
-/// overlaps — and `Score`'s ranking has nothing to do with hue. On a four-cover mosaic it put two
-/// complementary pairs on top of each other, which composite toward grey, and the band painted flat
-/// mauve out of four chroma-48 washes. Anchored at the dominant rather than sorted outright: it
-/// carries the strongest wash and the base gradient under it is solved from the same seed.
-fn around_the_wheel(ranked: [Tint; SEED_COUNT]) -> [Tint; SEED_COUNT] {
-    let anchor = hue_of(ranked[0].rgb);
-    let mut ordered = ranked;
-    // One turn from the anchor, so the sort can't wrap past it and reopen the gap it closes.
-    ordered[1..].sort_by(|a, b| {
-        let turn = |tint: &Tint| (hue_of(tint.rgb) - anchor).rem_euclid(360.0);
-        turn(a).total_cmp(&turn(b))
-    });
-    ordered
+    std::array::from_fn(|wash| match seeds[wash] {
+        Some(argb) => Tint {
+            rgb: argb,
+            weight: 1.0,
+        },
+        None => Tint {
+            rgb: rotate_hue(origin, FILL_HUES[wash]),
+            weight: FILL_WEIGHT,
+        },
+    })
 }
 
 /// Side of the noise tile. Big enough that the repeat carries no structure to lock onto — the

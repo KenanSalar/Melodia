@@ -3,18 +3,17 @@ use material_colors::hct::Hct;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::services::material_you::{extract_source_argb_from_rgb8, population_seeds};
-use crate::ui::aurora::{dither_tile, peak_coverage, tints};
-use crate::ui::backdrop::{SEED_COUNT, ThemeTokens, wash_cap};
+use crate::ui::aurora::{WASH_COUNT, dither_tile, tints};
+use crate::ui::backdrop::{SEED_COUNT, ThemeTokens};
 
 /// The default accent, standing in for "no artwork" wherever a fallback is exercised.
 const THEME_ACCENT: u32 = 0x00cb_a6f7;
 
-/// Catppuccin Mocha — the shipped default, and a dark polarity, so the cap below is a ceiling.
-/// `backdrop_tests` owns the light half; what these tests are about is what the washes keep.
+/// Catppuccin Mocha — the shipped default. What these tests are about is what the washes keep,
+/// which is everything: the theme reaches them only as the fallback for a set with no seeds at all.
 fn mocha() -> ThemeTokens {
     ThemeTokens {
         base: 0x001e_1e2e,
-        mantle: 0x0018_1825,
         text: 0x00cd_d6f4,
         subtext: 0x00ba_c2de,
         accent: THEME_ACCENT,
@@ -147,40 +146,37 @@ fn a_monochrome_sleeve_seeds_from_its_own_grey() {
 
 // --- the washes ---------------------------------------------------------------
 
-/// Every tint lands inside the theme's band. This replaced a pin that every tint landed on one
-/// *tone*: hue was the only axis they were allowed to differ on, which is what flattened a bright
-/// ochre and a deep navy into the same mid-grey-violet.
+/// A measured wash is the quantizer's colour, bit for bit, in the quantizer's own slot.
+///
+/// **The pin the whole arm rests on.** Every pass that ever sat between the two — a tone band to
+/// hold the composite legible, a hue seating to choose which wash met which — took the record's
+/// value structure with it: the band merged every wash above it onto one tone, so a four-colour
+/// sleeve painted as two and the surface read as a tint rather than as light across a plane. This
+/// is what Amberol does and the reason its backdrop looks the way it does. Anything reintroduced
+/// between `population_seeds` and here has to argue with this test.
 #[test]
-fn every_tint_lands_inside_the_theme_band() {
-    let (min_tone, max_tone) = wash_cap(&mocha(), peak_coverage());
+fn a_measured_wash_is_the_seed_untouched() {
+    let painted = tints(MANY_HUES, &mocha());
 
-    for seeds in [MANY_HUES, ONE_HUE, [None; SEED_COUNT]] {
-        for tint in tints(seeds, &mocha()) {
-            let tone = hct_of(tint.rgb).get_tone();
-            assert!(
-                tone >= min_tone - 1.0 && tone <= max_tone + 1.0,
-                "tint {:#08x} at tone {tone}, outside L*{min_tone:.1}..={max_tone:.1}",
-                tint.rgb
-            );
-        }
+    for (slot, seed) in MANY_HUES.iter().take(WASH_COUNT).enumerate() {
+        let Some(seed) = *seed else {
+            unreachable!("MANY_HUES is a full set")
+        };
+        assert_eq!(
+            painted[slot].rgb, seed,
+            "wash {slot} came back as {:#08x} against the seed {seed:#08x}",
+            painted[slot].rgb
+        );
     }
 }
 
-/// The other half, and the reason the cap *clamps* rather than sets: a colour already inside the
-/// band comes back bit-identical, chroma included. Without it the model is still a flattening —
-/// just to a different number.
+/// The paint takes three where the quantizer is asked for four, and the two counts are not one
+/// number. Median cut splits to a target, so asking it for three gives different boxes rather than
+/// these minus the last — Amberol extracts four and paints three for the same reason. That the
+/// paint is a *subset* is a `const _: () = assert!` in `ui::aurora`; this is that it is the front.
 #[test]
-fn a_wash_inside_the_band_keeps_its_own_colour() {
-    // Every seed here sits under Mocha's ceiling, so the whole set has to survive untouched.
-    // Matched by membership rather than by slot: paint order is the hue wheel.
-    let painted = tints(MANY_HUES, &mocha());
-
-    for seed in MANY_HUES.into_iter().flatten() {
-        assert!(
-            painted.iter().any(|tint| tint.rgb == seed),
-            "seed {seed:#08x} was moved by a cap that does not bind on it"
-        );
-    }
+fn the_paint_takes_the_quantizers_first_three() {
+    assert_eq!(tints(MANY_HUES, &mocha()).len(), WASH_COUNT);
 }
 
 /// The rule that keeps a monochrome record looking monochrome: a rotated hue is a guess, and on a
@@ -208,10 +204,9 @@ fn a_short_list_is_filled_from_its_own_hue_and_not_the_theme() {
     for tint in tints(ONE_HUE, &mocha()) {
         let gap_from_seed = hue_gap(hct_of(tint.rgb).get_hue(), seed_hue);
         let gap_from_accent = hue_gap(hct_of(tint.rgb).get_hue(), accent_hue);
-        // The fan reaches two analogous steps at its far end, which is what four of them costs
-        // over three — still nearer the album than the app's own accent by a wide margin.
+        // One analogous step either side, the whole fan three washes needs.
         assert!(
-            gap_from_seed <= 55.0,
+            gap_from_seed <= 30.0,
             "fill {:#08x} drifted {gap_from_seed}° from the album; accent is {gap_from_accent}° away",
             tint.rgb
         );
@@ -219,7 +214,7 @@ fn a_short_list_is_filled_from_its_own_hue_and_not_the_theme() {
 }
 
 /// Fills rotating the same way by the same step would stack into near-duplicates; a fan either
-/// side of the source is what keeps four washes reading as four.
+/// side of the source is what keeps three washes reading as three.
 #[test]
 fn the_fills_fan_out_around_the_seed() {
     let painted = tints(ONE_HUE, &mocha());
@@ -264,7 +259,7 @@ fn a_greyscale_cover_stays_grey() {
 /// overlapping washes composite in sRGB and its midpoint between distant hues is grey. Measured on
 /// a real blue-and-red sleeve, that turned seeds at 231°/17°/304° into 231°/271°/270° — three
 /// violets, the record's most vivid colour discarded. Separation is the Slint side's job, by
-/// giving each blob a region; the solve's job is to hand over what the artwork had.
+/// giving each sweep an edge; the solve's job is to hand over what the artwork had.
 #[test]
 fn a_multi_coloured_cover_keeps_its_colours_apart() {
     let blue_and_red = [
@@ -275,8 +270,8 @@ fn a_multi_coloured_cover_keeps_its_colours_apart() {
     ];
     let painted = tints(blue_and_red, &mocha());
 
-    // Matched by hue rather than by slot: paint order is the hue wheel, not the quantizer's.
-    for seed in blue_and_red.into_iter().flatten() {
+    // The painted set is the quantizer's first `WASH_COUNT`; the box it drops is not this test's.
+    for seed in blue_and_red.into_iter().take(WASH_COUNT).flatten() {
         let nearest = painted
             .iter()
             .map(|tint| hue_gap(hct_of(tint.rgb).get_hue(), hct_of(seed).get_hue()))
@@ -290,37 +285,6 @@ fn a_multi_coloured_cover_keeps_its_colours_apart() {
         .flat_map(|hue| hues.iter().map(move |other| hue_gap(*hue, *other)))
         .fold(0.0, f64::max);
     assert!(widest > 90.0, "blue and red collapsed to {widest}° apart");
-}
-
-/// Consecutive washes are consecutive on the hue wheel: the blobs anchor at fixed corners, so the
-/// rank a colour arrives in decides which other colour it meets along an edge, and a ranking by
-/// prominence has nothing to do with hue. The failure is invisible in review — every colour in the
-/// solve is correct and only the composite is wrong.
-#[test]
-fn the_washes_are_seated_around_the_hue_wheel() {
-    // Deliberately adversarial: ranked so the two complementary pairs land adjacent.
-    let complementary_by_rank = [
-        Some(0x0063_4def),
-        Some(0x00e5_2508),
-        Some(0x00b7_eaed),
-        Some(0x00de_eacc),
-    ];
-    let painted = tints(complementary_by_rank, &mocha());
-    let anchor = hct_of(painted[0].rgb).get_hue();
-    let turn = |rgb: u32| (hct_of(rgb).get_hue() - anchor).rem_euclid(360.0);
-
-    for pair in painted.windows(2) {
-        assert!(
-            turn(pair[0].rgb) <= turn(pair[1].rgb),
-            "the washes stopped walking one way round the wheel, so two of them can be \
-             complementary neighbours again"
-        );
-    }
-
-    // The anchor stays the top-ranked seed: it carries the strongest wash and the base gradient
-    // under it is solved from the same seed, so starting elsewhere strands the floor's own hue.
-    let dominant = hue_gap(anchor, hct_of(0x0063_4def).get_hue());
-    assert!(dominant < 10.0, "wash 0 is {dominant}° off the dominant seed");
 }
 
 /// No artwork at all is the only path that may reach for the theme, and it still owes a set of

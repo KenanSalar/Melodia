@@ -159,8 +159,11 @@ silently miss the other.
   the cover and solves a scrim driving the *composite* into a known dark band, seeding every tier
   from the artwork's hue; the aurora publishes `Theme.base` / `text` / `subtext1` verbatim, a
   **neutral chrome** — black or white at partial alpha, the wash beneath supplying its colour, which
-  is Amberol's answer and survived two attempts to derive that tier from the artwork — and bounds
-  the washes over them instead, so it follows theme polarity where the blur pins its own. `kind` is
+  is Amberol's answer and survived two attempts to derive that tier from the artwork — and does
+  **nothing at all** to the washes over them, which is the other half of that port: a tone band
+  holding the composite legible everywhere is a band every wash above it lands *on*, so a
+  four-colour sleeve paints as two and the surface reads as a tint. Contrast is the cover's to
+  decide and the neutral chrome is what carries the readable half. `kind` is
   the sole **Rust** reader of the flag, so no publisher can answer for a surface the mount isn't
   painting — the Settings switch reads `Theme.aurora-backdrop` too, as Native Title Bar reads its
   own, rather than carrying a `Settings` mirror beside it.
@@ -224,15 +227,17 @@ silently miss the other.
   value honest rather than suppressing the animation at the right instant**: the palette mirrors
   fall back to their idle half on `root.detail-open`, and both stacks swap their stops for a
   transparent pair on a `shown` input defaulting `true` — the blur's floor and scrim, and the
-  aurora's base plus all four washes. **`detail-open`, not `hero-shown`** — gated on the latter
+  aurora's base plus all three washes. **`detail-open`, not `hero-shown`** — gated on the latter
   they drain toward idle for `dur-med` *after* the collapse ends; the band folds it into `shown`
   beside the arm term rather than owning that input outright. **The scrim used to be the one
   exempt layer** and is gated now: draining it could only brighten the artwork while this stack
   was alone on screen, and it now cross-fades against the aurora, where a scrim at full strength
   under a half-faded pair darkens the midpoint of every crossing. The aurora's neutral layer is
-  gone with the vignette, the washes having moved to the corners it used to darken; its **dither
-  is the one layer behind an `if`**, alpha living in the tile leaving nothing to fade, and a
-  one-level grain being invisible enough to afford the cut.
+  gone with the vignette, the washes being three broad linear sweeps at Amberol's own 127°/217°/336°
+  — near-orthogonal, so each owns an edge and one corner is left showing the floor, which is the
+  asymmetry the whole effect is made of. Its **dither is the one layer behind an `if`**, alpha
+  living in the tile leaving nothing to fade, and a one-level grain being invisible enough to
+  afford the cut.
 
 - **`has-cover` is how a host says "not this one".** The `cover:` ternary must bind *some* global
   on every arm, Slint having no empty-`image` literal, and Genre owns no cover — so the Genre hero

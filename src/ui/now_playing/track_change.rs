@@ -209,11 +209,10 @@ fn write_backdrop_tiers(ui: &AppWindow, sample: BackdropSample) {
 
     let tints = sample.carries_artwork().then(|| aurora::tints(sample.seeds, &theme));
     player.set_np_has_tints(tints.is_some());
-    if let Some([tint_1, tint_2, tint_3, tint_4]) = tints {
+    if let Some([tint_1, tint_2, tint_3]) = tints {
         player.set_np_tint_1(tint_1.to_color());
         player.set_np_tint_2(tint_2.to_color());
         player.set_np_tint_3(tint_3.to_color());
-        player.set_np_tint_4(tint_4.to_color());
     }
 }
 

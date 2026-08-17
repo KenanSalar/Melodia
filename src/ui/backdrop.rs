@@ -13,12 +13,13 @@
 //! another. Pin the backdrop and every cover ends up dark, so one light foreground is correct
 //! everywhere.
 //!
-//! **The aurora is bounded instead.** [`wash_cap`] answers the inverse question — given the
-//! theme's base and its own ink, how bright may a wash be — and the text tiers are then the theme's
-//! tokens verbatim, the chrome a neutral ink the washes read through. Nothing is measured because
-//! nothing needs to be: the composite is held inside a known band of `Theme.base` *everywhere*, so
-//! one fixed foreground is correct by construction, and it follows the theme's polarity rather
-//! than pinning its own.
+//! **The aurora neither measures nor bounds.** Its washes are the quantizer's answer untouched and
+//! the tiers over them are the theme's own tokens, the chrome a neutral ink the washes read
+//! through. That is Amberol's arrangement, and the reason it isn't the blur's: three broad ramps of
+//! album colour at partial alpha over the theme's own base stay near that base, where a blurred
+//! photograph fills the surface and can be any brightness at all. What it gives up is the
+//! guarantee — contrast against the theme's ink is whatever the cover offers — and what it buys is
+//! the cover's value structure, which a band across the washes is precisely what flattens.
 //!
 //! **The blur's measurement comes off the decoded cover, never the rendered frame** — the chrome
 //! tints itself off the same accent feeding the backdrop, so sampling the composite closes a
@@ -232,8 +233,8 @@ pub(crate) enum BackdropKind {
     /// The blurred cover. The brightness is that photograph's, so it is measured and a scrim
     /// drives the composite down into range; [`solve`] is that whole path.
     Blur,
-    /// [`crate::ui::aurora`]'s brush stack over `Theme.base`, bounded by [`wash_cap`]. There are
-    /// no solved tones here at all — the tiers are the theme's own.
+    /// [`crate::ui::aurora`]'s three sweeps over `Theme.base`. There are no solved tones here at
+    /// all, and no bound over the washes — the tiers are the theme's own.
     Aurora,
 }
 
@@ -446,24 +447,26 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
 
 /// The aurora's tier set: the theme's own colours, and a neutral chrome the washes read through.
 ///
-/// A theme is a constant where a cover is not, so this needs no solve — [`wash_cap`] does the
-/// work, holding the composite inside the band where these already clear their bars.
+/// A theme is a constant where a cover is not, so this needs no solve, and nothing bounds the
+/// washes over it — [`crate::ui::aurora::tints`] argues what that trade buys.
 ///
 /// **The chrome carries no hue of its own**, which is Amberol's answer and the one that survived
 /// trying ours: deriving it from the artwork gets a colour that argues with the washes rather than
-/// belonging to them, because the surface is four of them and any single seed is at best one. Black
-/// or white at [`NEUTRAL_CHROME_ALPHA`] takes its colour from whatever wash it happens to sit on,
-/// which is the same answer everywhere on the surface and never the wrong one.
+/// belonging to them, because the surface is three of them and any single seed is at best one.
+/// Black or white at [`NEUTRAL_CHROME_ALPHA`] takes its colour from whatever wash it happens to sit
+/// on, which is the same answer everywhere on the surface and never the wrong one — and with no cap
+/// over the washes it is the tier carrying the readable half.
 ///
-/// `base` is the lighter stop under both polarities, so the gradient keeps its direction across
-/// the flip. The scrim is `base` at the alpha floor: nothing mounts the blur stack on this arm,
-/// and base over base is inert even if something did.
+/// **The floor is flat**, both stops `base`: Amberol composites over one window colour, and a ramp
+/// under three of its own adds a fourth direction to a surface whose whole structure is which way
+/// each sweep runs. The scrim is `base` at the alpha floor: nothing mounts the blur stack on this
+/// arm, and base over base is inert even if something did.
 fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
     BackdropColors {
         scrim: theme.base,
         scrim_alpha: SCRIM_ALPHA_MIN,
         floor_start: theme.base,
-        floor_end: theme.mantle,
+        floor_end: theme.base,
         chrome: neutral_ink(theme),
         chrome_alpha: NEUTRAL_CHROME_ALPHA,
         text: theme.text,
@@ -474,84 +477,14 @@ fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
 /// White on a dark theme, black on a light one.
 ///
 /// Off the *relationship* between base and ink rather than a threshold on either — the same reason
-/// [`wash_cap`] reads it that way, two of the six palettes being generated at runtime with no
-/// variant id to match on.
+/// `Theme.is-light` exists, two of the six palettes being generated at runtime with no variant id
+/// to match on.
 fn neutral_ink(theme: &ThemeTokens) -> u32 {
     if rgb_lstar(theme.text) > rgb_lstar(theme.base) {
         0x00ff_ffff
     } else {
         0x0000_0000
     }
-}
-
-/// Tone band a wash may occupy so the composite over `Theme.base` stays legible under every tier
-/// [`theme_backdrop`] publishes. `coverage` is the geometry's worst case
-/// ([`crate::ui::aurora::peak_coverage`]).
-///
-/// Closed form, because the renderer composites in gamma space: with `cov` the coverage, `b` the
-/// base's grey byte and `w` a wash's, the surface is `b·(1 − cov) + w·cov`, so bounding the
-/// composite bounds the wash by arithmetic. One side of the band is free — a wash *darker* than a
-/// dark base only raises contrast — hence the open bound on whichever side the theme's polarity
-/// doesn't put the danger.
-///
-/// **Over-stating `coverage` only costs brightness.** A real host sits nearer 0.5, which pulls
-/// the composite back toward the base: darker on a dark theme, lighter on a light one, safe
-/// either way.
-pub(crate) fn wash_cap(theme: &ThemeTokens, coverage: f64) -> (f64, f64) {
-    let base_tone = rgb_lstar(theme.base);
-    // The relationship, not a threshold: two of the six palettes are generated at runtime and have
-    // no variant id to match on, which is the same reason `Theme.is-light` exists.
-    let ink_is_lighter = rgb_lstar(theme.text) > base_tone;
-
-    // The accent stopped painting this surface when the chrome went neutral, and stays in the list
-    // as conservatism: dropping it would *widen* the band and brighten every wash, which is a
-    // change to a backdrop nobody asked to change. The chrome needs no entry of its own —
-    // `neutral_ink` at `NEUTRAL_CHROME_ALPHA` composites past `theme.text` in both polarities, so
-    // the text bound already covers it.
-    let tiers = [
-        (theme.text, TEXT_RATIO),
-        (theme.subtext, CHROME_RATIO),
-        (theme.accent, CHROME_RATIO),
-    ];
-    let bounds = tiers.into_iter().filter_map(|(ink, ratio)| {
-        let ink_tone = rgb_lstar(ink);
-        let bound = if ink_is_lighter {
-            contrast::darker(ink_tone, ratio)
-        } else {
-            contrast::lighter(ink_tone, ratio)
-        };
-        // A tier that can't reach its ratio against *any* surface is failing on every other page
-        // too — `Theme.accent` carries no contrast floor — and collapsing the aurora to a flat
-        // base over one marginal accent is the worse answer.
-        (bound >= 0.0).then_some(bound)
-    });
-
-    if ink_is_lighter {
-        let ceiling = bounds.fold(f64::INFINITY, f64::min);
-        (0.0, wash_tone_for_composite(base_tone, ceiling, coverage))
-    } else {
-        let floor = bounds.fold(f64::NEG_INFINITY, f64::max);
-        (wash_tone_for_composite(base_tone, floor, coverage), 100.0)
-    }
-}
-
-/// Inverse of the composite mix: the wash tone that lands `coverage` of itself over `base_tone`
-/// on `composite_tone`.
-///
-/// The fold above hands over an infinity when no tier could be bounded at all, and that opens the
-/// band rather than closing it — a theme whose own ink fails everywhere is not the backdrop's to
-/// rescue, and a flat base would be the worse answer.
-fn wash_tone_for_composite(base_tone: f64, composite_tone: f64, coverage: f64) -> f64 {
-    if composite_tone.is_infinite() {
-        return if composite_tone.is_sign_positive() {
-            100.0
-        } else {
-            0.0
-        };
-    }
-    let uncovered = grey_byte(base_tone) * (1.0 - coverage);
-    let wash = (grey_byte(composite_tone) - uncovered) / coverage;
-    byte_tone(wash.clamp(0.0, 255.0))
 }
 
 /// Which backdrop is painted, and the only place that asks — so no publisher can solve for one
@@ -581,12 +514,10 @@ pub(crate) fn blur_spec(ui: &AppWindow, tier: BlurSpec) -> Option<BlurSpec> {
 /// disagree about what the theme is — and read at *solve* time rather than cached, a palette
 /// change reaching an already-open surface only on its next open either way.
 pub(crate) struct ThemeTokens {
-    /// The surface the aurora is washed over, and its brighter gradient stop.
+    /// The surface the aurora is washed over. Flat — `theme_backdrop` publishes it as both floor
+    /// stops, so `Theme.mantle` is nothing this solve needs.
     pub base: u32,
-    /// The dimmer stop. Darker than `base` on a dark variant and lighter on a light one, so the
-    /// gradient reads the same way round under both.
-    pub mantle: u32,
-    /// Primary ink, and the tier [`wash_cap`] almost always binds on.
+    /// Primary ink.
     pub text: u32,
     /// Secondary ink. `subtext1` rather than `Theme.text-muted`, which carries its dimming in
     /// alpha and would arrive here as plain `text`.
@@ -600,7 +531,6 @@ pub(crate) fn theme_tokens(ui: &AppWindow) -> ThemeTokens {
     let theme = ui.global::<ThemeGlobal>();
     ThemeTokens {
         base: brush_to_rgb(&theme.get_base()),
-        mantle: brush_to_rgb(&theme.get_mantle()),
         text: brush_to_rgb(&theme.get_text()),
         subtext: brush_to_rgb(&theme.get_subtext1()),
         accent: brush_to_rgb(&theme.get_accent()),

@@ -62,16 +62,15 @@ export global Player {
     in-out property <color> np-floor-start: #2b2135;
     in-out property <color> np-floor-end: #14101a;
 
-    // The aurora's washes: the cover's own colours off the same quantize as everything above,
-    // clamped only where `ui::backdrop::wash_cap` binds — so what survives here is the record's
-    // value structure, not one tone with four hues on it.
+    // The aurora's washes: the cover's own colours off the same quantize as everything above, with
+    // nothing done to them — so what survives here is the record's value structure, not one tone
+    // with three hues on it.
     // `color` for the floor's gradient-stop reason, each carrying its own weight in the alpha.
-    // **The count matches `SEED_COUNT`** — a brush animates stop-for-stop only against one of the
-    // same type and length, so a varying count would cross through a flat solid mid-fade.
+    // **The count matches `ui::aurora::WASH_COUNT`** — a brush animates stop-for-stop only against
+    // one of the same type and length, so a varying count would cross through a flat solid mid-fade.
     in-out property <color> np-tint-1: #3a2d4a;
     in-out property <color> np-tint-2: #2d3a4a;
     in-out property <color> np-tint-3: #4a2d3a;
-    in-out property <color> np-tint-4: #2d4a3a;
 
     // `HeroBackdrop.has-tints`' twin, and the same axis: whether the track had artwork to wash at
     // all. False leaves the washes above unread and the view on the blur, since a placeholder has

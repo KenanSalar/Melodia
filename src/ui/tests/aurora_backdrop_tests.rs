@@ -4,34 +4,33 @@
 //! the count has to be fixed or `Brush::interpolate` crosses mismatched gradients, a ramp ending
 //! on the `transparent` keyword darkens instead of thinning, the dither's `image-fit` decides
 //! whether it dithers or mottles, a mount reading a global directly is what stops one component
-//! serving both backdrop tiers, and the blob geometry is what `ui::aurora`'s coverage — and so
-//! `wash_cap`, and so how bright the surface is allowed to get — is derived from.
+//! serving both backdrop tiers, and the three headings are what leave one corner showing the floor
+//! rather than covering the surface evenly and averaging back to a tint.
 
 // Comments dropped: every anchor here is a gradient literal or a geometry binding, and the prose
-// above them argues about gradients, stop counts, corners and `transparent`.
+// above them argues about gradients, stop counts, headings and `transparent`.
 use crate::test_support::{
-    MIN_SLINT_SOURCES, UI_DIR, binding_value, normalize_ws as normalized,
-    strip_line_comments as code, stripped_sources,
+    MIN_SLINT_SOURCES, UI_DIR, normalize_ws as normalized, strip_line_comments as code,
+    stripped_sources,
 };
-use crate::ui::aurora::{BLOB_PEAKS, REACH_FRACTION};
-use crate::ui::backdrop::SEED_COUNT;
+use crate::ui::aurora::WASH_COUNT;
 
 const AURORA: &str = include_str!("../../../melodia-ui/ui/components/aurora-backdrop.slint");
 
-/// The blob count is fixed, and fixed at the number Rust solves for.
+/// The wash count is fixed, and fixed at the number Rust solves for.
 ///
 /// `Brush::interpolate` blends gradient→gradient only at a matching stop *and* element count;
-/// anything else flattens through a solid colour halfway through the fade. A fourth blob added in
-/// Slint without a fourth seed would also paint whatever the uninitialised property holds.
+/// anything else flattens through a solid colour halfway through the fade. A fourth sweep added in
+/// Slint without a fourth wash would also paint whatever the uninitialised property holds.
 #[test]
 fn slint_paints_exactly_the_tints_rust_solves() {
-    let mounts = code(AURORA).matches("AuroraBlob {").count();
+    let mounts = code(AURORA).matches("AuroraSweep {").count();
     assert_eq!(
-        mounts, SEED_COUNT,
-        "{mounts} blob mounts against {SEED_COUNT} seeds — the two counts are one contract"
+        mounts, WASH_COUNT,
+        "{mounts} sweep mounts against {WASH_COUNT} washes — the two counts are one contract"
     );
 
-    for tint in 1..=SEED_COUNT {
+    for tint in 1..=WASH_COUNT {
         let property = format!("tint-{tint}");
         assert!(
             code(AURORA).contains(&format!("in property <color> {property}")),
@@ -86,74 +85,58 @@ fn the_dither_keeps_its_own_pitch() {
     }
 }
 
-/// Slint and Rust state the same geometry, `ui::aurora`'s coverage figures being a closed form over
-/// exactly these numbers and `wash_cap` a closed form over those. Moving one here is a change with
-/// no symptom on screen: the foreground stays legible right up until it isn't.
+/// The three sweeps carry Amberol's own angles, and they are three rather than four.
+///
+/// **The asymmetry is the effect.** Near-orthogonal headings leave each sweep owning a different
+/// edge and one corner showing the floor; a fourth, or three evenly spaced, covers the surface
+/// about equally again and the washes average back to the one flat tone this replaced. The numbers
+/// are load-bearing rather than decorative, and Slint's gradient angle is CSS's — `line_for_angle`
+/// adds 90° and takes the same magic-corner construction — so they need no conversion.
 #[test]
-fn the_coverage_constants_describe_the_geometry_below() {
-    let src = code(AURORA);
-    let reach = normalized(binding_value(&src, "blob-reach:"));
-    let fraction =
-        reach.strip_prefix("root.host-diagonal * ").and_then(|number| number.parse::<f64>().ok());
-    // Loose enough for however many places the `.slint` spells 1/√2 to, tight enough that another
-    // fraction is another geometry.
-    assert!(
-        fraction.is_some_and(|f| (f - REACH_FRACTION).abs() < 1e-3),
-        "`blob-reach` is `{reach}` — re-derive `ui::aurora`'s coverage before changing it here"
-    );
+fn the_sweeps_carry_amberols_angles() {
+    let src = normalized(&code(AURORA));
 
-    // The side of a square whose gradient reaches zero at `blob-reach`; the ramp and the rect are
-    // one number apart, so a stop moved without it silently rescales every wash.
-    assert!(code(AURORA).contains("blob-span: root.blob-reach / 0.495;"));
-
-    for peak in BLOB_PEAKS {
-        let binding = format!("peak: {peak};");
-        assert!(code(AURORA).contains(&binding), "no wash carries `{binding}`");
+    for heading in ["heading: 127deg;", "heading: 217deg;", "heading: 336deg;"] {
+        assert_eq!(
+            src.matches(heading).count(),
+            1,
+            "no sweep carries `{heading}` — the three headings are Amberol's stylesheet verbatim"
+        );
     }
+    assert_eq!(
+        code(AURORA).matches("AuroraSweep {").count(),
+        WASH_COUNT,
+        "the mount count left `ui::aurora::WASH_COUNT`, so Rust is solving washes nothing paints"
+    );
 }
 
-/// The washes anchor at the four corners, walking round the rectangle.
+/// Each ramp is 55% at its near edge and gone by 70.71% of the gradient line.
 ///
-/// Fractions of each axis put all four centres *inside* the element with the reach floored on the
-/// short one, so every ramp covered every pixel: four vivid washes averaged to one flat tone, on a
-/// banner and on Now Playing alike. From a corner each wash owns the region nearest it and meets
-/// only its two edge neighbours — which is the adjacency `around_the_wheel` hands them, four
-/// corners being a cycle exactly as the hue wheel is.
+/// `transparentize` *multiplies*, so 0.45 leaves a measured wash at Amberol's 55% while a
+/// synthesized one keeps the lower weight `ui::aurora` gave it — `with-alpha` would overwrite it
+/// and wash a guess on as hard as a fact. The far stop is 1/√2, the fraction of the line at which a
+/// 45° traversal reaches the opposite corner, which is why nothing bands at the edges.
 #[test]
-fn the_washes_are_anchored_at_the_corners() {
-    const LEFT: &str = "x: -root.blob-span / 2;";
-    const RIGHT: &str = "x: root.width - root.blob-span / 2;";
-    const TOP: &str = "y: -root.blob-span / 2;";
-    const BOTTOM: &str = "y: root.height - root.blob-span / 2;";
-
+fn each_sweep_fades_at_amberols_stop() {
     let src = normalized(&code(AURORA));
-    for gone in ["blob-x(", "blob-y(", "long-side", "short-side"] {
-        assert!(
-            !src.contains(gone),
-            "`{gone}` is back, so the centres are inside the element again"
-        );
-    }
-
-    // Walking round rather than down a list: two washes at one corner is two colours nothing
-    // separates, and a diagonal pair as neighbours is the grey composite the ordering exists to
-    // avoid.
-    for (across, down) in [(LEFT, TOP), (RIGHT, TOP), (RIGHT, BOTTOM), (LEFT, BOTTOM)] {
-        let anchored = format!("{across} {down}");
-        assert_eq!(
-            src.matches(&anchored).count(),
-            1,
-            "no wash anchors at `{anchored}`, so the four don't take a corner each"
-        );
-    }
+    assert!(
+        src.contains("root.tint.transparentize(0.45) 0%"),
+        "the near edge left 55% — `transparentize(0.45)` is Amberol's `color-mix(… 55%)`"
+    );
+    assert_eq!(
+        src.matches("root.tint.transparentize(1.0) 70.71%").count(),
+        2,
+        "both arms owe the same far stop, or the shown/hidden pair cross through a solid"
+    );
 }
 
 /// Nothing darkens the periphery.
 ///
 /// A vignette sat over this stack while the model was a self-contained dark surface, where the only
-/// question was how to frame a bright middle. Under washes anchored at the corners it is the direct
-/// inverse: the corners are where the album's colour now is, and neutral black over them is what the
-/// backdrop was dull for. Deleted rather than defaulted off, a property nothing sets being a layer
-/// waiting to be switched back on.
+/// question was how to frame a bright middle. Under sweeps that carry the album's colour along the
+/// edges it is the direct inverse: neutral black over them is what the backdrop was dull for.
+/// Deleted rather than defaulted off, a property nothing sets being a layer waiting to be switched
+/// back on.
 #[test]
 fn no_layer_darkens_the_periphery() {
     for (path, src) in stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES) {

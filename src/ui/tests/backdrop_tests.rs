@@ -2,11 +2,11 @@ use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast::ratio_of_tones;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::ui::aurora;
+use crate::ui::aurora::WASH_COUNT;
 use crate::ui::backdrop::{
-    BackdropColors, BackdropKind, BackdropSample, CHROME_MAX_TONE, CHROME_RATIO, SEED_COUNT,
-    TEXT_RATIO, ThemeTokens, chrome_tone, composited_tone, floor_luma, gradient_luma, luma_p90,
-    muted_tone, rgb_lstar, scrim_alpha, solve, text_tone, wash_cap,
+    BackdropColors, BackdropKind, BackdropSample, CHROME_MAX_TONE, CHROME_RATIO, ThemeTokens,
+    chrome_tone, composited_tone, floor_luma, gradient_luma, luma_p90, muted_tone, rgb_lstar,
+    scrim_alpha, solve, text_tone,
 };
 
 /// Catppuccin Mocha's mauve, the default accent — a realistic seed for the
@@ -20,7 +20,6 @@ const SEED: u32 = 0x00cb_a6f7;
 fn mocha() -> ThemeTokens {
     ThemeTokens {
         base: 0x001e_1e2e,
-        mantle: 0x0018_1825,
         text: 0x00cd_d6f4,
         subtext: 0x00ba_c2de,
         accent: SEED,
@@ -30,7 +29,6 @@ fn mocha() -> ThemeTokens {
 fn latte() -> ThemeTokens {
     ThemeTokens {
         base: 0x00ef_f1f5,
-        mantle: 0x00e6_e9ef,
         text: 0x004c_4f69,
         subtext: 0x005c_5f77,
         accent: 0x0088_39ef,
@@ -469,134 +467,15 @@ fn a_white_cover_now_clears_the_non_text_bar() {
     assert!(ratio_of_tones(text_tone(tone), tone) >= 4.5);
 }
 
-// --- the aurora's cap -------------------------------------------------------
+// --- the aurora's washes ------------------------------------------------------
 //
-// The geometry's own bounds are `const _: () = assert!(…)` in `ui::aurora`, both sides being
-// constants. What is left here is what a const can't reach: that the band `wash_cap` returns
-// actually holds the painted composite legible, on both polarities and on the covers that sit at
-// the ends of the range.
-
-/// One layer over what is already there, the way `FemtoVG` composites it — in gamma space, per
-/// channel. Not the grey proxy `wash_cap` reasons with: this is what the renderer does, so a cap
-/// that only works on greys fails here.
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "the clamp is the bound: a blended channel is in 0..=255 before the cast"
-)]
-fn over(under: u32, wash: u32, alpha: f64) -> u32 {
-    let (ur, ug, ub) = unpack(under);
-    let (wr, wg, wb) = unpack(wash);
-    let mix = |u: u8, w: u8| {
-        let blended = f64::from(u).mul_add(1.0 - alpha, f64::from(w) * alpha);
-        u32::from(blended.round().clamp(0.0, 255.0) as u8)
-    };
-    (mix(ur, wr) << 16) | (mix(ug, wg) << 8) | mix(ub, wb)
-}
-
-/// Every pixel the paint can produce where two washes meet: the four corner pairs sharing an
-/// edge, each at the alpha `aurora-backdrop.slint` gives it times the weight its `Tint` carries.
-/// The diagonal pairs are absent because `REACH_FRACTION` puts them out of each other's reach, so
-/// this is the geometry's own worst case rather than a bound on all four at once.
-fn edge_pixels(base: u32, tints: &[aurora::Tint; SEED_COUNT]) -> Vec<u32> {
-    let laid = |under: u32, at: usize| {
-        over(under, tints[at].rgb, aurora::BLOB_PEAKS[at] * f64::from(tints[at].weight))
-    };
-    (0..SEED_COUNT).map(|corner| laid(laid(base, corner), (corner + 1) % SEED_COUNT)).collect()
-}
-
-/// WCAG contrast between two packed `0x00RR_GGBB` colours.
-fn ratio_between(a: u32, b: u32) -> f64 {
-    let lum = |rgb: u32| {
-        let (r, g, b) = unpack(rgb);
-        relative_luminance(r, g, b)
-    };
-    (lum(a).max(lum(b)) + 0.05) / (lum(a).min(lum(b)) + 0.05)
-}
-
-/// The band against the table `docs/plans/AURORA_BACKDROP.md`'s finding 5 was computed from.
-/// Only one side of it is ever real — a wash darker than a dark base can only raise contrast —
-/// so the open bound is as load-bearing as the closed one.
-#[test]
-fn the_cap_matches_the_derivation_on_both_polarities() {
-    let coverage = aurora::peak_coverage();
-
-    let (dark_min, dark_max) = wash_cap(&mocha(), coverage);
-    assert!(dark_min <= 0.0, "a dark theme needs no floor, got L*{dark_min:.1}");
-    assert!(
-        (dark_max - 49.2).abs() < 1.5,
-        "Mocha's ceiling moved to L*{dark_max:.1}, off the derived 49.2"
-    );
-
-    let (light_min, light_max) = wash_cap(&latte(), coverage);
-    assert!(light_max >= 100.0, "a light theme needs no ceiling, got L*{light_max:.1}");
-    assert!(
-        (light_min - 72.2).abs() < 1.5,
-        "Latte's floor moved to L*{light_min:.1}, off the derived 72.2"
-    );
-}
-
-/// The pin the whole model rests on. Whatever the record was, every pixel where two washes meet
-/// has to leave the theme's own ink legible — because the foreground over the aurora *is* the
-/// theme's ink, with nothing solved per cover to rescue it.
-#[test]
-fn every_theme_tier_survives_the_washes_on_both_polarities() {
-    let covers = [
-        ("white", [Some(0x00ff_ffff), None, None, None]),
-        ("black", [Some(0x0000_0000), None, None, None]),
-        (
-            "saturated",
-            [
-                Some(0x00ff_0000),
-                Some(0x0000_ff00),
-                Some(0x0000_00ff),
-                Some(0x00ff_ff00),
-            ],
-        ),
-        (
-            "greyscale",
-            [
-                Some(0x0020_2020),
-                Some(0x0060_6060),
-                Some(0x00a0_a0a0),
-                Some(0x00e0_e0e0),
-            ],
-        ),
-        // The worst input there is, and the only one that pins the cap rather than the headroom
-        // above it: four *measured* seeds — so none is weakened by `FILL_WEIGHT` — every one of
-        // them outside the band at both ends, so all four clamp to a bound exactly.
-        (
-            "clamped",
-            [
-                Some(0x00ff_ffff),
-                Some(0x00ff_ee00),
-                Some(0x0000_ffee),
-                Some(0x0022_0011),
-            ],
-        ),
-    ];
-
-    for theme in [mocha(), latte()] {
-        for (cover, seeds) in covers {
-            let washes = aurora::tints(seeds, &theme);
-            for pixel in edge_pixels(theme.base, &washes) {
-                for (tier, ink, target) in [
-                    ("text", theme.text, TEXT_RATIO),
-                    ("subtext", theme.subtext, CHROME_RATIO),
-                    ("accent", theme.accent, CHROME_RATIO),
-                ] {
-                    let ratio = ratio_between(ink, pixel);
-                    assert!(
-                        ratio >= target,
-                        "on base 0x{:06X}, a {cover} cover washes to 0x{pixel:06X}, \
-                         where {tier} reads {ratio:.2}:1 against a {target}:1 bar",
-                        theme.base
-                    );
-                }
-            }
-        }
-    }
-}
+// **There is no cap to test any more, and that is the arm's whole design.** What used to live here
+// — a band `wash_cap` returned, and a walk over every pixel where two washes meet asserting the
+// theme's ink still cleared its bar — was the machinery that flattened the surface: holding the
+// composite inside a known band means holding every wash above that band on one tone. The washes
+// are the quantizer's own answer now, so contrast against `Theme.text` is the cover's to decide.
+//
+// What still carries a guarantee is the neutral chrome tier, pinned below.
 
 /// The two arms answer different questions, so nothing may leak between them. The blur half is
 /// asserted alongside so the pair can't both pass on a solve that ignored its argument.
@@ -608,7 +487,7 @@ fn the_aurora_arm_publishes_the_theme_and_the_blur_arm_solves() {
     let aurora_arm = sample.solve(&theme, BackdropKind::Aurora);
     assert_eq!(
         (aurora_arm.floor_start, aurora_arm.floor_end),
-        (theme.base, theme.mantle),
+        (theme.base, theme.base),
         "the aurora's gradient is the theme's own base"
     );
     assert_eq!(
@@ -686,7 +565,7 @@ fn an_entry_with_no_artwork_keeps_the_blur_under_either_setting() {
     );
     assert_ne!(
         (aurora_arm.floor_start, aurora_arm.floor_end),
-        (theme.base, theme.mantle),
+        (theme.base, theme.base),
         "an art-less surface takes the blur's own floor, not the theme's base"
     );
 
@@ -696,7 +575,7 @@ fn an_entry_with_no_artwork_keeps_the_blur_under_either_setting() {
     let measured_aurora = measured.solve(&theme, BackdropKind::Aurora);
     assert_eq!(
         (measured_aurora.floor_start, measured_aurora.floor_end),
-        (theme.base, theme.mantle),
+        (theme.base, theme.base),
         "a cover that was measured still publishes the theme's own base"
     );
 }
@@ -839,7 +718,7 @@ fn the_hero_text_defaults_match_hero_backdrop_slint() {
 /// hasn't been solved yet, which is the first frame of a cold open and nothing else.
 #[test]
 fn the_tint_defaults_agree_across_both_tiers_and_the_component() {
-    const TINTS: [&str; SEED_COUNT] = ["#3a2d4a", "#2d3a4a", "#4a2d3a", "#2d4a3a"];
+    const TINTS: [&str; WASH_COUNT] = ["#3a2d4a", "#2d3a4a", "#4a2d3a"];
 
     for (file, source, prefix, kind) in [
         (

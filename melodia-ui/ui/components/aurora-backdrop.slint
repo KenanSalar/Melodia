@@ -1,41 +1,45 @@
 import { Theme } from "../theme.slint";
 
-// One blob of the aurora: album colour at a point, thinning out across the surface.
+// One of the three sweeps: album colour along one edge of the surface, gone by 70.71% of the
+// gradient line.
 //
-// **Radial, not linear.** Alpha-blending linear ramps composites to something still linear in
-// position, so a stack of them keeps straight parallel contours — an earlier pass banded into
-// diagonal stripes and read as ramps rather than as anything blurred.
+// **A port of Amberol's `.main-window` background, angles and stops included.** Three broad linear
+// ramps at 127°, 217° and 336° — near-orthogonal, so each owns a different edge and one corner is
+// left showing the floor. That asymmetry is the whole effect: four symmetric corner washes cover
+// every corner about equally and average to one flat tone whatever the record was.
 //
 // **Two stops, the far one this tint at zero alpha — never the `transparent` keyword.** FemtoVG
 // interpolates stops in straight RGBA, so fading to rgba(0,0,0,0) drags the colour toward black and
-// the blob darkens instead of thinning.
-component AuroraBlob inherits Rectangle {
+// the ramp darkens instead of thinning. Amberol spells the same thing the long way, as
+// `color-mix(in srgb, <colour> 0%, transparent)`.
+//
+// Slint's gradient angle is CSS's — `line_for_angle` adds 90° and takes the same magic-corner
+// construction — so these are Amberol's numbers unconverted, and 70.71% means the same fraction of
+// the same line.
+component AuroraSweep inherits Rectangle {
     in property <color> tint;
-
-    // Alpha at the centre. The blob tints the base rather than lighting it — near opaque it stops
-    // being album colour over a dark floor and becomes a lightness ramp.
-    in property <float> peak;
-
+    in property <angle> heading;
     in property <bool> shown: true;
 
-    // **Gone by 70%, which is what lets a blob be local.** Slint's radius is the half-diagonal, so
-    // running the ramp to the corner leaves ~0.3 of peak where the rectangle ends, which draws as a
-    // straight seam. Reaching zero just inside frees the rect from covering the host at all — no
-    // set of colours can be seen at once if every one of them covers the whole surface.
+    // 0.55 at the near edge, Amberol's `color-mix(… 55%, transparent)`. `transparentize` multiplies,
+    // so a synthesized wash keeps the lower weight `ui::aurora` gave it rather than overriding it.
     //
     // Both arms one type at one stop count, the only shape `Brush::interpolate` blends
     // stop-for-stop. Safe to `animate` where a leaf's brush usually isn't: Rust writes the tint
     // discretely, so no host can restart the binding.
     background: root.shown
-        ? @radial-gradient(circle, root.tint.transparentize(1.0 - root.peak) 0%, root.tint.transparentize(1.0) 70%)
-        : @radial-gradient(circle, root.tint.transparentize(1.0) 0%, root.tint.transparentize(1.0) 70%);
+        ? @linear-gradient(root.heading, root.tint.transparentize(0.45) 0%, root.tint.transparentize(1.0) 70.71%)
+        : @linear-gradient(root.heading, root.tint.transparentize(1.0) 0%, root.tint.transparentize(1.0) 70.71%);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 }
 
-// The artwork-derived backdrop: four broad blobs of album colour over the theme's own base, and a
-// grain of noise. Bounded rather than pinned — `ui::backdrop::wash_cap` holds the composite inside
-// the band where the theme's own ink stays legible, so the foreground over this is `Theme.*` and
-// the surface follows the variant's polarity.
+// The artwork-derived backdrop: three broad sweeps of album colour over the theme's own base, and a
+// grain of noise.
+//
+// **Unbounded, which is the trade this arm makes.** The washes are the quantizer's own answer with
+// no tone cap over them, so a surface keeps the record's value structure — that is what makes it
+// read as light falling across a plane rather than as a tint. The cost is that contrast against the
+// theme's ink is whatever the cover gives, and a pale sleeve gives less of it.
 //
 // **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom. They exist
 // so this file imports no global: one mount reads the `Player` tier and the others `HeroBackdrop`,
@@ -49,7 +53,6 @@ export component AuroraBackdrop inherits Rectangle {
     in property <color> tint-1: #3a2d4a;
     in property <color> tint-2: #2d3a4a;
     in property <color> tint-3: #4a2d3a;
-    in property <color> tint-4: #2d4a3a;
 
     // Grain over everything below; `ui::aurora::dither_tile` argues it. An unset image draws
     // nothing, so a mount without one degrades to undithered gradients rather than to a hole.
@@ -65,74 +68,33 @@ export component AuroraBackdrop inherits Rectangle {
 
     clip: true;
 
-    // Slint's radial gradient owns neither centre nor radius: always a circle in the middle of its
-    // element, radius the half-diagonal. Position and spread are therefore the rect's, and it stays
-    // square — the circle would otherwise expose only the first fifth of its ramp on the short axis
-    // and read as a band.
-    //
-    // Length arithmetic has no squares, hence the round trip through `1px`.
-    property <length> host-diagonal: Math.sqrt((root.width / 1px) * (root.width / 1px)
-        + (root.height / 1px) * (root.height / 1px)) * 1px;
-
-    // **1/√2 of the diagonal, where this was fractions of each axis.** Those put all four centres
-    // inside the element with the reach floored on the *short* one, so every ramp covered every
-    // pixel and four vivid washes averaged to one flat tone whatever the record was. Over half the
-    // diagonal so the middle still isn't a hole — each ramp reaches the centre at under a third of
-    // its peak, which is Amberol's coverage there. `ui::aurora::REACH_FRACTION` mirrors it, what
-    // the composite covers being what the foreground is solved against.
-    property <length> blob-reach: root.host-diagonal * 0.7071;
-
-    // `AuroraBlob`'s ramp dies at 0.495 of its side, so this is the side that paints `blob-reach`.
-    property <length> blob-span: root.blob-reach / 0.495;
-
     background: root.shown
         ? @linear-gradient(135deg, root.base-start, root.base-end)
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
-    // **Round the rectangle, not down a list** — top-left, top-right, bottom-right, bottom-left.
-    // Rust hands the washes over in hue-wheel order (`ui::aurora::around_the_wheel`) and four
-    // corners are a cycle as the wheel is, so the pairs meeting along an edge are hue neighbours
-    // rather than complements compositing toward grey; the diagonal pairs never meet at all.
-    //
-    // Peaks descend with the ranking so the colour the artwork most is leads, but only just: the
-    // usual 60/30/10 has the dominant showing through everywhere the four overlap, and that advice
-    // is about *area*, which the geometry above already gives each of them.
-    // `ui::aurora::BLOB_PEAKS` mirrors them, the peak tone being derived from what they cover.
-    AuroraBlob {
-        x: -root.blob-span / 2;
-        y: -root.blob-span / 2;
-        width: root.blob-span;
-        height: root.blob-span;
-        tint: root.tint-1;
-        peak: 0.5;
-        shown: root.shown;
-    }
-    AuroraBlob {
-        x: root.width - root.blob-span / 2;
-        y: -root.blob-span / 2;
-        width: root.blob-span;
-        height: root.blob-span;
-        tint: root.tint-2;
-        peak: 0.46;
-        shown: root.shown;
-    }
-    AuroraBlob {
-        x: root.width - root.blob-span / 2;
-        y: root.height - root.blob-span / 2;
-        width: root.blob-span;
-        height: root.blob-span;
+    // **Declared back to front.** CSS lists the topmost layer first and Slint paints the last child
+    // on top, so tint-3 goes down first and tint-1 — the colour the artwork most is — lands over
+    // both. Source-over throughout, as in the stylesheet; no blend mode.
+    AuroraSweep {
+        width: 100%;
+        height: 100%;
         tint: root.tint-3;
-        peak: 0.42;
+        heading: 336deg;
         shown: root.shown;
     }
-    AuroraBlob {
-        x: -root.blob-span / 2;
-        y: root.height - root.blob-span / 2;
-        width: root.blob-span;
-        height: root.blob-span;
-        tint: root.tint-4;
-        peak: 0.38;
+    AuroraSweep {
+        width: 100%;
+        height: 100%;
+        tint: root.tint-2;
+        heading: 217deg;
+        shown: root.shown;
+    }
+    AuroraSweep {
+        width: 100%;
+        height: 100%;
+        tint: root.tint-1;
+        heading: 127deg;
         shown: root.shown;
     }
 

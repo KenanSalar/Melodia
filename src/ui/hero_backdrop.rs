@@ -23,8 +23,8 @@ use std::cell::Cell;
 use slint::ComponentHandle;
 
 use crate::themes::{brush, color};
-use crate::ui::aurora::{self, Tint};
-use crate::ui::backdrop::{self, BackdropColors, BackdropSample, SEED_COUNT};
+use crate::ui::aurora::{self, Tint, WASH_COUNT};
+use crate::ui::backdrop::{self, BackdropColors, BackdropSample};
 use crate::{AppWindow, HeroBackdrop};
 
 thread_local! {
@@ -43,7 +43,7 @@ thread_local! {
 /// `Option` inside `Artwork` is the same argument one level down, `has-tints` being exactly
 /// "are there washes" rather than a flag a caller could set against the colours it passed.
 enum HeroFill {
-    Artwork(Option<[Tint; SEED_COUNT]>),
+    Artwork(Option<[Tint; WASH_COUNT]>),
     Gradient { start_rgb: u32, end_rgb: u32 },
 }
 
@@ -70,8 +70,8 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
 /// Every tier here is derived from the live theme — the aurora's verbatim, the blur's only where a
 /// missing cover falls back to `Theme.accent` — and nothing else republishes: a hero is written at
 /// open time and holds until the next one. A new accent would otherwise reach the band only on the
-/// next drill, and the washes would stay clamped into the *old* theme's [`backdrop::wash_cap`]
-/// band, which a variant flip can make illegible.
+/// next drill, and the ink over an open hero would keep the *old* theme's tones against the base
+/// the new one paints.
 pub(crate) fn republish_for_palette(ui: &AppWindow) {
     if let Some(sample) = PUBLISHED_SAMPLE.get() {
         apply(ui, sample);
@@ -116,11 +116,10 @@ fn write(ui: &AppWindow, colors: &BackdropColors, fill: HeroFill) {
             g.set_floor_start(color(colors.floor_start));
             g.set_floor_end(color(colors.floor_end));
             g.set_has_tints(tints.is_some());
-            if let Some([tint_1, tint_2, tint_3, tint_4]) = tints {
+            if let Some([tint_1, tint_2, tint_3]) = tints {
                 g.set_tint_1(tint_1.to_color());
                 g.set_tint_2(tint_2.to_color());
                 g.set_tint_3(tint_3.to_color());
-                g.set_tint_4(tint_4.to_color());
             }
         }
         HeroFill::Gradient { start_rgb, end_rgb } => {
