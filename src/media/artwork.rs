@@ -361,6 +361,10 @@ fn compose_exact(
     filter: FilterType,
 ) -> Result<image::RgbImage, ComposeStop> {
     let rects = layout_for(sources.len()).ok_or(ComposeStop::NoLayout)?;
+    // An odd side leaves the rects a pixel short of the canvas they were scaled against, so the
+    // collage carries an unpainted hairline down two edges — right on both of today's callers and
+    // silently wrong the day one of them derives its side from the display.
+    debug_assert!(side >= 2 && side.is_multiple_of(2), "the half-unit layout needs an even side");
     let half = side / 2;
 
     let mut canvas = image::RgbImage::new(side, side);

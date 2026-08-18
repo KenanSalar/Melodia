@@ -153,9 +153,10 @@ silently miss the other.
   in half-canvas units so one set of rects serves both: the persisted thumbnail composes at
   `COMPOSITE_SIZE` through Lanczos3, where a hero takes its side from the caller — `COVER_SIZE`,
   the tile `pair_from_image` reduces it to on the next line — through Triangle. A hero canvas any
-  larger is resized twice and drawn once. **Every brush in it is a `HeroBackdrop` tier and none may become a `Theme.*`
-  token** — with no collage the hero is the dark gradient floor where a light theme's accent lands
-  dark-on-dark. **What decides the arm is the cover, not the count**: a set whose every entry lacks
+  larger is resized twice and drawn once. **Every brush in it is a `HeroBackdrop` tier and none may
+  become a `Theme.*` token** — with no collage the hero is the dark gradient floor where a light
+  theme's accent lands dark-on-dark.
+  **What decides the arm is the cover, not the count**: a set whose every entry lacks
   artwork is populated and has nothing to paint, so `count` picks between the page's own glyph and
   the placeholder note rather than between the two arms.
 

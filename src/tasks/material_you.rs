@@ -238,22 +238,25 @@ async fn react(
         return;
     }
 
-    // Reuse the 72×72 RGB8 thumbnail `CoverThumbs` already decoded for
-    // the now-playing-bar / queue-sheet rows. Avoids opening + decoding
-    // the artwork file a second time — on large embedded covers the
-    // duplicate decode produced a multi-MB transient that glibc didn't
-    // fully return to the OS, surfacing as a ~30 MiB residual RSS bump
-    // whenever the current track was DnD-imported. `get_or_load_rgb8`
-    // hits the cache on the warm path — `ui::shell::bridge::warm_vm_cover`
-    // decodes this same path for the now-playing bar on every track change —
-    // and falls back to `decode_thumb_buffer`'s `MAX_SOURCE_DIM = 8192` cap
-    // when it lost the race.
+    // Reuse the RGB8 thumbnail `CoverThumbs` already decoded for the
+    // now-playing-bar / queue-sheet rows rather than opening the artwork a
+    // second time — on large embedded covers the duplicate decode produced a
+    // multi-MB transient that glibc didn't fully return to the OS, surfacing
+    // as a ~30 MiB residual RSS bump whenever the current track was
+    // DnD-imported. Inside the seed cache's closure and inside the blocking
+    // task, both deliberately: a remembered seed needs no buffer at all, and
+    // a miss races `ui::shell::bridge::warm_vm_cover` for the same path, so
+    // the fallback is a full `decode_thumb_buffer` that has no business on a
+    // runtime worker.
     let artwork_for_block = artwork.clone();
-    let buf_for_block = cover_thumbs.get_or_load_rgb8(&artwork);
+    let thumbs = cover_thumbs.clone();
     let mut tmp_cache = std::mem::take(seed_cache);
     let blocking_result = tokio::task::spawn_blocking(move || {
         let seed = tmp_cache.get_or_insert_with(&artwork_for_block, || {
-            buf_for_block.as_ref().and_then(extract_source_argb_from_rgb8)
+            thumbs
+                .get_or_load_rgb8(&artwork_for_block)
+                .as_ref()
+                .and_then(extract_source_argb_from_rgb8)
         });
         let palette = seed.map(|s| generate_palette(s, is_dark, style));
         (tmp_cache, palette)
