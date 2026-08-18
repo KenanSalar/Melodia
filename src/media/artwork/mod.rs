@@ -13,9 +13,11 @@
 //! decode and stops even retrying.
 //!
 //! **Bounded on ingest.** Every tier decodes the stored file *whole* before resizing it, so this
-//! cap is the ceiling on every transient decode buffer in the app, not just on disk. It sits at
-//! the largest tier's decode size; a source inside it is stored byte-identical and never decoded
-//! at all. A full-resolution artwork view would read the user's own file rather than raise it.
+//! cap governs every transient decode buffer in the app, not just disk. It sits at the largest
+//! tier's decode size; a source inside it is stored byte-identical and never decoded at all. The
+//! one thing it yields to is [`normalized_bytes`]'s never-inflate rule, which keeps a source the
+//! re-encode would have grown — so the cap is where the store *aims*, not a hard ceiling. A
+//! full-resolution artwork view would read the user's own file rather than raise it.
 //!
 //! **Swept, not refcounted.** Artwork is shared, so a per-track delete must not unlink the file;
 //! [`sweep`] collects against the whole reference set instead. It is gated on
@@ -31,14 +33,14 @@ use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub mod sweep;
-
 use lofty::picture::MimeType;
 use lofty::tag::Tag;
 use lru::LruCache;
 use parking_lot::Mutex;
 
 use crate::media::image_decode::{self, FilterType, MAX_SOURCE_DIM, decode_capped, resize_rgb8};
+
+pub mod sweep;
 
 /// Pipes every byte to both the wrapped writer and a BLAKE3 hasher. Used by
 /// `compose_artwork` to encode a JPEG into a temp file while computing its
@@ -235,7 +237,9 @@ pub(crate) const STORE_MAX_DIM: u32 = 512;
 /// encodings cannot reach this inside the dimension cap; 16-bit PNG and uncompressed TIFF can.
 const STORE_MAX_BYTES: usize = 1024 * 1024;
 
-/// Quality for anything re-encoded on the way in, matching [`compose_artwork`]'s.
+/// Quality for everything this module encodes — the normalizer's re-encode and the composite
+/// alike. One knob, because a composite is written straight into the store and would otherwise be
+/// re-encoded the moment the two disagreed.
 const STORE_JPEG_QUALITY: u8 = 90;
 
 /// Resampler for the normalizer. Lanczos3 as the persisted composite takes, for the same reason:
@@ -521,7 +525,8 @@ pub(crate) fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> O
     };
     let hash_hex = {
         let mut hashing = HashingWriter::new(BufWriter::new(tmp.as_file()));
-        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut hashing, 90);
+        let encoder =
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut hashing, STORE_JPEG_QUALITY);
         if let Err(e) = image::DynamicImage::ImageRgb8(canvas).write_with_encoder(encoder) {
             log::warn!("Failed to encode composite JPEG: {e}");
             return None;

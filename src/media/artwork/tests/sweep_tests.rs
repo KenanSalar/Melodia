@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use std::time::{Duration, SystemTime};
 
 use super::super::is_stored_name;
-use super::super::sweep::{SweepReport, sweep};
+use super::super::sweep::{SweepReport, collect_candidates, retire};
 use crate::error::AppError;
 
 /// Long enough that nothing a test writes is ever old enough to sweep on its own.
@@ -16,6 +16,18 @@ const HOUR: Duration = Duration::from_hours(1);
 /// A clock well past anything a test writes, so `now - mtime` clears the grace window.
 fn well_past_grace() -> SystemTime {
     SystemTime::now() + Duration::from_hours(48)
+}
+
+/// Both halves in the order the caller runs them. Nothing is committing rows under a test, so
+/// having the reference set in hand first costs the ordering nothing here.
+fn sweep<S: std::hash::BuildHasher>(
+    dir: &std::path::Path,
+    referenced: &HashSet<String, S>,
+    grace: Duration,
+    now: SystemTime,
+) -> SweepReport {
+    let (candidates, report) = collect_candidates(dir, grace, now);
+    retire(candidates, referenced, report)
 }
 
 fn write(dir: &std::path::Path, name: &str, bytes: &[u8]) -> Result<(), AppError> {
@@ -77,6 +89,29 @@ fn a_referenced_file_survives_and_an_orphan_does_not() -> Result<(), AppError> {
             failed: 0,
         }
     );
+    Ok(())
+}
+
+/// The reference set is read *between* the two halves in production, so a file that becomes
+/// referenced while the directory is being listed still has to survive — which is the whole reason
+/// the listing goes first.
+#[test]
+fn a_candidate_referenced_after_the_listing_is_still_spared() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let dir = tmp.path();
+    write(dir, "abcdef0123456789.png", b"carried over from an earlier session")?;
+
+    // Past the grace window, so nothing but the reference set can save it — the shape of a cover
+    // `store_image` found already on disk and so never re-stamped.
+    let (candidates, report) = collect_candidates(dir, HOUR, well_past_grace());
+    assert_eq!(candidates.len(), 1);
+
+    // The row a concurrent scan committed while the listing ran.
+    let referenced: HashSet<String> = ["abcdef0123456789.png".to_owned()].into_iter().collect();
+    let report = retire(candidates, &referenced, report);
+
+    assert!(dir.join("abcdef0123456789.png").exists(), "the later commit has to win");
+    assert_eq!(report.deleted, 0);
     Ok(())
 }
 

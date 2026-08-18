@@ -4,31 +4,36 @@
 //! that unlinks live artwork, so both halves are pinned: that the SQL names all four columns, and
 //! that the one reachable through no other column comes back.
 
+use sqlx::AssertSqlSafe;
+
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::tests::helpers::{insert_test_track, setup_seeded_db};
 use crate::error::AppError;
 
-use super::{REFERENCED_PATHS, REPOINT_UPDATES};
+use super::{ARTWORK_COLUMNS, REFERENCED_PATHS, repoint_all};
 
-/// Every column in the schema that stores a path into the artwork directories.
+/// Every column in the schema that stores a path into the artwork directories, restated
+/// independently of the production ledger so that dropping one from either side fails.
 ///
-/// A fifth would have to be added here *and* to the query. Spelled as `(table, column)` so the
-/// walk can't be satisfied by a column name that happens to appear in another arm's text —
-/// `artwork_path` is on two tables.
-const ARTWORK_COLUMNS: [(&str, &str); 4] = [
+/// Spelled as `(table, column)` so the walk can't be satisfied by a column name that happens to
+/// appear in another arm's text — `artwork_path` is on two tables.
+const EXPECTED_COLUMNS: [(&str, &str); 4] = [
     ("tracks", "artwork_path"),
     ("albums", "artwork_path"),
     ("artists", "image_path"),
     ("playlists", "thumbnail_path"),
 ];
 
-/// The sweep keeps only what this query returns, so a column it forgets is artwork deleted while
-/// a row still points at it. `playlists.thumbnail_path` is the one that was missing from the
-/// first draft, and the one a reviewer is least likely to miss twice.
+/// The sweep keeps only what the reference query returns and the renormalize pass re-points only
+/// what the ledger names, so a column either forgets is artwork deleted while a row still points at
+/// it. `playlists.thumbnail_path` is the one that was missing from the first draft, and the one a
+/// reviewer is least likely to miss twice.
 #[test]
 fn the_reference_query_names_every_artwork_column() {
-    for (table, column) in ARTWORK_COLUMNS {
+    assert_eq!(ARTWORK_COLUMNS, EXPECTED_COLUMNS, "the artwork column ledger has moved");
+
+    for (table, column) in EXPECTED_COLUMNS {
         assert!(
             REFERENCED_PATHS.contains(&format!("{column} FROM {table}")),
             "the reference query no longer selects {table}.{column}, so a sweep will delete \
@@ -37,29 +42,49 @@ fn the_reference_query_names_every_artwork_column() {
     }
     assert_eq!(
         REFERENCED_PATHS.matches("SELECT").count(),
-        ARTWORK_COLUMNS.len(),
-        "the query has an arm `ARTWORK_COLUMNS` doesn't name, or names one twice"
+        EXPECTED_COLUMNS.len(),
+        "the query has an arm `EXPECTED_COLUMNS` doesn't name, or names one twice"
     );
 }
 
 /// The write side has the same shape of failure as the read side: a column the renormalize pass
-/// forgets to re-point keeps naming a file that pass has just orphaned, and the next sweep
-/// deletes it out from under the row.
-#[test]
-fn the_repoint_updates_cover_every_artwork_column() {
-    for (table, column) in ARTWORK_COLUMNS {
-        assert!(
-            REPOINT_UPDATES
-                .iter()
-                .any(|sql| sql.contains(&format!("UPDATE {table} SET {column} ="))),
-            "nothing re-points {table}.{column}, so a renormalized cover leaves it dangling"
-        );
+/// forgets to re-point keeps naming a file that pass has just orphaned, and the next sweep deletes
+/// it out from under the row. Exercised rather than grepped — the statements are generated, so a
+/// string check would only be reading the ledger back to itself.
+#[tokio::test]
+async fn repointing_moves_every_artwork_column_at_once() -> Result<(), AppError> {
+    const OLD: &str = "/data/artwork/33fb807d1f1b7cbb.png";
+    const NEW: &str = "/data/artwork/4cccaf4d4b4cea11.jpg";
+
+    let db = setup_seeded_db().await?;
+    queries::playlist::create_playlist(&db, "Mosaic", None).await?;
+
+    let mut tx = db.write().begin().await?;
+    for (table, column) in EXPECTED_COLUMNS {
+        let sql = format!("UPDATE {table} SET {column} = ?");
+        sqlx::query(AssertSqlSafe(sql)).bind(OLD).execute(&mut *tx).await?;
     }
-    assert_eq!(
-        REPOINT_UPDATES.len(),
-        ARTWORK_COLUMNS.len(),
-        "the update list and the column ledger have drifted apart"
-    );
+    tx.commit().await?;
+
+    assert!(repoint_all(&db, &[(OLD.to_owned(), NEW.to_owned())]).await? > 0);
+
+    for (table, column) in EXPECTED_COLUMNS {
+        let stale: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
+            "SELECT COUNT(*) FROM {table} WHERE {column} = ?"
+        )))
+        .bind(OLD)
+        .fetch_one(db.read())
+        .await?;
+        let moved: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
+            "SELECT COUNT(*) FROM {table} WHERE {column} = ?"
+        )))
+        .bind(NEW)
+        .fetch_one(db.read())
+        .await?;
+        assert_eq!(stale, 0, "nothing re-points {table}.{column}, so a renormalized cover dangles");
+        assert!(moved > 0, "{table}.{column} lost its path instead of moving it");
+    }
+    Ok(())
 }
 
 /// A custom playlist mosaic is written by `compose_artwork` and pointed at by nothing else, so it

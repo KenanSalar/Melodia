@@ -9,8 +9,7 @@
 //! is fatal at boot — this must never be able to stop the app opening.
 //!
 //! Nothing is deleted here. A re-encoded cover lands under a new content hash, the rows are
-//! re-pointed, and the file they used to name is left unreferenced for the next scan's
-//! [`crate::tasks::artwork_sweep`] to retire.
+//! re-pointed, and the file they used to name is left unreferenced for the sweep to retire.
 
 use std::path::{Path, PathBuf};
 
@@ -28,9 +27,10 @@ use crate::tasks::TaskSpawner;
 struct Outcome {
     /// Files that came back smaller and had their rows re-pointed.
     shrunk: u32,
-    /// Bytes the store lost. The old files go on the next sweep.
+    /// Bytes the store lost. The old files go on the sweep below.
     saved: u64,
-    /// Files already inside both bounds, or spared by the never-inflate rule.
+    /// Files the pass left where they were — inside both bounds, spared by the never-inflate
+    /// rule, or not readable at all.
     left_alone: u32,
 }
 
@@ -42,25 +42,27 @@ struct Outcome {
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let state = state.clone();
     spawner.spawn(async move {
-        let mut settings = match services::settings::read_settings(&state.paths) {
-            Ok(settings) => settings,
+        match services::settings::read_settings(&state.paths) {
+            Ok(settings) if settings.library.artwork_store_normalized => return,
+            Ok(_) => {}
             Err(e) => {
                 log::warn!("Artwork renormalize skipped: {}", services::describe(&e));
                 return;
             }
-        };
-        if settings.library.artwork_store_normalized {
-            return;
         }
 
         if let Err(e) = renormalize(&state.db, &state.paths).await {
             log::warn!("Artwork renormalize failed: {}", services::describe(&e));
         }
 
-        settings.library.artwork_store_normalized = true;
-        if let Err(e) = services::settings::write_settings(&state.paths, &settings) {
-            log::warn!("Failed to save artwork_store_normalized flag: {e}");
-        }
+        // Through `mutate_settings` rather than writing back the snapshot above: the pass between
+        // the two is minutes long on a real library, and a full-file write of a read that old
+        // reverts every theme, volume and playback change made while it ran.
+        state.persist_blocking("artwork_store_normalized", |state| {
+            services::settings::mutate_settings(&state.paths, |settings| {
+                settings.library.artwork_store_normalized = true;
+            })
+        });
     });
 }
 
@@ -75,27 +77,32 @@ async fn renormalize(db: &DbPool, paths: &Paths) -> AppResult<()> {
     // what moves is the same answer as pre-filtering, through the one funnel rather than a second
     // copy of its rules.
     let owned: Vec<PathBuf> = stored.into_iter().map(PathBuf::from).collect();
-    let moves = tokio::task::spawn_blocking(move || restore_each(&owned))
+    let steps = tokio::task::spawn_blocking(move || restore_each(&owned))
         .await
         .map_err(AppError::io_source)?;
 
     let mut outcome = Outcome::default();
-    for step in moves {
+    let mut moves = Vec::new();
+    for step in steps {
         match step {
             Step::Unchanged => outcome.left_alone += 1,
             Step::Shrunk { from, to, saved } => {
-                queries::artwork::repoint(db, &from, &to).await?;
+                moves.push((from, to));
                 outcome.shrunk += 1;
                 outcome.saved += saved;
             }
         }
     }
 
-    if outcome.shrunk == 0 {
+    if moves.is_empty() {
         return Ok(());
     }
+
+    // One transaction for the whole pass, so no window exists where a row names a file the sweep
+    // below is about to retire.
+    queries::artwork::repoint_all(db, &moves).await?;
     log::info!(
-        "Normalized {} stored cover(s), {} KiB smaller ({} already inside the bounds)",
+        "Normalized {} stored cover(s), {} KiB smaller ({} left alone)",
         outcome.shrunk,
         outcome.saved / 1024,
         outcome.left_alone
@@ -109,7 +116,7 @@ async fn renormalize(db: &DbPool, paths: &Paths) -> AppResult<()> {
 
 /// One file's verdict.
 enum Step {
-    /// Inside both bounds already, or the re-encode would have grown it.
+    /// Inside both bounds already, unreadable, or the re-encode would have grown it.
     Unchanged,
     Shrunk {
         from: String,
@@ -119,6 +126,10 @@ enum Step {
 }
 
 /// **Blocking** — one read and, for anything over the bounds, one decode plus one encode.
+///
+/// Serial where the sibling one-shot (`retroactive_hash`) fans out over Rayon, because the work is
+/// not the same shape: that one streams a hash, this one holds a whole decoded source, and
+/// `MAX_SOURCE_DIM` puts no useful ceiling on one of those times the worker count.
 fn restore_each(paths: &[PathBuf]) -> Vec<Step> {
     paths.iter().map(|path| restore_one(path)).collect()
 }

@@ -12,6 +12,7 @@
 use crate::config::Paths;
 use crate::database::DbPool;
 use crate::database::queries;
+use crate::error::{AppError, AppResult};
 use crate::media::artwork::sweep::{self, GRACE, SweepReport};
 use crate::services;
 use crate::state::AppState;
@@ -37,22 +38,35 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
 /// Public so the renormalize pass can await it directly rather than spawning a second task: its
 /// whole output is files that *become* orphans, and only a call ordered after its re-points can
 /// see them.
-pub(crate) async fn run(db: &DbPool, paths: &Paths) -> Result<(), crate::error::AppError> {
-    let referenced = queries::artwork::referenced_filenames(db).await?;
+pub(crate) async fn run(db: &DbPool, paths: &Paths) -> AppResult<()> {
     let artwork_dir = paths.artwork_dir.clone();
     let artists_dir = paths.artists_dir.clone();
 
+    // Listed first, and the reference set read second. Both are snapshots of state a scan is
+    // concurrently writing, and this is the order that fails safe: a row committed in between is
+    // visible to the query, where the reverse reads it as an orphan and unlinks a live cover.
+    //
     // One `spawn_blocking` for both stores: the two listings are the same shape of work and
     // splitting them would only buy a second hop onto the same pool.
-    let reports = tokio::task::spawn_blocking(move || {
+    let listed = tokio::task::spawn_blocking(move || {
         let now = std::time::SystemTime::now();
         [
-            ("artwork", sweep::sweep(&artwork_dir, &referenced, GRACE, now)),
-            ("artists", sweep::sweep(&artists_dir, &referenced, GRACE, now)),
+            ("artwork", sweep::collect_candidates(&artwork_dir, GRACE, now)),
+            ("artists", sweep::collect_candidates(&artists_dir, GRACE, now)),
         ]
     })
     .await
-    .map_err(crate::error::AppError::io_source)?;
+    .map_err(AppError::io_source)?;
+
+    let referenced = queries::artwork::referenced_filenames(db).await?;
+
+    let reports = tokio::task::spawn_blocking(move || {
+        listed.map(|(store, (candidates, report))| {
+            (store, sweep::retire(candidates, &referenced, report))
+        })
+    })
+    .await
+    .map_err(AppError::io_source)?;
 
     for (store, report) in reports {
         log_report(store, report);

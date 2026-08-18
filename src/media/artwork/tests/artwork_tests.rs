@@ -49,47 +49,45 @@ fn compute_hash_empty_input() {
 
 // ── how the store is written ──
 
-/// Every non-test source that writes into an artwork directory.
-///
-/// An equality below, not a floor: what this guards against is a *fifth* writer added later, and
-/// a floor is precisely what cannot see one appear.
-const STORE_WRITERS: [&str; 3] = [
-    "media/artwork/mod.rs",
-    "media/artwork/sweep.rs",
-    "media/deezer.rs",
-];
-
 /// A bare `fs::write` leaves a truncated file on a crash, a full disk or a force-exit — and
 /// because the name is content-addressed and every writer guards on `exists()`, that file is
 /// never rewritten and the cover is gone until someone deletes it by hand. `CoverThumbs` then
 /// caches the failed decode, so it does not even retry. The sweep cannot help: it is still
 /// referenced.
+///
+/// **Asked of whatever holds a store directory, rather than of a ledger of today's writers.** A
+/// ledger only ever catches its own entries being renamed; the writer this is about is the one
+/// added next, in a file the ledger has never heard of.
 #[test]
 fn nothing_writes_into_the_store_without_staging_and_renaming() {
     use crate::test_support::{SRC_DIR, stripped_sources};
 
     /// A floor, so a walk that silently found nothing can't pass vacuously.
     const MIN_SOURCES: usize = 200;
+    /// The same, for the sources that reach a store directory — most only pass one along, so this
+    /// stays a floor rather than becoming an equality that fails on every new courier.
+    const MIN_STORE_TOUCHING: usize = 8;
 
-    let mut seen = Vec::new();
+    let mut touching = 0;
     for (path, code) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
-        if !STORE_WRITERS.contains(&path.as_str()) {
+        // Test sources stage nothing and write wherever their tempdir is, this file included.
+        if path.contains("/tests/")
+            || !(code.contains("artwork_dir") || code.contains("artists_dir"))
+        {
             continue;
         }
         assert!(
-            !code.contains("fs::write("),
-            "{path} writes into the store directly — go through `write_atomic`, which stages \
-             beside the destination and renames, so the final name existing means the file is \
-             complete"
+            !code.contains("fs::write(") && !code.contains("File::create("),
+            "{path} holds a store directory and writes a file in one step — go through \
+             `write_atomic`, which stages beside the destination and renames, so the final name \
+             existing means the file is complete"
         );
-        seen.push(path);
+        touching += 1;
     }
 
-    assert_eq!(
-        seen.len(),
-        STORE_WRITERS.len(),
-        "`STORE_WRITERS` names {STORE_WRITERS:?} but the walk only reached {seen:?} — a moved or \
-         renamed entry pre-authorises whatever takes its path next"
+    assert!(
+        touching >= MIN_STORE_TOUCHING,
+        "only {touching} sources reach a store directory, so the walk has stopped finding them"
     );
 }
 

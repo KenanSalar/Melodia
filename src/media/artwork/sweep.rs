@@ -7,10 +7,11 @@
 //! reach files already orphaned by every one of those paths before it existed.
 //!
 //! Two gates decide what goes, and both have to hold: the name has to be one
-//! [`super::is_stored_name`] recognises, and nothing in the reference set may name it.
+//! [`super::is_stored_name`] recognises, and nothing in the reference set may name it. They are
+//! two calls rather than one because the *order* matters — see [`collect_candidates`].
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use super::is_stored_name;
@@ -35,29 +36,36 @@ pub struct SweepReport {
     pub failed: u32,
 }
 
-/// Deletes every file in `dir` that this module wrote and `referenced` does not name.
+/// A stored file only the reference set can still save.
+pub struct Candidate {
+    path: PathBuf,
+    name: String,
+    bytes: u64,
+}
+
+/// Every stored file in `dir` the two clock-and-name gates left standing, plus what they already
+/// decided.
 ///
-/// `referenced` holds bare filenames rather than paths, and is deliberately the union across
-/// *all four* columns rather than the one column that points into `dir`: the names are content
-/// hashes, so a cross-directory hit means the bytes are genuinely identical and keeping the file
-/// is the harmless direction. Over-keeping is a leak the next sweep collects; over-deleting is a
-/// cover gone until a re-scan.
+/// **Call this before reading the reference set, never after.** A scan writes to both under it,
+/// and only this order fails safe: a row committed between the two is visible to the query, where
+/// the reverse reads it as an orphan and unlinks a live cover. [`GRACE`] does not cover that case
+/// — `store_image` leaves mtime alone when its content-addressed name already exists, so a cover
+/// carried over from an earlier session is long past the window the moment a re-scan points a row
+/// back at it.
 ///
-/// `now` is a parameter so the grace window is testable without sleeping.
-///
-/// **Blocking** — a directory listing plus an unlink per orphan.
-pub fn sweep<S: std::hash::BuildHasher>(
+/// **Blocking** — one directory listing plus a `stat` per stored file.
+pub fn collect_candidates(
     dir: &Path,
-    referenced: &HashSet<String, S>,
     grace: Duration,
     now: SystemTime,
-) -> SweepReport {
+) -> (Vec<Candidate>, SweepReport) {
     let mut report = SweepReport::default();
     let Ok(entries) = std::fs::read_dir(dir) else {
         log::warn!("Could not list the artwork store at {}", dir.display());
-        return report;
+        return (Vec::new(), report);
     };
 
+    let mut candidates = Vec::new();
     for entry in entries.flatten() {
         let file_name = entry.file_name();
         // A name that isn't UTF-8 is not one we wrote, so it fails the predicate either way.
@@ -65,10 +73,6 @@ pub fn sweep<S: std::hash::BuildHasher>(
             continue;
         };
         if !is_stored_name(name) {
-            continue;
-        }
-        if referenced.contains(name) {
-            report.kept += 1;
             continue;
         }
         let Ok(metadata) = entry.metadata() else {
@@ -79,14 +83,43 @@ pub fn sweep<S: std::hash::BuildHasher>(
             report.kept += 1;
             continue;
         }
-        match std::fs::remove_file(entry.path()) {
+        candidates.push(Candidate {
+            path: entry.path(),
+            name: name.to_owned(),
+            bytes: metadata.len(),
+        });
+    }
+    (candidates, report)
+}
+
+/// Deletes every candidate `referenced` does not name, folding into the report
+/// [`collect_candidates`] started.
+///
+/// `referenced` holds bare filenames rather than paths, and is deliberately the union across
+/// *all four* columns rather than the one column that points into the store: the names are content
+/// hashes, so a cross-directory hit means the bytes are genuinely identical and keeping the file
+/// is the harmless direction. Over-keeping is a leak the next sweep collects; over-deleting is a
+/// cover gone until a re-scan.
+///
+/// **Blocking** — one unlink per orphan.
+pub fn retire<S: std::hash::BuildHasher>(
+    candidates: Vec<Candidate>,
+    referenced: &HashSet<String, S>,
+    mut report: SweepReport,
+) -> SweepReport {
+    for candidate in candidates {
+        if referenced.contains(&candidate.name) {
+            report.kept += 1;
+            continue;
+        }
+        match std::fs::remove_file(&candidate.path) {
             Ok(()) => {
                 report.deleted += 1;
-                report.bytes += metadata.len();
+                report.bytes += candidate.bytes;
             }
             Err(e) => {
                 report.failed += 1;
-                log::warn!("Could not retire {}: {e}", entry.path().display());
+                log::warn!("Could not retire {}: {e}", candidate.path.display());
             }
         }
     }

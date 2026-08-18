@@ -21,6 +21,7 @@
 //! one piece of that arithmetic more than one of them needed.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::path::Path;
 
 use fast_image_resize::{ResizeAlg, ResizeOptions, Resizer};
@@ -95,15 +96,31 @@ pub fn resize_rgb8(
         None => Cow::Owned(src.to_rgb8()),
     };
 
+    // A convolution at 1:1 walks every pixel to reproduce it, and the shortcut is not rare: a
+    // cover under the tier's tile and one over only the store's *byte* bound both arrive here
+    // asking for the source's own dimensions.
+    if (width, height) == source.dimensions() {
+        return Some(source.into_owned());
+    }
+
     let mut dst = RgbImage::new(width, height);
-    Resizer::new()
-        .resize(
-            source.as_ref(),
-            &mut dst,
-            &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(filter)),
-        )
+    RESIZER
+        .with_borrow_mut(|resizer| {
+            resizer.resize(
+                source.as_ref(),
+                &mut dst,
+                &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(filter)),
+            )
+        })
         .ok()?;
     Some(dst)
+}
+
+thread_local! {
+    /// One resizer per worker rather than one per cover: it owns the scratch buffers the
+    /// convolution runs in. Every caller is already on a Rayon worker or a blocking task, so
+    /// thread-local is the whole of the sharing needed.
+    static RESIZER: RefCell<Resizer> = RefCell::new(Resizer::new());
 }
 
 /// `width` × `height` shrunk by a single ratio until it fits inside `max_w` × `max_h`, or
