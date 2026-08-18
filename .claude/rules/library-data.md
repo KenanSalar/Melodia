@@ -28,6 +28,18 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   and skip `recalculate_all_stats` entirely. Orphans + artwork rollup + recalc land in one final
   tx; `library_changed_tx` bumps once after it.
 
+- **The artwork sweep runs *after* that tx commits, never inside it** (`tasks::artwork_sweep`,
+  spawned beside `retroactive_hash`). It deletes by reference rather than by refcount — artwork is
+  shared, so no per-track delete can safely unlink a file, and a sweep cannot undercount because it
+  never counts. Two gates, both required: the name has to parse back into the scheme
+  `media::artwork` writes, and nothing in the reference set may name it. **That set is four
+  columns** — `tracks.artwork_path`, `albums.artwork_path`, `artists.image_path` and
+  **`playlists.thumbnail_path`**, the last carrying composites reachable through no other row, so a
+  three-column union blanks every custom playlist mosaic. A one-hour grace window covers the file a
+  tag edit or scan worker has written but not yet committed a row for. `queries::artwork` owns both
+  the read side and the four `UPDATE`s the renormalize pass re-points with, pinned against one
+  column ledger — a missing column is silent one way and destructive the other.
+
 - **`stats_changed_tx` vs `library_changed_tx`.** Play-count flushes bump the stats channel only;
   its two subscribers are Favorites (hero mosaic + Most Played rank by `play_count`) and
   Recently-Played (ordered by `last_played`, written on the same flush). Everything structural —

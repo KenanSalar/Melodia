@@ -447,7 +447,11 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
         state.db.clone(),
         state.http_client().clone(),
     );
-    tasks::retroactive_hash::spawn(&TaskSpawner::from_state(state), state);
+    let spawner = TaskSpawner::from_state(state);
+    tasks::retroactive_hash::spawn(&spawner, state);
+    // After the orphan pass above committed, so the rows it deleted are already gone from the
+    // reference set this reads.
+    tasks::artwork_sweep::spawn(&spawner, state);
 
     state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
 

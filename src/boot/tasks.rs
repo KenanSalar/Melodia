@@ -24,6 +24,8 @@ pub fn spawn_background_tasks(
     tasks::file_event_processor::spawn(spawner, state, channels.file_event_rx);
     tasks::queue_prune::spawn(spawner, state);
     tasks::retroactive_hash::spawn(spawner, state);
+    // One-shot, and gated on its own settings marker rather than on anything here.
+    tasks::artwork_renormalize::spawn(spawner, state);
     tasks::heap_trim::spawn(spawner);
     // Folds the output device's fault counters into one line per window, and is
     // the only thing watching for a device that goes away mid-session.

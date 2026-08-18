@@ -6,6 +6,11 @@
 //! overwhelmingly alpha-free, and `FemtoVG` converts on upload rather than per draw), evicted LRU,
 //! and decoded under `image::Limits` so a forged dimension header can't allocate gigabytes.
 //!
+//! **Downscaled only.** A source already smaller than the tier keeps its own size: it is drawn at
+//! the tier's size either way, so padding the buffer out to it spends memory on pixels carrying no
+//! information — and hands the GPU a box-filtered upscale where it would otherwise magnify
+//! bilinearly at draw time.
+//!
 //! **`thumb_size` is per-instance.** Views draw artwork at wildly different sizes and `FemtoVG`
 //! minifies with plain bilinear and no mipmaps, so one size either softens the big tiles or wastes
 //! memory on the small ones; mixing grid-sized buffers into the row tier's LRU would also evict
@@ -25,7 +30,7 @@ use parking_lot::Mutex;
 use rayon::prelude::*;
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 
-use super::image_decode::{MAX_SOURCE_DIM, decode_capped, source_pixels};
+use super::image_decode::{FilterType, MAX_SOURCE_DIM, decode_capped, resize_rgb8, source_pixels};
 
 /// Row-tier thumbnail size at a 1× display — just over the now-playing bar's tile, the larger of
 /// the tier's two consumers.
@@ -267,10 +272,12 @@ fn decode_thumb_buffer(path: &Path, thumb_size: u32) -> CachedBuf {
 
     let dyn_img = decode_capped(path, MAX_SOURCE_DIM).ok()?;
 
-    // `thumbnail_exact` is integer-only and doesn't preserve aspect, which is moot for
-    // overwhelmingly square album art — and `image-fit: cover` on the Slint side would have
-    // re-cropped a non-square one anyway. Far cheaper than `resize_to_fill`.
-    let thumb = dyn_img.thumbnail_exact(thumb_size, thumb_size).to_rgb8();
+    // Square and aspect-blind, which is moot for overwhelmingly square album art — and
+    // `image-fit: cover` on the Slint side would have re-cropped a non-square one anyway.
+    // Bounded by the source's own long edge: a cover smaller than the tier is drawn at the
+    // tier's size either way, and enlarging it here only buys a bigger buffer.
+    let side = thumb_size.min(dyn_img.width().max(dyn_img.height()));
+    let thumb = resize_rgb8(&dyn_img, side, side, FilterType::Box)?;
     let (w, h) = thumb.dimensions();
     let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
     buf.make_mut_bytes().copy_from_slice(thumb.as_raw());

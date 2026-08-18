@@ -2,6 +2,23 @@ use crate::error::AppError;
 
 use super::*;
 
+/// A solid-colour square, encoded by the extension in `name`, so a sampled pixel names the source
+/// it came from. Real bytes rather than a placeholder string: `store_image` reads every source's
+/// header and refuses anything it could not draw, so a fixture has to be a decodable image.
+fn solid_source(
+    dir: &Path,
+    name: &str,
+    rgb: [u8; 3],
+    width: u32,
+    height: u32,
+) -> Result<PathBuf, AppError> {
+    let path = dir.join(name);
+    image::RgbImage::from_pixel(width, height, image::Rgb(rgb))
+        .save(&path)
+        .map_err(|e| AppError::Validation(format!("write {name}: {e}")))?;
+    Ok(path)
+}
+
 #[test]
 fn compute_hash_returns_16_hex_chars() {
     let hash = compute_hash(b"test data");
@@ -30,33 +47,180 @@ fn compute_hash_empty_input() {
     assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
 }
 
-// ── init_*_cache ──
+// ── how the store is written ──
 
+/// Every non-test source that writes into an artwork directory.
+///
+/// An equality below, not a floor: what this guards against is a *fifth* writer added later, and
+/// a floor is precisely what cannot see one appear.
+const STORE_WRITERS: [&str; 3] = [
+    "media/artwork/mod.rs",
+    "media/artwork/sweep.rs",
+    "media/deezer.rs",
+];
+
+/// A bare `fs::write` leaves a truncated file on a crash, a full disk or a force-exit — and
+/// because the name is content-addressed and every writer guards on `exists()`, that file is
+/// never rewritten and the cover is gone until someone deletes it by hand. `CoverThumbs` then
+/// caches the failed decode, so it does not even retry. The sweep cannot help: it is still
+/// referenced.
 #[test]
-fn init_artwork_cache_creates_dir() -> Result<(), AppError> {
+fn nothing_writes_into_the_store_without_staging_and_renaming() {
+    use crate::test_support::{SRC_DIR, stripped_sources};
+
+    /// A floor, so a walk that silently found nothing can't pass vacuously.
+    const MIN_SOURCES: usize = 200;
+
+    let mut seen = Vec::new();
+    for (path, code) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
+        if !STORE_WRITERS.contains(&path.as_str()) {
+            continue;
+        }
+        assert!(
+            !code.contains("fs::write("),
+            "{path} writes into the store directly — go through `write_atomic`, which stages \
+             beside the destination and renames, so the final name existing means the file is \
+             complete"
+        );
+        seen.push(path);
+    }
+
+    assert_eq!(
+        seen.len(),
+        STORE_WRITERS.len(),
+        "`STORE_WRITERS` names {STORE_WRITERS:?} but the walk only reached {seen:?} — a moved or \
+         renamed entry pre-authorises whatever takes its path next"
+    );
+}
+
+// ── the store's bounds ──
+
+/// The invariant `STORE_MAX_DIM` was picked from: the store must hold at least what the largest
+/// tier decodes, or every tier upscales from a source the store already threw away.
+///
+/// A runtime test rather than a `const _`, `row_cover_size` being a function — and here rather
+/// than beside the tiers because it is the *store's* cap that has to clear them, so a tier bump
+/// should fail next to the number it invalidates.
+#[test]
+fn every_tier_decodes_within_the_store_cap() {
+    use crate::media::cover_thumbs::row_cover_size;
+    use crate::ui::grid_prewarm::{GRID_COVER_SIZE, GRID_COVER_SIZE_HIDPI};
+    use crate::ui::util::COVER_SIZE;
+
+    for (tier, size) in [
+        ("GRID_COVER_SIZE_HIDPI", GRID_COVER_SIZE_HIDPI),
+        ("GRID_COVER_SIZE", GRID_COVER_SIZE),
+        ("COVER_SIZE", COVER_SIZE),
+        ("row_cover_size(1.0)", row_cover_size(1.0)),
+        ("row_cover_size(2.0)", row_cover_size(2.0)),
+    ] {
+        assert!(
+            size <= STORE_MAX_DIM,
+            "{tier} is {size}, past the {STORE_MAX_DIM} px the store keeps — raise \
+             `STORE_MAX_DIM` and renormalize, or the tier upscales from a capped source"
+        );
+    }
+}
+
+// ── store_image ──
+
+/// Below both bounds nothing is decoded, re-encoded or resized — the file on disk is the bytes
+/// that arrived. 144 of the reference library's 227 covers take this path, so it is the common
+/// case rather than the edge.
+#[test]
+fn a_source_inside_the_bounds_is_stored_byte_identical() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
-    let result = init_artwork_cache(tmp.path());
-    assert!(result.is_ok());
-    assert!(tmp.path().join("artwork").is_dir());
+    let source = solid_source(tmp.path(), "small.png", [10, 20, 30], 64, 64)?;
+    let bytes = std::fs::read(&source)?;
+
+    let stored = store_image(&bytes, "png", tmp.path())
+        .ok_or_else(|| AppError::Validation("store_image returned None".into()))?;
+
+    assert_eq!(std::fs::read(&stored)?, bytes, "an in-bounds source must not be re-encoded");
     Ok(())
 }
 
+/// Over the dimension bound the file is re-encoded, and **the name has to describe what landed**
+/// — hash the source instead and the `exists()` dedup guard starts answering about bytes nobody
+/// stored.
 #[test]
-fn init_artists_cache_creates_dir() -> Result<(), AppError> {
+fn an_oversized_source_is_shrunk_and_named_after_what_was_written() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
-    let result = init_artists_cache(tmp.path());
-    assert!(result.is_ok());
-    assert!(tmp.path().join("artists").is_dir());
+    // Noise rather than a flat fill, so the JPEG actually comes out smaller than the source PNG.
+    let source = tmp.path().join("big.png");
+    image::RgbImage::from_fn(1024, 1024, |x, y| {
+        image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x * y) % 239) as u8])
+    })
+    .save(&source)
+    .map_err(|e| AppError::Validation(format!("write big.png: {e}")))?;
+    let bytes = std::fs::read(&source)?;
+
+    let stored = store_image(&bytes, "png", tmp.path())
+        .ok_or_else(|| AppError::Validation("store_image returned None".into()))?;
+    let written = std::fs::read(&stored)?;
+
+    let (width, height) = image_decode::memory_dimensions(&written, MAX_SOURCE_DIM)
+        .ok_or_else(|| AppError::Validation("stored file will not decode".into()))?;
+    assert!(
+        width <= STORE_MAX_DIM && height <= STORE_MAX_DIM,
+        "stored at {width}x{height}, past the cap"
+    );
+    assert!(written.len() < bytes.len(), "the whole point is that it got smaller");
+
+    let name = std::path::Path::new(&stored)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| AppError::Validation("stored path has no file name".into()))?;
+    assert_eq!(
+        name,
+        stored_name(&compute_hash(&written), "jpg"),
+        "the name must describe the file"
+    );
     Ok(())
 }
 
+/// The rule that makes the cap forgiving, and the real mechanism behind it: a source encoded
+/// cheaply is only a little over the cap in pixels but far under it in bytes, so re-encoding it
+/// at a *fixed* quality 90 costs more than the downscale saves. A cap chosen slightly too low can
+/// therefore waste CPU here but can never grow the store. Live machinery rather than a
+/// theoretical guard — it fires on 6 of the reference library's 83 over-cap files.
 #[test]
-fn init_artwork_cache_idempotent() -> Result<(), AppError> {
+fn a_source_that_would_grow_under_re_encode_is_left_alone() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
-    let r1 = init_artwork_cache(tmp.path());
-    let r2 = init_artwork_cache(tmp.path());
-    assert!(r1.is_ok());
-    assert!(r2.is_ok());
+
+    // Just past the cap, and encoded far below the quality the normalizer would use.
+    let noisy = image::RgbImage::from_fn(600, 600, |x, y| {
+        image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x * y) % 239) as u8])
+    });
+    let mut cheap = Vec::new();
+    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cheap, 20);
+    image::DynamicImage::ImageRgb8(noisy)
+        .write_with_encoder(encoder)
+        .map_err(|e| AppError::Validation(format!("encode cheap jpeg: {e}")))?;
+
+    let stored = store_image(&cheap, "jpg", tmp.path())
+        .ok_or_else(|| AppError::Validation("store_image returned None".into()))?;
+
+    assert_eq!(
+        std::fs::read(&stored)?,
+        cheap,
+        "the re-encode came out larger than the source, so the source is what must be kept"
+    );
+    Ok(())
+}
+
+/// Header validation, which is also what stops a container this build cannot draw taking up disk
+/// forever — `image` is compiled without the BMP/GIF/TIFF decoders the lofty MIME map can name.
+#[test]
+fn a_source_that_is_not_a_decodable_image_is_not_stored() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+
+    assert!(store_image(b"", "jpg", tmp.path()).is_none(), "an empty source stores nothing");
+    assert!(
+        store_image(b"not an image at all", "jpg", tmp.path()).is_none(),
+        "a source with no recognisable header stores nothing"
+    );
+    assert_eq!(std::fs::read_dir(tmp.path())?.count(), 0, "and neither leaves a file behind");
     Ok(())
 }
 
@@ -113,8 +277,7 @@ fn cache_image_file_basic() -> Result<(), AppError> {
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir_all(&artwork_dir)?;
 
-    let source = tmp.path().join("cover.jpg");
-    std::fs::write(&source, b"fake image data")?;
+    let source = solid_source(tmp.path(), "cover.jpg", [12, 34, 56], 64, 64)?;
 
     let cached = cache_image_file(&source, &artwork_dir)
         .ok_or_else(|| AppError::Validation("cache_image_file returned None".into()))?;
@@ -138,10 +301,8 @@ fn cache_image_file_dedup() -> Result<(), AppError> {
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir_all(&artwork_dir)?;
 
-    let source1 = tmp.path().join("a.png");
-    let source2 = tmp.path().join("b.png");
-    std::fs::write(&source1, b"identical content")?;
-    std::fs::write(&source2, b"identical content")?;
+    let source1 = solid_source(tmp.path(), "a.png", [7, 8, 9], 64, 64)?;
+    let source2 = solid_source(tmp.path(), "b.png", [7, 8, 9], 64, 64)?;
 
     let r1 = cache_image_file(&source1, &artwork_dir)
         .ok_or_else(|| AppError::Validation("expected cached path 1".into()))?;
@@ -174,7 +335,7 @@ fn find_and_cache_artwork_external_only() -> Result<(), AppError> {
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir_all(&album_dir)?;
     std::fs::create_dir_all(&artwork_dir)?;
-    std::fs::write(album_dir.join("cover.jpg"), b"album art")?;
+    solid_source(&album_dir, "cover.jpg", [90, 90, 90], 64, 64)?;
 
     let cache: CoverCache = new_cover_cache();
     let track_path = album_dir.join("song.mp3");
@@ -191,7 +352,7 @@ fn find_and_cache_artwork_memoizes_per_cover() -> Result<(), AppError> {
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir_all(&album_dir)?;
     std::fs::create_dir_all(&artwork_dir)?;
-    std::fs::write(album_dir.join("cover.jpg"), b"album art")?;
+    solid_source(&album_dir, "cover.jpg", [90, 90, 90], 64, 64)?;
 
     let cache: CoverCache = new_cover_cache();
 
@@ -256,21 +417,6 @@ fn extract_and_cache_artwork_empty_pictures() -> Result<(), AppError> {
 }
 
 // ── compose_cover ──
-
-/// A solid-colour square PNG, so a sampled pixel names the source it came from.
-fn solid_source(
-    dir: &Path,
-    name: &str,
-    rgb: [u8; 3],
-    width: u32,
-    height: u32,
-) -> Result<PathBuf, AppError> {
-    let path = dir.join(name);
-    image::RgbImage::from_pixel(width, height, image::Rgb(rgb))
-        .save(&path)
-        .map_err(|e| AppError::Validation(format!("write {name}: {e}")))?;
-    Ok(path)
-}
 
 /// The canvas side these tests compose at. `compose_cover` takes it from the caller, so a number
 /// of the tests' own also pins that it is honoured rather than quietly using [`COMPOSITE_SIZE`].

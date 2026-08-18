@@ -13,6 +13,22 @@ fn new_decodes_to_row_tier_size() -> TestResult {
     Ok(())
 }
 
+/// A cover smaller than the tier is drawn at the tier's size either way — `image-fit: cover` on a
+/// GPU texture magnifies it at draw time. Padding the buffer out to the tile only spends memory
+/// on pixels carrying no information, and the box-filtered upscale it used to bake in looks
+/// slightly worse than the bilinear one the GPU does anyway.
+#[test]
+fn a_source_smaller_than_the_tier_keeps_its_own_size() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(448, cap);
+    let (_tmp, path) = write_test_png(128)?;
+
+    let buf = thumbs.get_or_load_rgb8(&path).ok_or("small cover failed to decode")?;
+
+    assert_eq!((buf.width(), buf.height()), (128, 128), "the tier must not enlarge a source");
+    Ok(())
+}
+
 #[test]
 fn with_config_decodes_to_requested_size() -> TestResult {
     let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;

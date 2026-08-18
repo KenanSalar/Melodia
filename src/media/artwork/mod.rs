@@ -1,15 +1,44 @@
+//! The artwork store: a content-addressed cache of every cover the library draws.
+//!
+//! Four properties, and each exists because its absence was a bug rather than a preference.
+//!
+//! **Content-addressed.** The filename is a truncated BLAKE3 of the *stored* bytes, so identical
+//! artwork is one file however many tracks carry it — which is also what makes one path-keyed
+//! entry downstream serve them all. Hashing the source instead would make the `exists()` guard
+//! every writer leans on answer about bytes nobody wrote.
+//!
+//! **Atomically written.** Staged beside the destination and renamed, so the final name existing
+//! means the file is complete. Without that a crash mid-write leaves a truncated file under a name
+//! no writer will ever revisit, and the cover is gone for good — `CoverThumbs` caches the failed
+//! decode and stops even retrying.
+//!
+//! **Bounded on ingest.** Every tier decodes the stored file *whole* before resizing it, so this
+//! cap is the ceiling on every transient decode buffer in the app, not just on disk. It sits at
+//! the largest tier's decode size; a source inside it is stored byte-identical and never decoded
+//! at all. A full-resolution artwork view would read the user's own file rather than raise it.
+//!
+//! **Swept, not refcounted.** Artwork is shared, so a per-track delete must not unlink the file;
+//! [`sweep`] collects against the whole reference set instead. It is gated on
+//! [`is_stored_name`] — the inverse of the naming scheme here, which is why the two live in one
+//! file — and the store directory holds whatever else a user has put there.
+//!
+//! Every byte is rederivable from the user's own files, which is what makes deleting aggressively
+//! safe. Nothing here ever writes back to those files: `tag_writer` embeds a picked cover's
+//! original bytes, so a capped store never caps what lands in a tag.
+
 use std::io::{self, BufWriter, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use image::imageops::FilterType;
+pub mod sweep;
+
 use lofty::picture::MimeType;
 use lofty::tag::Tag;
 use lru::LruCache;
 use parking_lot::Mutex;
 
-use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
+use crate::media::image_decode::{self, FilterType, MAX_SOURCE_DIM, decode_capped, resize_rgb8};
 
 /// Pipes every byte to both the wrapped writer and a BLAKE3 hasher. Used by
 /// `compose_artwork` to encode a JPEG into a temp file while computing its
@@ -96,24 +125,69 @@ const COVER_FILENAMES: &[&str] = &[
     "AlbumArt.png",
 ];
 
-/// Creates the artwork cache directory if it doesn't exist.
-pub fn init_artwork_cache(app_data_dir: &Path) -> io::Result<PathBuf> {
-    let artwork_dir = app_data_dir.join("artwork");
-    std::fs::create_dir_all(&artwork_dir)?;
-    Ok(artwork_dir)
+/// Publishes a staged file under its final name, dropping it if that name is already taken.
+///
+/// The rename is what lets every writer trust its own `exists()` guard: the name is content-
+/// addressed, so a file left half-written *under* it is never rewritten and that cover is gone
+/// until someone deletes it by hand. `database/backup.rs` states the same rule for its staging.
+fn persist_unless_exists(tmp: tempfile::NamedTempFile, file_path: &Path) -> io::Result<()> {
+    if file_path.exists() {
+        return Ok(());
+    }
+    tmp.persist(file_path).map(drop).map_err(|e| e.error)
 }
 
-/// Creates the artists image cache directory if it doesn't exist.
-pub fn init_artists_cache(app_data_dir: &Path) -> io::Result<PathBuf> {
-    let artists_dir = app_data_dir.join("artists");
-    std::fs::create_dir_all(&artists_dir)?;
-    Ok(artists_dir)
+/// Stages `bytes` beside their destination and renames into place.
+fn write_atomic(dir: &Path, file_path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
+    tmp.write_all(bytes)?;
+    persist_unless_exists(tmp, file_path)
 }
 
-/// Computes a truncated BLAKE3 hash (first 8 bytes = 16 hex chars) of the given data.
-pub(crate) fn compute_hash(data: &[u8]) -> String {
+/// Hex characters of BLAKE3 kept in a stored filename. Eight bytes, which puts the birthday bound
+/// far under any realistic cover count and leaves the name short enough to read in a log line.
+const HASH_HEX_LEN: usize = 16;
+
+/// Extensions a stored file may carry.
+///
+/// Closed on purpose: [`is_stored_name`] can only be the exact inverse of the writers if the set
+/// is. It is the union of what the cover pickers accept, what a lofty picture's MIME maps to, and
+/// the JPEG the composites and artist images are encoded as.
+const STORED_EXTENSIONS: [&str; 7] = ["jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff"];
+
+/// `raw` folded onto [`STORED_EXTENSIONS`], falling back to JPEG for anything unrecognised.
+///
+/// Lowercased rather than taken verbatim, because a `COVER.JPG` and a `cover.jpg` holding the same
+/// bytes hash alike and would otherwise land as two files. The fallback costs nothing — every
+/// reader sniffs the content rather than the name.
+fn stored_extension(raw: &str) -> &'static str {
+    let lowered = raw.to_ascii_lowercase();
+    STORED_EXTENSIONS.iter().copied().find(|ext| *ext == lowered).unwrap_or("jpg")
+}
+
+/// The one definition of the store's naming scheme; [`is_stored_name`] is its inverse.
+fn stored_name(hash_hex: &str, ext: &str) -> String {
+    format!("{hash_hex}.{ext}")
+}
+
+/// Whether `name` is one the writers here could have produced, and so the sweep's to retire.
+///
+/// Gated on this rather than on "everything in the directory", because the store is a folder in
+/// the user's data directory and a name this module cannot have written is not ours to delete.
+/// `crash_report::timestamp_of` and `database/backup.rs`'s `version_of` hold the same line.
+pub(super) fn is_stored_name(name: &str) -> bool {
+    let Some((hash_hex, ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    hash_hex.len() == HASH_HEX_LEN
+        && hash_hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        && STORED_EXTENSIONS.contains(&ext)
+}
+
+/// Computes a truncated BLAKE3 hash ([`HASH_HEX_LEN`] hex chars) of the given data.
+fn compute_hash(data: &[u8]) -> String {
     let hash = blake3::hash(data);
-    hash.to_hex()[..16].to_string()
+    hash.to_hex()[..HASH_HEX_LEN].to_string()
 }
 
 /// Searches the audio file's parent directory for a common cover art file.
@@ -145,23 +219,89 @@ fn find_external_cover(file_path: &Path, cover_cache: &CoverCache) -> Option<Pat
     result
 }
 
-/// Copies an external image file into the artwork cache, deduplicating by content hash.
-pub(crate) fn cache_image_file(source_path: &Path, artwork_dir: &Path) -> Option<String> {
-    let data = std::fs::read(source_path).ok()?;
-    if data.is_empty() {
+/// Longest edge a stored image may have.
+///
+/// The store must hold at least what the largest tier decodes — `ui::grid_prewarm`'s
+/// `GRID_COVER_SIZE_HIDPI` at 448 — so that is a floor and this is the smallest round value
+/// clearing it, leaving room to retune a tier without rebuilding the store. It doubles as the
+/// ceiling on every transient decode buffer in the app, each tier decoding the stored file whole
+/// before it resizes. A full-resolution artwork view would decode from the user's own file rather
+/// than raise this: the store exists to serve many small frequently-drawn tiles, and at 4K it
+/// would run to gigabytes across a few thousand covers.
+pub(crate) const STORE_MAX_DIM: u32 = 512;
+
+/// Byte ceiling, and a bound of its own rather than a consequence of [`STORE_MAX_DIM`] —
+/// dimensions drive decode cost, bytes drive disk, and a file can fail either alone. Ordinary
+/// encodings cannot reach this inside the dimension cap; 16-bit PNG and uncompressed TIFF can.
+const STORE_MAX_BYTES: usize = 1024 * 1024;
+
+/// Quality for anything re-encoded on the way in, matching [`compose_artwork`]'s.
+const STORE_JPEG_QUALITY: u8 = 90;
+
+/// Resampler for the normalizer. Lanczos3 as the persisted composite takes, for the same reason:
+/// this file outlives the session and is what every tier reads back.
+const STORE_FILTER: FilterType = FilterType::Lanczos3;
+
+/// Writes `bytes` into `dir` under their content hash, bounded, deduplicated, and atomically.
+///
+/// **The one funnel every byte-holding writer goes through**, so the store cannot end up with two
+/// size policies. Returns the stored path, or `None` for something that isn't a decodable image
+/// or that could not be written.
+///
+/// A source inside both bounds is stored byte-identical and never decoded at all — only its
+/// header is read, which is also what rejects a container this build cannot draw.
+pub(crate) fn store_image(bytes: &[u8], ext: &str, dir: &Path) -> Option<String> {
+    if bytes.is_empty() {
         return None;
     }
-    let ext = source_path.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
-    let hash_hex = compute_hash(&data);
-    let filename = format!("{hash_hex}.{ext}");
-    let file_path = artwork_dir.join(&filename);
+    let (width, height) = image_decode::memory_dimensions(bytes, MAX_SOURCE_DIM)?;
+
+    let over_bounds =
+        width > STORE_MAX_DIM || height > STORE_MAX_DIM || bytes.len() > STORE_MAX_BYTES;
+    let normalized = over_bounds.then(|| normalized_bytes(bytes, width, height)).flatten();
+
+    // Hash what lands on disk, not what arrived: the filename has to describe the file, or the
+    // `exists()` guard below starts answering about bytes nobody stored.
+    let (stored, ext) = match normalized.as_deref() {
+        Some(jpeg) => (jpeg, "jpg"),
+        None => (bytes, ext),
+    };
+    let file_path = dir.join(stored_name(&compute_hash(stored), ext));
     if !file_path.exists()
-        && let Err(e) = std::fs::write(&file_path, &data)
+        && let Err(e) = write_atomic(dir, &file_path, stored)
     {
         log::warn!("Failed to write artwork cache {}: {}", file_path.display(), e);
         return None;
     }
     Some(file_path.to_string_lossy().into_owned())
+}
+
+/// `bytes` re-encoded inside the store's bounds, or `None` where that would not pay.
+///
+/// **Never returns something larger than the source**, which is what makes the cap forgiving: a
+/// cheaply-encoded source is always at risk of growing under a fixed quality, so a cap set a
+/// little too low can waste CPU here but can never make the store bigger.
+///
+/// A source over the *byte* bound alone keeps its dimensions — `fit_within` never enlarges and
+/// has nothing to shrink, so it is re-encoded in place.
+fn normalized_bytes(bytes: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
+    let decoded = image_decode::decode_memory_capped(bytes, MAX_SOURCE_DIM)?;
+    let (target_w, target_h) =
+        image_decode::fit_within(width, height, STORE_MAX_DIM, STORE_MAX_DIM);
+    let resized = resize_rgb8(&decoded, target_w, target_h, STORE_FILTER)?;
+
+    let mut encoded = Vec::new();
+    let encoder =
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, STORE_JPEG_QUALITY);
+    image::DynamicImage::ImageRgb8(resized).write_with_encoder(encoder).ok()?;
+    (encoded.len() < bytes.len()).then_some(encoded)
+}
+
+/// Copies an external image file into the artwork cache, deduplicating by content hash.
+pub(crate) fn cache_image_file(source_path: &Path, artwork_dir: &Path) -> Option<String> {
+    let data = std::fs::read(source_path).ok()?;
+    let ext = source_path.extension().and_then(|e| e.to_str()).map_or("jpg", stored_extension);
+    store_image(&data, ext, artwork_dir)
 }
 
 /// Extracts the best cover picture from a lofty tag, hashes it with BLAKE3,
@@ -182,11 +322,6 @@ pub fn extract_and_cache_artwork(tag: &Tag, artwork_dir: &Path) -> Option<String
         .or_else(|| pictures.iter().find(|p| p.pic_type() == PictureType::CoverBack))
         .or(pictures.first())?;
 
-    let data = picture.data();
-    if data.is_empty() {
-        return None;
-    }
-
     let ext = match picture.mime_type() {
         Some(MimeType::Png) => "png",
         Some(MimeType::Bmp) => "bmp",
@@ -196,19 +331,7 @@ pub fn extract_and_cache_artwork(tag: &Tag, artwork_dir: &Path) -> Option<String
         _ => "jpg",
     };
 
-    let hash_hex = compute_hash(data);
-    let filename = format!("{hash_hex}.{ext}");
-    let file_path = artwork_dir.join(&filename);
-
-    // Skip write if file already exists (dedup)
-    if !file_path.exists()
-        && let Err(e) = std::fs::write(&file_path, data)
-    {
-        log::warn!("Failed to write artwork cache {}: {}", file_path.display(), e);
-        return None;
-    }
-
-    Some(file_path.to_string_lossy().into_owned())
+    store_image(picture.data(), ext, artwork_dir)
 }
 
 /// Unified artwork lookup: checks external cover files first, then embedded tag artwork.
@@ -256,7 +379,7 @@ fn resize_to_cover(
     width: u32,
     height: u32,
     filter: FilterType,
-) -> image::RgbImage {
+) -> Option<image::RgbImage> {
     let (iw, ih) = (f64::from(img.width()), f64::from(img.height()));
     let (tw, th) = (f64::from(width), f64::from(height));
 
@@ -265,23 +388,33 @@ fn resize_to_cover(
     let scaled_w = f64_to_pixel(iw * scale);
     let scaled_h = f64_to_pixel(ih * scale);
 
-    let resized = img.resize_exact(scaled_w, scaled_h, filter);
+    let resized = resize_rgb8(img, scaled_w, scaled_h, filter)?;
 
     // Center-crop to target dimensions
     let x = (scaled_w.saturating_sub(width)) / 2;
     let y = (scaled_h.saturating_sub(height)) / 2;
-    resized.crop_imm(x, y, width, height).to_rgb8()
+    Some(image::imageops::crop_imm(&resized, x, y, width, height).to_image())
 }
 
-/// Side of the collage [`compose_artwork`] persists. Sized so the playlist thumbnail survives a
-/// detail hero at full resolution — [`compose_cover`] takes its side from the caller instead, the
-/// hero's largest consumer being a tile it would only have to resize a second time.
-pub(crate) const COMPOSITE_SIZE: u32 = 600;
+/// Side of the collage [`compose_artwork`] persists.
+///
+/// **Derived from [`STORE_MAX_DIM`] rather than spelled beside it**: the composite is written
+/// *into* the store, so a larger canvas would be encoded once and immediately re-encoded by the
+/// normalizer — a second generation loss on the one artwork path that runs per playlist edit. It
+/// still clears both tiers that read a composite back, the playlist grid card and the detail hero.
+/// [`compose_cover`] takes its side from the caller instead, the hero's largest consumer being a
+/// tile it would only have to resize a second time.
+pub(crate) const COMPOSITE_SIZE: u32 = STORE_MAX_DIM;
 
-/// Resampler for the curated heroes' collage. Triangle rather than the Lanczos3 the persisted one
+/// The composite is written into the store, so a canvas over the cap would be re-encoded the
+/// moment it got there. Silent when it breaks — a doubled encode on every playlist edit — so it
+/// is asserted where it cannot be skipped.
+const _: () = assert!(COMPOSITE_SIZE <= STORE_MAX_DIM);
+
+/// Resampler for the curated heroes' collage. Bilinear rather than the Lanczos3 the persisted one
 /// takes: this canvas is downscaled again on the way to a cover tile and drawn at a fraction of
 /// that, so the sharper filter's extra source taps land in pixels no surface ever resolves.
-const HERO_FILTER: FilterType = FilterType::Triangle;
+const HERO_FILTER: FilterType = FilterType::Bilinear;
 
 /// Destination `(x, y, width, height)` per source, in **half-canvas units**, indexed by `len - 1`.
 /// Half-units so one table serves both canvas sizes; data rather than a `match` arm each, so the
@@ -336,7 +469,7 @@ enum ComposeStop {
     /// No layout for this many sources — an empty set, or more than [`COMPOSITE_LAYOUTS`] covers.
     /// Decided before anything is decoded.
     NoLayout,
-    /// The source at this index would not decode.
+    /// The source at this index would not decode, or would not resample into its tile.
     Unreadable(usize),
 }
 
@@ -358,7 +491,8 @@ fn compose_exact(
     for (index, (path, &(x, y, width, height))) in sources.iter().zip(rects).enumerate() {
         let source =
             decode_capped(path, MAX_SOURCE_DIM).map_err(|_| ComposeStop::Unreadable(index))?;
-        let tile = resize_to_cover(&source, width * half, height * half, filter);
+        let tile = resize_to_cover(&source, width * half, height * half, filter)
+            .ok_or(ComposeStop::Unreadable(index))?;
         image::imageops::overlay(&mut canvas, &tile, i64::from(x * half), i64::from(y * half));
     }
     Ok(canvas)
@@ -396,16 +530,12 @@ pub(crate) fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> O
             log::warn!("Failed to flush composite JPEG: {e}");
             return None;
         }
-        hashing.hasher.finalize().to_hex()[..16].to_string()
+        hashing.hasher.finalize().to_hex()[..HASH_HEX_LEN].to_string()
     };
-    let filename = format!("{hash_hex}.jpg");
+    let filename = stored_name(&hash_hex, "jpg");
     let file_path = artwork_dir.join(&filename);
 
-    if file_path.exists() {
-        // Already cached — drop the temp file (NamedTempFile cleans up on drop).
-        return Some(file_path.to_string_lossy().into_owned());
-    }
-    if let Err(e) = tmp.persist(&file_path) {
+    if let Err(e) = persist_unless_exists(tmp, &file_path) {
         log::warn!("Failed to write composite artwork {}: {}", file_path.display(), e);
         return None;
     }
@@ -415,7 +545,7 @@ pub(crate) fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> O
 /// Convert a non-negative f64 pixel coordinate (post `.round()` from image
 /// resize math) into a `u32`. Saturates to `u32::MAX` if the value
 /// somehow overflows; clamps NaN/negatives to 0.
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "image dimensions stay well below u32::MAX in practice; this helper is the saturating boundary"

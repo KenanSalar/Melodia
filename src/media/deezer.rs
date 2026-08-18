@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::path::Path;
 
 use crate::error::AppError;
+use crate::media::artwork;
 
 #[derive(serde::Deserialize)]
 struct DeezerSearchResponse {
@@ -242,23 +243,15 @@ pub async fn download_and_cache_artist_image(
         )));
     }
 
-    if bytes.is_empty() {
-        return Ok(None);
-    }
+    // Through the shared store so an artist image is bounded and deduplicated exactly as a cover
+    // is. Deezer serves these at a fixed 250 px, so the bounds don't fire today — what matters is
+    // that the two directories can't drift into two size policies.
+    let dir = artists_dir.to_path_buf();
+    let stored = tokio::task::spawn_blocking(move || artwork::store_image(&bytes, "jpg", &dir))
+        .await
+        .map_err(AppError::io_source)?;
 
-    // BLAKE3 hash (first 16 hex chars) for dedup filename
-    let hash = blake3::hash(&bytes);
-    let hash_hex: String = hash.to_hex()[..16].to_string();
-
-    let filename = format!("{hash_hex}.jpg");
-    let file_path = artists_dir.join(&filename);
-
-    // Skip write if file already exists (dedup)
-    if !file_path.exists() {
-        std::fs::write(&file_path, &bytes).map_err(AppError::Io)?;
-    }
-
-    Ok(Some(file_path.to_string_lossy().into_owned()))
+    Ok(stored)
 }
 
 #[cfg(test)]

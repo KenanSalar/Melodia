@@ -4,10 +4,11 @@
 
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-/// Side length (px) a sharp cover tile is downscaled to. Matches the ~380 px maximum
-/// on-screen tile in Now Playing, the largest cover the app paints, so it neither upscales
-/// nor pays for a 2× `HiDPI` buffer — one decode size across the app being worth more than
-/// the buffers it would save on surfaces holding a single image.
+/// Side length (px) a sharp cover tile is downscaled to. Matches the 384 px maximum on-screen
+/// tile in Now Playing, the largest cover the app paints, so it neither upscales nor pays for a
+/// 2× `HiDPI` buffer — one decode size across the app being worth more than the buffers it would
+/// save on surfaces holding a single image. The two are equal only at 1×, one being a Slint
+/// logical length and the other a decode size in physical pixels; neither derives from the other.
 pub const COVER_SIZE: u32 = 384;
 
 /// Side length a cover is downscaled to before blurring. A backdrop carries no fine detail and is

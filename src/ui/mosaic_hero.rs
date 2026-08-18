@@ -49,7 +49,8 @@ fn compose_hero_pair(paths: &[String], blur: Option<BlurSpec>) -> DetailPair {
     let Some(canvas) = compose_cover(&sources, COVER_SIZE) else {
         return DetailPair::default();
     };
-    pair_from_image(&image::DynamicImage::ImageRgb8(canvas), blur).into()
+    pair_from_image(&image::DynamicImage::ImageRgb8(canvas), blur)
+        .map_or_else(DetailPair::default, Into::into)
 }
 
 /// The covers whose collage is on screen, so an unchanged top-4 costs no recompose — or `None`

@@ -22,7 +22,7 @@ import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 export component NowPlayingView inherits Rectangle {
     // Ceiling on the square cover's edge. The tile takes this much when the column has the height
     // for it and less when it doesn't — the cover slot below is why the artwork gives ground.
-    property <length> cover-size: clamp(root.width * 0.22, 200px, 380px);
+    property <length> cover-size: clamp(root.width * 0.22, 200px, 384px);
 
     // The floor is the strip's old fixed height, so no window draws a smaller one than it used to;
     // the ceiling keeps a tall screen from turning the base of the group into the group.

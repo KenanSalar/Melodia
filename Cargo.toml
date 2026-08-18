@@ -198,6 +198,19 @@ natord = "1.0.9"
 # lock file transitively, so this line costs no extra build.
 unicode-normalization = "0.1.25"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+# Every cover the app draws is resized, most of them more than once, and
+# `image`'s own resamplers go through `get_pixel` — bounds-checked per output
+# pixel, with the output size as their floor, so no store cap reaches them. This
+# is the same convolution written over the flat slice with SIMD. It carries
+# `unsafe` internally, which `unsafe_code = "deny"` doesn't reach and which is
+# the reason the choice is written down here rather than arrived at by
+# `cargo add`; `media::image_decode::resize_rgb8` is the only place it is named.
+#
+# The `image` feature is the compat layer that lets it read and write this tree's
+# own buffers in place. Its `image` requirement is `0.25.6` against the `0.25.10`
+# above, so it unifies rather than resolving a second copy, and it enables no
+# format features of its own.
+fast_image_resize = { version = "6.1.0", features = ["image"] }
 lru = "0.18.2"
 
 # Material 3 dynamic colour (Material You). Its optional `image`/`serde`/`libm`

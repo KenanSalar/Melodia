@@ -1,0 +1,152 @@
+//! Brings an existing artwork store inside the size bounds the writers now enforce, once.
+//!
+//! [`crate::media::artwork::store_image`] only reaches files scanned after it shipped:
+//! `scanner::track_is_current` skips an unchanged track, so its cover is never re-derived and an
+//! install that scanned its library last year keeps whatever its tags happened to carry — up to
+//! the 8192 px `MAX_SOURCE_DIM` allows, decoded whole by every tier that draws it.
+//!
+//! **Not an `SQLx` migration.** It is a slow pass over a rebuildable cache, and a migration failure
+//! is fatal at boot — this must never be able to stop the app opening.
+//!
+//! Nothing is deleted here. A re-encoded cover lands under a new content hash, the rows are
+//! re-pointed, and the file they used to name is left unreferenced for the next scan's
+//! [`crate::tasks::artwork_sweep`] to retire.
+
+use std::path::{Path, PathBuf};
+
+use crate::config::Paths;
+use crate::database::DbPool;
+use crate::database::queries;
+use crate::error::{AppError, AppResult};
+use crate::media::artwork;
+use crate::services;
+use crate::state::AppState;
+use crate::tasks::TaskSpawner;
+
+/// What the pass did, for one log line at the end.
+#[derive(Default)]
+struct Outcome {
+    /// Files that came back smaller and had their rows re-pointed.
+    shrunk: u32,
+    /// Bytes the store lost. The old files go on the next sweep.
+    saved: u64,
+    /// Files already inside both bounds, or spared by the never-inflate rule.
+    left_alone: u32,
+}
+
+/// Run the pass unless this install has already had one.
+///
+/// The marker is set even when the pass fails part way: a store that half-normalized is still
+/// correct — every row points at a file that exists — and retrying the same failure on every
+/// launch buys nothing a re-scan wouldn't.
+pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
+    let state = state.clone();
+    spawner.spawn(async move {
+        let mut settings = match services::settings::read_settings(&state.paths) {
+            Ok(settings) => settings,
+            Err(e) => {
+                log::warn!("Artwork renormalize skipped: {}", services::describe(&e));
+                return;
+            }
+        };
+        if settings.library.artwork_store_normalized {
+            return;
+        }
+
+        if let Err(e) = renormalize(&state.db, &state.paths).await {
+            log::warn!("Artwork renormalize failed: {}", services::describe(&e));
+        }
+
+        settings.library.artwork_store_normalized = true;
+        if let Err(e) = services::settings::write_settings(&state.paths, &settings) {
+            log::warn!("Failed to save artwork_store_normalized flag: {e}");
+        }
+    });
+}
+
+async fn renormalize(db: &DbPool, paths: &Paths) -> AppResult<()> {
+    let stored = queries::artwork::referenced_paths(db).await?;
+    if stored.is_empty() {
+        return Ok(());
+    }
+
+    // Only referenced files are worth touching: an orphan is the sweep's to delete, not ours to
+    // re-encode. `store_image` re-checks the bounds itself, so handing it everything and keeping
+    // what moves is the same answer as pre-filtering, through the one funnel rather than a second
+    // copy of its rules.
+    let owned: Vec<PathBuf> = stored.into_iter().map(PathBuf::from).collect();
+    let moves = tokio::task::spawn_blocking(move || restore_each(&owned))
+        .await
+        .map_err(AppError::io_source)?;
+
+    let mut outcome = Outcome::default();
+    for step in moves {
+        match step {
+            Step::Unchanged => outcome.left_alone += 1,
+            Step::Shrunk { from, to, saved } => {
+                queries::artwork::repoint(db, &from, &to).await?;
+                outcome.shrunk += 1;
+                outcome.saved += saved;
+            }
+        }
+    }
+
+    if outcome.shrunk == 0 {
+        return Ok(());
+    }
+    log::info!(
+        "Normalized {} stored cover(s), {} KiB smaller ({} already inside the bounds)",
+        outcome.shrunk,
+        outcome.saved / 1024,
+        outcome.left_alone
+    );
+
+    // Awaited here rather than left to the next scan: every original this pass replaced is an
+    // orphan *created by the re-points above*, so a sweep ordered before them cannot see one —
+    // which is exactly what left them on disk for a whole extra launch.
+    super::artwork_sweep::run(db, paths).await
+}
+
+/// One file's verdict.
+enum Step {
+    /// Inside both bounds already, or the re-encode would have grown it.
+    Unchanged,
+    Shrunk {
+        from: String,
+        to: String,
+        saved: u64,
+    },
+}
+
+/// **Blocking** — one read and, for anything over the bounds, one decode plus one encode.
+fn restore_each(paths: &[PathBuf]) -> Vec<Step> {
+    paths.iter().map(|path| restore_one(path)).collect()
+}
+
+fn restore_one(path: &Path) -> Step {
+    let Some(dir) = path.parent() else {
+        return Step::Unchanged;
+    };
+    let Ok(bytes) = std::fs::read(path) else {
+        // A row pointing at a file that isn't there is the sweep's problem, not this pass's.
+        return Step::Unchanged;
+    };
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
+
+    let Some(stored) = artwork::store_image(&bytes, ext, dir) else {
+        return Step::Unchanged;
+    };
+    let from = path.to_string_lossy().into_owned();
+    if stored == from {
+        return Step::Unchanged;
+    }
+
+    let source_len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+    let saved =
+        std::fs::metadata(&stored).ok().map_or(0, |meta| source_len.saturating_sub(meta.len()));
+    Step::Shrunk {
+        from,
+        to: stored,
+        saved,
+    }
+}

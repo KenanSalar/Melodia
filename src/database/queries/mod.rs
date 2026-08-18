@@ -1,5 +1,6 @@
 pub mod album;
 pub mod artist;
+pub mod artwork;
 pub mod folder;
 pub mod genre;
 pub mod ingest;
