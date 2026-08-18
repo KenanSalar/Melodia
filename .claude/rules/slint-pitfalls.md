@@ -417,6 +417,16 @@ this file is what builds, looks right, and is wrong.
     `ui::chips::estimated_chip_width` keeps the wrap estimate out of reach). Sharper for a
     *fixed*-height `Text` — it is asking to be cut, so give it slack or leave the height alone.
 
+- **A function's arguments are unreachable inside a gradient's stops, so a shared
+  `tile-gradient(a, b)` helper is unspellable.** `from_at_gradient` swaps `ctx.property_type` to
+  `Type::Color` per stop, and `ArgumentsLookup` yields nothing unless that field is a
+  `Callback`/`Function`. Tell: `Unknown unqualified identifier 'a'` on the stop, which reads like a
+  typo. **Unqualified** lookup is the half that breaks — `root.a` is fine — so the escape is a
+  component with an `out property <brush>`, which has to be mounted to be read, an element per
+  caller. Rust can't either: `slint` re-exports `Brush` but not
+  `LinearGradientBrush`/`GradientStop`. Hence the genre tile gradient spelled out at
+  `grid/genre-grid.slint`, `my-library-view.slint` and `search/top-result-card.slint`.
+
 - **A `border-radius` past half an element's *height* becomes an ellipse, not a clamped stadium.**
   FemtoVG's `rounded_rect_varying` clamps a corner's x- and y-radii **independently**
   (`rad.min(halfw)` / `rad.min(halfh)`) and Slint passes the radius straight through, so a short

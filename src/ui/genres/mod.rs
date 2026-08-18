@@ -214,8 +214,9 @@ fn install_models(ui: &AppWindow) {
 
 /// A `GenreStats` as the `GenreRow` an `EntityCard` and the detail header
 /// render. Cheap enough to run for every genre on every rebuild — there is no
-/// cover to decode. The name hashes into the four gradient stops the Slint side
-/// plugs into `@linear-gradient`; see [`color::genre_accent`].
+/// cover to decode. The name hashes into the tile stops the Slint side plugs
+/// into `@linear-gradient`; the dimmer backdrop pair stays on the Rust side,
+/// which is the only place it is read. See [`color::genre_accent`].
 pub fn to_slint_genre_row(g: &GenreStats) -> UiGenreRow {
     let accent = color::genre_accent(&g.name);
     UiGenreRow {
@@ -229,8 +230,6 @@ pub fn to_slint_genre_row(g: &GenreStats) -> UiGenreRow {
         )),
         tile_color_1: accent.tile_color_1,
         tile_color_2: accent.tile_color_2,
-        hero_color_1: accent.hero_color_1,
-        hero_color_2: accent.hero_color_2,
     }
 }
 
