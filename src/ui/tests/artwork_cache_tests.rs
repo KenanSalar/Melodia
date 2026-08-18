@@ -68,6 +68,52 @@ fn a_specless_pair_keeps_the_seeds_and_skips_the_blur_and_the_brightness() {
     assert!(pair.sample.seeds.iter().any(Option::is_some));
 }
 
+/// The two halves of a measurement read two different buffers, and only one of them is drawn.
+///
+/// `scrim_alpha` solves the *composite* onto `TARGET_BACKDROP_TONE`, so the percentile has to come
+/// off the blurred buffer the scrim is painted over — which is `luma_p90`'s own argument read
+/// straight: a mostly-black sleeve carries its wordmark in too few pixels to reach the 90th
+/// percentile sharp, and the blur is exactly what smears it into the large mid-bright region the
+/// title then sits on. Taken off the sharp downscale — where the *seeds* belong, and where both
+/// halves briefly sat — that region is stepped over and the scrim comes back at its floor.
+#[test]
+fn the_brightness_comes_off_the_blur_and_the_seeds_off_the_sharp_downscale() {
+    // A wordmark's worth of white on black, deliberately *under* `PERCENTILE_TAIL` so the sharp
+    // percentile steps over it — the whole case this split exists for.
+    let source = DynamicImage::ImageRgb8(image::ImageBuffer::from_fn(192, 192, |x, y| {
+        image::Rgb(if x < 56 && y < 56 {
+            [255, 255, 255]
+        } else {
+            [0, 0, 0]
+        })
+    }));
+
+    let pair = pair_from_image(
+        &source,
+        Some(BlurSpec {
+            height: BLUR_TARGET,
+            sigma: 24.0,
+        }),
+    );
+
+    assert!(pair.blur.is_some(), "a tier holding a spec must build a blur");
+    assert_eq!(
+        pair.sample.luma,
+        pair.blur.as_ref().and_then(|blur| BackdropSample::measure(blur, blur).luma),
+        "the percentile must read the blurred buffer the scrim is composited over"
+    );
+
+    // An impossible `None` becomes `NaN` and fails the comparison rather than slipping through
+    // it — `unwrap` is denied crate-wide, tests included.
+    let painted = pair.sample.luma.unwrap_or(f64::NAN);
+    let sharp = BackdropSample::measure(&pair.cover, &pair.cover).luma.unwrap_or(f64::NAN);
+    assert!(
+        painted > sharp + 10.0,
+        "the blur has to surface the bright region the sharp percentile steps over: \
+         painted L*{painted} against sharp L*{sharp}"
+    );
+}
+
 /// Both tiers are newtypes whose whole content is a capacity and a
 /// [`BlurSpec`], so nothing about them fails to compile — this walks each one's
 /// two forwards so a tier wired to nothing is a failing test rather than a

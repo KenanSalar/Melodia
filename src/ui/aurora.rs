@@ -126,9 +126,11 @@ pub(crate) fn idle_tints(theme: &ThemeTokens) -> [Tint; WASH_COUNT] {
 
 /// Side of the noise tile. Big enough that the repeat carries no structure to lock onto — the
 /// generator wraps, so the tile is seamless — and small enough not to be worth measuring.
-const DITHER_TILE_SIDE: usize = 64;
+/// `u32` because that is the buffer's own unit — the generator's one index cast reads better than
+/// a fallible conversion with no failing case.
+const DITHER_TILE_SIDE: u32 = 64;
 
-const DITHER_TILE_PIXELS: usize = DITHER_TILE_SIDE * DITHER_TILE_SIDE;
+const DITHER_TILE_PIXELS: usize = (DITHER_TILE_SIDE * DITHER_TILE_SIDE) as usize;
 
 /// Alpha the tile is composited at. **One 8-bit level is the whole prescription**: the tile spans
 /// the full byte range, so `1/255` moves what is under it by exactly one quantization step — enough
@@ -147,9 +149,7 @@ const BLUE_NOISE_PASSES: usize = 8;
 /// energy in the low frequencies the eye is most sensitive to and reads as blotches.
 pub fn dither_tile() -> SharedPixelBuffer<Rgba8Pixel> {
     let levels = blue_noise_levels();
-    let side = u32::try_from(DITHER_TILE_SIDE).unwrap_or(u32::MAX);
-
-    let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(side, side);
+    let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(DITHER_TILE_SIDE, DITHER_TILE_SIDE);
     for (pixel, level) in buf.make_mut_slice().iter_mut().zip(levels) {
         *pixel = Rgba8Pixel {
             r: level,
@@ -225,7 +225,7 @@ fn low_pass_toroidal(source: &[f32]) -> Vec<f32> {
     const KERNEL_SUM: f32 = 4.0;
     const RADIUS: usize = 1;
 
-    let side = DITHER_TILE_SIDE;
+    let side = DITHER_TILE_SIDE as usize;
     let mut rows = vec![0.0_f32; source.len()];
     for row in 0..side {
         for col in 0..side {

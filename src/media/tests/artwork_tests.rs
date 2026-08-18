@@ -327,17 +327,26 @@ fn compose_cover_refuses_a_set_it_has_no_layout_for() -> Result<(), AppError> {
     Ok(())
 }
 
-/// All-or-nothing: a blank quarter would read as a bug where an absent collage reads
-/// as no artwork.
+/// A cover that has gone missing under us costs its slot, never the banner: the layout is picked
+/// from what survives, so a broken second source leaves the first full-bleed. Only an entirely
+/// unreadable set reads as no artwork.
 #[test]
-fn one_unreadable_source_fails_the_whole_compose() -> Result<(), AppError> {
+fn an_unreadable_source_drops_out_of_the_collage() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
     let good = solid_source(tmp.path(), "good.png", [255, 0, 0], 64, 64)?;
 
     let broken = tmp.path().join("broken.png");
     std::fs::write(&broken, b"not an image")?;
 
-    assert!(compose_cover(&[good, broken]).is_none());
+    let canvas = compose_cover(&[good, broken.clone()])
+        .ok_or_else(|| AppError::Validation("a readable source must still compose".into()))?;
+    // The 1-up layout rather than the 2-up: the survivor takes the half the broken source would
+    // have had, which is what separates this from painting a blank quarter.
+    for x in [COMPOSITE_SIZE / 4, COMPOSITE_SIZE * 3 / 4] {
+        assert_eq!(canvas.get_pixel(x, COMPOSITE_SIZE / 2).0, [255, 0, 0], "at x={x}");
+    }
+
+    assert!(compose_cover(&[broken]).is_none(), "nothing readable is still nothing");
     Ok(())
 }
 
@@ -351,6 +360,30 @@ fn a_source_past_the_decode_cap_is_refused() -> Result<(), AppError> {
     let over = solid_source(tmp.path(), "over.png", [0, 255, 0], MAX_SOURCE_DIM + 1, 1)?;
 
     assert!(compose_cover(std::slice::from_ref(&over)).is_none());
-    assert!(compose_cover(&[ok, over]).is_none());
+
+    // Beside a readable source the refusal is just a source that won't decode, so it drops out
+    // like any other — the guard still holds, the green never reaching the canvas.
+    let canvas = compose_cover(&[ok, over])
+        .ok_or_else(|| AppError::Validation("the readable source must still compose".into()))?;
+    for x in [COMPOSITE_SIZE / 4, COMPOSITE_SIZE * 3 / 4] {
+        assert_eq!(canvas.get_pixel(x, COMPOSITE_SIZE / 2).0, [255, 0, 0], "at x={x}");
+    }
+    Ok(())
+}
+
+/// `compose_artwork` is the strict half, and the asymmetry is deliberate: it bakes a file the
+/// mosaic picker has already previewed slot for slot, so a source dropping out would persist a
+/// collage that isn't the one the user chose.
+#[test]
+fn the_persisted_collage_refuses_what_the_hero_would_drop() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let good = solid_source(tmp.path(), "good.png", [255, 0, 0], 64, 64)?;
+
+    let broken = tmp.path().join("broken.png");
+    std::fs::write(&broken, b"not an image")?;
+
+    assert!(compose_artwork(&[good.clone(), broken], tmp.path()).is_none());
+    // The strictness is about the *missing* source, not about composing at all.
+    assert!(compose_artwork(&[good], tmp.path()).is_some());
     Ok(())
 }

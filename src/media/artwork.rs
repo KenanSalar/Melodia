@@ -306,15 +306,37 @@ const COMPOSITE_LAYOUTS: [&[(u32, u32, u32, u32)]; 4] = [
 /// - 3 images: left half = image 1, right top/bottom = images 2, 3
 /// - 4 images: 2x2 grid
 ///
-/// All-or-nothing: one source that won't decode fails the whole compose, a collage
-/// with a blank quarter reading as a bug where an absent one reads as no artwork.
+/// **A source that won't decode drops out of the set rather than failing the compose** — the
+/// layout is picked from what survives, so three readable covers give a three-up collage and only
+/// an entirely unreadable set reads as no artwork. The curated heroes recompose from whatever the
+/// database's top four currently are, and a cover deleted under them should cost that slot rather
+/// than the whole banner. The retry re-decodes; nothing reaches it while every file is where the
+/// database says it is.
 ///
 /// **Blocking** — call from `spawn_blocking` or a Rayon worker, never the UI thread.
 pub(crate) fn compose_cover(source_paths: &[PathBuf]) -> Option<image::RgbImage> {
-    let rects = *COMPOSITE_LAYOUTS.get(source_paths.len().checked_sub(1)?)?;
+    let all: Vec<&Path> = source_paths.iter().map(PathBuf::as_path).collect();
+    if let Some(canvas) = compose_exact(&all) {
+        return Some(canvas);
+    }
+
+    let readable: Vec<&Path> =
+        all.iter().copied().filter(|p| decode_capped(p, MAX_SOURCE_DIM).is_ok()).collect();
+    // Nothing to drop, so the failure was the set's size rather than a source: re-running would
+    // walk the same paths to the same answer.
+    if readable.len() == all.len() {
+        return None;
+    }
+    compose_exact(&readable)
+}
+
+/// One all-or-nothing pass, holding a single decode at a time — a four-cover collage never has
+/// four full-size sources in memory at once.
+fn compose_exact(sources: &[&Path]) -> Option<image::RgbImage> {
+    let rects = *COMPOSITE_LAYOUTS.get(sources.len().checked_sub(1)?)?;
 
     let mut canvas = image::RgbImage::new(COMPOSITE_SIZE, COMPOSITE_SIZE);
-    for (path, &(x, y, width, height)) in source_paths.iter().zip(rects) {
+    for (path, &(x, y, width, height)) in sources.iter().zip(rects) {
         let source = decode_capped(path, MAX_SOURCE_DIM).ok()?;
         let tile = resize_to_cover(&source, width, height);
         image::imageops::overlay(&mut canvas, &tile, i64::from(x), i64::from(y));
@@ -322,11 +344,16 @@ pub(crate) fn compose_cover(source_paths: &[PathBuf]) -> Option<image::RgbImage>
     Some(canvas)
 }
 
-/// [`compose_cover`] persisted into `artwork_dir` under its own content hash.
+/// [`compose_exact`] persisted into `artwork_dir` under its own content hash.
+///
+/// **Strict where [`compose_cover`] is lenient**: this bakes a file the mosaic picker has already
+/// previewed slot for slot, so a source quietly dropping out would persist a collage that isn't
+/// the one the user chose.
 ///
 /// Returns the cached path to the composite image, or None on failure.
 pub(crate) fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> Option<String> {
-    let canvas = compose_cover(source_paths)?;
+    let sources: Vec<&Path> = source_paths.iter().map(PathBuf::as_path).collect();
+    let canvas = compose_exact(&sources)?;
 
     // Stream the JPEG into a temp file in the artwork directory while a tee
     // writer feeds every byte to a BLAKE3 hasher. This avoids holding the

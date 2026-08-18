@@ -19,9 +19,9 @@ macro_rules! impl_detail_view_helpers {
         /// Push a decoded `(cover, blur)` pair into the detail global from the UI
         /// thread: the cover slot directly, the blur through `write_crossfade_slot` so
         /// switching entities fades rather than flashes. `animate: true` is the
-        /// fresh-open path, `false` the watcher-driven refresh. The colour set is
-        /// solved from the measurement the decode took off that same blur, so the
-        /// scrim can't fall out of step with the buffer it is darkening.
+        /// fresh-open path, `false` the watcher-driven refresh. The colour set comes off the
+        /// measurement the decode took beside these two buffers, so the scrim can't fall out
+        /// of step with the blur it is darkening.
         ///
         /// **`section_active` gates the `HeroBackdrop` write and nothing else.** The
         /// per-view properties either side of it are this view's own, and writing them

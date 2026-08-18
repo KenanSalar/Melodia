@@ -241,8 +241,9 @@ fn main() -> AppResult<()> {
     boot::ui_setup::install_locale(&app, &state, startup_settings.as_ref());
     boot::ui_setup::install_app_chrome(&app, &state);
     // Ahead of `install_views`, which builds the artwork tiers this decides the shape of.
-    boot::ui_setup::apply_backdrop_style(&app, startup_settings.as_ref());
-    boot::ui_setup::install_backdrop_dither(&app);
+    if boot::ui_setup::apply_backdrop_style(&app, startup_settings.as_ref()) {
+        boot::ui_setup::install_backdrop_dither(&app);
+    }
     let views = boot::ui_setup::install_views(&app, &state, startup_view_state.as_ref());
     let notifications = boot::ui_setup::install_library_settings_and_friends(&app, &state)?;
 

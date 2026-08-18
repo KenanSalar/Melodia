@@ -240,13 +240,13 @@ fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
     Some(bin_centre(0))
 }
 
-/// How many colours a backdrop asks the quantizer for — one per aurora wash, so `ui::aurora` has
-/// to agree.
+/// How many colours a backdrop asks the quantizer for.
 ///
-/// Four is the geometry's number rather than the quantizer's: the washes anchor at the corners of
-/// their host, and a rectangle has four. Median cut is happy to be asked for more, but each extra
-/// box is a finer split of a region already represented, so a fifth colour would have nowhere of
-/// its own to sit and would only dilute a neighbour.
+/// **Deliberately one more than [`crate::ui::aurora::WASH_COUNT`] paints**, which is where that
+/// half of the argument lives: median cut splits to a *target*, so asking for three is a different
+/// set of boxes rather than this one minus its last, and the washes take the top three of a
+/// four-box cut. Four rather than more because each extra box is a finer split of a region already
+/// represented, so a fifth colour has nowhere of its own to sit and only dilutes a neighbour.
 pub(crate) const SEED_COUNT: usize = 4;
 
 /// Which of the two backdrops a foreground will sit on — and therefore which of two unrelated
@@ -305,10 +305,19 @@ impl BackdropSample {
     /// [`Self::quantize`] plus the brightness a scrim is solved against — **the blur arm's, and
     /// nothing else's**. [`theme_backdrop`] answers off the theme's own tokens, so the aurora
     /// reads `luma` nowhere, and the percentile walks every pixel where the quantizer strides them.
-    pub(crate) fn measure(cover: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
+    ///
+    /// **Two buffers, because the halves want different ones.** Median cut wants `sharp` — blur
+    /// averages the regions it is looking for into each other. The percentile wants whatever is
+    /// actually *drawn*: [`scrim_alpha`] solves the composite onto [`TARGET_BACKDROP_TONE`], so
+    /// measuring anything but the painted layer lands the surface somewhere else entirely. They
+    /// are the same buffer only where the caller paints what it measured.
+    pub(crate) fn measure(
+        sharp: &SharedPixelBuffer<Rgb8Pixel>,
+        painted: &SharedPixelBuffer<Rgb8Pixel>,
+    ) -> Self {
         Self {
-            luma: luma_p90(cover),
-            ..Self::quantize(cover)
+            luma: luma_p90(painted),
+            ..Self::quantize(sharp)
         }
     }
 

@@ -57,6 +57,13 @@ fn p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> f64 {
     luma_p90(buf).unwrap_or(f64::NAN)
 }
 
+/// [`BackdropSample::measure`] where the sharp and the painted buffer are one — every test
+/// below is about the solve rather than about which buffer each half reads, and a synthetic
+/// buffer is its own blur anyway. The production split is pinned in `artwork_cache_tests`.
+fn measured(buf: &SharedPixelBuffer<Rgb8Pixel>) -> BackdropSample {
+    BackdropSample::measure(buf, buf)
+}
+
 /// Independent WCAG relative luminance of one sRGB byte triple, 0..1. Written
 /// from the spec rather than reusing the module's helpers so an assertion can't
 /// pass by agreeing with a bug in them.
@@ -174,14 +181,21 @@ fn luma_p90_steps_over_a_tail_smaller_than_the_percentile() {
 
 // --- BackdropSample ---------------------------------------------------------
 
+/// Each half reads the buffer it was handed, which is the whole reason there are two: the seeds
+/// want the sharp downscale and the percentile wants whatever the scrim gets painted over.
+/// Handing one buffer twice — what every other test here does — cannot tell the two apart.
 #[test]
-fn measure_takes_the_hue_and_the_percentile_off_one_buffer() {
-    let buf = buffer_from(32, |_, _| [220, 30, 30]);
-    let sample = BackdropSample::measure(&buf);
+fn measure_takes_the_hue_off_the_sharp_buffer_and_the_percentile_off_the_painted_one() {
+    let sharp = buffer_from(32, |_, _| [220, 30, 30]);
+    let painted = solid(32, 0x20);
+    let sample = BackdropSample::measure(&sharp, &painted);
 
-    assert_eq!(sample.luma, luma_p90(&buf));
+    assert_eq!(sample.luma, luma_p90(&painted), "the percentile must read the painted buffer");
+    assert_ne!(sample.luma, luma_p90(&sharp), "...and must not read the sharp one");
+
+    // Grey would be the answer off `painted`, so a red seed can only have come off `sharp`.
     let (r, g, b) = unpack(sample.accent_argb.unwrap_or(0));
-    assert!(r > g && r > b, "a red buffer quantized to rgb({r}, {g}, {b})");
+    assert!(r > g && r > b, "the seed must quantize the sharp buffer, got rgb({r}, {g}, {b})");
 }
 
 /// An empty buffer must leave both halves empty so the publisher falls back to
@@ -189,7 +203,7 @@ fn measure_takes_the_hue_and_the_percentile_off_one_buffer() {
 /// off whatever a degenerate quantize happened to return.
 #[test]
 fn measure_of_an_empty_buffer_leaves_both_halves_empty() {
-    let sample = BackdropSample::measure(&SharedPixelBuffer::<Rgb8Pixel>::new(0, 0));
+    let sample = measured(&SharedPixelBuffer::<Rgb8Pixel>::new(0, 0));
     assert_eq!(sample.accent_argb, None);
     assert_eq!(sample.luma, None);
 }
@@ -200,7 +214,7 @@ fn measure_of_an_empty_buffer_leaves_both_halves_empty() {
 /// and painting every album's banner the same colour.
 #[test]
 fn a_measured_cover_hue_outranks_the_theme_accent() {
-    let sample = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]));
+    let sample = measured(&buffer_from(32, |_, _| [220, 30, 30]));
     // `None` collapses onto the accent too, which is the same failure — so
     // falling back to `SEED` here makes the assertion below cover both.
     let seed = sample.accent_argb.unwrap_or(SEED);
@@ -225,8 +239,7 @@ fn channel_spread(rgb: u32) -> u8 {
 /// banner has to solve grey chrome.
 #[test]
 fn a_greyscale_blur_solves_neutral_chrome() {
-    let chrome =
-        BackdropSample::measure(&solid(32, 0x80)).solve(&mocha(), BackdropKind::Blur).chrome;
+    let chrome = measured(&solid(32, 0x80)).solve(&mocha(), BackdropKind::Blur).chrome;
     assert!(
         channel_spread(chrome) <= 8,
         "a grey blur must solve neutral chrome, got 0x{chrome:06X}"
@@ -239,7 +252,7 @@ fn a_greyscale_blur_solves_neutral_chrome() {
 #[test]
 fn a_black_and_a_white_blur_both_solve_legible_chrome() {
     for value in [0x00_u8, 0xff] {
-        let sample = BackdropSample::measure(&solid(32, value));
+        let sample = measured(&solid(32, value));
         let colors = sample.solve(&mocha(), BackdropKind::Blur);
         let band = composited_tone(sample.luma.unwrap_or(f64::NAN), colors.scrim_alpha);
 
@@ -263,8 +276,7 @@ fn a_black_and_a_white_blur_both_solve_legible_chrome() {
 /// not just the solve.
 #[test]
 fn the_chrome_tier_stays_inside_its_band() {
-    let chrome =
-        BackdropSample::measure(&solid(32, 0xff)).solve(&mocha(), BackdropKind::Blur).chrome;
+    let chrome = measured(&solid(32, 0xff)).solve(&mocha(), BackdropKind::Blur).chrome;
     let tone = rgb_lstar(chrome);
     assert!(
         tone <= CHROME_MAX_TONE + 0.5,
@@ -480,7 +492,7 @@ fn a_white_cover_now_clears_the_non_text_bar() {
 #[test]
 fn the_aurora_arm_publishes_the_theme_and_the_blur_arm_solves() {
     let theme = mocha();
-    let sample = BackdropSample::measure(&solid(32, 0xff));
+    let sample = measured(&solid(32, 0xff));
 
     let aurora_arm = sample.solve(&theme, BackdropKind::Aurora);
     assert_eq!(
@@ -525,8 +537,8 @@ fn the_auroras_chrome_is_neutral_ink_the_wash_reads_through() {
         ("mocha", mocha(), 0x00ff_ffff),
         ("latte", latte(), 0x0000_0000),
     ] {
-        let colors = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]))
-            .solve(&theme, BackdropKind::Aurora);
+        let colors =
+            measured(&buffer_from(32, |_, _| [220, 30, 30])).solve(&theme, BackdropKind::Aurora);
 
         assert_eq!(
             colors.chrome, expected,
@@ -539,8 +551,7 @@ fn the_auroras_chrome_is_neutral_ink_the_wash_reads_through() {
         );
     }
 
-    let blur = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]))
-        .solve(&mocha(), BackdropKind::Blur);
+    let blur = measured(&buffer_from(32, |_, _| [220, 30, 30])).solve(&mocha(), BackdropKind::Blur);
     assert!(
         (blur.chrome_alpha - 1.0).abs() < f32::EPSILON,
         "the blur's chrome is the colour itself and must stay opaque"
@@ -555,8 +566,8 @@ fn the_auroras_chrome_is_neutral_ink_the_wash_reads_through() {
 /// pinning it here would only make a tune fail a test that agreed with it.
 #[test]
 fn no_neutral_weight_goes_opaque_or_outshines_what_sits_on_it() {
-    let aurora = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]))
-        .solve(&mocha(), BackdropKind::Aurora);
+    let aurora =
+        measured(&buffer_from(32, |_, _| [220, 30, 30])).solve(&mocha(), BackdropKind::Aurora);
 
     for (name, alpha) in [
         ("chrome", aurora.chrome_alpha),
@@ -581,8 +592,7 @@ fn no_neutral_weight_goes_opaque_or_outshines_what_sits_on_it() {
 
     // The blur's tier *is* the colour, so everything but the pill is opaque there — asserted so the
     // partial weights above can't be read as a property of both arms.
-    let blur = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]))
-        .solve(&mocha(), BackdropKind::Blur);
+    let blur = measured(&buffer_from(32, |_, _| [220, 30, 30])).solve(&mocha(), BackdropKind::Blur);
     for (name, alpha) in [
         ("chrome-text", blur.chrome_text_alpha),
         ("viz", blur.viz_alpha),
@@ -634,8 +644,8 @@ fn an_entry_with_no_artwork_still_follows_the_setting() {
 #[test]
 fn the_aurora_tiers_ignore_what_the_cover_measured() {
     let theme = mocha();
-    let dark = BackdropSample::measure(&solid(32, 0x00));
-    let bright = BackdropSample::measure(&solid(32, 0xff));
+    let dark = measured(&solid(32, 0x00));
+    let bright = measured(&solid(32, 0xff));
 
     assert!(
         scrim_alpha(dark.luma.unwrap_or(f64::NAN)) < scrim_alpha(bright.luma.unwrap_or(f64::NAN)),

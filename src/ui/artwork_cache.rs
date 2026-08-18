@@ -141,15 +141,17 @@ pub(crate) fn pair_from_image(decoded: &DynamicImage, blur_spec: Option<BlurSpec
     // fast path and its aspect distortion is invisible once blurred and re-cropped;
     // `fast_blur`'s 3-pass box blur is indistinguishable from a true Gaussian here.
     let small = decoded.thumbnail_exact(BLUR_TARGET, spec.height).to_rgb8();
+    let blur = buffer_from_rgb(&fast_blur(&small, spec.sigma));
 
-    // Off the *sharp* downscale, never the blur — see [`BackdropSample::quantize`]. Here rather
-    // than at the publisher: this runs on the blocking pool and is cached, so the quantize is
-    // paid once per cover rather than once per open.
-    let sample = BackdropSample::measure(&buffer_from_rgb(&small));
+    // Seeds off the sharp downscale, brightness off the blurred one — the two halves want
+    // different buffers and [`BackdropSample::measure`] argues why. Here rather than at the
+    // publisher: this runs on the blocking pool and is cached, so both are paid once per cover
+    // rather than once per open.
+    let sample = BackdropSample::measure(&buffer_from_rgb(&small), &blur);
 
     ArtworkPair {
         cover,
-        blur: Some(buffer_from_rgb(&fast_blur(&small, spec.sigma))),
+        blur: Some(blur),
         sample,
     }
 }

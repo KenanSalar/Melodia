@@ -39,18 +39,28 @@ pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
 /// `ui::backdrop::kind`. The two obvious homes, `ui::appearance::install` and
 /// `hydrate_ui_from_settings`, both run after it. A failed settings read leaves the
 /// Slint-declared default, which is the same value.
+///
+/// Returns whether the aurora arm is live, read back off the property so the failed-read arm
+/// answers with what boot actually raised. The writer reporting what it wrote, not a second
+/// reader — `ui::backdrop::kind` stays the only one, and this crate can't name it anyway.
 pub fn apply_backdrop_style(
     app: &AppWindow,
     startup_settings: Option<&services::settings::SettingsData>,
-) {
+) -> bool {
+    let theme = app.global::<Theme>();
     if let Some(settings) = startup_settings {
-        app.global::<Theme>().set_aurora_backdrop(settings.backdrop.aurora_backdrop);
+        theme.set_aurora_backdrop(settings.backdrop.aurora_backdrop);
     }
+    theme.get_aurora_backdrop()
 }
 
 /// One tile for the process, shared by both aurora tiers: it answers to the renderer's
 /// lack of gradient dithering rather than to any artwork, so nothing later rewrites it.
 /// The `Image` is `Rc`-backed, so the second global clones a handle, not a buffer.
+///
+/// **The aurora arm's alone** — the tile sits behind `AuroraBackdrop`'s own `shown` gate, so on
+/// the blur arm it is a generator run and a buffer nothing draws. Skipping it leaves the unset
+/// `image` that component already degrades to.
 pub fn install_backdrop_dither(app: &AppWindow) {
     let tile = slint::Image::from_rgba8(ui::aurora::dither_tile());
     app.global::<Player>().set_np_dither(tile.clone());
