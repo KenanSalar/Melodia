@@ -284,11 +284,8 @@ pub(crate) const COMPOSITE_SIZE: u32 = 600;
 const HERO_FILTER: FilterType = FilterType::Triangle;
 
 /// Destination `(x, y, width, height)` per source, in **half-canvas units**, indexed by `len - 1`.
-///
-/// Half-units rather than pixels so one table serves both canvas sizes, and because the shapes are
-/// what it is for: every layout is a 2×2 grid with some cells merged. Data rather than a `match`
-/// arm each, so the decode loop can walk it one source at a time; a four-cover collage never holds
-/// four full-size decodes at once.
+/// Half-units so one table serves both canvas sizes; data rather than a `match` arm each, so the
+/// decode loop can walk it one source at a time and never holds four full-size decodes.
 const COMPOSITE_LAYOUTS: [&[(u32, u32, u32, u32)]; 4] = [
     // the whole canvas
     &[(0, 0, 2, 2)],
@@ -300,23 +297,16 @@ const COMPOSITE_LAYOUTS: [&[(u32, u32, u32, u32)]; 4] = [
     &[(0, 0, 1, 1), (1, 0, 1, 1), (0, 1, 1, 1), (1, 1, 1, 1)],
 ];
 
-/// Composes 1-4 source images into a single `side`-by-`side` square.
+/// Composes 1-4 source images into a single `side`-by-`side` square, laid out by
+/// [`COMPOSITE_LAYOUTS`]. `side` wants to be the size the collage is actually *drawn* at: this one
+/// goes straight to `pair_from_image`, which reduces it to a cover tile, so a larger canvas is
+/// resized twice and drawn once.
 ///
-/// Layouts:
-/// - 1 image: fills the entire canvas
-/// - 2 images: left/right halves
-/// - 3 images: left half = image 1, right top/bottom = images 2, 3
-/// - 4 images: 2x2 grid
-///
-/// **A source that won't decode drops out of the set rather than failing the compose** — the
-/// layout is picked from what survives, so three readable covers give a three-up collage and only
-/// an entirely unreadable set reads as no artwork. The curated heroes recompose from whatever the
+/// **A source that won't decode drops out of the set rather than failing the compose** — the layout
+/// is picked from what survives, so three readable covers give a three-up collage and only an
+/// entirely unreadable set reads as no artwork. The curated heroes recompose from whatever the
 /// database's top four currently are, and a cover deleted under them should cost that slot rather
 /// than the whole banner.
-///
-/// `side` is the caller's, and wants to be the size the collage is actually *drawn* at: this one
-/// is handed straight to `pair_from_image`, which reduces it to a cover tile, so a larger canvas is
-/// resized twice and drawn once.
 ///
 /// **Blocking** — call from `spawn_blocking` or a Rayon worker, never the UI thread.
 pub(crate) fn compose_cover(source_paths: &[PathBuf], side: u32) -> Option<image::RgbImage> {
@@ -350,11 +340,8 @@ enum ComposeStop {
     Unreadable(usize),
 }
 
-/// One all-or-nothing pass, holding a single decode at a time — a four-cover collage never has
-/// four full-size sources in memory at once.
-///
-/// The layout is in half-canvas units, so `side` scales it; both sides are even, so the scale is
-/// exact.
+/// One all-or-nothing pass, holding a single decode at a time. The layout is in half-canvas units,
+/// so `side` scales it; both sides are even, so the scale is exact.
 fn compose_exact(
     sources: &[&Path],
     side: u32,
@@ -377,13 +364,12 @@ fn compose_exact(
     Ok(canvas)
 }
 
-/// [`compose_exact`] persisted into `artwork_dir` under its own content hash.
+/// [`compose_exact`] persisted into `artwork_dir` under its own content hash, returning the cached
+/// path or `None` on failure.
 ///
 /// **Strict where [`compose_cover`] is lenient**: this bakes a file the mosaic picker has already
-/// previewed slot for slot, so a source quietly dropping out would persist a collage that isn't
-/// the one the user chose.
-///
-/// Returns the cached path to the composite image, or None on failure.
+/// previewed slot for slot, so a source quietly dropping out would persist a collage that isn't the
+/// one the user chose.
 pub(crate) fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> Option<String> {
     let sources: Vec<&Path> = source_paths.iter().map(PathBuf::as_path).collect();
     let canvas = compose_exact(&sources, COMPOSITE_SIZE, FilterType::Lanczos3).ok()?;

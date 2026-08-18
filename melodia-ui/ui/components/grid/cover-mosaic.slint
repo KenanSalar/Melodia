@@ -39,16 +39,14 @@ component MosaicSlot inherits Rectangle {
 }
 
 // Reusable 1/2/3/4-tile artwork mosaic, and the live preview of what
-// `media::artwork::compose_artwork` will bake: the layouts are shared, so the picker shows the
-// collage it is about to persist. That function rather than its lenient sibling `compose_cover` is
-// what makes the preview a promise — a source dropping out would bake a collage slot-for-slot
-// different from this one. Pure layout — the caller owns the outer chrome and only the
-// inner tiles are drawn here, so no paths draws nothing and the caller's own empty state shows
-// through. Tiles resolve through `request-cover`, so a consumer keeps its own LRU tier.
+// `media::artwork::compose_artwork` will bake — shared layouts, so the picker shows the collage it
+// is about to persist. That function rather than its lenient sibling `compose_cover` is what makes
+// the preview a promise: a source dropping out would bake a collage slot-for-slot different. Pure
+// layout, so no paths draws nothing and the caller's own empty state shows through, and tiles
+// resolve through `request-cover` so the consumer keeps its own LRU tier.
 //
-// One consumer: `components/dialog/playlist-mosaic-picker.slint`. The curated heroes drew this
-// once and now draw the composed collage itself, so the styling inputs below are the picker's
-// defaults rather than a set anyone overrides.
+// One consumer: `components/dialog/playlist-mosaic-picker.slint`. The curated heroes drew this once
+// and now draw the composed collage itself, so the styling inputs below are the picker's defaults.
 export component CoverMosaic inherits Rectangle {
     in property <[string]> artwork-paths;
     in property <length>   gutter-size: 3px;

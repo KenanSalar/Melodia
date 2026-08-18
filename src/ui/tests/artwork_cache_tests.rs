@@ -73,11 +73,10 @@ fn a_specless_pair_keeps_the_seeds_and_skips_the_blur_and_the_brightness() {
 /// The two halves of a measurement read two different buffers, and only one of them is drawn.
 ///
 /// `scrim_alpha` solves the *composite* onto `TARGET_BACKDROP_TONE`, so the percentile has to come
-/// off the blurred buffer the scrim is painted over — which is `luma_p90`'s own argument read
-/// straight: a mostly-black sleeve carries its wordmark in too few pixels to reach the 90th
-/// percentile sharp, and the blur is exactly what smears it into the large mid-bright region the
-/// title then sits on. Taken off the sharp downscale — where the *seeds* belong, and where both
-/// halves briefly sat — that region is stepped over and the scrim comes back at its floor.
+/// off the blurred buffer the scrim is painted over. A mostly-black sleeve carries its wordmark in
+/// too few pixels to reach the 90th percentile sharp, and the blur is what smears it into the
+/// mid-bright region the title then sits on; off the sharp downscale — where the *seeds* belong —
+/// that region is stepped over and the scrim comes back at its floor.
 #[test]
 fn the_brightness_comes_off_the_blur_and_the_seeds_off_the_sharp_downscale() {
     // A wordmark's worth of white on black, deliberately *under* `PERCENTILE_TAIL` so the sharp

@@ -9,8 +9,8 @@ use crate::ui::backdrop::{SEED_COUNT, ThemeTokens};
 /// The default accent, standing in for "no artwork" wherever a fallback is exercised.
 const THEME_ACCENT: u32 = 0x00cb_a6f7;
 
-/// Catppuccin Mocha — the shipped default. What these tests are about is what the washes keep,
-/// which is everything: the theme reaches them only as the fallback for a set with no seeds at all.
+/// Catppuccin Mocha — the shipped default, reaching the washes only as the fallback for a set with
+/// no seeds at all.
 fn mocha() -> ThemeTokens {
     ThemeTokens {
         base: 0x001e_1e2e,
@@ -30,24 +30,22 @@ const MANY_HUES: [Option<u32>; SEED_COUNT] = [
 /// A monochrome sleeve: one seed, the rest owed to the filling rule.
 const ONE_HUE: [Option<u32>; SEED_COUNT] = [Some(0x00c0_3030), None, None, None];
 
-/// Side of every fixture buffer. Spelled so a test can hand [`buffer_of`] exactly this many
-/// entries and place rows verbatim rather than cycling.
+/// Side of every fixture buffer — named so a test can place [`buffer_of`] rows verbatim rather than
+/// cycling.
 const FIXTURE_SIDE: u32 = 32;
 
 fn hct_of(rgb: u32) -> Hct {
     Hct::new(Argb::from_u32(rgb))
 }
 
-/// Smallest signed distance between two hue angles, so a rotation across 0° is measured as the
-/// step it is rather than as ~360.
+/// Smallest distance between two hue angles, so a rotation across 0° measures as the step it is.
 fn hue_gap(a: f64, b: f64) -> f64 {
     let raw = (a - b).abs() % 360.0;
     raw.min(360.0 - raw)
 }
 
-/// A buffer of `colours`, cycled one per row. At [`FIXTURE_SIDE`] entries the cycle is the identity
-/// and the caller is stating each row, which is how the weighted fixtures below get their
-/// proportions.
+/// A buffer of `colours`, cycled one per row. At [`FIXTURE_SIDE`] entries the cycle is the identity,
+/// which is how the weighted fixtures below get their proportions.
 fn buffer_of(colours: &[[u8; 3]]) -> SharedPixelBuffer<Rgb8Pixel> {
     let side = FIXTURE_SIDE as usize;
     let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(FIXTURE_SIDE, FIXTURE_SIDE);
@@ -73,9 +71,8 @@ fn greyscale_ramp() -> SharedPixelBuffer<Rgb8Pixel> {
 // --- the seed list ------------------------------------------------------------
 
 /// The finding the extractor was swapped for. `Score` discards every cluster under its own chroma
-/// cutoff, so a neutral sleeve survives it once — leaving three of four washes invented by hue
-/// rotation off the fourth, at a third of its strength. Median cut has no such cutoff and answers
-/// with the greys the record is made of.
+/// cutoff, so a neutral sleeve survives it once and three of four washes end up invented by hue
+/// rotation off the fourth. Median cut has no cutoff and answers with the greys the record is.
 #[test]
 fn a_greyscale_ramp_yields_a_full_set_of_seeds() {
     let seeds = population_seeds(greyscale_ramp().as_bytes(), SEED_COUNT);
@@ -116,9 +113,9 @@ fn the_first_seed_is_what_the_cover_mostly_is() {
     );
 }
 
-/// The two shapes that aren't a cover, and the crate answers them the same way unless one is
-/// caught: a near-white sleeve is filtered down to nothing, and so is an empty buffer, but only the
-/// second means "there is no artwork here".
+/// The two shapes that aren't a cover, which the crate answers alike unless one is caught: a
+/// near-white sleeve filters down to nothing and so does an empty buffer, but only the second means
+/// "there is no artwork here".
 #[test]
 fn an_empty_buffer_and_a_white_one_are_told_apart() {
     let empty = SharedPixelBuffer::<Rgb8Pixel>::new(0, 0);
@@ -128,9 +125,9 @@ fn an_empty_buffer_and_a_white_one_are_told_apart() {
     assert_eq!(white, vec![0x00ff_ffff], "a white cover answers with its own white");
 }
 
-/// Material You's seed keeps `Score`, so it keeps needing the dominant handed over as the
-/// fallback — the crate's own answer on a colourless sleeve is Google Blue, a brand colour rather
-/// than a fact about this record.
+/// Material You's seed keeps `Score`, so it keeps needing the dominant handed over as the fallback —
+/// the crate's own answer on a colourless sleeve is Google Blue, a brand colour rather than a fact
+/// about this record.
 #[test]
 fn a_monochrome_sleeve_seeds_from_its_own_grey() {
     let seed = extract_source_argb_from_rgb8(&buffer_of(&[[90, 90, 90], [120, 120, 120]]));
@@ -147,10 +144,9 @@ fn a_monochrome_sleeve_seeds_from_its_own_grey() {
 
 /// A measured wash is the quantizer's colour, bit for bit, in the quantizer's own slot.
 ///
-/// **The pin the whole arm rests on.** Every pass that ever sat between the two — a tone band, a
-/// hue seating — took the record's value structure with it: the band merged every wash above it
-/// onto one tone, so a four-colour sleeve painted as two and the surface read as a tint. Anything
-/// reintroduced between `population_seeds` and here has to argue with this test.
+/// **The pin the whole arm rests on**: a tone band or a hue seating between `population_seeds` and
+/// here takes the record's value structure with it, merging every wash above the bound onto one tone
+/// so a four-colour sleeve paints as two.
 #[test]
 fn a_measured_wash_is_the_seed_untouched() {
     let painted = tints(MANY_HUES, &mocha());
@@ -168,9 +164,8 @@ fn a_measured_wash_is_the_seed_untouched() {
 }
 
 /// The paint takes three where the quantizer is asked for four, and the two counts are not one
-/// number. Median cut splits to a target, so asking it for three gives different boxes rather than
-/// these minus the last. That the paint is a *subset* is a `const _: () = assert!` in
-/// `ui::aurora`; this is that it is the front.
+/// number — median cut splits to a target. That the paint is a *subset* is a `const _: () = assert!`
+/// in `ui::aurora`; this is that it is the front.
 #[test]
 fn the_paint_takes_the_quantizers_first_three() {
     assert_eq!(tints(MANY_HUES, &mocha()).len(), WASH_COUNT);
@@ -230,13 +225,9 @@ fn the_fills_fan_out_around_the_seed() {
     }
 }
 
-/// A black-and-white record gets a black-and-white backdrop.
-///
-/// This used to take a chroma floor scaled by how colourful the whole image measured, because
-/// `Score` handed over seeds carrying a few points of chroma either way and a wash covering the
-/// surface needs very little of it to read as a colour. **The property is now the extractor's**:
-/// what comes back is what the cover is made of, so a grey record yields greys and nothing lifts
-/// them. Run end to end rather than off recorded seeds — the claim is about the pair.
+/// A black-and-white record gets a black-and-white backdrop. The chroma floor this used to need went
+/// with `Score` — **the property is the extractor's now**, so a grey record yields greys and nothing
+/// lifts them. Run end to end rather than off recorded seeds, the claim being about the pair.
 #[test]
 fn a_greyscale_cover_stays_grey() {
     let mut seeds = [None; SEED_COUNT];
@@ -252,13 +243,10 @@ fn a_greyscale_cover_stays_grey() {
     }
 }
 
-/// A cover of two colours must come out as two colours.
-///
-/// An earlier pass pulled every seed into a 40° arc of the dominant, on the reasoning that
-/// overlapping washes composite in sRGB and its midpoint between distant hues is grey. Measured on
-/// a real blue-and-red sleeve, that turned seeds at 231°/17°/304° into 231°/271°/270° — three
-/// violets, the record's most vivid colour discarded. Separation is the Slint side's job, by
-/// giving each sweep an edge; the solve's job is to hand over what the artwork had.
+/// A cover of two colours must come out as two colours. An earlier pass pulled every seed into a 40°
+/// arc of the dominant, which on a real blue-and-red sleeve turned 231°/17°/304° into 231°/271°/270°
+/// — three violets, the record's most vivid colour discarded. Separating them is the Slint side's
+/// job, by giving each sweep an edge; the solve's is to hand over what the artwork had.
 #[test]
 fn a_multi_coloured_cover_keeps_its_colours_apart() {
     let blue_and_red = [
@@ -309,12 +297,10 @@ fn no_seeds_at_all_falls_back_to_the_theme_accent() {
     }
 }
 
-/// The accent stands in as **two seeds**, not as one and not as a rotation origin.
-///
-/// Left as the origin, every wash comes out at the fill weight and the surface reads as unpainted
-/// `Theme.base`; seated alone, the pair the sweeps need to have any value structure is a fan of two
-/// ghosts and the band reads as a flat tint. Asserted against the genre shape rather than against
-/// the numbers, since what is claimed is that the two coverless heroes are one case.
+/// The accent stands in as **two seeds**, not as one and not as a rotation origin: left as the
+/// origin every wash comes out at the fill weight and the surface reads as unpainted `Theme.base`,
+/// seated alone it reads as a flat tint. Asserted against the genre shape rather than the numbers,
+/// the claim being that the two coverless heroes are one case.
 #[test]
 fn an_empty_set_washes_the_pair_a_genre_hands_over() {
     let art_less = tints([None; SEED_COUNT], &mocha());

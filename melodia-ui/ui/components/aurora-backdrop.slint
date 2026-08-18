@@ -1,28 +1,22 @@
 import { Theme } from "../theme.slint";
 
 // One of the three sweeps: album colour along one edge of the surface, gone by 70.71% of the
-// gradient line. The three headings — 127°, 217°, 336° — are near-orthogonal, so each sweep owns a
-// different edge and one corner is left showing the floor. That asymmetry is the whole effect: four
-// symmetric corner washes cover every corner about equally and average to one flat tone whatever
-// the record was.
+// gradient line. The headings are near-orthogonal, so each owns a different edge and one corner is
+// left showing the floor — that asymmetry is the whole effect, four symmetric corner washes
+// averaging to one flat tone whatever the record was. They are CSS-convention degrees needing no
+// conversion, Slint's `line_for_angle` taking the same magic-corner construction.
 //
 // **Two stops, the far one this tint at zero alpha — never the `transparent` keyword.** FemtoVG
 // interpolates stops in straight RGBA, so fading to rgba(0,0,0,0) drags the colour toward black and
 // the ramp darkens instead of thinning.
-//
-// Headings are CSS-convention degrees needing no conversion — Slint's `line_for_angle` adds 90° and
-// takes the same magic-corner construction — so 70.71% is the same fraction of the same line.
 component AuroraSweep inherits Rectangle {
     in property <color> tint;
     in property <angle> heading;
     in property <bool> shown: true;
 
-    // 0.55 at the near edge. `transparentize` multiplies, so a synthesized wash keeps the lower
-    // weight `ui::aurora` gave it rather than overriding it.
-    //
-    // Both arms one type at one stop count, the only shape `Brush::interpolate` blends
-    // stop-for-stop. Safe to `animate` where a leaf's brush usually isn't: Rust writes the tint
-    // discretely, so no host can restart the binding.
+    // `transparentize` multiplies, so a synthesized wash keeps the lower weight `ui::aurora` gave it.
+    // Both arms one type at one stop count, the only shape `Brush::interpolate` blends stop-for-stop.
+    // Safe to `animate`: Rust writes the tint discretely, so nothing can restart the binding.
     background: root.shown
         ? @linear-gradient(root.heading, root.tint.transparentize(0.45) 0%, root.tint.transparentize(1.0) 70.71%)
         : @linear-gradient(root.heading, root.tint.transparentize(1.0) 0%, root.tint.transparentize(1.0) 70.71%);
@@ -30,16 +24,13 @@ component AuroraSweep inherits Rectangle {
 }
 
 // The artwork-derived backdrop: three broad sweeps of album colour over the theme's own base, and a
-// grain of noise. Nothing caps the washes, so a surface keeps the record's value structure and
-// reads as light falling across a plane rather than as a tint; `ui::aurora` argues the trade.
+// grain of noise. Nothing caps the washes, so a surface keeps the record's value structure and reads
+// as light falling across a plane rather than as a tint; `ui::aurora` argues the trade.
 //
-// **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom. They exist
-// so this file imports no global: one mount reads the `Player` tier and the others `HeroBackdrop`,
-// and naming either would tie the component to one. **`base-start` / `base-end` both carry
-// `Theme.base` on this arm and still may not read it here**: the tier is what `MosaicHeroTile`
-// fills its square from, so a component reaching past it is how the square and the surface under
-// it start disagreeing. The pair stays two properties because the blur arm behind the cross-fade
-// solves a real ramp into them.
+// **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom, so this file
+// imports no global: one mount reads the `Player` tier and the others `HeroBackdrop`. That holds
+// even for `base-start` / `base-end`, which carry `Theme.base` on this arm; they stay two properties
+// because the blur reads the same pair and solves a real ramp into it.
 export component AuroraBackdrop inherits Rectangle {
     in property <color> base-start: #2b2135;
     in property <color> base-end: #14101a;
@@ -51,12 +42,9 @@ export component AuroraBackdrop inherits Rectangle {
     // nothing, so a mount without one degrades to undithered gradients rather than to a hole.
     in property <image> dither;
 
-    // Whether this stack is the one on screen — `HeroBlurBackdrop.shown`'s twin, and the same two
-    // questions ANDed: the arm the setting and the artwork picked, and (`LibraryTabBand` alone)
-    // whether the band is painting a hero at all. The two stacks mount together and cross-fade
-    // through this rather than being swapped, an unmounted stack having nothing to fade from.
-    // **Discrete bool** — a leaf can't tell an eased input from a stepped one, and a float would
-    // restart every binding below per frame.
+    // Whether the host is painting a hero at all — `HeroBlurBackdrop.shown`'s twin, and drained
+    // through rather than unmounted, an unmounted stack having nothing to fade from. **Discrete
+    // bool** — a float would restart every binding below per frame.
     in property <bool> shown: true;
 
     clip: true;
@@ -67,8 +55,7 @@ export component AuroraBackdrop inherits Rectangle {
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
     // **Declared back to front.** Slint paints the last child on top, so tint-3 goes down first and
-    // tint-1 — the colour the artwork most is — lands over both. Source-over throughout, no blend
-    // mode.
+    // tint-1 — the colour the artwork most is — lands over both.
     AuroraSweep {
         width: 100%;
         height: 100%;
@@ -95,12 +82,9 @@ export component AuroraBackdrop inherits Rectangle {
     // scales the tile before tiling it, turning one texel into a block tens of pixels across. Only
     // `preserve` maps a source texel to a physical pixel, the frequency dither has to run at to
     // disappear; `pixelated` so filtering can't average it back toward the flat colour it breaks up.
-    // Alpha lives in the tile rather than in `opacity`, which would rasterize this into a layer.
-    //
-    // **Behind the `if` rather than eased with everything else** — with the alpha in the tile there
-    // is nothing to fade, so unmounting is the only way to stop it, and a one-level grain is the one
-    // layer that can vanish without being seen to. Ungated it would grain the blur through every
-    // crossing.
+    // Alpha lives in the tile rather than in `opacity`, which would rasterize this into a layer —
+    // and is why the grain unmounts rather than easing out with everything else, there being nothing
+    // to fade. Ungated it would grain the blur through every crossing.
     if root.shown: Image {
         x: 0;
         y: 0;

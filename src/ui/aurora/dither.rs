@@ -8,9 +8,9 @@
 use slint::{Rgba8Pixel, SharedPixelBuffer};
 
 /// Side of the noise tile. Big enough that the repeat carries no structure to lock onto — the
-/// generator wraps, so the tile is seamless — and small enough not to be worth measuring.
-/// `u32` because that is the buffer's own unit — the generator's one index cast reads better than
-/// a fallible conversion with no failing case.
+/// generator wraps, so the tile is seamless — and small enough not to be worth measuring. `u32`
+/// because that is the buffer's own unit, and the generator's one index cast reads better than a
+/// fallible conversion with no failing case.
 const DITHER_TILE_SIDE: u32 = 64;
 
 const DITHER_TILE_PIXELS: usize = (DITHER_TILE_SIDE * DITHER_TILE_SIDE) as usize;

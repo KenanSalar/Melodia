@@ -136,10 +136,9 @@ fn the_hero_height_is_derived_from_what_it_stacks() {
 }
 
 /// `CoverMosaic` lays a live 2×2 out in Slint, and this banner used to draw one — four lazy
-/// per-tile lookups beside a second composition of the same four covers for the backdrop.
-/// It draws one composed collage now, and this is what stops that branch returning: the
-/// picker is the component's whole remaining audience, and it wants the *live* form because
-/// its tiles follow a selection nothing has composed yet.
+/// per-tile lookups beside a second composition of the same covers for the backdrop. It draws one
+/// composed collage now, and this stops that branch returning: the picker is the component's whole
+/// remaining audience, and it wants the live form, its tiles following an uncomposed selection.
 #[test]
 fn the_cover_mosaic_is_the_pickers_alone() {
     let mounts: Vec<String> = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES)

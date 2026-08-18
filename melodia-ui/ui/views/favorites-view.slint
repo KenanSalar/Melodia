@@ -80,11 +80,10 @@ export component FavoritesView inherits Rectangle {
                 && Favorites.track-count == 0;
             empty-copy: @tr("No favorites yet");
 
-            // Clamped, unlike every other reader of this count: `MosaicHeroTile` picks its
-            // fallback glyph on `== 0`, so the not-yet-fetched `-1` would draw the generic
-            // placeholder note where the page's own glyph belongs — which is what a section
-            // re-enter shows while the collage, cleared on the same tick this count is, is
-            // still empty.
+            // Clamped, unlike every other reader of this count: `MosaicHeroTile` picks its fallback
+            // glyph on `== 0`, so the not-yet-fetched `-1` draws the generic placeholder note where
+            // the page's own glyph belongs — what a section re-enter shows while the collage, cleared
+            // on the same tick this count is, is still empty.
             mosaic-count: max(Favorites.track-count, 0);
             mosaic-cover: Favorites.cover;
             empty-glyph: "favorite";

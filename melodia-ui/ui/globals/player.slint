@@ -46,11 +46,10 @@ export global Player {
 
     // The Now Playing backdrop colour set, written together by the `track_change` subscriber from
     // `ui::backdrop`, which answers twice over: on the blur these take their *hue* from the accent
-    // quantized out of the cover (`Theme.accent` when art-less) and their *tone* from a solve
-    // against how bright it measured; on the aurora they are the theme's own base under a neutral
-    // ink, nothing bounding the washes at all. **Read the tier, never a `Theme.*` brush** — which
-    // of the two is live is `backdrop::kind`'s answer and no consumer's. The literal defaults exist
-    // for the same reason and are never taken.
+    // quantized out of the cover (`Theme.accent` when art-less) and their *tone* from a solve against
+    // how bright it measured; on the aurora they are the theme's own base under a neutral ink.
+    // **Read the tier, never a `Theme.*` brush** — which arm is live is `backdrop::kind`'s answer and
+    // no consumer's. The literal defaults exist for the same reason and are never taken.
 
     // Alpha baked in. Solved so the *composited* backdrop lands in a known dark band whatever
     // the cover, which is what lets one light foreground be correct on all of them.
@@ -62,13 +61,11 @@ export global Player {
     in-out property <color> np-floor-start: #2b2135;
     in-out property <color> np-floor-end: #14101a;
 
-    // The aurora's washes: the cover's own colours off the same quantize as everything above, with
-    // nothing done to them — so what survives here is the record's value structure, not one tone
-    // with three hues on it. A track with no cover substitutes the accent, seated to a wash tone and
-    // paired with a deeper sibling, that value structure being exactly what it has none of.
-    // `color` for the floor's gradient-stop reason, each carrying its own weight in the alpha.
-    // **The count matches `ui::aurora::WASH_COUNT`** — a brush animates stop-for-stop only against
-    // one of the same type and length, so a varying count would cross through a flat solid mid-fade.
+    // The aurora's washes: the cover's own colours off the same quantize, with nothing done to them,
+    // so what survives is the record's value structure rather than one tone wearing three hues. A
+    // coverless track substitutes the accent seated to a wash tone plus a deeper sibling; `color`
+    // carries each weight in its alpha, for the floor's gradient-stop reason. **The count matches
+    // `ui::aurora::WASH_COUNT`** — a brush animates stop-for-stop only against a matching one.
     in-out property <color> np-tint-1: #3a2d4a;
     in-out property <color> np-tint-2: #2d3a4a;
     in-out property <color> np-tint-3: #4a2d3a;
@@ -83,13 +80,10 @@ export global Player {
     // and can't lift a near-black accent at all.
     in-out property <brush> np-accent-bright: #cba6f7;
 
-    // Derived here so surfaces meant to match can't drift. Genuine one-offs stay inline;
-    // naming them would move the number without sharing it.
-    //
-    // **`transparentize`, not `with-alpha`** — it multiplies, so all three inherit whatever alpha
-    // the tier carries: opaque on the blur, partial on the aurora, where the wash reading through
-    // is the whole point. Setting alpha here would pin them and leave the pills heavier than the
-    // glyphs they sit behind.
+    // Derived here so surfaces meant to match can't drift; genuine one-offs stay inline.
+    // **`transparentize`, not `with-alpha`** — it multiplies, so all three inherit whatever alpha the
+    // tier carries: opaque on the blur, partial on the aurora. Pinning alpha here would leave the
+    // pills heavier than the glyphs they sit behind.
     out property <brush> np-accent-pill: root.np-accent-bright.transparentize(0.84);
     out property <brush> np-accent-disc-hover: root.np-accent-bright.transparentize(0.7);
     out property <brush> np-accent-dim: root.np-accent-bright.transparentize(0.4);

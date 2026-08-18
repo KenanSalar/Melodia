@@ -41,12 +41,9 @@ pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
 /// Slint-declared default, which is the same value.
 ///
 /// Returns whether the aurora arm is live, read back off the property so the failed-read arm
-/// answers with what boot actually raised. The writer reporting what it wrote, not a second
-/// reader — `ui::backdrop::kind` stays the only one, and this crate can't name it anyway.
-///
+/// answers with what boot raised — the writer reporting what it wrote, not a second reader.
 /// `#[must_use]` because dropping the answer is the live mutation: the dither install downstream is
-/// the aurora's alone, and a bare call statement would compile clean past it (`must_use_candidate`
-/// is off workspace-wide, and `unused_results` isn't in the `unused` group).
+/// the aurora's alone, and a bare call statement would compile clean past it.
 #[must_use]
 pub fn apply_backdrop_style(
     app: &AppWindow,
@@ -59,13 +56,12 @@ pub fn apply_backdrop_style(
     theme.get_aurora_backdrop()
 }
 
-/// One tile for the process, shared by both aurora tiers: it answers to the renderer's
-/// lack of gradient dithering rather than to any artwork, so nothing later rewrites it.
-/// The `Image` is `Rc`-backed, so the second global clones a handle, not a buffer.
+/// One tile for the process, shared by both aurora tiers: it answers to the renderer's lack of
+/// gradient dithering rather than to any artwork, so nothing later rewrites it. The `Image` is
+/// `Rc`-backed, so the second global clones a handle, not a buffer.
 ///
-/// **The aurora arm's alone** — the tile sits behind `AuroraBackdrop`'s own `shown` gate, so on
-/// the blur arm it is a generator run and a buffer nothing draws. Skipping it leaves the unset
-/// `image` that component already degrades to.
+/// **The aurora arm's alone** — on the blur arm it is a generator run and a buffer nothing draws,
+/// and skipping it leaves the unset `image` `AuroraBackdrop` already degrades to.
 pub fn install_backdrop_dither(app: &AppWindow) {
     let tile = slint::Image::from_rgba8(ui::aurora::dither_tile());
     app.global::<Player>().set_np_dither(tile.clone());

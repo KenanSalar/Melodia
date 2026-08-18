@@ -487,13 +487,10 @@ fn no_leave_clears_the_chips_behind_the_macro() {
     );
 }
 
-/// `themes::apply` is reached only through `ui::appearance::apply_palette`.
-///
-/// Both artwork-derived tiers are snapshots of the palette that was live when a hero or a track
-/// landed, so a pick reaches neither on its own. The band recovers on the next drill; Now Playing
-/// doesn't recover at all, its three publish paths all deduping on `applied_track_id`. The wrapper
-/// is what pairs the write with the two re-solves, and a fourth caller reaching past it is a
-/// palette that half-applies — visible only on the aurora, and only until you navigate.
+/// `themes::apply` is reached only through `ui::appearance::apply_palette`. Both artwork-derived
+/// tiers are snapshots of the palette live when a hero or a track landed, so a pick reaches neither
+/// on its own — and Now Playing never recovers, its three publish paths all deduping on
+/// `applied_track_id`. The wrapper is what pairs the write with the two re-solves.
 #[test]
 fn the_palette_is_never_written_without_re_solving_the_backdrops() {
     /// Floor on the walk, so a broken corpus reads as a broken corpus.
@@ -531,13 +528,11 @@ fn the_palette_is_never_written_without_re_solving_the_backdrops() {
     }
 }
 
-/// Nothing derived from the chrome tier may *set* its alpha.
-///
-/// `with-alpha` replaces where `transparentize` multiplies, so a fill spelled that way discards
-/// whatever alpha `chrome` carries — which on the aurora is the neutral ink's, and the whole
-/// mechanism by which the wash reads through it. It looks right on the blur arm, where the tier is
-/// opaque and the two spellings agree. Every tier is held, not just the chrome's: the lettering,
-/// its pill and both body-text weights each carry an alpha Rust solved per arm.
+/// Nothing derived from the chrome tier may *set* its alpha. `with-alpha` replaces where
+/// `transparentize` multiplies, so a fill spelled that way discards whatever alpha `chrome` carries
+/// — on the aurora the neutral ink's, and the whole mechanism by which the wash reads through. It
+/// looks right on the blur arm, where the tier is opaque and the two spellings agree. Every tier is
+/// held, not just the chrome's: each carries an alpha Rust solved per arm.
 #[test]
 fn no_fill_derived_from_the_chrome_tier_sets_its_alpha() {
     const TIERS: [&str; 12] = [
@@ -570,12 +565,10 @@ fn no_fill_derived_from_the_chrome_tier_sets_its_alpha() {
     }
 }
 
-/// Every coverless hero square paints from `placeholder`, and none of them from `chrome`.
-///
-/// The two tiers hold the same value on the blur, so reverting a mount builds, passes review and is
-/// wrong only under a setting CI never turns on — where `chrome` is a neutral ink and the square
-/// becomes a pale slab with a lamp on it. Spelled as a per-file pair because the fill and the glyph
-/// are separate bindings and either one alone is the visible half of the bug.
+/// Every coverless hero square paints from `placeholder`, and none of them from `chrome`. The two
+/// tiers hold the same value on the blur, so reverting a mount builds, passes review and is wrong
+/// only under a setting CI never turns on — where `chrome` is a neutral ink and the square becomes
+/// a pale slab with a lamp on it. A per-file pair, fill and glyph being separate bindings.
 #[test]
 fn every_coverless_hero_square_paints_from_the_placeholder_tier() {
     const MOUNTS: [&str; 3] = [
@@ -614,13 +607,11 @@ fn every_coverless_hero_square_paints_from_the_placeholder_tier() {
     assert_eq!(seen, MOUNTS.len(), "a mount was renamed and this pin stopped reading it");
 }
 
-/// Genre Detail hands over its two hashed pairs the right way round.
-///
-/// `genre_accent` dims the hero pair so the blur's scrim leaves the foreground legible, and leaves
-/// the tile pair saturated for the square and the grid card. The aurora has no scrim, so it washes
-/// the saturated one. Swap them and both arms still build and still paint a plausible band — dull
-/// sweeps under the aurora, a floor too bright for its own solve under the blur — which is the
-/// shape of mistake no runtime assertion here can reach, both fields being `(u32, u32)`.
+/// Genre Detail hands over its two hashed pairs the right way round. `genre_accent` dims the hero
+/// pair so the blur's scrim leaves the foreground legible and leaves the tile pair saturated for the
+/// square and the grid card; the aurora has no scrim, so it washes the saturated one. Swap them and
+/// both arms still paint a plausible band — dull sweeps, or a floor too bright for its own solve —
+/// which no runtime assertion here can reach, both fields being `(u32, u32)`.
 #[test]
 fn the_genre_hero_washes_the_saturated_pair_and_floors_on_the_dimmed_one() {
     let stops = GENRE_DETAIL
@@ -649,12 +640,10 @@ fn the_genre_hero_washes_the_saturated_pair_and_floors_on_the_dimmed_one() {
     }
 }
 
-/// The genre's arm is `backdrop::kind`'s answer, like every other hero's.
-///
-/// It reaches `backdrop::solve` directly, having no sample for `BackdropSample::solve` to pick the
-/// arm from, so nothing above it can catch a branch that stopped branching — and dropping one is
-/// how the genre spent every release before this one painting the blur under a setting the five
-/// other heroes honoured.
+/// The genre's arm is `backdrop::kind`'s answer, like every other hero's. It reaches
+/// `backdrop::solve` directly, having no sample for `BackdropSample::solve` to pick the arm from, so
+/// nothing above it can catch a branch that stopped branching — which is how the genre spent a
+/// release painting the blur under a setting the five other heroes honoured.
 #[test]
 fn the_genre_hero_picks_its_arm_off_the_setting() {
     let body = HERO_BACKDROP

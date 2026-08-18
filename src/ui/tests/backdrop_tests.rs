@@ -483,13 +483,11 @@ fn a_white_cover_now_clears_the_non_text_bar() {
 
 // --- the aurora's washes ------------------------------------------------------
 //
-// **There is no cap to test any more, and that is the arm's whole design.** What used to live here
-// — a band `wash_cap` returned, and a walk over every pixel where two washes meet asserting the
-// theme's ink still cleared its bar — was the machinery that flattened the surface: holding the
-// composite inside a known band means holding every wash above that band on one tone. The washes
-// are the quantizer's own answer now, so contrast against `Theme.text` is the cover's to decide.
-//
-// What still carries a guarantee is the neutral chrome tier, pinned below.
+// **There is no cap to test any more, and that is the arm's whole design.** The band `wash_cap`
+// returned, and the overlap walk asserting the theme's ink still cleared its bar, were the machinery
+// that flattened the surface: holding the composite inside a band means holding every wash above it
+// on one tone. Contrast against `Theme.text` is the cover's to decide now; the neutral chrome tier
+// below is what still carries a guarantee.
 
 /// The two arms answer different questions, so nothing may leak between them. The blur half is
 /// asserted alongside so the pair can't both pass on a solve that ignored its argument.
@@ -527,12 +525,10 @@ fn the_aurora_arm_publishes_the_theme_and_the_blur_arm_solves() {
 
 /// The aurora's chrome is neutral ink at partial alpha, and takes its polarity from the theme.
 ///
-/// **Arrived at the hard way.** Two attempts to derive this tier from the artwork shipped and were
-/// reverted: the dominant seed is one of four washes and argues with the other three, and the hue
-/// they composite to is a mean nothing on screen actually is. A neutral ink lets the wash it
-/// happens to sit on supply the colour, which is right everywhere on the surface at once — and the
-/// alpha is the whole mechanism, so an opaque one would be the bug rather than a tuning miss.
-///
+/// **Arrived at the hard way**: two attempts to derive this tier from the artwork shipped and were
+/// reverted — the dominant seed is one of four washes and argues with the other three, and the hue
+/// they composite to is a mean nothing on screen actually is. A neutral ink lets whichever wash it
+/// sits on supply the colour, so the alpha is the mechanism and an opaque one would be the bug.
 /// Polarity comes off base-versus-ink, not a variant id: two of the six palettes are generated at
 /// runtime and have none to match on.
 #[test]
@@ -563,10 +559,8 @@ fn the_auroras_chrome_is_neutral_ink_the_wash_reads_through() {
 }
 
 /// What holds across every retune of the neutral weights, which is deliberately not their order.
-///
 /// Two things are structural: no weight may go opaque, the wash reading through being the whole
-/// mechanism, and a chip's pill may not reach the lettering on it, a backing that outshines its own
-/// label having stopped being a backing. Everything else about how the weights rank is taste, so
+/// mechanism, and a chip's pill may not reach the lettering on it. Everything else is taste, so
 /// pinning it here would only make a tune fail a test that agreed with it.
 #[test]
 fn no_neutral_weight_goes_opaque_or_outshines_what_sits_on_it() {
@@ -610,13 +604,10 @@ fn no_neutral_weight_goes_opaque_or_outshines_what_sits_on_it() {
     assert!(blur.chip_fill_alpha < blur.chrome_alpha, "the blur's pill reached its glyph weight");
 }
 
-/// An entry with no artwork takes the arm the setting picked, like every other entry.
-///
-/// It used to keep the blur under either, the aurora's only fallback then being fills with no seed
-/// behind them; `aurora::tints` takes the accent as that seed now, so the surface has something to
-/// wash and the tiers under it are the theme's. Both arms are asserted, since a guard put back
-/// would leave the aurora arm solving the blur's colours and nothing else would notice — the mount
-/// gate that used to agree with it is gone.
+/// An entry with no artwork takes the arm the setting picked, like every other entry. It used to
+/// keep the blur under either, the aurora's only fallback then being fills with no seed behind them;
+/// `aurora::tints` takes the accent as that seed now. Both arms are asserted, since a guard put back
+/// would leave the aurora arm solving the blur's colours and nothing else would notice.
 #[test]
 fn an_entry_with_no_artwork_still_follows_the_setting() {
     let theme = mocha();
@@ -773,11 +764,9 @@ fn the_hero_text_defaults_match_hero_backdrop_slint() {
     }
 }
 
-/// One fallback set, spelled in three places, and all three have to agree.
-///
-/// The two globals are the tiers Rust publishes into and `AuroraBackdrop`'s inputs are what
-/// a mount that forgot one would paint — so a drift here shows only on the surface that
-/// hasn't been solved yet, which is the first frame of a cold open and nothing else.
+/// One fallback set, spelled in three places, and all three have to agree. The two globals are the
+/// tiers Rust publishes into and `AuroraBackdrop`'s inputs are what a mount that forgot one would
+/// paint, so a drift shows only on the first frame of a cold open.
 #[test]
 fn the_tint_defaults_agree_across_both_tiers_and_the_component() {
     const TINTS: [&str; WASH_COUNT] = ["#3a2d4a", "#2d3a4a", "#4a2d3a"];

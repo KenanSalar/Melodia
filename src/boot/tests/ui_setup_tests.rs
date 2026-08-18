@@ -46,15 +46,13 @@ fn the_persisted_nav_index_is_hydrated_before_any_view_is_wired() {
 /// The backdrop setting has to reach `Theme.aurora-backdrop` before `install_views`.
 ///
 /// Unlike its two siblings the anchors are in `main.rs`, the flag being raised there rather
-/// than inside `install_views` — which is the call it has to precede. `install_views` builds
-/// the three `DetailArtwork` tiers, and whether each holds a `BlurSpec` at all is decided from
-/// this flag; it then seeds all four detail views, whose fetches reach `ui::backdrop::kind`.
-/// Raise it later and the tiers blur every cover the aurora will never paint, while the first
-/// publish solves for the surface the mount isn't drawing.
+/// than inside `install_views` — the call it has to precede. `install_views` builds the three
+/// `DetailArtwork` tiers, whose `BlurSpec` is decided from this flag, then seeds all four
+/// detail views, whose fetches reach `ui::backdrop::kind`. Raise it later and the tiers blur
+/// every cover the aurora will never paint.
 ///
 /// The mutation this catches is the obvious one: moving the read into
-/// `hydrate_ui_from_settings`, where every other `settings.json`-to-Slint apply lives and
-/// which runs some thirty lines too late.
+/// `hydrate_ui_from_settings`, where every other `settings.json`-to-Slint apply lives.
 #[test]
 fn the_backdrop_setting_is_hydrated_before_the_views_are_installed() {
     let hydrations = MAIN.matches("apply_backdrop_style(").count();

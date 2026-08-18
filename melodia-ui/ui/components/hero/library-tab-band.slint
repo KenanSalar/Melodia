@@ -228,14 +228,9 @@ export component LibraryTabBand inherits Rectangle {
     out property <string> tip-label <=> header.tip-label;
     out property <bool> tip-visible <=> header.tip-visible;
 
-    // Behind everything else, and the setting alone: every hero has washes, a genre substituting
-    // its saturated hashed pair and an album with no cover the accent. Both stacks stay mounted and
-    // the loser goes transparent, so a change of arm cross-fades — which on this band is belt and
-    // braces, a detail only being swappable through the collapse below or through `reset`.
-    // The gradient floor shows through with no blur image, which is how Genre Detail paints on the
-    // blur arm. **`detail-open` is this band's alone** — the mosaic heroes never stop painting a
-    // hero, and nothing may ease *from* a tier the band wasn't painting, so the whole stack is
-    // gated on it; the setting term is the wrapper's, ANDed in there.
+    // Behind everything else; the gradient floor shows through with no blur image, which is how
+    // Genre Detail paints on the blur arm. **`detail-open` is this band's alone** — the mosaic heroes
+    // never stop painting a hero, and nothing may ease *from* a tier the band wasn't painting.
     HeroBackdropStack {
         x: 0; y: 0;
         width: 100%; height: 100%;
@@ -376,8 +371,7 @@ export component LibraryTabBand inherits Rectangle {
                             MaterialIcon {
                                 name: "auto_awesome";
                                 icon-size: 22px;
-                                // Multiplied, not set: `chrome` carries its own alpha on the
-                                // aurora arm.
+                                // Multiplied, not set: `chrome` carries its own alpha on the aurora.
                                 icon-color: HeroBackdrop.chrome.transparentize(1.0 - root.hero-t);
                                 filled: true;
                             }

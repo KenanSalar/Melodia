@@ -2,14 +2,13 @@ import { Theme } from "../../theme.slint";
 import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The artwork square both curated heroes draw. `cover` is a collage Rust composed from the
-// page's top four covers, so this draws one image where it once laid out a live 2×2 —
-// `media::artwork::compose_cover` owns that arrangement now, and the tile is an ordinary
-// single-artwork square. Mounted once, by `MosaicTabHero`.
+// The artwork square both curated heroes draw, mounted once by `MosaicTabHero`. `cover` is a collage
+// `media::artwork::compose_cover` composed from the page's top four, so this is an ordinary
+// single-artwork square rather than the live 2×2 it once laid out.
 //
-// **Every brush here is a `HeroBackdrop` tier, and none may become a `Theme.*` token.** The
-// tile sits *on* the hero — with no collage that's the dark gradient floor, where a light
-// theme's accent lands dark-on-dark.
+// **Every brush here is a `HeroBackdrop` tier, and none may become a `Theme.*` token.** The tile sits
+// *on* the hero — with no collage that's the dark gradient floor, where a light theme's accent lands
+// dark-on-dark.
 export component MosaicHeroTile inherits Rectangle {
     // Entries behind the collage. Zero means an empty *set*; a positive count with no cover
     // means a set whose entries carry no artwork, and the two get different glyphs.

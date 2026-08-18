@@ -1,25 +1,18 @@
 //! Publishes the hero band's solved colour set into the `HeroBackdrop` global.
 //!
-//! The thin half of [`crate::ui::backdrop`]: that module argues the colours and does
-//! the maths, this one takes the measurement its caller decoded off the cover and
-//! writes the answer. Six views share one global, so every hero opens by calling
-//! exactly one of these.
+//! The thin half of [`crate::ui::backdrop`]: that module argues the colours, this one writes the
+//! answer. Six views share one global, so every hero opens by calling exactly one of these, and the
+//! whole set goes out at once — scrim, floor, the three washes, chrome and both text tiers — so a
+//! hero and the Now Playing view answer identically.
 //!
-//! **Every hero has washes**, and they are the artwork's own wherever there is artwork: a genre
-//! substitutes its name-hashed pair through [`apply_gradient`], and anything else with no cover
-//! substitutes a seated accent pair inside [`aurora::tints`]. What the tiers over them are depends
-//! on the arm — the blur solves them off the cover's hue, the aurora takes the theme's own — and
-//! either way the set is a snapshot of the palette that was live when the hero opened, which is
-//! what [`republish_for_palette`] exists to refresh.
+//! **Every hero has washes**, the artwork's own wherever there is artwork: a genre substitutes its
+//! name-hashed pair through [`apply_gradient`], anything else coverless a seated accent pair inside
+//! [`aurora::tints`]. The set is a snapshot of the palette live when the hero opened, which is what
+//! [`republish_for_palette`] refreshes.
 //!
-//! **A band with no hero on it has none**, and that is [`reset`]'s whole difference from an
-//! art-less [`apply`]: it publishes [`aurora::idle_tints`] over [`backdrop::idle_backdrop`]'s
-//! floor, so a page waiting on its collage paints the surface rather than a colour it has not
-//! earned yet — on either arm.
-//!
-//! The whole set is published — scrim, gradient floor, the aurora's three washes,
-//! hue-carrying chrome and both text tiers — so a hero and the Now Playing view answer
-//! identically whichever backdrop the band is painting.
+//! **A band with no hero on it has none**, and that is [`reset`]'s whole difference from an art-less
+//! [`apply`]: it publishes [`aurora::idle_tints`] over [`backdrop::idle_backdrop`]'s floor, so a page
+//! waiting on its collage paints the surface rather than a colour it has not earned yet.
 
 use std::cell::Cell;
 
@@ -51,10 +44,9 @@ enum PublishedHero {
 /// Genre Detail's two name-hashed pairs, from [`crate::ui::genres::genre_accent`].
 ///
 /// Two, because the arms want different ones: the blur paints `floor` verbatim — the dimmed pair,
-/// picked so the scrim it solves leaves the foreground legible — where the aurora washes `wash`,
-/// the saturated pair the genre's own square and grid card paint, having no scrim for the dimming
-/// to survive. A struct rather than four arguments, two same-typed pairs being swappable in
-/// silence.
+/// picked so the scrim it solves leaves the foreground legible — where the aurora washes `wash`, the
+/// saturated pair the genre's own square and grid card paint, having no scrim for the dimming to
+/// survive. A struct rather than four arguments, two same-typed pairs being swappable in silence.
 #[derive(Clone, Copy)]
 pub(crate) struct GenreStops {
     pub floor: (u32, u32),
@@ -71,9 +63,9 @@ enum Floor {
     Own(u32, u32),
 }
 
-/// Solve and publish from a cover's measurement. An empty sample — no artwork, or a
-/// failed decode — takes the same path as every cover; what it falls back to on each arm, and why
-/// that isn't a guess, is on [`BackdropSample::solve`] and [`aurora::tints`].
+/// Solve and publish from a cover's measurement. An empty sample — no artwork, or a failed decode —
+/// takes the same path as every cover; what it falls back to on each arm is on
+/// [`BackdropSample::solve`] and [`aurora::tints`].
 pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
     // One read for both halves: the tier set, and the seed the washes fall back to.
     let theme = backdrop::theme_tokens(ui);
@@ -85,16 +77,13 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
 
 /// Re-solve the open hero against a palette that has just changed.
 ///
-/// Every tier here is derived from the live theme — the aurora's verbatim, the blur's only where a
-/// missing cover falls back to `Theme.accent` — and nothing else republishes: a hero is written at
-/// open time and holds until the next one. A new accent would otherwise reach the band only on the
-/// next drill, and the ink over an open hero would keep the *old* theme's tones against the base
-/// the new one paints.
+/// A hero is written at open time and holds until the next one, so without this a new accent would
+/// reach the band only on the next drill and the ink over an open hero would keep the *old* theme's
+/// tones against the base the new one paints.
 ///
 /// **The idle arm is what seeds the globals at boot.** `appearance::install` applies the persisted
-/// palette through `apply_palette`, which lands here before any hero has published — so the band a
-/// restored curated page comes up on is the theme's own base rather than `hero-backdrop.slint`'s
-/// declared placeholders.
+/// palette through `apply_palette`, which lands here before any hero has published — so a restored
+/// curated page comes up on the theme's own base rather than `hero-backdrop.slint`'s placeholders.
 pub(crate) fn republish_for_palette(ui: &AppWindow) {
     match PUBLISHED_HERO.get() {
         Some(PublishedHero::Artwork(sample)) => apply(ui, sample),
@@ -109,9 +98,8 @@ pub(crate) fn republish_for_palette(ui: &AppWindow) {
 /// whose name-hashed stops come from [`crate::ui::genres::genre_accent`].
 ///
 /// The washes are the saturated pair whichever arm runs — two opaque colours a quantizer could have
-/// answered with, so [`aurora::tints`] fans a third off them and needs no genre case. What the arms
-/// disagree about is the floor and the tiers over it, and the branch is here rather than at the call
-/// site because [`backdrop::kind`] is the only place allowed to ask which surface is mounted:
+/// answered with, so [`aurora::tints`] fans a third off them and needs no genre case. The arms
+/// disagree only about the floor and the tiers over it:
 ///
 /// - **Blur** — the dimmed pair verbatim as the floor, `stops.floor.0` doubling as the hue seed so
 ///   the chrome tier stays recognisably that genre's rather than reverting to the theme accent.
@@ -134,13 +122,11 @@ pub(crate) fn apply_gradient(ui: &AppWindow, stops: GenreStops) {
 }
 
 /// Publish the idle set — no hero is painting, so the band takes the surface itself: **no washes at
-/// all**, over a floor borrowing nothing from an entry that has not arrived. What that floor is per
-/// arm is [`backdrop::idle_backdrop`]'s to answer.
+/// all**, over [`backdrop::idle_backdrop`]'s floor.
 ///
-/// Deliberately not [`apply`] with an empty sample. That is a different state — a hero that *has*
-/// opened and has nothing to quantize — and both its arms reach for the accent, which on a teardown
-/// is a colour the next surface has not earned: a curated banner wore it for the length of its
-/// collage compose and a detail's grow-in wore it while the next cover decoded.
+/// Deliberately not [`apply`] with an empty sample. That is a hero that *has* opened with nothing to
+/// quantize, and both its arms reach for the accent — a colour the next surface has not earned. A
+/// curated banner wore it for the length of its collage compose.
 pub(crate) fn reset(ui: &AppWindow) {
     let theme = backdrop::theme_tokens(ui);
     let colors = backdrop::idle_backdrop(&theme, backdrop::kind(ui));

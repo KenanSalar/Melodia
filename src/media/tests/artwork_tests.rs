@@ -276,12 +276,10 @@ fn solid_source(
 /// of the tests' own also pins that it is honoured rather than quietly using [`COMPOSITE_SIZE`].
 const TEST_SIDE: u32 = 400;
 
-/// The four layouts, pinned against composed pixels. This is the arrangement `CoverMosaic`
-/// used to draw in Slint, and the collage is now the only place it is stated.
-///
-/// The sample points are spelled here rather than read off `COMPOSITE_LAYOUTS`: sampling the
-/// table the compose loop walks proves only that the loop honours it, and passes just as
-/// happily when two of its rows are swapped.
+/// The four layouts, pinned against composed pixels — the arrangement `CoverMosaic` used to draw in
+/// Slint, and the collage is now the only place it is stated. The sample points are spelled here
+/// rather than read off `COMPOSITE_LAYOUTS`: sampling the table the compose loop walks proves only
+/// that the loop honours it, and passes just as happily when two of its rows are swapped.
 #[test]
 fn each_layout_puts_every_source_in_its_own_rect() -> Result<(), AppError> {
     const COLOURS: [[u8; 3]; 4] = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0]];

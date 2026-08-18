@@ -21,12 +21,10 @@ const HERO_BLUR: &str = include_str!("../../../melodia-ui/ui/components/hero-blu
 /// The two stacks, by the name a host mounts them under.
 const STACKS: [&str; 2] = ["HeroBlurBackdrop", "AuroraBackdrop"];
 
-/// The files that choose between them, and the only ones allowed to mount either.
-///
-/// Two, not three: the two shared bands had the same twenty-five lines each and now mount
-/// `HeroBackdropStack`, which owns the pair on their behalf. Now Playing stays here because it
-/// reads `Player.np-*` rather than the `HeroBackdrop` tier the wrapper is bound to — that split is
-/// the whole reason the stacks take their colours as inputs.
+/// The files that choose between them, and the only ones allowed to mount either. Two, not three:
+/// the two shared bands mount `HeroBackdropStack`, which owns the pair on their behalf. Now Playing
+/// stays here because it reads `Player.np-*` rather than the `HeroBackdrop` tier the wrapper is
+/// bound to — that split is the whole reason the stacks take their colours as inputs.
 const SITES: [&str; 2] = ["views/now-playing-view.slint", WRAPPER];
 
 /// The tier-bound site, spelled apart from its sibling because one pin below is about this file
@@ -77,15 +75,13 @@ fn the_shared_backdrop_rides_one_duration() {
     );
 }
 
-/// The stack defaults to shown, and every layer it paints drains with that gate.
+/// The stack defaults to shown, and every layer it paints drains with that gate. Defaulted the other
+/// way a mount that passes nothing comes up transparent and stays there — on Genre Detail's, the one
+/// backdrop with no blur over it, that is the whole banner. Both sites pass it today, so this is the
+/// third mount's answer rather than theirs.
 ///
-/// The default is what a mount that passes nothing gets, and the other way round it comes up
-/// transparent and stays there — on Genre Detail's, the one backdrop with no blur over it, that
-/// is the whole banner. Both sites do pass it now, so this is the third mount's answer rather
-/// than theirs.
-///
-/// **The two arms are checked one at a time**, an inverted ternary being the same failure
-/// as an inverted default and reading correctly at a glance.
+/// **The two arms are checked one at a time**, an inverted ternary being the same failure as an
+/// inverted default and reading correctly at a glance.
 #[test]
 fn the_stack_defaults_to_shown_and_drains_every_layer() {
     let code = code(HERO_BLUR);
@@ -154,12 +150,11 @@ fn the_blur_stack_names_no_global() {
 
 /// Each site mounts each stack exactly once, behind the branch of the setting that paints it.
 ///
-/// **A branch rather than a transparent loser**, and it is safe only because the condition cannot
-/// move: `Theme.aurora-backdrop` is an `in` property written once by
-/// `boot::ui_setup::apply_backdrop_style`, ahead of `install_views` and `app.show()`. What it buys
-/// is that the hidden arm stops painting — `Brush::is_transparent()` answers `false` for *every*
-/// gradient whatever its stop alphas, so a stack faded to nothing still has its path tessellated
-/// and the whole surface filled, every frame, on both arms.
+/// **A branch rather than a transparent loser**, safe only because the condition cannot move:
+/// `Theme.aurora-backdrop` is an `in` property written once by `boot::ui_setup::apply_backdrop_style`
+/// ahead of `install_views` and `app.show()`. What it buys is that the hidden arm stops painting —
+/// `Brush::is_transparent()` answers `false` for *every* gradient whatever its stop alphas, so a
+/// stack faded to nothing still has its path tessellated and the whole surface filled every frame.
 ///
 /// So what a site can get wrong is the sign: an arm behind the *other* branch reads perfectly and
 /// paints the wrong backdrop under the setting the author wasn't on. The local `aurora-shown`
@@ -200,13 +195,10 @@ fn every_backdrop_site_mounts_only_the_live_arm() {
     }
 }
 
-/// The wrapper forwards its host's `shown` to whichever stack is mounted.
-///
-/// This is the half of `LibraryTabBand`'s `detail-open` gate that left the band when the pair
-/// became one mount: the band passes the term, and the wrapper owes it to the live child. It is
-/// what survives the branch above and the reason `shown` is still an input at all — the mounted
-/// stack drains to its idle colours through it. Drop it and both files still read correctly —
-/// `library_tab_band_tests` sees only the band — while My Library paints a detail's backdrop over
+/// The wrapper forwards its host's `shown` to whichever stack is mounted — the half of
+/// `LibraryTabBand`'s `detail-open` gate that left the band when the pair became one mount, and the
+/// reason `shown` is still an input at all. Drop it and both files still read correctly,
+/// `library_tab_band_tests` seeing only the band, while My Library paints a detail's backdrop over
 /// its flat state.
 #[test]
 fn the_wrapper_forwards_its_hosts_gate_to_the_mounted_stack() {
@@ -232,11 +224,9 @@ fn the_wrapper_forwards_its_hosts_gate_to_the_mounted_stack() {
     }
 }
 
-/// No site gates the aurora on anything but the setting.
-///
-/// Each used to AND in a `has-tints` twin, back when an entry with no cover had no washes to lay;
-/// `aurora::tints` substitutes the accent as its seed now, so every hero has an aurora and a
-/// surviving gate would strand one site on the blur under a setting the other two honour.
+/// No site gates the aurora on anything but the setting. Each used to AND in a `has-tints` twin,
+/// back when an entry with no cover had no washes to lay; `aurora::tints` substitutes the accent as
+/// that seed now, so a surviving gate would strand one site on the blur.
 #[test]
 fn no_backdrop_site_gates_the_aurora_on_anything_but_the_setting() {
     let tree = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);

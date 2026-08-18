@@ -154,11 +154,10 @@ export component AppearanceSection inherits Rectangle {
             }
         }
 
-        // Restart-gated for the reason the two backdrops don't share a contract: the blur solves
-        // its tiers off the artwork where the aurora publishes the theme's own, so a live flip
-        // leaves one stack painting the other's colours. `boot::ui_setup::apply_backdrop_style`
-        // raises the flag before the artwork tiers exist, which is also what lets the blur half
-        // go unbuilt — the cost the setting is for.
+        // Restart-gated for the reason the two backdrops don't share a contract: the blur solves its
+        // tiers off the artwork where the aurora publishes the theme's own, so a live flip leaves one
+        // stack painting the other's colours. Raising the flag at boot is also what lets the blur
+        // half go unbuilt — the cost the setting is for.
         if root.any-above-backdrop && root.show-backdrop: SectionDivider {}
         if root.show-backdrop: SettingRow {
             icon: "tonality";

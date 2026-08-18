@@ -7,9 +7,9 @@
 //! requested style and map the M3 roles into a [`crate::themes::Palette`].
 //!
 //! **[`population_seeds`] answers to none of that**, and is here because this is
-//! where a cover becomes colours. The backdrop asks what the artwork mostly *is*
-//! where everything else here asks what makes the best UI seed — different
-//! questions, hence a different quantizer.
+//! where a cover becomes colours: the backdrop asks what the artwork mostly *is*
+//! where everything else asks what makes the best UI seed, hence a second
+//! quantizer.
 //!
 //! All public functions are sync and may block — call from `spawn_blocking`.
 
@@ -190,21 +190,17 @@ pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Opti
 ///
 /// [`seed_from_pixels`]'s opposite number, and the one the backdrop washes across its surface.
 /// `Score` ranks by how *usable* a colour is: on a photographic sleeve that picks the reddest thing
-/// in the frame over what the frame mostly is, and on a greyscale one its chroma cutoff filters
-/// almost everything out and it answers **once**, leaving a backdrop to invent three of its four
-/// washes. Median cut has no such cutoff and asks the other question.
+/// in the frame over what the frame mostly is, and on a greyscale one its chroma cutoff answers
+/// **once**, leaving a backdrop to invent three of its four washes. Median cut has no cutoff and
+/// asks the other question.
 ///
-/// **A short list is rare but real, so the caller still owes a filling rule**: a near-white sleeve is
-/// dropped to nothing — the crate discards every pixel over 250 on all three channels — and comes
-/// back as a single white. Everything else fills the list, median cut going on splitting past the
-/// point where a box holds one colour, so even a flat two-tone poster answers with four: its two,
-/// and two more off further cuts of the same boxes.
+/// **A short list is rare but real, so the caller still owes a filling rule**: a near-white sleeve
+/// drops to nothing — the crate discards every pixel over 250 on all three channels — and comes
+/// back as a single white. Anything else fills the list, median cut splitting past the point where
+/// a box holds one colour.
 ///
-/// Quality 1 is the finest stride on offer and costs a fraction of a millisecond; it is **not**
-/// every pixel, the crate advancing its cursor by `bytes-per-pixel × quality` pixels.
-///
-/// Reads tightly-packed RGB8 in place — there is no intermediate pixel vector, which is most of
-/// why this costs what it does, and no pixel-buffer type in the signature to copy one into.
+/// Reads tightly-packed RGB8 in place, with no intermediate pixel vector, at quality 1 — the finest
+/// stride on offer and **not** every pixel, the crate advancing by `bytes-per-pixel × quality`.
 ///
 /// **Blocking** — cheap, but it belongs on the worker that decoded the cover either way.
 pub fn population_seeds(rgb: &[u8], desired: usize) -> Vec<u32> {
@@ -228,12 +224,10 @@ pub fn population_seeds(rgb: &[u8], desired: usize) -> Vec<u32> {
     }
 }
 
-/// Edit `argb` in HCT and pack the result back.
-///
-/// **The round trip is gamut-mapped**, so a saturated seed can come back a little less saturated —
-/// stated here rather than at each helper below, which is the whole reason they share this.
-/// [`clamp_to_tone_band`] deliberately doesn't use it: returning a colour already inside its band
-/// *verbatim* is what keeps that colour's own chroma, and a round trip would map it.
+/// Edit `argb` in HCT and pack the result back. **The round trip is gamut-mapped**, so a saturated
+/// seed can come back a little less saturated — stated here rather than at each helper below.
+/// [`clamp_to_tone_band`] deliberately doesn't use it: returning an in-band colour *verbatim* is
+/// what keeps its own chroma, and a round trip would map it.
 fn with_hct(argb: u32, edit: impl FnOnce(&mut Hct)) -> u32 {
     let mut hct = Hct::new(Argb::from_u32(argb));
     edit(&mut hct);
@@ -293,25 +287,19 @@ pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
     })
 }
 
-/// Scale `argb`'s HCT lightness by `factor`, keeping hue and chroma.
-///
-/// For a darker *sibling* of a colour rather than a legible version of it — [`crate::ui::aurora`]
-/// pairs a wash with a deeper one so an art-less surface has the value structure a cover would have
-/// given it. Multiplicative because the caller means "a bit below this one" and the answer has to
-/// scale with whatever the theme's accent turns out to be; a fixed tone would flatten every palette
-/// onto the same pair.
+/// Scale `argb`'s HCT lightness by `factor`, keeping hue and chroma — a darker *sibling* of a
+/// colour rather than a legible version of it, [`crate::ui::aurora`] pairing a wash with a deeper
+/// one so an art-less surface has the value structure a cover gave it. Multiplicative so the
+/// answer scales with whatever the theme's accent is; a fixed tone flattens every palette onto one
+/// pair.
 pub fn scale_tone(argb: u32, factor: f64) -> u32 {
     with_hct(argb, |hct| hct.set_tone((hct.get_tone() * factor).clamp(0.0, 100.0)))
 }
 
-/// Turn `argb` `degrees` around the HCT hue wheel, keeping tone and chroma.
-///
-/// The round trip for making a *second* colour out of a first rather than making one legible:
-/// [`crate::ui::aurora`] fills a short seed list this way, an album that quantized to one hue
-/// still owing three washes. HCT rather than HSL is what keeps the sibling at the same apparent
-/// lightness, which is why the tint band can state one tone ceiling.
-///
-/// Wraps, so any `degrees` is in range.
+/// Turn `argb` `degrees` around the HCT hue wheel, keeping tone and chroma, and wrapping so any
+/// `degrees` is in range. For making a *second* colour out of a first rather than making one
+/// legible: [`crate::ui::aurora`] fills a short seed list this way. HCT rather than HSL keeps the
+/// sibling at the same apparent lightness, which is why the tint band states one tone ceiling.
 pub fn rotate_hue(argb: u32, degrees: f64) -> u32 {
     with_hct(argb, |hct| hct.set_hue((hct.get_hue() + degrees).rem_euclid(360.0)))
 }

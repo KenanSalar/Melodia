@@ -4,24 +4,18 @@
 //! is a photograph and can be any brightness; the aurora is a stack of our own washes over the
 //! theme's own base.
 //!
-//! **The blur is measured.** [`luma_p90`] reads the cover, [`scrim_alpha`] solves an opacity
-//! driving the *composited* result into a known dark band ([`composited_tone`]), and each
-//! foreground tier's HCT tone is solved against that for a WCAG target. That order is
-//! load-bearing: adapting the foreground first answers a bright cover with a *polarity flip* past
-//! the black/white crossover rather than a darker accent, and a blurred cover isn't uniform
-//! besides, so no global foreground decision serves a backdrop bright in one corner and dark in
-//! another. Pin the backdrop and every cover ends up dark, so one light foreground is correct
-//! everywhere.
+//! **The blur is measured, and the order is load-bearing.** [`scrim_alpha`] drives the *composited*
+//! result into a known dark band ([`composited_tone`]) first; each foreground tier's HCT tone then
+//! solves against that for a WCAG target. Adapting the foreground instead answers a bright cover
+//! with a *polarity flip* past the black/white crossover, and a blurred cover isn't uniform anyway,
+//! so no global foreground decision serves a backdrop bright in one corner and dark in another. Pin
+//! the backdrop and every cover ends up dark, so one light foreground is correct everywhere. The
+//! measurement comes off the decoded cover, never the rendered frame — the chrome tints itself off
+//! the same accent feeding the backdrop, so sampling the composite closes a feedback loop.
 //!
-//! **The aurora neither measures nor bounds.** Its washes are the quantizer's answer untouched and
-//! the tiers over them are the theme's own tokens, the chrome a neutral ink the washes read
-//! through. It can afford that where the blur can't: three ramps of album colour at partial alpha
-//! over the theme's own base stay near that base, where a blurred photograph fills the surface and
-//! can be any brightness at all. [`crate::ui::aurora`] argues what the missing guarantee buys.
-//!
-//! **The blur's measurement comes off the decoded cover, never the rendered frame** — the chrome
-//! tints itself off the same accent feeding the backdrop, so sampling the composite closes a
-//! feedback loop.
+//! **The aurora neither measures nor bounds**: three ramps of album colour at partial alpha over the
+//! theme's own base stay near that base, where a blurred photograph can be any brightness at all.
+//! [`crate::ui::aurora`] argues what the missing guarantee buys.
 
 use std::sync::LazyLock;
 
@@ -55,8 +49,8 @@ const SCRIM_ALPHA_STEP: f32 = 0.01;
 const SCRIM_TONE: f64 = 8.0;
 
 /// Gradient-floor stops, in HCT tone — what shows with no artwork and both blur slots faded out.
-/// Owning both is what keeps the polarity the blur's: a `Theme.accent` → `Theme.base` pair is
-/// bright on a light theme, and so unreadable under the light foreground that arm solves for.
+/// Owning both keeps the polarity the blur's: a `Theme.accent` → `Theme.base` pair is bright on a
+/// light theme, and so unreadable under the light foreground that arm solves for.
 const FLOOR_TONE_START: f64 = 18.0;
 const FLOOR_TONE_END: f64 = 8.0;
 
@@ -72,16 +66,15 @@ const TEXT_RATIO: f64 = 4.5;
 
 /// Tone band for the hue-carrying chrome tier. The worst permitted backdrop only asks for tone 63,
 /// so the floor means the tier cannot regress on any cover; the ceiling stops a very dark sleeve
-/// pushing the accent far enough up the scale for gamut mapping to wash the hue out, and —
+/// pushing the accent far enough up the scale for gamut mapping to wash the hue out, and — with
 /// `clamp_to_tone_band` reading it too — stops a near-white *seed* arriving above it.
 const CHROME_MIN_TONE: f64 = 70.0;
 const CHROME_MAX_TONE: f64 = 92.0;
 
-/// Tone band for primary body text. Both bounds sit above the chrome band's and 4.5:1 is the
-/// stricter target, so whenever both tiers are *solved* the title is the brighter. The bands
-/// overlap, so a naturally light cover can pass chrome straight through above the solved text tone
-/// — bounded by `CHROME_MAX_TONE` rather than closed, closing it meaning a narrower band and a
-/// different answer on every cover.
+/// Tone band for primary body text, both bounds above the chrome band's against a stricter 4.5:1 —
+/// so whenever both tiers are *solved* the title is the brighter. The bands overlap deliberately: a
+/// naturally light cover passes chrome through above the solved text tone, bounded by
+/// `CHROME_MAX_TONE` rather than closed, since closing it changes the answer on every cover.
 const TEXT_MIN_TONE: f64 = 78.0;
 const TEXT_MAX_TONE: f64 = 96.0;
 
@@ -97,7 +90,7 @@ const MUTED_MAX_CHROMA: f64 = 8.0;
 
 // One neutral ink at several weights, a knob per kind of element so tuning one can't drag the
 // others. All under 1.0 — the wash reading through is what makes a hueless tier belong to the
-// record. Their order is taste and lives only in the values.
+// record.
 
 /// Icons, stars, the heart, the disc buttons. Everything derived from the tier multiplies this.
 const NEUTRAL_CHROME_ALPHA: f32 = 0.85;
@@ -117,8 +110,7 @@ const CHIP_FILL_WEIGHT: f32 = 0.16;
 const AURORA_CHIP_FILL_ALPHA: f32 = 0.08;
 
 /// Title and the Up-Next song name. Neutral ink rather than `Theme.text`, which carries its
-/// palette's cast (Mocha's is blue) and over an album's washes reads as a second hue arguing with
-/// them.
+/// palette's cast (Mocha's is blue) and reads as a second hue arguing with the washes.
 const AURORA_TEXT_ALPHA: f32 = 0.85;
 
 /// Its secondary half — artist, album, the lines under them. One colour with the tier above, so
@@ -131,9 +123,9 @@ const HISTOGRAM_BINS: usize = 64;
 /// Fraction of the brightest pixels the percentile deliberately steps over.
 const PERCENTILE_TAIL: f64 = 0.10;
 
-/// [`linearized`] over its whole domain — it takes a `u8`, so there are only 256 answers and each
-/// is a `powf(2.4)`, called three times per pixel. The `lab_f` inside [`lstar_from_y`] is left
-/// alone: one call rather than three, over a continuous input.
+/// [`linearized`] over its whole domain — it takes a `u8`, so there are only 256 answers and each is
+/// a `powf(2.4)` called three times per pixel. The `lab_f` inside [`lstar_from_y`] is left alone:
+/// one call rather than three, over a continuous input.
 static LINEARIZED: LazyLock<[f64; 256]> = LazyLock::new(|| {
     let mut table = [0.0_f64; 256];
     for (slot, byte) in table.iter_mut().zip(0u8..=u8::MAX) {
@@ -206,12 +198,10 @@ fn bin_centre(bin: usize) -> f64 {
     bin_floor_lstar(bin) + 50.0 / HISTOGRAM_BINS as f64
 }
 
-/// Every bin's lower edge in linear Y, so [`luma_p90`] can bin a pixel without converting it.
-///
-/// L\* is monotone in Y, so the bin a pixel lands in is the same question either way — and asking
-/// it here costs a handful of comparisons against the `cbrt` inside [`lstar_from_y`], which was the
-/// last transcendental left in that per-pixel loop. The first bin has no floor to compare against,
-/// hence one entry short.
+/// Every bin's lower edge in linear Y, so [`luma_p90`] can bin a pixel without converting it. L\* is
+/// monotone in Y, so the bin is the same question either way, and asking it here costs a handful of
+/// comparisons against the `cbrt` inside [`lstar_from_y`] — the last transcendental in that
+/// per-pixel loop. One entry short: the first bin has no floor to compare against.
 static BIN_FLOOR_Y: LazyLock<[f64; HISTOGRAM_BINS - 1]> =
     LazyLock::new(|| std::array::from_fn(|slot| y_from_lstar(bin_floor_lstar(slot + 1))));
 
@@ -222,11 +212,11 @@ fn bin_of_y(y: f64) -> usize {
 
 /// The 90th-percentile lightness of a decoded cover, over tightly-packed RGB8.
 ///
-/// **Not the mean, and that is the whole point.** A mostly-black sleeve with a white wordmark has
-/// a low mean — "dark backdrop, brighten the chrome" — while the region the title sits on is
-/// near-white, a heavy blur smearing that wordmark into a large mid-bright blob rather than
-/// averaging it away. Sizing the scrim against the bright *regions* is what keeps one global
-/// decision honest on a non-uniform backdrop.
+/// **Not the mean, and that is the whole point.** A mostly-black sleeve with a white wordmark has a
+/// low mean — "dark backdrop, brighten the chrome" — while the region the title sits on is
+/// near-white, a heavy blur smearing that wordmark into a mid-bright blob rather than averaging it
+/// away. Sizing the scrim against the bright *regions* keeps one global decision honest on a
+/// non-uniform backdrop.
 fn luma_p90(rgb: &[u8]) -> Option<f64> {
     if rgb.is_empty() {
         return None;
@@ -257,11 +247,10 @@ fn luma_p90(rgb: &[u8]) -> Option<f64> {
 
 /// How many colours a backdrop asks the quantizer for.
 ///
-/// **Deliberately one more than [`crate::ui::aurora::WASH_COUNT`] paints**, which is where that
-/// half of the argument lives: median cut splits to a *target*, so asking for three is a different
-/// set of boxes rather than this one minus its last, and the washes take the top three of a
-/// four-box cut. Four rather than more because each extra box is a finer split of a region already
-/// represented, so a fifth colour has nowhere of its own to sit and only dilutes a neighbour.
+/// **Deliberately one more than [`crate::ui::aurora::WASH_COUNT`] paints**: median cut splits to a
+/// *target*, so asking for three is a different set of boxes rather than this one minus its last,
+/// and the washes take the top three of a four-box cut. Four rather than more because each extra box
+/// finer-splits a region already represented, so a fifth colour only dilutes a neighbour.
 pub(crate) const SEED_COUNT: usize = 4;
 
 /// Which of the two backdrops a foreground will sit on — and therefore which of two unrelated
@@ -276,39 +265,34 @@ pub(crate) enum BackdropKind {
     Aurora,
 }
 
-/// Everything a solve needs off a decoded cover. All are `None` when there is none — no artwork,
-/// or a failed decode — and both arms fall back to the live `Theme.accent`: the blur seeds its floor
+/// Everything a solve needs off a decoded cover. All are `None` when there is none — no artwork, or
+/// a failed decode — and both arms fall back to the live `Theme.accent`: the blur seeds its floor
 /// from that hue at [`floor_luma`], the aurora seats it as a wash pair through
 /// [`crate::ui::aurora::tints`].
 #[derive(Clone, Copy, Default)]
 pub(crate) struct BackdropSample {
     /// Most prominent colour quantized out of the cover, supplying the *hue* for every colour
-    /// [`solve`] returns. Always `seeds[0]`, which keeps this tier and the washes on one hue
-    /// family.
+    /// [`solve`] returns. Always `seeds[0]`, keeping this tier and the washes on one hue family.
     pub(crate) accent_argb: Option<u32>,
     /// The same quantize's list, most prominent first, and short whenever the artwork had fewer
-    /// regions than that. `ui::aurora` owns the filling rule.
+    /// regions. `ui::aurora` owns the filling rule.
     pub(crate) seeds: [Option<u32>; SEED_COUNT],
     /// [`luma_p90`] of the buffer the scrim gets painted over, which is not the one the seeds came
-    /// off — [`Self::measure`] argues why. `None` throughout on the aurora arm, which sizes no
-    /// scrim and so never asks.
+    /// off — [`Self::measure`] argues why. `None` on the aurora arm, which sizes no scrim.
     pub(crate) luma: Option<f64>,
 }
 
 impl BackdropSample {
-    /// The colours a decoded cover is made of. Belongs in the `spawn_blocking` task that decoded
-    /// it — the buffer is already there.
+    /// The colours a decoded cover is made of. Belongs in the `spawn_blocking` task that decoded it
+    /// — the buffer is already there.
     ///
     /// **Tightly-packed RGB8, not a pixel buffer**, so a caller hands over whichever form it holds
-    /// — `SharedPixelBuffer::as_bytes` or `RgbImage::as_raw` — rather than copying one into the
-    /// other to be let in.
+    /// (`SharedPixelBuffer::as_bytes`, `RgbImage::as_raw`) rather than copying to be let in. **Hand
+    /// it a sharp buffer, never a blurred one** — blur averages the cover's regions into each other,
+    /// which is exactly what median cut is looking for.
     ///
-    /// **Hand it a sharp buffer, never a blurred one.** Blur averages the cover's regions into
-    /// each other, which is exactly what median cut is looking for.
-    ///
-    /// An empty `accent_argb` means there was no buffer at all, so [`Self::solve`]'s
-    /// `Theme.accent` path is for a missing cover and never a monochrome one — a greyscale sleeve
-    /// answers with its own greys.
+    /// An empty `accent_argb` means there was no buffer at all, so [`Self::solve`]'s `Theme.accent`
+    /// path is for a missing cover and never a monochrome one.
     pub(crate) fn quantize(cover: &[u8]) -> Self {
         let mut seeds = [None; SEED_COUNT];
         for (slot, seed) in seeds.iter_mut().zip(population_seeds(cover, SEED_COUNT)) {
@@ -323,15 +307,13 @@ impl BackdropSample {
     }
 
     /// [`Self::quantize`] plus the brightness a scrim is solved against — **the blur arm's, and
-    /// nothing else's**. [`theme_backdrop`] answers off the theme's own tokens, so the aurora
-    /// reads `luma` nowhere, and the percentile walks every pixel where the quantizer strides them.
+    /// nothing else's**; [`theme_backdrop`] answers off the theme's own tokens, so the aurora reads
+    /// `luma` nowhere.
     ///
-    /// **Two buffers, because the halves want different ones.** Median cut wants `sharp` — blur
-    /// averages the regions it is looking for into each other. The percentile wants whatever is
-    /// actually *drawn*: [`scrim_alpha`] solves the composite onto [`TARGET_BACKDROP_TONE`], so
-    /// measuring anything but the painted layer lands the surface somewhere else entirely. They
-    /// are the same buffer only where the caller paints what it measured. Both are RGB8 bytes on
-    /// [`Self::quantize`]'s contract.
+    /// **Two buffers, because the halves want different ones.** Median cut wants `sharp`. The
+    /// percentile wants whatever is actually *drawn*: [`scrim_alpha`] solves the composite onto
+    /// [`TARGET_BACKDROP_TONE`], so measuring anything but the painted layer lands the surface
+    /// somewhere else. Both are RGB8 bytes on [`Self::quantize`]'s contract.
     pub(crate) fn measure(sharp: &[u8], painted: &[u8]) -> Self {
         Self {
             luma: luma_p90(painted),
@@ -343,12 +325,8 @@ impl BackdropSample {
     ///
     /// The blur borrows only the *hue* from `theme`, its accent standing in when there was no
     /// artwork so a missing cover doesn't strand the surface on the previous one's colour; [`solve`]
-    /// owns every tone. The aurora consults the measurement for nothing at all: [`theme_backdrop`]
-    /// answers, and what the cover was reaches the surface only through the washes.
-    ///
-    /// **The setting is the whole of the branch.** An entry with no artwork used to keep the blur
-    /// under either, the aurora's only fallback then being a set of fills with no seed behind them;
-    /// `tints` now seats the accent as a wash pair, so every hero has an aurora to paint.
+    /// owns every tone. The aurora consults the measurement for nothing: [`theme_backdrop`] answers,
+    /// and what the cover was reaches the surface only through the washes.
     pub(crate) fn solve(self, theme: &ThemeTokens, kind: BackdropKind) -> BackdropColors {
         match kind {
             BackdropKind::Aurora => theme_backdrop(theme),
@@ -367,10 +345,9 @@ fn floor_luma() -> f64 {
     gradient_luma_lstar(FLOOR_TONE_START, FLOOR_TONE_END)
 }
 
-/// Lightness of a two-stop gradient whose stops are given as sRGB. The Genre hero has no artwork
-/// and no floor of ours either, painting a name-hashed gradient (`ui::genres::color`); measuring
-/// its stops is what keeps it on the same solve as every cover rather than special-cased into a
-/// fixed scrim.
+/// Lightness of a two-stop gradient whose stops are given as sRGB. The Genre hero has no artwork and
+/// no floor of ours either, painting a name-hashed gradient (`ui::genres::color`); measuring its
+/// stops keeps it on the same solve as every cover rather than special-cased into a fixed scrim.
 pub(crate) fn gradient_luma(start_rgb: u32, end_rgb: u32) -> f64 {
     gradient_luma_lstar(rgb_lstar(start_rgb), rgb_lstar(end_rgb))
 }
@@ -473,10 +450,9 @@ pub(crate) struct BackdropColors {
     /// Alpha for the visualizer, off the same colour.
     pub viz_alpha: f32,
     /// Fill and glyph of a coverless hero square, always opaque — the mounts take their own weight
-    /// off it. `chrome`'s value on the blur and a tier of its own only on the aurora, where that one
-    /// is a neutral ink: correct for a chip or a disc the wash reads through, and a pale slab at
-    /// 140 px. The theme accent instead, which is what every grid card and track row already paints
-    /// behind the same glyph.
+    /// off it. `chrome`'s value on the blur, and a tier of its own only on the aurora, where that
+    /// one is a neutral ink: right for a chip the wash reads through, a pale slab at 140 px. The
+    /// theme accent instead, which every grid card and track row already paints behind that glyph.
     pub placeholder: u32,
     /// Primary body text.
     pub text: u32,
@@ -491,9 +467,8 @@ pub(crate) struct BackdropColors {
 /// Solve the blur's whole set from one seed hue and one backdrop measurement.
 ///
 /// Reach for [`BackdropSample::solve`] rather than calling this directly — it resolves both
-/// fallbacks in one place *and* picks the arm, which is what keeps the two consumers from
-/// drifting. Genre Detail's procedural gradient is the sole caller here, having stops of its own
-/// to measure where a sample has a cover.
+/// fallbacks in one place *and* picks the arm. Genre Detail's procedural gradient is the sole caller
+/// here, having stops of its own to measure where a sample has a cover.
 pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
     let alpha = scrim_alpha(backdrop_luma);
     let tone = composited_tone(backdrop_luma, alpha);
@@ -523,21 +498,18 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
 
 /// The aurora's tier set: the theme's own colours, and a neutral chrome the washes read through.
 ///
-/// A theme is a constant where a cover is not, so this needs no solve, and nothing bounds the
-/// washes over it — [`crate::ui::aurora::tints`] argues what that trade buys. Reachable past
-/// [`BackdropSample::solve`] for the one hero that has washes without a sample to solve from,
-/// Genre Detail.
+/// A theme is a constant where a cover is not, so this needs no solve, and nothing bounds the washes
+/// over it — [`crate::ui::aurora::tints`] argues what that trade buys. Reachable past
+/// [`BackdropSample::solve`] for Genre Detail, the one hero with washes but no sample.
 ///
-/// **The chrome carries no hue of its own**, the answer that survived two attempts at a derived
-/// one: a colour taken from the artwork argues with the washes rather than belonging to them, the
-/// surface being three of them and any single seed at best one. Black or white at
-/// [`NEUTRAL_CHROME_ALPHA`] takes its colour from whichever wash it sits on, so it is right
-/// everywhere at once — and with nothing bounding the washes it carries the readable half.
+/// **The chrome carries no hue of its own**, the answer that survived two attempts at a derived one:
+/// the surface is three washes and any single seed is at best one of them, so a derived colour
+/// argues with the other two. Black or white at [`NEUTRAL_CHROME_ALPHA`] takes its colour from
+/// whichever wash it sits on, so it is right everywhere at once.
 ///
 /// **The floor is flat**, both stops `base`: a ramp under three sweeps of its own adds a fourth
-/// direction to a surface whose whole structure is which way each sweep runs. The scrim is `base`
-/// at the alpha floor — nothing mounts the blur stack on this arm, and base over base is inert
-/// even if something did.
+/// direction to a surface whose whole structure is which way each sweep runs. The scrim is `base` at
+/// the alpha floor — nothing mounts the blur stack on this arm, and base over base is inert anyway.
 pub(crate) fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
     // One ink for all three tiers below — they differ only in the weight it is laid on at.
     let ink = neutral_ink(theme);
@@ -553,8 +525,7 @@ pub(crate) fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
         chip_fill_alpha: AURORA_CHIP_FILL_ALPHA,
         viz_alpha: AURORA_VIZ_ALPHA,
         // The one tier the neutral ink is wrong for — see `BackdropColors::placeholder`. Raw rather
-        // than seated like the wash under it: the glyph has to come off that wash, and the accent's
-        // own tone is the distance.
+        // than seated like the wash under it: the glyph has to read off that wash.
         placeholder: theme.accent,
         text: ink,
         muted: ink,
@@ -567,18 +538,16 @@ pub(crate) fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
 /// every teardown.
 ///
 /// Neither arm can spell this through [`BackdropSample::solve`], whose empty sample is an art-less
-/// *hero*: both its arms reach for `Theme.accent`, the blur to seed its floor and the aurora to seat
-/// a wash pair. That is the honest answer for a hero that has opened with nothing to quantize, and
-/// the wrong one for a band still waiting — which wore it for the length of a collage compose.
+/// *hero* and so reaches for `Theme.accent` on both arms. That is the honest answer for a hero that
+/// opened with nothing to quantize, and the wrong one for a band still waiting — which wore it for
+/// the length of a collage compose.
 ///
 /// **Both arms floor on `Theme.base`, and only the aurora can paint it at its own lightness.** The
-/// blur takes it as the *seed* of the floor it always draws — the theme's cast at
-/// [`FLOOR_TONE_START`]'s tones — because that arm solves a light foreground against a backdrop it
-/// drives down to [`TARGET_BACKDROP_TONE`] and paints its scrim whether or not a cover has landed.
-/// Handed the base at its own tone a light theme would answer with a near-full scrim and come back
-/// dark anyway, having spent the ink's polarity on the round trip. A neutral seed is the other
-/// near-miss: it holds the tones and drops the theme, so the band reads as grey beside the surface
-/// it is supposed to be part of.
+/// blur takes it as the *seed* of the floor it always draws, because that arm solves a light
+/// foreground against a backdrop it drives down to [`TARGET_BACKDROP_TONE`] and paints its scrim
+/// whether or not a cover has landed: handed the base at its own tone, a light theme answers with a
+/// near-full scrim and comes back dark anyway. A neutral seed is the other near-miss — it holds the
+/// tones and drops the theme, so the band reads as grey beside the surface it belongs to.
 pub(crate) fn idle_backdrop(theme: &ThemeTokens, kind: BackdropKind) -> BackdropColors {
     match kind {
         BackdropKind::Aurora => theme_backdrop(theme),
@@ -586,11 +555,9 @@ pub(crate) fn idle_backdrop(theme: &ThemeTokens, kind: BackdropKind) -> Backdrop
     }
 }
 
-/// White on a dark theme, black on a light one.
-///
-/// Off the *relationship* between base and ink rather than a threshold on either — the same reason
-/// `Theme.is-light` exists, two of the six palettes being generated at runtime with no variant id
-/// to match on.
+/// White on a dark theme, black on a light one — off the *relationship* between base and ink rather
+/// than a threshold on either, the same reason `Theme.is-light` exists: two of the six palettes are
+/// generated at runtime with no variant id to match on.
 fn neutral_ink(theme: &ThemeTokens) -> u32 {
     if rgb_lstar(theme.text) > rgb_lstar(theme.base) {
         0x00ff_ffff
@@ -609,10 +576,8 @@ pub(crate) fn kind(ui: &AppWindow) -> BackdropKind {
     }
 }
 
-/// The blur half a tier builds, or `None` when the aurora is mounted and nothing paints one.
-///
-/// Beside [`kind`] rather than at each tier so the branch is written once — the setting is
-/// restart-gated, so this is asked exactly as often as a tier is constructed.
+/// The blur half a tier builds, or `None` when the aurora is mounted and nothing paints one. Beside
+/// [`kind`] rather than at each tier so the branch is written once.
 pub(crate) fn blur_spec(ui: &AppWindow, tier: BlurSpec) -> Option<BlurSpec> {
     match kind(ui) {
         BackdropKind::Blur => Some(tier),
@@ -622,12 +587,12 @@ pub(crate) fn blur_spec(ui: &AppWindow, tier: BlurSpec) -> Option<BlurSpec> {
 
 /// The live theme's own colours, packed `0x00RR_GGBB`.
 ///
-/// Read in one place rather than at each publisher so the hero and Now Playing tiers can't
-/// disagree about what the theme is — and read at *solve* time rather than cached, a palette
-/// change reaching an already-open surface only on its next open either way.
+/// Read in one place rather than at each publisher so the hero and Now Playing tiers can't disagree
+/// about what the theme is — and read at *solve* time rather than cached, a palette change reaching
+/// an already-open surface only on its next open either way.
 pub(crate) struct ThemeTokens {
-    /// The surface the aurora is washed over. Flat — `theme_backdrop` publishes it as both floor
-    /// stops, so `Theme.mantle` is nothing this solve needs.
+    /// The surface the aurora is washed over, and both floor stops, so `Theme.mantle` is nothing
+    /// this solve needs.
     pub base: u32,
     /// Primary ink.
     pub text: u32,

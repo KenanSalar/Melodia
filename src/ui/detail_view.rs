@@ -25,9 +25,8 @@ macro_rules! impl_detail_view_helpers {
         /// **Gated whole, where a detail view fills its own slots even while hidden.** A curated
         /// page's leave wipes its models and forgets the guard, so slots written behind it have
         /// nothing to be ready for and their claim would suppress the re-enter's recompose. What
-        /// the gate mainly protects is still `HeroBackdrop`, shared by all six heroes: a compose
-        /// finishing after a nav away would paint this page's solve under whichever hero mounted
-        /// next.
+        /// the gate mainly protects is `HeroBackdrop`, shared by all six heroes: a compose finishing
+        /// after a nav away would paint this page's solve under whichever hero mounted next.
         fn publish_hero_artwork(
             view: &std::sync::Arc<$Ui>,
             weak: &slint::Weak<$crate::AppWindow>,
@@ -48,15 +47,11 @@ macro_rules! impl_detail_view_helpers {
 
         /// Re-publish the band's chips on the UI thread.
         ///
-        /// **Call this wherever one of the chips' inputs lands.** Both curated pages assemble
-        /// their band from more than one fetch and run those *concurrently*, so no ordering can
-        /// be assumed. Each fetch folds its own answer on its own worker and then calls this; the
-        /// publish reads only finished values, so the worst a mistimed one can be is a tick
-        /// behind, never half-built.
-        ///
-        /// The grid path can't stand in for it: the grid write publishes past a signature
-        /// early-return, and `mounted_content` is a constant `0` on the Songs tab — so there that
-        /// publish fires only when the column count moves.
+        /// **Call this wherever one of the chips' inputs lands.** Both curated pages assemble their
+        /// band from more than one fetch and run those *concurrently*, so no ordering can be
+        /// assumed; the publish reads only finished values, so the worst a mistimed one can be is a
+        /// tick behind, never half-built. The grid path can't stand in for it — it publishes past a
+        /// signature early-return, and `mounted_content` is a constant `0` on the Songs tab.
         pub fn republish_chips(
             view: &std::sync::Arc<$Ui>,
             weak: &slint::Weak<$crate::AppWindow>,

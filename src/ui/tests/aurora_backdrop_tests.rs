@@ -3,8 +3,8 @@
 //! Nothing pinned here shows on screen until an edge case arrives, and each was paid for once: a
 //! varying stop count crosses mismatched gradients in `Brush::interpolate`, a ramp ending on the
 //! `transparent` keyword darkens instead of thinning, the dither's `image-fit` decides whether it
-//! dithers or mottles, a mount reading a global directly is what stops one component serving both
-//! backdrop tiers, and the three headings are what leave a corner showing the floor.
+//! dithers or mottles, a mount reading a global directly stops one component serving both backdrop
+//! tiers, and the three headings are what leave a corner showing the floor.
 
 // Comments stripped: every anchor is a gradient literal or a geometry binding, and the prose above
 // them names the same tokens.
@@ -16,11 +16,9 @@ use crate::ui::aurora::WASH_COUNT;
 
 const AURORA: &str = include_str!("../../../melodia-ui/ui/components/aurora-backdrop.slint");
 
-/// The wash count is fixed, and fixed at the number Rust solves for.
-///
-/// `Brush::interpolate` blends gradient→gradient only at a matching stop *and* element count;
-/// anything else flattens through a solid colour halfway through the fade. A fourth sweep added in
-/// Slint without a fourth wash would also paint whatever the uninitialised property holds.
+/// The wash count is fixed, and fixed at the number Rust solves for. `Brush::interpolate` blends
+/// gradient→gradient only at a matching stop *and* element count; anything else flattens through a
+/// solid colour halfway. A fourth sweep with no fourth wash would paint an uninitialised property.
 #[test]
 fn slint_paints_exactly_the_tints_rust_solves() {
     let mounts = code(AURORA).matches("AuroraSweep {").count();
@@ -38,15 +36,11 @@ fn slint_paints_exactly_the_tints_rust_solves() {
     }
 }
 
-/// No ramp ends on the `transparent` keyword.
-///
-/// `FemtoVG` interpolates stops in straight RGBA, so fading to rgba(0,0,0,0) drags red, green and
-/// blue toward black on the way: the layer darkens across its own length instead of thinning, and
-/// three of those at three angles read as wedges painted onto the surface. Ending on the same
-/// colour at zero alpha keeps RGB flat and lets alpha do the work.
-///
-/// The base gradient's own gated arm is the exception and stays legible as one: both its stops are
-/// `transparent`, so there is no colour to drag anywhere.
+/// No ramp ends on the `transparent` keyword. `FemtoVG` interpolates stops in straight RGBA, so
+/// fading to rgba(0,0,0,0) drags red, green and blue toward black on the way: the layer darkens
+/// across its own length instead of thinning, and three of those read as wedges painted on. Ending
+/// on the same colour at zero alpha keeps RGB flat and lets alpha do the work. The base gradient's
+/// gated arm is the exception — both its stops are `transparent`, so there is no colour to drag.
 #[test]
 fn no_layer_fades_through_black() {
     for (line_number, line) in code(AURORA).lines().enumerate() {
@@ -64,13 +58,10 @@ fn no_layer_fades_through_black() {
     }
 }
 
-/// The dither tile is mapped one texel to one physical pixel.
-///
-/// Outside a layout `image-fit` defaults to `fill`, which scales the tile to the whole element
-/// *before* tiling it — one texel becomes a block tens of pixels across and the noise draws as
-/// visible mottling rather than disappearing. `preserve` is the only mode that keeps the source
-/// pitch, and `pixelated` stops filtering averaging the tile back toward the flat colour it is
-/// there to break up.
+/// The dither tile is mapped one texel to one physical pixel. Outside a layout `image-fit` defaults
+/// to `fill`, which scales the tile to the whole element *before* tiling it — one texel becomes a
+/// block tens of pixels across and the noise draws as mottling. `preserve` is the only mode keeping
+/// the source pitch, and `pixelated` stops filtering averaging it back toward the flat colour.
 #[test]
 fn the_dither_keeps_its_own_pitch() {
     for binding in [
@@ -83,11 +74,9 @@ fn the_dither_keeps_its_own_pitch() {
     }
 }
 
-/// The three sweeps keep their headings, and they are three rather than four.
-///
-/// **The asymmetry is the effect.** Near-orthogonal headings leave each sweep owning a different
-/// edge and one corner showing the floor; a fourth, or three evenly spaced, covers the surface
-/// about equally again and the washes average back to the one flat tone this replaced.
+/// The three sweeps keep their headings, and they are three rather than four. **The asymmetry is the
+/// effect**: near-orthogonal headings leave each sweep owning an edge and one corner showing the
+/// floor, where a fourth or three evenly spaced average back to the one flat tone this replaced.
 #[test]
 fn the_sweeps_keep_their_headings() {
     let src = normalized(&code(AURORA));
@@ -106,12 +95,10 @@ fn the_sweeps_keep_their_headings() {
     );
 }
 
-/// Each ramp is 55% at its near edge and gone by 70.71% of the gradient line.
-///
-/// `transparentize` *multiplies*, so 0.45 leaves a measured wash at 55% while a synthesized one
-/// keeps the lower weight `ui::aurora` gave it — `with-alpha` would overwrite it and wash a guess
-/// on as hard as a fact. The far stop is 1/√2, where a 45° traversal reaches the opposite corner,
-/// which is why nothing bands at the edges.
+/// Each ramp is 55% at its near edge and gone by 70.71% of the gradient line. `transparentize`
+/// *multiplies*, so 0.45 leaves a measured wash at 55% while a synthesized one keeps the lower
+/// weight `ui::aurora` gave it — `with-alpha` would wash a guess on as hard as a fact. The far stop
+/// is 1/√2, where a 45° traversal reaches the opposite corner, so nothing bands at the edges.
 #[test]
 fn each_sweep_fades_between_the_same_two_stops() {
     let src = normalized(&code(AURORA));
@@ -126,13 +113,10 @@ fn each_sweep_fades_between_the_same_two_stops() {
     );
 }
 
-/// Nothing darkens the periphery.
-///
-/// A vignette sat over this stack while the model was a self-contained dark surface, where the only
-/// question was how to frame a bright middle. Under sweeps that carry the album's colour along the
-/// edges it is the direct inverse: neutral black over them is what the backdrop was dull for.
-/// Deleted rather than defaulted off, a property nothing sets being a layer waiting to be switched
-/// back on.
+/// Nothing darkens the periphery. A vignette sat over this stack while the model was a dark surface
+/// framing a bright middle; under sweeps carrying the album's colour along the *edges* it is the
+/// direct inverse, neutral black over them being what the backdrop was dull for. Deleted rather than
+/// defaulted off — a property nothing sets is a layer waiting to be switched back on.
 #[test]
 fn no_layer_darkens_the_periphery() {
     for (path, src) in stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES) {
@@ -140,13 +124,10 @@ fn no_layer_darkens_the_periphery() {
     }
 }
 
-/// Nothing in Slint writes the backdrop choice.
-///
-/// The `in` qualifier on `Theme.aurora-backdrop` already makes a write fail to compile, so what
-/// this holds is the *reason*: the two arms publish unrelated tiers, so a live flip leaves one
-/// stack painting the other's colours, and the tiers decide at construction whether to build a
-/// blurred half at all. A `Ctrl+Shift+B` arm did exactly that while both models were being
-/// judged; the pin outlives a later loosening of the qualifier.
+/// Nothing in Slint writes the backdrop choice. The `in` qualifier on `Theme.aurora-backdrop`
+/// already makes a write fail to compile, so what this holds is the *reason*: the two arms publish
+/// unrelated tiers, so a live flip leaves one stack painting the other's colours, and the tiers
+/// decide at construction whether to build a blurred half at all. The pin outlives the qualifier.
 #[test]
 fn nothing_in_slint_writes_the_backdrop_choice() {
     for (path, src) in stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES) {
@@ -157,13 +138,11 @@ fn nothing_in_slint_writes_the_backdrop_choice() {
     }
 }
 
-/// Every colour arrives as an input, so one component can serve both backdrop tiers.
-///
-/// Now Playing reads `Player.np-*` and the two bands read `HeroBackdrop.*`; a component naming
-/// either could only ever mount on one, which is exactly why the blur it replaces had to be
-/// spelled inline a second time. A `Theme.*` brush would be worse than wrong — theme brushes flip
-/// polarity with the variant, so one album would paint a dark surface under one and a near-white
-/// one under another while the foreground stayed solved for dark.
+/// Every colour arrives as an input, so one component can serve both backdrop tiers. Now Playing
+/// reads `Player.np-*` and the two bands read `HeroBackdrop.*`; a component naming either could only
+/// mount on one, which is why the blur it replaces had to be spelled inline a second time. A
+/// `Theme.*` brush flips polarity with the variant, painting one album near-white under a light theme
+/// while the foreground stays solved for dark.
 #[test]
 fn the_backdrop_names_no_global() {
     for global in [

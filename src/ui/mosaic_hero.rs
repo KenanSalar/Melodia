@@ -56,15 +56,13 @@ fn compose_hero_pair(paths: &[String], blur: Option<BlurSpec>) -> DetailPair {
 /// while nothing is claimed.
 ///
 /// **"Nothing claimed" and "claimed nothing" are different answers, hence the `Option`.** A page
-/// whose set is empty — no favourites, or none with artwork — still has to *publish* that, the
-/// seated accent being its honest colour. Collapsed onto a bare `Vec` the two states were one, so
-/// an empty set was never stale, both curated pages early-returned before composing, and the band
-/// kept whatever the last teardown or the last hero had left in the shared globals.
+/// whose set is empty still has to *publish* that, the seated accent being its honest colour.
+/// Collapsed onto a bare `Vec` the two states were one, so an empty set was never stale and the band
+/// kept whatever the last teardown had left in the shared globals.
 ///
-/// **[`claim`](Self::claim) belongs past the section check, never beside the compose.**
-/// The guard means "this collage is what's painted", so a set claimed ahead of a publish
-/// that then bails leaves every later refresh of those same covers early-returning, and
-/// the banner sits on the bare gradient floor until the section leave forgets it.
+/// **[`claim`](Self::claim) belongs past the section check, never beside the compose** — a set
+/// claimed ahead of a publish that then bails leaves every later refresh of those covers
+/// early-returning, and the banner sits on the bare gradient floor until the leave forgets it.
 #[derive(Default)]
 pub(crate) struct MosaicGuard(Mutex<Option<Vec<String>>>);
 

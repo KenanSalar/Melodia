@@ -114,15 +114,12 @@ fn decode_artwork(path: &Path, blur_spec: Option<BlurSpec>) -> CachedArtwork {
 
 /// Both halves plus the measurement, from an image already in hand.
 ///
-/// Split out for the curated heroes, whose source is a composed collage rather than a
-/// file — nothing about the tiers they publish into differs, so nothing about how the
-/// pair is derived should either.
+/// Split out for the curated heroes, whose source is a composed collage rather than a file.
 ///
 /// The **seeds survive a `None` spec** — the aurora is what wants them — but nothing else of the
-/// blur's preamble does. That second downscale exists to make `fast_blur` cheap, so with no blur
-/// to make cheap the quantizer reads the cover tile already in hand and takes no brightness, the
-/// aurora solving against none. The tile is the better sample besides, being sharp and
-/// aspect-preserved where the band's buffer is squashed to a landscape one.
+/// blur's preamble does. That second downscale exists to make `fast_blur` cheap, so with no blur to
+/// make cheap the quantizer reads the cover tile already in hand and takes no brightness. The tile
+/// is the better sample besides, sharp and aspect-preserved where the band's buffer is squashed.
 pub(crate) fn pair_from_image(decoded: &DynamicImage, blur_spec: Option<BlurSpec>) -> ArtworkPair {
     // `thumbnail`, not `thumbnail_exact`: aspect-preserving, so a non-square cover keeps
     // its ratio and the Slint side's `image-fit: cover` crops it to the square tile.
@@ -143,11 +140,9 @@ pub(crate) fn pair_from_image(decoded: &DynamicImage, blur_spec: Option<BlurSpec
     let small = decoded.thumbnail_exact(BLUR_TARGET, spec.height).to_rgb8();
     let blur = buffer_from_rgb(&fast_blur(&small, spec.sigma));
 
-    // Seeds off the sharp downscale, brightness off the blurred one — the two halves want
-    // different buffers and [`BackdropSample::measure`] argues why. Here rather than at the
-    // publisher: this runs on the blocking pool and is cached, so both are paid once per cover
-    // rather than once per open. Both go in as bytes, so `small` needs no pixel-buffer copy of its
-    // own to be readable.
+    // Seeds off the sharp downscale, brightness off the blurred one — `BackdropSample::measure`
+    // argues why. Here rather than at the publisher: this runs on the blocking pool and is cached,
+    // so both are paid once per cover rather than once per open.
     let sample = BackdropSample::measure(small.as_raw(), blur.as_bytes());
 
     ArtworkPair {

@@ -83,11 +83,10 @@ pub fn spawn_view_model_subscriber(
                 // is-it-empty test would re-ask on every volume step for the rest of the track.
                 let warm = cover_changed && new_vm.track.cover_img.size().width == 0;
                 let cover_path = warm.then(|| new_vm.track.artwork_path.to_string());
-                // `Property::set` is value-compared, so an identical write repaints nothing on its
-                // own — this guard spares only the move into the setter and the binding-handle
-                // access it opens with, and pays a second compare whenever the VM *did* change.
-                // Worth keeping because most emits are value-identical: a seek carries its
-                // position outside `vm`, so nothing the struct holds actually moved.
+                // `Property::set` is value-compared, so this guard spares only the move into the
+                // setter and the binding-handle access it opens with, and pays a second compare
+                // whenever the VM *did* change. Worth it because most emits are value-identical —
+                // a seek carries its position outside `vm`.
                 if new_vm != prev_vm {
                     player.set_vm(new_vm);
                 }
@@ -191,11 +190,9 @@ pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSumm
 ///
 /// [`to_slint_track`]'s other half: it answers cache-only so nothing decodes on the UI thread, and
 /// this is what makes a cold cover arrive at all. Fire-and-forget — the buffer crosses back rather
-/// than a second lookup, `SharedPixelBuffer` being `Send` where [`slint::Image`] is not.
-///
-/// Keyed on the path on the way back in, so a track change that landed while this decoded keeps
-/// its own cover. Nothing is written for an empty path or a failed decode — a track with no
-/// readable artwork already holds the slot this would put back.
+/// than a second lookup, `SharedPixelBuffer` being `Send` where [`slint::Image`] is not. Keyed on
+/// the path on the way back in, so a track change that landed while this decoded keeps its own
+/// cover; nothing is written for an empty path or a failed decode.
 pub fn warm_vm_cover(
     weak: Weak<AppWindow>,
     runtime: &Handle,
@@ -208,10 +205,9 @@ pub fn warm_vm_cover(
     let thumbs = cover_thumbs.clone();
     runtime.spawn_blocking(move || {
         // A decode that failed has nothing to write — the slot is already the empty `Image`, that
-        // emptiness being what asked for this. Bailing here rather than writing it back skips the
-        // whole round trip: `Property::set` is value-compared, so the write would repaint nothing,
-        // but the hop, the `PlayerVm` clone `get_vm` hands back and the compare over it are all
-        // paid on the UI thread before it can decide that.
+        // emptiness being what asked for this. Bailing here skips the whole round trip: the write
+        // would repaint nothing, but the hop, the `PlayerVm` clone `get_vm` hands back and the
+        // compare over it are all paid on the UI thread before it can decide that.
         let Some(buffer) = thumbs.get_or_load_rgb8(Path::new(&path)) else {
             return;
         };

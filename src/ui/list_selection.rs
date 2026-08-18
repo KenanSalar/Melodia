@@ -5,10 +5,9 @@
 //! Tracks, Favorites, and Recently Played all implement the same click
 //! semantics (plain click = single, Ctrl = toggle, Shift = range over the
 //! displayed order); their per-view `selection.rs` files stay as thin
-//! adapters that read/write their own Slint global and call in here. Favorites and Recently
-//! Played get the whole of it from the three `*_curated` functions below — their adapters were
-//! the same four bodies character for character. **Tracks stays hand-written and should**: its
-//! range branch walks the filtered cache (`current_ids_filtered`) where those two read the Slint
+//! adapters that read/write their own Slint global and call in here. The two curated pages get the
+//! whole of it from the three `*_curated` functions below. **Tracks stays hand-written and should**:
+//! its range branch walks the filtered cache (`current_ids_filtered`) where those two read the Slint
 //! model directly.
 //!
 //! `detail_selection.rs` is the other consumer of the trait: same accessors, cache-indexed
@@ -122,11 +121,9 @@ pub fn restamp_selected<S: BuildHasher>(rows: &mut [UiTrackListRow], selected: &
 
 /// The per-view Slint surface both selection layers drive. Each global implements it by routing
 /// through its auto-generated `get_*` / `set_*` accessors; the trait method names are deliberately
-/// distinct from those so the bodies are unambiguous.
-///
-/// Here rather than in [`crate::ui::detail_selection`] because both layers name it and this is the
-/// one they share — the *logic* differs (a detail view indexes its Rust cache and re-stamps
-/// O(changed); a curated page reads the model and re-stamps O(rows)), the accessors don't.
+/// distinct from those so the bodies are unambiguous. Here rather than in
+/// [`crate::ui::detail_selection`] because the *logic* differs between the two layers and the
+/// accessors don't.
 pub trait RowSelectionView {
     /// The shift-range anchor row index (`-1` = no anchor).
     fn anchor(&self) -> i32;
@@ -174,10 +171,9 @@ impl_row_selection_view!(GenreDetail);
 impl_row_selection_view!(PlaylistDetail);
 impl_row_selection_view!(RecentlyPlayed);
 
-/// Compute the new selection set for a curated page's row click and apply it. Click semantics
-/// match `tracks::handle_select_row` exactly. Runs on the UI thread (called from
-/// `on_select_row`). The selection is mirrored into `applied` so the next `apply_filtered_tracks`
-/// round can re-stamp the `selected` flag on freshly-built rows.
+/// Compute the new selection set for a curated page's row click and apply it, on the UI thread.
+/// Click semantics match `tracks::handle_select_row` exactly, and the selection is mirrored into
+/// `applied` so the next `apply_filtered_tracks` round can re-stamp freshly-built rows.
 pub fn handle_curated_click<V: RowSelectionView, S: BuildHasher>(
     view: &V,
     applied: &Mutex<HashSet<i32, S>>,

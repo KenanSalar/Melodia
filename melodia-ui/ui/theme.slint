@@ -170,14 +170,12 @@ export global Theme {
     // `use-native-titlebar`, the toggle defaulting on under KDE and surviving a titlebar disable.
     in-out property <bool> window-focused: true;
 
-    // Which backdrop the artwork-derived surfaces paint. On `Theme` because both colour tiers ask
-    // — `Player.np-*` and `HeroBackdrop` are deliberately separate and neither owns the other —
-    // and `ui::backdrop::kind` is its only Rust reader, so no publisher can solve for one surface
-    // while the mount paints the other. **`in`, not `in-out`**: the two arms publish different
-    // tiers, so a mid-session flip leaves one stack painting the other's colours — the setting is
-    // restart-gated and `boot::ui_setup::apply_backdrop_style` is the only writer, which the
-    // qualifier is what enforces. The declared default matches the setting's, so a failed settings
-    // read lands on the shipped look.
+    // Which backdrop the artwork-derived surfaces paint. On `Theme` because both colour tiers ask —
+    // `Player.np-*` and `HeroBackdrop` are deliberately separate — and `ui::backdrop::kind` is its
+    // only Rust reader, so no publisher can solve for one surface while the mount paints the other.
+    // **`in`, not `in-out`**: the two arms publish different tiers, so a mid-session flip leaves one
+    // stack painting the other's colours, and the qualifier is what pins
+    // `boot::ui_setup::apply_backdrop_style` as the only writer. The default matches the setting's.
     in property <bool> aurora-backdrop: false;
 
     // Integer arithmetic, so no float rounding; anything ≤ 0 collapses to "0:00", which lets

@@ -104,10 +104,8 @@ export component MosaicTabHero inherits Rectangle {
     height: root.hero-height;
 
     // Behind everything else, and unconditionally shown: this band never stops painting a hero,
-    // where `LibraryTabBand` gates on its own `detail-open`. Which of the two stacks inside wins
-    // is the setting's alone — a curated set whose every entry lacks a cover washes `Theme.accent`,
-    // which on these two pages is the honest colour, they being the app's own and not a record's.
-    // The gradient floor shows through when there is no blur image.
+    // where `LibraryTabBand` gates on its own `detail-open`. The gradient floor shows through when
+    // there is no blur image.
     HeroBackdropStack {
         x: 0; y: 0;
         width: 100%; height: 100%;

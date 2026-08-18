@@ -137,11 +137,9 @@ pub(super) async fn apply_track_change(
     np_state.applied_track_id.set(track_id);
 }
 
-/// The eight chip columns for `track`, awaited inline — sqlx has a reactor here.
-///
-/// Every failure arm is the same empty row, which is what clears the chips: a missing row and a
-/// failed read are both "nothing to state about this track", and no track at all is the third
-/// spelling of it.
+/// The eight chip columns for `track`, awaited inline — sqlx has a reactor here. Every failure arm
+/// is the same empty row, which is what clears the chips: a missing row, a failed read and no track
+/// at all are three spellings of "nothing to state about this track".
 async fn fetch_track_meta(state: &AppState, track: Option<&Arc<TrackSummary>>) -> TrackMetaRow {
     let Some(track) = track else {
         return TrackMetaRow::default();
@@ -157,15 +155,13 @@ async fn fetch_track_meta(state: &AppState, track: Option<&Arc<TrackSummary>>) -
     }
 }
 
-/// Decode `track`'s cover on the blocking pool.
-///
-/// CPU-bound, hence the pool. A *single* decode derives both the sharp tile and the blurred
-/// backdrop — the cover is the largest image on the app's hot path, so decoding it once rather
-/// than twice halves the per-skip cost.
+/// Decode `track`'s cover on the blocking pool. A *single* decode derives both the sharp tile and
+/// the blurred backdrop — the cover is the largest image on the app's hot path, so decoding it once
+/// rather than twice halves the per-skip cost.
 ///
 /// Every arm that isn't a decoded pair answers with an empty sample rather than a previous one:
-/// `BackdropSample::solve` reads that as "no artwork" and falls back to `Theme.accent`, which is
-/// the honest answer for a track whose cover is missing or unreadable.
+/// `BackdropSample::solve` reads that as "no artwork" and falls back to `Theme.accent`, the honest
+/// answer for a track whose cover is missing or unreadable.
 async fn decode_artwork_for(
     state: &AppState,
     np_artwork: &Arc<NowPlayingArtwork>,
@@ -234,12 +230,10 @@ fn write_backdrop_tiers(ui: &AppWindow, sample: BackdropSample) {
     player.set_np_tint_3(tint_3.to_color());
 }
 
-/// Re-solve the view's tiers against a palette that has just changed.
-///
-/// `hero_backdrop::republish_for_palette`'s twin, and the one that matters more: a band republishes
+/// Re-solve the view's tiers against a palette that has just changed —
+/// `hero_backdrop::republish_for_palette`'s twin, and the one that matters more. A band republishes
 /// on every detail open, where all three callers of [`apply_track_change`] dedup on
-/// `applied_track_id` — even the seed-on-open path — so without this the tiers hold until the next
-/// *track*, which on a paused player is until the app restarts.
+/// `applied_track_id`, so without this the tiers hold until the next *track*.
 pub(crate) fn republish_for_palette(ui: &AppWindow) {
     if let Some(sample) = PUBLISHED_SAMPLE.get() {
         write_backdrop_tiers(ui, sample);

@@ -3,26 +3,19 @@ import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
 import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
 import { AuroraBackdrop } from "../aurora-backdrop.slint";
 
-// The two backdrop stacks as one mount, for the hosts painting off the `HeroBackdrop` tier.
+// The two backdrop stacks as one mount, for the hosts painting off the `HeroBackdrop` tier — the
+// tier-bound half the two leaf components may not be, their colours staying defaulted `in property`s
+// so one pair can serve this tier *and* Now Playing's `Player.np-*`.
 //
-// **Only the live arm is mounted**, and the branch is safe because the condition is a process
-// constant: `Theme.aurora-backdrop` is an `in` property written once by
-// `boot::ui_setup::apply_backdrop_style`, before `install_views` and before `app.show()`, so no
-// frame can ever see it move. Painting the loser transparent instead is not the free option it
+// **Only the live arm is mounted**, safe because the condition is a process constant:
+// `Theme.aurora-backdrop` is written once by `boot::ui_setup::apply_backdrop_style`, before
+// `install_views` and before `app.show()`. Painting the loser transparent is not the free option it
 // reads as — `Brush::is_transparent()` answers `false` for *every* gradient whatever its stop
-// alphas, so the femtovg renderer tessellates the path and fills the whole surface anyway. That is
-// four wasted full-bleed fills a frame on the blur arm, which is the setting most installs are on.
+// alphas, so femtovg tessellates the path and fills the whole surface anyway.
 //
-// Reading `HeroBackdrop` here is what the two leaf components may not do: their colours stay
-// defaulted `in property`s so one pair can serve this tier *and* Now Playing's `Player.np-*`,
-// which is why `now-playing-view.slint` still mounts them directly. This wrapper is the tier-bound
-// half, and it exists because its two hosts had the same twenty-five lines each.
-//
-// `shown` survives the gate and is still load-bearing: it is the host's own question — for
-// `LibraryTabBand`, whether the band is painting a hero at all, its globals outliving the tab that
-// filled them — and the surviving stack drains to its idle colours through it. That drain is why
-// each stack's `shown: false` arm stays a *gradient* of the same shape: `Brush::interpolate` blends
-// stop-for-stop and only between matching types.
+// `shown` survives the gate as the host's own question — for `LibraryTabBand`, whether the band is
+// painting a hero at all — and the surviving stack drains to its idle colours through it, which is
+// why each `shown: false` arm stays a gradient of the same shape.
 export component HeroBackdropStack inherits Rectangle {
     in property <image> blur-a;
     in property <image> blur-b;
