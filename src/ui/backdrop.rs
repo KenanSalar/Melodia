@@ -522,6 +522,29 @@ pub(crate) fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
     }
 }
 
+/// The set a band publishes when **no hero is painting** — before the first one opens, and after
+/// every teardown.
+///
+/// Neither arm can spell this through [`BackdropSample::solve`], whose empty sample is an art-less
+/// *hero*: both its arms reach for `Theme.accent`, the blur to seed its floor and the aurora to seat
+/// a wash pair. That is the honest answer for a hero that has opened with nothing to quantize, and
+/// the wrong one for a band still waiting — which wore it for the length of a collage compose.
+///
+/// **Both arms floor on `Theme.base`, and only the aurora can paint it at its own lightness.** The
+/// blur takes it as the *seed* of the floor it always draws — the theme's cast at
+/// [`FLOOR_TONE_START`]'s tones — because that arm solves a light foreground against a backdrop it
+/// drives down to [`TARGET_BACKDROP_TONE`] and paints its scrim whether or not a cover has landed.
+/// Handed the base at its own tone a light theme would answer with a near-full scrim and come back
+/// dark anyway, having spent the ink's polarity on the round trip. A neutral seed is the other
+/// near-miss: it holds the tones and drops the theme, so the band reads as grey beside the surface
+/// it is supposed to be part of.
+pub(crate) fn idle_backdrop(theme: &ThemeTokens, kind: BackdropKind) -> BackdropColors {
+    match kind {
+        BackdropKind::Aurora => theme_backdrop(theme),
+        BackdropKind::Blur => solve(theme.base, floor_luma()),
+    }
+}
+
 /// White on a dark theme, black on a light one.
 ///
 /// Off the *relationship* between base and ink rather than a threshold on either — the same reason

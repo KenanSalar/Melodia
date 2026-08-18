@@ -13,8 +13,9 @@
 //! what [`republish_for_palette`] exists to refresh.
 //!
 //! **A band with no hero on it has none**, and that is [`reset`]'s whole difference from an
-//! art-less [`apply`]: it publishes [`aurora::idle_tints`], so a page waiting on its collage paints
-//! the surface rather than a colour it has not earned yet.
+//! art-less [`apply`]: it publishes [`aurora::idle_tints`] over [`backdrop::idle_backdrop`]'s
+//! floor, so a page waiting on its collage paints the surface rather than a colour it has not
+//! earned yet — on either arm.
 //!
 //! The whole set is published — scrim, gradient floor, the aurora's three washes,
 //! hue-carrying chrome and both text tiers — so a hero and the Now Playing view answer
@@ -132,18 +133,17 @@ pub(crate) fn apply_gradient(ui: &AppWindow, stops: GenreStops) {
     }
 }
 
-/// Publish the idle set — no hero is painting, so the theme's own tiers over a flat base and **no
-/// washes at all**.
+/// Publish the idle set — no hero is painting, so the band takes the surface itself: **no washes at
+/// all**, over a floor borrowing nothing from an entry that has not arrived. What that floor is per
+/// arm is [`backdrop::idle_backdrop`]'s to answer.
 ///
 /// Deliberately not [`apply`] with an empty sample. That is a different state — a hero that *has*
-/// opened and has nothing to quantize — and it seats the accent, which on a teardown is a colour
-/// the next surface has not earned: a curated banner wore it for the length of its collage compose
-/// and a detail's grow-in wore it while the next cover decoded.
+/// opened and has nothing to quantize — and both its arms reach for the accent, which on a teardown
+/// is a colour the next surface has not earned: a curated banner wore it for the length of its
+/// collage compose and a detail's grow-in wore it while the next cover decoded.
 pub(crate) fn reset(ui: &AppWindow) {
     let theme = backdrop::theme_tokens(ui);
-    // The tiers are the empty sample's on both arms — only the washes differ, and only the aurora
-    // paints those.
-    let colors = BackdropSample::default().solve(&theme, backdrop::kind(ui));
+    let colors = backdrop::idle_backdrop(&theme, backdrop::kind(ui));
     let tints = aurora::idle_tints(&theme);
     PUBLISHED_HERO.set(None);
     write(ui, &colors, &tints, Floor::FromTiers);
