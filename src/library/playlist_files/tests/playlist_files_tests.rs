@@ -20,7 +20,7 @@ fn entry(path: &str, hash: Option<&str>) -> m3u::ParsedEntry {
 /// `make_test_metadata` sets `file_hash = blake3(title)`, so each track's
 /// hash is deterministic from its title.
 async fn seed() -> Result<(DbPool, i64, i64, i64), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     let a =
         insert_test_track(&db, "/music/a.mp3", "Alpha Song", "Artist A", "Album", "Rock").await?;

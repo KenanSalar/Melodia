@@ -156,7 +156,7 @@ async fn fixture() -> Result<ActionsFixture, AppError> {
     let tmp = tempfile::tempdir()?;
     let track_path = tmp.path().join("track.mp3");
     std::fs::write(&track_path, b"")?;
-    let db = crate::database::DbPool::test_pool().await;
+    let db = crate::database::DbPool::test_pool().await?;
     Ok(ActionsFixture {
         db,
         player_state: PlayerStateHandle::default(),

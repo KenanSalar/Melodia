@@ -29,7 +29,7 @@ fn make_scanned_file_with_hash(path: &str, title: &str, hash: &str) -> ScannedFi
 
 #[tokio::test]
 async fn ingest_empty_list_returns_zero() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let mut tx = db.write().begin().await?;
     let result = ingest_scanned_files(
         &mut tx,
@@ -46,7 +46,7 @@ async fn ingest_empty_list_returns_zero() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_single_file_fixed_folder() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let files = vec![make_scanned_file("/music/song.mp3", "My Song")];
@@ -77,7 +77,7 @@ async fn ingest_single_file_fixed_folder() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_deduplicates_artists() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let mut f1 = make_scanned_file("/music/a.mp3", "A");
@@ -110,7 +110,7 @@ async fn ingest_deduplicates_artists() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_deduplicates_albums() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let mut f1 = make_scanned_file("/music/a.mp3", "A");
@@ -140,7 +140,7 @@ async fn ingest_deduplicates_albums() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_deduplicates_genres() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let mut f1 = make_scanned_file("/music/a.mp3", "A");
@@ -168,7 +168,7 @@ async fn ingest_deduplicates_genres() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_skips_existing_track() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/existing.mp3", "Existing", "Art", "Alb", "Pop").await?;
 
@@ -192,7 +192,7 @@ async fn ingest_skips_existing_track() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_updates_artwork_on_existing_when_flag_set() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/song.mp3", "Song", "Art", "Alb", "Pop").await?;
 
@@ -227,7 +227,7 @@ async fn ingest_updates_artwork_on_existing_when_flag_set() -> Result<(), AppErr
 
 #[tokio::test]
 async fn ingest_does_not_update_artwork_when_flag_false() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/song.mp3", "Song", "Art", "Alb", "Pop").await?;
 
@@ -255,7 +255,7 @@ async fn ingest_does_not_update_artwork_when_flag_false() -> Result<(), AppError
 
 #[tokio::test]
 async fn ingest_from_parent_dir_creates_folder() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
 
     let files = vec![make_scanned_file("/home/user/music/song.mp3", "Song")];
 
@@ -280,7 +280,7 @@ async fn ingest_from_parent_dir_creates_folder() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_from_parent_dir_caches_folder() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
 
     let files = vec![
         make_scanned_file("/data/music/a.mp3", "A"),
@@ -307,7 +307,7 @@ async fn ingest_from_parent_dir_caches_folder() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_empty_artist_gets_unknown_id() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let mut file = make_scanned_file("/music/no_artist.mp3", "No Artist Track");
@@ -335,7 +335,7 @@ async fn ingest_empty_artist_gets_unknown_id() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_empty_album_gets_none() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let mut file = make_scanned_file("/music/no_album.mp3", "No Album Track");
@@ -363,7 +363,7 @@ async fn ingest_empty_album_gets_none() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_mixed_new_and_existing() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/existing.mp3", "Existing", "Art", "Alb", "Pop").await?;
 
@@ -390,7 +390,7 @@ async fn ingest_mixed_new_and_existing() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_same_album_different_artists() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let mut f1 = make_scanned_file("/music/a.mp3", "A");
@@ -423,7 +423,7 @@ async fn ingest_same_album_different_artists() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_detects_moved_file() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Insert a track with a known hash at the old path
@@ -479,7 +479,7 @@ async fn ingest_batched_inserts_preserve_input_order_across_chunks() -> Result<(
     // every id must point at the right row — the mapping goes through
     // `RETURNING id, file_path` because SQLite's RETURNING output order
     // is unspecified.
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let n = queries::scan::INSERT_CHUNK_ROWS + 5;
@@ -535,7 +535,7 @@ async fn ingest_duplicate_hash_repoints_once_inserts_second() -> Result<(), AppE
     // and the second must fall through to a fresh insert instead of
     // re-pointing (stealing) the same row again — consume-once, mirroring
     // the reconcile path's moved-candidates map.
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let old_id =
@@ -584,7 +584,7 @@ async fn ingest_duplicate_hash_repoints_once_inserts_second() -> Result<(), AppE
 
 #[tokio::test]
 async fn ingest_does_not_move_when_hash_differs() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Insert a track with hash "aaa..."
@@ -620,7 +620,7 @@ async fn ingest_does_not_move_when_hash_differs() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_moved_file_preserves_playback_state() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     let old_id = insert_test_track(&db, "/music/old.mp3", "Song", "Art", "Alb", "Rock").await?;
 
@@ -663,7 +663,7 @@ async fn ingest_moved_file_preserves_playback_state() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_skips_unchanged_file() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/song.mp3", "Song", "Art", "Alb", "Rock").await?;
 
@@ -688,7 +688,7 @@ async fn ingest_skips_unchanged_file() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_updates_metadata_when_file_changed() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/song.mp3", "Old Title", "Art", "Alb", "Rock").await?;
 
@@ -721,7 +721,7 @@ async fn ingest_updates_metadata_when_file_changed() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn ingest_stores_file_hash() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let hash = "c".repeat(64);

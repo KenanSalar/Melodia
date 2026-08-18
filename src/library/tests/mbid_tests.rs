@@ -32,7 +32,7 @@ async fn seed_track(db: &DbPool, path: &str) -> Result<i64, AppError> {
 
 #[tokio::test]
 async fn writes_recording_id_to_file_and_db_and_preserves_stats() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
@@ -88,7 +88,7 @@ async fn writes_recording_id_to_file_and_db_and_preserves_stats() -> Result<(), 
 
 #[tokio::test]
 async fn a_missing_file_is_skipped_and_the_rest_commit() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;

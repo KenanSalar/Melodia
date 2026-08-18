@@ -91,7 +91,7 @@ async fn repointing_moves_every_artwork_column_at_once() -> Result<(), AppError>
 /// is the case a three-column union silently blanks.
 #[tokio::test]
 async fn a_composite_referenced_only_by_a_playlist_is_still_referenced() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let composite = "/data/artwork/33fb807d1f1b7cbb.jpg";
 
     let playlist = queries::playlist::create_playlist(&db, "Mosaic", None).await?;

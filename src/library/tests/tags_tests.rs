@@ -34,7 +34,7 @@ async fn seed_track(db: &DbPool, path: &str) -> Result<i64, AppError> {
 
 #[tokio::test]
 async fn single_track_edit_updates_row_and_preserves_stats() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
@@ -87,7 +87,7 @@ async fn single_track_edit_updates_row_and_preserves_stats() -> Result<(), AppEr
 
 #[tokio::test]
 async fn batch_edit_reports_failure_and_commits_the_rest() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
@@ -135,7 +135,7 @@ async fn batch_edit_reports_failure_and_commits_the_rest() -> Result<(), AppErro
 
 #[tokio::test]
 async fn album_rename_moves_track_to_new_album_id() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
@@ -181,7 +181,7 @@ async fn album_rename_moves_track_to_new_album_id() -> Result<(), AppError> {
 /// `apply_replace_artwork`.
 #[tokio::test]
 async fn replace_artwork_lands_on_every_track_and_the_shared_album() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;

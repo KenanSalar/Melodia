@@ -302,25 +302,20 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
 impl DbPool {
     /// An in-memory `DbPool` for tests. Read and write share one connection,
     /// in-memory `SQLite` being per-connection.
-    #[expect(
-        clippy::unwrap_used,
-        reason = "test helper; failure here aborts the test run by design"
-    )]
-    pub async fn test_pool() -> Self {
-        let opts = SqliteConnectOptions::from_str("sqlite::memory:")
-            .unwrap()
+    pub async fn test_pool() -> Result<Self, AppError> {
+        let opts = SqliteConnectOptions::from_str("sqlite::memory:")?
             .pragma("foreign_keys", "ON")
             .pragma("synchronous", "NORMAL")
             .pragma("temp_store", "MEMORY");
 
-        let pool = SqlitePoolOptions::new().max_connections(1).connect_with(opts).await.unwrap();
+        let pool = SqlitePoolOptions::new().max_connections(1).connect_with(opts).await?;
 
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await?;
 
-        DbPool {
+        Ok(DbPool {
             read: pool.clone(),
             write: pool,
-        }
+        })
     }
 }
 

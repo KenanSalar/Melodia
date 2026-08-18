@@ -47,7 +47,7 @@ struct Seed {
 }
 
 async fn seed() -> Result<Seed, AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     let t1 = insert_test_track(&db, "/music/1.mp3", "One", "Artist A", "Album A", "Rock").await?;

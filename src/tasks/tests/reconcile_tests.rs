@@ -22,7 +22,7 @@ const SENTINEL_MTIME: &str = "2001-02-03T04:05:06+00:00";
 /// A pool with `dir` registered as a library folder (id 1) and one track row at
 /// `<dir>/from.mp3` — the row a rename has to re-point.
 async fn seed_folder_with_track(dir: &std::path::Path) -> Result<(DbPool, i64), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let folder = dir.to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
 
