@@ -129,9 +129,10 @@ as work to be done — it is done, and the truncated 64-bit hash is fine (birthd
    smallest round value above it. That it also lands exactly past the lower cluster is what
    makes it cheap.
 
-5. **The caches upscale a fifth of the store, and the store does not.** `cover_thumbs.rs:273`
-   calls `thumbnail_exact(thumb_size, thumb_size)`, which produces exactly that regardless of
-   the source; `artwork_cache.rs:129`'s `thumbnail(COVER_SIZE, COVER_SIZE)` routes through
+5. **The tier resize is where the cover path spends its time, and it upscales a fifth of the
+   store besides.** Two defects behind one call, so one fix. `cover_thumbs.rs:273` calls
+   `thumbnail_exact(thumb_size, thumb_size)`, which produces exactly that regardless of the
+   source; `artwork_cache.rs:129`'s `thumbnail(COVER_SIZE, COVER_SIZE)` routes through
    `resize_dimensions` (`image-0.25.10/src/math/utils.rs:56`), whose `ratio = min(nw/w, nh/h)`
    has **no clamp at 1.0**. Measured against the tiers:
 
@@ -144,6 +145,31 @@ as work to be done — it is done, and the truncated 64-bit hash is fine (birthd
 
    19 files are 128 px. Each is currently held as a 448×448 / 588 KB buffer carrying 128×128
    of information — a 12× multiplier, box-filter upscaled.
+
+   **The cost is the other half.** `imageops::thumbnail` averages a source block per output
+   pixel through `GenericImageView::get_pixel`, so it is bounds-checked per pixel and its
+   floor is the *output* rather than the source. Mean per cover over the 227-file store,
+   resizing to the 384 px tile:
+
+   | resize | today's store | at a 512 cap |
+   |---|---|---|
+   | `image::thumbnail` (today) | 2427 µs | 1997 µs |
+   | the same box average, written over the flat RGB slice | 1060 µs | 810 µs |
+   | `fast_image_resize`, `Box` (SIMD) | **153 µs** | **127 µs** |
+
+   Two things follow, and they are why Phase 2 is a resizer swap rather than a clamp. **The
+   cap barely reaches this**: capping the store takes the decode from 1662 µs to 438 µs and
+   leaves the resize near 2 ms, the floor being the output size, which no cap moves. And **the
+   algorithm is not the problem** — the identical box average written against the byte slice
+   is 2.4× faster and a SIMD one 16×, for output differing by a mean of 2.7 per channel byte.
+   Against the whole per-cover path (decode + tile + seeds) the swap is worth more than the
+   cap is: 4351 µs → 826 µs with both, and the resize is 2290 of the 3525 saved.
+
+   **And the tiers are not the worst of it.** `artwork.rs:268`'s `resize_to_cover` fits a
+   source to a collage quadrant through `resize_exact`, four times per composite: 4387 µs a
+   source on `Lanczos3` and 2243 on `Triangle`, against 440 and 206 for the same two filters
+   under SIMD. That is ~17 ms per persisted collage and ~9 ms per curated-banner recompose,
+   on the one path finding 7 says is hot.
 
 6. **Three of the four writers are not atomic, and the failure is permanent.**
    `compose_artwork` (`artwork.rs:362`) stages through `NamedTempFile` and `persist`;
@@ -174,12 +200,16 @@ it is without a deliberate pass. Hence Phase 5.
 No new module. Both halves belong to the file that already owns the store.
 
 ```
-src/media/artwork.rs        the writers (atomicity), normalization, the filename predicate
+src/media/artwork.rs        the writers (atomicity), normalization, the filename predicate,
+                            and the collage resize (Phase 2)
 src/media/artwork/sweep.rs  NEW: the reference sweep, one fn over (dir, referenced set)
 src/database/queries/artwork.rs  NEW: the four-column reference query
-src/media/cover_thumbs.rs   the tier decode (Phase 2 clamp)
-src/ui/artwork_cache.rs     the cover + blur decode (Phase 2 clamp)
+src/media/image_decode.rs   the shared resize primitive (Phase 2)
+src/media/cover_thumbs.rs   the tier resize (Phase 2)
+src/ui/artwork_cache.rs     the cover + blur resize (Phase 2)
+src/ui/callbacks/tags.rs    the tag dialog's cover preview (Phase 2)
 melodia-ui/ui/views/now-playing-view.slint   the card ceiling (Phase 4)
+Cargo.toml                  the resizer dependency (Phase 2)
 ```
 
 Ownership rules:
@@ -203,10 +233,16 @@ Ownership rules:
 - **`COMPOSITE_SIZE` is derived from `STORE_MAX_DIM`, not spelled beside it.** The composite
   is written *into* the store, so a composite larger than the cap is encoded once and
   immediately re-encoded — a second generation loss on the one path finding 7 says is hot.
-- **The Phase 2 clamp belongs at each decode, not in a shared helper.** The three call sites
-  want different things — square, aspect-preserved, and deliberately aspect-*distorted* — so
-  a single "fit" helper would have to take a mode argument that is really just the three
-  call sites written down again.
+- **One resizer, and `store_image` is one of its callers.** Phase 4's downscale to the cap is
+  the same operation as a tier's, so a second spelling there is how the store ends up
+  filtering differently from what reads it back — and `resize_to_cover` writes into that same
+  store. Six call sites, one dependency, one documented exception (Phase 2 item 8).
+- **Each of them computes its own target; there is no shared "fit" helper.** They want
+  different things — square, aspect-preserved, deliberately aspect-*distorted*, cover-and-crop,
+  and the cap — so a helper would need a mode argument that is really just the call sites
+  written down again. This is what absorbs the upscale half of finding 5: the target is now
+  spelled at the call site, so bounding it by the source's long edge is a term in an expression
+  each one already writes, rather than a clamp bolted onto a resize that decided its own size.
 - **`src/ui/` reaches none of the store work.** The sweep is a scan-pipeline concern and runs
   where the orphan cleanup already runs. The one `src/ui/` and `.slint` edit in this plan is
   the now-playing card ceiling, which is a tier question rather than a store one.
@@ -215,8 +251,10 @@ Ownership rules:
 
 ## Phases
 
-Phases 1 and 2 are independent correctness/memory fixes that hold regardless of what the
-store contains; ship them in either order. Phases 3–5 are the store itself.
+Phases 1 and 2 are independent correctness/performance fixes that hold regardless of what the
+store contains; ship them in either order. Phases 3–5 are the store itself. The one ordering
+constraint outside that split is **Phase 2 before Phase 4**, which resizes through what Phase 2
+lands.
 
 **Phase 3 is still the one that pays**, taking 39.0 MB → 10.5 MB on the reference library.
 Under the old 1280 cap Phases 4 and 5 were insurance that touched one live file; at 512 they
@@ -240,21 +278,47 @@ than on a hypothetical one.
 short of decoding every file, and the honest fix for a user who hits one is Phase 3 plus a
 re-scan — the sweep won't remove a referenced file, but a re-scan after the row is gone will.
 
-### Phase 2 — Stop the caches upscaling
+### Phase 2 — Swap the tier resizer
 
-Independent of everything else: different files, different mechanism, and it is a memory
-win rather than a disk one.
+Independent of what the store *contains*, so it can ship before Phase 3 — but **ahead of
+Phase 4**, which reuses what this phase lands. One edit for both halves of finding 5: the
+resize stops costing ~2 ms a cover, and it stops enlarging a source already smaller than the
+tier.
 
-1. **`cover_thumbs.rs:273`** — clamp the square target to the source's own long edge. A
-   128 px source yields a 128 px buffer, not a 448 px one.
-2. **`artwork_cache.rs:129`** (`thumbnail`, aspect-preserved) — clamp the target box the
-   same way; `resize_dimensions` will then compute a ratio ≤ 1.
-3. **`artwork_cache.rs:143`** (`thumbnail_exact(BLUR_TARGET, spec.height)`) is the
-   one that needs care: its aspect distortion is **deliberate**, squashing a square cover
-   into a landscape band. Scale the *target rectangle* down uniformly until it fits the
-   source rather than clamping each axis independently — otherwise the amount of distortion
-   starts depending on the source's shape, which is a behaviour change rather than a saving.
-4. Nothing on the Slint side changes. Every consumer draws these through `image-fit: cover`
+1. Take `fast_image_resize = "6.1.0"` and give `media/image_decode.rs` a
+   `resize_rgb8(src, width, height, filter) -> RgbImage` beside `decode_capped` — that file is
+   already the single copy of the preamble every decode shares, and its `//!` widens by one
+   clause (Phase 7). **It takes an explicit target and computes none**, which is what keeps it
+   from being the "fit" helper the ownership rules refuse: the shape question stays at the call
+   site, only the pixels move here. `filter` stays the caller's for the reason
+   `resize_to_cover` already documents — a file that outlives the session and a banner
+   recomposed per top-4 change buy different things with it.
+2. The three tiers take `ResizeAlg::Convolution(FilterType::Box)` — the same average
+   `imageops::thumbnail` computes, so no tier changes appearance. Measured against a
+   hand-written box over the same sources, the outputs differ by a mean of 2.7 per channel byte.
+3. **`cover_thumbs.rs:273`** — square target, bounded by the source's own long edge. A 128 px
+   source yields a 128 px buffer, not a 448 px one.
+4. **`artwork_cache.rs:129`** — aspect-preserved fit inside `COVER_SIZE`, bounded the same way.
+5. **`artwork_cache.rs:143`** (`thumbnail_exact(BLUR_TARGET, spec.height)`) is the one that
+   needs care: its aspect distortion is **deliberate**, squashing a square cover into a
+   landscape band. Scale the *target rectangle* down uniformly until it fits the source rather
+   than bounding each axis independently — otherwise the amount of distortion starts depending
+   on the source's shape, which is a behaviour change rather than a saving.
+6. **`artwork.rs:268`'s `resize_to_cover`** is the largest single resize in the tree and the
+   one the tiers' numbers understate — it fits a source to a collage quadrant, four times per
+   composite, at 4387 µs a source on Lanczos3 and 2243 on Triangle. `Lanczos3` and `Bilinear`
+   map straight across at 440 and 206. Both existing filters keep their callers; only the
+   implementation moves. This site also decides the swap's reach: the composite is written
+   *into* the store, so leaving it on `image` is the "store filters differently from what reads
+   it back" the ownership rules refuse.
+7. **`ui/callbacks/tags.rs:648`** — the tag dialog's cover preview, at `COVER_SIZE` like the
+   others. Not a hot path, included so the walk in Phase 6 can be written as an equality.
+8. **`services/material_you.rs:124` is the one documented exception** and stays on
+   `image::resize_exact(Triangle)`. It downscales to 64 px to seed a *palette*, so a filter
+   change moves every generated theme colour, and `extract_source_argb` is the cold half of
+   that path — the live one reads a `CoverThumbs` buffer that is already through the new
+   resizer. Precedent: `tag_writer` is the same shape of exception to `decode_capped`.
+9. Nothing on the Slint side changes. Every consumer draws these through `image-fit: cover`
    on a GPU texture, so a smaller buffer is simply magnified at draw time — work the GPU was
    doing anyway, and with bilinear filtering rather than the box-filtered upscale currently
    baked into the buffer. Expect it to look the same or slightly better.
@@ -285,7 +349,11 @@ that creates one is worse than the leak it fixed.
 
 1. `store_image(bytes, dir)`: decode-validate through `image_decode::capped_limits`, then
    re-encode **only when the source exceeds a bound** — long edge > `STORE_MAX_DIM`, or byte
-   length > `STORE_MAX_BYTES`. Below both, write the original bytes untouched.
+   length > `STORE_MAX_BYTES`. Below both, write the original bytes untouched. The downscale
+   goes through Phase 2's `resize_rgb8` — it is the same operation a tier performs, and the
+   store filtering differently from what reads it back is a difference nobody would think to
+   look for. Phase 5 drives this in bulk, so it is also the one caller where the resizer's
+   cost is paid over the whole store at once.
 2. **`STORE_MAX_DIM = 512`**, argued at its definition from finding 4. The store must hold at
    least what the largest tier decodes — `GRID_COVER_SIZE_HIDPI` at 448 — so 448 is a floor
    and 512 is the smallest round value clearing it with room to retune a tier without
@@ -362,8 +430,13 @@ Source walks, matching the tree's existing style:
    case finding 2 measured, and the one that blanks every playlist mosaic if it regresses.
 5. **The grace window keeps a just-written file**, with the clock injected rather than
    slept on.
-6. **No tier upscales** — a source smaller than the tier yields a buffer at the source's
-   size, at all three Phase 2 call sites, plus the blur tier keeping its target aspect.
+6. **No tier upscales, and there is one resizer** — a source smaller than the tier yields a
+   buffer at the source's size at the three tier call sites, plus the blur tier keeping its
+   target aspect. Beside it a source walk: outside `image_decode::resize_rgb8`, the only thing
+   under `src/` naming `thumbnail`, `thumbnail_exact`, `resize_exact` or `imageops::resize` is
+   `services/material_you.rs`. Assert that as an **equality**, the way
+   `test_support::callback_sources` does — a floor cannot see a new site appear, and a new site
+   reaching for `image`'s own compiles clean while silently costing what finding 5 measured.
 7. **`COMPOSITE_SIZE <= STORE_MAX_DIM`** — a `const` assertion, not a runtime test. The
    failure is silent (a double re-encode on every playlist edit), so it belongs where it
    can't be skipped.
@@ -378,7 +451,9 @@ Source walks, matching the tree's existing style:
 
 1. `CLAUDE.md` — the `media/` bullet gains the store's invariants: content-addressed,
    atomically written, bounded on ingest at the largest tier's decode size, swept against
-   four columns. Two lines; the detail belongs in the module's `//!`.
+   four columns. Two lines; the detail belongs in the module's `//!`. The same bullet already
+   calls `decode_capped` the sole bounded-decode preamble — after Phase 2 that sentence owes
+   the resize, `resize_rgb8` being the one Phase 6 walks the tree for.
 2. `.claude/rules/library-data.md` — the sweep's position in the scan pipeline, beside the
    existing orphan-cleanup and artwork-rollup sentence, and the fourth column with it.
 3. `src/media/artwork.rs`'s `//!` — currently absent; the store's contract has grown enough
@@ -386,8 +461,11 @@ Source walks, matching the tree's existing style:
 4. `src/media/cover_thumbs.rs`'s `//!` already says "downscaled to `thumb_size`" — after
    Phase 2 that is true rather than aspirational, and worth one clause noting a smaller
    source stays small.
-5. `src/ui/util.rs`'s `COVER_SIZE` doc says "~380 px" — after Phase 4 it is exact.
-6. Delete this file.
+5. `src/media/image_decode.rs`'s `//!` describes one bounded decode; after Phase 2 the module
+   owns the shared resize too, and the reason it is shared (one filter across tiers and the
+   store) is not derivable from the signature.
+6. `src/ui/util.rs`'s `COVER_SIZE` doc says "~380 px" — after Phase 4 it is exact.
+7. Delete this file.
 
 ---
 
@@ -401,10 +479,25 @@ Source walks, matching the tree's existing style:
   background task rather than a migration. The user's own files are never touched:
   `tag_writer::cover_picture_from_path` embeds the picked cover's **original bytes** and
   decodes only to validate, so a capped store never caps what is written back to a tag.
-- **Two different wins, don't conflate them.** Phase 2 is memory (smaller cache buffers, ~21%
-  of covers affected). Phases 3–5 are disk plus decode CPU, and after Phase 4 the largest
-  transient RGB8 buffer any tier can allocate from the store falls from tens of MiB to under
-  a megabyte. The RSS reading should move on Phase 2 and on prewarm bursts after Phase 5.
+- **Three different wins, don't conflate them.** Phase 2 is CPU (the resize, per finding 5)
+  *and* memory (smaller cache buffers, ~21% of covers affected). Phases 3–5 are disk plus
+  decode CPU, and after Phase 4 the largest transient RGB8 buffer any tier can allocate from
+  the store falls from tens of MiB to under a megabyte. The RSS reading should move on Phase 2
+  and on prewarm bursts after Phase 5; the per-cover latency moves on Phases 2 and 4 together,
+  measured 4351 µs → 826 µs over the reference store.
+- **`fast_image_resize` is the one new dependency, and taking it is a deliberate import of
+  `unsafe`.** It reaches its speed through SIMD intrinsics and so carries `unsafe` internally.
+  The workspace `unsafe_code = "deny"` does not reach a dependency, and the tree already builds
+  on several that do the same — but the rule is emphatic enough that arriving here by way of a
+  `cargo add` would be the wrong way to arrive here. The alternative is the hand-written box
+  average: no dependency, 810 µs against the SIMD 127, so 2.4× rather than 16×. Pin the full
+  `x.y.z` either way.
+- **Don't reach for the quantizer's stride.** `color_thief::get_palette`'s `quality` argument
+  is a pixel step, so raising it from 1 is the obvious next saving on the same path — and it is
+  worth 54 µs a cover against a third aurora wash that moves by more than 24 (of 441) on 22 of
+  the 227 covers and by more than 64 on 10. The dominant colour is stable under it; the third
+  is not, and the third is a sweep the surface paints. Written down because the argument for it
+  is one line and the argument against it needs the measurement.
 - **Don't fold in the tier consolidation.** Seven `CoverThumbs` instances share
   `GRID_COVER_SIZE` and a cap of 48, and `favorites/mod.rs:129` says two of them are the
   same tier in a comment. Real, but it is a re-decode saving rather than a memory one
