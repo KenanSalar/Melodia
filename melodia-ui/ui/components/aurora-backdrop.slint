@@ -1,0 +1,99 @@
+import { Theme } from "../theme.slint";
+
+// One of the three sweeps: album colour along one edge of the surface, gone by 70.71% of the
+// gradient line. The headings are near-orthogonal, so each owns a different edge and one corner is
+// left showing the floor — that asymmetry is the whole effect, four symmetric corner washes
+// averaging to one flat tone whatever the record was. They are CSS-convention degrees needing no
+// conversion, Slint's `line_for_angle` taking the same magic-corner construction.
+//
+// **Two stops, the far one this tint at zero alpha — never the `transparent` keyword.** FemtoVG
+// interpolates stops in straight RGBA, so fading to rgba(0,0,0,0) drags the colour toward black and
+// the ramp darkens instead of thinning.
+component AuroraSweep inherits Rectangle {
+    in property <color> tint;
+    in property <angle> heading;
+    in property <bool> shown: true;
+
+    // `transparentize` multiplies, so a synthesized wash keeps the lower weight `ui::aurora` gave it.
+    // Both arms one type at one stop count, the only shape `Brush::interpolate` blends stop-for-stop.
+    // Safe to `animate`: Rust writes the tint discretely, so nothing can restart the binding.
+    background: root.shown
+        ? @linear-gradient(root.heading, root.tint.transparentize(0.45) 0%, root.tint.transparentize(1.0) 70.71%)
+        : @linear-gradient(root.heading, root.tint.transparentize(1.0) 0%, root.tint.transparentize(1.0) 70.71%);
+    animate background { duration: Theme.dur-med; easing: ease-in-out; }
+}
+
+// The artwork-derived backdrop: three broad sweeps of album colour over the theme's own base, and a
+// grain of noise. Nothing caps the washes, so a surface keeps the record's value structure and reads
+// as light falling across a plane rather than as a tint; `ui::aurora` argues the trade.
+//
+// **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom, so this file
+// imports no global: one mount reads the `Player` tier and the others `HeroBackdrop`. That holds
+// even for `base-start` / `base-end`, which carry `Theme.base` on this arm; they stay two properties
+// because the blur reads the same pair and solves a real ramp into it.
+export component AuroraBackdrop inherits Rectangle {
+    in property <color> base-start: #2b2135;
+    in property <color> base-end: #14101a;
+    in property <color> tint-1: #3a2d4a;
+    in property <color> tint-2: #2d3a4a;
+    in property <color> tint-3: #4a2d3a;
+
+    // Grain over everything below; `ui::aurora::dither_tile` argues it. An unset image draws
+    // nothing, so a mount without one degrades to undithered gradients rather than to a hole.
+    in property <image> dither;
+
+    // Whether the host is painting a hero at all — `HeroBlurBackdrop.shown`'s twin, and drained
+    // through rather than unmounted, an unmounted stack having nothing to fade from. **Discrete
+    // bool** — a float would restart every binding below per frame.
+    in property <bool> shown: true;
+
+    clip: true;
+
+    background: root.shown
+        ? @linear-gradient(135deg, root.base-start, root.base-end)
+        : @linear-gradient(135deg, transparent, transparent);
+    animate background { duration: Theme.dur-med; easing: ease-in-out; }
+
+    // **Declared back to front.** Slint paints the last child on top, so tint-3 goes down first and
+    // tint-1 — the colour the artwork most is — lands over both.
+    AuroraSweep {
+        width: 100%;
+        height: 100%;
+        tint: root.tint-3;
+        heading: 336deg;
+        shown: root.shown;
+    }
+    AuroraSweep {
+        width: 100%;
+        height: 100%;
+        tint: root.tint-2;
+        heading: 217deg;
+        shown: root.shown;
+    }
+    AuroraSweep {
+        width: 100%;
+        height: 100%;
+        tint: root.tint-1;
+        heading: 127deg;
+        shown: root.shown;
+    }
+
+    // **`image-fit: preserve` is what makes this dither rather than decoration**: the default `fill`
+    // scales the tile before tiling it, turning one texel into a block tens of pixels across. Only
+    // `preserve` maps a source texel to a physical pixel, the frequency dither has to run at to
+    // disappear; `pixelated` so filtering can't average it back toward the flat colour it breaks up.
+    // Alpha lives in the tile rather than in `opacity`, which would rasterize this into a layer —
+    // and is why the grain unmounts rather than easing out with everything else, there being nothing
+    // to fade. Ungated it would grain the blur through every crossing.
+    if root.shown: Image {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        source: root.dither;
+        image-fit: ImageFit.preserve;
+        image-rendering: ImageRendering.pixelated;
+        horizontal-tiling: ImageTiling.repeat;
+        vertical-tiling: ImageTiling.repeat;
+    }
+}

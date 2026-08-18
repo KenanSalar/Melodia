@@ -6,11 +6,17 @@
 //! ([`seed_from_pixels`] argues the fallback); build a `DynamicScheme` of the
 //! requested style and map the M3 roles into a [`crate::themes::Palette`].
 //!
+//! **[`population_seeds`] answers to none of that**, and is here because this is
+//! where a cover becomes colours: the backdrop asks what the artwork mostly *is*
+//! where everything else asks what makes the best UI seed, hence a second
+//! quantizer.
+//!
 //! All public functions are sync and may block — call from `spawn_blocking`.
 
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
+use color_thief::ColorFormat;
 use image::imageops::FilterType;
 use lru::LruCache;
 use material_colors::color::Argb;
@@ -159,9 +165,8 @@ fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
         return None;
     }
     let counts = QuantizerCelebi::quantize(pixels, QUANTIZE_MAX_COLOURS).color_to_count;
-    let dominant = *counts.iter().max_by_key(|(_, count)| **count)?.0;
-    let seed = *Score::score(&counts, Some(1), Some(dominant), None).first()?;
-    Some(argb_to_u32(seed))
+    let dominant = counts.iter().max_by_key(|(_, count)| **count).map(|(argb, _)| *argb)?;
+    Score::score(&counts, Some(1), Some(dominant), None).into_iter().next().map(argb_to_u32)
 }
 
 /// [`extract_source_argb`]'s pipeline starting from the RGB8 thumbnail
@@ -173,12 +178,60 @@ fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
 /// **Blocking** (CPU-bound quantize) — call from `spawn_blocking`.
 pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<u32> {
     let bytes = buf.as_bytes();
-    // No alpha here, so the sibling's alpha-skip collapses to a plain push.
+    // No alpha here, so the path-based sibling's alpha-skip collapses to a plain push.
     let mut pixels: Vec<Argb> = Vec::with_capacity(bytes.len() / 3);
     for chunk in bytes.chunks_exact(3) {
         pixels.push(Argb::new(0xff, chunk[0], chunk[1], chunk[2]));
     }
     seed_from_pixels(&pixels)
+}
+
+/// Up to `desired` colours the cover is mostly *made of*, most prominent first.
+///
+/// [`seed_from_pixels`]'s opposite number, and the one the backdrop washes across its surface.
+/// `Score` ranks by how *usable* a colour is: on a photographic sleeve that picks the reddest thing
+/// in the frame over what the frame mostly is, and on a greyscale one its chroma cutoff answers
+/// **once**, leaving a backdrop to invent three of its four washes. Median cut has no cutoff and
+/// asks the other question.
+///
+/// **A short list is rare but real, so the caller still owes a filling rule**: a near-white sleeve
+/// drops to nothing — the crate discards every pixel over 250 on all three channels — and comes
+/// back as a single white. Anything else fills the list, median cut splitting past the point where
+/// a box holds one colour.
+///
+/// Reads tightly-packed RGB8 in place, with no intermediate pixel vector, at quality 1 — the finest
+/// stride on offer and **not** every pixel, the crate advancing by `bytes-per-pixel × quality`.
+///
+/// **Blocking** — cheap, but it belongs on the worker that decoded the cover either way.
+pub fn population_seeds(rgb: &[u8], desired: usize) -> Vec<u32> {
+    // Guarded rather than left to the crate: on an empty slice it builds an inverted box and
+    // answers `Ok([white])`, where every caller here spells "no artwork" as an empty list.
+    if rgb.is_empty() {
+        return Vec::new();
+    }
+
+    // The crate asserts below two, and a backdrop asking for one wash is not a caller's error to
+    // report from here.
+    let max_colors = u8::try_from(desired).unwrap_or(u8::MAX).max(2);
+    match color_thief::get_palette(rgb, ColorFormat::Rgb, 1, max_colors) {
+        Ok(palette) => palette
+            .into_iter()
+            .map(|c| (u32::from(c.r) << 16) | (u32::from(c.g) << 8) | u32::from(c.b))
+            .collect(),
+        // A box it could neither cut nor average. Nothing to say about this cover, which is the
+        // same answer as no cover — and not worth a log line on a path that runs per track.
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Edit `argb` in HCT and pack the result back. **The round trip is gamut-mapped**, so a saturated
+/// seed can come back a little less saturated — stated here rather than at each helper below.
+/// [`clamp_to_tone_band`] deliberately doesn't use it: returning an in-band colour *verbatim* is
+/// what keeps its own chroma, and a round trip would map it.
+fn with_hct(argb: u32, edit: impl FnOnce(&mut Hct)) -> u32 {
+    let mut hct = Hct::new(Argb::from_u32(argb));
+    edit(&mut hct);
+    argb_to_u32(Argb::from(hct))
 }
 
 /// Move `argb` into the `min_tone..=max_tone` HCT lightness band, leaving hue
@@ -226,12 +279,29 @@ pub fn clamp_to_tone_band(argb: u32, min_tone: f64, max_tone: f64) -> u32 {
 /// Chroma is capped *before* the tone is set, the solver gamut-mapping against
 /// whatever chroma it is given.
 pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
-    let mut hct = Hct::new(Argb::from_u32(argb));
-    if hct.get_chroma() > max_chroma {
-        hct.set_chroma(max_chroma);
-    }
-    hct.set_tone(tone);
-    argb_to_u32(Argb::from(hct))
+    with_hct(argb, |hct| {
+        if hct.get_chroma() > max_chroma {
+            hct.set_chroma(max_chroma);
+        }
+        hct.set_tone(tone);
+    })
+}
+
+/// Scale `argb`'s HCT lightness by `factor`, keeping hue and chroma — a darker *sibling* of a
+/// colour rather than a legible version of it, [`crate::ui::aurora`] pairing a wash with a deeper
+/// one so an art-less surface has the value structure a cover gave it. Multiplicative so the
+/// answer scales with whatever the theme's accent is; a fixed tone flattens every palette onto one
+/// pair.
+pub fn scale_tone(argb: u32, factor: f64) -> u32 {
+    with_hct(argb, |hct| hct.set_tone((hct.get_tone() * factor).clamp(0.0, 100.0)))
+}
+
+/// Turn `argb` `degrees` around the HCT hue wheel, keeping tone and chroma, and wrapping so any
+/// `degrees` is in range. For making a *second* colour out of a first rather than making one
+/// legible: [`crate::ui::aurora`] fills a short seed list this way. HCT rather than HSL keeps the
+/// sibling at the same apparent lightness, which is why the tint band states one tone ceiling.
+pub fn rotate_hue(argb: u32, degrees: f64) -> u32 {
+    with_hct(argb, |hct| hct.set_hue((hct.get_hue() + degrees).rem_euclid(360.0)))
 }
 
 /// Build a `DynamicScheme` of `style` × `is_dark` from the seed and map the M3

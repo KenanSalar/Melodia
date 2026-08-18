@@ -19,7 +19,7 @@ export component NowPlayingCover inherits Rectangle {
     // blur, where a light theme's surface reads as a white square through the
     // cross-fade. The low alpha keeps it a recess in the backdrop, not a slab
     // on it.
-    background: Player.np-on-backdrop.with-alpha(0.08);
+    background: Player.np-on-backdrop.transparentize(0.92);
     clip: true;
 
     // Under the slots, faded out once a cover is there.
@@ -33,7 +33,7 @@ export component NowPlayingCover inherits Rectangle {
                 MaterialIcon {
                     name: "music_note";
                     icon-size: root.height * 0.4;
-                    icon-color: Player.np-on-backdrop-muted.with-alpha(0.5);
+                    icon-color: Player.np-on-backdrop-muted.transparentize(0.5);
                 }
             }
         }

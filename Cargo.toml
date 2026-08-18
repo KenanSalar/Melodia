@@ -204,6 +204,13 @@ lru = "0.18.2"
 # features stay off — we feed it quantized pixel data ourselves.
 material-colors = "0.4.2"
 
+# The backdrop's own quantizer, beside rather than instead of the one above: the
+# two answer different questions, and only one of them is "what is this cover
+# mostly made of". Median-cut over a fixed histogram, so it costs a fraction of
+# a millisecond where Celebi's k-means costs tens on photographic art. Its one
+# dependency, `rgb`, is already in the lock file.
+color-thief = "0.2.2"
+
 # Serde / config
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"

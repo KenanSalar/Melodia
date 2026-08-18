@@ -257,8 +257,8 @@ fn the_grid_mount_forwards_the_covers_generation() {
         MOST_PLAYED_TAB.contains("covers-generation: RecentlyPlayed.covers-generation;"),
         "most-played-tab.slint must forward `covers-generation` to its `EntityCardGrid`"
     );
-    // Arity-counted, so the hero's one-argument `CoverMosaic` lookup can't stand
-    // in for the grid's two-argument one.
+    // Arity-counted: the one-argument form is a live signature elsewhere in the tree, so a
+    // mount wired to it builds and only misbehaves on a cold tab.
     let request = block_body(MOST_PLAYED_TAB, "request-cover(", ")").unwrap_or_default();
     assert!(
         request.contains(','),
@@ -432,9 +432,10 @@ fn a_superseded_filter_build_does_not_reach_the_grid() {
 /// equality: a counter that repeated a value would let a stale build match.
 #[test]
 fn every_filter_write_moves_the_token_the_deferred_build_carries() {
-    let rp_ui = super::RecentlyPlayedUi::new(std::sync::Arc::new(
-        crate::media::cover_thumbs::CoverThumbs::new(),
-    ));
+    let rp_ui = super::RecentlyPlayedUi::new(
+        std::sync::Arc::new(crate::media::cover_thumbs::CoverThumbs::new()),
+        None,
+    );
 
     let mut seen = vec![rp_ui.filter_generation()];
     for needle in ["a", "ab", "ab", ""] {

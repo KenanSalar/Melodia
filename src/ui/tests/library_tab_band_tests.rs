@@ -288,15 +288,19 @@ fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
         );
     }
 
+    // The backdrop is one mount carrying both stacks, so this is the single binding standing
+    // between an artwork-less detail and a backdrop easing out of the previous tab's stops. The
+    // wrapper defaults `shown` true, for the two mosaic bands and Now Playing, which never stop
+    // painting a hero — so an omitted binding here is silently ungated.
     let mount = code
-        .split_once("HeroBlurBackdrop {")
+        .split_once("HeroBackdropStack {")
         .and_then(|(_, rest)| rest.split_once('}'))
-        .map_or(String::new(), |(body, _)| body.to_owned());
+        .map_or("", |(body, _)| body);
     assert!(
-        mount.contains("hero-open: root.detail-open;"),
-        "the band must gate the shared floor on the same predicate — it defaults to ungated for \
-         the two mosaic bands, which never stop painting a hero, and an ungated floor here is the \
-         whole backdrop of an artwork-less detail easing out of the previous tab's stops"
+        mount.contains("shown: root.detail-open;"),
+        "the band must gate `HeroBackdropStack`'s `shown` on `detail-open` — the wrapper ANDs the \
+         setting in itself, so this term is the band's whole half of the deal and covers both \
+         stacks at once. The wrapper owes the other half, pinned by `hero_blur_backdrop_tests`"
     );
 }
 
@@ -558,14 +562,17 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
          whole of the bug"
     );
     assert_eq!(
-        title.matches("color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);").count(),
+        title.matches("color: HeroBackdrop.on-backdrop.transparentize(1.0 - root.hero-t);").count(),
         2,
         "the title *and* the subtitle must carry the fade in their own brush. The subtitle is the \
          block's last child, so it is the edge a layer cut from below — fixing only the title \
          moves the crop rather than removing it"
     );
+    // Every tier here carries alpha of its own on the aurora arm, so a fade multiplies into it;
+    // `with-alpha` would set it instead and paint the block opaque at rest, dropping the whole
+    // mechanism, which is the wash reading through.
     assert!(
-        title.contains("icon-color: HeroBackdrop.chrome.with-alpha(root.hero-t);"),
+        title.contains("icon-color: HeroBackdrop.chrome.transparentize(1.0 - root.hero-t);"),
         "the smart-playlist badge fades with the text beside it — left on a flat brush it is the \
          one piece of the block that arrives before the morph does"
     );
@@ -593,11 +600,12 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
     assert!(
         strip.contains("chip-fill: HeroBackdrop.chip-fill-at(root.fade * root.arrive-t);")
             && strip.contains(
-                "chip-label-color: HeroBackdrop.chrome.with-alpha(root.fade * root.arrive-t);"
+                "chip-label-color: HeroBackdrop.chrome-text\
+                 .transparentize(1.0 - root.fade * root.arrive-t);"
             ),
-        "both of the strip's brushes must carry the fade, and the pill must go through the \
-         global's own function — `with-alpha` *sets* alpha rather than multiplying it, so a local \
-         spelling would have to restate the tier's weight"
+        "both of the strip's brushes must carry the fade: the pill through the global's own \
+         function so its weight is stated once, the label through `transparentize`, since \
+         `with-alpha` *sets* alpha and `chrome-text` carries its own on the aurora arm"
     );
 }
 
@@ -854,7 +862,7 @@ fn the_back_button_takes_every_brush_from_the_backdrop() {
     );
 
     for (prop, tier) in [
-        ("idle-bg", "HeroBackdrop.chip-fill"),
+        ("idle-bg", "HeroBackdrop.disc-fill"),
         ("hover-bg", "HeroBackdrop.disc-hover"),
         ("idle-fg", "HeroBackdrop.chrome"),
     ] {

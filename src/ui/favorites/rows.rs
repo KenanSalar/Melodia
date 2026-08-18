@@ -27,9 +27,6 @@ pub(super) fn install_favorites_models(ui: &AppWindow) {
     let tracks: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
     g.set_tracks(ModelRc::from(tracks));
 
-    let mosaic_paths: Rc<VecModel<SharedString>> = Rc::new(VecModel::default());
-    g.set_mosaic_paths(ModelRc::from(mosaic_paths));
-
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     g.set_selected_ids(ModelRc::from(sel));
 }

@@ -10,6 +10,8 @@ import { NowPlayingCover } from "../components/now-playing/now-playing-cover.sli
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
 import { NowPlayingViewMenu } from "../components/now-playing/view-menu.slint";
 import { VisualizerStrip } from "../components/now-playing/visualizer-strip.slint";
+import { AuroraBackdrop } from "../components/aurora-backdrop.slint";
+import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
 // The full-screen Now Playing view, rendered inside the content panel — sidebar and now-playing
 // bar stay visible — when `Nav.now-playing-open`. A large centred artwork, title / artist / album,
@@ -49,53 +51,41 @@ export component NowPlayingView inherits Rectangle {
     // negative.
     property <length> strip-w: max(root.cover-size, min(root.content-width * 0.75, root.strip-w-max));
 
-    // Always painted, so there is never an empty frame: with artwork the blur slots fade in over
-    // it, without it they fade to 0 and leave it visible. **Both stops come from Rust**, not a
-    // `Theme.accent` mix — this is the surface an art-less track's title sits on and the foreground
-    // is solved light, so a theme-derived floor would be bright on a light theme. Eased on the
-    // slots' own duration, it *being* the backdrop whenever both slots are at 0; safe to `animate`
-    // where a leaf's brush is not — `Brush::interpolate` handles gradient↔gradient stop-for-stop
-    // and `track_change.rs` writes the stops discretely, so nothing restarts it mid-flight.
-    Rectangle {
-        width: 100%;
-        height: 100%;
-        background: @linear-gradient(135deg, Player.np-floor-start, Player.np-floor-end);
-        animate background { duration: Theme.dur-med; easing: ease-in-out; }
-    }
+    // Which of the two backdrops this view paints — a process constant, the setting being
+    // restart-gated, so only the live arm is mounted: a hidden stack is not free,
+    // `Brush::is_transparent()` answering `false` for every gradient whatever its stop alphas.
+    // `hero-backdrop-stack.slint` argues it at length.
+    property <bool> aurora-shown: Theme.aurora-backdrop;
 
-    // Rust writes the new blurred cover into the *inactive* slot then flips the bool; only opacity
-    // animates and **a slot's `source` is never cleared**, so the outgoing layer stays fully painted
-    // for the whole fade. That overlap, plus the floor underneath, is what makes it flash-free.
-    Image {
+    // The stack the six hero bands mount, on this view's own colour tier. **Both floor stops come
+    // from Rust**, not a `Theme.accent` mix — this is the surface an art-less track's title sits on
+    // and the foreground is solved light. `shown` stays defaulted: this view has no idle state to
+    // drain to, where a band's globals outlive the tab that filled them.
+    if !root.aurora-shown: HeroBlurBackdrop {
         x: 0;
         y: 0;
         width: 100%;
         height: 100%;
-        source: Player.blur-img-a;
-        image-fit: ImageFit.cover;
-        opacity: (Player.blur-has-image && Player.blur-use-a) ? 1.0 : 0.0;
-        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
+        floor-start: Player.np-floor-start;
+        floor-end: Player.np-floor-end;
+        scrim: Player.np-scrim;
+        blur-a: Player.blur-img-a;
+        blur-b: Player.blur-img-b;
+        use-a: Player.blur-use-a;
+        has-blur: Player.blur-has-image;
     }
-    Image {
+
+    if root.aurora-shown: AuroraBackdrop {
         x: 0;
         y: 0;
         width: 100%;
         height: 100%;
-        source: Player.blur-img-b;
-        image-fit: ImageFit.cover;
-        opacity: (Player.blur-has-image && !Player.blur-use-a) ? 1.0 : 0.0;
-        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
-    }
-
-    // Drives the *composited* backdrop into a known dark band. The opacity is solved per artwork in
-    // Rust and baked into the brush, hence no `with-alpha`: a fixed alpha of a theme colour can't
-    // do this — on a light theme `Theme.crust` is near-white, so raising it *brightens* the
-    // backdrop, and a white sleeve needs about twice a black one's.
-    Rectangle {
-        width: 100%;
-        height: 100%;
-        background: Player.np-scrim;
-        animate background { duration: Theme.dur-med; easing: ease-in-out; }
+        base-start: Player.np-floor-start;
+        base-end: Player.np-floor-end;
+        tint-1: Player.np-tint-1;
+        tint-2: Player.np-tint-2;
+        tint-3: Player.np-tint-3;
+        dither: Player.np-dither;
     }
 
     // **Padding is per-section, not uniform on this layout**: the Up Next column has to
@@ -237,7 +227,7 @@ export component NowPlayingView inherits Rectangle {
                     // cell, so an album-less track reserved a full text line for nothing.
                     if Player.vm.has_track && Player.vm.track.album != "": Text {
                         text: "‎" + Player.vm.track.album;
-                        color: Player.np-on-backdrop-muted.with-alpha(0.75);
+                        color: Player.np-on-backdrop-muted.transparentize(0.25);
                         font-size: Theme.font-size-md;
                         horizontal-alignment: center;
                         overflow: elide;
@@ -253,8 +243,8 @@ export component NowPlayingView inherits Rectangle {
                     rows: Player.chip-rows;
                     show-rows: Player.track-meta.track_id == Player.vm.track.id;
                     centred: true;
-                    chip-fill: Player.np-accent-pill;
-                    chip-label-color: Player.np-accent-bright;
+                    chip-fill: Player.np-chip-fill;
+                    chip-label-color: Player.np-chrome-text;
                     measured(w) => { Player.recompute-chip-rows(w); }
                 }
 
@@ -292,7 +282,7 @@ export component NowPlayingView inherits Rectangle {
                     height: 1px;
                     // Weaker than the stars and heart above: a hairline, not a glyph, so it carries
                     // at a lower alpha without turning into a stripe.
-                    background: Player.np-accent-bright.with-alpha(0.45);
+                    background: Player.np-accent-bright.transparentize(0.55);
                 }
 
                 // The mini-player mounts the same component with `compact: true`.

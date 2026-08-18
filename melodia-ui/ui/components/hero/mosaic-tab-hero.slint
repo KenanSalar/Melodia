@@ -1,8 +1,8 @@
 import { Theme } from "../../theme.slint";
 import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
 import { NavEnterFrom } from "../../globals/nav.slint";
-import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
 import { HeroChipStrip } from "../hero-chip-strip.slint";
+import { HeroBackdropStack } from "hero-backdrop-stack.slint";
 import { MosaicHeroTile } from "mosaic-hero-tile.slint";
 import { TabSearchHeader } from "tab-search-header.slint";
 
@@ -11,8 +11,9 @@ import { TabSearchHeader } from "tab-search-header.slint";
 // strings, their tab list and the pills they pass as `@children`.
 //
 // **Data-agnostic on purpose.** A Slint component can't be parameterised over a global and
-// `Favorites` / `RecentlyPlayed` are distinct generated types — the same wall `impl_mosaic_hero!`
-// works around in Rust, and the reason this is a component rather than a third copy.
+// `Favorites` / `RecentlyPlayed` are distinct generated types — the same wall
+// `impl_detail_view_helpers!` works around in Rust, and the reason this is a component rather
+// than a third copy.
 export component MosaicTabHero inherits Rectangle {
     // **Inline `[@tr("…"), …]` at the call site** — an array populated from Rust renders
     // untranslated. Forwarding one through here keeps the literal in a `.slint` file.
@@ -29,7 +30,7 @@ export component MosaicTabHero inherits Rectangle {
     in property <string> empty-copy;
 
     in property <int> mosaic-count;
-    in property <[string]> mosaic-paths;
+    in property <image> mosaic-cover;
     in property <string> empty-glyph;
     in property <bool> empty-glyph-filled: false;
 
@@ -41,8 +42,6 @@ export component MosaicTabHero inherits Rectangle {
     in-out property <string> filter;
     in property <int> blur-tick;
 
-    // `pure` because `MosaicHeroTile`'s is, which is because `CoverMosaic`'s is.
-    pure callback request-cover(string) -> image;
     // Fires *after* the direction and arming have settled, so a host handler that clears its
     // filter and calls into Rust can't be sequenced ahead of them.
     callback tab-selected(int);
@@ -79,7 +78,7 @@ export component MosaicTabHero inherits Rectangle {
     // anchor. The bar itself must not ease these — see `tab-bar.slint`'s two floats.
     property <brush> hero-label: HeroBackdrop.on-backdrop;
     property <brush> hero-active: HeroBackdrop.chrome;
-    property <brush> hero-hover: HeroBackdrop.on-backdrop.with-alpha(0.12);
+    property <brush> hero-hover: HeroBackdrop.on-backdrop.transparentize(0.88);
     property <brush> hero-divider: HeroBackdrop.tile-edge;
     animate hero-label, hero-active, hero-hover, hero-divider {
         duration: Theme.dur-med;
@@ -104,9 +103,10 @@ export component MosaicTabHero inherits Rectangle {
     vertical-stretch: 0;
     height: root.hero-height;
 
-    // Behind everything else. The shared component owns the dual-slot crossfade contract; the
-    // gradient floor shows through when there is no blur image.
-    HeroBlurBackdrop {
+    // Behind everything else, and unconditionally shown: this band never stops painting a hero,
+    // where `LibraryTabBand` gates on its own `detail-open`. The gradient floor shows through when
+    // there is no blur image.
+    HeroBackdropStack {
         x: 0; y: 0;
         width: 100%; height: 100%;
         blur-a: root.blur-a;
@@ -146,7 +146,7 @@ export component MosaicTabHero inherits Rectangle {
             search-edited(t) => { root.search-edited(t); }
         }
 
-        // Mosaic tile + title block.
+        // Artwork tile + title block.
         HorizontalLayout {
             vertical-stretch: 1;
             spacing: Theme.pad-lg;
@@ -157,12 +157,9 @@ export component MosaicTabHero inherits Rectangle {
 
                 MosaicHeroTile {
                     count: root.mosaic-count;
-                    paths: root.mosaic-paths;
+                    cover: root.mosaic-cover;
                     empty-glyph: root.empty-glyph;
                     empty-glyph-filled: root.empty-glyph-filled;
-                    request-cover(p) => {
-                        return root.request-cover(p);
-                    }
                 }
             }
 

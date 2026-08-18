@@ -288,10 +288,10 @@ export component MyLibraryView inherits Rectangle {
                 ? @linear-gradient(135deg,
                     GenreDetail.genre.tile_color_1,
                     GenreDetail.genre.tile_color_2)
-                : HeroBackdrop.chrome.with-alpha(0.15);
+                : HeroBackdrop.placeholder.transparentize(0.85);
             tile-icon-color: root.hero-genre
                 ? #ffffff.with-alpha(0.3)
-                : HeroBackdrop.chrome;
+                : HeroBackdrop.placeholder;
 
             // **`has-blur` is the gate, not the slot.** `GenreDetail` declares no blur
             // quartet at all, and Slint has no empty-`image` literal to fall through to —

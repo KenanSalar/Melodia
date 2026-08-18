@@ -404,6 +404,15 @@ msgstr "Ουδέτερο"
 msgid "Monochrome"
 msgstr "Μονόχρωμο"
 
+msgid "Aurora Backdrop"
+msgstr "Φόντο Aurora"
+
+msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
+msgstr "Βάψτε τις κεφαλίδες άλμπουμ, λίστας αναπαραγωγής και «Αναπαράγεται τώρα» με τα χρώματα του ίδιου του άλμπουμ, αντί με ένα θολωμένο αντίγραφο του εξωφύλλου. Δεν χρειάζεται θόλωμα, οπότε οι κεφαλίδες εμφανίζονται πιο γρήγορα και το Melodia παραμένει πιο ελαφρύ. Απαιτείται επανεκκίνηση."
+
+msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
+msgstr "Η αλλαγή του στιλ φόντου απαιτεί επανεκκίνηση του Melodia. Επανεκκίνηση τώρα;"
+
 # ---- Motion section ---------------------------------------------------------
 
 msgid "Motion"

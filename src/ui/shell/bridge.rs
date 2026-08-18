@@ -6,10 +6,12 @@
 //! to UI properties directly) and `Compat` provides a tokio reactor for the
 //! `watch::Receiver::changed` await.
 
+use std::path::Path;
 use std::sync::Arc;
 
 use async_compat::Compat;
 use slint::{ComponentHandle, SharedString, Weak};
+use tokio::runtime::Handle;
 use tokio::sync::watch;
 
 use crate::entities::track::TrackSummary;
@@ -26,6 +28,7 @@ pub fn spawn_view_model_subscriber(
     ui: Weak<AppWindow>,
     sinks: &Arc<PlayerSinks>,
     cover_thumbs: Arc<CoverThumbs>,
+    runtime: Handle,
 ) -> Result<(), slint::EventLoopError> {
     let mut rx = sinks.view_model.subscribe();
     slint::spawn_local(Compat::new(async move {
@@ -47,7 +50,8 @@ pub fn spawn_view_model_subscriber(
                 // the cover as a brand-new texture on each volume step /
                 // seek / queue edit. Same pixels either way — both handles
                 // wrap the same cached RGB8 buffer.
-                if new_vm.track.artwork_path == prev_vm.track.artwork_path {
+                let cover_changed = new_vm.track.artwork_path != prev_vm.track.artwork_path;
+                if !cover_changed {
                     new_vm.track.cover_img = prev_vm.track.cover_img.clone();
                 }
                 let new_position_ms = clamp_to_i32(vm.position_ms);
@@ -74,12 +78,20 @@ pub fn spawn_view_model_subscriber(
                 player.set_position_ms(new_position_ms);
                 player.set_duration_ms(new_duration_ms);
                 player.set_progress(new_progress);
-                // Slint's property set dirties dependents unconditionally —
-                // skip the write when the VM is value-identical (e.g. a
-                // seek emit: position lives outside `vm`, so nothing the
-                // struct carries actually changed).
+                // Gated on the path having *moved* rather than on the slot being empty: the
+                // reuse above hands a cover that failed to decode straight back, so an
+                // is-it-empty test would re-ask on every volume step for the rest of the track.
+                let warm = cover_changed && new_vm.track.cover_img.size().width == 0;
+                let cover_path = warm.then(|| new_vm.track.artwork_path.to_string());
+                // `Property::set` is value-compared, so this guard spares only the move into the
+                // setter and the binding-handle access it opens with, and pays a second compare
+                // whenever the VM *did* change. Worth it because most emits are value-identical —
+                // a seek carries its position outside `vm`.
                 if new_vm != prev_vm {
                     player.set_vm(new_vm);
+                }
+                if let Some(path) = cover_path {
+                    warm_vm_cover(ui.as_weak(), &runtime, &cover_thumbs, path);
                 }
             }
         }
@@ -153,8 +165,13 @@ pub fn spawn_position_subscriber(
 
 // ---------- conversions ----------
 
+/// **Cache-only on the cover**, because both callers run on the event loop: `get_or_load_opt` would
+/// decode the full source there, and `decode_thumb_buffer` takes the large-decode gate the prewarm
+/// pool holds while it works — so a miss parks the loop behind a background decode rather than
+/// merely paying for its own. A cold cover comes back as the empty [`slint::Image`] and
+/// [`warm_vm_cover`] fills the slot in a moment later.
 pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSummaryRow {
-    let cover_img = cover_thumbs.get_or_load_opt(t.artwork_path.as_deref());
+    let cover_img = cover_thumbs.get_cached_opt(t.artwork_path.as_deref());
     TrackSummaryRow {
         id: clamp_to_i32(u64::try_from(t.id).unwrap_or(0)),
         file_path: SharedString::from(t.file_path.as_str()),
@@ -167,6 +184,43 @@ pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSumm
         is_favorite: t.is_favorite,
         rating: t.rating,
     }
+}
+
+/// Decode `path` into the row tier off the event loop, then write it into `Player.vm`.
+///
+/// [`to_slint_track`]'s other half: it answers cache-only so nothing decodes on the UI thread, and
+/// this is what makes a cold cover arrive at all. Fire-and-forget — the buffer crosses back rather
+/// than a second lookup, `SharedPixelBuffer` being `Send` where [`slint::Image`] is not. Keyed on
+/// the path on the way back in, so a track change that landed while this decoded keeps its own
+/// cover; nothing is written for an empty path or a failed decode.
+pub fn warm_vm_cover(
+    weak: Weak<AppWindow>,
+    runtime: &Handle,
+    cover_thumbs: &Arc<CoverThumbs>,
+    path: String,
+) {
+    if path.is_empty() {
+        return;
+    }
+    let thumbs = cover_thumbs.clone();
+    runtime.spawn_blocking(move || {
+        // A decode that failed has nothing to write — the slot is already the empty `Image`, that
+        // emptiness being what asked for this. Bailing here skips the whole round trip: the write
+        // would repaint nothing, but the hop, the `PlayerVm` clone `get_vm` hands back and the
+        // compare over it are all paid on the UI thread before it can decide that.
+        let Some(buffer) = thumbs.get_or_load_rgb8(Path::new(&path)) else {
+            return;
+        };
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            let player = ui.global::<Player>();
+            let mut vm = player.get_vm();
+            if vm.track.artwork_path != path.as_str() {
+                return;
+            }
+            vm.track.cover_img = slint::Image::from_rgb8(buffer);
+            player.set_vm(vm);
+        });
+    });
 }
 
 /// Convert a backend view-model snapshot to the Slint `PlayerVm` struct.

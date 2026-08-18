@@ -27,10 +27,11 @@ export component HeroChipStrip inherits MetaChipStrip {
     }
 
     rows: HeroChips.rows;
-    // `chrome` is the 3:1 tier, solved against the composited band. The pill goes through the
-    // global's own function so its weight is stated once.
+    // `chrome-text` rather than `chrome`: a label is held to 4.5:1 where the glyphs on that tier
+    // answer to 3:1. **`transparentize`, never `with-alpha`** — both tiers carry alpha of their own
+    // on the aurora arm, and setting it here would paint them opaque at rest.
     chip-fill: HeroBackdrop.chip-fill-at(root.fade * root.arrive-t);
-    chip-label-color: HeroBackdrop.chrome.with-alpha(root.fade * root.arrive-t);
+    chip-label-color: HeroBackdrop.chrome-text.transparentize(1.0 - root.fade * root.arrive-t);
     vertical-stretch: 0;
 
     measured(w) => {

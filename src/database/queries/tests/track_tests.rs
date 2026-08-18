@@ -444,10 +444,8 @@ async fn get_favorite_stats_orders_artwork_by_play_count() -> Result<(), AppErro
 
     let stats = queries::track::get_favorite_stats(&db).await?;
     assert_eq!(stats.count, 3);
-    // Distinct artworks only, ordered by play_count DESC. The Slint
-    // `CoverMosaic` paints placeholder tiles for slots beyond
-    // `artwork_paths.len()` when `pad-to-four: true` is set — the SQL
-    // does *not* duplicate paths to reach 4.
+    // Distinct artworks only, ordered by play_count DESC — the SQL does *not*
+    // duplicate paths to reach 4, `compose_cover` having a layout per count.
     assert_eq!(
         stats.artwork_paths,
         vec![
@@ -468,10 +466,9 @@ async fn get_favorite_stats_returns_distinct_artworks_no_duplicates() -> Result<
     queries::track::set_favorite(&db, &ids, true).await?;
 
     // All three seed tracks share one artwork_path (single-album-heavy
-    // library). The SQL must return that one distinct artwork *once*,
-    // not duplicate it to fill 4 slots — the Slint `CoverMosaic`'s
-    // `pad-to-four` flag is what paints placeholder tiles for the
-    // missing 3 slots.
+    // library). The SQL must return that one distinct artwork *once*, not
+    // duplicate it to fill 4 slots — `compose_cover` draws a lone cover
+    // full-bleed rather than tiling it four times.
     sqlx::query(
         "UPDATE tracks SET artwork_path = '/art/single.jpg' WHERE title IN ('Alpha', 'Beta', 'Gamma')",
     )

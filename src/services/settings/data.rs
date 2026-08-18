@@ -474,6 +474,17 @@ pub struct MotionFlags {
     pub skip_startup_animation: bool,
 }
 
+/// Which backdrop the artwork-derived surfaces paint.
+///
+/// Its own struct rather than a fourth bool on [`LayoutFlags`], which is already at clippy's
+/// `struct_excessive_bools` budget. Read once at boot into `Theme.aurora-backdrop` — the toggle is
+/// restart-gated, so the artwork tiers can decide whether to build a blur half at all.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BackdropFlags {
+    pub aurora_backdrop: bool,
+}
+
 // OS / desktop-environment probes behind the defaults above. They sit in
 // `services/` rather than `library/` because that is the dependency direction;
 // `src/ui/appearance/` imports them from `services::settings::` directly.
@@ -573,6 +584,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub motion: MotionFlags,
     #[serde(flatten)]
+    pub backdrop: BackdropFlags,
+    #[serde(flatten)]
     pub updates: UpdateFlags,
     #[serde(flatten)]
     pub diagnostics: DiagnosticsFlags,
@@ -613,6 +626,7 @@ impl Default for SettingsData {
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
             motion: MotionFlags::default(),
+            backdrop: BackdropFlags::default(),
             updates: UpdateFlags::default(),
             diagnostics: DiagnosticsFlags::default(),
             support: SupportFlags::default(),

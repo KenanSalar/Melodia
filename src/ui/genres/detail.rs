@@ -1,8 +1,8 @@
 //! Genre Detail header + track list: fetch, re-sort, refresh-preserving, startup seed. Mirror of
 //! `src/ui/albums/detail.rs` minus everything related to artwork (`decode_detail_pair`,
 //! `apply_detail_artwork`, `write_crossfade_slot`): genres have no intrinsic image. In its place
-//! [`apply_genre_hero`] publishes the name-hashed gradient as the hero's backdrop and solves the
-//! rest of the band against it.
+//! [`apply_genre_hero`] hands the name-hashed colours to the backdrop, which paints them as its
+//! gradient floor or washes them as an aurora depending on the arm.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
 
 use super::selection::{apply_selection_to_rows, write_selection};
-use super::{GenresUi, to_slint_genre_row};
+use super::{GenresUi, genre_accent, to_slint_genre_row};
 use crate::entities::genre::GenreStats;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::error::AppResult;
@@ -20,34 +20,37 @@ use crate::state::AppState;
 use crate::themes::color_to_rgb;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
+use crate::ui::hero_backdrop::GenreStops;
 use crate::ui::model_patch;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
 use crate::ui::util::clamp_i64_to_i32;
-use crate::{
-    AppWindow, GenreDetail, GenreRow as UiGenreRow, NavEnterFrom, TrackListRow as UiTrackListRow,
-};
+use crate::{AppWindow, GenreDetail, NavEnterFrom, TrackListRow as UiTrackListRow};
 
-/// Publish the genre's hero band: its two hash-derived stops become the gradient floor verbatim,
-/// and the scrim + foreground tiers are solved against how bright that gradient measures.
+/// Publish the genre's hero band from both of its hash-derived pairs — [`genre_accent`] picks them
+/// off a name hash, and which one reaches the surface is the backdrop's to decide.
 ///
-/// The stops are already theme-independent (`super::color::genre_accent` picks them off a name
-/// hash and deliberately dims the hero pair), so unlike every other hero this one keeps its own
-/// floor rather than taking the solved one.
+/// Hashed here rather than read back off the `GenreRow`: the row carries the saturated pair for the
+/// square to paint, but the dimmed one has no Slint reader at all, so taking either from the row
+/// means `slint::Color`s converted back into the numbers the hash produced — and a boundary struct
+/// carrying two fields solely to hand them back to Rust.
 ///
 /// `section_active` is the same gate `apply_detail_artwork` takes, and for the same reason:
 /// `HeroBackdrop` is one global shared by six heroes, and the boot path seeds every persisted
 /// detail id whichever section is being restored.
-fn apply_genre_hero(ui: &AppWindow, header: &UiGenreRow, section_active: bool) {
+fn apply_genre_hero(ui: &AppWindow, genre: &GenreStats, section_active: bool) {
     if !section_active {
         return;
     }
+    let accent = genre_accent(&genre.name);
     crate::ui::hero_backdrop::apply_gradient(
         ui,
-        color_to_rgb(header.hero_color_1),
-        color_to_rgb(header.hero_color_2),
+        GenreStops {
+            floor: (color_to_rgb(accent.hero_color_1), color_to_rgb(accent.hero_color_2)),
+            wash: (color_to_rgb(accent.tile_color_1), color_to_rgb(accent.tile_color_2)),
+        },
     );
 }
 
@@ -153,7 +156,7 @@ where
         // than a shadow the `SectionActiveGate` only updates next frame: read before the hook
         // above, a cross-section drill answers for the tab the user *left*.
         let on_screen = tab_is_mounted(&ui, MyLibraryTab::Genres);
-        apply_genre_hero(&ui, &header, on_screen);
+        apply_genre_hero(&ui, &detail, on_screen);
         g.set_genre(header);
         crate::ui::hero_chips::publish_genre(&ui, &detail, fold, on_screen);
         // Fresh open: no filter, so the displayed cache equals the canonical full set.
@@ -197,7 +200,7 @@ pub async fn refresh_detail(
         // the hero alongside it keeps this path identical to the open path.
         let header = to_slint_genre_row(&detail);
         let on_screen = tab_is_mounted(&ui, MyLibraryTab::Genres);
-        apply_genre_hero(&ui, &header, on_screen);
+        apply_genre_hero(&ui, &detail, on_screen);
         g.set_genre(header);
         crate::ui::hero_chips::publish_genre(&ui, &detail, fold, on_screen);
 

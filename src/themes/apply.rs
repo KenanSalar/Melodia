@@ -190,7 +190,14 @@ pub(crate) fn color(rgb: u32) -> Color {
 /// per artwork, so baking it in keeps the Slint side one `background:` binding
 /// rather than a colour plus a float the view has to recombine.
 pub(crate) fn brush_with_alpha(rgb: u32, alpha: u8) -> Brush {
-    Brush::SolidColor(color(rgb).with_alpha(f32::from(alpha) / 255.0))
+    Brush::SolidColor(color_with_alpha(rgb, f32::from(alpha) / 255.0))
+}
+
+/// [`color`] carrying a weight in its alpha, for a gradient stop that has to stay a `color`. The
+/// aurora's tints arrive this way: `transparentize` on the Slint side multiplies rather than sets,
+/// so the falloff shape and the per-artwork weight compose without either restating the other.
+pub(crate) fn color_with_alpha(rgb: u32, alpha: f32) -> Color {
+    color(rgb).with_alpha(alpha)
 }
 
 /// A solid `Brush` back to `0x00RRGGBB`, dropping alpha — how a solved surface

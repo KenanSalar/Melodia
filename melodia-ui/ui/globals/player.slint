@@ -45,38 +45,64 @@ export global Player {
     callback recompute-chip-rows(length);
 
     // The Now Playing backdrop colour set, written together by the `track_change` subscriber from
-    // `ui::now_playing::backdrop::solve`. **None of these can be a theme constant**: they take their
-    // *hue* from the accent quantized out of the cover (`Theme.accent` when art-less) and their
-    // *tone* from a solve against how bright the backdrop measured — the theme lends its colour,
-    // never its polarity. Don't reach for `Theme.text` / `subtext0` / `crust` / `base` on anything
-    // painting on the blur; the literal defaults are for the same reason.
+    // `ui::backdrop`, which answers twice over: on the blur these take their *hue* from the accent
+    // quantized out of the cover (`Theme.accent` when art-less) and their *tone* from a solve against
+    // how bright it measured; on the aurora they are the theme's own base under a neutral ink.
+    // **Read the tier, never a `Theme.*` brush** — which arm is live is `backdrop::kind`'s answer and
+    // no consumer's. The literal defaults exist for the same reason and are never taken.
 
     // Alpha baked in. Solved so the *composited* backdrop lands in a known dark band whatever
     // the cover, which is what lets one light foreground be correct on all of them.
     in-out property <brush> np-scrim: #0a0a0e73;
 
-    // The floor under the blur slots. Two `color`s rather than one `brush`: gradient stops and
-    // `.mix()` need `color` operands.
+    // The floor under the blur slots, and the aurora's base — flat `Theme.base` in both stops on
+    // that arm. Two `color`s rather than one `brush`: gradient stops and `.mix()` need `color`
+    // operands.
     in-out property <color> np-floor-start: #2b2135;
     in-out property <color> np-floor-end: #14101a;
 
-    // The hue-carrying tier — visualizer, stars, heart, back button, chips, Up-Next chrome. Solved
-    // for the 3:1 non-text bar then floored, so a brighter accent keeps its own tone; one brush
-    // serves solid and translucent alike. **Never `.brighter()`** — that scales HSV value and
-    // can't lift a near-black accent at all.
+    // The aurora's washes: the cover's own colours off the same quantize, with nothing done to them,
+    // so what survives is the record's value structure rather than one tone wearing three hues. A
+    // coverless track substitutes the accent seated to a wash tone plus a deeper sibling; `color`
+    // carries each weight in its alpha, for the floor's gradient-stop reason. **The count matches
+    // `ui::aurora::WASH_COUNT`** — a brush animates stop-for-stop only against a matching one.
+    in-out property <color> np-tint-1: #3a2d4a;
+    in-out property <color> np-tint-2: #2d3a4a;
+    in-out property <color> np-tint-3: #4a2d3a;
+
+    // The aurora's grain, written once at boot. Here rather than beside the tints because it
+    // answers to the renderer rather than to the artwork; `ui::aurora::dither_tile` argues it.
+    in-out property <image> np-dither;
+
+    // The hue-carrying tier — visualizer, stars, heart, back button, chips, Up-Next chrome. On the
+    // blur, solved for the 3:1 non-text bar then floored, so a brighter accent keeps its own tone;
+    // one brush serves solid and translucent alike. **Never `.brighter()`** — that scales HSV value
+    // and can't lift a near-black accent at all.
     in-out property <brush> np-accent-bright: #cba6f7;
 
-    // Derived here so surfaces meant to match can't drift. Genuine one-offs stay inline;
-    // naming them would move the number without sharing it.
-    out property <brush> np-accent-pill: root.np-accent-bright.with-alpha(0.16);
-    out property <brush> np-accent-disc-hover: root.np-accent-bright.with-alpha(0.3);
-    out property <brush> np-accent-dim: root.np-accent-bright.with-alpha(0.6);
+    // Derived here so surfaces meant to match can't drift; genuine one-offs stay inline.
+    // **`transparentize`, not `with-alpha`** — it multiplies, so all three inherit whatever alpha the
+    // tier carries: opaque on the blur, partial on the aurora. Pinning alpha here would leave the
+    // pills heavier than the glyphs they sit behind.
+    out property <brush> np-accent-pill: root.np-accent-bright.transparentize(0.84);
+    out property <brush> np-accent-disc-hover: root.np-accent-bright.transparentize(0.7);
+    out property <brush> np-accent-dim: root.np-accent-bright.transparentize(0.4);
 
-    // Body text, solved for 4.5:1 and chroma-capped, so it reads as near-white carrying a
-    // whisper of the album's warmth — the tier above is where the hue gets to be loud.
+    // `HeroBackdrop.chrome-text` / `.chip-fill`'s twins. Deliberately *not* derived from the tier
+    // above: `np-accent-pill` is the disc buttons' and the Up-Next row's fill too, and the chips
+    // lightening to let the wash through must not take those affordances with them.
+    in-out property <brush> np-chrome-text: #cba6f7;
+    in-out property <brush> np-chip-fill: #cba6f733;
+
+    // The spectrum bars and the waveform trace. Off the tier above but at its own weight, the
+    // visualizer being the only chrome that moves; no hero mounts one, so it has no twin.
+    in-out property <brush> np-viz: #cba6f7;
+
+    // Body text. On the blur, solved for 4.5:1 and chroma-capped, so it reads as near-white
+    // carrying a whisper of the album's warmth — the tier above is where the hue gets to be loud.
     in-out property <brush> np-on-backdrop: #c4c0cc;
 
-    // Secondary text at 3:1 in its own dimmer band, so the hierarchy survives every backdrop.
+    // Secondary text, at 3:1 in its own dimmer band so the hierarchy survives every backdrop.
     in-out property <brush> np-on-backdrop-muted: #ada9b5;
 
     callback play-pause();

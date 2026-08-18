@@ -6,7 +6,7 @@
 //! half only this file can answer — that the band still mounts that row, hands it hero
 //! tiers, and forwards what its two pages read back.
 
-use crate::test_support::binding_value;
+use crate::test_support::{MIN_SLINT_SOURCES, UI_DIR, binding_value, stripped_sources};
 
 const HERO: &str = include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint");
 
@@ -132,5 +132,24 @@ fn the_hero_height_is_derived_from_what_it_stacks() {
         height.contains("header.row-h") && height.contains("Theme.hero-artwork"),
         "`hero-height` must sum the header row's own height and the artwork tile — a literal \
          drifts silently the moment either grows"
+    );
+}
+
+/// `CoverMosaic` lays a live 2×2 out in Slint, and this banner used to draw one — four lazy
+/// per-tile lookups beside a second composition of the same covers for the backdrop. It draws one
+/// composed collage now, and this stops that branch returning: the picker is the component's whole
+/// remaining audience, and it wants the live form, its tiles following an uncomposed selection.
+#[test]
+fn the_cover_mosaic_is_the_pickers_alone() {
+    let mounts: Vec<String> = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES)
+        .into_iter()
+        .filter(|(_, src)| src.contains("CoverMosaic {"))
+        .map(|(path, _)| path)
+        .collect();
+    assert_eq!(
+        mounts,
+        ["components/dialog/playlist-mosaic-picker.slint"],
+        "only the playlist mosaic picker may mount `CoverMosaic` — a hero wanting a live \
+         mosaic is a hero composing its covers twice"
     );
 }

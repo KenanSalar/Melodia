@@ -30,8 +30,8 @@ export component WaveformTrace inherits Rectangle {
         // The figure doubles back on itself by construction, so the two edges' strokes converge as
         // the trace thins — `waveform::MIN_HALF_THICKNESS` holds them apart at every amplitude,
         // stroking a path lying exactly on top of itself rendering as a dashed line.
-        fill: Player.np-accent-bright.transparentize(0.55);
-        stroke: Player.np-accent-bright;
+        fill: Player.np-viz.transparentize(0.55);
+        stroke: Player.np-viz;
         // Scaled off the strip, which is no longer a fixed height — a constant thins into a
         // hairline as the strip grows. Capped before the stroke starts eating the wash.
         stroke-width: clamp(root.height / 45, 1.25px, 2px);

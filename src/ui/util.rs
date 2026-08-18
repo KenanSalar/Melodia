@@ -10,16 +10,19 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 /// the buffers it would save on surfaces holding a single image.
 pub const COVER_SIZE: u32 = 384;
 
-/// Side length a cover is downscaled to before blurring. A backdrop carries no fine detail
-/// and is stretched under `image-fit: cover`, so downscaling first makes the blur cheap
-/// and anything larger buys nothing.
-pub const BLUR_TARGET: u32 = 192;
+/// Side length a cover is downscaled to before blurring. A backdrop carries no fine detail and is
+/// stretched under `image-fit: cover`, so downscaling first makes the blur cheap and anything
+/// larger buys nothing — but **the floor binds harder than the ceiling**: the box average that
+/// gets a cover here dilutes thin bright detail into its ground *before* the blur can bloom it, so
+/// a sleeve of fine highlights on a dark field flattens well before the wash itself looks any
+/// different.
+pub const BLUR_TARGET: u32 = 128;
 
 /// `fast_blur` sigma at [`BLUR_TARGET`] — a soft wash of colour with no recognisable
-/// shapes left in it. Taken by the Now Playing tier and the mosaic composition, the two
-/// backdrops with nothing painted over them; the detail heroes run lighter and say so at
-/// their own `BlurSpec`.
-pub const BLUR_SIGMA: f32 = 24.0;
+/// shapes left in it. Proportional to that side, so the two move together or the wash changes
+/// strength. The Now Playing tier's, that being the one backdrop with nothing painted over it;
+/// every band runs lighter and says so at its own `BlurSpec`.
+pub const BLUR_SIGMA: f32 = 16.0;
 
 /// Copy an `image` RGB8 buffer into a Slint `SharedPixelBuffer`. Both are tightly packed,
 /// so the byte lengths match and one `copy_from_slice` suffices.

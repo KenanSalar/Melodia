@@ -86,9 +86,10 @@ export struct ArtistGridRow {
 
 // Genres have no intrinsic artwork, so there is no path and no cached image: the card and the
 // detail header paint a deterministic name-hash gradient instead, composed inline on the Slint
-// side. The four stops come from `genres::color::genre_accent`, which hashes the name once and
-// varies hue, hue-offset, saturation and value on independent axes. The tile pair is saturated for
-// the small card; the hero pair is dimmer so the full-bleed backdrop keeps its text legible.
+// side. The stops come from `genres::color::genre_accent`, which hashes the name once and varies
+// hue, hue-offset, saturation and value on independent axes. **Only the saturated pair crosses**
+// — `genre_accent` also carries a dimmer one for the full-bleed backdrop, but nothing here paints
+// it, and `apply_genre_hero` re-hashes rather than taking it back off this struct.
 export struct GenreRow {
     id: int,
     name: string,
@@ -97,8 +98,6 @@ export struct GenreRow {
     display_duration: string,
     tile_color_1: color,
     tile_color_2: color,
-    hero_color_1: color,
-    hero_color_2: color,
 }
 
 export struct GenreGridRow {

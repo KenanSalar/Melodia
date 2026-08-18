@@ -28,17 +28,19 @@ const BLUR: BlurSpec = BlurSpec {
     sigma: BLUR_SIGMA,
 };
 
-pub struct NowPlayingArtwork(ArtworkCache);
-
-impl Default for NowPlayingArtwork {
-    fn default() -> Self {
-        Self(ArtworkCache::new(ARTWORK_CACHE_CAP, BLUR))
-    }
+/// This tier's spec, or `None` under the aurora setting. Here rather than at the one call site
+/// so [`BLUR`] stays private — the two numbers are what makes this the Now Playing tier.
+pub fn blur_spec(ui: &crate::AppWindow) -> Option<BlurSpec> {
+    crate::ui::backdrop::blur_spec(ui, BLUR)
 }
 
+pub struct NowPlayingArtwork(ArtworkCache);
+
 impl NowPlayingArtwork {
-    pub fn new() -> Self {
-        Self::default()
+    /// Takes the spec rather than reading the setting itself, so the tests can build a tier
+    /// without a window. [`blur_spec`] is what the one production caller passes.
+    pub fn new(blur: Option<BlurSpec>) -> Self {
+        Self(ArtworkCache::new(ARTWORK_CACHE_CAP, blur))
     }
 
     /// See [`ArtworkCache::get_or_decode`].

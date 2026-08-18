@@ -140,46 +140,157 @@ silently miss the other.
 - **The play-count badge lives on `EntityCard`**, not on whichever host wants it, and renders a
   `MaterialIcon` rather than a `"▶"` in the string (the fallback-font line-box pitfall).
 
-- **`MosaicHeroTile`** is the 140 px artwork square both mosaic heroes draw. **Every brush in it
-  is a `HeroBackdrop` tier on both arms of the ternary** — with no mosaic the hero is the dark
-  gradient floor where a light theme's accent lands dark-on-dark, and the populated fill matters
-  just as much, the placeholder slots being translucent.
+- **`MosaicHeroTile`** is the 140 px artwork square both curated heroes draw, and it draws **one
+  composed collage, never a live `CoverMosaic`** — `media::artwork`'s `COMPOSITE_LAYOUTS` owns the
+  1/2/3/4 arrangement, so the square, the banner blur and a playlist thumbnail are all laid out the
+  same. **What they do not share is what an unreadable source costs**, and the asymmetry is
+  deliberate: the heroes go through `compose_cover`, which drops that source and picks the layout
+  from what survives, because they recompose from whatever the database's top four currently are
+  and a cover deleted underneath should cost its slot rather than the banner; a playlist thumbnail
+  goes through `compose_artwork`, which refuses, because the mosaic picker previewed that file slot
+  for slot and `CoverMosaic` is a promise. Collapsing the two onto one function for DRY persists a
+  collage nobody chose. **They differ on cost as well as on strictness**, and the layout table is
+  in half-canvas units so one set of rects serves both: the persisted thumbnail composes at
+  `COMPOSITE_SIZE` through Lanczos3, where a hero takes its side from the caller — `COVER_SIZE`,
+  the tile `pair_from_image` reduces it to on the next line — through Triangle. A hero canvas any
+  larger is resized twice and drawn once. **Every brush in it is a `HeroBackdrop` tier and none may
+  become a `Theme.*` token** — with no collage the hero is the dark gradient floor where a light
+  theme's accent lands dark-on-dark.
+  **What decides the arm is the cover, not the count**: a set whose every entry lacks
+  artwork is populated and has nothing to paint, so `count` picks between the page's own glyph and
+  the placeholder note rather than between the two arms.
 
 ### Hero bands
 
-- **Anything painting on a hero blur reads `HeroBackdrop`, never a `Theme.*` brush.** Six views
-  share **one** global, only one hero being mountable at a time. `hero_backdrop.rs` publishes it
-  from the same `backdrop.rs` solve the Now Playing `np-*` tier runs: measure the blur, solve a
-  scrim driving the *composite* into a known dark band. Both seed from the hue quantized out of
-  their own blur, `Theme.accent` only when there is no artwork. **Producing the `BackdropSample`
-  is the decoder's job, never the publisher's** — it runs in whichever `spawn_blocking` already
-  decoded the blur, the quantize being the heaviest thing on that path and `apply` running on the
-  UI thread. `on-backdrop` for title and secondary line, `on-backdrop-muted` for empty-state copy,
-  `chrome` for a placeholder fill or glyph and for a chip label, `chip-fill` for the pill behind
-  it — **`chip-fill-at(fade)` when the surface is morphing**, `with-alpha` *setting* alpha where
-  the tier needs it multiplied.
+- **Anything painting on a hero reads `HeroBackdrop`, never a `Theme.*` brush** — including where
+  the tier now *carries* a theme token, since a consumer reaching past it is how the layers start
+  disagreeing. Six views share **one** global, only one hero being mountable at a time.
+  `hero_backdrop.rs` publishes it from the same `backdrop.rs` answer the Now Playing `np-*` tier
+  runs, and **`backdrop::kind` decides which of two unrelated answers that is**: the blur measures
+  the cover and solves a scrim driving the *composite* into a known dark band, seeding every tier
+  from the artwork's hue; the aurora publishes `Theme.base` as a flat floor under a
+  **neutral chrome** — black or white at partial alpha, the wash beneath supplying its colour, which
+  survived two attempts to derive that tier from the artwork — and does
+  **nothing at all** to the washes over them, which is the other half of that answer: a tone band
+  holding the composite legible everywhere is a band every wash above it lands *on*, so a
+  four-colour sleeve paints as two and the surface reads as a tint. Contrast is the cover's to
+  decide and the neutral chrome is what carries the readable half. `kind` is
+  the sole **Rust** reader of the flag, so no publisher can answer for a surface the mount isn't
+  painting — the Settings switch reads `Theme.aurora-backdrop` too, as Native Title Bar reads its
+  own, rather than carrying a `Settings` mirror beside it.
+  **Which is also why the setting is restart-gated rather than live**: the two arms publish
+  unrelated tiers, so a flip mid-session leaves one stack painting the other's colours, and the
+  artwork tiers decide at construction whether to build a blurred half at all
+  (`boot::ui_setup::apply_backdrop_style` raises the flag ahead of `install_views` for that
+  reason; `boot::tests::ui_setup_tests` pins the order).
+  **Producing the `BackdropSample` is the decoder's job, never the publisher's** — it runs in
+  whichever `spawn_blocking` already decoded the cover, the quantize being the heaviest thing on
+  that path and `apply` running on the UI thread.
+  `on-backdrop` for title and secondary line, `on-backdrop-muted` for empty-state copy, `chrome`
+  for a chip label, `chip-fill` for the pill behind it —
+  **`chip-fill-at(fade)` when the surface is morphing**, so the pill's weight is stated once.
+  **A coverless square takes `placeholder`, not `chrome`**, and that split is the tier's whole
+  reason: on the blur the two hold one value, on the aurora `chrome` is a neutral ink — right for a
+  chip or a disc the wash reads through, a pale slab with a lamp on it across 140 px. `placeholder`
+  is `Theme.accent` there, so the square matches the grid card and the track row painting the same
+  glyph, and the hero still owns no `Theme.*` binding. Three mounts (`library-tab-band`'s defaults,
+  `my-library-view`'s non-genre arms, `mosaic-hero-tile`), pinned by
+  `hero_backdrop_tests::every_coverless_hero_square_paints_from_the_placeholder_tier` — reverting
+  one builds and is wrong only under a setting CI never turns on.
+  **Anything derived from `chrome` fades with `transparentize`, never `with-alpha`**: the tier
+  carries alpha of its own on the aurora arm, so *setting* it paints the neutral ink opaque and the
+  wash stops reading through. Both spellings agree on the blur, which is what makes the mistake
+  invisible where it is written; `hero_backdrop_tests` walks the tree for it.
+
+- **Two backdrop stacks, and neither knows which tier it is painting from.** `HeroBlurBackdrop`
+  and `AuroraBackdrop` take every colour as a defaulted `in property` — `MetaChip`'s idiom — which
+  is what lets one component serve `HeroBackdrop` on the six bands and `Player.np-*` on Now
+  Playing, two globals kept separate because a band stays mounted behind an open Now Playing.
+  Reading either global from inside a stack ties it to one tier and puts the other site's inline
+  copy back; `hero_blur_backdrop_tests` pins both directions. **Two mount sites, one
+  `aurora-shown` property, and only the live arm mounted at each** — each stack sits behind its own
+  branch of that property, the two conditions each other's negation.
+  **The branch is safe because the condition is a process constant**: `Theme.aurora-backdrop` is an
+  `in` property written once by `boot::ui_setup::apply_backdrop_style`, ahead of `install_views` and
+  `app.show()`, so no frame sees it move and neither leaf carries a `changed` tracker. The pair was
+  mounted unconditionally with the loser painted transparent for as long as an art-less track could
+  move the arm with the view on screen — that term is gone, and **a transparent loser was never the
+  free option it reads as**: `Brush::is_transparent()` (`i-slint-core/graphics/brush.rs`) answers
+  `false` for every gradient whatever its stop alphas, and femtovg's `draw_rectangle` tessellates
+  the path before `brush_to_paint` looks at it, so a stack faded to nothing still filled the whole
+  surface every frame — four of them on the blur arm, which is the shipped default.
+  What the gate does **not** retire is `shown`: the mounted stack still drains to its idle colours
+  through it (below), which is why each stack's `shown: false` arm stays a *gradient of the same
+  shape* — `Brush::interpolate` blends stop-for-stop and only between matching types, so
+  "simplifying" that arm to a solid `transparent` kills the drain.
+  `hero_blur_backdrop_tests::every_backdrop_site_mounts_only_the_live_arm` anchors each gate at the
+  head of its mount line, `if root.aurora-shown:` being a substring of the negation.
+
+- **The six bands reach that pair through `components/hero/hero-backdrop-stack.slint`, not
+  directly.** `HeroBackdropStack` is the pair plus the `aurora-shown` choice, bound to the
+  `HeroBackdrop` tier — the twenty-five lines `MosaicTabHero` and `LibraryTabBand` had each. Now
+  Playing stays a direct mount because it paints `Player.np-*`, which is the whole reason the two
+  leaves take their colours as inputs rather than naming a global. The wrapper's own `shown` is
+  the **host's** question — ungated for the two mosaic bands, which never stop painting a hero,
+  and `detail-open` for `LibraryTabBand`, whose globals outlive the tab that filled them. That
+  makes the gate a two-file deal and each half its own pin: the band passes the term
+  (`library_tab_band_tests::no_hero_tier_outlives_the_banner_it_was_solved_for`) and the wrapper
+  forwards it to each child
+  (`hero_blur_backdrop_tests::the_wrapper_forwards_its_hosts_gate_to_the_mounted_stack`) — drop
+  either and both files still read correctly while My Library paints a detail's backdrop flat.
+
+- **Every hero has washes, so the mount gates on the setting and nothing else.** What differs is
+  where the three colours come from: a cover's quantize, or — for the two heroes that have no
+  cover — a substitute seed. Genre Detail hands over `genre_accent`'s **saturated tile pair**
+  (`hero_backdrop::GenreStops`), the one its own square and grid card paint; the dimmed *hero* pair
+  in the same struct is the blur floor's alone, and swapping them builds and paints a plausible band
+  on both arms, hence a pin. Anything else with no artwork substitutes `Theme.accent`, and does it
+  **as two seeds rather than as a rotation origin** — left as the origin every wash comes out at
+  `FILL_WEIGHT` and the surface reads as unpainted `Theme.base`; seated as one, the sweeps have a
+  single colour to run three ways and the band reads as a flat tint. A pair plus a fill is exactly
+  the shape a genre hands over, which is the point: they are the same case and had visibly stopped
+  looking like it. **And the pair is seated under `aurora::WASH_MAX_TONE` first** — an accent is
+  picked to be legible as *ink on the app's surface*, so it sits well above anything a record
+  quantizes to and washed at its own tone reads as a lamp beside a genre's hashed stops. A ceiling
+  rather than a tone, so an accent already that deep (Latte's) passes through carrying its own
+  chroma; `WASH_MAX_TONE` is the one number here to tune by eye. This retired a `has-tints` /
+  `np-has-tints` pair both mounts had to fold in; a term put back strands one site on the blur
+  under a setting its sibling honours, which
+  `hero_blur_backdrop_tests::no_backdrop_site_gates_the_aurora_on_anything_but_the_setting` reads
+  off each binding's own text. **A genre publishes through `apply_gradient`, which picks its arm
+  from `backdrop::kind` itself** — it has no `BackdropSample` for `solve` to pick from — and is in
+  `republish_for_palette` for the first time, its tiers having been theme-independent only while it
+  was permanently on the blur.
 
 - **`ActionPill`/`SearchBar` inside a hero are the deliberate exception** and stay on
   `Theme.floating-chrome-bg`, still mostly their own surface — safe only because the backdrop is
   *pinned*. A `chrome`-tinted placeholder is the opposite case: translucent enough that whatever
   fills the rectangle behind it is most of what its glyph composites against, so that fill has to
-  be a hero token too. Genre Detail is the other exception, `apply_gradient` keeping its own
-  name-hashed floor, already theme-independent.
+  be a hero token too. Genre Detail's square is the other exception, keeping the name-hashed
+  gradient and white glyph it shares with the grid card, already theme-independent.
 
 - **No layer may ease *out of* a held tier.** On My Library the globals routinely describe a hero
   the band stopped painting several tabs ago, so an eased layer bound to them settles on it and
   interpolates out the moment a hero opens — a genre's pink under a playlist. **Make the idle
   value honest rather than suppressing the animation at the right instant**: the palette mirrors
-  fall back to their idle half on `root.detail-open`, the shared floor swaps its stops for a
-  transparent pair on a `hero-open` input defaulting `true`. **`detail-open`, not `hero-shown`** —
-  gated on the latter they drain toward idle for `dur-med` *after* the collapse ends. The scrim
-  stays ungated, carrying almost no chroma.
+  fall back to their idle half on `root.detail-open`, and both stacks swap their stops for a
+  transparent pair on a `shown` input defaulting `true` — the blur's floor and scrim, and the
+  aurora's base plus all three washes. **`detail-open`, not `hero-shown`** — gated on the latter
+  they drain toward idle for `dur-med` *after* the collapse ends; the band folds it into `shown`
+  beside the arm term rather than owning that input outright. **The scrim used to be the one
+  exempt layer** and is gated now: draining it could only brighten the artwork while this stack
+  was alone on screen, and it now cross-fades against the aurora, where a scrim at full strength
+  under a half-faded pair darkens the midpoint of every crossing. The base and the three washes are
+  the aurora's whole stack, so gating them leaves only its **dither, the one layer behind an `if`** —
+  alpha living in the tile leaving nothing to fade, and a one-level grain being invisible enough to
+  afford the cut.
 
 - **`has-cover` is how a host says "not this one".** The `cover:` ternary must bind *some* global
   on every arm, Slint having no empty-`image` literal, and Genre owns no cover — so the Genre hero
   painted whichever other detail was open, which `seed_detail_from_settings` makes routine.
-  `ArtworkImage` takes `has-cover` defaulting `true`. The blur quartet needs no equivalent,
-  `has-blur: false` being exactly what a procedural backdrop is for.
+  `ArtworkImage` takes `has-cover` defaulting `true`. Neither the blur quartet nor the washes need
+  an equivalent: `has-blur: false` is exactly what a procedural backdrop is for, and a tint is
+  always a colour — an entry with nothing of its own substitutes a seed rather than going absent.
 
 - **A hero may publish into either shared global only while it is the one on screen.**
   `install_views` seeds **all four** detail views unconditionally, so a cold start fetches up to
@@ -260,14 +371,16 @@ silently miss the other.
     its band and growing no title, chip strip or artwork size of its own — the detail bodies being
     the half worth pinning, one regrowing a header passing every other check.
 
-- **The mosaic heroes' `last_mosaic_paths` guard means "this mosaic is what's painted", so it moves
-  only *past* the check that decides whether anything is** — inside `apply_hero_blur` and
-  `clear_hero_blur`, never at the fetch that kicked them. Both bail when the section went inactive
-  mid-compose, so a guard written beforehand records a paint that never happened and every later
-  refresh for the same top-4 early-returns, leaving the banner on the accent-seeded floor until a
-  section leave's `forget_mosaic`. **The pair is one source**: `impl_mosaic_hero!($Global, $Ui)`
-  generates it into each view's `hero.rs` — a macro rather than a generic fn, two distinct Slint
-  globals having no trait between them.
+- **The curated heroes' `MosaicGuard` means "this collage is what's painted", so the claim moves
+  only *past* the check that decides whether anything is** — inside each view's
+  `publish_hero_artwork`, never at the fetch that kicked it. Both bail when the section went
+  inactive mid-compose, so a set claimed beforehand records a paint that never happened and every
+  later refresh for the same top-4 early-returns, leaving the banner on the accent-seeded floor
+  until a section leave's `forget_mosaic`. **`claim` is check-and-set under one lock**, the second
+  of two in-flight composes for one set being a no-op rather than a second paint.
+  **The publish is gated whole, where a detail view fills its own slots even while hidden**: this
+  page's leave wipes its models and forgets the guard, so slots written behind it have nothing to
+  be ready for and their claim would suppress the re-enter's recompose.
 
 - **Now-Playing accent tiers are derived on the `Player` global, not at the call site** — one
   solved brush plus three named translucent tiers off it. Reach for the tier, never a fresh
@@ -433,8 +546,9 @@ silently miss the other.
 
 - **Detail-close releases global Image properties.** `release_detail_hero_images!` resets `cover` +
   `blur-img-a/b`, clears `has-blur`, and re-solves the two shared globals, alongside `clear_detail`
-  + `release_detail_artwork`. Without it `SharedPixelBuffer` Arcs pin (~650 KiB CPU + ~1.5 MiB GPU
-  on Mesa). It runs on each view's **section leave**, gated per the hero-teardown rules above.
+  + `release_detail_artwork`. Without it `SharedPixelBuffer` Arcs pin the cover tile and **both**
+  blur slots, on the heap and again as Mesa textures. It runs on each view's **section leave**,
+  gated per the hero-teardown rules above.
 
 - **A close doesn't run it, and that is the contract the morph forced.** Every fact the band paints
   is a ternary over the detail id, so clearing on the frame the id does leaves the band spending
@@ -634,9 +748,10 @@ Data-agnostic: parallel `labels`/`icons`, `avail-width`, `selected-index`, `sele
   **`active-color` is the one worth spelling out**, being one input for the selected label, its
   FILL=1 icon *and* the underline: `Theme.accent` carries **no contrast floor** against a pinned
   band — Latte's mauve lands near 1.7:1, under even the 3:1 non-text bar — where
-  `HeroBackdrop.chrome` is solved to clear 3:1 whatever the cover. The trade before "fixing" it
-  back: `chrome` is the 3:1 tier and `on-backdrop` the 4.5:1 one, so the honest repair is a second
-  input separating label from indicator, not a token swap at the call site.
+  `HeroBackdrop.chrome` clears 3:1 whatever the cover, by a solve on the blur and by being the
+  theme's own ink on the aurora. The trade before "fixing" it back: `chrome` is the 3:1 tier and
+  `on-backdrop` the 4.5:1 one, so the honest repair is a second input separating label from
+  indicator, not a token swap at the call site.
 
 - **The cells are equal width, sized to the widest tab, and that is what makes the underline
   arithmetic** — a `for` loop exposes no per-tab element to read a position off, so a content-sized
@@ -677,8 +792,10 @@ Data-agnostic: parallel `labels`/`icons`, `avail-width`, `selected-index`, `sele
 the mounted tab's count; with a detail open it grows into that entity's hero at `MosaicTabHero`'s
 `hero-height` exactly — the same formula, so the two bands agree on what a hero is. One animated
 `hero-t` drives the height, backdrop reveal, back slot, palette and count exit. **The two bands are
-siblings, not one parameterised component**, differing in mosaic-square-versus-artwork-tile and
-fixed-height-versus-morph, which Slint can't abstract over — so the header-row fixes are *ported
+siblings, not one parameterised component**, differing in which artwork square they draw (a
+`MosaicHeroTile`, whose fallback is the page's own Material Symbols glyph, against an
+`ArtworkImage`, whose fallback is an SVG asset) and in fixed-height-versus-morph, neither of which
+Slint can abstract over — so the header-row fixes are *ported
 verbatim* and `ui::library_tab_band_tests` holds the copy to a contract a copy is exactly how you
 lose. **Two things stay at each host**: the per-tab `ActionPill` rows (`@children`, placed after the
 trailing spacer, which is also the slack `HERO_MAX_ROWS` is measured against) and the tooltip frame.
@@ -722,7 +839,8 @@ block first; each page's section below is deltas only.** The nav-index map is in
   beside the model clears. A count outliving its model suppresses an empty state over an emptied
   model; resetting to `0` asserts "nothing here" for the length of the re-fetch. `-1` matches
   neither `== 0` nor `> 0`, so every existing gate keeps working — the one reader splitting on both
-  is `MosaicHeroTile`, which clamps. The five library counts are interpolated into gettext plurals,
+  is `MosaicHeroTile`, whose two mounts clamp it. The five library counts are interpolated into
+  gettext plurals,
   so each is read through a `>= 0` ternary (a ternary, not an `if`, so the `Text` keeps its slot).
   **Tracks is the exception, and the exception is the rule read precisely** — what obliges the
   rewind is the leave dropping the rows, and its leave doesn't. **Rewind if and only if you clear,
@@ -767,7 +885,7 @@ block first; each page's section below is deltas only.** The nav-index map is in
 
 - Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, should_announce_warm, UNFETCHED_COUNT}`,
   `ui::grid_rows::{chunk_entity_rows, write_grid}`, `ui::track_list_cache`,
-  `ui::mosaic_hero::impl_mosaic_hero!`.
+  `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 
 ### Per-page deltas
 
@@ -775,7 +893,7 @@ Each page's own tree is the reference for how it fills; what follows is only the
 edit would otherwise reverse.
 
 - **Favorites** (three tabs) — `refresh_hero` stays **ungated**, answering the count, running time
-  and mosaic the band states on all three tabs, which is why Songs owes no count rewind. Both sorts
+  and collage the band states on all three tabs, which is why Songs owes no count rewind. Both sorts
   resolve **in memory**, the fetch having lost its sort parameters entirely. **The artist sort
   applies to the cached `Vec`, not the filtered copy** — `first_screenful_paths` picks prewarm
   targets off that cache, so sorting downstream warms the covers of whichever artists SQL returned

@@ -254,3 +254,151 @@ fn extract_and_cache_artwork_empty_pictures() -> Result<(), AppError> {
     assert!(result.is_none());
     Ok(())
 }
+
+// ── compose_cover ──
+
+/// A solid-colour square PNG, so a sampled pixel names the source it came from.
+fn solid_source(
+    dir: &Path,
+    name: &str,
+    rgb: [u8; 3],
+    width: u32,
+    height: u32,
+) -> Result<PathBuf, AppError> {
+    let path = dir.join(name);
+    image::RgbImage::from_pixel(width, height, image::Rgb(rgb))
+        .save(&path)
+        .map_err(|e| AppError::Validation(format!("write {name}: {e}")))?;
+    Ok(path)
+}
+
+/// The canvas side these tests compose at. `compose_cover` takes it from the caller, so a number
+/// of the tests' own also pins that it is honoured rather than quietly using [`COMPOSITE_SIZE`].
+const TEST_SIDE: u32 = 400;
+
+/// The four layouts, pinned against composed pixels — the arrangement `CoverMosaic` used to draw in
+/// Slint, and the collage is now the only place it is stated. The sample points are spelled here
+/// rather than read off `COMPOSITE_LAYOUTS`: sampling the table the compose loop walks proves only
+/// that the loop honours it, and passes just as happily when two of its rows are swapped.
+#[test]
+fn each_layout_puts_every_source_in_its_own_rect() -> Result<(), AppError> {
+    const COLOURS: [[u8; 3]; 4] = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0]];
+
+    const NEAR: u32 = TEST_SIDE / 4;
+    const FAR: u32 = TEST_SIDE * 3 / 4;
+    const MID: u32 = TEST_SIDE / 2;
+    /// Where each source's colour must land, by set size: full bleed; left | right;
+    /// left | right-top over right-bottom; 2×2 read across then down.
+    const SAMPLES: [&[(u32, u32)]; 4] = [
+        &[(MID, MID)],
+        &[(NEAR, MID), (FAR, MID)],
+        &[(NEAR, MID), (FAR, NEAR), (FAR, FAR)],
+        &[(NEAR, NEAR), (FAR, NEAR), (NEAR, FAR), (FAR, FAR)],
+    ];
+
+    let tmp = tempfile::tempdir()?;
+    let sources = COLOURS
+        .iter()
+        .enumerate()
+        .map(|(i, rgb)| solid_source(tmp.path(), &format!("{i}.png"), *rgb, 64, 64))
+        .collect::<Result<Vec<PathBuf>, AppError>>()?;
+
+    for (count, points) in (1..=4).zip(SAMPLES) {
+        let canvas = compose_cover(&sources[..count], TEST_SIDE)
+            .ok_or_else(|| AppError::Validation(format!("compose of {count} returned None")))?;
+        assert_eq!((canvas.width(), canvas.height()), (TEST_SIDE, TEST_SIDE));
+
+        for (slot, &(x, y)) in points.iter().enumerate() {
+            assert_eq!(
+                canvas.get_pixel(x, y).0,
+                COLOURS[slot],
+                "{count}-up layout, slot {slot} at ({x}, {y})"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Refused for the set's *size*, which the leniency below must not talk its way out of: dropping a
+/// source is how a broken one costs its slot, never how five of them find a layout.
+#[test]
+fn compose_cover_refuses_a_set_it_has_no_layout_for() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let one = solid_source(tmp.path(), "one.png", [255, 0, 0], 64, 64)?;
+
+    assert!(compose_cover(&[], TEST_SIDE).is_none());
+    assert!(compose_cover(&vec![one.clone(); 5], TEST_SIDE).is_none());
+
+    // Four readable plus a broken fifth composed a 4-up while the size check sat behind the
+    // readability retry — the one arrangement of five sources that ever reached a canvas.
+    let broken = tmp.path().join("broken.png");
+    std::fs::write(&broken, b"not an image")?;
+    let mut five = vec![one; 4];
+    five.push(broken);
+    assert!(
+        compose_cover(&five, TEST_SIDE).is_none(),
+        "a broken source must not buy a set a layout"
+    );
+    Ok(())
+}
+
+/// A cover that has gone missing under us costs its slot, never the banner: the layout is picked
+/// from what survives, so a broken second source leaves the first full-bleed. Only an entirely
+/// unreadable set reads as no artwork.
+#[test]
+fn an_unreadable_source_drops_out_of_the_collage() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let good = solid_source(tmp.path(), "good.png", [255, 0, 0], 64, 64)?;
+
+    let broken = tmp.path().join("broken.png");
+    std::fs::write(&broken, b"not an image")?;
+
+    let canvas = compose_cover(&[good, broken.clone()], TEST_SIDE)
+        .ok_or_else(|| AppError::Validation("a readable source must still compose".into()))?;
+    // The 1-up layout rather than the 2-up: the survivor takes the half the broken source would
+    // have had, which is what separates this from painting a blank quarter.
+    for x in [TEST_SIDE / 4, TEST_SIDE * 3 / 4] {
+        assert_eq!(canvas.get_pixel(x, TEST_SIDE / 2).0, [255, 0, 0], "at x={x}");
+    }
+
+    assert!(compose_cover(&[broken], TEST_SIDE).is_none(), "nothing readable is still nothing");
+    Ok(())
+}
+
+/// The forged-header guard every other decode in the tree carries. One pixel over on
+/// the long axis only, `decode_capped` bounding each dimension independently — a
+/// square at the cap would be a 200 MB fixture.
+#[test]
+fn a_source_past_the_decode_cap_is_refused() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let ok = solid_source(tmp.path(), "ok.png", [255, 0, 0], 64, 64)?;
+    let over = solid_source(tmp.path(), "over.png", [0, 255, 0], MAX_SOURCE_DIM + 1, 1)?;
+
+    assert!(compose_cover(std::slice::from_ref(&over), TEST_SIDE).is_none());
+
+    // Beside a readable source the refusal is just a source that won't decode, so it drops out
+    // like any other — the guard still holds, the green never reaching the canvas.
+    let canvas = compose_cover(&[ok, over], TEST_SIDE)
+        .ok_or_else(|| AppError::Validation("the readable source must still compose".into()))?;
+    for x in [TEST_SIDE / 4, TEST_SIDE * 3 / 4] {
+        assert_eq!(canvas.get_pixel(x, TEST_SIDE / 2).0, [255, 0, 0], "at x={x}");
+    }
+    Ok(())
+}
+
+/// `compose_artwork` is the strict half, and the asymmetry is deliberate: it bakes a file the
+/// mosaic picker has already previewed slot for slot, so a source dropping out would persist a
+/// collage that isn't the one the user chose.
+#[test]
+fn the_persisted_collage_refuses_what_the_hero_would_drop() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let good = solid_source(tmp.path(), "good.png", [255, 0, 0], 64, 64)?;
+
+    let broken = tmp.path().join("broken.png");
+    std::fs::write(&broken, b"not an image")?;
+
+    assert!(compose_artwork(&[good.clone(), broken], tmp.path()).is_none());
+    // The strictness is about the *missing* source, not about composing at all.
+    assert!(compose_artwork(&[good], tmp.path()).is_some());
+    Ok(())
+}

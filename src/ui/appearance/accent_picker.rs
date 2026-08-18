@@ -139,7 +139,7 @@ pub(super) fn wire_accent_changed(
             return;
         };
         g.set_accent_idx(idx);
-        themes::apply(&ui, theme.id, variant_id, accent_id, &snapshot);
+        super::apply_palette(&ui, theme.id, variant_id, accent_id, &snapshot);
         // Update the synchronous accent shadow before the async write
         // — a sibling `wire_variant_changed` that fires before the disk
         // commit will then read the new accent (not the previous one).

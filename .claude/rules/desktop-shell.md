@@ -37,8 +37,17 @@ the OS owns has to be attached late or not at all on at least one platform.
   via `Dialog` `"restart-titlebar"` → `window_chrome::request_respawn_and_quit`; hydrate
   `Theme.use-native-titlebar` *before* `app.run()`.
 
-- **A restart can refuse, and the check has to sit on this side of the exit.** All three restart
-  paths — titlebar toggle, tray toggle, the updater's "Restart Now" — go through
+- **`"restart-backdrop"` is the third of these and the one whose deadline is earlier than
+  `app.run()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a
+  `BlurSpec` at all, so `boot::ui_setup::apply_backdrop_style` raises it ahead of `install_views`
+  rather than in `hydrate_ui_from_settings`. Same three-part shape as the tray's:
+  `WindowChrome.restart-backdrop()` → `controls.rs::on_restart_backdrop`
+  (`library::window::set_aurora_backdrop` + `request_respawn_and_quit`). Why it can't be live is
+  `.claude/rules/ui-patterns.md`'s.
+
+- **A restart can refuse, and the check has to sit on this side of the exit.** All four restart
+  paths — titlebar toggle, tray toggle, backdrop-style toggle, the updater's "Restart Now" — go
+  through
   **`window_chrome::request_respawn_and_quit`**, which resolves `respawn_target()` *before*
   setting `RESPAWN_AFTER_EXIT` and quitting: past `slint::quit_event_loop()` the window is gone, so
   a failed `exec` in `shutdown::respawn_if_requested` has nothing to fall back to and the app

@@ -5,71 +5,24 @@
 //! reusable `TrackList` component and run byte-identical selection logic —
 //! the only differences are the per-view Slint global type and the cached
 //! Rust-side track list / applied-selection shadow. This module captures
-//! that logic once, parameterised over the [`DetailSelectionView`] trait
+//! that logic once, parameterised over the [`RowSelectionView`] trait
 //! (the handful of Slint accessors it touches) and a [`SelectionRefs`]
 //! borrow of the two caches. Each view's `selection.rs` is a thin adapter
 //! that supplies those.
+//!
+//! The trait itself lives in [`crate::ui::list_selection`], the layer under this one. It is
+//! re-exported for [`crate::ui::detail_filter`], the one importer outside these two files, whose
+//! import reads against the layer it belongs to rather than through it.
 
 use std::collections::{HashMap, HashSet};
 
 use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
+use crate::TrackListRow as UiTrackListRow;
 use crate::entities::track::TrackListRow as RsTrackListRow;
+pub use crate::ui::list_selection::RowSelectionView;
 use crate::ui::util::clamp_i64_to_i32;
-use crate::{
-    AlbumDetail, ArtistDetail, GenreDetail, PlaylistDetail, TrackListRow as UiTrackListRow,
-};
-
-/// The per-detail-view Slint surface the generic selection logic drives.
-/// Each detail global (`AlbumDetail`, `ArtistDetail`, …) implements this by
-/// routing through its auto-generated `get_*` / `set_*` accessors.
-pub trait DetailSelectionView {
-    /// The shift-range anchor row index (`-1` = no anchor).
-    fn anchor(&self) -> i32;
-    fn set_anchor(&self, anchor: i32);
-    /// The currently-selected track ids model.
-    fn selected_ids(&self) -> ModelRc<i32>;
-    fn replace_selected_ids(&self, ids: ModelRc<i32>);
-    /// The displayed track-row model.
-    fn track_rows(&self) -> ModelRc<UiTrackListRow>;
-    /// Replace the displayed track-row model wholesale (downcast-miss
-    /// fallback only — the model is normally mutated in place).
-    fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>);
-}
-
-/// Generate a [`DetailSelectionView`] impl for a detail global. The trait
-/// method names are deliberately distinct from Slint's `get_*` / `set_*`
-/// accessors so the bodies are unambiguous.
-macro_rules! impl_detail_selection_view {
-    ($global:ident) => {
-        impl DetailSelectionView for $global<'_> {
-            fn anchor(&self) -> i32 {
-                self.get_selection_anchor()
-            }
-            fn set_anchor(&self, anchor: i32) {
-                self.set_selection_anchor(anchor);
-            }
-            fn selected_ids(&self) -> ModelRc<i32> {
-                self.get_selected_ids()
-            }
-            fn replace_selected_ids(&self, ids: ModelRc<i32>) {
-                self.set_selected_ids(ids);
-            }
-            fn track_rows(&self) -> ModelRc<UiTrackListRow> {
-                self.get_tracks()
-            }
-            fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>) {
-                self.set_tracks(rows);
-            }
-        }
-    };
-}
-
-impl_detail_selection_view!(AlbumDetail);
-impl_detail_selection_view!(ArtistDetail);
-impl_detail_selection_view!(GenreDetail);
-impl_detail_selection_view!(PlaylistDetail);
 
 /// Borrows of the Rust-side caches a detail view keeps alongside its Slint
 /// model: the track rows in display order, and the selection set currently
@@ -86,7 +39,7 @@ pub struct SelectionRefs<'a> {
 /// Compute the new selection state for a detail-row click and apply it.
 /// Plain click selects one row; `ctrl` toggles a row; `shift` (with a live
 /// anchor) range-selects over the displayed rows. Runs on the UI thread.
-pub fn handle_select_row<V: DetailSelectionView>(
+pub fn handle_select_row<V: RowSelectionView>(
     view: &V,
     refs: &SelectionRefs<'_>,
     idx: i32,
@@ -127,7 +80,7 @@ pub fn handle_select_row<V: DetailSelectionView>(
 }
 
 /// Reset selection (called from the action-pill "Clear" button).
-pub fn clear_selection<V: DetailSelectionView>(view: &V, refs: &SelectionRefs<'_>) {
+pub fn clear_selection<V: RowSelectionView>(view: &V, refs: &SelectionRefs<'_>) {
     write_selection(view, Vec::new());
     view.set_anchor(-1);
     apply_selection_to_rows(view, refs);
@@ -142,7 +95,7 @@ pub fn clear_selection<V: DetailSelectionView>(view: &V, refs: &SelectionRefs<'_
 /// cache (kept in the same display order as the Slint model), so reading a
 /// row's id never costs a struct clone — only the genuinely flipped rows
 /// are pulled out of the model.
-pub fn apply_selection_to_rows<V: DetailSelectionView>(view: &V, refs: &SelectionRefs<'_>) {
+pub fn apply_selection_to_rows<V: RowSelectionView>(view: &V, refs: &SelectionRefs<'_>) {
     let desired: HashSet<i32> = view.selected_ids().iter().collect();
     let mut applied = refs.applied.lock();
 
@@ -177,7 +130,7 @@ pub fn apply_selection_to_rows<V: DetailSelectionView>(view: &V, refs: &Selectio
 
 /// Mutate the persistent `selected-ids` `VecModel<i32>` in place. Falls
 /// back to a fresh `ModelRc` only if the install step somehow didn't run.
-pub fn write_selection<V: DetailSelectionView>(view: &V, ids: Vec<i32>) {
+pub fn write_selection<V: RowSelectionView>(view: &V, ids: Vec<i32>) {
     let model = view.selected_ids();
     if let Some(vm) = model.as_any().downcast_ref::<VecModel<i32>>() {
         vm.set_vec(ids);

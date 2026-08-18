@@ -3,7 +3,9 @@
 
 use std::sync::Arc;
 
-use melodia::{AppWindow, ArtistDetail, Nav, Player, media, services, state::AppState, ui};
+use melodia::{
+    AppWindow, ArtistDetail, HeroBackdrop, Nav, Player, Theme, media, services, state::AppState, ui,
+};
 use slint::ComponentHandle;
 
 /// Hydrate Slint's bundled-translation runtime from the persisted
@@ -27,6 +29,43 @@ pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
     if let Err(e) = ui::window_chrome::install(app, state) {
         log::warn!("window_chrome::install: {e}");
     }
+}
+
+/// Raise the persisted backdrop choice, and do it **before `install_views`**.
+///
+/// The flag has to be up before the first tier exists, not merely before `app.show()`:
+/// `install_views` constructs the three `DetailArtwork` caches — whose blur half is built or
+/// skipped on this answer — and then seeds all four detail views, whose fetches end in
+/// `ui::backdrop::kind`. The two obvious homes, `ui::appearance::install` and
+/// `hydrate_ui_from_settings`, both run after it. A failed settings read leaves the
+/// Slint-declared default, which is the same value.
+///
+/// Returns whether the aurora arm is live, read back off the property so the failed-read arm
+/// answers with what boot raised — the writer reporting what it wrote, not a second reader.
+/// `#[must_use]` because dropping the answer is the live mutation: the dither install downstream is
+/// the aurora's alone, and a bare call statement would compile clean past it.
+#[must_use]
+pub fn apply_backdrop_style(
+    app: &AppWindow,
+    startup_settings: Option<&services::settings::SettingsData>,
+) -> bool {
+    let theme = app.global::<Theme>();
+    if let Some(settings) = startup_settings {
+        theme.set_aurora_backdrop(settings.backdrop.aurora_backdrop);
+    }
+    theme.get_aurora_backdrop()
+}
+
+/// One tile for the process, shared by both aurora tiers: it answers to the renderer's lack of
+/// gradient dithering rather than to any artwork, so nothing later rewrites it. The `Image` is
+/// `Rc`-backed, so the second global clones a handle, not a buffer.
+///
+/// **The aurora arm's alone** — on the blur arm it is a generator run and a buffer nothing draws,
+/// and skipping it leaves the unset `image` `AuroraBackdrop` already degrades to.
+pub fn install_backdrop_dither(app: &AppWindow) {
+    let tile = slint::Image::from_rgba8(ui::aurora::dither_tile());
+    app.global::<Player>().set_np_dither(tile.clone());
+    app.global::<HeroBackdrop>().set_dither(tile);
 }
 
 /// The per-view handles `install_views` hands back for the wiring `main()` still
@@ -241,7 +280,7 @@ pub fn install_library_settings_and_friends(
 pub fn seed_initial_view_model(
     app: &AppWindow,
     state: &AppState,
-    cover_thumbs: &media::cover_thumbs::CoverThumbs,
+    cover_thumbs: &Arc<media::cover_thumbs::CoverThumbs>,
 ) {
     use melodia::player::state::lock_state;
 
@@ -270,6 +309,16 @@ pub fn seed_initial_view_model(
     };
     player.set_progress(progress);
     player.set_queue(ui::shell::bridge::to_slint_queue_vm(&qvm));
+
+    // The row tier is empty this early, so the seed above is guaranteed to be the cache-only
+    // lookup's miss — and no `view_model` push is owed on a restored-but-paused session, so
+    // nothing else would ever fill it.
+    ui::shell::bridge::warm_vm_cover(
+        app.as_weak(),
+        &state.runtime,
+        cover_thumbs,
+        light.current_track.as_ref().and_then(|t| t.artwork_path.clone()).unwrap_or_default(),
+    );
 }
 
 /// Apply every UI-visible persisted section to the Slint globals — sidebar
@@ -377,9 +426,9 @@ pub fn spawn_initial_tracks_fetch(
 /// Kick off an entity grid's initial fetch so its cards are populated by the
 /// time the user navigates to it.
 ///
-/// A macro rather than a generic `fn` for the reason `impl_mosaic_hero!` is one:
-/// the four `*Ui` types share no trait, and each `fetch_grid` is a free function
-/// in its own module. Tracks is deliberately not among them, resolving a
+/// A macro rather than a generic `fn` for the reason `impl_detail_view_helpers!`
+/// is one: the four `*Ui` types share no trait, and each `fetch_grid` is a free
+/// function in its own module. Tracks is deliberately not among them, resolving a
 /// persisted sort and calling `fetch_and_apply` instead.
 macro_rules! initial_grid_fetch {
     ($(#[$doc:meta])* $name:ident, $module:ident, $handle:ty, $label:literal) => {

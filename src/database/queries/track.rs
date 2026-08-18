@@ -589,20 +589,19 @@ pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, App
     .fetch_one(db.read())
     .await?;
 
-    // Up to 4 *distinct* artworks for the live-updating Favorites hero mosaic:
-    // walk the favourites in `MOST_PLAYED_ORDER` and keep each cover's best
-    // slot, which makes the mosaic literally the head of the Most Played tab
-    // rather than a second ranking that has to be kept in step with it. A
-    // hand-matched `ORDER BY` over `MAX(play_count)` was that second ranking,
-    // and it disagreed with the grid on every tie.
+    // Up to 4 *distinct* artworks for the Favorites banner collage: walk the
+    // favourites in `MOST_PLAYED_ORDER` and keep each cover's best slot, which
+    // makes the collage literally the head of the Most Played tab rather than a
+    // second ranking that has to be kept in step with it. A hand-matched
+    // `ORDER BY` over `MAX(play_count)` was that second ranking, and it
+    // disagreed with the grid on every tie.
     //
     // The rank spans *all* favourites, not just `play_count > 0` as the grid
-    // does, so once the played covers run out the remainder pads the mosaic to
-    // 4 — the same fill the previous query gave, since unplayed rows sort last
-    // under `play_count DESC`. Duplicates are deliberately not synthesised: the
-    // consuming `CoverMosaic` renders an empty placeholder for the slots beyond
-    // what this returns when `pad-to-four` is set, so a one-album-heavy library
-    // shows 1 real cover + 3 placeholders rather than the same artwork 4 times.
+    // does, so once the played covers run out the remainder fills the collage —
+    // unplayed rows sort last under `play_count DESC`. Duplicates are
+    // deliberately not synthesised: `compose_cover` lays 1–4 sources out per
+    // count, so a one-album-heavy library gets one full-bleed cover rather than
+    // the same artwork four times.
     let artwork_paths: Vec<String> = sqlx::query_scalar(AssertSqlSafe(format!(
         "SELECT artwork_path FROM ( \
             SELECT artwork_path, \

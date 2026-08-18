@@ -1,6 +1,6 @@
 //! `RecentlyPlayed.*` callbacks, split by concern:
 //!
-//! * [`covers`] — the lazy mosaic and grid cover-lookup callbacks.
+//! * [`covers`] — the Most Played grid's lazy cover-lookup callback.
 //! * [`subviews`] — the Most Played card actions, the tab switch, and the
 //!   grid's column-count push.
 //! * [`tracklist`] — the Songs tab: row actions, filter, column visibility,

@@ -91,8 +91,8 @@ export component PlaylistMosaicPicker inherits Rectangle {
                     }
                 }
 
-                // The empty cases above stay local: `CoverMosaic` is
-                // empty-state-agnostic, since the Favorites hero wants its own.
+                // The empty cases above stay local: `CoverMosaic` is empty-state-agnostic,
+                // drawing only tiles so a caller can own what "none" looks like.
                 if Dialog.mosaic-selection.length >= 1: CoverMosaic {
                     width: 100%;
                     height: 100%;

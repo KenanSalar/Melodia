@@ -2,10 +2,10 @@ import { Theme } from "../../theme.slint";
 import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
 import { NavEnterFrom } from "../../globals/nav.slint";
 import { ArtworkImage } from "../artwork-image.slint";
-import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
 import { HeroChipStrip } from "../hero-chip-strip.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
+import { HeroBackdropStack } from "hero-backdrop-stack.slint";
 import { TabSearchHeader } from "tab-search-header.slint";
 
 // The My Library page's pinned band, in two states. Idle it is a flat pane carrying the tab bar,
@@ -45,11 +45,11 @@ export component LibraryTabBand inherits Rectangle {
     in property <image> cover;
     in property <bool> circular-artwork: false;
     in property <string> fallback-icon: "music-note";
-    // Genre Detail's name-hashed gradient overrides both. The defaults take solved
-    // `HeroBackdrop.chrome`, never `Theme.accent` — the tile sits *on* the hero, where a light
-    // theme's accent lands dark-on-dark.
-    in property <brush> tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
-    in property <brush> tile-icon-color: HeroBackdrop.chrome;
+    // Genre Detail's name-hashed gradient overrides both. The defaults take the hero's own
+    // `placeholder` tier, never `Theme.accent` — the tile sits *on* the hero, and only Rust knows
+    // which backdrop is under it.
+    in property <brush> tile-bg: HeroBackdrop.placeholder.transparentize(0.85);
+    in property <brush> tile-icon-color: HeroBackdrop.placeholder;
 
     in property <image> blur-a;
     in property <image> blur-b;
@@ -137,7 +137,7 @@ export component LibraryTabBand inherits Rectangle {
     property <brush> hero-label: root.detail-open ? HeroBackdrop.on-backdrop : Theme.text;
     property <brush> hero-active: root.detail-open ? HeroBackdrop.chrome : Theme.accent;
     property <brush> hero-hover:
-        root.detail-open ? HeroBackdrop.on-backdrop.with-alpha(0.12) : Theme.surface0;
+        root.detail-open ? HeroBackdrop.on-backdrop.transparentize(0.88) : Theme.surface0;
     property <brush> hero-divider: root.detail-open ? HeroBackdrop.tile-edge : Theme.surface1;
     animate hero-label, hero-active, hero-hover, hero-divider {
         duration: Theme.dur-med;
@@ -228,17 +228,17 @@ export component LibraryTabBand inherits Rectangle {
     out property <string> tip-label <=> header.tip-label;
     out property <bool> tip-visible <=> header.tip-visible;
 
-    // Behind everything else; the gradient floor shows through with no blur image, which Genre
-    // Detail's procedural backdrop relies on. **`hero-open` is this band's alone** — the mosaic
-    // heroes never stop painting one, and nothing may ease *from* a tier the band wasn't painting.
-    HeroBlurBackdrop {
+    // Behind everything else; the gradient floor shows through with no blur image, which is how
+    // Genre Detail paints on the blur arm. **`detail-open` is this band's alone** — the mosaic heroes
+    // never stop painting a hero, and nothing may ease *from* a tier the band wasn't painting.
+    HeroBackdropStack {
         x: 0; y: 0;
         width: 100%; height: 100%;
         blur-a: root.blur-a;
         blur-b: root.blur-b;
         use-a: root.use-a;
         has-blur: root.has-blur;
-        hero-open: root.detail-open;
+        shown: root.detail-open;
     }
 
     // The idle pane, over the backdrop rather than instead of it. **The alpha is folded into the
@@ -295,7 +295,7 @@ export component LibraryTabBand inherits Rectangle {
                     // `hover-bg` must be named beside `idle-bg` — the component defaults it to an
                     // opaque `Theme.surface0`, grey over the blur the moment the pointer lands.
                     // Not `Theme.floating-chrome-bg`: wrong for a disc sitting in the tab row.
-                    idle-bg: HeroBackdrop.chip-fill;
+                    idle-bg: HeroBackdrop.disc-fill;
                     hover-bg: HeroBackdrop.disc-hover;
                     idle-fg: HeroBackdrop.chrome;
                     // **A bias off the morph, not the morph itself** — this is the only piece of
@@ -371,14 +371,15 @@ export component LibraryTabBand inherits Rectangle {
                             MaterialIcon {
                                 name: "auto_awesome";
                                 icon-size: 22px;
-                                icon-color: HeroBackdrop.chrome.with-alpha(root.hero-t);
+                                // Multiplied, not set: `chrome` carries its own alpha on the aurora.
+                                icon-color: HeroBackdrop.chrome.transparentize(1.0 - root.hero-t);
                                 filled: true;
                             }
                         }
 
                         Text {
                             text: "\u{200e}" + root.title;
-                            color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);
+                            color: HeroBackdrop.on-backdrop.transparentize(1.0 - root.hero-t);
                             font-size: Theme.hero-title-size;
                             font-weight: Theme.page-title-weight;
                             horizontal-alignment: left;
@@ -389,7 +390,7 @@ export component LibraryTabBand inherits Rectangle {
                     if root.subtitle != "": Text {
                         vertical-stretch: 0;
                         text: "\u{200e}" + root.subtitle;
-                        color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);
+                        color: HeroBackdrop.on-backdrop.transparentize(1.0 - root.hero-t);
                         font-size: Theme.font-size-md;
                         horizontal-alignment: left;
                         overflow: elide;

@@ -37,7 +37,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::playlist::PlaylistStats;
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::ui::detail_artwork::DetailArtwork;
+use crate::ui::artwork_cache::BlurSpec;
+use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
@@ -84,7 +85,8 @@ pub use callbacks::wire_files;
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
     install_models(cx.app);
-    let playlists_ui = Arc::new(PlaylistsUi::new(cx.cover_thumbs.clone()));
+    let playlists_ui =
+        Arc::new(PlaylistsUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, &playlists_ui);
     playlists_ui
 }
@@ -111,7 +113,7 @@ pub struct PlaylistsUi {
 }
 
 impl PlaylistsUi {
-    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>, hero_blur: Option<BlurSpec>) -> Self {
         Self {
             grid: PlaylistGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
@@ -130,7 +132,7 @@ impl PlaylistsUi {
                 GRID_COVER_SIZE,
                 DEFAULT_GRID_COVER_CAP,
             )),
-            detail_artwork: Arc::new(DetailArtwork::new()),
+            detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),
         }
     }

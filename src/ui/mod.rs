@@ -2,6 +2,7 @@ pub mod albums;
 pub mod appearance;
 pub mod artists;
 pub mod artwork_cache;
+pub mod aurora;
 pub mod backdrop;
 pub mod browse;
 pub mod callbacks;
@@ -23,7 +24,6 @@ pub mod launcher;
 pub mod list_selection;
 pub mod model_diff;
 pub mod model_patch;
-pub mod mosaic_blur;
 pub mod mosaic_hero;
 pub mod my_library;
 pub mod nav_history;
@@ -72,6 +72,9 @@ pub mod window_chrome;
 // view mounted inside it do on the frame the window opens. `titlebar_tests` reaches a third
 // tree — it holds the brand mark's theme brush to the asset it is painted over, the only
 // thing here a dark-palette reviewer cannot see going wrong.
+#[cfg(test)]
+#[path = "tests/aurora_backdrop_tests.rs"]
+mod aurora_backdrop_tests;
 #[cfg(test)]
 #[path = "tests/hero_blur_backdrop_tests.rs"]
 mod hero_blur_backdrop_tests;

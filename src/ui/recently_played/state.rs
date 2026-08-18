@@ -10,6 +10,7 @@ use parking_lot::Mutex;
 
 use crate::entities::track::{MostPlayedFavorite, TrackListRow as RsTrackListRow};
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
+use crate::ui::mosaic_hero::MosaicGuard;
 use crate::ui::row_match::Needle;
 
 /// What the Songs tab's band states about the recency set.
@@ -56,10 +57,9 @@ pub(crate) struct RecentlyPlayedUiState {
     /// `TrackListRow.id`s currently `selected: true` on the Slint model. The same
     /// diff-then-write the other list views use.
     pub applied_selection: Mutex<HashSet<i32>>,
-    /// Mosaic cover paths last composed into the hero blur, guarding against
-    /// recomposing four decodes and a blur when a refresh yields the same top-4 —
-    /// the common case. Reset on section-leave so a genuine re-enter recomposes.
-    pub last_mosaic_paths: Mutex<Vec<String>>,
+    /// The covers last composed into the banner, guarding against redoing four decodes, a
+    /// 600² compose and a blur when a refresh yields the same top four — the common case.
+    pub last_mosaic_paths: MosaicGuard,
     /// Hash of the Most Played grid's last applied contents plus the tab and column
     /// count that shaped them. The same guard one surface down: a grid write is a
     /// `set_vec` reset that rebuilds every mounted card, and a `stats_changed` tick
@@ -79,22 +79,11 @@ impl RecentlyPlayedUiState {
             songs_fold: Mutex::new(HeroFold::default()),
             most_played_totals: Mutex::new(MostPlayedTotals::default()),
             applied_selection: Mutex::new(HashSet::new()),
-            last_mosaic_paths: Mutex::new(Vec::new()),
+            last_mosaic_paths: MosaicGuard::default(),
             last_grid_signature: Mutex::new(None),
         }
     }
 }
-
-/// Hero mosaic-tile cache size (px). Each hero tile renders at ~70 px, so
-/// 128 px gives a crisp downscale. Mirrors the Favorites mosaic tier.
-pub(super) const MOSAIC_THUMB_SIZE: u32 = 128;
-
-/// LRU capacity for the mosaic-tile cache — at most 4 covers live in the
-/// mosaic, with a little headroom for the recency set shifting.
-pub(super) const MOSAIC_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(16) {
-    Some(n) => n,
-    None => panic!("MOSAIC_THUMB_CAP > 0"),
-};
 
 /// LRU capacity for the Most Played tier, sized like the album grid's default:
 /// a screenful or two of cards, so scrolling re-decodes rather than the cache growing

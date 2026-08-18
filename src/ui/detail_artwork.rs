@@ -14,38 +14,45 @@ use std::sync::Arc;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::state::AppState;
-use crate::ui::artwork_cache::{ArtworkCache, BlurSpec, CachedArtwork};
+use crate::ui::artwork_cache::{ArtworkCache, ArtworkPair, BlurSpec, CachedArtwork};
 use crate::ui::backdrop::BackdropSample;
 
 /// Landscape, and lighter than the Now Playing tier's wash: the hero region
 /// paints full content-panel width by a band `Theme.hero-artwork` tall, and
 /// the gradient floor plus the solved scrim sit on top of this blur, so it
 /// needs less of its own.
-const BLUR: BlurSpec = BlurSpec {
-    height: 128,
-    sigma: 20.0,
+///
+/// Public because the curated heroes want it without wanting this tier's LRU — their
+/// source is composed per refresh, so there is no path to key it on, but they draw the
+/// same band shape and owe it the same blur.
+pub(crate) const BLUR: BlurSpec = BlurSpec {
+    height: 85,
+    sigma: 13.3,
 };
 
 /// LRU capacity. The working set for a detail view is the currently-open
 /// entity plus a handful of recently-opened ones (the back-and-forth
-/// pattern). At one `(cover, blur)` pair per entry ≈ `432 KiB + 72 KiB`,
-/// 12 entries caps at ≈ 6 MiB — comfortably under the RSS ceiling.
+/// pattern). At one `(cover, blur)` pair per entry ≈ `432 KiB + 32 KiB`,
+/// 12 entries caps at ≈ 5.5 MiB — comfortably under the RSS ceiling.
 const ARTWORK_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(12) {
     Some(n) => n,
     None => panic!("ARTWORK_CACHE_CAP > 0"),
 };
 
-pub struct DetailArtwork(ArtworkCache);
-
-impl Default for DetailArtwork {
-    fn default() -> Self {
-        Self(ArtworkCache::new(ARTWORK_CACHE_CAP, BLUR))
-    }
+/// This tier's spec, or `None` under the aurora setting. The three detail views each build
+/// their own tier, so the pairing of [`BLUR`] with the live setting lives here rather than
+/// three times at their `install`s.
+pub fn blur_spec(ui: &crate::AppWindow) -> Option<BlurSpec> {
+    crate::ui::backdrop::blur_spec(ui, BLUR)
 }
 
+pub struct DetailArtwork(ArtworkCache);
+
 impl DetailArtwork {
-    pub fn new() -> Self {
-        Self::default()
+    /// Takes the spec rather than reading the setting itself, so the tests can build a tier
+    /// without a window. [`blur_spec`] is what the three production callers pass.
+    pub fn new(blur: Option<BlurSpec>) -> Self {
+        Self(ArtworkCache::new(ARTWORK_CACHE_CAP, blur))
     }
 
     /// See [`ArtworkCache::get_or_decode`].
@@ -73,6 +80,16 @@ pub(crate) struct DetailPair {
     pub(crate) sample: BackdropSample,
 }
 
+impl From<ArtworkPair> for DetailPair {
+    fn from(pair: ArtworkPair) -> Self {
+        Self {
+            cover: Some(pair.cover),
+            blur: pair.blur,
+            sample: pair.sample,
+        }
+    }
+}
+
 /// Decode an entity's artwork into a [`DetailPair`] for a detail-view
 /// header — the sharp header tile **and** the heavily-blurred hero
 /// backdrop, both derived from one source decode. Off-loaded to the
@@ -90,11 +107,7 @@ pub(crate) async fn decode_detail_pair(
         return DetailPair::default();
     };
     match state.runtime.spawn_blocking(move || artwork.get_or_decode(Path::new(&path))).await {
-        Ok(Some(pair)) => DetailPair {
-            cover: Some(pair.cover),
-            blur: Some(pair.blur),
-            sample: pair.sample,
-        },
+        Ok(Some(pair)) => pair.into(),
         Ok(None) => DetailPair::default(),
         Err(e) => {
             log::warn!("detail artwork decode: {e}");

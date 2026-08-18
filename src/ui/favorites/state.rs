@@ -10,6 +10,7 @@ use crate::entities::artist::FavoriteArtist;
 use crate::entities::track::{FavoriteStats, MostPlayedFavorite};
 use crate::services::settings::{SortDir, ViewSort};
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
+use crate::ui::mosaic_hero::MosaicGuard;
 use crate::ui::row_match::Needle;
 use crate::ui::track_list_cache::TrackListCache;
 
@@ -30,8 +31,10 @@ pub(crate) struct FavoritesUiState {
     /// different entities over disjoint field sets. Read off the UI thread by
     /// `grids::sort::sort_cached_artists`, which is why it can't live on the global.
     pub artist_sort: Mutex<ViewSort>,
-    /// Most recent successful `get_favorite_stats`, held so the empty `mosaic-paths` write on
-    /// section leave can be reverted on re-enter without a DB round trip.
+    /// Most recent successful `get_favorite_stats`, held because `hero_chips::publish_favorites`
+    /// takes the band's count and running time off this handle rather than back off the
+    /// properties written around it — the page is assembled from three fetches, so no call site
+    /// holds all of it.
     pub stats: Mutex<FavoriteStats>,
     /// Grid-tab rows in Rust shape, so click handlers resolve `(id) -> entity` without re-fetching
     /// and a keystroke or column-count change re-chunks in memory. Refreshed in lockstep on
@@ -50,10 +53,9 @@ pub(crate) struct FavoritesUiState {
     /// `TrackListRow.id`s currently `selected: true` on the Slint model. The same diff-then-write
     /// Albums uses to keep updates O(changed) rather than O(rows).
     pub applied_selection: Mutex<HashSet<i32>>,
-    /// Mosaic cover paths last composed into the hero blur, guarding against recomposing four
-    /// decodes and a blur when a refresh yields the same covers. Reset on section-leave so a
-    /// genuine re-enter recomposes.
-    pub last_mosaic_paths: Mutex<Vec<String>>,
+    /// The covers last composed into the banner, guarding against redoing four decodes, a
+    /// 600² compose and a blur when a refresh yields the same top four.
+    pub last_mosaic_paths: MosaicGuard,
     /// Hash of the mounted grid's last applied contents plus the tab and column count that shaped
     /// them. The same guard one surface down: a grid write is a `set_vec` reset that rebuilds
     /// every mounted card. Reset on section-leave, the models being cleared there, so a matching
@@ -84,22 +86,11 @@ impl FavoritesUiState {
             songs_fold: Mutex::new(HeroFold::default()),
             most_played_totals: Mutex::new(MostPlayedTotals::default()),
             applied_selection: Mutex::new(HashSet::new()),
-            last_mosaic_paths: Mutex::new(Vec::new()),
+            last_mosaic_paths: MosaicGuard::default(),
             last_grid_signature: Mutex::new(None),
         }
     }
 }
-
-/// Mosaic-tile cache size (px). A tile renders at half the 140 px hero square minus the gutter, so
-/// this downscales crisply without paying the detail tier's 384 px.
-pub(super) const MOSAIC_THUMB_SIZE: u32 = 128;
-
-/// LRU capacity for the mosaic-tile cache. Small: at most four covers live in the mosaic at once,
-/// with headroom for displaced tiles re-entering as the top-4 shifts.
-pub(super) const MOSAIC_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(16) {
-    Some(n) => n,
-    None => panic!("MOSAIC_THUMB_CAP > 0"),
-};
 
 /// LRU capacity per grid tier, sized like the album grid's default: a screenful or two of cards,
 /// so scrolling re-decodes rather than the cache growing with the library. The two tiers are never

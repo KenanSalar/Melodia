@@ -1,11 +1,10 @@
-//! The Recently-Played view's three cover tiers: what each holds, when it warms,
+//! The Recently-Played view's two cover tiers: what each holds, when it warms,
 //! and when it is handed back.
 //!
-//! Two of them are the view's own — the hero mosaic (128 px) and Most Played
-//! (grid-sized) — and the third is the shared row tier the Songs tab's
-//! `TrackList` draws from, which this module only ever reads. Tab-leave is a
-//! release event as much as a section leave is, so the grid tier is dropped and
-//! re-warmed on a tab pick too.
+//! One is the view's own — Most Played, at grid size — and the other is the
+//! shared row tier the Songs tab's `TrackList` draws from, which this module
+//! only ever reads. Tab-leave is a release event as much as a section leave is,
+//! so the grid tier is dropped and re-warmed on a tab pick too.
 
 use std::path::PathBuf;
 
@@ -15,7 +14,7 @@ use super::state::{GRID_PREWARM_AHEAD, GRID_THUMB_CAP};
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::AppWindow;
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::ui::grid_prewarm::{grid_cover, nonempty_artwork_path};
+use crate::ui::grid_prewarm::grid_cover;
 
 impl RecentlyPlayedUi {
     /// First-screenful cover paths for the Most Played tab, in display order.
@@ -103,12 +102,6 @@ impl RecentlyPlayedUi {
         let warm = self.prewarm_tab_covers(entering);
         crate::tasks::heap_trim::trim();
         warm
-    }
-
-    /// Lazy cover lookup for the hero 2×2 mosaic tiles. Routed via
-    /// `RecentlyPlayed.request-mosaic-cover`.
-    pub fn mosaic_cover(&self, artwork_path: &str) -> Image {
-        self.mosaic_thumbs.get_or_load_opt(nonempty_artwork_path(artwork_path))
     }
 
     /// Lazy cover lookup for the Most Played grid cards. Routed via

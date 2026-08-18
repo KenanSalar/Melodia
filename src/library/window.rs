@@ -80,6 +80,17 @@ pub fn set_tray_enabled(state: &AppState, on: bool) -> Result<(), AppError> {
     })
 }
 
+/// Persist the user toggle for "Aurora Backdrop". When `false` (the default) the
+/// artwork-derived surfaces blur the cover behind them, and the two artwork tiers build a
+/// blurred half per decode; when `true` they wash the cover's own colours over `Theme.base`
+/// and no blur is built at all. Restart-gated through the `restart-backdrop` `Dialog` flow —
+/// `boot::ui_setup::apply_backdrop_style` is what reads it, before the first tier exists.
+pub fn set_aurora_backdrop(state: &AppState, on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |s| {
+        s.backdrop.aurora_backdrop = on;
+    })
+}
+
 /// Persist the user's pick for the custom titlebar's decoration button
 /// style (Standard vs macOS traffic lights). The runtime effect lives in
 /// `Theme.titlebar-button-style`, mirrored synchronously by the UI

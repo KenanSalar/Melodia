@@ -4,10 +4,10 @@
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Image, SharedString};
+use slint::ComponentHandle;
 
 use crate::state::AppState;
-use crate::ui::callbacks::macros::release_shared_hero;
+use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
 use crate::ui::favorites::NAV_FAVORITES;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
@@ -40,13 +40,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 fu.mark_dirty();
             }
             if !active && let Some(ui) = weak.upgrade() {
-                // UI-thread teardown: clear the Slint Image properties so the `SharedPixelBuffer`
-                // Arcs release immediately — the dual blur slots hold their own refs even after
-                // the LRU drops — and empty the models so their `SharedString`s go on this tick.
+                // UI-thread teardown: hand back the banner's cover and blur slots so their
+                // `SharedPixelBuffer` Arcs release immediately — the dual blur slots hold their
+                // own refs even after the LRU drops — and empty the models so their
+                // `SharedString`s go on this tick.
                 let g = ui.global::<Favorites>();
-                g.set_blur_img_a(Image::default());
-                g.set_blur_img_b(Image::default());
-                g.set_has_blur(false);
+                release_hero_slots!(g);
                 // Same tick as the wipe above, and unconditional: `release_section_state` bails
                 // when the user has already come back, so leaving the guard to it can strand the
                 // hero on the bare gradient floor until the next channel tick.
@@ -55,7 +54,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 // would match the identical data on re-enter and skip the refill.
                 fu.forget_grid_signature();
                 // Six heroes share one colour set and one chip row, so hand both back rather than
-                // leaving this mosaic's solve for the next hero to paint under.
+                // leaving this banner's solve for the next hero to paint under.
                 release_shared_hero!(ui);
                 // Both grid tiers go with `release_section_state` below, so rewind the counter
                 // that means "cold" — else the next enter reads a leftover bump as a warm tier.
@@ -63,7 +62,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 // And rewind all three counts on the same tick as the models they number: a count
                 // that outlives its model is the one thing these surfaces can state that is
                 // *wrong* rather than merely absent. `track-count` is the visible one, the hero
-                // square reading it to size its mosaic slots.
+                // square reading it to pick its fallback glyph.
                 g.set_track_count(UNFETCHED_COUNT);
                 g.set_most_played_count(UNFETCHED_COUNT);
                 g.set_artist_count(UNFETCHED_COUNT);
@@ -74,10 +73,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 );
                 clear_vec_model::<UiEntityGridRow>(&g.get_artist_rows(), "favorites: clear artist");
                 clear_vec_model::<i32>(&g.get_selected_ids(), "favorites: clear selected-ids");
-                clear_vec_model::<SharedString>(
-                    &g.get_mosaic_paths(),
-                    "favorites: clear mosaic-paths",
-                );
                 g.set_selection_anchor(-1);
             }
             let fu = fu.clone();

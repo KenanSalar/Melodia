@@ -95,19 +95,16 @@ pub async fn refresh_tracks(
         *rp_ui.state().tracks_all.lock() = rows;
     }
 
-    super::hero::push_hero_stats(totals.tracks, &mosaic_paths, rp_ui, weak);
-    // Only recompose the hero blur when the mosaic covers differ from the ones on screen: a
-    // played-track refresh usually yields the same top-4, and re-blurring them is wasted
-    // blocking-pool work. The record is `hero::apply_hero_blur`'s to make, once the buffer is
-    // actually published — recorded here it would also cover a compose whose apply is dropped,
-    // wedging the hero on the gradient floor for the rest of the session.
-    let blur_changed = *rp_ui.state().last_mosaic_paths.lock() != mosaic_paths;
-    if blur_changed {
+    super::hero::push_hero_stats(totals.tracks, rp_ui, weak);
+    // Only recompose the banner when the covers differ from the ones on screen: a played-track
+    // refresh usually yields the same top four, and recomposing them is wasted blocking-pool
+    // work. The matching claim is `hero::publish_hero_artwork`'s, for `MosaicGuard`'s reason.
+    if rp_ui.state().last_mosaic_paths.is_stale(&mosaic_paths) {
         let st = state.clone();
         let ru = rp_ui.clone();
         let weak = weak.clone();
         state.runtime.spawn(async move {
-            super::hero::refresh_blur(&st, &ru, mosaic_paths, &weak, /* animate */ true).await;
+            super::hero::refresh_artwork(&st, &ru, mosaic_paths, &weak, /* animate */ true).await;
         });
     }
 

@@ -91,6 +91,23 @@ pub(super) fn read_last_static_accent(state: &AppState, theme_id: &str) -> Optio
         .and_then(|s| s.theme_preferences.get(theme_id).and_then(|p| p.last_static_accent.clone()))
 }
 
+/// Write the palette, then re-solve the two artwork-derived tiers against it.
+///
+/// **The only place `themes::apply` may be called from.** Both tiers are snapshots taken when a
+/// hero or a track landed, so a palette change reaches neither on its own — visibly, since the
+/// aurora's whole tier set is the theme's own and Now Playing republishes only on the next track.
+pub(super) fn apply_palette(
+    ui: &AppWindow,
+    theme_id: &str,
+    variant_id: &str,
+    accent_id: &str,
+    system: &SystemColorState,
+) {
+    themes::apply(ui, theme_id, variant_id, accent_id, system);
+    crate::ui::hero_backdrop::republish_for_palette(ui);
+    crate::ui::now_playing::republish_for_palette(ui);
+}
+
 /// Persist the user's pick on tokio's blocking pool — `set_appearance`
 /// is sync `std::fs` I/O and must not block the Slint event loop. Any
 /// write failure (disk full, permissions) surfaces as a `log::warn!`

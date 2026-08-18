@@ -93,7 +93,11 @@ export component DialogOverlay inherits Rectangle {
             DialogGlobal.kind == "remove-queue-selected" ? "playlist_remove" :
             DialogGlobal.kind == "remove-folder" ? "folder_off" :
             DialogGlobal.kind == "clear-queue" ? "clear_all" :
-            DialogGlobal.kind == "restart-titlebar" ? "restart_alt" :
+            // One arm for all three restart flows rather than three lines; the tray one had no
+            // entry at all and rendered with no tile.
+            DialogGlobal.kind == "restart-titlebar"
+                || DialogGlobal.kind == "restart-tray"
+                || DialogGlobal.kind == "restart-backdrop" ? "restart_alt" :
             "";
         width: min(self.max-w, max(360px, parent.width - 96px));
         x: (parent.width - self.width) / 2;

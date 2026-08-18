@@ -195,7 +195,7 @@ pub(super) fn wire_variant_changed(
         g_swatches.set_accent_names(ModelRc::from(Rc::new(VecModel::from(labels))));
         g.set_variant_idx(idx);
         g.set_kde_system_active(kde_system_active(theme.id, variant_id, &snapshot));
-        themes::apply(&ui, theme.id, variant_id, visible_accent_id, &snapshot);
+        super::apply_palette(&ui, theme.id, variant_id, visible_accent_id, &snapshot);
         // The *original* accent: a variant flip never demotes a sticky Material You
         // pick to its static fallback, and the shadow cell already holds this value.
         // Write and kick are sequenced in one `spawn_blocking`, so the coordinator

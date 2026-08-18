@@ -9,6 +9,8 @@
 
 const DETAIL_VIEW: &str = include_str!("../detail_view.rs");
 const HERO_CHIPS: &str = include_str!("../hero_chips.rs");
+const HERO_BACKDROP: &str = include_str!("../hero_backdrop.rs");
+const GENRE_DETAIL: &str = include_str!("../genres/detail.rs");
 
 /// The four detail modules, the tab each one's gate has to name, and the helpers
 /// in each that must carry that gate.
@@ -26,7 +28,7 @@ const DETAILS: [(&str, &str, &str, &[&str]); 4] = [
         &["apply_detail_artwork(", "publish_artist("],
     ),
     (
-        include_str!("../genres/detail.rs"),
+        GENRE_DETAIL,
         "genres/detail.rs",
         "MyLibraryTab::Genres",
         &["apply_genre_hero(", "publish_genre("],
@@ -337,7 +339,7 @@ fn the_collapsed_teardown_hands_back_only_what_closed() {
         !body.contains("hero_backdrop::reset"),
         "the colour set outlives the collapse — it is reset by `release_page_hero` alone, so a \
          tab re-entered onto a held detail morphs open on that detail's own tone rather than \
-         easing up through the accent-seeded floor"
+         easing up out of the idle set"
     );
     assert!(
         body.contains("hero_chips::clear_if_stale"),
@@ -482,5 +484,190 @@ fn no_leave_clears_the_chips_behind_the_macro() {
         total >= MIN_TEARDOWNS,
         "only {total} hero teardowns found across the wiring tree — either the walk broke or a \
          leave stopped handing its hero back"
+    );
+}
+
+/// `themes::apply` is reached only through `ui::appearance::apply_palette`. Both artwork-derived
+/// tiers are snapshots of the palette live when a hero or a track landed, so a pick reaches neither
+/// on its own — and Now Playing never recovers, its three publish paths all deduping on
+/// `applied_track_id`. The wrapper is what pairs the write with the two re-solves.
+#[test]
+fn the_palette_is_never_written_without_re_solving_the_backdrops() {
+    /// Floor on the walk, so a broken corpus reads as a broken corpus.
+    const MIN_SOURCES: usize = 200;
+
+    // This file spells the needle, so it is its own first hit — comment-stripping doesn't help
+    // when the string lives in the assertion.
+    const SELF: &str = "ui/tests/hero_backdrop_tests.rs";
+
+    let mut callers = Vec::new();
+    for (rel, code) in
+        crate::test_support::stripped_sources(crate::test_support::SRC_DIR, "rs", MIN_SOURCES)
+    {
+        if rel != SELF && code.contains("themes::apply(") {
+            callers.push(rel);
+        }
+    }
+    assert_eq!(
+        callers,
+        ["ui/appearance/mod.rs"],
+        "`themes::apply` must be called only from `apply_palette`, which re-solves \
+         `HeroBackdrop` and `Player.np-*` against the palette it just wrote"
+    );
+
+    let wrapper = include_str!("../appearance/mod.rs");
+    for republish in [
+        "hero_backdrop::republish_for_palette(ui)",
+        "now_playing::republish_for_palette(ui)",
+    ] {
+        assert!(
+            wrapper.contains(republish),
+            "`apply_palette` no longer calls `{republish}` — the tier it feeds holds the previous \
+             palette until its own view is reopened"
+        );
+    }
+}
+
+/// Nothing derived from the chrome tier may *set* its alpha. `with-alpha` replaces where
+/// `transparentize` multiplies, so a fill spelled that way discards whatever alpha `chrome` carries
+/// — on the aurora the neutral ink's, and the whole mechanism by which the wash reads through. It
+/// looks right on the blur arm, where the tier is opaque and the two spellings agree. Every tier is
+/// held, not just the chrome's: each carries an alpha Rust solved per arm.
+#[test]
+fn no_fill_derived_from_the_chrome_tier_sets_its_alpha() {
+    const TIERS: [&str; 12] = [
+        "chrome",
+        "placeholder",
+        "chrome-text",
+        "chip-fill",
+        "on-backdrop",
+        "on-backdrop-muted",
+        "np-accent-bright",
+        "np-chrome-text",
+        "np-chip-fill",
+        "np-viz",
+        "np-on-backdrop",
+        "np-on-backdrop-muted",
+    ];
+
+    for (path, src) in crate::test_support::stripped_sources(
+        crate::test_support::UI_DIR,
+        "slint",
+        crate::test_support::MIN_SLINT_SOURCES,
+    ) {
+        for tier in TIERS {
+            assert!(
+                !src.contains(&format!("{tier}.with-alpha(")),
+                "{path} sets alpha on `{tier}` — use `transparentize`, which multiplies, or the \
+                 aurora's neutral tier is painted opaque and stops letting the wash through"
+            );
+        }
+    }
+}
+
+/// Every coverless hero square paints from `placeholder`, and none of them from `chrome`. The two
+/// tiers hold the same value on the blur, so reverting a mount builds, passes review and is wrong
+/// only under a setting CI never turns on — where `chrome` is a neutral ink and the square becomes
+/// a pale slab with a lamp on it. A per-file pair, fill and glyph being separate bindings.
+#[test]
+fn every_coverless_hero_square_paints_from_the_placeholder_tier() {
+    const MOUNTS: [&str; 3] = [
+        "components/hero/library-tab-band.slint",
+        "components/hero/mosaic-hero-tile.slint",
+        "views/my-library-view.slint",
+    ];
+
+    let sources = crate::test_support::stripped_sources(
+        crate::test_support::UI_DIR,
+        "slint",
+        crate::test_support::MIN_SLINT_SOURCES,
+    );
+
+    let mut seen = 0;
+    for (path, code) in &sources {
+        // The chrome tier is legitimate everywhere else in the tree — chips, discs, the
+        // visualizer — so only the three squares are asked about.
+        if !MOUNTS.contains(&path.as_str()) {
+            continue;
+        }
+        seen += 1;
+        assert!(
+            code.contains("HeroBackdrop.placeholder.transparentize(0.85)"),
+            "{path} lost the placeholder fill — `chrome` is a neutral ink on the aurora"
+        );
+        assert!(
+            code.contains("HeroBackdrop.placeholder;"),
+            "{path} lost the placeholder glyph — `chrome` is a neutral ink on the aurora"
+        );
+        assert!(
+            !code.contains("HeroBackdrop.chrome.transparentize(0.85)"),
+            "{path} still fills a coverless square from the chrome tier"
+        );
+    }
+    assert_eq!(seen, MOUNTS.len(), "a mount was renamed and this pin stopped reading it");
+}
+
+/// Genre Detail hands over its two hashed pairs the right way round. `genre_accent` dims the hero
+/// pair so the blur's scrim leaves the foreground legible and leaves the tile pair saturated for the
+/// square and the grid card; the aurora has no scrim, so it washes the saturated one. Swap them and
+/// both arms still paint a plausible band — dull sweeps, or a floor too bright for its own solve —
+/// which no runtime assertion here can reach, both fields being `(u32, u32)`.
+#[test]
+fn the_genre_hero_washes_the_saturated_pair_and_floors_on_the_dimmed_one() {
+    let stops = GENRE_DETAIL
+        .split_once("GenreStops {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map(|(stops, _)| stops)
+        .unwrap_or_default();
+
+    // Each field is bounded by the other rather than by a paren or a line end: the stops are
+    // wrapped in `color_to_rgb(…)` calls, and rustfmt is free to break the tuple across lines.
+    let field_of = |field: &str, other: &str| {
+        let after = stops.split_once(field).map_or("", |(_, rest)| rest);
+        after.split_once(other).map_or(after, |(bound, _)| bound)
+    };
+
+    for (field, other, pair) in [
+        ("floor:", "wash:", "hero_color_"),
+        ("wash:", "floor:", "tile_color_"),
+    ] {
+        let bound = field_of(field, other);
+        assert_eq!(
+            bound.matches(pair).count(),
+            2,
+            "`apply_genre_hero` binds `{field}` to `{bound}` — it owes both `{pair}` stops"
+        );
+    }
+}
+
+/// The genre's arm is `backdrop::kind`'s answer, like every other hero's. It reaches
+/// `backdrop::solve` directly, having no sample for `BackdropSample::solve` to pick the arm from, so
+/// nothing above it can catch a branch that stopped branching — which is how the genre spent a
+/// release painting the blur under a setting the five other heroes honoured.
+#[test]
+fn the_genre_hero_picks_its_arm_off_the_setting() {
+    let body = HERO_BACKDROP
+        .split_once("pub(crate) fn apply_gradient(")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+
+    for needle in [
+        "backdrop::kind(ui)",
+        "backdrop::theme_backdrop(",
+        "backdrop::solve(",
+    ] {
+        assert!(
+            body.contains(needle),
+            "`apply_gradient` no longer reaches `{needle}` — a genre that solves one arm for both \
+             paints the other backdrop's colours under whichever stack is mounted"
+        );
+    }
+
+    // The palette half: an aurora genre's tiers are the theme's, so a pick has to reach them.
+    assert!(
+        HERO_BACKDROP.contains("PublishedHero::Genre(stops)) => apply_gradient(ui, stops)"),
+        "`republish_for_palette` no longer re-runs a genre — its tiers were theme-independent \
+         only while it was permanently on the blur"
     );
 }

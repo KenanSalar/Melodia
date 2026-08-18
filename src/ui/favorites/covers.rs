@@ -1,9 +1,9 @@
-//! The Favorites view's four cover tiers: what each holds, when it warms, and when it is handed
+//! The Favorites view's three cover tiers: what each holds, when it warms, and when it is handed
 //! back.
 //!
-//! Three are the view's own — the hero mosaic and the two grid tiers — and the fourth is the
-//! shared row tier the Songs tab's `TrackList` draws from, which this module only reads. **The two
-//! grid tiers are released and re-warmed on a tab pick as well as on a section leave.**
+//! Two are the view's own — one per grid tab — and the third is the shared row tier the Songs
+//! tab's `TrackList` draws from, which this module only reads. **The two grid tiers are released
+//! and re-warmed on a tab pick as well as on a section leave.**
 
 use std::path::PathBuf;
 
@@ -13,7 +13,7 @@ use super::state::{GRID_PREWARM_AHEAD, GRID_THUMB_CAP};
 use super::{FavoritesTab, FavoritesUi};
 use crate::AppWindow;
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::ui::grid_prewarm::{grid_cover, nonempty_artwork_path};
+use crate::ui::grid_prewarm::grid_cover;
 
 impl FavoritesUi {
     /// First-screenful cover paths for a grid tab, in display order.
@@ -104,11 +104,6 @@ impl FavoritesUi {
     pub fn release_artist_covers(&self) {
         self.artist_thumbs.clear();
         crate::tasks::heap_trim::trim();
-    }
-
-    /// Lazy cover lookup for the hero 2x2 mosaic tiles, via `Favorites.request-mosaic-cover`.
-    pub fn mosaic_cover(&self, artwork_path: &str) -> Image {
-        self.mosaic_thumbs.get_or_load_opt(nonempty_artwork_path(artwork_path))
     }
 
     /// Lazy cover lookup for the Most Played grid cards, via

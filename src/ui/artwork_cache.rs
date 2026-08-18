@@ -16,6 +16,7 @@
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
+use image::DynamicImage;
 use image::imageops::fast_blur;
 use lru::LruCache;
 use parking_lot::Mutex;
@@ -27,6 +28,10 @@ use crate::ui::util::{BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
 
 /// The blurred half's shape: [`BLUR_TARGET`] wide by `height`, softened at `sigma`. The
 /// width is shared, a backdrop carrying no fine detail either way.
+///
+/// A tier holds it as an `Option` — `None` under the aurora setting, where nothing paints a
+/// blur and building one would be the whole cost the setting exists to avoid.
+#[derive(Clone, Copy)]
 pub struct BlurSpec {
     /// Height the cover is downscaled to before blurring. A landscape band wants a
     /// landscape buffer, and squashing a square source into one is invisible once blurred.
@@ -41,10 +46,11 @@ pub struct BlurSpec {
 pub struct ArtworkPair {
     /// Sharp, aspect-preserved cover tile (≤ [`COVER_SIZE`] on its long edge).
     pub cover: SharedPixelBuffer<Rgb8Pixel>,
-    /// Heavily-blurred backdrop, sized by the tier's [`BlurSpec`].
-    pub blur: SharedPixelBuffer<Rgb8Pixel>,
-    /// The hue and brightness of `blur` — everything [`crate::ui::backdrop::solve`]
-    /// needs to colour the surface.
+    /// Heavily-blurred backdrop, sized by the tier's [`BlurSpec`]. `None` when the tier has
+    /// no spec, the aurora being mounted instead.
+    pub blur: Option<SharedPixelBuffer<Rgb8Pixel>>,
+    /// What the cover quantized to, and — on the blur arm alone — how bright it is. Everything
+    /// the mounted backdrop needs to colour its surface.
     pub(crate) sample: BackdropSample,
 }
 
@@ -55,11 +61,11 @@ pub type CachedArtwork = Option<ArtworkPair>;
 /// A path-keyed LRU of `(cover, blur)` pairs at one blur shape.
 pub struct ArtworkCache {
     cache: Mutex<LruCache<PathBuf, CachedArtwork>>,
-    blur: BlurSpec,
+    blur: Option<BlurSpec>,
 }
 
 impl ArtworkCache {
-    pub fn new(capacity: NonZeroUsize, blur: BlurSpec) -> Self {
+    pub fn new(capacity: NonZeroUsize, blur: Option<BlurSpec>) -> Self {
         Self {
             cache: Mutex::new(LruCache::new(capacity)),
             blur,
@@ -76,7 +82,7 @@ impl ArtworkCache {
         }
         // Decode and blur without holding the lock, so a concurrent lookup isn't parked
         // behind the CPU work.
-        let pair = decode_artwork(path, &self.blur);
+        let pair = decode_artwork(path, self.blur);
         let returned = pair.clone();
         self.cache.lock().put(path.to_path_buf(), pair);
         returned
@@ -102,28 +108,48 @@ impl ArtworkCache {
 }
 
 /// Decode `path` **once**, then derive both halves from that single `DynamicImage`.
-fn decode_artwork(path: &Path, blur_spec: &BlurSpec) -> CachedArtwork {
-    let decoded = decode_capped(path, MAX_SOURCE_DIM).ok()?;
+fn decode_artwork(path: &Path, blur_spec: Option<BlurSpec>) -> CachedArtwork {
+    Some(pair_from_image(&decode_capped(path, MAX_SOURCE_DIM).ok()?, blur_spec))
+}
 
+/// Both halves plus the measurement, from an image already in hand.
+///
+/// Split out for the curated heroes, whose source is a composed collage rather than a file.
+///
+/// The **seeds survive a `None` spec** — the aurora is what wants them — but nothing else of the
+/// blur's preamble does. That second downscale exists to make `fast_blur` cheap, so with no blur to
+/// make cheap the quantizer reads the cover tile already in hand and takes no brightness. The tile
+/// is the better sample besides, sharp and aspect-preserved where the band's buffer is squashed.
+pub(crate) fn pair_from_image(decoded: &DynamicImage, blur_spec: Option<BlurSpec>) -> ArtworkPair {
     // `thumbnail`, not `thumbnail_exact`: aspect-preserving, so a non-square cover keeps
     // its ratio and the Slint side's `image-fit: cover` crops it to the square tile.
     let cover = buffer_from_rgb(&decoded.thumbnail(COVER_SIZE, COVER_SIZE).to_rgb8());
 
+    let Some(spec) = blur_spec else {
+        let sample = BackdropSample::quantize(cover.as_bytes());
+        return ArtworkPair {
+            cover,
+            blur: None,
+            sample,
+        };
+    };
+
     // Downscale hard first, so the blur is cheap. `thumbnail_exact` is the integer-only
     // fast path and its aspect distortion is invisible once blurred and re-cropped;
     // `fast_blur`'s 3-pass box blur is indistinguishable from a true Gaussian here.
-    let small = decoded.thumbnail_exact(BLUR_TARGET, blur_spec.height).to_rgb8();
-    let blur = buffer_from_rgb(&fast_blur(&small, blur_spec.sigma));
+    let small = decoded.thumbnail_exact(BLUR_TARGET, spec.height).to_rgb8();
+    let blur = buffer_from_rgb(&fast_blur(&small, spec.sigma));
 
-    // Here rather than at the publisher: this runs on the blocking pool and the result is
-    // cached, so the quantize is paid once per cover rather than once per open.
-    let sample = BackdropSample::measure(&blur);
+    // Seeds off the sharp downscale, brightness off the blurred one — `BackdropSample::measure`
+    // argues why. Here rather than at the publisher: this runs on the blocking pool and is cached,
+    // so both are paid once per cover rather than once per open.
+    let sample = BackdropSample::measure(small.as_raw(), blur.as_bytes());
 
-    Some(ArtworkPair {
+    ArtworkPair {
         cover,
-        blur,
+        blur: Some(blur),
         sample,
-    })
+    }
 }
 
 #[cfg(test)]
