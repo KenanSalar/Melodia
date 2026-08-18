@@ -3,7 +3,7 @@
 //! The four detail views each filter their track list in memory, and the filter walk, the
 //! selection re-stamp and the displayed-cache bookkeeping are identical — only the
 //! per-view Slint global and the `*Ui` holding the caches differ. Captured once here over
-//! the [`DetailSelectionView`] trait and a [`FilterRefs`] borrow.
+//! the [`RowSelectionView`] trait and a [`FilterRefs`] borrow.
 //!
 //! Album / Genre / Playlist run the whole pass on the UI thread through
 //! [`apply_filtered_detail`]. Artist does its own worker-thread row prep, also rebuilding
@@ -17,13 +17,13 @@ use slint::{Model, ModelRc, VecModel};
 
 use crate::TrackListRow as UiTrackListRow;
 use crate::entities::track::TrackListRow as RsTrackListRow;
-use crate::ui::detail_selection::DetailSelectionView;
+use crate::ui::detail_selection::RowSelectionView;
 use crate::ui::row_match::{Needle, track_matches};
 
 /// Re-apply selection from the view's `selected-ids` onto freshly-built rows before they
 /// are swapped in — `to_slint_track_list_row` defaults `selected` to `false`, so a
 /// filter rebuild would otherwise drop every checkbox and accent highlight.
-pub fn restamp_selection<V: DetailSelectionView>(view: &V, rows: &mut [UiTrackListRow]) {
+pub fn restamp_selection<V: RowSelectionView>(view: &V, rows: &mut [UiTrackListRow]) {
     let selected: HashSet<i32> = view.selected_ids().iter().collect();
     if selected.is_empty() {
         return;
@@ -53,7 +53,7 @@ pub struct FilterRefs<'a> {
 /// model, and store the filtered subset back into `tracks` so it stays in lockstep.
 /// Selection is re-stamped, the shift-range anchor dropped — the model changed shape — and
 /// the applied-selection shadow re-synced. UI thread.
-pub fn apply_filtered_detail<V: DetailSelectionView>(view: &V, refs: &FilterRefs<'_>) {
+pub fn apply_filtered_detail<V: RowSelectionView>(view: &V, refs: &FilterRefs<'_>) {
     let needle = refs.filter.lock().clone();
 
     let displayed: Vec<RsTrackListRow> = {
@@ -74,7 +74,7 @@ pub fn apply_filtered_detail<V: DetailSelectionView>(view: &V, refs: &FilterRefs
 /// Swap the view's `tracks` `VecModel` contents in place, falling back to a fresh model if
 /// the downcast fails — never expected, but it keeps the model from desyncing from the
 /// cache on the dead path.
-fn install_tracks<V: DetailSelectionView>(view: &V, rows: Vec<UiTrackListRow>) {
+fn install_tracks<V: RowSelectionView>(view: &V, rows: Vec<UiTrackListRow>) {
     let model = view.track_rows();
     if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
         vm.set_vec(rows);

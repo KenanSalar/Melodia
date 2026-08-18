@@ -1,4 +1,4 @@
-//! Shared flat-list row-selection core: the [`DetailSelectionView`] surface the four detail
+//! Shared flat-list row-selection core: the [`RowSelectionView`] surface the four detail
 //! globals and the two curated pages are driven through, modifier-aware click math, the
 //! diff-aware per-row `selected` stamper, and the persistent `selected-ids` model writer.
 //!
@@ -126,9 +126,8 @@ pub fn restamp_selected<S: BuildHasher>(rows: &mut [UiTrackListRow], selected: &
 ///
 /// Here rather than in [`crate::ui::detail_selection`] because both layers name it and this is the
 /// one they share — the *logic* differs (a detail view indexes its Rust cache and re-stamps
-/// O(changed); a curated page reads the model and re-stamps O(rows)), the accessors don't. The
-/// name is the older half of that: two of the six impls are curated pages, not detail views.
-pub trait DetailSelectionView {
+/// O(changed); a curated page reads the model and re-stamps O(rows)), the accessors don't.
+pub trait RowSelectionView {
     /// The shift-range anchor row index (`-1` = no anchor).
     fn anchor(&self) -> i32;
     fn set_anchor(&self, anchor: i32);
@@ -142,10 +141,10 @@ pub trait DetailSelectionView {
     fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>);
 }
 
-/// Generate a [`DetailSelectionView`] impl for a Slint global.
-macro_rules! impl_detail_selection_view {
+/// Generate a [`RowSelectionView`] impl for a Slint global.
+macro_rules! impl_row_selection_view {
     ($global:ident) => {
-        impl DetailSelectionView for $global<'_> {
+        impl RowSelectionView for $global<'_> {
             fn anchor(&self) -> i32 {
                 self.get_selection_anchor()
             }
@@ -168,18 +167,18 @@ macro_rules! impl_detail_selection_view {
     };
 }
 
-impl_detail_selection_view!(AlbumDetail);
-impl_detail_selection_view!(ArtistDetail);
-impl_detail_selection_view!(Favorites);
-impl_detail_selection_view!(GenreDetail);
-impl_detail_selection_view!(PlaylistDetail);
-impl_detail_selection_view!(RecentlyPlayed);
+impl_row_selection_view!(AlbumDetail);
+impl_row_selection_view!(ArtistDetail);
+impl_row_selection_view!(Favorites);
+impl_row_selection_view!(GenreDetail);
+impl_row_selection_view!(PlaylistDetail);
+impl_row_selection_view!(RecentlyPlayed);
 
 /// Compute the new selection set for a curated page's row click and apply it. Click semantics
 /// match `tracks::handle_select_row` exactly. Runs on the UI thread (called from
 /// `on_select_row`). The selection is mirrored into `applied` so the next `apply_filtered_tracks`
 /// round can re-stamp the `selected` flag on freshly-built rows.
-pub fn handle_curated_click<V: DetailSelectionView, S: BuildHasher>(
+pub fn handle_curated_click<V: RowSelectionView, S: BuildHasher>(
     view: &V,
     applied: &Mutex<HashSet<i32, S>>,
     idx: i32,
@@ -222,7 +221,7 @@ pub fn handle_curated_click<V: DetailSelectionView, S: BuildHasher>(
 
 /// Reset a curated page's selection (called from the action-pill "Clear" button and
 /// section-leave). Same diff-then-write shape as [`handle_curated_click`].
-pub fn clear_curated_selection<V: DetailSelectionView, S: BuildHasher>(
+pub fn clear_curated_selection<V: RowSelectionView, S: BuildHasher>(
     view: &V,
     applied: &Mutex<HashSet<i32, S>>,
 ) {
@@ -234,13 +233,13 @@ pub fn clear_curated_selection<V: DetailSelectionView, S: BuildHasher>(
 
 /// UI-thread-only: re-stamp selection onto a freshly-built row list before it's pushed into the
 /// Slint model, so a filter change / library refresh doesn't drop the user's existing selection.
-pub fn restamp_curated_rows<V: DetailSelectionView>(view: &V, rows: &mut [UiTrackListRow]) {
+pub fn restamp_curated_rows<V: RowSelectionView>(view: &V, rows: &mut [UiTrackListRow]) {
     let selected: HashSet<i32> = view.selected_ids().iter().collect();
     restamp_selected(rows, &selected);
 }
 
 /// Mutate the persistent `selected-ids` `VecModel<i32>` in place.
-fn write_curated_selection<V: DetailSelectionView>(view: &V, ids: Vec<i32>) {
+fn write_curated_selection<V: RowSelectionView>(view: &V, ids: Vec<i32>) {
     write_selection_ids(&view.selected_ids(), ids, |m| view.replace_selected_ids(m));
 }
 
