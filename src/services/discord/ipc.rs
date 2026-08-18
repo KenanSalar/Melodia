@@ -1,11 +1,15 @@
 //! The blocking Discord IPC transport: framed JSON over a local unix socket
 //! (Linux/macOS) or named pipe (Windows), run on a dedicated `std::thread`.
 //!
-//! `std` only — no new dependency, no `unsafe`. The framing and payloads are
-//! pure (unit-tested over a `Vec<u8>`); only [`connect`] touches the OS. The
-//! socket-discovery table is lifted from `discord-rich-presence` (MIT) — the one
-//! part with real upstream value, so a new Discord packaging variant is a
-//! one-line addition here rather than a dependency bump.
+//! `std` only — no new dependency, no `unsafe`. Hand-rolled rather than taken
+//! from `discord-rich-presence`, which pins `uuid ^0.8` against the tree's 1.x:
+//! a second copy of that crate is a steep price for a transport this size. If
+//! the pin lifts, this file deletes and [`super::model`] is untouched. The
+//! framing and payloads are pure (unit-tested over a `Vec<u8>`); only
+//! [`connect`] touches the OS. The socket-discovery table is lifted from
+//! `discord-rich-presence` (MIT) — the one part with real upstream value, so a
+//! new Discord packaging variant is a one-line addition here rather than a
+//! dependency bump.
 //!
 //! Wire frame: `[u32 LE opcode][u32 LE len][JSON body]`. Opcodes: 0 handshake,
 //! 1 frame, 2 close, 3 ping, 4 pong.

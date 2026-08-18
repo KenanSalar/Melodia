@@ -1,3 +1,20 @@
+//! Search: one FTS5 match over `tracks_fts`, plus a name lookup per strip, all
+//! run together.
+//!
+//! **The diacritic folding stops at the index**, which is worth knowing before
+//! promising accent-insensitive search anywhere. `tracks_fts` tokenizes under
+//! `remove_diacritics 2`, so an unaccented query reaches an accented *track*.
+//! The `name LIKE` arms here are not folded: the same query reaches an accented
+//! album or artist only through their tracks, landing in a Top Result
+//! fall-through tier rather than an exact-name one, and an accented genre, whose
+//! only arm is that `LIKE`, never surfaces as a genre result at all.
+//!
+//! The two FTS subqueries are deliberately unbounded. fts5 scores every match
+//! either way, and where the tracks arm pulls only its 50 ranked rows through
+//! the join, each subquery costs a `tracks` rowid lookup per match: two more
+//! walks rather than a doubling of one, and all four futures ride the same
+//! `try_join!`.
+
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;

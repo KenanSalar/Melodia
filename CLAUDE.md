@@ -12,17 +12,17 @@ This file holds what applies repo-wide. Subsystem contracts load on demand — *
 | `.claude/rules/library-data.md` | scan ingest, the two change channels, track projections, ratings, tag write-through, M3U8, smart playlists |
 | `.claude/rules/ui-patterns.md` | shared components (pills, pickers, grids, toasts), cover prewarm, the two teardown paths, shortcuts, **the three tabbed pages**, the Settings page |
 | `.claude/rules/desktop-shell.md` | window chrome + winit, tray, media keys, always-on-top, force-exit shutdown |
-| `.claude/rules/scrobbling.md` | Last.fm + ListenBrainz, the durable queue, love↔favorite sync, MBID auto-tagging |
-| `.claude/rules/discord.md` | Rich Presence — the pure model, the hand-rolled IPC, external artwork URLs |
-| `.claude/rules/updater.md` | install methods, download/resume, manifest signing, the release matrix |
+| `.claude/rules/updater.md` | install methods, manifest signing, the release matrix |
 | `.claude/rules/visualizer.md` | the visualizer's UI half — arming, the tick's gates, the strip and its pickers |
 | `.claude/rules/ci-packaging.md` | the PR gate, the skip matrix, coverage, action pinning, the five package formats and their licence pins |
 | `.claude/rules/diagnostics.md` | the logging sink, the crash hook, the bug-report bundle |
 | `.claude/rules/*.md` (rest) | per-crate best practices (tokio, sqlx, slint, rodio-symphonia, lofty, rayon, serde, blake3, rust-performance) plus `slint-pitfalls`, `unsafe-rust` and `code-style` |
 
-Rules are **path-scoped** by a `paths:` glob and load when Claude *reads* a matching file — a grep hit or a clippy failure won't pull one in. So: **descriptive** detail (how a subsystem is shaped) belongs in a rule, since you'll be reading those files anyway; a **prohibition** violable from outside that directory stays here. Hence "no `unwrap`", the zbus footgun and the `--version` contract sitting in this file.
+Rules are **path-scoped** by a `paths:` glob and load when Claude *reads* a matching file, so a grep hit or a clippy failure won't pull one in. **A rule earns its place only when its subject has no single anchor file**: a coupling between trees (Rust ↔ `.slint`, Rust ↔ CI, Rust ↔ a shipped migration nobody may edit), or a comparison across peers that no one of them owns. Everything else is argued *at its anchor*, in the doc comment on the constant, function or migration it constrains, where it cannot drift out of sight of the code it describes. A **prohibition** violable from outside that anchor's directory stays in this file. Hence "no `unwrap`", the zbus footgun and the `--version` contract sitting here.
 
-A subsystem gets a `CLAUDE.md` when it **is** a directory, a `.claude/rules/` entry when it cuts across several. UI features always cut across (`.slint` under `melodia-ui/ui/`, Rust under `src/ui/`), so a per-directory file would reach one tree and silently miss the other.
+Two copies of one argument is the failure mode that test exists to prevent, and it is not hypothetical: `tasks/mbid_backfill.rs` and the rule describing it came to disagree about whether a set was persisted, each correct on the day it was written. Prose in a rule that restates a doc comment is the copy to delete.
+
+A subsystem gets a `CLAUDE.md` when it **is** a directory and its contract needs more than the module `//!` docs carry; a `.claude/rules/` entry when the subject spans trees no single file can reach. UI features always span (`.slint` under `melodia-ui/ui/`, Rust under `src/ui/`), so a per-directory file would reach one tree and silently miss the other.
 
 Only this file is re-injected after `/compact`; nested ones come back on the next read in their directory, so a long session can lose one without saying so. Module `//!` docs are the third tier and usually the most current, and tuning constants are justified at their definitions — link, don't restate.
 

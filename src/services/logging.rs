@@ -196,9 +196,12 @@ pub fn log_files() -> Vec<PathBuf> {
 
 /// Join the live file and the rotated ones into one newest-first list.
 ///
-/// The reversal is the whole of it, and reading `FileSpec` argues against it —
-/// `.claude/rules/diagnostics.md` has the argument and the cost of getting it backwards. Split
-/// out to be testable without a logger.
+/// The reversal is the whole of it, and reading `FileSpec` argues against it:
+/// `existing_log_files` ends in a plain `sort()` that undoes
+/// `FileSpec::read_dir_related_files`' own reverse, so the public API hands back ascending names
+/// and a higher `Naming::Numbers` index is the *newer* file. Backwards, the bundle spends its byte
+/// budget on the oldest runs and truncates the one being reported. Split out to be testable
+/// without a logger.
 fn newest_first(current: Vec<PathBuf>, mut rotated: Vec<PathBuf>) -> Vec<PathBuf> {
     rotated.reverse();
     let mut files = current;

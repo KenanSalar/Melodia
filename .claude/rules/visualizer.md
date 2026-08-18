@@ -62,14 +62,9 @@ counter, both worth reading before changing a gate.
   drive it without stopping the window being painted.
 
 - **`pulse::install` is deferred to the first `set-active(true)`, and it is not free to leave
-  standing.** With a notifier set, FemtoVG adds an extra `flush_to_output` + `submit_commands` and
-  a second `with_graphics_api` hop to every drawn frame of the **whole window**, not just the
-  strip. The one-shot guard has to gate the **call**, not the `Err` — `set_rendering_notifier`
-  swaps the new callback in *before* deciding to return `AlreadySet` — and it can latch for the
-  process, a tray hide *suspending* the graphics context without dropping the notifier. What
-  deferring costs is the window's **first** `RenderingSetup`, long consumed by then; a later one
-  arrives on each re-show (the resumed renderer gets a fresh canvas), so that phase is unreliable
-  in the closure rather than absent — anything needing it moves the install back to boot.
+  standing** — a live notifier costs the renderer an extra flush on every drawn frame of the whole
+  window. `pulse.rs` argues the deferral, the one-shot guard and what the deferral costs; read it
+  before moving the install back to boot.
 
 ## The strip and its styles
 
@@ -120,22 +115,10 @@ counter, both worth reading before changing a gate.
   `commands` string with a fixed viewbox rather than a model — `slint-pitfalls.md`'s `Path` entry.
 
 - **The trace is the visualizer's most expensive frame, and the `x` half of it is cached.**
-  Rebuilding the path string outweighs a whole spectrum frame, two FFTs included, because it
-  formats two floats per vertex through `core::fmt` — 2048 vertices at the `MAX_COLUMNS` cap, set
-  to the widest strip the view can ask for. But `x` is `i / (columns - 1)`, a function of index and
-  column count, so between resizes it is byte-identical every frame and only `y` is worth
-  re-formatting: `WaveformAnalyzer` holds it as one packed string plus per-entry offsets
-  (`XPrefixes`), rebuilt only when the column count changes — and a resize is cheaper too, the
-  table one rebuild fills serving both the outward and the return edge. **The table is built
-  through `push_fixed::<4>`, the same hand-rolled fixed-point writer the per-frame `y` takes**, so
-  both halves of a vertex round by one rule rather than by two formatters that would have to agree
-  at every tie: `push_fixed` deliberately differs from `core::fmt` twice (negative zero prints as
-  `0`; an exact tie rounds away from zero, not to even), so a table built through
-  `write!("{x:.4}")` beside a `push_fixed` `y` would disagree by one unit in the last place on
-  exactly the inputs nobody tests. `WaveformAnalyzer::trace` is the per-frame writer and
-  `write_path_commands` the one-off; both reach the same inner writer, and
-  `the_cached_trace_writes_exactly_what_the_reference_writer_would` pins them equal across a
-  resize, the only way they can disagree.
+  Rebuilding the path string outweighs a whole spectrum frame, two FFTs included, and it is the
+  number *formatting* that costs, not the arithmetic. `player/waveform.rs` holds the whole
+  argument: `XPrefixes` for the cache, `push_fixed` for the writer both halves of a vertex share,
+  and why a `write!("{x:.4}")` beside it would disagree in the last place.
 
 ## The two style pickers
 

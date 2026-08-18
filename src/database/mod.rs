@@ -21,6 +21,14 @@ const MIGRATIONS_TABLE: &str = "_sqlx_migrations";
 /// Named so the test that proves it still runs binds to the same string —
 /// fts5 rejects an unknown command at *step* time, and `close` can only
 /// afford to log that.
+///
+/// The full collapse to a single segment, not the bounded `'merge'` fts5
+/// documents as the incremental alternative. `automerge` already folds segments
+/// as writes accumulate, so what reaches shutdown is the tail: collapsing it
+/// leaves the next call a no-op, where a page budget only spreads the same work
+/// across more shutdowns. An unfinished one costs nothing but the tidying, the
+/// force-exit rolling it back, and the expensive case is the session that
+/// scanned a library in, which is also the one with the most segments to fold.
 const FTS_OPTIMIZE: &str = "INSERT INTO tracks_fts(tracks_fts) VALUES('optimize')";
 
 /// Build a `?, ?, …` placeholder list for an `IN (...)` clause. Single-pass and

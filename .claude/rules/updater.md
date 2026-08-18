@@ -78,18 +78,6 @@ from `main.rs` without ever opening this file.
   AppImage (`$APPIMAGE` set) and RPM/DEB. Don't move the source paths without updating the
   `include_*!` call sites.
 
-## Download path
-
-- **Download bound check (5 % over manifest size) aborts streams.**
-  `exceeds_size_bound(downloaded, expected_size)` saturates `expected_size * 105` toward "reject"
-  on overflow; tripping it drops the file, removes the partial bytes and returns
-  `AppError::Network`.
-
-- **HTTP Range resume via `plan_resume(existing_size, expected_size)`**, returning `Skip` (existing
-  == expected → skip the network, verify catches corruption), `Resume(offset)` (send
-  `Range: bytes=<offset>-`) or `Fresh`. 206 appends, 200 resets; the progress denominator stays on
-  `expected_size`.
-
 ## Manifest
 
 - **`latest.json` is minisign-signed and the client verifies before parse.** Same key as the

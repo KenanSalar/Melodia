@@ -1,11 +1,33 @@
+//! Track rows, and the projections queries select into.
+//!
+//! [`Track`] is the whole row, and the callers that need all of it are few: scan
+//! ingest, hash backfill, the detail view, fixtures. Everything else selects a
+//! narrower struct through its `*_columns()` helper, since a list view fetching
+//! the full row pays a decode per unused column on every row it draws.
+//!
+//! Pick the slimmest projection that carries what the caller renders:
+//!
+//! | projection | for |
+//! |---|---|
+//! | [`TrackSummary`] | queue, Now Playing, the sync playback path (carries `ReplayGain` and rating) |
+//! | [`TrackListRow`] | every track list, Files and Browse included |
+//! | [`TrackMeta`] | the Now-Playing technical chips |
+//! | [`TagEditRow`] | the Edit-Track-Information dialog |
+//! | [`ScrobbleRow`] | a scrobble or love submission |
+//! | [`PlaylistExportRow`] | one M3U8 line |
+//!
+//! A new caller takes the closest existing projection rather than adding an
+//! eighth. Where the problem is instead a list held *resident* carrying columns
+//! it never draws, the answer is `ui::track_list_cache`, which converts at fetch
+//! and frees the rest.
+
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-/// Queue + `ViewModel` shape: the minimal fields the player and now-playing
-/// bar need to render and the queue-persistence file needs to round-trip.
-/// `~10 fields vs Track's 41` cuts clone/serialize cost ~75 %. Use this when
-/// you only need playback-relevant identity (id, path, title, artwork) plus
-/// the favorite flag — never as a query result for a list view.
+/// Queue + `ViewModel` shape: what the player and the now-playing bar render,
+/// and what the queue-persistence file round-trips. It is cloned into every
+/// published `ViewModel` and serialized on every queue save, so it carries
+/// playback identity and nothing a list draws. Use [`TrackListRow`] for those.
 #[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct TrackSummary {
     pub id: i64,
