@@ -12,6 +12,10 @@
 //! either way the set is a snapshot of the palette that was live when the hero opened, which is
 //! what [`republish_for_palette`] exists to refresh.
 //!
+//! **A band with no hero on it has none**, and that is [`reset`]'s whole difference from an
+//! art-less [`apply`]: it publishes [`aurora::idle_tints`], so a page waiting on its collage paints
+//! the surface rather than a colour it has not earned yet.
+//!
 //! The whole set is published — scrim, gradient floor, the aurora's three washes,
 //! hue-carrying chrome and both text tiers — so a hero and the Now Playing view answer
 //! identically whichever backdrop the band is painting.
@@ -27,7 +31,7 @@ use crate::{AppWindow, HeroBackdrop};
 
 thread_local! {
     /// What the set now in `HeroBackdrop` was derived from, so a palette change can re-solve it.
-    /// `None` until the first hero opens.
+    /// `None` is the idle set — before the first hero opens, and after every teardown.
     ///
     /// A thread-local because it shadows a global that is itself process-wide, and both are the
     /// UI thread's alone.
@@ -85,13 +89,18 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
 /// open time and holds until the next one. A new accent would otherwise reach the band only on the
 /// next drill, and the ink over an open hero would keep the *old* theme's tones against the base
 /// the new one paints.
+///
+/// **The idle arm is what seeds the globals at boot.** `appearance::install` applies the persisted
+/// palette through `apply_palette`, which lands here before any hero has published — so the band a
+/// restored curated page comes up on is the theme's own base rather than `hero-backdrop.slint`'s
+/// declared placeholders.
 pub(crate) fn republish_for_palette(ui: &AppWindow) {
     match PUBLISHED_HERO.get() {
         Some(PublishedHero::Artwork(sample)) => apply(ui, sample),
         // Idempotent on the blur, whose stops are the genre's own — no second gate for an arm
         // that re-solves to the colours it already published.
         Some(PublishedHero::Genre(stops)) => apply_gradient(ui, stops),
-        None => {}
+        None => reset(ui),
     }
 }
 
@@ -123,10 +132,21 @@ pub(crate) fn apply_gradient(ui: &AppWindow, stops: GenreStops) {
     }
 }
 
-/// Reset to the floor solve on hero teardown, so backing out of one detail and into
-/// another can't flash the previous entity's colours while the new cover decodes.
+/// Publish the idle set — no hero is painting, so the theme's own tiers over a flat base and **no
+/// washes at all**.
+///
+/// Deliberately not [`apply`] with an empty sample. That is a different state — a hero that *has*
+/// opened and has nothing to quantize — and it seats the accent, which on a teardown is a colour
+/// the next surface has not earned: a curated banner wore it for the length of its collage compose
+/// and a detail's grow-in wore it while the next cover decoded.
 pub(crate) fn reset(ui: &AppWindow) {
-    apply(ui, BackdropSample::default());
+    let theme = backdrop::theme_tokens(ui);
+    // The tiers are the empty sample's on both arms — only the washes differ, and only the aurora
+    // paints those.
+    let colors = BackdropSample::default().solve(&theme, backdrop::kind(ui));
+    let tints = aurora::idle_tints(&theme);
+    PUBLISHED_HERO.set(None);
+    write(ui, &colors, &tints, Floor::FromTiers);
 }
 
 fn write(ui: &AppWindow, colors: &BackdropColors, tints: &[Tint; WASH_COUNT], floor: Floor) {

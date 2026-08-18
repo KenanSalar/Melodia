@@ -339,7 +339,7 @@ fn the_collapsed_teardown_hands_back_only_what_closed() {
         !body.contains("hero_backdrop::reset"),
         "the colour set outlives the collapse — it is reset by `release_page_hero` alone, so a \
          tab re-entered onto a held detail morphs open on that detail's own tone rather than \
-         easing up through the accent-seeded floor"
+         easing up out of the idle set"
     );
     assert!(
         body.contains("hero_chips::clear_if_stale"),

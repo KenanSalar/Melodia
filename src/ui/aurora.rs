@@ -111,6 +111,19 @@ pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], theme: &ThemeTokens) -> [T
     })
 }
 
+/// The washes a band paints while nothing has published one — the theme's base three times over,
+/// so each sweep composites onto the surface it sits on and the band reads as flat `Theme.base`.
+///
+/// **Deliberately not [`tints`]'s art-less answer**, which seats the accent: that is what a hero
+/// with nothing to quantize *is*, where this is what one that has not been asked yet is. Painting
+/// the first while a collage composes is what flashed the accent across the two curated banners.
+pub(crate) fn idle_tints(theme: &ThemeTokens) -> [Tint; WASH_COUNT] {
+    std::array::from_fn(|_| Tint {
+        rgb: theme.base,
+        weight: 1.0,
+    })
+}
+
 /// Side of the noise tile. Big enough that the repeat carries no structure to lock onto — the
 /// generator wraps, so the tile is seamless — and small enough not to be worth measuring.
 const DITHER_TILE_SIDE: usize = 64;

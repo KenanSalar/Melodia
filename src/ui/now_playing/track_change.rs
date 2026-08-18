@@ -24,7 +24,7 @@ use crate::{AppWindow, Player, TrackMetaRow};
 
 thread_local! {
     /// The measurement behind whatever is in the `Player.np-*` tier now, so a palette change can
-    /// re-solve it. `hero_backdrop::PUBLISHED_SAMPLE`'s twin, `None` until the first track lands.
+    /// re-solve it. `hero_backdrop::PUBLISHED_HERO`'s twin, `None` until the first track lands.
     static PUBLISHED_SAMPLE: Cell<Option<BackdropSample>> = const { Cell::new(None) };
 }
 

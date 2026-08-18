@@ -48,20 +48,28 @@ fn compose_hero_pair(paths: &[String], blur: Option<BlurSpec>) -> DetailPair {
     pair_from_image(&image::DynamicImage::ImageRgb8(canvas), blur).into()
 }
 
-/// The covers whose collage is on screen, so an unchanged top-4 costs no recompose.
+/// The covers whose collage is on screen, so an unchanged top-4 costs no recompose — or `None`
+/// while nothing is claimed.
+///
+/// **"Nothing claimed" and "claimed nothing" are different answers, hence the `Option`.** A page
+/// whose set is empty — no favourites, or none with artwork — still has to *publish* that, the
+/// seated accent being its honest colour. Collapsed onto a bare `Vec` the two states were one, so
+/// an empty set was never stale, both curated pages early-returned before composing, and the band
+/// kept whatever the last teardown or the last hero had left in the shared globals.
 ///
 /// **[`claim`](Self::claim) belongs past the section check, never beside the compose.**
 /// The guard means "this collage is what's painted", so a set claimed ahead of a publish
 /// that then bails leaves every later refresh of those same covers early-returning, and
 /// the banner sits on the bare gradient floor until the section leave forgets it.
 #[derive(Default)]
-pub(crate) struct MosaicGuard(Mutex<Vec<String>>);
+pub(crate) struct MosaicGuard(Mutex<Option<Vec<String>>>);
 
 impl MosaicGuard {
     /// Whether `paths` differ from what the last publish claimed — the cheap skip, taken
-    /// before spending the blocking pool on a compose.
+    /// before spending the blocking pool on a compose. Nothing claimed is stale against
+    /// anything, the empty set included.
     pub(crate) fn is_stale(&self, paths: &[String]) -> bool {
-        self.0.lock().as_slice() != paths
+        self.0.lock().as_deref() != Some(paths)
     }
 
     /// Claim `paths` as the collage on screen. `false` when the same set was already
@@ -69,10 +77,10 @@ impl MosaicGuard {
     #[must_use]
     pub(crate) fn claim(&self, paths: Vec<String>) -> bool {
         let mut last = self.0.lock();
-        if *last == paths {
+        if last.as_deref() == Some(paths.as_slice()) {
             return false;
         }
-        *last = paths;
+        *last = Some(paths);
         true
     }
 
@@ -80,7 +88,7 @@ impl MosaicGuard {
     /// unconditional there: `release_section_state` bails once the user is already back, so
     /// leaving the reset to it can strand the hero on the floor.
     pub(crate) fn forget(&self) {
-        self.0.lock().clear();
+        *self.0.lock() = None;
     }
 }
 
