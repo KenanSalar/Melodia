@@ -96,9 +96,9 @@ pub fn resize_rgb8(
         None => Cow::Owned(src.to_rgb8()),
     };
 
-    // A convolution at 1:1 walks every pixel to reproduce it, and the shortcut is not rare: a
-    // cover under the tier's tile and one over only the store's *byte* bound both arrive here
-    // asking for the source's own dimensions.
+    // Equal sizes are not rare — a cover under the tier's tile and one over only the store's
+    // *byte* bound both arrive asking for the source's own dimensions — and the resizer answers
+    // those with a zeroed destination and a row-by-row copy of what is already in hand.
     if (width, height) == source.dimensions() {
         return Some(source.into_owned());
     }
@@ -106,20 +106,32 @@ pub fn resize_rgb8(
     let mut dst = RgbImage::new(width, height);
     RESIZER
         .with_borrow_mut(|resizer| {
-            resizer.resize(
+            let resized = resizer.resize(
                 source.as_ref(),
                 &mut dst,
                 &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(filter)),
-            )
+            );
+            if resizer.size_of_internal_buffers() > RESIZER_SCRATCH_CAP {
+                resizer.reset_internal_buffers();
+            }
+            resized
         })
         .ok()?;
     Some(dst)
 }
 
+/// Ceiling on the scratch a thread's resampler may keep between calls.
+///
+/// The resizer holds one intermediate buffer sized by the *source* width against the target
+/// height and grows it without ever shrinking, so one outsized source would leave that thread
+/// holding it for the process lifetime — once per Rayon worker. Set above what a stored cover into
+/// the largest tile needs, so the steady state keeps its buffer and only the outlier reallocates.
+const RESIZER_SCRATCH_CAP: usize = 1024 * 1024;
+
 thread_local! {
     /// One resizer per worker rather than one per cover: it owns the scratch buffers the
-    /// convolution runs in. Every caller is already on a Rayon worker or a blocking task, so
-    /// thread-local is the whole of the sharing needed.
+    /// convolution runs in, capped by [`RESIZER_SCRATCH_CAP`]. Every caller is already on a Rayon
+    /// worker or a blocking task, so thread-local is the whole of the sharing needed.
     static RESIZER: RefCell<Resizer> = RefCell::new(Resizer::new());
 }
 

@@ -44,6 +44,10 @@ fn the_predicate_accepts_only_names_the_writers_produce() {
         "abcdef0123456789.png",
         "0000000000000000.webp",
         "ffffffffffffffff.tiff",
+        // Builds before `stored_extension` folded the case took the picked file's own, so a
+        // store shipped by one of them holds these and they are as much ours to retire.
+        "abcdef0123456789.JPG",
+        "abcdef0123456789.PNG",
     ] {
         assert!(is_stored_name(name), "{name} is exactly what the writers emit");
     }
@@ -55,7 +59,7 @@ fn the_predicate_accepts_only_names_the_writers_produce() {
         "33fb807d1f1b7cbb.jpg.tmp", // a staged write that never landed
         "33fb807d1f1b7cb.jpg",      // fifteen hex chars
         "33fb807d1f1b7cbbb.jpg",    // seventeen
-        "33FB807D1F1B7CBB.jpg",     // upper case, which `to_hex` never produces
+        "33FB807D1F1B7CBB.jpg",     // an upper-case stem, which `to_hex` never produces
         "33fb807d1f1b7cbg.jpg",     // not hex
         "33fb807d1f1b7cbb.txt",     // not an image extension we write
     ] {

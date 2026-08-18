@@ -71,17 +71,17 @@ impl<W: Write> Write for HashingWriter<W> {
     }
 }
 
-/// LRU cap shared by both external-cover caches. Each entry stores a couple
+/// LRU cap shared by all three cover caches. Each entry stores a couple
 /// of `PathBuf`s / a short `String`, so 2 000 entries is well under 1 MB but
 /// covers a realistic distinct-album directory count for a large library.
-/// Older entries are evicted on insert once the cap is reached, so neither
-/// cache grows unbounded as a user browses lots of folders.
+/// Older entries are evicted on insert once the cap is reached, so none of
+/// them grows unbounded as a user browses lots of folders.
 const COVER_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(2_000) {
     Some(n) => n,
     None => panic!("COVER_CACHE_CAP > 0"),
 };
 
-/// Filesystem memoization for external cover resolution, two tiers:
+/// Memoization for artwork ingest, three tiers:
 ///
 /// * `dir_to_cover` — parent directory → which cover filename (if any)
 ///   lives in it, saving the per-track directory probe.
@@ -90,12 +90,17 @@ const COVER_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(2_000) {
 ///   empty file). Every track in an album directory resolves to the same
 ///   cover file, so without this tier the cover is fully re-read and
 ///   re-hashed once per *track* instead of once per *cover*.
+/// * `source_to_stored` — hash of an embedded picture's bytes → the same
+///   result, for the tracks that reach [`extract_and_cache_artwork`]. The
+///   tier above has a path to key on and this one doesn't, which is the only
+///   reason the two are separate.
 ///
 /// Locks are held only around LRU get/put — never across the file
 /// read+hash itself — so Rayon scan workers don't serialize behind I/O.
 pub struct CoverCaches {
     dir_to_cover: Mutex<LruCache<PathBuf, Option<PathBuf>>>,
     cover_to_cached: Mutex<LruCache<PathBuf, Option<String>>>,
+    source_to_stored: Mutex<LruCache<String, Option<String>>>,
 }
 
 pub type CoverCache = Arc<CoverCaches>;
@@ -106,6 +111,7 @@ pub fn new_cover_cache() -> CoverCache {
     Arc::new(CoverCaches {
         dir_to_cover: Mutex::new(LruCache::new(COVER_CACHE_CAP)),
         cover_to_cached: Mutex::new(LruCache::new(COVER_CACHE_CAP)),
+        source_to_stored: Mutex::new(LruCache::new(COVER_CACHE_CAP)),
     })
 }
 
@@ -177,13 +183,17 @@ fn stored_name(hash_hex: &str, ext: &str) -> String {
 /// Gated on this rather than on "everything in the directory", because the store is a folder in
 /// the user's data directory and a name this module cannot have written is not ours to delete.
 /// `crash_report::timestamp_of` and `database/backup.rs`'s `version_of` hold the same line.
+///
+/// The extension is matched case-insensitively where [`stored_extension`] folds it: builds before
+/// that took the picked file's own, so `.JPG` names sit in stores already shipped and are exactly
+/// as much ours to retire. It costs nothing, the lowercase-hex stem being the whole discriminator.
 pub(super) fn is_stored_name(name: &str) -> bool {
     let Some((hash_hex, ext)) = name.rsplit_once('.') else {
         return false;
     };
     hash_hex.len() == HASH_HEX_LEN
         && hash_hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
-        && STORED_EXTENSIONS.contains(&ext)
+        && STORED_EXTENSIONS.iter().any(|known| known.eq_ignore_ascii_case(ext))
 }
 
 /// Computes a truncated BLAKE3 hash ([`HASH_HEX_LEN`] hex chars) of the given data.
@@ -311,7 +321,16 @@ pub(crate) fn cache_image_file(source_path: &Path, artwork_dir: &Path) -> Option
 /// Extracts the best cover picture from a lofty tag, hashes it with BLAKE3,
 /// and saves it to the artwork cache directory. Returns the absolute path
 /// to the cached image file, or None if no picture is found.
-pub fn extract_and_cache_artwork(tag: &Tag, artwork_dir: &Path) -> Option<String> {
+///
+/// Memoized on the *source* bytes, because [`store_image`]'s `exists()` guard cannot help here:
+/// the stored name has to describe the stored file, so an over-cap cover is decoded and re-encoded
+/// before the guard is even reachable. Every track on an album carries the same picture, so
+/// without the memo that whole cost is paid once per track and thrown away all but once.
+pub fn extract_and_cache_artwork(
+    tag: &Tag,
+    artwork_dir: &Path,
+    cover_cache: &CoverCache,
+) -> Option<String> {
     use lofty::picture::PictureType;
 
     let pictures = tag.pictures();
@@ -335,7 +354,17 @@ pub fn extract_and_cache_artwork(tag: &Tag, artwork_dir: &Path) -> Option<String
         _ => "jpg",
     };
 
-    store_image(picture.data(), ext, artwork_dir)
+    let key = compute_hash(picture.data());
+    // Lock dropped before the store, as the tier above does, so two Rayon workers racing on the
+    // same cover duplicate the work once rather than queueing behind each other's decode.
+    let memo = cover_cache.source_to_stored.lock().get(&key).cloned();
+    if let Some(stored) = memo {
+        return stored;
+    }
+
+    let stored = store_image(picture.data(), ext, artwork_dir);
+    cover_cache.source_to_stored.lock().put(key, stored.clone());
+    stored
 }
 
 /// Unified artwork lookup: checks external cover files first, then embedded tag artwork.
@@ -370,7 +399,7 @@ pub fn find_and_cache_artwork(
     }
 
     // 2. Embedded tag artwork
-    tag.and_then(|t| extract_and_cache_artwork(t, artwork_dir))
+    tag.and_then(|t| extract_and_cache_artwork(t, artwork_dir, cover_cache))
 }
 
 /// Resizes an image to cover a target region, center-cropping to fit exactly.

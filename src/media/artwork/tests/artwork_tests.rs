@@ -409,8 +409,49 @@ fn extract_and_cache_artwork_empty_pictures() -> Result<(), AppError> {
 
     // Create a tag with no pictures
     let tag = lofty::tag::Tag::new(lofty::tag::TagType::Id3v2);
-    let result = extract_and_cache_artwork(&tag, &artwork_dir);
+    let result = extract_and_cache_artwork(&tag, &artwork_dir, &new_cover_cache());
     assert!(result.is_none());
+    Ok(())
+}
+
+/// The store's dedup guard sits *behind* the normalizer — the stored name has to describe the
+/// stored file — so every track on an album would decode and re-encode the one cover they share,
+/// and throw all but one of those away. The external-cover tier gets the same saving from its path
+/// key; embedded artwork has no path, hence the hash.
+#[test]
+fn an_embedded_cover_is_stored_once_however_many_tracks_carry_it() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir_all(&artwork_dir)?;
+
+    // Over `STORE_MAX_DIM`, so the work the memo saves is a decode rather than a hash.
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(1024, 1024, |x, y| {
+        image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x * y) % 239) as u8])
+    }))
+    .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+    .map_err(|e| AppError::Validation(format!("encode png: {e}")))?;
+
+    let picture = lofty::picture::Picture::from_reader(&mut std::io::Cursor::new(&png))
+        .map_err(|e| AppError::Validation(format!("read picture: {e}")))?;
+    let mut tag = lofty::tag::Tag::new(lofty::tag::TagType::Id3v2);
+    tag.push_picture(picture);
+
+    let cache: CoverCache = new_cover_cache();
+    let first = extract_and_cache_artwork(&tag, &artwork_dir, &cache)
+        .ok_or_else(|| AppError::Validation("expected a stored cover".into()))?;
+
+    // Removing the file is what makes the second call's answer proof rather than coincidence:
+    // only a memo hit can name the same path and leave it absent.
+    std::fs::remove_file(&first)?;
+    let second = extract_and_cache_artwork(&tag, &artwork_dir, &cache)
+        .ok_or_else(|| AppError::Validation("expected a stored cover".into()))?;
+
+    assert_eq!(second, first);
+    assert!(
+        !std::path::Path::new(&second).exists(),
+        "the second track re-ran the decode instead of taking the memo"
+    );
     Ok(())
 }
 
