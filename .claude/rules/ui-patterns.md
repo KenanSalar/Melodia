@@ -159,8 +159,8 @@ silently miss the other.
   the cover and solves a scrim driving the *composite* into a known dark band, seeding every tier
   from the artwork's hue; the aurora publishes `Theme.base` as a flat floor under a
   **neutral chrome** — black or white at partial alpha, the wash beneath supplying its colour, which
-  is Amberol's answer and survived two attempts to derive that tier from the artwork — and does
-  **nothing at all** to the washes over them, which is the other half of that port: a tone band
+  survived two attempts to derive that tier from the artwork — and does
+  **nothing at all** to the washes over them, which is the other half of that answer: a tone band
   holding the composite legible everywhere is a band every wash above it lands *on*, so a
   four-colour sleeve paints as two and the surface reads as a tint. Contrast is the cover's to
   decide and the neutral chrome is what carries the readable half. `kind` is
@@ -254,11 +254,9 @@ silently miss the other.
   beside the arm term rather than owning that input outright. **The scrim used to be the one
   exempt layer** and is gated now: draining it could only brighten the artwork while this stack
   was alone on screen, and it now cross-fades against the aurora, where a scrim at full strength
-  under a half-faded pair darkens the midpoint of every crossing. The aurora's neutral layer is
-  gone with the vignette, the washes being three broad linear sweeps at Amberol's own 127°/217°/336°
-  — near-orthogonal, so each owns an edge and one corner is left showing the floor, which is the
-  asymmetry the whole effect is made of. Its **dither is the one layer behind an `if`**, alpha
-  living in the tile leaving nothing to fade, and a one-level grain being invisible enough to
+  under a half-faded pair darkens the midpoint of every crossing. The base and the three washes are
+  the aurora's whole stack, so gating them leaves only its **dither, the one layer behind an `if`** —
+  alpha living in the tile leaving nothing to fade, and a one-level grain being invisible enough to
   afford the cut.
 
 - **`has-cover` is how a host says "not this one".** The `cover:` ternary must bind *some* global
