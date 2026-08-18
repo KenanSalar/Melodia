@@ -78,7 +78,7 @@ fn greyscale_ramp() -> SharedPixelBuffer<Rgb8Pixel> {
 /// with the greys the record is made of.
 #[test]
 fn a_greyscale_ramp_yields_a_full_set_of_seeds() {
-    let seeds = population_seeds(&greyscale_ramp(), SEED_COUNT);
+    let seeds = population_seeds(greyscale_ramp().as_bytes(), SEED_COUNT);
 
     assert_eq!(seeds.len(), SEED_COUNT, "got {seeds:#08x?}");
     for (index, seed) in seeds.iter().enumerate() {
@@ -99,7 +99,7 @@ fn the_first_seed_is_what_the_cover_mostly_is() {
     let mut rows = vec![SLATE; FIXTURE_SIDE as usize - 1];
     rows.push(VIVID);
 
-    let seeds = population_seeds(&buffer_of(&rows), SEED_COUNT);
+    let seeds = population_seeds(buffer_of(&rows).as_bytes(), SEED_COUNT);
 
     let Some(&first) = seeds.first() else {
         unreachable!("a two-colour buffer must quantize to something")
@@ -122,9 +122,9 @@ fn the_first_seed_is_what_the_cover_mostly_is() {
 #[test]
 fn an_empty_buffer_and_a_white_one_are_told_apart() {
     let empty = SharedPixelBuffer::<Rgb8Pixel>::new(0, 0);
-    assert!(population_seeds(&empty, SEED_COUNT).is_empty());
+    assert!(population_seeds(empty.as_bytes(), SEED_COUNT).is_empty());
 
-    let white = population_seeds(&buffer_of(&[[255, 255, 255]]), SEED_COUNT);
+    let white = population_seeds(buffer_of(&[[255, 255, 255]]).as_bytes(), SEED_COUNT);
     assert_eq!(white, vec![0x00ff_ffff], "a white cover answers with its own white");
 }
 
@@ -240,7 +240,9 @@ fn the_fills_fan_out_around_the_seed() {
 #[test]
 fn a_greyscale_cover_stays_grey() {
     let mut seeds = [None; SEED_COUNT];
-    for (slot, seed) in seeds.iter_mut().zip(population_seeds(&greyscale_ramp(), SEED_COUNT)) {
+    for (slot, seed) in
+        seeds.iter_mut().zip(population_seeds(greyscale_ramp().as_bytes(), SEED_COUNT))
+    {
         *slot = Some(seed);
     }
 

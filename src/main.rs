@@ -285,6 +285,7 @@ fn main() -> AppResult<()> {
         weak.clone(),
         &state.sinks,
         views.cover_thumbs.clone(),
+        state.runtime.clone(),
     )
     .map_err(|e| AppError::Window(format!("view-model subscriber: {e}")))?;
     ui::shell::bridge::spawn_queue_subscriber(weak.clone(), &state.sinks)

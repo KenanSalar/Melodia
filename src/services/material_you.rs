@@ -203,22 +203,21 @@ pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Opti
 /// Quality 1 is the finest stride on offer and costs a fraction of a millisecond; it is **not**
 /// every pixel, the crate advancing its cursor by `bytes-per-pixel × quality` pixels.
 ///
-/// Reads the buffer in place — there is no intermediate pixel vector, which is most of why this
-/// costs what it does.
+/// Reads tightly-packed RGB8 in place — there is no intermediate pixel vector, which is most of
+/// why this costs what it does, and no pixel-buffer type in the signature to copy one into.
 ///
 /// **Blocking** — cheap, but it belongs on the worker that decoded the cover either way.
-pub fn population_seeds(buf: &SharedPixelBuffer<Rgb8Pixel>, desired: usize) -> Vec<u32> {
-    let bytes = buf.as_bytes();
+pub fn population_seeds(rgb: &[u8], desired: usize) -> Vec<u32> {
     // Guarded rather than left to the crate: on an empty slice it builds an inverted box and
     // answers `Ok([white])`, where every caller here spells "no artwork" as an empty list.
-    if bytes.is_empty() {
+    if rgb.is_empty() {
         return Vec::new();
     }
 
     // The crate asserts below two, and a backdrop asking for one wash is not a caller's error to
     // report from here.
     let max_colors = u8::try_from(desired).unwrap_or(u8::MAX).max(2);
-    match color_thief::get_palette(bytes, ColorFormat::Rgb, 1, max_colors) {
+    match color_thief::get_palette(rgb, ColorFormat::Rgb, 1, max_colors) {
         Ok(palette) => palette
             .into_iter()
             .map(|c| (u32::from(c.r) << 16) | (u32::from(c.g) << 8) | u32::from(c.b))

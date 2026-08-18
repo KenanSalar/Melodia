@@ -24,6 +24,11 @@ const DITHER_ALPHA: u8 = 1;
 /// eighth pass against white noise's 0.33 and then flattens, so anything past it sorts for nothing.
 const BLUE_NOISE_PASSES: usize = 8;
 
+const _: () = assert!(
+    BLUE_NOISE_PASSES > 0,
+    "with no pass, the levels below are raw white noise rather than ranks, and the scale is wrong"
+);
+
 /// A tile of neutral blue noise, laid over the backdrop to break up 8-bit banding.
 ///
 /// **Blue rather than white** is the difference between invisible and grubby — white noise keeps
@@ -71,12 +76,14 @@ fn blue_noise_levels() -> Vec<u8> {
         values = rank_of_each(&high);
     }
 
+    // `values` is already a rank permutation — the last pass ended in `rank_of_each` — so ranking
+    // it again is the identity, and the assertion above is what keeps that true.
+    //
     // Scaled by the *count*, not the last index: dividing by 255/(n-1) puts the single top rank
     // alone in level 255 and leaves the histogram one bin short of flat, which is the one shape
     // this must not have — whether a pixel rounds up is decided against a fixed threshold, so an
     // uneven histogram dithers parts of the surface differently.
-    let ranks = rank_of_each(&values);
-    ranks.iter().map(|rank| (*rank * 256.0 / DITHER_TILE_PIXELS as f32) as u8).collect()
+    values.iter().map(|rank| (*rank * 256.0 / DITHER_TILE_PIXELS as f32) as u8).collect()
 }
 
 /// Each value's position in sorted order. Re-ranking is what keeps the distribution uniform

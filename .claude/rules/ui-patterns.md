@@ -149,7 +149,11 @@ silently miss the other.
   and a cover deleted underneath should cost its slot rather than the banner; a playlist thumbnail
   goes through `compose_artwork`, which refuses, because the mosaic picker previewed that file slot
   for slot and `CoverMosaic` is a promise. Collapsing the two onto one function for DRY persists a
-  collage nobody chose. **Every brush in it is a `HeroBackdrop` tier and none may become a `Theme.*`
+  collage nobody chose. **They differ on cost as well as on strictness**, and the layout table is
+  in half-canvas units so one set of rects serves both: the persisted thumbnail composes at
+  `COMPOSITE_SIZE` through Lanczos3, where a hero takes its side from the caller — `COVER_SIZE`,
+  the tile `pair_from_image` reduces it to on the next line — through Triangle. A hero canvas any
+  larger is resized twice and drawn once. **Every brush in it is a `HeroBackdrop` tier and none may become a `Theme.*`
   token** — with no collage the hero is the dark gradient floor where a light theme's accent lands
   dark-on-dark. **What decides the arm is the cover, not the count**: a set whose every entry lacks
   artwork is populated and has nothing to paint, so `count` picks between the page's own glyph and
@@ -203,21 +207,23 @@ silently miss the other.
   Playing, two globals kept separate because a band stays mounted behind an open Now Playing.
   Reading either global from inside a stack ties it to one tier and puts the other site's inline
   copy back; `hero_blur_backdrop_tests` pins both directions. **Two mount sites, one
-  `aurora-shown` property, and both stacks mounted unconditionally at each** — the loser goes
-  transparent through its own `shown` input, which is what the two components spend their gated
-  brushes on, so a change of arm **cross-fades**. They were an `if` pair until an art-less track
-  made the arm change with the view on screen: a branch destroys the stack outright, leaving
-  nothing to fade from. Nothing moves the arm live any more — the setting is restart-gated and the
-  artwork term is gone — but the `shown` inputs stay load-bearing for the idle drain below, and a
-  branch in front of either stack is still the wrong shape. The blur is declared first and the
-  aurora second, both bases being opaque,
-  so paint order decides the midpoint rather than any alpha arithmetic. Both `shown` terms come off
-  the one `aurora-shown` property and must be each other's negation — a stack missing its term
-  takes the `true` default and sits over the other for good, and an `if` restored in front of one
-  reads exactly like what this replaced;
-  `hero_blur_backdrop_tests::every_backdrop_site_cross_fades_between_the_two` holds both.
-  The cost is that the transparent stack still builds its paths every frame, where an unmounted arm
-  cost nothing.
+  `aurora-shown` property, and only the live arm mounted at each** — each stack sits behind its own
+  branch of that property, the two conditions each other's negation.
+  **The branch is safe because the condition is a process constant**: `Theme.aurora-backdrop` is an
+  `in` property written once by `boot::ui_setup::apply_backdrop_style`, ahead of `install_views` and
+  `app.show()`, so no frame sees it move and neither leaf carries a `changed` tracker. The pair was
+  mounted unconditionally with the loser painted transparent for as long as an art-less track could
+  move the arm with the view on screen — that term is gone, and **a transparent loser was never the
+  free option it reads as**: `Brush::is_transparent()` (`i-slint-core/graphics/brush.rs`) answers
+  `false` for every gradient whatever its stop alphas, and femtovg's `draw_rectangle` tessellates
+  the path before `brush_to_paint` looks at it, so a stack faded to nothing still filled the whole
+  surface every frame — four of them on the blur arm, which is the shipped default.
+  What the gate does **not** retire is `shown`: the mounted stack still drains to its idle colours
+  through it (below), which is why each stack's `shown: false` arm stays a *gradient of the same
+  shape* — `Brush::interpolate` blends stop-for-stop and only between matching types, so
+  "simplifying" that arm to a solid `transparent` kills the drain.
+  `hero_blur_backdrop_tests::every_backdrop_site_mounts_only_the_live_arm` anchors each gate at the
+  head of its mount line, `if root.aurora-shown:` being a substring of the negation.
 
 - **The six bands reach that pair through `components/hero/hero-backdrop-stack.slint`, not
   directly.** `HeroBackdropStack` is the pair plus the `aurora-shown` choice, bound to the
@@ -228,9 +234,9 @@ silently miss the other.
   and `detail-open` for `LibraryTabBand`, whose globals outlive the tab that filled them. That
   makes the gate a two-file deal and each half its own pin: the band passes the term
   (`library_tab_band_tests::no_hero_tier_outlives_the_banner_it_was_solved_for`) and the wrapper
-  ANDs it into both children
-  (`hero_blur_backdrop_tests::the_wrapper_folds_its_hosts_gate_into_both_stacks`) — drop either
-  and both files still read correctly while My Library paints a detail's backdrop flat.
+  forwards it to each child
+  (`hero_blur_backdrop_tests::the_wrapper_forwards_its_hosts_gate_to_the_mounted_stack`) — drop
+  either and both files still read correctly while My Library paints a detail's backdrop flat.
 
 - **Every hero has washes, so the mount gates on the setting and nothing else.** What differs is
   where the three colours come from: a cover's quantize, or — for the two heroes that have no

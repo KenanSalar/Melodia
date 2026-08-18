@@ -54,14 +54,14 @@ fn solid(side: u32, v: u8) -> SharedPixelBuffer<Rgb8Pixel> {
 /// `None` becomes `NaN`, which fails every comparison below rather than
 /// slipping through — `unwrap` is denied crate-wide, tests included.
 fn p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> f64 {
-    luma_p90(buf).unwrap_or(f64::NAN)
+    luma_p90(buf.as_bytes()).unwrap_or(f64::NAN)
 }
 
 /// [`BackdropSample::measure`] where the sharp and the painted buffer are one — every test
 /// below is about the solve rather than about which buffer each half reads, and a synthetic
 /// buffer is its own blur anyway. The production split is pinned in `artwork_cache_tests`.
 fn measured(buf: &SharedPixelBuffer<Rgb8Pixel>) -> BackdropSample {
-    BackdropSample::measure(buf, buf)
+    BackdropSample::measure(buf.as_bytes(), buf.as_bytes())
 }
 
 /// Independent WCAG relative luminance of one sRGB byte triple, 0..1. Written
@@ -121,7 +121,7 @@ fn the_linearisation_table_answers_for_every_channel_value() {
 #[test]
 fn luma_p90_rejects_an_empty_buffer() {
     let buf = SharedPixelBuffer::<Rgb8Pixel>::new(0, 0);
-    assert_eq!(luma_p90(&buf), None);
+    assert_eq!(luma_p90(buf.as_bytes()), None);
 }
 
 #[test]
@@ -188,10 +188,14 @@ fn luma_p90_steps_over_a_tail_smaller_than_the_percentile() {
 fn measure_takes_the_hue_off_the_sharp_buffer_and_the_percentile_off_the_painted_one() {
     let sharp = buffer_from(32, |_, _| [220, 30, 30]);
     let painted = solid(32, 0x20);
-    let sample = BackdropSample::measure(&sharp, &painted);
+    let sample = BackdropSample::measure(sharp.as_bytes(), painted.as_bytes());
 
-    assert_eq!(sample.luma, luma_p90(&painted), "the percentile must read the painted buffer");
-    assert_ne!(sample.luma, luma_p90(&sharp), "...and must not read the sharp one");
+    assert_eq!(
+        sample.luma,
+        luma_p90(painted.as_bytes()),
+        "the percentile must read the painted buffer"
+    );
+    assert_ne!(sample.luma, luma_p90(sharp.as_bytes()), "...and must not read the sharp one");
 
     // Grey would be the answer off `painted`, so a red seed can only have come off `sharp`.
     let (r, g, b) = unpack(sample.accent_argb.unwrap_or(0));

@@ -27,7 +27,7 @@ use std::sync::LazyLock;
 
 use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast;
-use slint::{Brush, ComponentHandle, Rgb8Pixel, SharedPixelBuffer};
+use slint::{Brush, ComponentHandle};
 
 use crate::services::material_you::{clamp_to_tone_band, population_seeds, to_tone_capped_chroma};
 use crate::themes::{brush, brush_to_rgb, brush_with_alpha};
@@ -142,13 +142,17 @@ static LINEARIZED: LazyLock<[f64; 256]> = LazyLock::new(|| {
     table
 });
 
-/// Perceptual lightness (L*) of one sRGB pixel.
-fn pixel_lstar(r: u8, g: u8, b: u8) -> f64 {
+/// Relative luminance (Y) of one sRGB pixel.
+fn pixel_y(r: u8, g: u8, b: u8) -> f64 {
     // Once rather than per channel: a `LazyLock` deref is a load and a branch.
     let table = &*LINEARIZED;
     let linear = |channel: u8| table[usize::from(channel)];
-    let y = 0.0722f64.mul_add(linear(b), 0.2126f64.mul_add(linear(r), 0.7152 * linear(g)));
-    lstar_from_y(y)
+    0.0722f64.mul_add(linear(b), 0.2126f64.mul_add(linear(r), 0.7152 * linear(g)))
+}
+
+/// Perceptual lightness (L*) of one sRGB pixel.
+fn pixel_lstar(r: u8, g: u8, b: u8) -> f64 {
+    lstar_from_y(pixel_y(r, g, b))
 }
 
 /// sRGB transfer function over a *fractional* channel byte → linear 0..100. Same curve as the
@@ -184,15 +188,13 @@ fn byte_tone(byte: f64) -> f64 {
     lstar_from_y(linear_from_byte(byte))
 }
 
-/// Histogram bin holding `lstar`.
+/// Lightness at `bin`'s lower edge.
 #[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    reason = "HISTOGRAM_BINS is 64 and the value is clamped in range before the cast"
+    reason = "HISTOGRAM_BINS is 64; both operands are exactly representable"
 )]
-fn bin_index(lstar: f64) -> usize {
-    (lstar / 100.0 * HISTOGRAM_BINS as f64).clamp(0.0, (HISTOGRAM_BINS - 1) as f64) as usize
+fn bin_floor_lstar(bin: usize) -> f64 {
+    bin as f64 / HISTOGRAM_BINS as f64 * 100.0
 }
 
 /// Centre lightness of `bin` — an edge would bias the percentile half a bin high.
@@ -201,26 +203,39 @@ fn bin_index(lstar: f64) -> usize {
     reason = "HISTOGRAM_BINS is 64; both operands are exactly representable"
 )]
 fn bin_centre(bin: usize) -> f64 {
-    (bin as f64 + 0.5) / HISTOGRAM_BINS as f64 * 100.0
+    bin_floor_lstar(bin) + 50.0 / HISTOGRAM_BINS as f64
 }
 
-/// The 90th-percentile lightness of a decoded cover.
+/// Every bin's lower edge in linear Y, so [`luma_p90`] can bin a pixel without converting it.
+///
+/// L\* is monotone in Y, so the bin a pixel lands in is the same question either way — and asking
+/// it here costs a handful of comparisons against the `cbrt` inside [`lstar_from_y`], which was the
+/// last transcendental left in that per-pixel loop. The first bin has no floor to compare against,
+/// hence one entry short.
+static BIN_FLOOR_Y: LazyLock<[f64; HISTOGRAM_BINS - 1]> =
+    LazyLock::new(|| std::array::from_fn(|slot| y_from_lstar(bin_floor_lstar(slot + 1))));
+
+/// Histogram bin holding a pixel of luminance `y`.
+fn bin_of_y(y: f64) -> usize {
+    BIN_FLOOR_Y.partition_point(|floor| y >= *floor)
+}
+
+/// The 90th-percentile lightness of a decoded cover, over tightly-packed RGB8.
 ///
 /// **Not the mean, and that is the whole point.** A mostly-black sleeve with a white wordmark has
 /// a low mean — "dark backdrop, brighten the chrome" — while the region the title sits on is
 /// near-white, a heavy blur smearing that wordmark into a large mid-bright blob rather than
 /// averaging it away. Sizing the scrim against the bright *regions* is what keeps one global
 /// decision honest on a non-uniform backdrop.
-fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
-    let bytes = buf.as_bytes();
-    if bytes.is_empty() {
+fn luma_p90(rgb: &[u8]) -> Option<f64> {
+    if rgb.is_empty() {
         return None;
     }
 
     let mut histogram = [0u32; HISTOGRAM_BINS];
     let mut total = 0u32;
-    for px in bytes.chunks_exact(3) {
-        histogram[bin_index(pixel_lstar(px[0], px[1], px[2]))] += 1;
+    for px in rgb.chunks_exact(3) {
+        histogram[bin_of_y(pixel_y(px[0], px[1], px[2]))] += 1;
         total += 1;
     }
     if total == 0 {
@@ -284,13 +299,17 @@ impl BackdropSample {
     /// The colours a decoded cover is made of. Belongs in the `spawn_blocking` task that decoded
     /// it — the buffer is already there.
     ///
+    /// **Tightly-packed RGB8, not a pixel buffer**, so a caller hands over whichever form it holds
+    /// — `SharedPixelBuffer::as_bytes` or `RgbImage::as_raw` — rather than copying one into the
+    /// other to be let in.
+    ///
     /// **Hand it a sharp buffer, never a blurred one.** Blur averages the cover's regions into
     /// each other, which is exactly what median cut is looking for.
     ///
     /// An empty `accent_argb` means there was no buffer at all, so [`Self::solve`]'s
     /// `Theme.accent` path is for a missing cover and never a monochrome one — a greyscale sleeve
     /// answers with its own greys.
-    pub(crate) fn quantize(cover: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
+    pub(crate) fn quantize(cover: &[u8]) -> Self {
         let mut seeds = [None; SEED_COUNT];
         for (slot, seed) in seeds.iter_mut().zip(population_seeds(cover, SEED_COUNT)) {
             *slot = Some(seed);
@@ -311,11 +330,9 @@ impl BackdropSample {
     /// averages the regions it is looking for into each other. The percentile wants whatever is
     /// actually *drawn*: [`scrim_alpha`] solves the composite onto [`TARGET_BACKDROP_TONE`], so
     /// measuring anything but the painted layer lands the surface somewhere else entirely. They
-    /// are the same buffer only where the caller paints what it measured.
-    pub(crate) fn measure(
-        sharp: &SharedPixelBuffer<Rgb8Pixel>,
-        painted: &SharedPixelBuffer<Rgb8Pixel>,
-    ) -> Self {
+    /// are the same buffer only where the caller paints what it measured. Both are RGB8 bytes on
+    /// [`Self::quantize`]'s contract.
+    pub(crate) fn measure(sharp: &[u8], painted: &[u8]) -> Self {
         Self {
             luma: luma_p90(painted),
             ..Self::quantize(sharp)

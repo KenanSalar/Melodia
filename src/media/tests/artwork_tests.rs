@@ -272,6 +272,10 @@ fn solid_source(
     Ok(path)
 }
 
+/// The canvas side these tests compose at. `compose_cover` takes it from the caller, so a number
+/// of the tests' own also pins that it is honoured rather than quietly using [`COMPOSITE_SIZE`].
+const TEST_SIDE: u32 = 400;
+
 /// The four layouts, pinned against composed pixels. This is the arrangement `CoverMosaic`
 /// used to draw in Slint, and the collage is now the only place it is stated.
 ///
@@ -282,9 +286,9 @@ fn solid_source(
 fn each_layout_puts_every_source_in_its_own_rect() -> Result<(), AppError> {
     const COLOURS: [[u8; 3]; 4] = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0]];
 
-    const NEAR: u32 = COMPOSITE_SIZE / 4;
-    const FAR: u32 = COMPOSITE_SIZE * 3 / 4;
-    const MID: u32 = COMPOSITE_SIZE / 2;
+    const NEAR: u32 = TEST_SIDE / 4;
+    const FAR: u32 = TEST_SIDE * 3 / 4;
+    const MID: u32 = TEST_SIDE / 2;
     /// Where each source's colour must land, by set size: full bleed; left | right;
     /// left | right-top over right-bottom; 2×2 read across then down.
     const SAMPLES: [&[(u32, u32)]; 4] = [
@@ -302,9 +306,9 @@ fn each_layout_puts_every_source_in_its_own_rect() -> Result<(), AppError> {
         .collect::<Result<Vec<PathBuf>, AppError>>()?;
 
     for (count, points) in (1..=4).zip(SAMPLES) {
-        let canvas = compose_cover(&sources[..count])
+        let canvas = compose_cover(&sources[..count], TEST_SIDE)
             .ok_or_else(|| AppError::Validation(format!("compose of {count} returned None")))?;
-        assert_eq!((canvas.width(), canvas.height()), (COMPOSITE_SIZE, COMPOSITE_SIZE));
+        assert_eq!((canvas.width(), canvas.height()), (TEST_SIDE, TEST_SIDE));
 
         for (slot, &(x, y)) in points.iter().enumerate() {
             assert_eq!(
@@ -324,8 +328,8 @@ fn compose_cover_refuses_a_set_it_has_no_layout_for() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
     let one = solid_source(tmp.path(), "one.png", [255, 0, 0], 64, 64)?;
 
-    assert!(compose_cover(&[]).is_none());
-    assert!(compose_cover(&vec![one.clone(); 5]).is_none());
+    assert!(compose_cover(&[], TEST_SIDE).is_none());
+    assert!(compose_cover(&vec![one.clone(); 5], TEST_SIDE).is_none());
 
     // Four readable plus a broken fifth composed a 4-up while the size check sat behind the
     // readability retry — the one arrangement of five sources that ever reached a canvas.
@@ -333,7 +337,10 @@ fn compose_cover_refuses_a_set_it_has_no_layout_for() -> Result<(), AppError> {
     std::fs::write(&broken, b"not an image")?;
     let mut five = vec![one; 4];
     five.push(broken);
-    assert!(compose_cover(&five).is_none(), "a broken source must not buy a set a layout");
+    assert!(
+        compose_cover(&five, TEST_SIDE).is_none(),
+        "a broken source must not buy a set a layout"
+    );
     Ok(())
 }
 
@@ -348,15 +355,15 @@ fn an_unreadable_source_drops_out_of_the_collage() -> Result<(), AppError> {
     let broken = tmp.path().join("broken.png");
     std::fs::write(&broken, b"not an image")?;
 
-    let canvas = compose_cover(&[good, broken.clone()])
+    let canvas = compose_cover(&[good, broken.clone()], TEST_SIDE)
         .ok_or_else(|| AppError::Validation("a readable source must still compose".into()))?;
     // The 1-up layout rather than the 2-up: the survivor takes the half the broken source would
     // have had, which is what separates this from painting a blank quarter.
-    for x in [COMPOSITE_SIZE / 4, COMPOSITE_SIZE * 3 / 4] {
-        assert_eq!(canvas.get_pixel(x, COMPOSITE_SIZE / 2).0, [255, 0, 0], "at x={x}");
+    for x in [TEST_SIDE / 4, TEST_SIDE * 3 / 4] {
+        assert_eq!(canvas.get_pixel(x, TEST_SIDE / 2).0, [255, 0, 0], "at x={x}");
     }
 
-    assert!(compose_cover(&[broken]).is_none(), "nothing readable is still nothing");
+    assert!(compose_cover(&[broken], TEST_SIDE).is_none(), "nothing readable is still nothing");
     Ok(())
 }
 
@@ -369,14 +376,14 @@ fn a_source_past_the_decode_cap_is_refused() -> Result<(), AppError> {
     let ok = solid_source(tmp.path(), "ok.png", [255, 0, 0], 64, 64)?;
     let over = solid_source(tmp.path(), "over.png", [0, 255, 0], MAX_SOURCE_DIM + 1, 1)?;
 
-    assert!(compose_cover(std::slice::from_ref(&over)).is_none());
+    assert!(compose_cover(std::slice::from_ref(&over), TEST_SIDE).is_none());
 
     // Beside a readable source the refusal is just a source that won't decode, so it drops out
     // like any other — the guard still holds, the green never reaching the canvas.
-    let canvas = compose_cover(&[ok, over])
+    let canvas = compose_cover(&[ok, over], TEST_SIDE)
         .ok_or_else(|| AppError::Validation("the readable source must still compose".into()))?;
-    for x in [COMPOSITE_SIZE / 4, COMPOSITE_SIZE * 3 / 4] {
-        assert_eq!(canvas.get_pixel(x, COMPOSITE_SIZE / 2).0, [255, 0, 0], "at x={x}");
+    for x in [TEST_SIDE / 4, TEST_SIDE * 3 / 4] {
+        assert_eq!(canvas.get_pixel(x, TEST_SIDE / 2).0, [255, 0, 0], "at x={x}");
     }
     Ok(())
 }

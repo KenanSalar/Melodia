@@ -52,16 +52,17 @@ export component NowPlayingView inherits Rectangle {
     property <length> strip-w: max(root.cover-size, min(root.content-width * 0.75, root.strip-w-max));
 
     // Which of the two backdrops this view paints — the setting alone, a track with no artwork
-    // washing `Theme.accent` rather than dropping to the other arm. Both stacks are mounted and the
-    // loser goes transparent, so the arms cross-fade; nothing can change the answer with the view
-    // on screen any more, the setting being restart-gated, but an `if` pair would still cut on the
-    // sibling bands and the three sites are held to one shape.
+    // washing `Theme.accent` rather than dropping to the other arm. A process constant, the setting
+    // being restart-gated, so only the live arm is mounted: a transparent *gradient* is not free,
+    // `Brush::is_transparent()` answering `false` for every gradient whatever its stop alphas, so a
+    // hidden stack fills this panel every frame. `hero-backdrop-stack.slint` argues it at length.
     property <bool> aurora-shown: Theme.aurora-backdrop;
 
     // The stack the six hero bands mount, on this view's own colour tier. **Both floor stops come
     // from Rust**, not a `Theme.accent` mix — this is the surface an art-less track's title sits on
-    // and the foreground is solved light.
-    HeroBlurBackdrop {
+    // and the foreground is solved light. `shown` stays `true` here: this view has no idle state to
+    // drain to, where a band's globals outlive the tab that filled them.
+    if !root.aurora-shown: HeroBlurBackdrop {
         x: 0;
         y: 0;
         width: 100%;
@@ -73,12 +74,9 @@ export component NowPlayingView inherits Rectangle {
         blur-b: Player.blur-img-b;
         use-a: Player.blur-use-a;
         has-blur: Player.blur-has-image;
-        shown: !root.aurora-shown;
     }
 
-    // Second, so it covers the blur when it wins — both bases are opaque, so paint order is what
-    // decides the midpoint rather than any alpha maths.
-    AuroraBackdrop {
+    if root.aurora-shown: AuroraBackdrop {
         x: 0;
         y: 0;
         width: 100%;
@@ -89,7 +87,6 @@ export component NowPlayingView inherits Rectangle {
         tint-2: Player.np-tint-2;
         tint-3: Player.np-tint-3;
         dither: Player.np-dither;
-        shown: root.aurora-shown;
     }
 
     // **Padding is per-section, not uniform on this layout**: the Up Next column has to

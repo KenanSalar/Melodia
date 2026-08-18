@@ -244,9 +244,10 @@ async fn react(
     // duplicate decode produced a multi-MB transient that glibc didn't
     // fully return to the OS, surfacing as a ~30 MiB residual RSS bump
     // whenever the current track was DnD-imported. `get_or_load_rgb8`
-    // hits the cache on the warm path (seeded by `seed_initial_view_model`
-    // / `to_slint_player_vm`) and decodes via `decode_thumb_buffer`'s
-    // `MAX_SOURCE_DIM = 8192` cap on the cold path.
+    // hits the cache on the warm path — `ui::shell::bridge::warm_vm_cover`
+    // decodes this same path for the now-playing bar on every track change —
+    // and falls back to `decode_thumb_buffer`'s `MAX_SOURCE_DIM = 8192` cap
+    // when it lost the race.
     let artwork_for_block = artwork.clone();
     let buf_for_block = cover_thumbs.get_or_load_rgb8(&artwork);
     let mut tmp_cache = std::mem::take(seed_cache);

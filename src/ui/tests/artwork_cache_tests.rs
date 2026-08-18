@@ -99,14 +99,20 @@ fn the_brightness_comes_off_the_blur_and_the_seeds_off_the_sharp_downscale() {
     assert!(pair.blur.is_some(), "a tier holding a spec must build a blur");
     assert_eq!(
         pair.sample.luma,
-        pair.blur.as_ref().and_then(|blur| BackdropSample::measure(blur, blur).luma),
+        pair.blur.as_ref().and_then(|blur| BackdropSample::measure(
+            blur.as_bytes(),
+            blur.as_bytes()
+        )
+        .luma),
         "the percentile must read the blurred buffer the scrim is composited over"
     );
 
     // An impossible `None` becomes `NaN` and fails the comparison rather than slipping through
     // it — `unwrap` is denied crate-wide, tests included.
     let painted = pair.sample.luma.unwrap_or(f64::NAN);
-    let sharp = BackdropSample::measure(&pair.cover, &pair.cover).luma.unwrap_or(f64::NAN);
+    let sharp = BackdropSample::measure(pair.cover.as_bytes(), pair.cover.as_bytes())
+        .luma
+        .unwrap_or(f64::NAN);
     assert!(
         painted > sharp + 10.0,
         "the blur has to surface the bright region the sharp percentile steps over: \

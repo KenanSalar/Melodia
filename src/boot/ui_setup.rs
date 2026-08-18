@@ -284,7 +284,7 @@ pub fn install_library_settings_and_friends(
 pub fn seed_initial_view_model(
     app: &AppWindow,
     state: &AppState,
-    cover_thumbs: &media::cover_thumbs::CoverThumbs,
+    cover_thumbs: &Arc<media::cover_thumbs::CoverThumbs>,
 ) {
     use melodia::player::state::lock_state;
 
@@ -313,6 +313,16 @@ pub fn seed_initial_view_model(
     };
     player.set_progress(progress);
     player.set_queue(ui::shell::bridge::to_slint_queue_vm(&qvm));
+
+    // The row tier is empty this early, so the seed above is guaranteed to be the cache-only
+    // lookup's miss — and no `view_model` push is owed on a restored-but-paused session, so
+    // nothing else would ever fill it.
+    ui::shell::bridge::warm_vm_cover(
+        app.as_weak(),
+        &state.runtime,
+        cover_thumbs,
+        light.current_track.as_ref().and_then(|t| t.artwork_path.clone()).unwrap_or_default(),
+    );
 }
 
 /// Apply every UI-visible persisted section to the Slint globals — sidebar

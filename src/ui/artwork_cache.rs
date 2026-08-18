@@ -129,7 +129,7 @@ pub(crate) fn pair_from_image(decoded: &DynamicImage, blur_spec: Option<BlurSpec
     let cover = buffer_from_rgb(&decoded.thumbnail(COVER_SIZE, COVER_SIZE).to_rgb8());
 
     let Some(spec) = blur_spec else {
-        let sample = BackdropSample::quantize(&cover);
+        let sample = BackdropSample::quantize(cover.as_bytes());
         return ArtworkPair {
             cover,
             blur: None,
@@ -146,8 +146,9 @@ pub(crate) fn pair_from_image(decoded: &DynamicImage, blur_spec: Option<BlurSpec
     // Seeds off the sharp downscale, brightness off the blurred one — the two halves want
     // different buffers and [`BackdropSample::measure`] argues why. Here rather than at the
     // publisher: this runs on the blocking pool and is cached, so both are paid once per cover
-    // rather than once per open.
-    let sample = BackdropSample::measure(&buffer_from_rgb(&small), &blur);
+    // rather than once per open. Both go in as bytes, so `small` needs no pixel-buffer copy of its
+    // own to be readable.
+    let sample = BackdropSample::measure(small.as_raw(), blur.as_bytes());
 
     ArtworkPair {
         cover,

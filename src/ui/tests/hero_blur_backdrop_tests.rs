@@ -152,20 +152,20 @@ fn the_blur_stack_names_no_global() {
     }
 }
 
-/// Each site mounts both stacks once and hands each the negation of the other's `shown`.
+/// Each site mounts each stack exactly once, behind the branch of the setting that paints it.
 ///
-/// **They are mounted together and cross-fade rather than swapped**, an `if` pair having nothing to
-/// fade from: the loser goes transparent through its own `shown`, which is what the two components
-/// spend their gated brushes on. So what a site can now get wrong is different from what it could
-/// before — a stack missing its `shown` takes the `true` default and sits opaque over the other
-/// forever, and two terms of the same sign leave the pair either blank or permanently blurred.
-/// Both read correctly in the source and are only visible on the setting the author wasn't using.
+/// **A branch rather than a transparent loser**, and it is safe only because the condition cannot
+/// move: `Theme.aurora-backdrop` is an `in` property written once by
+/// `boot::ui_setup::apply_backdrop_style`, ahead of `install_views` and `app.show()`. What it buys
+/// is that the hidden arm stops painting — `Brush::is_transparent()` answers `false` for *every*
+/// gradient whatever its stop alphas, so a stack faded to nothing still has its path tessellated
+/// and the whole surface filled, every frame, on both arms.
 ///
-/// The local `aurora-shown` property is still what keeps the condition single-sourced; the terms
-/// are checked for the `!` rather than for equality with a whole string, since `LibraryTabBand`
-/// folds its own `detail-open` into both.
+/// So what a site can get wrong is the sign: an arm behind the *other* branch reads perfectly and
+/// paints the wrong backdrop under the setting the author wasn't on. The local `aurora-shown`
+/// property is what keeps the condition single-sourced.
 #[test]
-fn every_backdrop_site_cross_fades_between_the_two() {
+fn every_backdrop_site_mounts_only_the_live_arm() {
     let tree = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);
     for site in SITES {
         let src = tree
@@ -178,50 +178,38 @@ fn every_backdrop_site_cross_fades_between_the_two() {
             "{site} must name its choice once — both stacks read it, and a second spelling of \
              the condition can invert alone"
         );
-        for (stack, sign) in STACKS.iter().zip(["!root.aurora-shown", "root.aurora-shown"]) {
+        let gates = ["if !root.aurora-shown:", "if root.aurora-shown:"];
+        for (stack, gate) in STACKS.iter().zip(gates) {
             let mounts: Vec<&str> =
                 src.lines().filter(|line| line.contains(&format!("{stack} {{"))).collect();
             assert_eq!(
                 mounts.len(),
                 1,
-                "{site} must mount exactly one `{stack}` — it is the cross-fade's other half, \
-                 and an unmounted stack has nothing to fade from"
+                "{site} must mount exactly one `{stack}` — a second one paints over the first \
+                 under whichever setting reaches it"
             );
-            // The mount is unconditional, which is the whole of the cross-fade: an `if` in front
-            // of it reads exactly like the pair this replaced, still satisfies every `shown`
-            // assertion below, and cuts.
+            // `starts_with` rather than `contains`: `if root.aurora-shown:` is a substring of the
+            // negation, so only anchoring at the line's head tells the two branches apart.
             assert!(
-                mounts.iter().all(|line| !line.contains("if ")),
-                "{site} mounts `{stack}` behind an `if` — a branch destroys the stack outright, \
-                 so there is nothing left to fade and the arms cut as they did before"
-            );
-            // `!root.aurora-shown` contains `root.aurora-shown`, so the blur's term is checked
-            // first and the aurora's is checked for the negation's *absence*.
-            let mount = src
-                .split_once(&format!("{stack} {{"))
-                .and_then(|(_, rest)| rest.split_once("\n    }"))
-                .map(|(mount, _)| mount)
-                .unwrap_or_default();
-            let has_term =
-                mount.contains(&format!("shown: {sign}")) || mount.contains(&format!("&& {sign}"));
-            assert!(
-                has_term,
-                "{site}'s `{stack}` must take `shown:` carrying `{sign}` — without it the stack \
-                 defaults to `true` and sits over the other one for good"
+                mounts.iter().all(|line| line.trim_start().starts_with(gate)),
+                "{site} must mount `{stack}` behind `{gate}` — ungated it paints over the other \
+                 arm for good, and behind the negation it is the wrong backdrop on the setting \
+                 the author wasn't using"
             );
         }
     }
 }
 
-/// The wrapper folds its host's `shown` into both stacks.
+/// The wrapper forwards its host's `shown` to whichever stack is mounted.
 ///
 /// This is the half of `LibraryTabBand`'s `detail-open` gate that left the band when the pair
-/// became one mount: the band passes the term, and the wrapper owes it to each child. Drop either
-/// `root.shown &&` and both files still read correctly — `library_tab_band_tests` sees only the
-/// band, and the sign check above is satisfied by the ungated spelling — while the band paints a
-/// detail's backdrop over its flat state.
+/// became one mount: the band passes the term, and the wrapper owes it to the live child. It is
+/// what survives the branch above and the reason `shown` is still an input at all — the mounted
+/// stack drains to its idle colours through it. Drop it and both files still read correctly —
+/// `library_tab_band_tests` sees only the band — while My Library paints a detail's backdrop over
+/// its flat state.
 #[test]
-fn the_wrapper_folds_its_hosts_gate_into_both_stacks() {
+fn the_wrapper_forwards_its_hosts_gate_to_the_mounted_stack() {
     let tree = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);
     let src = tree
         .iter()
@@ -236,10 +224,10 @@ fn the_wrapper_folds_its_hosts_gate_into_both_stacks() {
             .map(|(mount, _)| mount)
             .unwrap_or_default();
         assert!(
-            mount.contains("shown: root.shown &&"),
-            "`{stack}` must AND the wrapper's own `shown` into its gate — that term is the host's \
-             whole half of the deal, and the two mosaic bands pass nothing, so a missing one is \
-             correct on the site it was written for and dead on My Library's"
+            mount.contains("shown: root.shown;"),
+            "`{stack}` must take the wrapper's own `shown` — that term is the host's whole half \
+             of the deal, and the two mosaic bands pass nothing, so a missing one is correct on \
+             the site it was written for and dead on My Library's"
         );
     }
 }

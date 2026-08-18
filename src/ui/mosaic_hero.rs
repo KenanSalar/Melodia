@@ -15,6 +15,7 @@ use crate::media::artwork::compose_cover;
 use crate::state::AppState;
 use crate::ui::artwork_cache::{BlurSpec, pair_from_image};
 use crate::ui::detail_artwork::DetailPair;
+use crate::ui::util::COVER_SIZE;
 
 /// [`compose_hero_pair`] on the blocking pool.
 ///
@@ -42,7 +43,10 @@ pub(crate) async fn compose_off_thread(
 /// "no artwork" rather than as a failure.
 fn compose_hero_pair(paths: &[String], blur: Option<BlurSpec>) -> DetailPair {
     let sources: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
-    let Some(canvas) = compose_cover(&sources) else {
+    // Composed at the size the collage is *kept* at rather than at the persisted thumbnail's:
+    // `pair_from_image`'s first act is to reduce it to a `COVER_SIZE` tile, so a larger canvas
+    // costs a second resize of every source and reaches no surface.
+    let Some(canvas) = compose_cover(&sources, COVER_SIZE) else {
         return DetailPair::default();
     };
     pair_from_image(&image::DynamicImage::ImageRgb8(canvas), blur).into()

@@ -3,6 +3,7 @@ use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use image::imageops::FilterType;
 use lofty::picture::MimeType;
 use lofty::tag::Tag;
 use lru::LruCache;
@@ -246,9 +247,16 @@ pub fn find_and_cache_artwork(
 }
 
 /// Resizes an image to cover a target region, center-cropping to fit exactly.
-fn resize_to_cover(img: &image::DynamicImage, width: u32, height: u32) -> image::RgbImage {
-    use image::imageops::FilterType;
-
+///
+/// `filter` is the caller's because the two collages want different trades: Lanczos3's support in
+/// *source* pixels grows with the downscale ratio, which a file that outlives the session is worth
+/// paying and a banner recomposed per top-4 change is not.
+fn resize_to_cover(
+    img: &image::DynamicImage,
+    width: u32,
+    height: u32,
+    filter: FilterType,
+) -> image::RgbImage {
     let (iw, ih) = (f64::from(img.width()), f64::from(img.height()));
     let (tw, th) = (f64::from(width), f64::from(height));
 
@@ -257,7 +265,7 @@ fn resize_to_cover(img: &image::DynamicImage, width: u32, height: u32) -> image:
     let scaled_w = f64_to_pixel(iw * scale);
     let scaled_h = f64_to_pixel(ih * scale);
 
-    let resized = img.resize_exact(scaled_w, scaled_h, FilterType::Lanczos3);
+    let resized = img.resize_exact(scaled_w, scaled_h, filter);
 
     // Center-crop to target dimensions
     let x = (scaled_w.saturating_sub(width)) / 2;
@@ -265,40 +273,34 @@ fn resize_to_cover(img: &image::DynamicImage, width: u32, height: u32) -> image:
     resized.crop_imm(x, y, width, height).to_rgb8()
 }
 
-/// Side of the composed collage. Every consumer draws it far smaller — it is sized
-/// so the playlist thumbnail it persists survives a detail hero at full resolution.
+/// Side of the collage [`compose_artwork`] persists. Sized so the playlist thumbnail survives a
+/// detail hero at full resolution — [`compose_cover`] takes its side from the caller instead, the
+/// hero's largest consumer being a tile it would only have to resize a second time.
 pub(crate) const COMPOSITE_SIZE: u32 = 600;
 
-const COMPOSITE_HALF: u32 = COMPOSITE_SIZE / 2;
+/// Resampler for the curated heroes' collage. Triangle rather than the Lanczos3 the persisted one
+/// takes: this canvas is downscaled again on the way to a cover tile and drawn at a fraction of
+/// that, so the sharper filter's extra source taps land in pixels no surface ever resolves.
+const HERO_FILTER: FilterType = FilterType::Triangle;
 
-/// Destination `(x, y, width, height)` per source, indexed by `len - 1`.
+/// Destination `(x, y, width, height)` per source, in **half-canvas units**, indexed by `len - 1`.
 ///
-/// Data rather than a `match` arm each, so the decode loop can walk it one source at
-/// a time; a four-cover collage never holds four full-size decodes at once.
+/// Half-units rather than pixels so one table serves both canvas sizes, and because the shapes are
+/// what it is for: every layout is a 2×2 grid with some cells merged. Data rather than a `match`
+/// arm each, so the decode loop can walk it one source at a time; a four-cover collage never holds
+/// four full-size decodes at once.
 const COMPOSITE_LAYOUTS: [&[(u32, u32, u32, u32)]; 4] = [
     // the whole canvas
-    &[(0, 0, COMPOSITE_SIZE, COMPOSITE_SIZE)],
+    &[(0, 0, 2, 2)],
     // left | right
-    &[
-        (0, 0, COMPOSITE_HALF, COMPOSITE_SIZE),
-        (COMPOSITE_HALF, 0, COMPOSITE_HALF, COMPOSITE_SIZE),
-    ],
+    &[(0, 0, 1, 2), (1, 0, 1, 2)],
     // left | right top over right bottom
-    &[
-        (0, 0, COMPOSITE_HALF, COMPOSITE_SIZE),
-        (COMPOSITE_HALF, 0, COMPOSITE_HALF, COMPOSITE_HALF),
-        (COMPOSITE_HALF, COMPOSITE_HALF, COMPOSITE_HALF, COMPOSITE_HALF),
-    ],
+    &[(0, 0, 1, 2), (1, 0, 1, 1), (1, 1, 1, 1)],
     // 2x2
-    &[
-        (0, 0, COMPOSITE_HALF, COMPOSITE_HALF),
-        (COMPOSITE_HALF, 0, COMPOSITE_HALF, COMPOSITE_HALF),
-        (0, COMPOSITE_HALF, COMPOSITE_HALF, COMPOSITE_HALF),
-        (COMPOSITE_HALF, COMPOSITE_HALF, COMPOSITE_HALF, COMPOSITE_HALF),
-    ],
+    &[(0, 0, 1, 1), (1, 0, 1, 1), (0, 1, 1, 1), (1, 1, 1, 1)],
 ];
 
-/// Composes 1-4 source images into a single [`COMPOSITE_SIZE`] square.
+/// Composes 1-4 source images into a single `side`-by-`side` square.
 ///
 /// Layouts:
 /// - 1 image: fills the entire canvas
@@ -310,29 +312,28 @@ const COMPOSITE_LAYOUTS: [&[(u32, u32, u32, u32)]; 4] = [
 /// layout is picked from what survives, so three readable covers give a three-up collage and only
 /// an entirely unreadable set reads as no artwork. The curated heroes recompose from whatever the
 /// database's top four currently are, and a cover deleted under them should cost that slot rather
-/// than the whole banner. The retry re-decodes; nothing reaches it while every file is where the
-/// database says it is.
+/// than the whole banner.
+///
+/// `side` is the caller's, and wants to be the size the collage is actually *drawn* at: this one
+/// is handed straight to `pair_from_image`, which reduces it to a cover tile, so a larger canvas is
+/// resized twice and drawn once.
 ///
 /// **Blocking** — call from `spawn_blocking` or a Rayon worker, never the UI thread.
-pub(crate) fn compose_cover(source_paths: &[PathBuf]) -> Option<image::RgbImage> {
-    let all: Vec<&Path> = source_paths.iter().map(PathBuf::as_path).collect();
-    // Refused for its size, and dropping a source is not how a set gets a layout — so the
-    // readability pass below would decode every path to reach the same answer.
-    layout_for(all.len())?;
+pub(crate) fn compose_cover(source_paths: &[PathBuf], side: u32) -> Option<image::RgbImage> {
+    let mut sources: Vec<&Path> = source_paths.iter().map(PathBuf::as_path).collect();
 
-    if let Some(canvas) = compose_exact(&all) {
-        return Some(canvas);
+    loop {
+        match compose_exact(&sources, side, HERO_FILTER) {
+            Ok(canvas) => return Some(canvas),
+            Err(ComposeStop::NoLayout) => return None,
+            // The pass names what it stopped on, so the retry drops exactly that. A separate
+            // readability filter would decode every path again only to learn what this already
+            // knows — and could not spot a source the *cap* refuses, whose header reads fine.
+            Err(ComposeStop::Unreadable(index)) => {
+                sources.remove(index);
+            }
+        }
     }
-
-    let readable: Vec<&Path> =
-        all.iter().copied().filter(|p| decode_capped(p, MAX_SOURCE_DIM).is_ok()).collect();
-    // Everything decoded this time, so whatever failed above lost a race rather than being
-    // unreadable — and `compose_exact(&readable)` is then the call that just failed, for a third
-    // walk of the same paths.
-    if readable.len() == all.len() {
-        return None;
-    }
-    compose_exact(&readable)
 }
 
 /// The rect list for a set of `len` sources, or `None` where there is no layout for that many.
@@ -340,18 +341,36 @@ fn layout_for(len: usize) -> Option<&'static [(u32, u32, u32, u32)]> {
     COMPOSITE_LAYOUTS.get(len.checked_sub(1)?).copied()
 }
 
+/// Why [`compose_exact`] gave up, which the two callers answer differently.
+enum ComposeStop {
+    /// No layout for this many sources — an empty set, or more than [`COMPOSITE_LAYOUTS`] covers.
+    /// Decided before anything is decoded.
+    NoLayout,
+    /// The source at this index would not decode.
+    Unreadable(usize),
+}
+
 /// One all-or-nothing pass, holding a single decode at a time — a four-cover collage never has
 /// four full-size sources in memory at once.
-fn compose_exact(sources: &[&Path]) -> Option<image::RgbImage> {
-    let rects = layout_for(sources.len())?;
+///
+/// The layout is in half-canvas units, so `side` scales it; both sides are even, so the scale is
+/// exact.
+fn compose_exact(
+    sources: &[&Path],
+    side: u32,
+    filter: FilterType,
+) -> Result<image::RgbImage, ComposeStop> {
+    let rects = layout_for(sources.len()).ok_or(ComposeStop::NoLayout)?;
+    let half = side / 2;
 
-    let mut canvas = image::RgbImage::new(COMPOSITE_SIZE, COMPOSITE_SIZE);
-    for (path, &(x, y, width, height)) in sources.iter().zip(rects) {
-        let source = decode_capped(path, MAX_SOURCE_DIM).ok()?;
-        let tile = resize_to_cover(&source, width, height);
-        image::imageops::overlay(&mut canvas, &tile, i64::from(x), i64::from(y));
+    let mut canvas = image::RgbImage::new(side, side);
+    for (index, (path, &(x, y, width, height))) in sources.iter().zip(rects).enumerate() {
+        let source =
+            decode_capped(path, MAX_SOURCE_DIM).map_err(|_| ComposeStop::Unreadable(index))?;
+        let tile = resize_to_cover(&source, width * half, height * half, filter);
+        image::imageops::overlay(&mut canvas, &tile, i64::from(x * half), i64::from(y * half));
     }
-    Some(canvas)
+    Ok(canvas)
 }
 
 /// [`compose_exact`] persisted into `artwork_dir` under its own content hash.
@@ -363,7 +382,7 @@ fn compose_exact(sources: &[&Path]) -> Option<image::RgbImage> {
 /// Returns the cached path to the composite image, or None on failure.
 pub(crate) fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> Option<String> {
     let sources: Vec<&Path> = source_paths.iter().map(PathBuf::as_path).collect();
-    let canvas = compose_exact(&sources)?;
+    let canvas = compose_exact(&sources, COMPOSITE_SIZE, FilterType::Lanczos3).ok()?;
 
     // Stream the JPEG into a temp file in the artwork directory while a tee
     // writer feeds every byte to a BLAKE3 hasher. This avoids holding the
