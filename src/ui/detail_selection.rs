@@ -10,8 +10,9 @@
 //! borrow of the two caches. Each view's `selection.rs` is a thin adapter
 //! that supplies those.
 //!
-//! The trait itself lives in [`crate::ui::list_selection`], the layer under this one, and is
-//! re-exported here because every call site in the tree reaches it through this module.
+//! The trait itself lives in [`crate::ui::list_selection`], the layer under this one. It is
+//! re-exported for [`crate::ui::detail_filter`], the one importer outside these two files, whose
+//! import reads against the layer it belongs to rather than through it.
 
 use std::collections::{HashMap, HashSet};
 

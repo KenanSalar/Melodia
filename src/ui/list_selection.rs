@@ -1,6 +1,6 @@
-//! Shared flat-list row-selection core: the [`DetailSelectionView`] surface every list view is
-//! driven through, modifier-aware click math, the diff-aware per-row `selected` stamper, and the
-//! persistent `selected-ids` model writer.
+//! Shared flat-list row-selection core: the [`DetailSelectionView`] surface the four detail
+//! globals and the two curated pages are driven through, modifier-aware click math, the
+//! diff-aware per-row `selected` stamper, and the persistent `selected-ids` model writer.
 //!
 //! Tracks, Favorites, and Recently Played all implement the same click
 //! semantics (plain click = single, Ctrl = toggle, Shift = range over the
@@ -126,7 +126,8 @@ pub fn restamp_selected<S: BuildHasher>(rows: &mut [UiTrackListRow], selected: &
 ///
 /// Here rather than in [`crate::ui::detail_selection`] because both layers name it and this is the
 /// one they share — the *logic* differs (a detail view indexes its Rust cache and re-stamps
-/// O(changed); a curated page reads the model and re-stamps O(rows)), the accessors don't.
+/// O(changed); a curated page reads the model and re-stamps O(rows)), the accessors don't. The
+/// name is the older half of that: two of the six impls are curated pages, not detail views.
 pub trait DetailSelectionView {
     /// The shift-range anchor row index (`-1` = no anchor).
     fn anchor(&self) -> i32;
@@ -207,8 +208,8 @@ pub fn handle_curated_click<V: DetailSelectionView, S: BuildHasher>(
     write_curated_selection(view, new_selected);
     view.set_anchor(new_anchor);
     {
-        // Refilled rather than assigned, to keep the shadow's allocation — and `clone_from` can't
-        // stand in, the caller's hasher being a free parameter.
+        // `clone_from` needs both sides on one hasher, and a public parameter may not name a
+        // concrete one (`implicit_hasher`) — so refill, which keeps the allocation just the same.
         let mut applied = applied.lock();
         applied.clear();
         applied.extend(id_set.iter().copied());
