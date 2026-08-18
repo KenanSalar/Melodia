@@ -51,10 +51,11 @@ fn clear_empties_the_cache() {
     assert_eq!(artwork.len(), 0);
 }
 
-/// A tier with no spec is the aurora setting, where nothing paints a blur — but the aurora is
-/// exactly what wants the seeds, so the measurement has to survive the skipped blur.
+/// A tier with no spec is the aurora setting, where nothing paints a blur. The seeds have to
+/// survive that, the aurora being exactly what wants them — and the brightness has to not, no
+/// scrim being solved on that arm and the percentile being the dearer half of the two.
 #[test]
-fn a_specless_pair_skips_the_blur_and_keeps_the_measurement() {
+fn a_specless_pair_keeps_the_seeds_and_skips_the_blur_and_the_brightness() {
     let source = DynamicImage::ImageRgb8(image::ImageBuffer::from_fn(64, 64, |x, _| {
         image::Rgb(if x < 32 { [200, 30, 40] } else { [30, 50, 200] })
     }));
@@ -62,8 +63,8 @@ fn a_specless_pair_skips_the_blur_and_keeps_the_measurement() {
     let pair = pair_from_image(&source, None);
 
     assert!(pair.blur.is_none());
+    assert!(pair.sample.luma.is_none());
     assert!(pair.sample.accent_argb.is_some());
-    assert!(pair.sample.luma.is_some());
     assert!(pair.sample.seeds.iter().any(Option::is_some));
 }
 

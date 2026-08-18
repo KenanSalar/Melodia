@@ -49,8 +49,8 @@ pub struct ArtworkPair {
     /// Heavily-blurred backdrop, sized by the tier's [`BlurSpec`]. `None` when the tier has
     /// no spec, the aurora being mounted instead.
     pub blur: Option<SharedPixelBuffer<Rgb8Pixel>>,
-    /// The hue and brightness of `blur` — everything [`crate::ui::backdrop::solve`]
-    /// needs to colour the surface.
+    /// What the cover quantized to, and — on the blur arm alone — how bright it is. Everything
+    /// the mounted backdrop needs to colour its surface.
     pub(crate) sample: BackdropSample,
 }
 
@@ -118,32 +118,38 @@ fn decode_artwork(path: &Path, blur_spec: Option<BlurSpec>) -> CachedArtwork {
 /// file — nothing about the tiers they publish into differs, so nothing about how the
 /// pair is derived should either.
 ///
-/// The **measurement survives a `None` spec** — the aurora is what wants `sample.seeds`, so a
-/// specless tier still downscales, just square rather than to the band's height. Which is
-/// strictly the better sample (a square cover into a square thumb isn't squashed at all) and
-/// changes nothing on screen, no blur being mounted when there is no spec.
+/// The **seeds survive a `None` spec** — the aurora is what wants them — but nothing else of the
+/// blur's preamble does. That second downscale exists to make `fast_blur` cheap, so with no blur
+/// to make cheap the quantizer reads the cover tile already in hand and takes no brightness, the
+/// aurora solving against none. The tile is the better sample besides, being sharp and
+/// aspect-preserved where the band's buffer is squashed to a landscape one.
 pub(crate) fn pair_from_image(decoded: &DynamicImage, blur_spec: Option<BlurSpec>) -> ArtworkPair {
     // `thumbnail`, not `thumbnail_exact`: aspect-preserving, so a non-square cover keeps
     // its ratio and the Slint side's `image-fit: cover` crops it to the square tile.
     let cover = buffer_from_rgb(&decoded.thumbnail(COVER_SIZE, COVER_SIZE).to_rgb8());
 
+    let Some(spec) = blur_spec else {
+        let sample = BackdropSample::quantize(&cover);
+        return ArtworkPair {
+            cover,
+            blur: None,
+            sample,
+        };
+    };
+
     // Downscale hard first, so the blur is cheap. `thumbnail_exact` is the integer-only
     // fast path and its aspect distortion is invisible once blurred and re-cropped;
     // `fast_blur`'s 3-pass box blur is indistinguishable from a true Gaussian here.
-    let small = decoded
-        .thumbnail_exact(BLUR_TARGET, blur_spec.map_or(BLUR_TARGET, |spec| spec.height))
-        .to_rgb8();
+    let small = decoded.thumbnail_exact(BLUR_TARGET, spec.height).to_rgb8();
 
-    // Off the *sharp* downscale, never the blur — see [`BackdropSample::measure`]. Here rather
+    // Off the *sharp* downscale, never the blur — see [`BackdropSample::quantize`]. Here rather
     // than at the publisher: this runs on the blocking pool and is cached, so the quantize is
     // paid once per cover rather than once per open.
     let sample = BackdropSample::measure(&buffer_from_rgb(&small));
 
-    let blur = blur_spec.map(|spec| buffer_from_rgb(&fast_blur(&small, spec.sigma)));
-
     ArtworkPair {
         cover,
-        blur,
+        blur: Some(buffer_from_rgb(&fast_blur(&small, spec.sigma))),
         sample,
     }
 }

@@ -274,21 +274,22 @@ pub(crate) struct BackdropSample {
     /// The same quantize's list, most prominent first, and short whenever the artwork had fewer
     /// regions than that. `ui::aurora` owns the filling rule.
     pub(crate) seeds: [Option<u32>; SEED_COUNT],
-    /// [`luma_p90`] of the same buffer.
+    /// [`luma_p90`] of the same buffer — and `None` throughout on the aurora arm, which sizes no
+    /// scrim and so never asks. See [`Self::measure`].
     pub(crate) luma: Option<f64>,
 }
 
 impl BackdropSample {
-    /// Measure a decoded cover. Belongs in the `spawn_blocking` task that decoded it — the buffer
-    /// is already there, and the percentile below still walks every pixel.
+    /// The colours a decoded cover is made of. Belongs in the `spawn_blocking` task that decoded
+    /// it — the buffer is already there.
     ///
-    /// **Hand it the sharp downscale, never a blurred one.** Blur averages the cover's regions
-    /// into each other, which is exactly what median cut is looking for.
+    /// **Hand it a sharp buffer, never a blurred one.** Blur averages the cover's regions into
+    /// each other, which is exactly what median cut is looking for.
     ///
     /// An empty `accent_argb` means there was no buffer at all, so [`Self::solve`]'s
     /// `Theme.accent` path is for a missing cover and never a monochrome one — a greyscale sleeve
     /// answers with its own greys.
-    pub(crate) fn measure(cover: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
+    pub(crate) fn quantize(cover: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
         let mut seeds = [None; SEED_COUNT];
         for (slot, seed) in seeds.iter_mut().zip(population_seeds(cover, SEED_COUNT)) {
             *slot = Some(seed);
@@ -297,7 +298,17 @@ impl BackdropSample {
         Self {
             accent_argb: seeds[0],
             seeds,
+            luma: None,
+        }
+    }
+
+    /// [`Self::quantize`] plus the brightness a scrim is solved against — **the blur arm's, and
+    /// nothing else's**. [`theme_backdrop`] answers off the theme's own tokens, so the aurora
+    /// reads `luma` nowhere, and the percentile walks every pixel where the quantizer strides them.
+    pub(crate) fn measure(cover: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
+        Self {
             luma: luma_p90(cover),
+            ..Self::quantize(cover)
         }
     }
 
