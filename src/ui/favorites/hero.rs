@@ -15,12 +15,11 @@ use crate::entities::track::FavoriteStats;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
-use crate::ui::detail_artwork::DetailPair;
 use crate::ui::detail_view::impl_detail_view_helpers;
 use crate::{AppWindow, Favorites};
 
 // Only the artwork half — this page's track model is not a detail `tracks` list.
-impl_detail_view_helpers!(artwork_only Favorites);
+impl_detail_view_helpers!(curated Favorites, FavoritesUi, crate::ui::hero_chips::publish_favorites);
 
 /// Fetch fresh stats, push the count and the band's chips with it, then kick a blocking
 /// compose whose result lands on the UI thread via `invoke_from_event_loop`. `animate`
@@ -38,11 +37,11 @@ pub async fn refresh_hero(
 ) -> AppResult<()> {
     let stats = library::favorites::get_favorite_stats(state).await?;
 
-    // A leave that landed while the query was in flight has already wiped
-    // `stats` and emptied the mosaic-path model, so the store and the push
-    // below would fill both back in behind a view nobody can see. The leave set
-    // `mark_dirty`, so the next enter re-fetches — the guard `refresh_grids`
-    // and `refresh_tracks` carry, in the same place, after the slow part.
+    // A leave that landed while the query was in flight has already wiped `stats` and
+    // forgotten the collage guard, so the store and the push below would fill both back
+    // in behind a view nobody can see. The leave set `mark_dirty`, so the next enter
+    // re-fetches — the guard `refresh_grids` and `refresh_tracks` carry, in the same
+    // place, after the slow part.
     if !fav_ui.section_active() {
         return Ok(());
     }
@@ -74,31 +73,6 @@ pub async fn refresh_hero(
     Ok(())
 }
 
-/// Publish a composed banner and claim it as the one on screen.
-///
-/// **Gated whole, where a detail view fills its own slots even while hidden.** This page's
-/// leave wipes its models and forgets the guard, so slots written behind it have nothing to
-/// be ready for and their claim would suppress the re-enter's recompose. What the gate
-/// mainly protects is still `HeroBackdrop`, shared by all six heroes: a compose finishing
-/// after a nav away would paint this page's solve under whichever hero mounted next.
-fn publish_hero_artwork(
-    fav_ui: &Arc<FavoritesUi>,
-    weak: &Weak<AppWindow>,
-    pair: DetailPair,
-    animate: bool,
-    paths: Vec<String>,
-) {
-    let fav_ui = fav_ui.clone();
-    let weak = weak.clone();
-    let _ = slint::invoke_from_event_loop(move || {
-        let Some(ui) = weak.upgrade() else { return };
-        if !fav_ui.section_active() || !fav_ui.state().last_mosaic_paths.claim(paths) {
-            return;
-        }
-        apply_detail_artwork(&ui, &ui.global::<Favorites>(), pair, animate, true);
-    });
-}
-
 fn push_stats_to_slint(stats: &FavoriteStats, fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
     let count = i32::try_from(stats.count).unwrap_or(i32::MAX);
     let fav_ui = fav_ui.clone();
@@ -113,25 +87,6 @@ fn push_stats_to_slint(stats: &FavoriteStats, fav_ui: &Arc<FavoritesUi>, weak: &
         ui.global::<Favorites>().set_track_count(count);
         // Order-free: the chips take their facts off the handle's own state,
         // not back off the properties written around them.
-        crate::ui::hero_chips::publish_favorites(&ui, &fav_ui);
-    });
-}
-
-/// Re-publish the band's chips on the UI thread.
-///
-/// **Call this wherever one of the chips' inputs lands.** Favorites is the one
-/// hero built from three fetches rather than one: the stats, the Songs spread,
-/// the Most Played totals — and `kick_full_refresh` runs those *concurrently*,
-/// so no ordering can be assumed. Each fetch folds its own answer on its own
-/// worker and then calls this; the publish itself reads only finished values,
-/// so the worst a mistimed one can be is a tick behind, never half-built.
-///
-/// The grid path can't stand in for it: `write_filtered_grids` publishes past a
-/// signature early-return, and `mounted_content` is a constant `0` on the Songs
-/// tab — so on Songs that publish fires only when the column count moves.
-pub fn republish_chips(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
-    let fav_ui = fav_ui.clone();
-    let _ = weak.upgrade_in_event_loop(move |ui| {
         crate::ui::hero_chips::publish_favorites(&ui, &fav_ui);
     });
 }

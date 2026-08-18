@@ -1,21 +1,73 @@
 //! Shared hero-header helper macro.
 //!
-//! Every global carrying a hero is a distinct Slint-generated type, so the two helpers
-//! their modules need — `apply_detail_artwork` for the cover and hero-blur pair,
-//! `replace_tracks_model` for the `tracks` `VecModel` — can't be generic functions. This
-//! stamps the typed body once per module, as `impl_track_list_column_state!` does.
+//! Every global carrying a hero is a distinct Slint-generated type, so the helpers their
+//! modules need — `apply_detail_artwork` for the cover and hero-blur pair,
+//! `replace_tracks_model` for the `tracks` `VecModel`, and the curated pages'
+//! `publish_hero_artwork` / `republish_chips` — can't be generic functions. This stamps the
+//! typed body once per module, as `impl_track_list_column_state!` does.
 
 /// Generate the per-view hero helpers for a Slint global.
 ///
 /// `artwork $Global` is a detail view with a cover / hero-blur header and emits both;
-/// `artwork_only $Global` is a curated page, whose track model is its own tabbed cache's;
+/// `curated $Global, $Ui, $publish_chips` is one of the two curated pages, whose track model is
+/// its own tabbed cache's and whose banner is a composed collage;
 /// `no_artwork $Global` is the procedural `GenreDetail` and emits only the model swap.
 macro_rules! impl_detail_view_helpers {
     (artwork $Global:ty) => {
         impl_detail_view_helpers!(@tracks_model $Global);
-        impl_detail_view_helpers!(artwork_only $Global);
+        impl_detail_view_helpers!(@artwork $Global);
     };
-    (artwork_only $Global:ty) => {
+    (curated $Global:ty, $Ui:ty, $publish_chips:path) => {
+        impl_detail_view_helpers!(@artwork $Global);
+
+        /// Publish a composed banner and claim it as the one on screen.
+        ///
+        /// **Gated whole, where a detail view fills its own slots even while hidden.** A curated
+        /// page's leave wipes its models and forgets the guard, so slots written behind it have
+        /// nothing to be ready for and their claim would suppress the re-enter's recompose. What
+        /// the gate mainly protects is still `HeroBackdrop`, shared by all six heroes: a compose
+        /// finishing after a nav away would paint this page's solve under whichever hero mounted
+        /// next.
+        fn publish_hero_artwork(
+            view: &std::sync::Arc<$Ui>,
+            weak: &slint::Weak<$crate::AppWindow>,
+            pair: $crate::ui::detail_artwork::DetailPair,
+            animate: bool,
+            paths: Vec<String>,
+        ) {
+            let view = view.clone();
+            let weak = weak.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                let Some(ui) = weak.upgrade() else { return };
+                if !view.section_active() || !view.state().last_mosaic_paths.claim(paths) {
+                    return;
+                }
+                apply_detail_artwork(&ui, &ui.global::<$Global>(), pair, animate, true);
+            });
+        }
+
+        /// Re-publish the band's chips on the UI thread.
+        ///
+        /// **Call this wherever one of the chips' inputs lands.** Both curated pages assemble
+        /// their band from more than one fetch and run those *concurrently*, so no ordering can
+        /// be assumed. Each fetch folds its own answer on its own worker and then calls this; the
+        /// publish reads only finished values, so the worst a mistimed one can be is a tick
+        /// behind, never half-built.
+        ///
+        /// The grid path can't stand in for it: the grid write publishes past a signature
+        /// early-return, and `mounted_content` is a constant `0` on the Songs tab — so there that
+        /// publish fires only when the column count moves.
+        pub fn republish_chips(
+            view: &std::sync::Arc<$Ui>,
+            weak: &slint::Weak<$crate::AppWindow>,
+        ) {
+            let view = view.clone();
+            let _ = weak.upgrade_in_event_loop(move |ui| {
+                $publish_chips(&ui, &view);
+            });
+        }
+    };
+    (@artwork $Global:ty) => {
         /// Push a decoded `(cover, blur)` pair into the detail global from the UI
         /// thread: the cover slot directly, the blur through `write_crossfade_slot` so
         /// switching entities fades rather than flashes. `animate: true` is the

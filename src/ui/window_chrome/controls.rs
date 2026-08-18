@@ -12,6 +12,7 @@ use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowLevel;
 
 use crate::AppWindow;
+use crate::error::AppError;
 use crate::services::always_on_top::AlwaysOnTopMethod;
 use crate::state::AppState;
 
@@ -131,64 +132,55 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
         drag_hover.store(hovered, Ordering::Relaxed);
     });
 
-    {
-        let weak = app.as_weak();
-        let state = state.clone();
-        chrome.on_restart_app(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            // `Dialog.target-id` carries the requested value. Read it before the
-            // dispatcher wipes the routing payload.
-            let target = ui.global::<crate::Dialog>().get_target_id();
-            let on = target == 1;
+    chrome.on_restart_app(restart_toggle(
+        app,
+        state,
+        "use_native_titlebar",
+        crate::library::window::set_use_native_titlebar,
+    ));
+    chrome.on_restart_tray(restart_toggle(
+        app,
+        state,
+        "tray_enabled",
+        crate::library::window::set_tray_enabled,
+    ));
+    chrome.on_restart_backdrop(restart_toggle(
+        app,
+        state,
+        "aurora_backdrop",
+        crate::library::window::set_aurora_backdrop,
+    ));
+}
 
-            if let Err(e) = crate::library::window::set_use_native_titlebar(&state, on) {
-                log::warn!("persist use_native_titlebar failed: {e}");
-                return;
-            }
+/// The handler behind a restart-gated setting: persist the value the dialog carries, then ask for
+/// the respawn.
+///
+/// One body for all three because the only thing that differs is which setting is written.
+/// `setting` names it for the log line, since `persist` is a plain fn pointer with nothing
+/// readable to print.
+///
+/// **`Dialog.target-id` carries the requested value and must be read before the dispatcher wipes
+/// the routing payload.** The respawn is then deferred to `main()`'s exit path: spawning here
+/// while the old loop is still wrapping up leaves two windows on screen, the old one unresponsive
+/// until its `tracker.wait()` finishes. A refusal there leaves the app running with the new value
+/// already on disk.
+fn restart_toggle(
+    app: &AppWindow,
+    state: &AppState,
+    setting: &'static str,
+    persist: fn(&AppState, bool) -> Result<(), AppError>,
+) -> impl Fn() + 'static {
+    let weak = app.as_weak();
+    let state = state.clone();
+    move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let on = ui.global::<crate::Dialog>().get_target_id() == 1;
 
-            // The respawn is deferred to `main()`'s exit path: spawning here while the
-            // old loop is still wrapping up leaves two windows on screen, the old one
-            // unresponsive until its `tracker.wait()` finishes. A refusal there leaves
-            // the app running with the new value already on disk.
-            super::request_respawn_and_quit();
-        });
-    }
+        if let Err(e) = persist(&state, on) {
+            log::warn!("persist {setting} failed: {e}");
+            return;
+        }
 
-    {
-        let weak = app.as_weak();
-        let state = state.clone();
-        chrome.on_restart_tray(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            // As above: read `target-id` before the dispatcher wipes it.
-            let target = ui.global::<crate::Dialog>().get_target_id();
-            let on = target == 1;
-
-            if let Err(e) = crate::library::window::set_tray_enabled(&state, on) {
-                log::warn!("persist tray_enabled failed: {e}");
-                return;
-            }
-
-            // Deferred for `on_restart_app`'s reason.
-            super::request_respawn_and_quit();
-        });
-    }
-
-    {
-        let weak = app.as_weak();
-        let state = state.clone();
-        chrome.on_restart_backdrop(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            // As above: read `target-id` before the dispatcher wipes it.
-            let target = ui.global::<crate::Dialog>().get_target_id();
-            let on = target == 1;
-
-            if let Err(e) = crate::library::window::set_aurora_backdrop(&state, on) {
-                log::warn!("persist aurora_backdrop failed: {e}");
-                return;
-            }
-
-            // Deferred for `on_restart_app`'s reason.
-            super::request_respawn_and_quit();
-        });
+        super::request_respawn_and_quit();
     }
 }

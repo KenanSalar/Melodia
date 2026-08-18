@@ -288,23 +288,20 @@ fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
         );
     }
 
-    // Both stacks, not just the one the current setting paints: the other is the one an edit
-    // forgets, and it looks right on the setting it was written under. **`detail-open` ANDs into
-    // each `shown` rather than being its whole value** — that term also carries which arm won,
-    // the two stacks now being mounted together so they can cross-fade.
-    for stack in ["HeroBlurBackdrop {", "AuroraBackdrop {"] {
-        let mount = code
-            .split_once(stack)
-            .and_then(|(_, rest)| rest.split_once('}'))
-            .map_or("", |(body, _)| body);
-        assert!(
-            mount.contains("shown: root.detail-open &&"),
-            "the band must AND `detail-open` into `{stack}`'s `shown` — it defaults to ungated for \
-             the two mosaic bands and Now Playing, which never stop painting a hero, and an \
-             ungated layer here is the backdrop of an artwork-less detail easing out of the \
-             previous tab's stops"
-        );
-    }
+    // The backdrop is one mount carrying both stacks, so this is the single binding standing
+    // between an artwork-less detail and a backdrop easing out of the previous tab's stops. The
+    // wrapper defaults `shown` true, for the two mosaic bands and Now Playing, which never stop
+    // painting a hero — so an omitted binding here is silently ungated.
+    let mount = code
+        .split_once("HeroBackdropStack {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or("", |(body, _)| body);
+    assert!(
+        mount.contains("shown: root.detail-open"),
+        "the band must gate `HeroBackdropStack`'s `shown` on `detail-open` — the wrapper ANDs the \
+         setting in itself, so this term is the band's whole half of the deal and covers both \
+         stacks at once"
+    );
 }
 
 /// The band forwards everything the shared header publishes **that this page consumes**,

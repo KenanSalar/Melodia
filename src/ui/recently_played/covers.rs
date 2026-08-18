@@ -1,11 +1,10 @@
-//! The Recently-Played view's three cover tiers: what each holds, when it warms,
+//! The Recently-Played view's two cover tiers: what each holds, when it warms,
 //! and when it is handed back.
 //!
-//! Two of them are the view's own — the hero mosaic (128 px) and Most Played
-//! (grid-sized) — and the third is the shared row tier the Songs tab's
-//! `TrackList` draws from, which this module only ever reads. Tab-leave is a
-//! release event as much as a section leave is, so the grid tier is dropped and
-//! re-warmed on a tab pick too.
+//! One is the view's own — Most Played, at grid size — and the other is the
+//! shared row tier the Songs tab's `TrackList` draws from, which this module
+//! only ever reads. Tab-leave is a release event as much as a section leave is,
+//! so the grid tier is dropped and re-warmed on a tab pick too.
 
 use std::path::PathBuf;
 

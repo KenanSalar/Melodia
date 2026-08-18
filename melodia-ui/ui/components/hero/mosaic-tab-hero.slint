@@ -1,9 +1,8 @@
 import { Theme } from "../../theme.slint";
 import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
 import { NavEnterFrom } from "../../globals/nav.slint";
-import { AuroraBackdrop } from "../aurora-backdrop.slint";
-import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
 import { HeroChipStrip } from "../hero-chip-strip.slint";
+import { HeroBackdropStack } from "hero-backdrop-stack.slint";
 import { MosaicHeroTile } from "mosaic-hero-tile.slint";
 import { TabSearchHeader } from "tab-search-header.slint";
 
@@ -104,39 +103,18 @@ export component MosaicTabHero inherits Rectangle {
     vertical-stretch: 0;
     height: root.hero-height;
 
-    // Behind everything else, and one of the two. The setting alone: a curated set whose every
-    // entry lacks a cover washes `Theme.accent`, which on these two pages is the honest colour —
-    // they are the app's own, not a record's.
-    property <bool> aurora-shown: Theme.aurora-backdrop;
-
-    // Both mounted, the loser transparent, so a change of arm cross-fades rather than cutting.
-    // Nothing moves the arm live now that the setting is its only term, but a branch in front of
-    // either stack would leave nothing to fade from if one ever did. The gradient floor shows
-    // through when there is no blur image.
-    HeroBlurBackdrop {
+    // Behind everything else, and unconditionally shown: this band never stops painting a hero,
+    // where `LibraryTabBand` gates on its own `detail-open`. Which of the two stacks inside wins
+    // is the setting's alone — a curated set whose every entry lacks a cover washes `Theme.accent`,
+    // which on these two pages is the honest colour, they being the app's own and not a record's.
+    // The gradient floor shows through when there is no blur image.
+    HeroBackdropStack {
         x: 0; y: 0;
         width: 100%; height: 100%;
-        floor-start: HeroBackdrop.floor-start;
-        floor-end: HeroBackdrop.floor-end;
-        scrim: HeroBackdrop.scrim;
         blur-a: root.blur-a;
         blur-b: root.blur-b;
         use-a: root.use-a;
         has-blur: root.has-blur;
-        shown: !root.aurora-shown;
-    }
-
-    // Second, so it covers the blur when it wins — both bases are opaque, so paint order decides.
-    AuroraBackdrop {
-        x: 0; y: 0;
-        width: 100%; height: 100%;
-        base-start: HeroBackdrop.floor-start;
-        base-end: HeroBackdrop.floor-end;
-        tint-1: HeroBackdrop.tint-1;
-        tint-2: HeroBackdrop.tint-2;
-        tint-3: HeroBackdrop.tint-3;
-        dither: HeroBackdrop.dither;
-        shown: root.aurora-shown;
     }
 
     VerticalLayout {

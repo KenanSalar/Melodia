@@ -13,12 +13,15 @@ use slint::{ComponentHandle, Weak};
 use super::RecentlyPlayedUi;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::state::AppState;
-use crate::ui::detail_artwork::DetailPair;
 use crate::ui::detail_view::impl_detail_view_helpers;
 use crate::{AppWindow, RecentlyPlayed};
 
 // Only the artwork half — this page's track model is its own tabbed cache's.
-impl_detail_view_helpers!(artwork_only RecentlyPlayed);
+impl_detail_view_helpers!(
+    curated RecentlyPlayed,
+    RecentlyPlayedUi,
+    crate::ui::hero_chips::publish_recently_played
+);
 
 /// The up-to-`n` most-recently-played *distinct* cover paths, in recency
 /// order — the collage's sources. Skips empty/absent artwork.
@@ -58,29 +61,14 @@ pub fn push_hero_stats(count: i32, rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<Ap
     });
 }
 
-/// Re-publish the band's chips on the UI thread.
-///
-/// **Call this wherever one of the chips' inputs lands.** `kick_full_refresh`
-/// runs the recency fetch and the Most Played fetch *concurrently*, and the band
-/// states something from each depending on which tab is mounted — so no ordering
-/// can be assumed. Each fetch folds its own answer on its own worker and then
-/// calls this; the publish itself reads only finished values, so the worst a
-/// mistimed one can be is a tick behind, never half-built.
-///
-/// The grid path can't stand in for it: `write_filtered_grid` publishes past a
-/// signature early-return, and `mounted_content` is a constant `0` on the Songs
-/// tab — so there that publish fires only when the column count moves.
-pub fn republish_chips(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
-    let rp_ui = rp_ui.clone();
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        crate::ui::hero_chips::publish_recently_played(&ui, &rp_ui);
-    });
-}
-
 /// Compose the banner artwork from `mosaic_paths` and publish it. The CPU-bound compose,
 /// blur and colour measurement run on the blocking pool; the result lands on the UI
 /// thread. `animate` fades the cross-fade (true for live refreshes). An empty list
 /// composes to an empty pair, which clears the banner back to the gradient floor.
+///
+/// Overlapping composes are more reachable here than on Favorites — `refresh_tracks` spawns
+/// this detached, so the subscriber loop can come round again before the guard is claimed,
+/// once per tick. `MosaicGuard::claim` is what makes the second one a no-op.
 pub async fn refresh_artwork(
     state: &AppState,
     rp_ui: &Arc<RecentlyPlayedUi>,
@@ -95,33 +83,4 @@ pub async fn refresh_artwork(
         return;
     };
     publish_hero_artwork(rp_ui, weak, pair, animate, mosaic_paths);
-}
-
-/// Publish a composed banner and claim it as the one on screen.
-///
-/// **Gated whole, where a detail view fills its own slots even while hidden.** This page's
-/// leave wipes its models and forgets the guard, so slots written behind it have nothing to
-/// be ready for and their claim would suppress the re-enter's recompose. What the gate
-/// mainly protects is still `HeroBackdrop`, shared by all six heroes: a compose finishing
-/// after a nav away would paint this page's solve under whichever hero mounted next.
-///
-/// Overlapping composes are more reachable here than on Favorites — `refresh_tracks` spawns
-/// this detached, so the subscriber loop can come round again before the guard is claimed,
-/// once per tick. `MosaicGuard::claim` is what makes the second one a no-op.
-fn publish_hero_artwork(
-    rp_ui: &Arc<RecentlyPlayedUi>,
-    weak: &Weak<AppWindow>,
-    pair: DetailPair,
-    animate: bool,
-    paths: Vec<String>,
-) {
-    let rp_ui = rp_ui.clone();
-    let weak = weak.clone();
-    let _ = slint::invoke_from_event_loop(move || {
-        let Some(ui) = weak.upgrade() else { return };
-        if !rp_ui.section_active() || !rp_ui.state().last_mosaic_paths.claim(paths) {
-            return;
-        }
-        apply_detail_artwork(&ui, &ui.global::<RecentlyPlayed>(), pair, animate, true);
-    });
 }

@@ -229,6 +229,18 @@ pub fn population_seeds(buf: &SharedPixelBuffer<Rgb8Pixel>, desired: usize) -> V
     }
 }
 
+/// Edit `argb` in HCT and pack the result back.
+///
+/// **The round trip is gamut-mapped**, so a saturated seed can come back a little less saturated —
+/// stated here rather than at each helper below, which is the whole reason they share this.
+/// [`clamp_to_tone_band`] deliberately doesn't use it: returning a colour already inside its band
+/// *verbatim* is what keeps that colour's own chroma, and a round trip would map it.
+fn with_hct(argb: u32, edit: impl FnOnce(&mut Hct)) -> u32 {
+    let mut hct = Hct::new(Argb::from_u32(argb));
+    edit(&mut hct);
+    argb_to_u32(Argb::from(hct))
+}
+
 /// Move `argb` into the `min_tone..=max_tone` HCT lightness band, leaving hue
 /// and chroma alone; returns it unchanged when it is already inside.
 ///
@@ -274,12 +286,12 @@ pub fn clamp_to_tone_band(argb: u32, min_tone: f64, max_tone: f64) -> u32 {
 /// Chroma is capped *before* the tone is set, the solver gamut-mapping against
 /// whatever chroma it is given.
 pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
-    let mut hct = Hct::new(Argb::from_u32(argb));
-    if hct.get_chroma() > max_chroma {
-        hct.set_chroma(max_chroma);
-    }
-    hct.set_tone(tone);
-    argb_to_u32(Argb::from(hct))
+    with_hct(argb, |hct| {
+        if hct.get_chroma() > max_chroma {
+            hct.set_chroma(max_chroma);
+        }
+        hct.set_tone(tone);
+    })
 }
 
 /// Scale `argb`'s HCT lightness by `factor`, keeping hue and chroma.
@@ -289,12 +301,8 @@ pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
 /// given it. Multiplicative because the caller means "a bit below this one" and the answer has to
 /// scale with whatever the theme's accent turns out to be; a fixed tone would flatten every palette
 /// onto the same pair.
-///
-/// Gamut-mapped like its siblings, so a saturated seed can come back a little less so.
 pub fn scale_tone(argb: u32, factor: f64) -> u32 {
-    let mut hct = Hct::new(Argb::from_u32(argb));
-    hct.set_tone((hct.get_tone() * factor).clamp(0.0, 100.0));
-    argb_to_u32(Argb::from(hct))
+    with_hct(argb, |hct| hct.set_tone((hct.get_tone() * factor).clamp(0.0, 100.0)))
 }
 
 /// Turn `argb` `degrees` around the HCT hue wheel, keeping tone and chroma.
@@ -304,12 +312,9 @@ pub fn scale_tone(argb: u32, factor: f64) -> u32 {
 /// still owing three washes. HCT rather than HSL is what keeps the sibling at the same apparent
 /// lightness, which is why the tint band can state one tone ceiling.
 ///
-/// Wraps, so any `degrees` is in range; chroma is gamut-mapped, so a saturated seed can come back
-/// less so at a hue sRGB has less room for.
+/// Wraps, so any `degrees` is in range.
 pub fn rotate_hue(argb: u32, degrees: f64) -> u32 {
-    let mut hct = Hct::new(Argb::from_u32(argb));
-    hct.set_hue((hct.get_hue() + degrees).rem_euclid(360.0));
-    argb_to_u32(Argb::from(hct))
+    with_hct(argb, |hct| hct.set_hue((hct.get_hue() + degrees).rem_euclid(360.0)))
 }
 
 /// Build a `DynamicScheme` of `style` × `is_dark` from the seed and map the M3

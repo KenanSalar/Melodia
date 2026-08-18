@@ -1,5 +1,5 @@
-//! Source-level pins on the two backdrop stacks and the three sites that choose between
-//! them — Now Playing and the two shared bands.
+//! Source-level pins on the two backdrop stacks and the two sites that choose between them —
+//! Now Playing, and `HeroBackdropStack` on behalf of the six heroes.
 //!
 //! The blur's floor is the layer that shipped without an `animate`, and it is the layer
 //! that *is* the backdrop whenever the slots sit at 0: an art-less track, an artwork-less
@@ -22,10 +22,14 @@ const HERO_BLUR: &str = include_str!("../../../melodia-ui/ui/components/hero-blu
 const STACKS: [&str; 2] = ["HeroBlurBackdrop", "AuroraBackdrop"];
 
 /// The files that choose between them, and the only ones allowed to mount either.
-const SITES: [&str; 3] = [
+///
+/// Two, not three: the two shared bands had the same twenty-five lines each and now mount
+/// `HeroBackdropStack`, which owns the pair on their behalf. Now Playing stays here because it
+/// reads `Player.np-*` rather than the `HeroBackdrop` tier the wrapper is bound to — that split is
+/// the whole reason the stacks take their colours as inputs.
+const SITES: [&str; 2] = [
     "views/now-playing-view.slint",
-    "components/hero/mosaic-tab-hero.slint",
-    "components/hero/library-tab-band.slint",
+    "components/hero/hero-backdrop-stack.slint",
 ];
 
 /// The gradient floor eases, on the same token the layers above it take. Anchored on the

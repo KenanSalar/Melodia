@@ -522,12 +522,15 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
 /// at the alpha floor — nothing mounts the blur stack on this arm, and base over base is inert
 /// even if something did.
 pub(crate) fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
+    // One ink for all three tiers below — they differ only in the weight it is laid on at.
+    let ink = neutral_ink(theme);
+
     BackdropColors {
         scrim: theme.base,
         scrim_alpha: SCRIM_ALPHA_MIN,
         floor_start: theme.base,
         floor_end: theme.base,
-        chrome: neutral_ink(theme),
+        chrome: ink,
         chrome_alpha: NEUTRAL_CHROME_ALPHA,
         chrome_text_alpha: AURORA_CHROME_TEXT_ALPHA,
         chip_fill_alpha: AURORA_CHIP_FILL_ALPHA,
@@ -536,8 +539,8 @@ pub(crate) fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
         // than seated like the wash under it: the glyph has to come off that wash, and the accent's
         // own tone is the distance.
         placeholder: theme.accent,
-        text: neutral_ink(theme),
-        muted: neutral_ink(theme),
+        text: ink,
+        muted: ink,
         text_alpha: AURORA_TEXT_ALPHA,
         muted_alpha: AURORA_MUTED_ALPHA,
     }
@@ -629,13 +632,7 @@ pub(crate) fn theme_tokens(ui: &AppWindow) -> ThemeTokens {
 /// publisher because the bound making the lossy cast safe is [`scrim_alpha`]'s clamp, which
 /// neither call site can see.
 pub(crate) fn scrim_brush(colors: &BackdropColors) -> Brush {
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "solved alpha is clamped to 0..=1 by `scrim_alpha`"
-    )]
-    let alpha = (colors.scrim_alpha * 255.0).round() as u8;
-    brush_with_alpha(colors.scrim, alpha)
+    tier(colors.scrim, colors.scrim_alpha)
 }
 
 /// The chrome tier as a Slint brush. Opaque on the blur; on the aurora the alpha is the whole
@@ -684,7 +681,7 @@ fn tier(rgb: u32, alpha: f32) -> Brush {
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
-        reason = "every arm sets a literal in 0..=1"
+        reason = "every arm sets a literal in 0..=1, and the solved scrim is clamped there by `scrim_alpha`"
     )]
     let alpha = (alpha * 255.0).round() as u8;
     brush_with_alpha(rgb, alpha)

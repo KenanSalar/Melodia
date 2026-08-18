@@ -97,45 +97,8 @@ pub(super) async fn apply_track_change(
 ) {
     let track_id = track.as_ref().map(|t| t.id);
 
-    // --- Metadata: DB read, awaited inline (sqlx has a reactor here).
-    // `get_track_meta` reads only the 8 chip columns, not a full `Track`.
-    let meta = match track.as_ref() {
-        Some(t) => match library::tracks::get_track_meta(state, t.id).await {
-            Ok(Some(m)) => to_slint_track_meta(&m),
-            // Missing row → clear the chips (default = all-empty strings).
-            Ok(None) => TrackMetaRow::default(),
-            Err(e) => {
-                log::warn!("ui::now_playing get_track_meta({}): {e}", t.id);
-                TrackMetaRow::default()
-            }
-        },
-        // No track → clear the chips.
-        None => TrackMetaRow::default(),
-    };
-
-    // CPU-bound, so onto the blocking pool. A *single* decode derives both the sharp
-    // tile and the blurred backdrop — the cover is the largest image on the app's hot
-    // path, so decoding it once rather than twice halves the per-skip cost.
-    let artwork = track.as_ref().and_then(|t| t.artwork_path.clone()).filter(|p| !p.is_empty());
-
-    let (cover, blurred, sample): DecodedArtwork = match artwork {
-        Some(path) => {
-            let np = np_artwork.clone();
-            match state.runtime.spawn_blocking(move || np.get_or_decode(Path::new(&path))).await {
-                Ok(Some(pair)) => (
-                    Some(Image::from_rgb8(pair.cover)),
-                    pair.blur.map(Image::from_rgb8),
-                    pair.sample,
-                ),
-                Ok(None) => (None, None, backdrop::BackdropSample::default()),
-                Err(e) => {
-                    log::warn!("ui::now_playing artwork task join: {e}");
-                    (None, None, backdrop::BackdropSample::default())
-                }
-            }
-        }
-        None => (None, None, backdrop::BackdropSample::default()),
-    };
+    let meta = fetch_track_meta(state, track.as_ref()).await;
+    let (cover, blurred, sample) = decode_artwork_for(state, np_artwork, track.as_ref()).await;
 
     // --- Write to Slint (UI thread) ---
     let Some(ui) = weak.upgrade() else { return };
@@ -149,20 +112,7 @@ pub(super) async fn apply_track_change(
     }
 
     let player = ui.global::<Player>();
-    // Refresh the shadow from the just-fetched `meta` and push a freshly chunked model,
-    // so the view reflects the new track without waiting on a width-change fire. With
-    // no layout pass yet the chunk collapses to one row and the strip's mount Timer
-    // fires a real width immediately. `None` because this column can grow downward —
-    // the hero band can't.
-    let chip_texts = super::metadata::visible_chip_texts(&meta);
-    let chip_rows = chips::chunk_chips_to_rows(&chip_texts, np_state.chip_last_width.get(), None);
-    // Unconditional: a new track's chips are new text, which a row-length comparison
-    // can't see. Recording the shape is what lets the width channel skip its repaints.
-    *np_state.chip_last_shape.borrow_mut() = chips::split_shape(&chip_rows);
-    player.set_chip_rows(chips::rows_to_model(chip_rows));
-    *np_state.chip_texts.borrow_mut() = chip_texts;
-    player.set_track_meta(meta);
-
+    publish_chips(&player, np_state, meta);
     write_backdrop_tiers(&ui, sample);
 
     write_crossfade_slot(
@@ -185,6 +135,76 @@ pub(super) async fn apply_track_change(
     );
 
     np_state.applied_track_id.set(track_id);
+}
+
+/// The eight chip columns for `track`, awaited inline — sqlx has a reactor here.
+///
+/// Every failure arm is the same empty row, which is what clears the chips: a missing row and a
+/// failed read are both "nothing to state about this track", and no track at all is the third
+/// spelling of it.
+async fn fetch_track_meta(state: &AppState, track: Option<&Arc<TrackSummary>>) -> TrackMetaRow {
+    let Some(track) = track else {
+        return TrackMetaRow::default();
+    };
+
+    match library::tracks::get_track_meta(state, track.id).await {
+        Ok(Some(meta)) => to_slint_track_meta(&meta),
+        Ok(None) => TrackMetaRow::default(),
+        Err(e) => {
+            log::warn!("ui::now_playing get_track_meta({}): {e}", track.id);
+            TrackMetaRow::default()
+        }
+    }
+}
+
+/// Decode `track`'s cover on the blocking pool.
+///
+/// CPU-bound, hence the pool. A *single* decode derives both the sharp tile and the blurred
+/// backdrop — the cover is the largest image on the app's hot path, so decoding it once rather
+/// than twice halves the per-skip cost.
+///
+/// Every arm that isn't a decoded pair answers with an empty sample rather than a previous one:
+/// `BackdropSample::solve` reads that as "no artwork" and falls back to `Theme.accent`, which is
+/// the honest answer for a track whose cover is missing or unreadable.
+async fn decode_artwork_for(
+    state: &AppState,
+    np_artwork: &Arc<NowPlayingArtwork>,
+    track: Option<&Arc<TrackSummary>>,
+) -> DecodedArtwork {
+    let empty = (None, None, BackdropSample::default());
+
+    let Some(path) = track.and_then(|t| t.artwork_path.clone()).filter(|p| !p.is_empty()) else {
+        return empty;
+    };
+
+    let np = np_artwork.clone();
+    match state.runtime.spawn_blocking(move || np.get_or_decode(Path::new(&path))).await {
+        Ok(Some(pair)) => {
+            (Some(Image::from_rgb8(pair.cover)), pair.blur.map(Image::from_rgb8), pair.sample)
+        }
+        Ok(None) => empty,
+        Err(e) => {
+            log::warn!("ui::now_playing artwork task join: {e}");
+            empty
+        }
+    }
+}
+
+/// Chunk the new track's chips and push them with the meta row they came from.
+///
+/// Refreshes the shadow from the just-fetched `meta` and pushes a freshly chunked model, so the
+/// view reflects the new track without waiting on a width-change fire. With no layout pass yet the
+/// chunk collapses to one row and the strip's mount `Timer` fires a real width immediately. `None`
+/// because this column can grow downward — the hero band can't.
+fn publish_chips(player: &Player<'_>, np_state: &NowPlayingState, meta: TrackMetaRow) {
+    let chip_texts = super::metadata::visible_chip_texts(&meta);
+    let chip_rows = chips::chunk_chips_to_rows(&chip_texts, np_state.chip_last_width.get(), None);
+    // Unconditional: a new track's chips are new text, which a row-length comparison
+    // can't see. Recording the shape is what lets the width channel skip its repaints.
+    *np_state.chip_last_shape.borrow_mut() = chips::split_shape(&chip_rows);
+    player.set_chip_rows(chips::rows_to_model(chip_rows));
+    *np_state.chip_texts.borrow_mut() = chip_texts;
+    player.set_track_meta(meta);
 }
 
 /// Every colour this view paints on the backdrop, answered together. Which arm runs and both of

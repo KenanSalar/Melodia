@@ -2,11 +2,10 @@ import { Theme } from "../../theme.slint";
 import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
 import { NavEnterFrom } from "../../globals/nav.slint";
 import { ArtworkImage } from "../artwork-image.slint";
-import { AuroraBackdrop } from "../aurora-backdrop.slint";
-import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
 import { HeroChipStrip } from "../hero-chip-strip.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
+import { HeroBackdropStack } from "hero-backdrop-stack.slint";
 import { TabSearchHeader } from "tab-search-header.slint";
 
 // The My Library page's pinned band, in two states. Idle it is a flat pane carrying the tab bar,
@@ -233,36 +232,18 @@ export component LibraryTabBand inherits Rectangle {
     // its saturated hashed pair and an album with no cover the accent. Both stacks stay mounted and
     // the loser goes transparent, so a change of arm cross-fades — which on this band is belt and
     // braces, a detail only being swappable through the collapse below or through `reset`.
-    property <bool> aurora-shown: Theme.aurora-backdrop;
-
-    // Both mounted, the loser transparent. The gradient floor shows through with no blur image,
-    // which is how Genre Detail paints on this arm. **`detail-open` is this band's alone** —
-    // the mosaic heroes never stop painting a hero, and nothing may ease *from* a tier the band
-    // wasn't painting, so it ANDs into both `shown` terms rather than replacing them.
-    HeroBlurBackdrop {
+    // The gradient floor shows through with no blur image, which is how Genre Detail paints on the
+    // blur arm. **`detail-open` is this band's alone** — the mosaic heroes never stop painting a
+    // hero, and nothing may ease *from* a tier the band wasn't painting, so the whole stack is
+    // gated on it; the setting term is the wrapper's, ANDed in there.
+    HeroBackdropStack {
         x: 0; y: 0;
         width: 100%; height: 100%;
-        floor-start: HeroBackdrop.floor-start;
-        floor-end: HeroBackdrop.floor-end;
-        scrim: HeroBackdrop.scrim;
         blur-a: root.blur-a;
         blur-b: root.blur-b;
         use-a: root.use-a;
         has-blur: root.has-blur;
-        shown: root.detail-open && !root.aurora-shown;
-    }
-
-    // Second, so it covers the blur when it wins — both bases are opaque, so paint order decides.
-    AuroraBackdrop {
-        x: 0; y: 0;
-        width: 100%; height: 100%;
-        base-start: HeroBackdrop.floor-start;
-        base-end: HeroBackdrop.floor-end;
-        tint-1: HeroBackdrop.tint-1;
-        tint-2: HeroBackdrop.tint-2;
-        tint-3: HeroBackdrop.tint-3;
-        dither: HeroBackdrop.dither;
-        shown: root.detail-open && root.aurora-shown;
+        shown: root.detail-open;
     }
 
     // The idle pane, over the backdrop rather than instead of it. **The alpha is folded into the

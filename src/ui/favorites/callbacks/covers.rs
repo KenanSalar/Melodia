@@ -1,7 +1,6 @@
-//! `Favorites.*` lazy cover-lookup callbacks — one per card tier
-//! (mosaic, most-played, artist). (Songs-tab rows resolve through the
-//! shared `RowCovers` global like every other `TrackListRowItem`.)
-//! See [`super::wire`].
+//! `Favorites.*` lazy cover-lookup callbacks — one per grid tab, Most Played
+//! and Artists. (Songs-tab rows resolve through the shared `RowCovers` global
+//! like every other `TrackListRowItem`.) See [`super::wire`].
 //!
 //! The two grid lookups carry `Favorites.covers-generation`, which is both
 //! what makes their `pure` bindings re-evaluate when a prewarm lands and the

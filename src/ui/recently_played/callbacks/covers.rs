@@ -1,7 +1,6 @@
-//! `RecentlyPlayed` lazy cover-lookup callbacks — the hero mosaic tiles and
-//! the Most Played grid cards. (Songs rows resolve through the shared
-//! `RowCovers` global like every other `TrackListRowItem`.) See
-//! [`super::wire`].
+//! `RecentlyPlayed`'s lazy cover-lookup callback — the Most Played grid cards.
+//! (Songs rows resolve through the shared `RowCovers` global like every other
+//! `TrackListRowItem`.) See [`super::wire`].
 
 use std::sync::Arc;
 

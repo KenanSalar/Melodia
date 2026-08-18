@@ -1,9 +1,9 @@
-//! The Favorites view's four cover tiers: what each holds, when it warms, and when it is handed
+//! The Favorites view's three cover tiers: what each holds, when it warms, and when it is handed
 //! back.
 //!
-//! Three are the view's own — the hero mosaic and the two grid tiers — and the fourth is the
-//! shared row tier the Songs tab's `TrackList` draws from, which this module only reads. **The two
-//! grid tiers are released and re-warmed on a tab pick as well as on a section leave.**
+//! Two are the view's own — one per grid tab — and the third is the shared row tier the Songs
+//! tab's `TrackList` draws from, which this module only reads. **The two grid tiers are released
+//! and re-warmed on a tab pick as well as on a section leave.**
 
 use std::path::PathBuf;
 

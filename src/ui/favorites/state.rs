@@ -31,8 +31,10 @@ pub(crate) struct FavoritesUiState {
     /// different entities over disjoint field sets. Read off the UI thread by
     /// `grids::sort::sort_cached_artists`, which is why it can't live on the global.
     pub artist_sort: Mutex<ViewSort>,
-    /// Most recent successful `get_favorite_stats`, held so the empty `mosaic-paths` write on
-    /// section leave can be reverted on re-enter without a DB round trip.
+    /// Most recent successful `get_favorite_stats`, held because `hero_chips::publish_favorites`
+    /// takes the band's count and running time off this handle rather than back off the
+    /// properties written around it — the page is assembled from three fetches, so no call site
+    /// holds all of it.
     pub stats: Mutex<FavoriteStats>,
     /// Grid-tab rows in Rust shape, so click handlers resolve `(id) -> entity` without re-fetching
     /// and a keystroke or column-count change re-chunks in memory. Refreshed in lockstep on

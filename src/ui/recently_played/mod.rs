@@ -9,7 +9,7 @@
 //! deltas below are this page's.
 //!
 //! The tree is split by the question each file answers rather than by tab. This file is the handle
-//! and its teardown; `tabs.rs` the sub-view enum and its seeding, `covers.rs` the three tiers,
+//! and its teardown; `tabs.rs` the sub-view enum and its seeding, `covers.rs` the two tiers,
 //! `rows.rs` the Slint models, `hero.rs` the band, `songs.rs` the Songs tab, and `grid/` the Most
 //! Played tab in three parts — `fetch`, `apply` and `warm`.
 

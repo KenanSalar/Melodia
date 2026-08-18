@@ -111,6 +111,99 @@ pub fn restamp_selected<S: BuildHasher>(rows: &mut [UiTrackListRow], selected: &
     }
 }
 
+/// Stamp a curated page's whole selection adapter.
+///
+/// The two curated pages' adapters were the same four functions character for character, which is
+/// what this replaces. **Tracks stays hand-written and should**: its range branch walks the
+/// filtered cache (`current_ids_filtered`) where these two read the Slint model directly, and it
+/// takes its handle by reference rather than as an `Arc`.
+macro_rules! impl_row_selection {
+    ($Global:ty, $Ui:ty) => {
+        /// Compute the new selection set for a row click and apply it. Click semantics match
+        /// `tracks::handle_select_row` exactly. Runs on the UI thread (called from
+        /// `on_select_row`). The selection `HashSet` is mirrored into the handle's
+        /// `applied_selection` so the next `apply_filtered_tracks` round can re-stamp the
+        /// `selected` flag on freshly-built rows.
+        pub fn handle_select_row(
+            ui: &$crate::AppWindow,
+            view: &$Ui,
+            idx: i32,
+            id: i32,
+            shift: bool,
+            ctrl: bool,
+        ) {
+            use slint::{ComponentHandle as _, Model as _};
+
+            let g = ui.global::<$Global>();
+            let cur_anchor = g.get_selection_anchor();
+            let cur_selected: Vec<i32> = g.get_selected_ids().iter().collect();
+
+            let (new_selected, new_anchor) = $crate::ui::list_selection::compute_click_selection(
+                cur_anchor,
+                cur_selected,
+                // Range select over the currently-displayed rows (post-filter, already in the
+                // same order as the Slint `tracks` model). Read ids straight from the model
+                // rather than re-walking the cached `tracks_all` + filter, so the range matches
+                // what the user is looking at even mid-debounce.
+                || {
+                    let rows = g.get_tracks();
+                    (0..rows.row_count()).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect()
+                },
+                idx,
+                id,
+                shift,
+                ctrl,
+            );
+
+            let id_set: std::collections::HashSet<i32> = new_selected.iter().copied().collect();
+            write_selection(&g, new_selected);
+            g.set_selection_anchor(new_anchor);
+            (*view.state().applied_selection.lock()).clone_from(&id_set);
+
+            // Re-stamp per-row `selected` flags so the checkbox + background highlight reflect
+            // the new set immediately.
+            $crate::ui::list_selection::stamp_rows_selected(&g.get_tracks(), &id_set);
+        }
+
+        /// Reset selection (called from the action-pill "Clear" button and section-leave). Same
+        /// diff-then-write shape as `handle_select_row`.
+        pub fn clear_selection(ui: &$crate::AppWindow, view: &$Ui) {
+            use slint::ComponentHandle as _;
+
+            let g = ui.global::<$Global>();
+            write_selection(&g, Vec::new());
+            g.set_selection_anchor(-1);
+            view.state().applied_selection.lock().clear();
+            $crate::ui::list_selection::stamp_rows_selected(
+                &g.get_tracks(),
+                &std::collections::HashSet::new(),
+            );
+        }
+
+        /// Mutate the persistent `selected-ids` `VecModel<i32>` in place.
+        pub(super) fn write_selection(g: &$Global, ids: Vec<i32>) {
+            $crate::ui::list_selection::write_selection_ids(
+                &g.get_selected_ids(),
+                ids,
+                |m: slint::ModelRc<i32>| g.set_selected_ids(m),
+            );
+        }
+
+        /// UI-thread-only: re-stamp selection onto a freshly-built row list before it's pushed
+        /// into the Slint model, so a filter change / library refresh doesn't drop the user's
+        /// existing selection.
+        pub fn restamp_rows(g: &$Global, rows: &mut [$crate::TrackListRow]) {
+            use slint::Model as _;
+
+            let selected_set: std::collections::HashSet<i32> =
+                g.get_selected_ids().iter().collect();
+            $crate::ui::list_selection::restamp_selected(rows, &selected_set);
+        }
+    };
+}
+
+pub(crate) use impl_row_selection;
+
 #[cfg(test)]
 #[path = "tests/list_selection_tests.rs"]
 mod tests;
