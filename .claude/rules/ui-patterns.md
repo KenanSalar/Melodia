@@ -546,8 +546,9 @@ silently miss the other.
 
 - **Detail-close releases global Image properties.** `release_detail_hero_images!` resets `cover` +
   `blur-img-a/b`, clears `has-blur`, and re-solves the two shared globals, alongside `clear_detail`
-  + `release_detail_artwork`. Without it `SharedPixelBuffer` Arcs pin (~650 KiB CPU + ~1.5 MiB GPU
-  on Mesa). It runs on each view's **section leave**, gated per the hero-teardown rules above.
+  + `release_detail_artwork`. Without it `SharedPixelBuffer` Arcs pin the cover tile and **both**
+  blur slots, on the heap and again as Mesa textures. It runs on each view's **section leave**,
+  gated per the hero-teardown rules above.
 
 - **A close doesn't run it, and that is the contract the morph forced.** Every fact the band paints
   is a ternary over the detail id, so clearing on the frame the id does leaves the band spending

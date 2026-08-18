@@ -1,14 +1,16 @@
 use super::*;
+use crate::ui::util::BLUR_SIGMA;
 
 /// A tier at the Now Playing shape — the specifics don't matter to any test
-/// here, which are all about the LRU and the remembered-failure rule.
+/// here, which are all about the LRU and the remembered-failure rule, but a
+/// literal drifts off the tier it claims to be the moment either is retuned.
 fn test_cache(capacity: usize) -> ArtworkCache {
     let cap = NonZeroUsize::new(capacity).unwrap_or(NonZeroUsize::MIN);
     ArtworkCache::new(
         cap,
         Some(BlurSpec {
             height: BLUR_TARGET,
-            sigma: 24.0,
+            sigma: BLUR_SIGMA,
         }),
     )
 }

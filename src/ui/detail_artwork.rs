@@ -26,14 +26,14 @@ use crate::ui::backdrop::BackdropSample;
 /// source is composed per refresh, so there is no path to key it on, but they draw the
 /// same band shape and owe it the same blur.
 pub(crate) const BLUR: BlurSpec = BlurSpec {
-    height: 128,
-    sigma: 20.0,
+    height: 85,
+    sigma: 13.3,
 };
 
 /// LRU capacity. The working set for a detail view is the currently-open
 /// entity plus a handful of recently-opened ones (the back-and-forth
-/// pattern). At one `(cover, blur)` pair per entry ≈ `432 KiB + 72 KiB`,
-/// 12 entries caps at ≈ 6 MiB — comfortably under the RSS ceiling.
+/// pattern). At one `(cover, blur)` pair per entry ≈ `432 KiB + 32 KiB`,
+/// 12 entries caps at ≈ 5.5 MiB — comfortably under the RSS ceiling.
 const ARTWORK_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(12) {
     Some(n) => n,
     None => panic!("ARTWORK_CACHE_CAP > 0"),
