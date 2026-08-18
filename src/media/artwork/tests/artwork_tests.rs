@@ -414,17 +414,9 @@ fn extract_and_cache_artwork_empty_pictures() -> Result<(), AppError> {
     Ok(())
 }
 
-/// The store's dedup guard sits *behind* the normalizer — the stored name has to describe the
-/// stored file — so every track on an album would decode and re-encode the one cover they share,
-/// and throw all but one of those away. The external-cover tier gets the same saving from its path
-/// key; embedded artwork has no path, hence the hash.
-#[test]
-fn an_embedded_cover_is_stored_once_however_many_tracks_carry_it() -> Result<(), AppError> {
-    let tmp = tempfile::tempdir()?;
-    let artwork_dir = tmp.path().join("artwork");
-    std::fs::create_dir_all(&artwork_dir)?;
-
-    // Over `STORE_MAX_DIM`, so the work the memo saves is a decode rather than a hash.
+/// An `Id3v2` tag carrying one cover over [`STORE_MAX_DIM`], so what a memo saves is a decode and a
+/// re-encode rather than a hash.
+fn tag_with_oversized_cover() -> Result<lofty::tag::Tag, AppError> {
     let mut png = Vec::new();
     image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(1024, 1024, |x, y| {
         image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x * y) % 239) as u8])
@@ -436,22 +428,60 @@ fn an_embedded_cover_is_stored_once_however_many_tracks_carry_it() -> Result<(),
         .map_err(|e| AppError::Validation(format!("read picture: {e}")))?;
     let mut tag = lofty::tag::Tag::new(lofty::tag::TagType::Id3v2);
     tag.push_picture(picture);
+    Ok(tag)
+}
 
+/// The store's dedup guard sits *behind* the normalizer — the stored name has to describe the
+/// stored file — so every track on an album would decode and re-encode the one cover they share,
+/// and throw all but one of those away. The external-cover tier gets the same saving from its path
+/// key; embedded artwork has no path, hence the hash.
+///
+/// The second store is what makes the answer proof rather than coincidence: only a hit can name one
+/// the call was never handed. Production has a single store, so it is a probe here rather than a
+/// shape the caches support.
+#[test]
+fn an_embedded_cover_is_stored_once_however_many_tracks_carry_it() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let artwork_dir = tmp.path().join("artwork");
+    let unused_dir = tmp.path().join("artwork-second");
+    std::fs::create_dir_all(&artwork_dir)?;
+    std::fs::create_dir_all(&unused_dir)?;
+
+    let tag = tag_with_oversized_cover()?;
+    let cache: CoverCache = new_cover_cache();
+    let first = extract_and_cache_artwork(&tag, &artwork_dir, &cache)
+        .ok_or_else(|| AppError::Validation("expected a stored cover".into()))?;
+    let second = extract_and_cache_artwork(&tag, &unused_dir, &cache)
+        .ok_or_else(|| AppError::Validation("expected a stored cover".into()))?;
+
+    assert_eq!(second, first);
+    assert!(
+        std::fs::read_dir(&unused_dir)?.next().is_none(),
+        "the second track re-ran the decode instead of taking the memo"
+    );
+    Ok(())
+}
+
+/// The sweep unlinks a stored cover once nothing references it, which can land between the memo and
+/// a later track reaching it. A row written from that hit would not heal — `track_is_current` reads
+/// the track as current, so nothing re-extracts.
+#[test]
+fn a_hit_whose_file_the_sweep_retired_is_stored_again() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir_all(&artwork_dir)?;
+
+    let tag = tag_with_oversized_cover()?;
     let cache: CoverCache = new_cover_cache();
     let first = extract_and_cache_artwork(&tag, &artwork_dir, &cache)
         .ok_or_else(|| AppError::Validation("expected a stored cover".into()))?;
 
-    // Removing the file is what makes the second call's answer proof rather than coincidence:
-    // only a memo hit can name the same path and leave it absent.
     std::fs::remove_file(&first)?;
     let second = extract_and_cache_artwork(&tag, &artwork_dir, &cache)
         .ok_or_else(|| AppError::Validation("expected a stored cover".into()))?;
 
     assert_eq!(second, first);
-    assert!(
-        !std::path::Path::new(&second).exists(),
-        "the second track re-ran the decode instead of taking the memo"
-    );
+    assert!(Path::new(&second).exists(), "the memo handed back a path the sweep had unlinked");
     Ok(())
 }
 

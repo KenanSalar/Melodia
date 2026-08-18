@@ -124,9 +124,11 @@ pub fn resize_rgb8(
 ///
 /// The resizer holds one intermediate buffer sized by the *source* width against the target
 /// height and grows it without ever shrinking, so one outsized source would leave that thread
-/// holding it for the process lifetime — once per Rayon worker. Set above what a stored cover into
-/// the largest tile needs, so the steady state keeps its buffer and only the outlier reallocates.
-const RESIZER_SCRATCH_CAP: usize = 1024 * 1024;
+/// holding it for the process lifetime — once per Rayon worker and once per blocking-pool thread.
+/// Clear of *twice* what a stored cover into the largest tile needs, because the buffer grows by
+/// `max(capacity * 2, required)`: gated on the request size instead, two ordinary tiers in the
+/// wrong order trip the reset that the steady state is the whole point of avoiding.
+const RESIZER_SCRATCH_CAP: usize = 2 * 1024 * 1024;
 
 thread_local! {
     /// One resizer per worker rather than one per cover: it owns the scratch buffers the
