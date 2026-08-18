@@ -46,11 +46,11 @@ export component LibraryTabBand inherits Rectangle {
     in property <image> cover;
     in property <bool> circular-artwork: false;
     in property <string> fallback-icon: "music-note";
-    // Genre Detail's name-hashed gradient overrides both. The defaults take solved
-    // `HeroBackdrop.chrome`, never `Theme.accent` — the tile sits *on* the hero, where a light
-    // theme's accent lands dark-on-dark.
-    in property <brush> tile-bg: HeroBackdrop.chrome.transparentize(0.85);
-    in property <brush> tile-icon-color: HeroBackdrop.chrome;
+    // Genre Detail's name-hashed gradient overrides both. The defaults take the hero's own
+    // `placeholder` tier, never `Theme.accent` — the tile sits *on* the hero, and only Rust knows
+    // which backdrop is under it.
+    in property <brush> tile-bg: HeroBackdrop.placeholder.transparentize(0.85);
+    in property <brush> tile-icon-color: HeroBackdrop.placeholder;
 
     in property <image> blur-a;
     in property <image> blur-b;

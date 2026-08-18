@@ -176,8 +176,16 @@ silently miss the other.
   whichever `spawn_blocking` already decoded the cover, the quantize being the heaviest thing on
   that path and `apply` running on the UI thread.
   `on-backdrop` for title and secondary line, `on-backdrop-muted` for empty-state copy, `chrome`
-  for a placeholder fill or glyph and for a chip label, `chip-fill` for the pill behind it —
+  for a chip label, `chip-fill` for the pill behind it —
   **`chip-fill-at(fade)` when the surface is morphing**, so the pill's weight is stated once.
+  **A coverless square takes `placeholder`, not `chrome`**, and that split is the tier's whole
+  reason: on the blur the two hold one value, on the aurora `chrome` is a neutral ink — right for a
+  chip or a disc the wash reads through, a pale slab with a lamp on it across 140 px. `placeholder`
+  is `Theme.accent` there, so the square matches the grid card and the track row painting the same
+  glyph, and the hero still owns no `Theme.*` binding. Three mounts (`library-tab-band`'s defaults,
+  `my-library-view`'s non-genre arms, `mosaic-hero-tile`), pinned by
+  `hero_backdrop_tests::every_coverless_hero_square_paints_from_the_placeholder_tier` — reverting
+  one builds and is wrong only under a setting CI never turns on.
   **Anything derived from `chrome` fades with `transparentize`, never `with-alpha`**: the tier
   carries alpha of its own on the aurora arm, so *setting* it paints the neutral ink opaque and the
   wash stops reading through. Both spellings agree on the blur, which is what makes the mistake
@@ -210,10 +218,16 @@ silently miss the other.
   cover — a substitute seed. Genre Detail hands over `genre_accent`'s **saturated tile pair**
   (`hero_backdrop::GenreStops`), the one its own square and grid card paint; the dimmed *hero* pair
   in the same struct is the blur floor's alone, and swapping them builds and paints a plausible band
-  on both arms, hence a pin. Anything else with no artwork substitutes `Theme.accent`, and
-  **as a seed rather than as a rotation origin** — left as the origin every wash comes out at
-  `FILL_WEIGHT` and the surface reads as unpainted `Theme.base`, where one seed and two fills is
-  exactly the set a sleeve that quantized to one colour gets. This retired a `has-tints` /
+  on both arms, hence a pin. Anything else with no artwork substitutes `Theme.accent`, and does it
+  **as two seeds rather than as a rotation origin** — left as the origin every wash comes out at
+  `FILL_WEIGHT` and the surface reads as unpainted `Theme.base`; seated as one, the sweeps have a
+  single colour to run three ways and the band reads as a flat tint. A pair plus a fill is exactly
+  the shape a genre hands over, which is the point: they are the same case and had visibly stopped
+  looking like it. **And the pair is seated under `aurora::WASH_MAX_TONE` first** — an accent is
+  picked to be legible as *ink on the app's surface*, so it sits well above anything a record
+  quantizes to and washed at its own tone reads as a lamp beside a genre's hashed stops. A ceiling
+  rather than a tone, so an accent already that deep (Latte's) passes through carrying its own
+  chroma; `WASH_MAX_TONE` is the one number here to tune by eye. This retired a `has-tints` /
   `np-has-tints` pair the three mounts had to fold in; a term put back strands one site on the blur
   under a setting its siblings honour, which
   `hero_blur_backdrop_tests::no_backdrop_site_gates_the_aurora_on_anything_but_the_setting` reads

@@ -282,6 +282,21 @@ pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
     argb_to_u32(Argb::from(hct))
 }
 
+/// Scale `argb`'s HCT lightness by `factor`, keeping hue and chroma.
+///
+/// For a darker *sibling* of a colour rather than a legible version of it — [`crate::ui::aurora`]
+/// pairs a wash with a deeper one so an art-less surface has the value structure a cover would have
+/// given it. Multiplicative because the caller means "a bit below this one" and the answer has to
+/// scale with whatever the theme's accent turns out to be; a fixed tone would flatten every palette
+/// onto the same pair.
+///
+/// Gamut-mapped like its siblings, so a saturated seed can come back a little less so.
+pub fn scale_tone(argb: u32, factor: f64) -> u32 {
+    let mut hct = Hct::new(Argb::from_u32(argb));
+    hct.set_tone((hct.get_tone() * factor).clamp(0.0, 100.0));
+    argb_to_u32(Argb::from(hct))
+}
+
 /// Turn `argb` `degrees` around the HCT hue wheel, keeping tone and chroma.
 ///
 /// The round trip for making a *second* colour out of a first rather than making one legible:

@@ -32,7 +32,9 @@ pub mod palette;
 pub mod system_color_state;
 
 pub use apply::{accent_brushes, apply};
-pub(crate) use apply::{brush_to_rgb, brush_with_alpha, color, color_to_rgb, color_with_alpha};
+pub(crate) use apply::{
+    brush, brush_to_rgb, brush_with_alpha, color, color_to_rgb, color_with_alpha,
+};
 pub use palette::{
     AccentDef, MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef, Variant,
 };

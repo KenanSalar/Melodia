@@ -10,11 +10,11 @@
 //! A fixed set, always — `Brush::interpolate` blends gradients only at a matching stop and element
 //! count — and the quantizer can still answer short, a near-white sleeve coming back as one colour.
 //! Hence [`tints`]'s filling rule, which an entry with no cover at all reaches through the same
-//! door: the accent stands in as its one seed.
+//! door: the accent stands in, seated to a wash tone and paired with a deeper sibling.
 
 use slint::{Color, Rgba8Pixel, SharedPixelBuffer};
 
-use crate::services::material_you::rotate_hue;
+use crate::services::material_you::{clamp_to_tone_band, rotate_hue, scale_tone};
 use crate::themes::color_with_alpha;
 use crate::ui::backdrop::{SEED_COUNT, ThemeTokens};
 
@@ -42,6 +42,20 @@ const FILL_HUES: [f64; WASH_COUNT] = [0.0, 25.0, -25.0];
 /// in direction, and at full strength a stack of those is a lightness gradient it never had.
 const FILL_WEIGHT: f32 = 0.3;
 
+/// Tone ceiling on the accent when it stands in for an entry with no colours of its own.
+///
+/// **A ceiling rather than a tone**, so an accent already this deep passes through carrying its own
+/// chroma. An accent is picked to be legible as *ink on the app's surface*, which puts it well above
+/// anything a record quantizes to — laid on as a wash at full tone it reads as a lamp rather than as
+/// a surface, and beside Genre Detail's hashed stops the two heroes stop looking like one app. This
+/// is where the accent stops being ink and becomes ground.
+const WASH_MAX_TONE: f64 = 52.0;
+
+/// How far the second seated wash sits below the first. The pair is what an art-less surface has
+/// instead of a cover's value structure, and one colour alone reads as a flat tint however it is
+/// swept.
+const WASH_SHADE_FACTOR: f64 = 0.8;
+
 /// One wash's colour and how strongly it is laid on.
 pub(crate) struct Tint {
     /// `0x00RRGGBB`, exactly as the quantizer answered.
@@ -68,15 +82,22 @@ impl Tint {
 ///
 /// `theme`'s accent never *pads* a short list: one hue's worth of cover gets a full set of its own
 /// colours, not the app's. It stands in only for an *empty* one — an entry with no artwork — and it
-/// stands in as a **seed** rather than as a rotation origin: three fills with nothing at full weight
-/// behind them wash at [`FILL_WEIGHT`] throughout and read as an unpainted surface, where one seed
-/// and two fills is the set a sleeve that quantized to a single colour already gets.
+/// stands in as **two seeds**, seated under [`WASH_MAX_TONE`] and [`WASH_SHADE_FACTOR`] apart. Three
+/// fills with nothing at full weight behind them wash at [`FILL_WEIGHT`] throughout and read as an
+/// unpainted surface; one seed alone reads as a flat tint. A pair plus a fill is exactly the shape
+/// Genre Detail hands over in [`crate::ui::hero_backdrop::apply_gradient`], the other hero with no
+/// cover to quantize — so the two answer alike, which they visibly did not while the accent went in
+/// at its own tone.
 pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], theme: &ThemeTokens) -> [Tint; WASH_COUNT] {
-    let origin = seeds.iter().flatten().next().copied().unwrap_or(theme.accent);
     let mut seeds = seeds;
+    // Ahead of the origin read, so the third wash fans off the seated colour rather than off the
+    // pastel the other two just came down from.
     if seeds.iter().all(Option::is_none) {
-        seeds[0] = Some(origin);
+        let lit = clamp_to_tone_band(theme.accent, 0.0, WASH_MAX_TONE);
+        seeds[0] = Some(lit);
+        seeds[1] = Some(scale_tone(lit, WASH_SHADE_FACTOR));
     }
+    let origin = seeds.iter().flatten().next().copied().unwrap_or(theme.accent);
 
     std::array::from_fn(|wash| match seeds[wash] {
         Some(argb) => Tint {

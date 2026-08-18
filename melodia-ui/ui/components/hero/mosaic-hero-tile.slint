@@ -29,7 +29,7 @@ export component MosaicHeroTile inherits Rectangle {
     // reads as one giant placeholder tile rather than as a bare surface.
     background: root.shows-cover
         ? HeroBackdrop.floor-start
-        : HeroBackdrop.chrome.transparentize(0.85);
+        : HeroBackdrop.placeholder.transparentize(0.85);
     border-radius: Theme.radius-lg;
     border-width: 1px;
     border-color: HeroBackdrop.tile-edge;
@@ -52,7 +52,7 @@ export component MosaicHeroTile inherits Rectangle {
                 name: root.count == 0 ? root.empty-glyph : "music_note";
                 filled: root.count == 0 && root.empty-glyph-filled;
                 icon-size: 56px;
-                icon-color: HeroBackdrop.chrome;
+                icon-color: HeroBackdrop.placeholder;
             }
         }
     }

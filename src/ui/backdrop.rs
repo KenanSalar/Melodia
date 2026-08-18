@@ -30,7 +30,7 @@ use material_colors::contrast;
 use slint::{Brush, ComponentHandle, Rgb8Pixel, SharedPixelBuffer};
 
 use crate::services::material_you::{clamp_to_tone_band, population_seeds, to_tone_capped_chroma};
-use crate::themes::{brush_to_rgb, brush_with_alpha};
+use crate::themes::{brush, brush_to_rgb, brush_with_alpha};
 use crate::ui::artwork_cache::BlurSpec;
 use crate::{AppWindow, Theme as ThemeGlobal};
 
@@ -263,7 +263,8 @@ pub(crate) enum BackdropKind {
 
 /// Everything a solve needs off a decoded cover. All are `None` when there is none — no artwork,
 /// or a failed decode — and both arms fall back to the live `Theme.accent`: the blur seeds its floor
-/// from that hue at [`floor_luma`], the aurora washes it through [`crate::ui::aurora::tints`].
+/// from that hue at [`floor_luma`], the aurora seats it as a wash pair through
+/// [`crate::ui::aurora::tints`].
 #[derive(Clone, Copy, Default)]
 pub(crate) struct BackdropSample {
     /// Most prominent colour quantized out of the cover, supplying the *hue* for every colour
@@ -309,7 +310,7 @@ impl BackdropSample {
     ///
     /// **The setting is the whole of the branch.** An entry with no artwork used to keep the blur
     /// under either, the aurora's only fallback then being a set of fills with no seed behind them;
-    /// `tints` now takes the accent as that seed, so every hero has an aurora to paint.
+    /// `tints` now seats the accent as a wash pair, so every hero has an aurora to paint.
     pub(crate) fn solve(self, theme: &ThemeTokens, kind: BackdropKind) -> BackdropColors {
         match kind {
             BackdropKind::Aurora => theme_backdrop(theme),
@@ -433,6 +434,12 @@ pub(crate) struct BackdropColors {
     pub chip_fill_alpha: f32,
     /// Alpha for the visualizer, off the same colour.
     pub viz_alpha: f32,
+    /// Fill and glyph of a coverless hero square, always opaque — the mounts take their own weight
+    /// off it. `chrome`'s value on the blur and a tier of its own only on the aurora, where that one
+    /// is a neutral ink: correct for a chip or a disc the wash reads through, and a pale slab at
+    /// 140 px. The theme accent instead, which is what every grid card and track row already paints
+    /// behind the same glyph.
+    pub placeholder: u32,
     /// Primary body text.
     pub text: u32,
     /// Secondary body text.
@@ -452,19 +459,23 @@ pub(crate) struct BackdropColors {
 pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
     let alpha = scrim_alpha(backdrop_luma);
     let tone = composited_tone(backdrop_luma, alpha);
+    // *Clamps* rather than sets: a cover already brighter than the solve asks for keeps its own
+    // tone, and so its own chroma, up to `CHROME_MAX_TONE`.
+    let chrome = clamp_to_tone_band(seed_argb, chrome_tone(tone), CHROME_MAX_TONE);
 
     BackdropColors {
         scrim: to_tone_capped_chroma(seed_argb, SCRIM_TONE, BACKDROP_MAX_CHROMA),
         scrim_alpha: alpha,
         floor_start: to_tone_capped_chroma(seed_argb, FLOOR_TONE_START, BACKDROP_MAX_CHROMA),
         floor_end: to_tone_capped_chroma(seed_argb, FLOOR_TONE_END, BACKDROP_MAX_CHROMA),
-        // *Clamps* rather than sets: a cover already brighter than the solve asks for keeps its
-        // own tone, and so its own chroma, up to `CHROME_MAX_TONE`.
-        chrome: clamp_to_tone_band(seed_argb, chrome_tone(tone), CHROME_MAX_TONE),
+        chrome,
         chrome_alpha: 1.0,
         chrome_text_alpha: 1.0,
         chip_fill_alpha: CHIP_FILL_WEIGHT,
         viz_alpha: 1.0,
+        // This tier is hue-carrying and solved against the floor already, so the placeholder has
+        // nothing of its own to want here.
+        placeholder: chrome,
         text: to_tone_capped_chroma(seed_argb, text_tone(tone), TEXT_MAX_CHROMA),
         muted: to_tone_capped_chroma(seed_argb, muted_tone(tone), MUTED_MAX_CHROMA),
         text_alpha: 1.0,
@@ -500,6 +511,10 @@ pub(crate) fn theme_backdrop(theme: &ThemeTokens) -> BackdropColors {
         chrome_text_alpha: AURORA_CHROME_TEXT_ALPHA,
         chip_fill_alpha: AURORA_CHIP_FILL_ALPHA,
         viz_alpha: AURORA_VIZ_ALPHA,
+        // The one tier the neutral ink is wrong for — see `BackdropColors::placeholder`. Raw rather
+        // than seated like the wash under it: the glyph has to come off that wash, and the accent's
+        // own tone is the distance.
+        placeholder: theme.accent,
         text: neutral_ink(theme),
         muted: neutral_ink(theme),
         text_alpha: AURORA_TEXT_ALPHA,
@@ -598,6 +613,12 @@ pub(crate) fn chip_fill_brush(colors: &BackdropColors) -> Brush {
 /// The same tier at the visualizer's weight.
 pub(crate) fn viz_brush(colors: &BackdropColors) -> Brush {
     chrome_at(colors, colors.viz_alpha)
+}
+
+/// A coverless hero square's fill and glyph. Opaque, the mounts taking their own weight off it with
+/// `transparentize` — so the fill stays a fraction of whatever this is.
+pub(crate) fn placeholder_brush(colors: &BackdropColors) -> Brush {
+    brush(colors.placeholder)
 }
 
 /// Primary and secondary body text. Opaque on the blur, where each is its own solved tone; one

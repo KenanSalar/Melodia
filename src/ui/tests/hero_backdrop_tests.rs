@@ -540,8 +540,9 @@ fn the_palette_is_never_written_without_re_solving_the_backdrops() {
 /// its pill and both body-text weights each carry an alpha Rust solved per arm.
 #[test]
 fn no_fill_derived_from_the_chrome_tier_sets_its_alpha() {
-    const TIERS: [&str; 11] = [
+    const TIERS: [&str; 12] = [
         "chrome",
+        "placeholder",
         "chrome-text",
         "chip-fill",
         "on-backdrop",
@@ -567,6 +568,50 @@ fn no_fill_derived_from_the_chrome_tier_sets_its_alpha() {
             );
         }
     }
+}
+
+/// Every coverless hero square paints from `placeholder`, and none of them from `chrome`.
+///
+/// The two tiers hold the same value on the blur, so reverting a mount builds, passes review and is
+/// wrong only under a setting CI never turns on — where `chrome` is a neutral ink and the square
+/// becomes a pale slab with a lamp on it. Spelled as a per-file pair because the fill and the glyph
+/// are separate bindings and either one alone is the visible half of the bug.
+#[test]
+fn every_coverless_hero_square_paints_from_the_placeholder_tier() {
+    const MOUNTS: [&str; 3] = [
+        "components/hero/library-tab-band.slint",
+        "components/hero/mosaic-hero-tile.slint",
+        "views/my-library-view.slint",
+    ];
+
+    let sources = crate::test_support::stripped_sources(
+        crate::test_support::UI_DIR,
+        "slint",
+        crate::test_support::MIN_SLINT_SOURCES,
+    );
+
+    let mut seen = 0;
+    for (path, code) in &sources {
+        // The chrome tier is legitimate everywhere else in the tree — chips, discs, the
+        // visualizer — so only the three squares are asked about.
+        if !MOUNTS.contains(&path.as_str()) {
+            continue;
+        }
+        seen += 1;
+        assert!(
+            code.contains("HeroBackdrop.placeholder.transparentize(0.85)"),
+            "{path} lost the placeholder fill — `chrome` is a neutral ink on the aurora"
+        );
+        assert!(
+            code.contains("HeroBackdrop.placeholder;"),
+            "{path} lost the placeholder glyph — `chrome` is a neutral ink on the aurora"
+        );
+        assert!(
+            !code.contains("HeroBackdrop.chrome.transparentize(0.85)"),
+            "{path} still fills a coverless square from the chrome tier"
+        );
+    }
+    assert_eq!(seen, MOUNTS.len(), "a mount was renamed and this pin stopped reading it");
 }
 
 /// Genre Detail hands over its two hashed pairs the right way round.

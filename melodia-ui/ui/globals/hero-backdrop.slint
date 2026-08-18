@@ -15,8 +15,9 @@ export global HeroBackdrop {
 
     // `Player.np-tint-*`'s twin, off the same solve — same `WASH_COUNT` reason, and the defaults
     // have to agree with that block and with `AuroraBackdrop`'s own. Always populated: a cover
-    // supplies them, a genre substitutes its saturated hashed pair, and anything with no colours
-    // of its own substitutes `Theme.accent`.
+    // supplies them, a genre substitutes its saturated hashed pair, and anything with no colours of
+    // its own substitutes the accent seated to a wash tone plus a deeper sibling — the same pair
+    // shape, so the two coverless heroes read at one weight.
     in-out property <color> tint-1: #3a2d4a;
     in-out property <color> tint-2: #2d3a4a;
     in-out property <color> tint-3: #4a2d3a;
@@ -28,6 +29,13 @@ export global HeroBackdrop {
     // The hue-carrying tier. Solved to 3:1 against the composited backdrop on the blur, and a
     // neutral ink at partial alpha on the aurora, where the wash beneath supplies the colour.
     in-out property <brush> chrome: #cba6f7;
+
+    // A coverless hero square — its fill at a fraction, its glyph whole. `chrome`'s own value on the
+    // blur, and its own answer only on the aurora, where that tier is a neutral ink: right for a
+    // chip or a disc the wash reads through, a pale slab across 140px. `Theme.accent` there instead,
+    // reached through Rust like every tier so the hero still owns no `Theme.*` binding — and so the
+    // square matches the grid card and the track row behind the same glyph.
+    in-out property <brush> placeholder: #cba6f7;
 
     // The same tier at the weight lettering wants, and the pill behind it at its own. Solved in
     // Rust rather than derived here, the two arms wanting different answers — `ui::backdrop`'s

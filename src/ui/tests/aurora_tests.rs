@@ -2,6 +2,7 @@ use material_colors::color::Argb;
 use material_colors::hct::Hct;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
+use super::{WASH_MAX_TONE, WASH_SHADE_FACTOR};
 use crate::services::material_you::{extract_source_argb_from_rgb8, population_seeds};
 use crate::ui::aurora::{WASH_COUNT, dither_tile, tints};
 use crate::ui::backdrop::{SEED_COUNT, ThemeTokens};
@@ -285,7 +286,8 @@ fn a_multi_coloured_cover_keeps_its_colours_apart() {
 }
 
 /// No artwork at all is the only path that may reach for the theme, and it still owes a set of
-/// distinguishable tints rather than one colour washed on repeatedly.
+/// distinguishable tints rather than one colour washed on repeatedly — the accent's own hue
+/// throughout, and none of it above the wash ceiling.
 #[test]
 fn no_seeds_at_all_falls_back_to_the_theme_accent() {
     let [first, fills @ ..] = tints([None; SEED_COUNT], &mocha());
@@ -296,27 +298,67 @@ fn no_seeds_at_all_falls_back_to_the_theme_accent() {
         "tint 0 must be the accent's own hue, got {:#08x}",
         first.rgb
     );
+    assert!(
+        hct_of(first.rgb).get_tone() <= WASH_MAX_TONE + 1.0,
+        "the accent went in as ink rather than as ground: tone {}",
+        hct_of(first.rgb).get_tone()
+    );
     for fill in fills {
         assert!(fill.rgb != first.rgb, "a fill duplicated the accent");
     }
 }
 
-/// The accent stands in as a **seed**, not as a rotation origin — the whole of why an art-less hero
-/// is worth painting at all.
+/// The accent stands in as **two seeds**, not as one and not as a rotation origin.
 ///
 /// Left as the origin, every wash comes out at the fill weight and the surface reads as unpainted
-/// `Theme.base`. Asserted against a one-colour sleeve rather than against the numbers, since what
-/// is claimed is that the two are the same case: one seed in, one wash at full weight and a fan of
-/// two behind it.
+/// `Theme.base`; seated alone, the pair the sweeps need to have any value structure is a fan of two
+/// ghosts and the band reads as a flat tint. Asserted against the genre shape rather than against
+/// the numbers, since what is claimed is that the two coverless heroes are one case.
 #[test]
-fn an_empty_set_washes_like_a_sleeve_that_quantized_to_one_colour() {
+fn an_empty_set_washes_the_pair_a_genre_hands_over() {
     let art_less = tints([None; SEED_COUNT], &mocha());
-    let one_hue = tints(ONE_HUE, &mocha());
+    let genre = tints([Some(0x00c0_3030), Some(0x0080_2020), None, None], &mocha());
 
     let weights: Vec<f32> = art_less.iter().map(|tint| tint.weight).collect();
-    let reference: Vec<f32> = one_hue.iter().map(|tint| tint.weight).collect();
-    assert_eq!(weights, reference, "an art-less set must carry a real seed's weights");
-    assert!(weights[0] >= 1.0, "the accent is the seed, so its wash is laid on in full");
+    let reference: Vec<f32> = genre.iter().map(|tint| tint.weight).collect();
+    assert_eq!(weights, reference, "an art-less set must carry a seated pair's weights");
+    assert!(weights[0] >= 1.0 && weights[1] >= 1.0, "both seated washes are laid on in full");
+}
+
+/// The second seated wash is the darker one, which is the whole of what the pair buys: one colour
+/// swept three ways is a tint whichever way it runs.
+#[test]
+fn the_seated_accent_pair_runs_light_to_dark() {
+    let [lit, shade, _] = tints([None; SEED_COUNT], &mocha());
+
+    let lit_tone = hct_of(lit.rgb).get_tone();
+    let shade_tone = hct_of(shade.rgb).get_tone();
+    assert!(shade_tone < lit_tone, "the pair has no value structure: {lit_tone} then {shade_tone}");
+    assert!(
+        (shade_tone - lit_tone * WASH_SHADE_FACTOR).abs() < 1.0,
+        "the shade drifted off its factor: {shade_tone} against {}",
+        lit_tone * WASH_SHADE_FACTOR
+    );
+}
+
+/// A **ceiling, not a tone** — an accent already deep enough to be ground reaches the wash carrying
+/// its own chroma. Latte's mauve is that accent, and it is the half of this a `set_tone` would break
+/// invisibly: on Mocha, whose accent is a pastel, the two spellings agree.
+#[test]
+fn an_accent_below_the_ceiling_washes_untouched() {
+    const LATTE_ACCENT: u32 = 0x0088_39ef;
+    let latte = ThemeTokens {
+        base: 0x00ef_f1f5,
+        text: 0x004c_4f69,
+        accent: LATTE_ACCENT,
+    };
+
+    assert!(
+        hct_of(LATTE_ACCENT).get_tone() < WASH_MAX_TONE,
+        "fixture no longer sits under the ceiling, so this asserts nothing"
+    );
+    let [lit, ..] = tints([None; SEED_COUNT], &latte);
+    assert_eq!(lit.rgb, LATTE_ACCENT, "a seated accent lost chroma it never had to spend");
 }
 
 // --- the dither tile -----------------------------------------------------------

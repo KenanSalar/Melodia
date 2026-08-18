@@ -7,10 +7,10 @@
 //!
 //! **Every hero has washes**, and they are the artwork's own wherever there is artwork: a genre
 //! substitutes its name-hashed pair through [`apply_gradient`], and anything else with no cover
-//! substitutes the accent inside [`aurora::tints`]. What the tiers over them are depends on the
-//! arm — the blur solves them off the cover's hue, the aurora takes the theme's own — and either
-//! way the set is a snapshot of the palette that was live when the hero opened, which is what
-//! [`republish_for_palette`] exists to refresh.
+//! substitutes a seated accent pair inside [`aurora::tints`]. What the tiers over them are depends
+//! on the arm — the blur solves them off the cover's hue, the aurora takes the theme's own — and
+//! either way the set is a snapshot of the palette that was live when the hero opened, which is
+//! what [`republish_for_palette`] exists to refresh.
 //!
 //! The whole set is published — scrim, gradient floor, the aurora's three washes,
 //! hue-carrying chrome and both text tiers — so a hero and the Now Playing view answer
@@ -132,6 +132,7 @@ pub(crate) fn reset(ui: &AppWindow) {
 fn write(ui: &AppWindow, colors: &BackdropColors, tints: &[Tint; WASH_COUNT], floor: Floor) {
     let g = ui.global::<HeroBackdrop>();
     g.set_chrome(backdrop::chrome_brush(colors));
+    g.set_placeholder(backdrop::placeholder_brush(colors));
     g.set_chrome_text(backdrop::chrome_text_brush(colors));
     g.set_chip_fill(backdrop::chip_fill_brush(colors));
     g.set_scrim(backdrop::scrim_brush(colors));
