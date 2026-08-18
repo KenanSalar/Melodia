@@ -628,9 +628,8 @@ pub(crate) fn theme_tokens(ui: &AppWindow) -> ThemeTokens {
     }
 }
 
-/// The scrim as a Slint brush, opacity baked into the alpha channel. Here rather than at each
-/// publisher because the bound making the lossy cast safe is [`scrim_alpha`]'s clamp, which
-/// neither call site can see.
+/// The scrim as a Slint brush, opacity in the alpha channel — the one tier whose alpha is solved
+/// per cover rather than set as a literal.
 pub(crate) fn scrim_brush(colors: &BackdropColors) -> Brush {
     tier(colors.scrim, colors.scrim_alpha)
 }
@@ -681,7 +680,7 @@ fn tier(rgb: u32, alpha: f32) -> Brush {
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
-        reason = "every arm sets a literal in 0..=1, and the solved scrim is clamped there by `scrim_alpha`"
+        reason = "literal alphas sit in 0..=1, and the solved scrim is clamped by `scrim_alpha`"
     )]
     let alpha = (alpha * 255.0).round() as u8;
     brush_with_alpha(rgb, alpha)

@@ -27,10 +27,11 @@ const STACKS: [&str; 2] = ["HeroBlurBackdrop", "AuroraBackdrop"];
 /// `HeroBackdropStack`, which owns the pair on their behalf. Now Playing stays here because it
 /// reads `Player.np-*` rather than the `HeroBackdrop` tier the wrapper is bound to — that split is
 /// the whole reason the stacks take their colours as inputs.
-const SITES: [&str; 2] = [
-    "views/now-playing-view.slint",
-    "components/hero/hero-backdrop-stack.slint",
-];
+const SITES: [&str; 2] = ["views/now-playing-view.slint", WRAPPER];
+
+/// The tier-bound site, spelled apart from its sibling because one pin below is about this file
+/// alone — Now Playing is mounted directly and has no host gate to forward.
+const WRAPPER: &str = "components/hero/hero-backdrop-stack.slint";
 
 /// The gradient floor eases, on the same token the layers above it take. Anchored on the
 /// binding rather than searched loosely: what this catches is one line deleted from
@@ -80,8 +81,8 @@ fn the_shared_backdrop_rides_one_duration() {
 ///
 /// The default is what a mount that passes nothing gets, and the other way round it comes up
 /// transparent and stays there — on Genre Detail's, the one backdrop with no blur over it, that
-/// is the whole banner. All three sites do pass it now, so this is the fourth mount's answer
-/// rather than theirs.
+/// is the whole banner. Both sites do pass it now, so this is the third mount's answer rather
+/// than theirs.
 ///
 /// **The two arms are checked one at a time**, an inverted ternary being the same failure
 /// as an inverted default and reading correctly at a glance.
@@ -209,6 +210,37 @@ fn every_backdrop_site_cross_fades_between_the_two() {
                  defaults to `true` and sits over the other one for good"
             );
         }
+    }
+}
+
+/// The wrapper folds its host's `shown` into both stacks.
+///
+/// This is the half of `LibraryTabBand`'s `detail-open` gate that left the band when the pair
+/// became one mount: the band passes the term, and the wrapper owes it to each child. Drop either
+/// `root.shown &&` and both files still read correctly — `library_tab_band_tests` sees only the
+/// band, and the sign check above is satisfied by the ungated spelling — while the band paints a
+/// detail's backdrop over its flat state.
+#[test]
+fn the_wrapper_folds_its_hosts_gate_into_both_stacks() {
+    let tree = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);
+    let src = tree
+        .iter()
+        .find(|(path, _)| path.ends_with(WRAPPER))
+        .map(|(_, src)| src.as_str())
+        .unwrap_or_default();
+
+    for stack in STACKS {
+        let mount = src
+            .split_once(&format!("{stack} {{"))
+            .and_then(|(_, rest)| rest.split_once("\n    }"))
+            .map(|(mount, _)| mount)
+            .unwrap_or_default();
+        assert!(
+            mount.contains("shown: root.shown &&"),
+            "`{stack}` must AND the wrapper's own `shown` into its gate — that term is the host's \
+             whole half of the deal, and the two mosaic bands pass nothing, so a missing one is \
+             correct on the site it was written for and dead on My Library's"
+        );
     }
 }
 

@@ -12,8 +12,8 @@
 //! Hence [`tints`]'s filling rule, which an entry with no cover at all reaches through the same
 //! door: the accent stands in, seated to a wash tone and paired with a deeper sibling.
 //!
-//! [`dither`] is the grain laid over the result and answers to the renderer rather than to any
-//! artwork, so it shares nothing with the solve above but the surface it lands on.
+//! [`dither_tile`] is the grain laid over the result and answers to the renderer rather than to
+//! any artwork, so it shares nothing with the solve above but the surface it lands on.
 
 use slint::Color;
 

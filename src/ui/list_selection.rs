@@ -1,20 +1,29 @@
-//! Shared flat-list row-selection core: modifier-aware click math, the
-//! diff-aware per-row `selected` stamper, and the persistent `selected-ids`
-//! model writer.
+//! Shared flat-list row-selection core: the [`DetailSelectionView`] surface every list view is
+//! driven through, modifier-aware click math, the diff-aware per-row `selected` stamper, and the
+//! persistent `selected-ids` model writer.
 //!
 //! Tracks, Favorites, and Recently Played all implement the same click
 //! semantics (plain click = single, Ctrl = toggle, Shift = range over the
 //! displayed order); their per-view `selection.rs` files stay as thin
-//! adapters that read/write their own Slint global and call in here. The
-//! detail views keep `detail_selection.rs` — their selection is cache-indexed
-//! with different complexity trade-offs.
+//! adapters that read/write their own Slint global and call in here. Favorites and Recently
+//! Played get the whole of it from the three `*_curated` functions below — their adapters were
+//! the same four bodies character for character. **Tracks stays hand-written and should**: its
+//! range branch walks the filtered cache (`current_ids_filtered`) where those two read the Slint
+//! model directly.
+//!
+//! `detail_selection.rs` is the other consumer of the trait: same accessors, cache-indexed
+//! selection with different complexity trade-offs.
 
 use std::collections::HashSet;
 use std::hash::BuildHasher;
 
+use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
-use crate::TrackListRow as UiTrackListRow;
+use crate::{
+    AlbumDetail, ArtistDetail, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed,
+    TrackListRow as UiTrackListRow,
+};
 
 /// Compute the new `(selected_ids, anchor)` for a row click.
 ///
@@ -111,98 +120,128 @@ pub fn restamp_selected<S: BuildHasher>(rows: &mut [UiTrackListRow], selected: &
     }
 }
 
-/// Stamp a curated page's whole selection adapter.
+/// The per-view Slint surface both selection layers drive. Each global implements it by routing
+/// through its auto-generated `get_*` / `set_*` accessors; the trait method names are deliberately
+/// distinct from those so the bodies are unambiguous.
 ///
-/// The two curated pages' adapters were the same four functions character for character, which is
-/// what this replaces. **Tracks stays hand-written and should**: its range branch walks the
-/// filtered cache (`current_ids_filtered`) where these two read the Slint model directly, and it
-/// takes its handle by reference rather than as an `Arc`.
-macro_rules! impl_row_selection {
-    ($Global:ty, $Ui:ty) => {
-        /// Compute the new selection set for a row click and apply it. Click semantics match
-        /// `tracks::handle_select_row` exactly. Runs on the UI thread (called from
-        /// `on_select_row`). The selection `HashSet` is mirrored into the handle's
-        /// `applied_selection` so the next `apply_filtered_tracks` round can re-stamp the
-        /// `selected` flag on freshly-built rows.
-        pub fn handle_select_row(
-            ui: &$crate::AppWindow,
-            view: &$Ui,
-            idx: i32,
-            id: i32,
-            shift: bool,
-            ctrl: bool,
-        ) {
-            use slint::{ComponentHandle as _, Model as _};
+/// Here rather than in [`crate::ui::detail_selection`] because both layers name it and this is the
+/// one they share — the *logic* differs (a detail view indexes its Rust cache and re-stamps
+/// O(changed); a curated page reads the model and re-stamps O(rows)), the accessors don't.
+pub trait DetailSelectionView {
+    /// The shift-range anchor row index (`-1` = no anchor).
+    fn anchor(&self) -> i32;
+    fn set_anchor(&self, anchor: i32);
+    /// The currently-selected track ids model.
+    fn selected_ids(&self) -> ModelRc<i32>;
+    fn replace_selected_ids(&self, ids: ModelRc<i32>);
+    /// The displayed track-row model.
+    fn track_rows(&self) -> ModelRc<UiTrackListRow>;
+    /// Replace the displayed track-row model wholesale (downcast-miss fallback only — the model
+    /// is normally mutated in place).
+    fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>);
+}
 
-            let g = ui.global::<$Global>();
-            let cur_anchor = g.get_selection_anchor();
-            let cur_selected: Vec<i32> = g.get_selected_ids().iter().collect();
-
-            let (new_selected, new_anchor) = $crate::ui::list_selection::compute_click_selection(
-                cur_anchor,
-                cur_selected,
-                // Range select over the currently-displayed rows (post-filter, already in the
-                // same order as the Slint `tracks` model). Read ids straight from the model
-                // rather than re-walking the cached `tracks_all` + filter, so the range matches
-                // what the user is looking at even mid-debounce.
-                || {
-                    let rows = g.get_tracks();
-                    (0..rows.row_count()).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect()
-                },
-                idx,
-                id,
-                shift,
-                ctrl,
-            );
-
-            let id_set: std::collections::HashSet<i32> = new_selected.iter().copied().collect();
-            write_selection(&g, new_selected);
-            g.set_selection_anchor(new_anchor);
-            (*view.state().applied_selection.lock()).clone_from(&id_set);
-
-            // Re-stamp per-row `selected` flags so the checkbox + background highlight reflect
-            // the new set immediately.
-            $crate::ui::list_selection::stamp_rows_selected(&g.get_tracks(), &id_set);
-        }
-
-        /// Reset selection (called from the action-pill "Clear" button and section-leave). Same
-        /// diff-then-write shape as `handle_select_row`.
-        pub fn clear_selection(ui: &$crate::AppWindow, view: &$Ui) {
-            use slint::ComponentHandle as _;
-
-            let g = ui.global::<$Global>();
-            write_selection(&g, Vec::new());
-            g.set_selection_anchor(-1);
-            view.state().applied_selection.lock().clear();
-            $crate::ui::list_selection::stamp_rows_selected(
-                &g.get_tracks(),
-                &std::collections::HashSet::new(),
-            );
-        }
-
-        /// Mutate the persistent `selected-ids` `VecModel<i32>` in place.
-        pub(super) fn write_selection(g: &$Global, ids: Vec<i32>) {
-            $crate::ui::list_selection::write_selection_ids(
-                &g.get_selected_ids(),
-                ids,
-                |m: slint::ModelRc<i32>| g.set_selected_ids(m),
-            );
-        }
-
-        /// UI-thread-only: re-stamp selection onto a freshly-built row list before it's pushed
-        /// into the Slint model, so a filter change / library refresh doesn't drop the user's
-        /// existing selection.
-        pub fn restamp_rows(g: &$Global, rows: &mut [$crate::TrackListRow]) {
-            use slint::Model as _;
-
-            let selected_set: std::collections::HashSet<i32> =
-                g.get_selected_ids().iter().collect();
-            $crate::ui::list_selection::restamp_selected(rows, &selected_set);
+/// Generate a [`DetailSelectionView`] impl for a Slint global.
+macro_rules! impl_detail_selection_view {
+    ($global:ident) => {
+        impl DetailSelectionView for $global<'_> {
+            fn anchor(&self) -> i32 {
+                self.get_selection_anchor()
+            }
+            fn set_anchor(&self, anchor: i32) {
+                self.set_selection_anchor(anchor);
+            }
+            fn selected_ids(&self) -> ModelRc<i32> {
+                self.get_selected_ids()
+            }
+            fn replace_selected_ids(&self, ids: ModelRc<i32>) {
+                self.set_selected_ids(ids);
+            }
+            fn track_rows(&self) -> ModelRc<UiTrackListRow> {
+                self.get_tracks()
+            }
+            fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>) {
+                self.set_tracks(rows);
+            }
         }
     };
 }
 
-pub(crate) use impl_row_selection;
+impl_detail_selection_view!(AlbumDetail);
+impl_detail_selection_view!(ArtistDetail);
+impl_detail_selection_view!(Favorites);
+impl_detail_selection_view!(GenreDetail);
+impl_detail_selection_view!(PlaylistDetail);
+impl_detail_selection_view!(RecentlyPlayed);
+
+/// Compute the new selection set for a curated page's row click and apply it. Click semantics
+/// match `tracks::handle_select_row` exactly. Runs on the UI thread (called from
+/// `on_select_row`). The selection is mirrored into `applied` so the next `apply_filtered_tracks`
+/// round can re-stamp the `selected` flag on freshly-built rows.
+pub fn handle_curated_click<V: DetailSelectionView, S: BuildHasher>(
+    view: &V,
+    applied: &Mutex<HashSet<i32, S>>,
+    idx: i32,
+    id: i32,
+    shift: bool,
+    ctrl: bool,
+) {
+    let (new_selected, new_anchor) = compute_click_selection(
+        view.anchor(),
+        view.selected_ids().iter().collect(),
+        // Range select over the currently-displayed rows (post-filter, already in the same order
+        // as the Slint `tracks` model). Read ids straight from the model rather than re-walking
+        // the cached `tracks_all` + filter, so the range matches what the user is looking at even
+        // mid-debounce — where a detail view, whose cache *is* the display order, indexes that.
+        || {
+            let rows = view.track_rows();
+            (0..rows.row_count()).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect()
+        },
+        idx,
+        id,
+        shift,
+        ctrl,
+    );
+
+    let id_set: HashSet<i32> = new_selected.iter().copied().collect();
+    write_curated_selection(view, new_selected);
+    view.set_anchor(new_anchor);
+    {
+        // Refilled rather than assigned, to keep the shadow's allocation — and `clone_from` can't
+        // stand in, the caller's hasher being a free parameter.
+        let mut applied = applied.lock();
+        applied.clear();
+        applied.extend(id_set.iter().copied());
+    }
+
+    // Re-stamp per-row `selected` flags so the checkbox + background highlight reflect the new
+    // set immediately.
+    stamp_rows_selected(&view.track_rows(), &id_set);
+}
+
+/// Reset a curated page's selection (called from the action-pill "Clear" button and
+/// section-leave). Same diff-then-write shape as [`handle_curated_click`].
+pub fn clear_curated_selection<V: DetailSelectionView, S: BuildHasher>(
+    view: &V,
+    applied: &Mutex<HashSet<i32, S>>,
+) {
+    write_curated_selection(view, Vec::new());
+    view.set_anchor(-1);
+    applied.lock().clear();
+    stamp_rows_selected(&view.track_rows(), &HashSet::new());
+}
+
+/// UI-thread-only: re-stamp selection onto a freshly-built row list before it's pushed into the
+/// Slint model, so a filter change / library refresh doesn't drop the user's existing selection.
+pub fn restamp_curated_rows<V: DetailSelectionView>(view: &V, rows: &mut [UiTrackListRow]) {
+    let selected: HashSet<i32> = view.selected_ids().iter().collect();
+    restamp_selected(rows, &selected);
+}
+
+/// Mutate the persistent `selected-ids` `VecModel<i32>` in place.
+fn write_curated_selection<V: DetailSelectionView>(view: &V, ids: Vec<i32>) {
+    write_selection_ids(&view.selected_ids(), ids, |m| view.replace_selected_ids(m));
+}
 
 #[cfg(test)]
 #[path = "tests/list_selection_tests.rs"]

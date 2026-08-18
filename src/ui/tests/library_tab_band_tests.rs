@@ -297,10 +297,10 @@ fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
         .and_then(|(_, rest)| rest.split_once('}'))
         .map_or("", |(body, _)| body);
     assert!(
-        mount.contains("shown: root.detail-open"),
+        mount.contains("shown: root.detail-open;"),
         "the band must gate `HeroBackdropStack`'s `shown` on `detail-open` — the wrapper ANDs the \
          setting in itself, so this term is the band's whole half of the deal and covers both \
-         stacks at once"
+         stacks at once. The wrapper owes the other half, pinned by `hero_blur_backdrop_tests`"
     );
 }
 

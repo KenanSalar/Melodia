@@ -202,7 +202,7 @@ silently miss the other.
   is what lets one component serve `HeroBackdrop` on the six bands and `Player.np-*` on Now
   Playing, two globals kept separate because a band stays mounted behind an open Now Playing.
   Reading either global from inside a stack ties it to one tier and puts the other site's inline
-  copy back; `hero_blur_backdrop_tests` pins both directions. **Three mount sites, one
+  copy back; `hero_blur_backdrop_tests` pins both directions. **Two mount sites, one
   `aurora-shown` property, and both stacks mounted unconditionally at each** — the loser goes
   transparent through its own `shown` input, which is what the two components spend their gated
   brushes on, so a change of arm **cross-fades**. They were an `if` pair until an art-less track
@@ -215,9 +215,22 @@ silently miss the other.
   the one `aurora-shown` property and must be each other's negation — a stack missing its term
   takes the `true` default and sits over the other for good, and an `if` restored in front of one
   reads exactly like what this replaced;
-  `hero_blur_backdrop_tests::every_backdrop_site_cross_fades_between_the_two` holds all three.
+  `hero_blur_backdrop_tests::every_backdrop_site_cross_fades_between_the_two` holds both.
   The cost is that the transparent stack still builds its paths every frame, where an unmounted arm
   cost nothing.
+
+- **The six bands reach that pair through `components/hero/hero-backdrop-stack.slint`, not
+  directly.** `HeroBackdropStack` is the pair plus the `aurora-shown` choice, bound to the
+  `HeroBackdrop` tier — the twenty-five lines `MosaicTabHero` and `LibraryTabBand` had each. Now
+  Playing stays a direct mount because it paints `Player.np-*`, which is the whole reason the two
+  leaves take their colours as inputs rather than naming a global. The wrapper's own `shown` is
+  the **host's** question — ungated for the two mosaic bands, which never stop painting a hero,
+  and `detail-open` for `LibraryTabBand`, whose globals outlive the tab that filled them. That
+  makes the gate a two-file deal and each half its own pin: the band passes the term
+  (`library_tab_band_tests::no_hero_tier_outlives_the_banner_it_was_solved_for`) and the wrapper
+  ANDs it into both children
+  (`hero_blur_backdrop_tests::the_wrapper_folds_its_hosts_gate_into_both_stacks`) — drop either
+  and both files still read correctly while My Library paints a detail's backdrop flat.
 
 - **Every hero has washes, so the mount gates on the setting and nothing else.** What differs is
   where the three colours come from: a cover's quantize, or — for the two heroes that have no
@@ -234,8 +247,8 @@ silently miss the other.
   quantizes to and washed at its own tone reads as a lamp beside a genre's hashed stops. A ceiling
   rather than a tone, so an accent already that deep (Latte's) passes through carrying its own
   chroma; `WASH_MAX_TONE` is the one number here to tune by eye. This retired a `has-tints` /
-  `np-has-tints` pair the three mounts had to fold in; a term put back strands one site on the blur
-  under a setting its siblings honour, which
+  `np-has-tints` pair both mounts had to fold in; a term put back strands one site on the blur
+  under a setting its sibling honours, which
   `hero_blur_backdrop_tests::no_backdrop_site_gates_the_aurora_on_anything_but_the_setting` reads
   off each binding's own text. **A genre publishes through `apply_gradient`, which picks its arm
   from `backdrop::kind` itself** — it has no `BackdropSample` for `solve` to pick from — and is in
