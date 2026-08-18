@@ -39,8 +39,10 @@ component MosaicSlot inherits Rectangle {
 }
 
 // Reusable 1/2/3/4-tile artwork mosaic, and the live preview of what
-// `media::artwork::compose_cover` will bake: the layouts are that function's, so the picker shows
-// the collage it is about to persist. Pure layout — the caller owns the outer chrome and only the
+// `media::artwork::compose_artwork` will bake: the layouts are shared, so the picker shows the
+// collage it is about to persist. That function rather than its lenient sibling `compose_cover` is
+// what makes the preview a promise — a source dropping out would bake a collage slot-for-slot
+// different from this one. Pure layout — the caller owns the outer chrome and only the
 // inner tiles are drawn here, so no paths draws nothing and the caller's own empty state shows
 // through. Tiles resolve through `request-cover`, so a consumer keeps its own LRU tier.
 //

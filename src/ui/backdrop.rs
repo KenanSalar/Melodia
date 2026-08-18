@@ -274,8 +274,9 @@ pub(crate) struct BackdropSample {
     /// The same quantize's list, most prominent first, and short whenever the artwork had fewer
     /// regions than that. `ui::aurora` owns the filling rule.
     pub(crate) seeds: [Option<u32>; SEED_COUNT],
-    /// [`luma_p90`] of the same buffer — and `None` throughout on the aurora arm, which sizes no
-    /// scrim and so never asks. See [`Self::measure`].
+    /// [`luma_p90`] of the buffer the scrim gets painted over, which is not the one the seeds came
+    /// off — [`Self::measure`] argues why. `None` throughout on the aurora arm, which sizes no
+    /// scrim and so never asks.
     pub(crate) luma: Option<f64>,
 }
 

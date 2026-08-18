@@ -43,6 +43,11 @@ pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
 /// Returns whether the aurora arm is live, read back off the property so the failed-read arm
 /// answers with what boot actually raised. The writer reporting what it wrote, not a second
 /// reader — `ui::backdrop::kind` stays the only one, and this crate can't name it anyway.
+///
+/// `#[must_use]` because dropping the answer is the live mutation: the dither install downstream is
+/// the aurora's alone, and a bare call statement would compile clean past it (`must_use_candidate`
+/// is off workspace-wide, and `unused_results` isn't in the `unused` group).
+#[must_use]
 pub fn apply_backdrop_style(
     app: &AppWindow,
     startup_settings: Option<&services::settings::SettingsData>,

@@ -317,13 +317,23 @@ fn each_layout_puts_every_source_in_its_own_rect() -> Result<(), AppError> {
     Ok(())
 }
 
+/// Refused for the set's *size*, which the leniency below must not talk its way out of: dropping a
+/// source is how a broken one costs its slot, never how five of them find a layout.
 #[test]
 fn compose_cover_refuses_a_set_it_has_no_layout_for() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
     let one = solid_source(tmp.path(), "one.png", [255, 0, 0], 64, 64)?;
 
     assert!(compose_cover(&[]).is_none());
-    assert!(compose_cover(&vec![one; 5]).is_none());
+    assert!(compose_cover(&vec![one.clone(); 5]).is_none());
+
+    // Four readable plus a broken fifth composed a 4-up while the size check sat behind the
+    // readability retry — the one arrangement of five sources that ever reached a canvas.
+    let broken = tmp.path().join("broken.png");
+    std::fs::write(&broken, b"not an image")?;
+    let mut five = vec![one; 4];
+    five.push(broken);
+    assert!(compose_cover(&five).is_none(), "a broken source must not buy a set a layout");
     Ok(())
 }
 

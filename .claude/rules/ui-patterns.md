@@ -141,9 +141,15 @@ silently miss the other.
   `MaterialIcon` rather than a `"▶"` in the string (the fallback-font line-box pitfall).
 
 - **`MosaicHeroTile`** is the 140 px artwork square both curated heroes draw, and it draws **one
-  composed collage, never a live `CoverMosaic`** — `media::artwork::compose_cover` owns the 1/2/3/4
-  arrangement, so the square, the banner blur and a playlist thumbnail are all the same
-  composition. **Every brush in it is a `HeroBackdrop` tier and none may become a `Theme.*`
+  composed collage, never a live `CoverMosaic`** — `media::artwork`'s `COMPOSITE_LAYOUTS` owns the
+  1/2/3/4 arrangement, so the square, the banner blur and a playlist thumbnail are all laid out the
+  same. **What they do not share is what an unreadable source costs**, and the asymmetry is
+  deliberate: the heroes go through `compose_cover`, which drops that source and picks the layout
+  from what survives, because they recompose from whatever the database's top four currently are
+  and a cover deleted underneath should cost its slot rather than the banner; a playlist thumbnail
+  goes through `compose_artwork`, which refuses, because the mosaic picker previewed that file slot
+  for slot and `CoverMosaic` is a promise. Collapsing the two onto one function for DRY persists a
+  collage nobody chose. **Every brush in it is a `HeroBackdrop` tier and none may become a `Theme.*`
   token** — with no collage the hero is the dark gradient floor where a light theme's accent lands
   dark-on-dark. **What decides the arm is the cover, not the count**: a set whose every entry lacks
   artwork is populated and has nothing to paint, so `count` picks between the page's own glyph and

@@ -316,24 +316,34 @@ const COMPOSITE_LAYOUTS: [&[(u32, u32, u32, u32)]; 4] = [
 /// **Blocking** — call from `spawn_blocking` or a Rayon worker, never the UI thread.
 pub(crate) fn compose_cover(source_paths: &[PathBuf]) -> Option<image::RgbImage> {
     let all: Vec<&Path> = source_paths.iter().map(PathBuf::as_path).collect();
+    // Refused for its size, and dropping a source is not how a set gets a layout — so the
+    // readability pass below would decode every path to reach the same answer.
+    layout_for(all.len())?;
+
     if let Some(canvas) = compose_exact(&all) {
         return Some(canvas);
     }
 
     let readable: Vec<&Path> =
         all.iter().copied().filter(|p| decode_capped(p, MAX_SOURCE_DIM).is_ok()).collect();
-    // Nothing to drop, so the failure was the set's size rather than a source: re-running would
-    // walk the same paths to the same answer.
+    // Everything decoded this time, so whatever failed above lost a race rather than being
+    // unreadable — and `compose_exact(&readable)` is then the call that just failed, for a third
+    // walk of the same paths.
     if readable.len() == all.len() {
         return None;
     }
     compose_exact(&readable)
 }
 
+/// The rect list for a set of `len` sources, or `None` where there is no layout for that many.
+fn layout_for(len: usize) -> Option<&'static [(u32, u32, u32, u32)]> {
+    COMPOSITE_LAYOUTS.get(len.checked_sub(1)?).copied()
+}
+
 /// One all-or-nothing pass, holding a single decode at a time — a four-cover collage never has
 /// four full-size sources in memory at once.
 fn compose_exact(sources: &[&Path]) -> Option<image::RgbImage> {
-    let rects = *COMPOSITE_LAYOUTS.get(sources.len().checked_sub(1)?)?;
+    let rects = layout_for(sources.len())?;
 
     let mut canvas = image::RgbImage::new(COMPOSITE_SIZE, COMPOSITE_SIZE);
     for (path, &(x, y, width, height)) in sources.iter().zip(rects) {
