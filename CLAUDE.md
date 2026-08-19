@@ -170,6 +170,8 @@ See `.claude/rules/tokio.md`. Project-specific:
 - **DB tests** — `DbPool::test_pool()` (in-memory); helpers in `src/database/queries/tests/helpers.rs` (`make_test_metadata`, `insert_test_track`, `setup_seeded_db`).
 - **Player DSP tests** — helpers in `src/player/tests/helpers.rs`: `TestSource` (in-memory rodio `Source`), `approx_eq`/`assert_approx`, `bits` (bit-identical passthrough without a float `==`), `fill_sine`. `crossfade_tests` takes none of it on purpose — pure predicates, tighter tolerance.
 - **UI tests** — `slint::testing` exists but UI coverage is intentionally light; test the **library** layer thoroughly.
+- **The suite assumes an LF checkout, and `.gitattributes` is what guarantees one.** Without it a clone under `core.autocrlf=true` rewrites line endings on the way out and thirteen tests fail on Windows alone: every source walk that splits on `"\n}\n"` or parses a rule's `---` frontmatter, the packaging text compared against `LICENSE`, and all seven updater-signature tests — git having quietly rewritten the *signed* fixtures, which is why they are pinned `binary` there rather than left to its text heuristic.
+- **A path in a fixture is joined, never spelled.** `format!("{dir}/x.mp3")` is a path only the CI runner has; the code under test looks the row up by what `Path::join` gave it, so a hand-spelled `/` seeds a row Windows can never match and the test fails for a reason that has nothing to do with what it is checking. Where the *separator itself* is the subject, build it from `MAIN_SEPARATOR_STR` so the assertion means something on both platforms — a literal `\` only ever fails on Linux, which is how `find_folder_for_path` shipped broken for every Windows install.
 
 ## Continuous Integration
 

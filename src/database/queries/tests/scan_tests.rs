@@ -363,6 +363,25 @@ async fn find_folder_for_path_matches_parent() -> Result<(), AppError> {
     Ok(())
 }
 
+/// Every other test here spells a POSIX path, which is every path on the CI runner and none
+/// on Windows — where a library folder is `C:\Music` and its tracks `C:\Music\a.mp3`. Building
+/// the pair from `MAIN_SEPARATOR_STR` asks the question each platform actually faces; a literal
+/// backslash would only ever fail on Linux, which is why the gap survived.
+#[tokio::test]
+async fn find_folder_for_path_matches_a_native_separator() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = DbPool::test_pool().await?;
+    let folder = format!("{SEP}music");
+    queries::folder::insert_folder(&db, &folder, true).await?;
+
+    let mut tx = db.write().begin().await?;
+    let folder_id =
+        queries::scan::find_folder_for_path(&mut tx, &format!("{folder}{SEP}song.mp3")).await?;
+    assert!(folder_id.is_some(), "a path spelled the way the OS spells it must resolve");
+    Ok(())
+}
+
 #[tokio::test]
 async fn find_folder_for_path_matches_nested() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;

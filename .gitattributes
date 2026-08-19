@@ -1,0 +1,26 @@
+# The repo stores LF and every checkout gets LF, whatever `core.autocrlf` says.
+# Without this, a Windows clone rewrites line endings on the way out and the
+# test suite goes red in three separate ways: source walks that split on "\n}\n"
+# stop matching, generated packaging text stops comparing equal to LICENSE, and
+# the signed updater fixtures below no longer hash to what was signed.
+* text=auto eol=lf
+
+# Signed payloads and their signatures — byte-exact or the verification tests
+# are testing nothing.
+*.bin    binary
+*.minisig binary
+*.b64    binary
+
+# Media, fonts and images. Git's own heuristic already catches most of these;
+# spelling them out is what keeps a new fixture from depending on it.
+*.flac binary
+*.mp3  binary
+*.m4a  binary
+*.ogg  binary
+*.wav  binary
+*.aiff binary
+*.ttf  binary
+*.png  binary
+*.jpg  binary
+*.webp binary
+*.ico  binary

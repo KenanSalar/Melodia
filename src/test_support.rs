@@ -485,6 +485,18 @@ pub(crate) fn reading_env<F: FnOnce() -> R, R>(body: F) -> R {
     body()
 }
 
+/// The home directory `services::redact_home` will actually resolve, if there is one.
+///
+/// A redaction test builds its fixture from this rather than spelling `/home/testuser` under a
+/// faked `$HOME`: `dirs::home_dir()` asks Win32 for the profile folder and never reads the
+/// environment, so the faked form is a fixture only Linux can honour and every such test was
+/// red on Windows. `None` leaves the caller nothing to assert against.
+pub(crate) fn resolved_home() -> Option<String> {
+    let home = dirs::home_dir()?;
+    let home = home.to_str()?;
+    (!home.is_empty()).then(|| home.to_owned())
+}
+
 #[cfg(test)]
 #[path = "tests/test_support_tests.rs"]
 mod tests;

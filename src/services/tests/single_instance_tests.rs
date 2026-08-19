@@ -5,8 +5,8 @@ use std::time::Duration;
 use tempfile::tempdir;
 
 use super::{
-    Claim, LENGTH_PREFIX_LEN, MAX_PAYLOAD_LEN, claim, decode_paths, encode_frame, name_is_taken_on,
-    serve, socket_name,
+    Claim, LENGTH_PREFIX_LEN, MAX_PAYLOAD_LEN, allow_missing_timeout, claim, decode_paths,
+    encode_frame, name_is_taken_on, serve, socket_name,
 };
 use crate::test_support::reading_env;
 
@@ -101,6 +101,25 @@ fn a_taken_name_is_recognised_in_both_spellings() {
          name that is merely held"
     );
     assert!(!taken_on(std::io::ErrorKind::NotFound, true));
+}
+
+/// The socket test below only ever exercises the transport the runner has, and the one that
+/// answers this question differently has no runner. Getting it wrong is not a dropped
+/// timeout: `forward` propagates, `claim` reads that as `Unenforced`, and the second launch
+/// opens a second window and a second writer onto one database.
+#[test]
+fn a_transport_without_timeouts_still_forwards() {
+    let refused = |kind| allow_missing_timeout(Err(std::io::Error::from(kind)));
+
+    assert!(
+        refused(std::io::ErrorKind::Unsupported).is_ok(),
+        "a Windows named pipe has no settable timeout, and that may not cost us the claim"
+    );
+    assert!(
+        refused(std::io::ErrorKind::BrokenPipe).is_err(),
+        "a real failure on the way to setting one is still a failure"
+    );
+    assert!(allow_missing_timeout(Ok(())).is_ok());
 }
 
 /// Keyed on the data directory, that being what two Melodias would corrupt.

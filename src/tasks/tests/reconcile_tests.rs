@@ -26,7 +26,9 @@ async fn seed_folder_with_track(dir: &std::path::Path) -> Result<(DbPool, i64), 
     let folder = dir.to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
 
-    let from = format!("{folder}/from.mp3");
+    // Joined, not interpolated: the handlers look the row up by the path `Path::join` gives
+    // them, so a hand-spelled `/` seeds a row Windows can never match.
+    let from = dir.join("from.mp3").to_string_lossy().into_owned();
     let id = insert_test_track(&db, &from, "Before", "Artist A", "Album One", "Rock").await?;
     Ok((db, id))
 }

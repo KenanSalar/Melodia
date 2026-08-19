@@ -122,6 +122,10 @@ The other way paths arrive from outside, and the one that can arrive before ther
   `a_taken_name_is_recognised_in_both_spellings` can ask both ways. A genuine ACL denial takes the
   same arm and fails at the connect, landing back on `Unenforced`, which is where it belonged
   anyway.
+  **Recognising the name is only half of it — the forward has to survive the transport too.** A
+  named pipe has no settable I/O timeout, so `forward`'s deadline came back `Unsupported` and
+  propagated, landing on the same `Unenforced` arm and the same second window; `allow_missing_timeout`
+  carries that argument and is called at all three deadline sites.
 
 - **The accept loop is a detached `std::thread`, not `spawn_blocking`**, as `discord/ipc.rs` runs
   its transport: a parked blocking-pool tenant is what the 32-slot cap exists to prevent. Its

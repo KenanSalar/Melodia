@@ -194,10 +194,26 @@ fn socket_name(data_dir: &Path) -> io::Result<Name<'static>> {
     format!("melodia-{}.sock", &digest.to_hex()[..32]).to_ns_name::<GenericNamespaced>()
 }
 
+/// Apply an I/O deadline, tolerating a transport that has none.
+///
+/// The timeouts guard against a peer that connects and then stops reading, and every
+/// transport but one honours them: `interprocess`'s Windows named pipes refuse outright
+/// with `ErrorKind::Unsupported`. Propagating that is far worse than going without, because
+/// [`claim`] reads a failed [`forward`] as `Unenforced` and boots a **second** Melodia — so
+/// the launch that should have handed its files over opens a second window and a second
+/// writer onto one database, on the platform whose installer registers the file
+/// associations. Every other failure still propagates.
+fn allow_missing_timeout(applied: io::Result<()>) -> io::Result<()> {
+    match applied {
+        Err(e) if e.kind() == io::ErrorKind::Unsupported => Ok(()),
+        other => other,
+    }
+}
+
 fn forward(name: Name<'_>, files: &[PathBuf]) -> io::Result<()> {
     let mut stream = Stream::connect(name)?;
-    stream.set_send_timeout(Some(IO_TIMEOUT))?;
-    stream.set_recv_timeout(Some(IO_TIMEOUT))?;
+    allow_missing_timeout(stream.set_send_timeout(Some(IO_TIMEOUT)))?;
+    allow_missing_timeout(stream.set_recv_timeout(Some(IO_TIMEOUT)))?;
     stream.write_all(&encode_frame(files))?;
 
     // Block until the primary closes, which it does the moment it has the whole
@@ -210,7 +226,7 @@ fn forward(name: Name<'_>, files: &[PathBuf]) -> io::Result<()> {
 }
 
 fn read_payload(mut stream: Stream) -> io::Result<Vec<String>> {
-    stream.set_recv_timeout(Some(IO_TIMEOUT))?;
+    allow_missing_timeout(stream.set_recv_timeout(Some(IO_TIMEOUT)))?;
 
     let mut declared = [0_u8; LENGTH_PREFIX_LEN];
     stream.read_exact(&mut declared)?;

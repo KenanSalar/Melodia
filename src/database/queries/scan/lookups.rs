@@ -20,14 +20,24 @@ pub async fn track_exists_by_path(
 
 /// Find the library folder that contains the given file path (longest prefix match).
 /// Returns `None` if the path doesn't belong to any known folder.
+///
+/// **The separator is bound, never spelled.** Paths are stored exactly as the OS handed
+/// them over, so a Windows library folder is `C:\Music` and its tracks `C:\Music\a.mp3` —
+/// against a hardcoded `'/'` that answers `None` for every file on the platform, and each
+/// caller reads that as "outside the library": tag writes and MBID backfill refuse the
+/// file, and the watcher drops a create, rename or modify on the floor. `/` stays in the
+/// comparison unconditionally rather than being swapped out, Win32 accepting it as a
+/// separator too and a path that arrived through a playlist or a URI carrying it.
 pub async fn find_folder_for_path(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
 ) -> Result<Option<i64>, AppError> {
     let id = sqlx::query_scalar::<_, i64>(
-        "SELECT id FROM folders WHERE SUBSTR(?, 1, LENGTH(path) + 1) = path || '/' ORDER BY LENGTH(path) DESC LIMIT 1",
+        "SELECT id FROM folders WHERE SUBSTR(?, 1, LENGTH(path) + 1) IN (path || '/', path || ?) \
+         ORDER BY LENGTH(path) DESC LIMIT 1",
     )
     .bind(file_path)
+    .bind(std::path::MAIN_SEPARATOR_STR)
     .fetch_optional(&mut **tx)
     .await?;
     Ok(id)
