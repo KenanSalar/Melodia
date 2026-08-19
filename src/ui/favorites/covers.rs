@@ -118,8 +118,8 @@ impl FavoritesUi {
     }
 }
 
-/// Retune both grid-tier cover caches to the real display resolution. Called once at startup after
-/// the winit window is live, alongside the entity grids' own tuning — the tabs draw the same card
+/// Retune both grid-tier cover caches to the real display resolution. Called after `app.show()`
+/// and again on every resize, alongside the entity grids' own tuning — the tabs draw the same card
 /// at the same size, so they take the same band.
 ///
 /// Both, even though only one is ever warm: which tab the user resumes on isn't known until

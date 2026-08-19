@@ -1,6 +1,28 @@
 use super::*;
 use crate::test_support::write_test_png;
 
+const GRID_GEOMETRY: &str = include_str!("../../../melodia-ui/ui/components/grid-geometry.slint");
+
+/// **Both answers in this module are built out of `GridGeometry`'s defaults**, and Slint declares
+/// them where Rust can only restate them. Nothing else holds the two trees together: a `min-card-w`
+/// nudged in the component silently moves every tier size and every cap, in the direction that
+/// leaves the grid's overflow on placeholders.
+#[test]
+fn the_card_constants_are_the_ones_the_component_declares() {
+    for (name, value) in [
+        ("min-card-w", MIN_CARD_W),
+        ("gap", GAP),
+        ("card-text-h", CARD_TEXT_H),
+    ] {
+        let declared = format!("in property <length> {name}: {value}px;");
+        assert!(
+            GRID_GEOMETRY.contains(&declared),
+            "`grid-geometry.slint` no longer declares `{declared}` — Rust sizes every grid tier \
+             and cap off that number"
+        );
+    }
+}
+
 fn paths(of: &[Option<&str>], cap: usize) -> Vec<String> {
     unique_artwork_paths(of.iter().copied(), cap)
         .iter()
@@ -94,16 +116,18 @@ fn the_ceiling_is_bytes_rather_than_entries() {
     }
 }
 
+/// `GridGeometry`'s own `card-w`, which production no longer computes — it sizes to the widest
+/// card a column count can pack, and this is what that bound has to clear.
+fn drawn_card_width(body_w: u32) -> u32 {
+    let cols = (body_w.saturating_sub(GAP) / (MIN_CARD_W + GAP)).max(1);
+    body_w.saturating_sub((cols + 1) * GAP) / cols
+}
+
 /// `GridGeometry`'s own arithmetic, so the pin below measures the cap against the number of
 /// cards the grid really mounts rather than against a restated guess.
 fn mounted_cards(logical_w: u32, logical_h: u32) -> u32 {
-    const MIN_CARD_W: u32 = 180;
-    const GAP: u32 = 20;
-    const CARD_TEXT_H: u32 = 46;
-
-    let cols = ((logical_w.saturating_sub(GAP)) / (MIN_CARD_W + GAP)).max(1);
-    let card_w = logical_w.saturating_sub((cols + 1) * GAP) / cols;
-    let row_h = card_w + CARD_TEXT_H + GAP;
+    let cols = (logical_w.saturating_sub(GAP) / (MIN_CARD_W + GAP)).max(1);
+    let row_h = drawn_card_width(logical_w) + CARD_TEXT_H + GAP;
     // `+ 1` for the partially-visible row, matching `cover_cap`.
     cols * (logical_h.div_ceil(row_h) + 1)
 }
@@ -152,13 +176,12 @@ fn the_cap_covers_the_cards_the_grid_mounts() {
 /// displays hold every buffer at roughly twice the pixels it drew.
 #[test]
 fn the_tier_follows_the_card_it_draws() {
-    const MIN_CARD_W: u32 = 180;
-
-    // Every wide panel packs to about the same card, so they land on one step however big the
-    // display is. That is the case the old constants over-paid for.
+    // A wider panel packs smaller cards, so at a fixed scale the tier never grows with the
+    // display. That is the case the old constants over-paid for, and the whole 1× range sits
+    // under the 256 they spent on it.
     let wide = super::cover_size(1920, 1.0);
-    assert_eq!(super::cover_size(2560, 1.0), wide);
-    assert_eq!(super::cover_size(3840, 1.0), wide);
+    assert!(super::cover_size(2560, 1.0) <= wide);
+    assert!(super::cover_size(3840, 1.0) <= super::cover_size(2560, 1.0));
     assert!(wide >= MIN_CARD_W, "a {wide}px tier can't cover a {MIN_CARD_W}px card");
 
     // Scale multiplies what the card occupies, so the tier follows it up.
@@ -172,6 +195,70 @@ fn the_tier_follows_the_card_it_draws() {
 
     // Nothing may exceed what the store keeps, however extreme the pairing.
     assert_eq!(super::cover_size(400, 4.0), crate::media::artwork::STORE_MAX_DIM);
+}
+
+/// **The tier has to hold still through a resize drag.** `WindowChrome.display-changed` re-derives
+/// it on every winit `Resized` and a genuine `set_thumb_size` clears the whole tier, so a size
+/// that flips between two steps as the window moves drops every decoded cover and repaints the
+/// grid as placeholders, over and over, under the drag.
+///
+/// Sizing to the widest card a column count can pack is what holds it flat. The card itself
+/// sweeps `min-card-w` up to that bound inside *every* column band, so a tier tracking it crosses
+/// a step boundary twice a band — which is a wipe per crossing, not a rounding difference.
+#[test]
+fn the_tier_holds_still_through_a_resize_drag() {
+    const MAX_RETUNES: usize = 8;
+
+    for scale in [1.0, 1.25, 1.5, 2.0] {
+        let mut retunes = 0;
+        let mut previous = None;
+        for logical_w in 800..=3840 {
+            let size = super::cover_size(logical_w, scale);
+            if previous.is_some_and(|prev| prev != size) {
+                retunes += 1;
+            }
+            previous = Some(size);
+        }
+        assert!(
+            retunes <= MAX_RETUNES,
+            "a drag from 800 to 3840 logical px at {scale}× retunes the tier {retunes} times, \
+             past the {MAX_RETUNES} it can absorb — each one clears every grid's covers"
+        );
+    }
+}
+
+/// **The tier may not land under the card the grid draws.** Rust measures the *window* while the
+/// grid gets the body, and the sidebar between them is the user's to drag across a range no
+/// window measurement sees. `BODY_CHROME_W` assumes the widest of them so the estimate can only
+/// run wide; the other way round every card is upscaled from a tier too small for it, and
+/// `FemtoVG` minifies bilinear with no mipmaps.
+#[test]
+fn the_tier_covers_the_card_at_every_sidebar_width() {
+    // `Theme.sidebar-collapsed-w` through `sidebar-max-w`, plus the page's `pad-lg` at both edges.
+    const SIDEBAR_WIDTHS: [u32; 5] = [46, 105, 180, 240, 400];
+    const PAGE_PAD: u32 = 32;
+
+    for sidebar in SIDEBAR_WIDTHS {
+        for logical_w in (800_u32..=3840).step_by(7) {
+            let Some(body) = logical_w.checked_sub(sidebar + PAGE_PAD) else {
+                continue;
+            };
+            for scale in [1.0, 1.5, 2.0] {
+                let drawn = f64::from(drawn_card_width(body)) * scale;
+                let tier = super::cover_size(logical_w, scale);
+                // The store's own cap is the one honest exception — past it there is no sharper
+                // source left to decode.
+                if tier == crate::media::artwork::STORE_MAX_DIM {
+                    continue;
+                }
+                assert!(
+                    f64::from(tier) >= drawn,
+                    "a {logical_w}px window beside a {sidebar}px sidebar draws {drawn} px of card \
+                     at {scale}× against a {tier}px tier — the covers upscale"
+                );
+            }
+        }
+    }
 }
 
 /// **Neither generation may decode on the calling thread.** 0 means the tier was cleared when

@@ -163,8 +163,8 @@ pub fn repaint_covers(ui: &AppWindow) {
     }
 }
 
-/// Size the card cover cache against the display it will be drawn on. Called once
-/// from `install_views`, after the winit window is live.
+/// Size the card cover cache against the display it will be drawn on. Called after `app.show()`
+/// and again on every resize, off `WindowChrome.display-changed`.
 pub fn tune_cache_for_display(app: &AppWindow, browse_ui: &BrowseUi) {
     let cap = grid_prewarm::cover_cap_for_window(app, DEFAULT_GRID_COVER_CAP);
     browse_ui.grid_covers.resize(cap);

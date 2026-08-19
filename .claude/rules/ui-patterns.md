@@ -583,24 +583,32 @@ silently miss the other.
   not stepped off the scale factor.** `GridGeometry` packs toward `min-card-w`, so a card is
   *smallest* on the panels mounting the most of them: the two constants this replaced sized the
   wide case generously and doubled it for `HiDPI`, which made the displays paying for the most
-  buffers hold each one at roughly twice the pixels it drew. `card_width × scale` is the whole
+  buffers hold each one at roughly twice the pixels it drew. `widest_card × scale` is the whole
   question, clamped to `STORE_MAX_DIM`, which is what caps a single-column panel's sharpness.
-  - **Quantized to a step, because a genuine `set_thumb_size` clears the tier.** A size tracking
-    the card continuously would wipe and re-decode every grid on every column change of a resize
-    drag. The ladder is also what lets Rust measure the *window* where the grid gets the body:
-    the two land on the same step at every size either can take.
+  - **The bound, never the card itself.** `card-w` sweeps `min-card-w` up to
+    `min-card-w + pitch/cols` inside *every* column band, so a tier tracking it crosses a step
+    boundary twice a band — and `display-changed` re-derives on every winit `Resized` while a
+    genuine `set_thumb_size` clears the whole tier, so each crossing wipes every grid's covers
+    mid-drag. Sizing to the band's upper bound is what makes the answer flat across a drag rather
+    than merely close, and the step is what collapses the column counts a desktop passes through
+    into a handful of tiers.
+  - **The window is not the body, and `BODY_CHROME_W` is the gap.** The sidebar between them is
+    the user's to drag from `sidebar-collapsed-w` to `sidebar-max-w`, a range no window
+    measurement sees, so the estimate assumes the *widest* one: over-subtracting costs a tier one
+    step too large, under-subtracting puts every card on an upscale, and `FemtoVG` minifies
+    bilinear with no mipmaps.
   - `GRID_COVER_FALLBACK` is what a tier is *built* at, before any geometry exists. A fallback,
-    not a tier size — everything decoded at it is discarded by the first retune, so it wants the
-    cheap end.
+    not a tier size, but sized for the run where the deferred retune never schedules and it stays
+    the live tier.
 
 - **The cap and the size are read together**, in the same `tune_cache_for_display`
   call — two halves of one budget, and both are answers about the
-  display. `GRID_COVER_SIZE` replaced a `448` copied into five files, each justifying it in its own
+  display. The derived size replaced a `448` copied into five files, each justifying it in its own
   doc comment off the same claim that flex-filled cards "run well past 260 px". They don't:
   `GridGeometry` packs toward `min-card-w`, so a card is **largest in a narrow panel** and lands
   near 190 px on a wide one. A tier spelling its own size is the thing to reach for this instead
-  of. Needs no winit round trip and has no failure arm, unlike the cap — the scale factor is
-  Slint's own. `cover_thumbs::row_cover_size` is the row tier's twin, wired at each of its two
+  of. Needs no winit round trip, the scale factor being Slint's own, and shares the cap's
+  zero-extent bail. `cover_thumbs::row_cover_size` is the row tier's twin, wired at each of its two
   construction sites rather than through a tune hook, neither having one.
 
 - **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered

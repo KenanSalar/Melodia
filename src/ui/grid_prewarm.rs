@@ -67,7 +67,7 @@ pub fn cover_cap(
     thumb_size: u32,
     fallback: NonZeroUsize,
 ) -> NonZeroUsize {
-    /// The same card's row pitch at that width: `min-card-w + card-text-h + gap`.
+    /// The row pitch beside [`CARD_PITCH_W`]'s column one, the tile being square above its text.
     const ROW_PITCH_H: u32 = MIN_CARD_W + CARD_TEXT_H + GAP;
     const MIN_CAP: usize = 32;
     /// Ceiling on what one grid tier may hold, in bytes of RGB8. Set at what the old
@@ -76,6 +76,8 @@ pub fn cover_cap(
     /// section leave.
     const MAX_TIER_BYTES: usize = 56 * 1024 * 1024;
 
+    // Ceiling where [`widest_card`] floors: the cap has to cover what is mounted, so an
+    // over-count is the safe direction here and the wrong one there.
     let cols = logical_w.div_ceil(CARD_PITCH_W).max(1);
     // `+ 1` for the partially-visible row — the only scroll headroom.
     let rows = logical_h.div_ceil(ROW_PITCH_H) + 1;
@@ -99,45 +101,63 @@ const CARD_TEXT_H: u32 = 46;
 /// The pitch `GridGeometry` packs columns at.
 const CARD_PITCH_W: u32 = MIN_CARD_W + GAP;
 
+/// What the window keeps before the grid's body starts: the widest the sidebar can be dragged
+/// (`Theme.sidebar-max-w`) plus the page's `pad-lg` at both edges.
+///
+/// Subtracted rather than ignored, the sidebar being the user's to drag while only the window is
+/// measurable from here. Assuming the *widest* one is the safe direction: over-subtracting costs
+/// a tier one step too large, under-subtracting puts the cards on an upscale.
+const BODY_CHROME_W: u32 = 400 + 2 * 16;
+
 /// The size a tier is built at, before any geometry is known.
 ///
 /// A **fallback, not a tier size**: everything decoded at it is discarded the moment
-/// [`cover_size_for_window`] retunes, a genuine change clearing the cache. So it wants to be the
-/// cheap end rather than the safe-and-large one.
+/// [`cover_size_for_window`] retunes. Sized for the run where that never happens — the deferred
+/// retune in `boot::ui_setup` can fail to schedule — so it covers a wide panel's card rather than
+/// taking the cheap end.
 pub const GRID_COVER_FALLBACK: u32 = 256;
 
 /// Steps the derived size falls on. Quantized because [`crate::media::cover_thumbs::CoverThumbs`]
-/// **clears the whole tier** when the size genuinely moves: a size that tracked the card width
-/// continuously would wipe and re-decode every grid on every column change of a resize drag.
-const SIZE_STEP: u32 = 64;
+/// **clears the whole tier** when the size genuinely moves, and `WindowChrome.display-changed`
+/// re-derives it on every winit `Resized`: the answer has to be flat across a resize drag, not
+/// merely close. [`widest_card`] is what makes it flat; the step is what collapses the column
+/// counts a desktop drags through into a handful of tiers.
+const SIZE_STEP: u32 = 32;
 
-/// What `GridGeometry` packs a card to in a panel of this logical width.
+/// The widest card `GridGeometry` can pack into the body of a window this wide.
 ///
-/// Rust measures the *window* where the grid gets the body, so this runs a little wide or a
-/// little narrow depending on how the column count falls out — and it does not matter, because
-/// the [`SIZE_STEP`] ladder above absorbs the difference: window and body land on the same step
-/// at every size either can take.
-fn card_width(logical_w: u32) -> u32 {
-    let cols = logical_w.saturating_sub(GAP) / CARD_PITCH_W;
-    let cols = cols.max(1);
-    (logical_w.saturating_sub(GAP) / cols).saturating_sub(GAP).max(MIN_CARD_W)
+/// The bound rather than the card itself: `card-w` climbs from `min-card-w` to this as a column
+/// band fills, so sizing to the bound holds the tier flat across the band and steps only where
+/// the column count really moves. It also can't land under what the grid draws, which is the
+/// failure that shows — `FemtoVG` minifies bilinear with no mipmaps, so a soft tile is the worse
+/// of the two.
+fn widest_card(logical_w: u32) -> u32 {
+    let body = logical_w.saturating_sub(BODY_CHROME_W).max(CARD_PITCH_W);
+    let cols = (body.saturating_sub(GAP) / CARD_PITCH_W).max(1);
+    MIN_CARD_W + CARD_PITCH_W / cols
 }
 
 /// Square decode size (px) for a grid-card tile on this window.
 ///
-/// **Derived from what the card is actually drawn at**, rather than stepped off the scale factor
-/// alone. The two constants this replaced were a tier size for the wide case and twice it for
-/// `HiDPI`, which got the trade backwards: a card is *smallest* on the panels that mount the most
-/// of them, so the displays paying for the most buffers were the ones holding each one at roughly
-/// twice the pixels it drew. The physical size the card occupies is the whole question, and it is
-/// `card_width × scale`.
+/// **Derived from the card the grid draws**, rather than stepped off the scale factor alone. The
+/// two constants this replaced were a tier size for the wide case and twice it for `HiDPI`, which
+/// got the trade backwards: a card is *smallest* on the panels that mount the most of them, so
+/// the displays paying for the most buffers were the ones holding each one at roughly twice the
+/// pixels it drew. The physical size the card occupies is the whole question, and it is
+/// `widest_card × scale`.
 ///
 /// Clamped to [`STORE_MAX_DIM`], past which every tier would upscale from a source the store
 /// already discarded — which is also the ceiling on how sharp a single-column panel can get.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "clamped into `[MIN_CARD_W, STORE_MAX_DIM]` ahead of the cast"
+)]
 pub fn cover_size(logical_w: u32, scale: f64) -> u32 {
-    let physical = f64::from(card_width(logical_w)) * if scale > 0.0 { scale } else { 1.0 };
-    let physical = pixel_extent(physical).max(MIN_CARD_W);
-    physical.div_ceil(SIZE_STEP).saturating_mul(SIZE_STEP).clamp(SIZE_STEP, STORE_MAX_DIM)
+    let scale = if scale > 0.0 { scale } else { 1.0 };
+    let physical = (f64::from(widest_card(logical_w)) * scale)
+        .clamp(f64::from(MIN_CARD_W), f64::from(STORE_MAX_DIM)) as u32;
+    physical.div_ceil(SIZE_STEP).saturating_mul(SIZE_STEP).min(STORE_MAX_DIM)
 }
 
 /// Grid decode size for the display this window is on. Unlike [`cover_cap_for_window`]
@@ -151,24 +171,6 @@ pub fn cover_size_for_window(app: &AppWindow) -> u32 {
         return GRID_COVER_FALLBACK;
     }
     cover_size(logical_dim(physical_w, scale), scale)
-}
-
-/// A scaled extent back to whole pixels, floored at one — a zero-width tile is a resize the
-/// resampler refuses, which reads downstream as an undecodable cover.
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "a card extent stays well below u32::MAX; this is the saturating boundary"
-)]
-fn pixel_extent(value: f64) -> u32 {
-    let rounded = value.round();
-    if rounded.is_nan() || rounded <= 0.0 {
-        1
-    } else if rounded >= f64::from(u32::MAX) {
-        u32::MAX
-    } else {
-        rounded as u32
-    }
 }
 
 /// A physical pixel extent and DPI scale as a logical extent. The saturating boundary
