@@ -2,8 +2,8 @@ name: Linux system deps
 description: >-
   Install Melodia's Linux build/test system dependencies (Slint femtovg fonts,
   ALSA, xkbcommon, Wayland, D-Bus, OpenSSL) with Azure apt-mirror failover and
-  a retry loop. Mirrors the provisioning used by release.yml (minus the
-  packaging-only `rpm`).
+  a time-bounded retry loop. Mirrors the provisioning used by release.yml (minus
+  the packaging-only `rpm`).
 
 runs:
   using: composite
@@ -21,19 +21,43 @@ runs:
           /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
 
     # Defence in depth over the mirror swap above, for short hiccups.
+    #
+    # The retry loop can only see an exit code, and a mirror that accepts the
+    # connection then stops sending produces none: apt carries no overall
+    # deadline, `-qq` prints nothing while it waits, and the only bound outside
+    # this step is GitHub's six-hour job cap. Hence the `timeout`s, sized for the
+    # failure rather than the happy path; a 124 or 137 in the warning below is
+    # one of them firing rather than apt itself failing. `-k` because TERM is
+    # catchable and apt defers it around dpkg, and `sudo timeout` rather than
+    # `timeout sudo` because an unprivileged timeout cannot signal what sudo has
+    # already made root.
     - name: Install Linux system deps
       shell: bash
       run: |
         sudo systemctl stop unattended-upgrades || true
+
+        # Acquire timeouts are per-connection idle limits, not transfer budgets:
+        # 15s without a byte is a dead connection, whatever the download's size.
+        apt_opts=(
+          -o DPkg::Lock::Timeout=60
+          -o Acquire::Retries=3
+          -o Acquire::http::Timeout=15
+        )
         for attempt in 1 2 3; do
-          if sudo apt-get update -qq -o DPkg::Lock::Timeout=60 && \
-             sudo apt-get install -qq -y -o DPkg::Lock::Timeout=60 \
-               libasound2-dev libxkbcommon-dev libfontconfig1-dev libfreetype-dev \
-               libwayland-dev libdbus-1-dev libssl-dev pkg-config; then
+          rc=0
+          sudo timeout -k 30 120 apt-get update -qq "${apt_opts[@]}" && \
+            sudo timeout -k 30 240 apt-get install -qq -y "${apt_opts[@]}" \
+              libasound2-dev libxkbcommon-dev libfontconfig1-dev libfreetype-dev \
+              libwayland-dev libdbus-1-dev libssl-dev pkg-config || rc=$?
+          if [ "$rc" -eq 0 ]; then
             exit 0
           fi
-          echo "::warning::apt install (system deps) attempt $attempt failed; retrying in 15s"
-          sleep 15
+          echo "::warning::apt install (system deps) attempt $attempt failed (exit $rc)"
+          # A kill can land mid-unpack, which the next apt refuses to work past.
+          sudo dpkg --configure -a || true
+          if [ "$attempt" -lt 3 ]; then
+            sleep 15
+          fi
         done
         echo "::error::apt install (system deps) failed after 3 attempts"
         exit 1
