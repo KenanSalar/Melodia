@@ -1,6 +1,8 @@
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::{PlaybackCheck, compute_position, evaluate_playback_check, media_to_output_ms};
+use crate::test_support::ASSETS_DIR;
 
 // --- evaluate_playback_check ---
 
@@ -121,8 +123,8 @@ fn seek_round_trips_through_compute_position() {
 
 // --- probe_duration ---
 
-fn asset(name: &str) -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/assets").join(name)
+fn asset(name: &str) -> PathBuf {
+    Path::new(ASSETS_DIR).join(name)
 }
 
 /// The function exists for the containers lofty can't identify, so those are the cases worth
@@ -135,10 +137,10 @@ fn probe_duration_reads_the_containers_lofty_cannot() {
     }
 }
 
-/// Two paths that demux and then need a codec the build has to have registered: AIFF-C's A-law,
-/// past the compression types symphonia's common chunk accepts, and the MS ADPCM that
+/// Two files that demux and then need a codec registered separately from their container:
+/// AIFF-C's A-law, which the common chunk resolves and `symphonia-pcm` decodes, and the MS ADPCM
 /// `symphonia-adpcm` exists for. Losing either leaves a file that scans, lists, and then refuses
-/// to play — which nothing reading tags would notice.
+/// to play, which nothing reading tags would notice.
 #[test]
 fn probe_duration_decodes_past_the_container_to_the_codec() {
     for fixture in ["silence.aifc", "silence-adpcm.wav"] {

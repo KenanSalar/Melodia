@@ -15,9 +15,10 @@ use crate::error::AppError;
 use crate::media::artwork;
 use crate::media::self_writes::SelfWrites;
 use crate::media::tag_writer::{ArtworkEdit, FieldEdit, TagEdit};
+use crate::test_support::ASSETS_DIR;
 
 fn assets_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets")
+    PathBuf::from(ASSETS_DIR)
 }
 
 /// Copy a checked-in fixture into `tmp` and hand back the working copy.
