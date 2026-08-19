@@ -115,10 +115,11 @@ Melodia is a modern, local-first desktop music player with a Material
 3-inspired interface. Your music collection stays entirely on your own
 machine, with no accounts, streaming or cloud. It pairs a Slint user
 interface with a pure-Rust backend: gapless playback via Rodio and
-Symphonia (MP3, FLAC, M4A/M4B, Ogg Vorbis, WAV, AIFF, Matroska and CAF), a fast local
-SQLite library with full-text search, browsing by album, artist, genre
-and playlist, OS media controls (MPRIS), and pluggable themes including
-system light/dark and Material You."""
+Symphonia (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis, WAV,
+AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
+full-text search, browsing by album, artist, genre and playlist, OS
+media controls (MPRIS), and pluggable themes including system light/dark
+and Material You."""
 # The reverse-DNS dest names match the AppStream component id, which is what
 # makes KDE Discover / GNOME Software merge the desktop entry with the MetaInfo
 # component instead of listing them separately.

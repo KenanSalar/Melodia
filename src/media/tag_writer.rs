@@ -9,8 +9,8 @@
 //! ## Why the primary tag, and only the primary tag
 //!
 //! [`TaggedFileExt::primary_tag_type`] is the format's canonical tag — `ID3v2`,
-//! `VorbisComments` or `Ilst`, the whole set across the seven containers Melodia scans, and all
-//! three map every field this module exposes. **Never `first_tag_mut()`**, which
+//! `VorbisComments` or `Ilst`, the whole set across every container Melodia scans that lofty can
+//! tag, and all three map every field this module exposes. **Never `first_tag_mut()`**, which
 //! `.claude/rules/library-data.md` argues; creating a fresh primary tag instead also matches the
 //! reader (`metadata.rs` reads `primary_tag().or(first_tag())`), so the next `extract_metadata`
 //! reads back what we wrote. **Never [`Tag::re_map`]** either — it discards the format-specific
@@ -38,7 +38,7 @@ use lofty::prelude::{Accessor, ItemKey};
 use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
-use super::image_decode;
+use super::{image_decode, metadata};
 use crate::error::AppError;
 
 /// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and a tag holding a
@@ -338,13 +338,10 @@ pub fn apply_to_file(
     edit: &TagEdit,
     picture: Option<&Picture>,
 ) -> Result<UnsupportedFields, AppError> {
-    // Default `ParseOptions`, so `read_cover_art` stays on. NEVER reuse `extract_metadata`'s
-    // `skip_artwork` branch: it skips picture frames at *parse*, and pictures live in
-    // `Tag.pictures` rather than the companion tag — so `save_to_path` would silently delete
-    // every embedded picture.
-    let mut tagged = lofty::probe::read_from_path(path).map_err(|e| {
-        AppError::metadata(format!("Failed to read tags from {}", path.display()), e)
-    })?;
+    // `skip_artwork: false` is load-bearing rather than a default: skipping picture frames at
+    // *parse* leaves `Tag.pictures` empty, and `save_to_path` writes that emptiness back over
+    // every embedded picture the file had.
+    let mut tagged = metadata::read_tags(path, false)?;
 
     let tag_type = tagged.primary_tag_type();
 
@@ -431,9 +428,7 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
 /// falling back to `UnsyncLyrics` — the mirror of what [`apply_edit`] writes,
 /// `ID3v2` having no `Lyrics` mapping. Blocking; call under `spawn_blocking`.
 pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
-    let tagged = lofty::probe::read_from_path(path).map_err(|e| {
-        AppError::metadata(format!("Failed to read tags from {}", path.display()), e)
-    })?;
+    let tagged = metadata::read_tags(path, true)?;
     let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {
         return Ok(None);
     };

@@ -103,7 +103,11 @@ fn sniff_file_type(path: &Path) -> Option<FileType> {
 /// way reads as an unknown format. Asking the header covers it. Only asked when the
 /// extension resolved to nothing, so every file that parses today still parses the same
 /// way, and the extra open stays off the scan's hot path.
-fn read_tags(path: &Path, skip_artwork: bool) -> Result<TaggedFile, AppError> {
+///
+/// Every lofty open in the tree comes through here, `media::tag_writer` included: a file the
+/// scan identifies by its header and the tag editor refuses by its extension is a track whose
+/// tags are visible and unsavable.
+pub(crate) fn read_tags(path: &Path, skip_artwork: bool) -> Result<TaggedFile, AppError> {
     // Embedded pictures are the expensive half of a parse, and a rescan already has them.
     let parse_opts = lofty::config::ParseOptions::new().read_cover_art(!skip_artwork);
 

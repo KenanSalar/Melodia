@@ -718,6 +718,26 @@ fn ogg_round_trips_a_full_edit() -> Result<(), AppError> {
     Ok(())
 }
 
+/// `.oga` is the one extension lofty's own map has no entry for, so every open of one resolves
+/// through the reader's header sniff. The scan already read these; until the writer shared that
+/// opener, saving an edit to one failed as an unknown format and so did the Lyrics tab.
+#[test]
+fn an_oga_round_trips_a_full_edit_despite_its_extension() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let audio = tmp.path().join("quiet.oga");
+    std::fs::copy(assets_dir().join("silence.ogg"), &audio)?;
+
+    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(unsupported.is_empty(), "VorbisComments maps every field: {:?}", unsupported.0);
+
+    let tagged = crate::media::metadata::read_tags(&audio, false)?;
+    let tag = tagged.primary_tag().ok_or_else(|| missing("primary tag"))?;
+    assert_eq!(tag.tag_type(), TagType::VorbisComments);
+    assert_full_edit_landed(tag)?;
+    assert_eq!(read_lyrics(&audio)?.as_deref(), Some("la la la"));
+    Ok(())
+}
+
 #[test]
 fn aiff_round_trips_a_full_edit_through_id3v2() -> Result<(), AppError> {
     let tmp = TempDir::new()?;

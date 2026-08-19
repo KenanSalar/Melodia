@@ -121,13 +121,30 @@ fn seek_round_trips_through_compute_position() {
 
 // --- probe_duration ---
 
-/// The function exists for the containers lofty can't identify, so Matroska is the case
-/// worth pinning: without this answer their rows reach the library reading 0:00.
+fn asset(name: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/assets").join(name)
+}
+
+/// The function exists for the containers lofty can't identify, so those are the cases worth
+/// pinning: without this answer their rows reach the library reading 0:00.
 #[test]
-fn probe_duration_reads_a_container_lofty_cannot() {
-    let mka = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/assets/silence.mka");
-    let probed = super::probe_duration(&mka);
-    assert_eq!(probed.map(|d| d.as_secs()), Some(1));
+fn probe_duration_reads_the_containers_lofty_cannot() {
+    for fixture in ["silence.mka", "silence.caf"] {
+        let probed = super::probe_duration(&asset(fixture));
+        assert_eq!(probed.map(|d| d.as_secs()), Some(1), "{fixture}");
+    }
+}
+
+/// Two paths that demux and then need a codec the build has to have registered: AIFF-C's A-law,
+/// past the compression types symphonia's common chunk accepts, and the MS ADPCM that
+/// `symphonia-adpcm` exists for. Losing either leaves a file that scans, lists, and then refuses
+/// to play — which nothing reading tags would notice.
+#[test]
+fn probe_duration_decodes_past_the_container_to_the_codec() {
+    for fixture in ["silence.aifc", "silence-adpcm.wav"] {
+        let probed = super::probe_duration(&asset(fixture));
+        assert_eq!(probed.map(|d| d.as_secs()), Some(1), "{fixture}");
+    }
 }
 
 #[test]

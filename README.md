@@ -140,6 +140,8 @@ MP3, FLAC, M4A/M4B (AAC and ALAC), Ogg Vorbis (`.ogg`, `.oga`), WAV, AIFF/AIFF-C
 
 Matroska and CAF carry no tags Melodia can read, so those tracks are listed under their filename with the duration taken from the file itself. Anything whose tags are too damaged to parse is listed the same way rather than being skipped.
 
+Opus is not decoded yet ([#35](https://github.com/KenanSalar/Melodia/issues/35)). Because `.oga` and `.mka` are containers Melodia does scan, an Opus track inside one is still added to your library; it just won't play until that lands.
+
 ### Internationalization
 - 7 locales: English, German, French, Spanish, Turkish, Greek, Italian
 - Slint-native `@tr()` translations with bundled `.po` files compiled into the binary
