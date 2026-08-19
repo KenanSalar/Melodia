@@ -33,6 +33,12 @@ the OS owns has to be attached late or not at all on at least one platform.
   `WindowChrome.drag-region-hover-changed`; `on_winit_window_event` intercepts
   `MouseInput { Pressed, Left }` when that atomic is true → `drag_window()` → `PreventDefault`.
 
+- **On Win32 a resize or move drag parks winit's loop, and with it every Slint `Timer` and
+  `changed` handler**, so the whole responsive layer — the miniplayer swap, grid column counts,
+  each `changed width` mirror — waits for the button to come up. `winit_filter::pump_parked_loop`
+  is what keeps them running and carries the argument; a new drag-reachable winit arm is where a
+  third pump site would go.
+
 - **`Window.no-frame` is sticky** — read once at first show. The Native Title Bar toggle restarts
   via `Dialog` `"restart-titlebar"` → `window_chrome::request_respawn_and_quit`; hydrate
   `Theme.use-native-titlebar` *before* `app.run()`.

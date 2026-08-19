@@ -17,7 +17,7 @@ fn main() {
 /// shell pulls this for the titlebar's top-left glyph, the taskbar button, the
 /// Alt-Tab thumbnail badge, and the Explorer file icon. Without an embedded
 /// resource the running window falls back to a generic placeholder even when
-/// the Start-Menu shortcut has its own icon (WiX `ProductICO`).
+/// the Start-Menu shortcut has its own icon (`WiX` `ProductICO`).
 #[cfg(target_os = "windows")]
 fn embed_windows_icon() {
     println!("cargo:rerun-if-changed=assets/melodia.ico");

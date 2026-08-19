@@ -62,6 +62,30 @@ fn the_resize_arm_retunes_the_cover_tiers() {
     );
 }
 
+/// Win32 parks winit's loop in a modal message loop for a whole resize drag, and `NewEvents` —
+/// the only place the backend ticks Slint — fires once, at the top of it. Without the pump every
+/// `changed` handler and `Timer` waits for the button to come up, which on a shrink past the
+/// miniplayer threshold is the swap not happening. A source walk because the arm's body is
+/// `cfg(target_os = "windows")` and CI never compiles it.
+#[test]
+fn the_redraw_arm_ticks_the_loop_win32_parked() {
+    const ARM: &str = "WindowEvent::RedrawRequested =>";
+    let code = strip_line_comments(include_str!("../winit_filter.rs"));
+    let arm = code
+        .find(ARM)
+        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
+        .and_then(|open| block_body(&code, open))
+        .unwrap_or_default();
+
+    assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
+    assert!(
+        arm.contains("pump_parked_loop()"),
+        "a paint is what the Win32 modal loop still delivers, so this arm is where the tick it \
+         parked winit out of gets run:\n{arm}"
+    );
+    assert!(code.contains("fn pump_parked_loop"), "the arm calls a pump that no longer exists");
+}
+
 /// Nothing paints the two properties the arm writes, so without the request no frame is
 /// scheduled and the `changed` handler that applies them waits for an unrelated event —
 /// every notch landing one notch late (#64). A source walk because scheduling is what a

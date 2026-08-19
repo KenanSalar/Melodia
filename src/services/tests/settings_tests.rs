@@ -1,5 +1,8 @@
 use crate::error::AppError;
-use crate::test_support::{reading_env, with_env_set, with_env_var};
+use crate::test_support::{reading_env, with_env_set};
+// The corner-radius probe is the only caller and only Linux has a desktop to ask.
+#[cfg(target_os = "linux")]
+use crate::test_support::with_env_var;
 
 use super::*;
 
