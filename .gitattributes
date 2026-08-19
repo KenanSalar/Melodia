@@ -17,6 +17,11 @@ src/services/updater/tests/fixtures/*.json -text
 *.minisig binary
 *.b64     binary
 
+# The vendored winit fork's X11 fixture — a captured xsettings blob with no NUL in
+# the first 8000 bytes, so git's heuristic reads it as text and would happily
+# rewrite a CR inside a length-prefixed record.
+*.dat     binary
+
 # Media, fonts and images. Git's own heuristic already catches most of these;
 # spelling them out is what keeps a new fixture from depending on it.
 *.flac binary
@@ -30,4 +35,3 @@ src/services/updater/tests/fixtures/*.json -text
 *.jpg  binary
 *.webp binary
 *.ico  binary
-*.dat  binary

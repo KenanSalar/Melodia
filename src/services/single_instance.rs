@@ -36,18 +36,24 @@ const MAX_PAYLOAD_LEN: u64 = 64 * 1024;
 
 const LENGTH_PREFIX_LEN: usize = size_of::<u32>();
 
-/// A peer that connects and then says nothing must not park the accept thread.
+/// How long a peer that connects and then says nothing is given, where the transport takes a
+/// deadline at all.
 ///
-/// Only half the guarantee, and the half one transport doesn't have — a Windows named pipe
-/// takes no deadline at all ([`allow_missing_timeout`]). The portable half is that the read
-/// runs off the accept loop entirely; see [`spawn_reader`].
+/// One doesn't — a Windows named pipe refuses outright ([`allow_missing_timeout`]) — so this
+/// bounds nothing there and [`spawn_reader`] carries the guarantee instead.
 const IO_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Reads in flight, past which a connection is answered without being read.
 ///
-/// One stalled peer costs a parked thread rather than every launch after it, and a flood of
-/// them costs a bounded number — the socket is reachable by any local process, and this is a
+/// One stalled peer costs a parked thread rather than every launch after it, and a flood of them
+/// costs a bounded number — the socket is reachable by any local process, and this is a
 /// memory-disciplined app to hand an unbounded thread count.
+///
+/// A slot comes back on [`IO_TIMEOUT`] only where the transport honours one. On a named pipe the
+/// read has no deadline to give up on, so a peer that holds its handle open holds the slot for the
+/// session; eight of those and every later launch raises a bare window rather than opening its
+/// file. Bounding that in turn would mean `set_nonblocking` and a sleep-poll — a busy loop traded
+/// for a parked thread, against an attacker who is already a local process.
 const MAX_CONCURRENT_READS: usize = 8;
 
 /// A listener that has stopped working errors as fast as the loop can ask, so
@@ -207,32 +213,53 @@ fn spawn_reader<F>(stream: Stream, on_launch: &Arc<F>, reads_in_flight: &Arc<Ato
 where
     F: Fn(Vec<String>) + Send + Sync + 'static,
 {
-    if reads_in_flight.fetch_add(1, Ordering::Relaxed) >= MAX_CONCURRENT_READS {
-        reads_in_flight.fetch_sub(1, Ordering::Relaxed);
+    let Some(slot) = ReadSlot::take(reads_in_flight) else {
         log::warn!("single_instance: {MAX_CONCURRENT_READS} launches unread; raising bare");
         on_launch(Vec::new());
         return;
-    }
+    };
 
     let reader = {
         let on_launch = Arc::clone(on_launch);
-        let reads_in_flight = Arc::clone(reads_in_flight);
         std::thread::Builder::new().name("melodia-open-read".to_owned()).spawn(move || {
-            match read_payload(stream) {
-                Ok(paths) => on_launch(paths),
-                Err(e) => {
-                    log::warn!("single_instance: forwarded launch unreadable: {e}");
-                    on_launch(Vec::new());
-                }
-            }
-            reads_in_flight.fetch_sub(1, Ordering::Relaxed);
+            let paths = read_payload(stream).unwrap_or_else(|e| {
+                log::warn!("single_instance: forwarded launch unreadable: {e}");
+                Vec::new()
+            });
+            // The read is what the cap counts; `on_launch` only schedules.
+            drop(slot);
+            on_launch(paths);
         })
     };
 
+    // The slot went into the closure, which a failed spawn drops for us.
     if let Err(e) = reader {
-        reads_in_flight.fetch_sub(1, Ordering::Relaxed);
         log::warn!("single_instance: no reader thread: {e}");
         on_launch(Vec::new());
+    }
+}
+
+/// One read's place under [`MAX_CONCURRENT_READS`], given back on drop.
+///
+/// A trailing `fetch_sub` would be equivalent right up to the read that panics, and a slot lost
+/// that way is lost for the process's life — [`MAX_CONCURRENT_READS`] of them and forwarding stops
+/// working with nothing to see for it.
+struct ReadSlot(Arc<AtomicUsize>);
+
+impl ReadSlot {
+    /// `None` once the cap is met, with the count left where it was found.
+    fn take(reads_in_flight: &Arc<AtomicUsize>) -> Option<Self> {
+        if reads_in_flight.fetch_add(1, Ordering::Relaxed) < MAX_CONCURRENT_READS {
+            return Some(Self(Arc::clone(reads_in_flight)));
+        }
+        reads_in_flight.fetch_sub(1, Ordering::Relaxed);
+        None
+    }
+}
+
+impl Drop for ReadSlot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
     }
 }
 
@@ -281,11 +308,12 @@ fn forward(name: Name<'_>, files: &[PathBuf]) -> io::Result<()> {
 /// process's handle the last one open — harmless on a unix socket, and the platform where it
 /// isn't is the one no Linux runner covers.
 ///
-/// Bounded off a thread rather than by [`IO_TIMEOUT`], which the same named pipe won't take:
-/// unbounded, a primary that is merely wedged holds the launch that should have handed it a
-/// file *before* the fallback window can open, which reads as a launch that did nothing at
-/// all. Giving up early is safe — the frame is already written, and the wait only buys the
-/// primary the time to drain it.
+/// Bounded off a thread rather than by [`IO_TIMEOUT`], which the same named pipe won't take.
+/// Unbounded, a primary that is merely wedged parks this process here for good — no window of
+/// its own is coming ([`Claim::Secondary`] is a bare return), so what the user is left with is a
+/// Melodia that shows nothing and never exits, and a file manager still waiting on it. Giving up
+/// early is safe: the frame is already written, and the wait only buys the primary time to drain
+/// it.
 fn wait_for_close(mut stream: Stream) {
     let (closed_tx, closed_rx) = mpsc::channel();
     let waiter = std::thread::Builder::new().name("melodia-forward".to_owned()).spawn(move || {
