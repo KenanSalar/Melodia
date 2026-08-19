@@ -63,6 +63,49 @@ fn cover_cap_clamps_and_scales_with_resolution() {
     assert!(cap(1280, 720) <= mid && mid <= cap(2560, 1440));
 }
 
+/// `GridGeometry`'s own arithmetic, so the pin below measures the cap against the number of
+/// cards the grid really mounts rather than against a restated guess.
+fn mounted_cards(logical_w: u32, logical_h: u32) -> u32 {
+    const MIN_CARD_W: u32 = 180;
+    const GAP: u32 = 20;
+    const CARD_TEXT_H: u32 = 46;
+
+    let cols = ((logical_w.saturating_sub(GAP)) / (MIN_CARD_W + GAP)).max(1);
+    let card_w = logical_w.saturating_sub((cols + 1) * GAP) / cols;
+    let row_h = card_w + CARD_TEXT_H + GAP;
+    // `+ 1` for the partially-visible row, matching `cover_cap`.
+    cols * (logical_h.div_ceil(row_h) + 1)
+}
+
+/// **The cap has to cover what the grid draws.** The lookup behind a card schedules against this
+/// tier, so a cap under the mounted count leaves the overflow on placeholders until a scroll —
+/// and it is the pitches, not the clamp, that decide: a cap derived from a card footprint the
+/// grid doesn't use is wrong by a ratio at every size.
+///
+/// The margin is that `cover_cap` measures the *window* while the grid gets what's left of it
+/// after the sidebar and the bands. Above the ceiling the guarantee stops, deliberately — a
+/// panel that wide is bounded on bytes instead.
+#[test]
+fn the_cap_covers_the_cards_the_grid_mounts() {
+    let fallback = NonZeroUsize::new(48).unwrap_or(NonZeroUsize::MIN);
+
+    for (w, h) in [
+        (1280, 720),
+        (1366, 768),
+        (1600, 900),
+        (1920, 1080),
+        (2560, 1440),
+    ] {
+        let cap = super::cover_cap(w, h, fallback).get();
+        let mounted = usize::try_from(mounted_cards(w, h)).unwrap_or(usize::MAX);
+        assert!(
+            cap >= mounted,
+            "{w}x{h} mounts {mounted} cards against a tier of {cap} — the overflow can only \
+             paint placeholders"
+        );
+    }
+}
+
 /// A grid card is drawn at roughly `GridGeometry`'s 180 px `min-card-w` on a
 /// wide panel, so the 1× tier only has to beat that; the `HiDPI` tier has to
 /// beat twice it. The threshold sits below 1.5 so a fractional-scale desktop

@@ -269,7 +269,8 @@ impl PlaylistsUi {
     /// Lazy cover lookup for a Playlists **grid card** — backs
     /// `Playlists.request-cover`. Resolves against the grid-tier cache.
     pub fn grid_cover(&self, artwork_path: &str) -> slint::Image {
-        self.grid_covers.get_or_schedule_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+        self.grid_covers
+            .get_or_schedule_opt(crate::ui::grid_prewarm::nonempty_artwork_path(artwork_path))
     }
 
     /// The grid tier itself, for the wiring that has to reach past a lookup — the
@@ -278,12 +279,11 @@ impl PlaylistsUi {
         self.grid_covers.clone()
     }
 
-    /// [`Self::grid_cover`] for the Edit Artwork dialog's current-cover slot, which is written
-    /// once as a property rather than read from a binding: a scheduled decode has nothing to
-    /// re-run, so the placeholder would stand for the life of the dialog.
+    /// The inline sibling, for the Edit Artwork dialog's current-cover slot: it is written once as
+    /// a property rather than read from a binding, so a scheduled decode has nothing to re-run and
+    /// the placeholder would stand for the life of the dialog.
     pub fn grid_cover_blocking(&self, artwork_path: &str) -> slint::Image {
-        self.grid_covers
-            .get_or_load_opt(crate::ui::grid_prewarm::nonempty_artwork_path(artwork_path))
+        crate::ui::grid_prewarm::grid_cover_blocking(&self.grid_covers, artwork_path)
     }
 
     /// Lookup of a playlist's canonical stats by id, against the cached

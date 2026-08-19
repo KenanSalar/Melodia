@@ -322,10 +322,19 @@ pub(crate) fn write_test_png(
 pub(crate) fn write_test_jpeg(
     side: u32,
 ) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
+    write_test_jpeg_sized(side, side)
+}
+
+/// [`write_test_jpeg`] at an arbitrary aspect ratio, for the half of the scaled-decode contract a
+/// square source cannot fail: a scale picked off the long edge alone still clears the short one.
+pub(crate) fn write_test_jpeg_sized(
+    width: u32,
+    height: u32,
+) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
     let tmp = tempfile::tempdir()?;
     let path = tmp.path().join("cover.jpg");
     let channel = |value: u32| u8::try_from(value % 256).unwrap_or(0);
-    image::RgbImage::from_fn(side, side, |x, y| {
+    image::RgbImage::from_fn(width, height, |x, y| {
         image::Rgb([channel(x), channel(y), channel(x + y)])
     })
     .save(&path)?;

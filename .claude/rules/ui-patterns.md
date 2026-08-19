@@ -483,7 +483,7 @@ silently miss the other.
   need zero cover plumbing. `CoverThumbs::prewarm` dedupes and caps at LRU capacity — pass paths in
   **display order** so the kept prefix paints first.
 
-- **A lazy cover lookup never decodes on the thread that asks.** `get_or_schedule_opt` answers
+- **No *uncapped* cover lookup decodes on the thread that asks.** `get_or_schedule_opt` answers
   from the tier and hands a miss to the decode pool, so the caller — a Slint model getter, so the
   event loop — gets the placeholder on that frame. What makes the placeholder temporary is a
   generation the same binding reads: the tier fires one notifier per landed *batch* and
@@ -496,12 +496,26 @@ silently miss the other.
     bindings, and a miss arriving mid-drain joins it rather than spawning a second.
   - **A cached failure is a hit**, so a broken cover re-queues nothing and can't spin against its
     own notifier.
-  - **A surface with no generation to come back on takes `grid_cover_blocking` instead** — Artist
-    Detail's Albums strip, whose callback carries no counter, and the Edit Artwork dialog's cover
-    slot, which is a one-shot property write with no binding to re-run. Both are bounded and
-    prewarmed, so the inline decode is a single sub-frame cost; scheduling there instead leaves a
-    placeholder nothing ever replaces. `ui::cover_generation::tests` walks for both halves — the
-    mismatch is invisible in review and only shows up on a library big enough to miss.
+  - **The notifier is a feedback loop, and two things stop it running away.** The queue is capped
+    at the tier's own capacity, newest-wins, so a scroll can't queue more than the cache holds and
+    then evict the visible prefix with the tail of its own batch. And a path the burst already
+    handed to the pool is refused — a grid drawing more cards than its tier holds would otherwise
+    re-queue whatever the last batch evicted, forever, at frame rate. A miss the burst hasn't seen
+    clears that state, which is what tells a moved visible set apart from a thrashing one.
+  - **A reset invalidates whatever is mid-decode.** `clear` and a genuine `set_thumb_size` bump a
+    tier epoch under the queue lock; a batch that captured the old one drops its buffers rather
+    than landing behind the section leave that released them, or at a size nobody asked for.
+  - **A surface with no generation to come back on takes `grid_prewarm::grid_cover_blocking`
+    instead** — Artist Detail's Albums strip, whose callback carries no counter, and the Edit
+    Artwork dialog's cover slot, which is a one-shot property write with no binding to re-run.
+    Both are bounded and prewarmed, so the inline decode is a single sub-frame cost; scheduling
+    there instead leaves a placeholder nothing ever replaces. `ui::cover_generation::tests` walks
+    for both halves — the mismatch is invisible in review and only shows up on a library big
+    enough to miss.
+  - **The bounded strips and one-shot slots were never on this path and stay inline** — Search's
+    two card strips, Now Playing's up-next list, and `Playlists.request-row-cover` behind the three
+    picker dialogs. Each draws a capped set against a tier its own fetch warmed, so "never on the
+    calling thread" is a rule about the *uncapped* surfaces: grids, and the shared row tier.
 
 - **`QueueRow` goes through two globals rather than `RowCovers`**, each wanting a different tier:
   the queue sheet's *private* `CoverThumbs` (so closing it drops every buffer without yanking
@@ -544,9 +558,13 @@ silently miss the other.
     its tier being warmed by a fetch.
 
 - **Cache cap via `grid_prewarm::cover_cap_for_window(app, fallback)`** — one band for every grid,
-  they all draw the same card. Derives its cap from the monitor's *logical* resolution against the
-  card footprint; resized from `install_views` once the winit window is live, the fallback passed
-  in so a module keeps its own default and a monitor reporting `None` lands there.
+  they all draw the same card. Derives its cap from the monitor's *logical* resolution against
+  `GridGeometry`'s own pitches; resized from `install_views` once the winit window is live, the
+  fallback passed in so a module keeps its own default and a monitor reporting `None` lands there.
+  **The pitches have to be the grid's, not a footprint estimate**: the cap has to come out at or
+  above the cards actually mounted, or the scheduling lookup leaves the overflow on placeholders
+  until a scroll. Margin comes from measuring the window rather than the grid's own box;
+  `grid_prewarm_tests` pins the two against each other below the ceiling.
 
 - **Decode size via `grid_prewarm::cover_size_for_window(app)`, in the same `tune_cache_for_display`
   call** — the cap and the size are two halves of one budget, and both are answers about the

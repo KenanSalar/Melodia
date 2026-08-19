@@ -46,23 +46,29 @@ pub fn unique_artwork_paths<'a>(
 
 /// How many grid covers to keep resident on a display of this logical size.
 ///
-/// The card footprint deliberately over-estimates against a card packing down toward
-/// `GridGeometry`'s `min-card-w` on a wide panel — it under-counts columns, where a
-/// tighter number would claim more cards are on screen than are. `rows` adds one partial
-/// row as the only scroll-back headroom; the clamp bounds the tier either way, and every
-/// one of these caches is released entirely on section leave.
+/// **The pitches are `GridGeometry`'s own, and the estimate has to come out at or above the
+/// number of cards actually mounted.** A tier smaller than the grid draws leaves the overflow
+/// on placeholders until a scroll, because the lookup behind them schedules against a cache
+/// that cannot hold them all. The margin comes from measuring the *window* rather than the
+/// grid's own box: the sidebar and the bands above and below are headroom this never subtracts.
+/// `rows` adds one more for the partially-visible row.
 ///
 /// One function rather than one per grid: every grid draws the same card at the same size,
-/// so the footprint constants and clamps are the only knobs.
+/// so the pitches and clamps are the only knobs.
 pub fn cover_cap(logical_w: u32, logical_h: u32, fallback: NonZeroUsize) -> NonZeroUsize {
-    const CARD_FOOTPRINT_W: u32 = 260;
-    const ROW_FOOTPRINT_H: u32 = 320;
+    /// `GridGeometry`'s `min-card-w + gap`, the pitch it packs columns at.
+    const CARD_PITCH_W: u32 = 200;
+    /// The same card's row pitch at that width: `min-card-w + card-text-h + gap`.
+    const ROW_PITCH_H: u32 = 246;
     const MIN_CAP: usize = 32;
+    /// Ceiling on resident grid buffers. A panel wide enough to reach it draws more cards than
+    /// the tier keeps, which the scheduling lookup degrades to placeholders rather than to
+    /// re-decoding; every one of these caches is released entirely on section leave.
     const MAX_CAP: usize = 96;
 
-    let cols = (logical_w / CARD_FOOTPRINT_W).max(1);
+    let cols = logical_w.div_ceil(CARD_PITCH_W).max(1);
     // `+ 1` for the partially-visible row — the only scroll headroom.
-    let rows = logical_h.div_ceil(ROW_FOOTPRINT_H) + 1;
+    let rows = logical_h.div_ceil(ROW_PITCH_H) + 1;
     let visible = usize::try_from(cols.saturating_mul(rows)).unwrap_or(MAX_CAP);
     let cap = visible.clamp(MIN_CAP, MAX_CAP);
     NonZeroUsize::new(cap).unwrap_or(fallback)
@@ -153,6 +159,17 @@ pub fn grid_cover(thumbs: &Arc<CoverThumbs>, artwork_path: &str, generation: i32
     } else {
         thumbs.get_or_schedule_opt(path)
     }
+}
+
+/// [`grid_cover`] for a surface with no generation behind it, which has to decode inline: nothing
+/// would re-run the binding, so a scheduled cover would never arrive.
+///
+/// Only for bounded, prewarmed surfaces — Artist Detail's Albums strip, whose callback carries no
+/// counter, and the Edit Artwork dialog's cover slot, a one-shot property write. Shared for the
+/// same reason [`grid_cover`] is: the choice between the two is the whole decision, and a per-view
+/// copy is where it stops being visible.
+pub fn grid_cover_blocking(thumbs: &CoverThumbs, artwork_path: &str) -> Image {
+    thumbs.get_or_load_opt(nonempty_artwork_path(artwork_path))
 }
 
 /// The `""` → `None` normalization every cover lookup owes its tier: Slint has no null

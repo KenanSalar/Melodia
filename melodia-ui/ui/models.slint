@@ -53,8 +53,8 @@ export struct TrackListRow {
 }
 
 // One album card in the grid, and the Album Detail header. **No `cover_img`**: the cover is pulled
-// per visible card through `request-cover(artwork_path) -> image`, so only on-screen `EntityCard`s
-// ever lock `CoverThumbs`. Every entity row below shares that contract.
+// per visible card through `request-cover(artwork_path, generation) -> image`, so only on-screen
+// `EntityCard`s ever lock `CoverThumbs`. Every entity row below shares that contract.
 export struct AlbumRow {
     id: int,
     name: string,

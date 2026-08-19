@@ -204,6 +204,88 @@ fn a_remembered_failure_never_re_queues() -> TestResult {
     Ok(())
 }
 
+/// A tier releases its buffers on a section leave and pairs that with `heap_trim`, so a batch
+/// still decoding must not land behind it — that is the memory the leave exists to hand back,
+/// resident again behind a view nobody is looking at.
+///
+/// The clear races the drain by construction, and the invariant is the same whichever wins: the
+/// batch is either dropped on its epoch or never claimed.
+#[test]
+fn a_reset_drops_the_batch_that_was_decoding_across_it() -> TestResult {
+    let thumbs = Arc::new(CoverThumbs::new());
+    let (_tmp, path) = write_test_png(600)?;
+    let path = path.to_str().ok_or("temp path is not UTF-8")?;
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    thumbs.set_decoded_notifier(move || {
+        let _ = tx.send(());
+    });
+
+    let _ = thumbs.get_or_schedule_opt(Some(path));
+    thumbs.clear();
+
+    // No notification is owed, so this settles the pool rather than awaiting one.
+    let _ = rx.recv_timeout(DRAIN_TIMEOUT);
+    assert!(
+        thumbs.cache.lock().is_empty(),
+        "a batch decoded across a `clear` repopulated the tier the clear had just released"
+    );
+    Ok(())
+}
+
+/// Latch `draining` so [`CoverThumbs::schedule`] takes no pool, leaving the queue's own
+/// bookkeeping observable without racing a drain for it.
+fn without_a_drain(thumbs: &CoverThumbs) {
+    thumbs.pending.lock().draining = true;
+}
+
+/// The queue is capped at the tier's own capacity, for the same reason `prewarm` caps its work:
+/// decoding more than the cache holds means the tail of a batch evicts the head of it. Newest
+/// wins, that being what a card is asking for now.
+#[test]
+fn the_queue_never_outgrows_the_tier() -> TestResult {
+    let cap = NonZeroUsize::new(4).ok_or("cap must be > 0")?;
+    let thumbs = Arc::new(CoverThumbs::with_config(64, cap));
+    without_a_drain(&thumbs);
+
+    for i in 0..32 {
+        thumbs.schedule(PathBuf::from(format!("/nonexistent/melodia/cover-{i}.png")));
+    }
+
+    let pending = thumbs.pending.lock();
+    assert_eq!(pending.queue.len(), cap.get(), "the miss queue grew past the tier it feeds");
+    assert_eq!(
+        pending.queue.back().map(PathBuf::as_path),
+        Some(Path::new("/nonexistent/melodia/cover-31.png")),
+        "the newest miss is the one a card is asking for and must not be the one dropped"
+    );
+    Ok(())
+}
+
+/// The brake on the notifier's own feedback loop. A bump re-runs every mounted binding, so a grid
+/// drawing more cards than its tier holds would re-queue whatever the last batch evicted, decode
+/// it, evict the replacement and bump again — forever. A path the burst has already handed to the
+/// pool doesn't go back in, and a miss it hasn't seen is what says the visible set moved.
+#[test]
+fn a_path_the_burst_already_decoded_never_re_queues() {
+    let thumbs = Arc::new(CoverThumbs::new());
+    without_a_drain(&thumbs);
+    let decoded = PathBuf::from("/nonexistent/melodia/cover-burst.png");
+
+    thumbs.pending.lock().settled.insert(decoded.clone());
+    thumbs.schedule(decoded.clone());
+    assert!(
+        thumbs.pending.lock().queue.is_empty(),
+        "a cover the burst decoded and lost to eviction went straight back on the queue"
+    );
+
+    thumbs.schedule(PathBuf::from("/nonexistent/melodia/cover-elsewhere.png"));
+    assert!(
+        !thumbs.pending.lock().settled.contains(&decoded),
+        "a miss the burst hasn't seen must clear what it learned about the set it replaced"
+    );
+}
+
 /// An empty path is the "this row has no artwork" case and reaches neither the cache nor the
 /// pool — every model row carries one, so a queued entry per artless track is the cost.
 #[test]

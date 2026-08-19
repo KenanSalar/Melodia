@@ -20,9 +20,10 @@
 //! nor `Sync`, so it can neither live in a cross-thread cache nor come out of a Rayon pipeline.
 //! `SharedPixelBuffer<Rgb8Pixel>` is both, and refcounted.
 
+use std::collections::{HashSet, VecDeque};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use lru::LruCache;
@@ -101,13 +102,35 @@ fn decode_pool() -> Option<&'static rayon::ThreadPool> {
 /// Misses [`CoverThumbs::get_or_schedule_opt`] has handed to the decode pool.
 ///
 /// `draining` is what coalesces a screenful of them into one batch: the first miss spawns the
-/// drain and every miss behind it only adds to the set. It is cleared under the same lock that
-/// finds the set empty, so a miss arriving as a drain finishes cannot be left with nothing
+/// drain and every miss behind it only joins the queue. It is cleared under the same lock that
+/// finds the queue empty, so a miss arriving as a drain finishes cannot be left with nothing
 /// scheduled to pick it up.
 #[derive(Default)]
 struct Pending {
-    queued: std::collections::HashSet<PathBuf>,
+    /// Waiting misses, oldest first, capped at the tier's capacity — queueing more than the
+    /// cache can hold means the tail of the batch evicts the head of it. Newest wins, that
+    /// being the one a card is currently asking for; `queued` is the membership half.
+    queue: VecDeque<PathBuf>,
+    queued: HashSet<PathBuf>,
+    /// What this burst has already handed to the pool.
+    ///
+    /// A path coming back is one the tier decoded and then dropped to fit the rest of the
+    /// batch, so decoding it again would evict whatever took its place and the notifier would
+    /// ask a third time — a grid mounting more cards than its tier holds would never settle.
+    /// Cleared by the first miss the burst hasn't seen, which is what distinguishes a moved
+    /// visible set from a cache thrashing under a fixed one.
+    settled: HashSet<PathBuf>,
     draining: bool,
+}
+
+impl Pending {
+    /// Forget everything waiting and everything the burst learned, for a tier being reset. A
+    /// drain already on the pool is left to notice on its own.
+    fn reset(&mut self) {
+        self.queue.clear();
+        self.queued.clear();
+        self.settled.clear();
+    }
 }
 
 pub struct CoverThumbs {
@@ -115,6 +138,10 @@ pub struct CoverThumbs {
     /// Side length every cover in this cache is downscaled to. Atomic because the tiers are held
     /// behind `Arc` and [`Self::set_thumb_size`] retunes them once the scale factor is known.
     thumb_size: AtomicU32,
+    /// Bumped by every reset. A batch reads it before decoding and again before inserting, so
+    /// what a [`Self::clear`] or a [`Self::set_thumb_size`] invalidated mid-flight is dropped
+    /// rather than landing in the tier behind them.
+    epoch: AtomicU64,
     pending: Mutex<Pending>,
     /// Fired once per landed batch, for the UI to invalidate the bindings that missed. Set at
     /// wire time and never replaced, a tier having exactly one surface to tell.
@@ -126,6 +153,7 @@ impl Default for CoverThumbs {
         Self {
             cache: Mutex::new(LruCache::new(CACHE_CAP)),
             thumb_size: AtomicU32::new(ROW_THUMB_SIZE),
+            epoch: AtomicU64::new(0),
             pending: Mutex::new(Pending::default()),
             on_decoded: OnceLock::new(),
         }
@@ -153,9 +181,7 @@ impl CoverThumbs {
     /// with `heap_trim::trim()` so glibc hands the freed pages back to the OS.
     pub fn clear(&self) {
         self.cache.lock().clear();
-        // A drain already on the pool finds the set empty and exits; what it holds mid-batch
-        // lands in a cleared cache, which is a stale entry the next miss re-queues.
-        self.pending.lock().queued.clear();
+        self.reset_pending();
     }
 
     /// Retune the LRU capacity in place, once the real display size is known. Shrinking evicts
@@ -173,7 +199,18 @@ impl CoverThumbs {
             return;
         }
         self.cache.lock().clear();
-        self.pending.lock().queued.clear();
+        self.reset_pending();
+    }
+
+    /// Drop the queue and invalidate whatever is mid-decode, for the two resets above.
+    ///
+    /// The bump happens **under the queue lock**, which the drain also takes to claim a batch,
+    /// so the two can't interleave: a batch is either claimed before this and drops itself on
+    /// the epoch it captured, or after it and never existed.
+    fn reset_pending(&self) {
+        let mut pending = self.pending.lock();
+        self.epoch.fetch_add(1, Ordering::Relaxed);
+        pending.reset();
     }
 
     /// Current LRU capacity. A `prewarm` caller building a display-ordered path list can
@@ -250,9 +287,25 @@ impl CoverThumbs {
 
     /// Queue one miss, spawning the drain if nothing is already draining.
     fn schedule(self: &Arc<Self>, path: PathBuf) {
+        // Read before the queue lock — `capacity` takes the cache's, and nothing else here
+        // holds both.
+        let capacity = self.capacity();
         {
             let mut pending = self.pending.lock();
-            if !pending.queued.insert(path) || pending.draining {
+            if pending.queued.contains(&path) || pending.settled.contains(&path) {
+                return;
+            }
+            // A miss this burst hasn't seen means the visible set moved, so what it learned
+            // about the old one no longer stands.
+            pending.settled.clear();
+            pending.queued.insert(path.clone());
+            pending.queue.push_back(path);
+            while pending.queue.len() > capacity {
+                if let Some(dropped) = pending.queue.pop_front() {
+                    pending.queued.remove(&dropped);
+                }
+            }
+            if pending.draining {
                 return;
             }
             pending.draining = true;
@@ -265,19 +318,24 @@ impl CoverThumbs {
         }
     }
 
-    /// Decode everything queued, then everything queued while that ran, until the set is empty.
+    /// Decode everything queued, then everything queued while that ran, until the queue is empty.
     ///
     /// Looping rather than one batch per spawn because the misses arrive as fast as rows mount:
     /// a scroll would otherwise spawn a drain per frame, each contending for the same pool.
     fn drain_pending(&self) {
         loop {
-            let batch: Vec<PathBuf> = {
+            let (epoch, batch) = {
                 let mut pending = self.pending.lock();
-                if pending.queued.is_empty() {
+                if pending.queue.is_empty() {
                     pending.draining = false;
                     return;
                 }
-                pending.queued.drain().collect()
+                pending.queued.clear();
+                let batch: Vec<PathBuf> = pending.queue.drain(..).collect();
+                // Doubles as the in-flight guard `queued` was: a binding re-running mid-decode
+                // must not queue what this batch is already carrying.
+                pending.settled.extend(batch.iter().cloned());
+                (self.epoch.load(Ordering::Relaxed), batch)
             };
 
             // Non-promoting, so this can't reorder a prefix `prewarm` warmed. A tab pick mounts
@@ -299,6 +357,12 @@ impl CoverThumbs {
                     (path, buf)
                 })
                 .collect();
+
+            // A reset landed while this decoded: the buffers are either the size nobody asked
+            // for any more or the memory a section leave has already handed back.
+            if self.epoch.load(Ordering::Relaxed) != epoch {
+                continue;
+            }
 
             {
                 let mut cache = self.cache.lock();
@@ -345,7 +409,7 @@ impl CoverThumbs {
         let missing: Vec<PathBuf> = {
             let cache = self.cache.lock();
             let cap = cache.cap().get();
-            let mut seen = std::collections::HashSet::with_capacity(paths.len().min(cap));
+            let mut seen = HashSet::with_capacity(paths.len().min(cap));
             paths
                 .iter()
                 .filter(|p| !cache.contains(*p) && seen.insert(*p))

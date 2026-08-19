@@ -94,7 +94,7 @@ fn install_row_covers(app: &AppWindow, cover_thumbs: &Arc<media::cover_thumbs::C
     let ct = cover_thumbs.clone();
     // `generation` is read for its effect on the binding, never its value — see `RowCovers`.
     app.global::<melodia::RowCovers>().on_request(move |path, _generation| {
-        ct.get_or_schedule_opt(Some(path.as_str()).filter(|s| !s.is_empty()))
+        ct.get_or_schedule_opt(ui::grid_prewarm::nonempty_artwork_path(path.as_str()))
     });
 
     ui::cover_generation::notify_on_decode(cover_thumbs, app, |app| {

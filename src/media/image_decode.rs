@@ -60,9 +60,9 @@ pub fn decode_capped(path: &Path, max_dim: u32) -> image::ImageResult<DynamicIma
 /// JPEG carries its own downscale: the IDCT runs at 1/8, 1/4 or 1/2 for a fraction of the full
 /// cost, and every tier draws a cover far smaller than the store holds, so most of what a full
 /// decode produces is pixels the resize behind it was always going to discard. The result still
-/// meets `target` on its long edge, so the caller's resize is unchanged and still never upscales.
-/// Entropy decoding is not skipped, only the transform, so this is a fraction rather than the
-/// scale factor.
+/// covers `target` on **both** edges — the short one is what a square tier resizes from, so a
+/// bound on the long edge alone would hand it a source to enlarge. Entropy decoding is not
+/// skipped, only the transform, so this is a fraction rather than the scale factor.
 ///
 /// Falls back to [`decode_capped`] for every other format, for the two colour spaces it does not
 /// convert, and for a source over `max_dim` — the bound stays [`capped_limits`]'s alone rather
@@ -92,7 +92,7 @@ fn decode_jpeg_scaled(path: &Path, max_dim: u32, target: u32) -> Option<DynamicI
         return None;
     }
 
-    let requested = u16::try_from(target.max(1)).unwrap_or(u16::MAX);
+    let requested = short_edge_request(info.width, info.height, target);
     let (width, height) = decoder.scale(requested, requested).ok()?;
     let pixels = decoder.decode().ok()?;
 
@@ -106,6 +106,21 @@ fn decode_jpeg_scaled(path: &Path, max_dim: u32, target: u32) -> Option<DynamicI
         // `image` has both, and neither reaches a real cover often enough to copy here.
         PixelFormat::L16 | PixelFormat::CMYK32 => None,
     }
+}
+
+/// The scale request that makes a decode clear `target` on the source's **short** edge.
+///
+/// `jpeg-decoder` takes the first scale where *either* axis reaches the request, which on a
+/// non-square source is always the long one — so asking for `target` outright leaves the short
+/// edge under it, and a square tier resizing from that enlarges what it was handed. Asking for
+/// the long edge in the source's own ratio moves the bar onto the axis that has to clear it.
+///
+/// A source already shorter than `target` finds no scale that qualifies and falls through to a
+/// full decode, which is the answer: there is nothing to downscale.
+fn short_edge_request(width: u16, height: u16, target: u32) -> u16 {
+    let short = u32::from(width.min(height)).max(1);
+    let long = u32::from(width.max(height));
+    u16::try_from(target.max(1).saturating_mul(long).div_ceil(short)).unwrap_or(u16::MAX)
 }
 
 /// [`decode_capped`] for bytes already in hand, for the store's own normalizer.

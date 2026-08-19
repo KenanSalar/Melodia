@@ -244,16 +244,14 @@ impl AlbumsUi {
     /// Backs `Albums.request-cover`, so a card's cover is resolved only once it
     /// is on screen.
     pub fn grid_cover(&self, artwork_path: &str) -> slint::Image {
-        self.grid_covers.get_or_schedule_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+        self.grid_covers
+            .get_or_schedule_opt(crate::ui::grid_prewarm::nonempty_artwork_path(artwork_path))
     }
 
-    /// [`Self::grid_cover`] for a surface with no generation behind it, which has to decode on a
-    /// miss rather than schedule: nothing would re-run the binding, so a scheduled cover would
-    /// never arrive. Only for bounded, prewarmed surfaces — Artist Detail's Albums strip is the
-    /// one, and it is short and warmed by the fetch that opens it.
+    /// The inline sibling, for Artist Detail's Albums strip — its callback carries no generation,
+    /// so a scheduled cover would have nothing to bring the card back.
     pub fn grid_cover_blocking(&self, artwork_path: &str) -> slint::Image {
-        self.grid_covers
-            .get_or_load_opt(crate::ui::grid_prewarm::nonempty_artwork_path(artwork_path))
+        crate::ui::grid_prewarm::grid_cover_blocking(&self.grid_covers, artwork_path)
     }
 
     /// The grid tier itself, for a surface that borrows it — Artist Detail's

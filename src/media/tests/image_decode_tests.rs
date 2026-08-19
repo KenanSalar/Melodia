@@ -3,7 +3,9 @@
 use std::collections::BTreeSet;
 
 use super::*;
-use crate::test_support::{SRC_DIR, stripped_sources, write_test_jpeg, write_test_png};
+use crate::test_support::{
+    SRC_DIR, stripped_sources, write_test_jpeg, write_test_jpeg_sized, write_test_png,
+};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -83,6 +85,41 @@ fn a_scaled_decode_still_covers_its_target() -> TestResult {
         assert!(long_edge >= target, "target {target} came back at {long_edge}px");
         assert!(long_edge <= SOURCE, "a decode may never enlarge: {target} gave {long_edge}px");
     }
+    Ok(())
+}
+
+/// The same contract on a source that isn't square, which is the half a square fixture cannot
+/// fail. `jpeg-decoder` takes the first scale where *either* axis clears the request, always the
+/// long one — so a request of `target` alone comes back under it on the short edge, and
+/// [`crate::media::cover_thumbs`]'s square resize enlarges what it was handed.
+#[test]
+fn a_scaled_decode_covers_its_target_on_the_short_edge_too() -> TestResult {
+    // 16:9 and a banner, either side of the ratio where a long-edge bound starts falling short.
+    for (width, height) in [(1920, 1080), (2000, 400), (600, 1500)] {
+        let (_tmp, path) = write_test_jpeg_sized(width, height)?;
+        let source_short = width.min(height);
+
+        for target in [48, 72, 180, 256, 384, 448] {
+            let decoded = decode_capped_to(&path, MAX_SOURCE_DIM, target)?;
+            let short = decoded.width().min(decoded.height());
+            // A source already under the target has nothing to downscale, so it is its own floor.
+            let owed = target.min(source_short);
+            assert!(
+                short >= owed,
+                "{width}x{height} at target {target} came back {short}px on the short edge, \
+                 under the {owed}px the tier resizes from"
+            );
+        }
+    }
+
+    // Meeting the short edge must not have cost the fast path: a row tile off a 16:9 source is
+    // still a fraction of it, and the assertions above would pass a decode that gave up entirely.
+    let (_tmp, path) = write_test_jpeg_sized(1920, 1080)?;
+    let decoded = decode_capped_to(&path, MAX_SOURCE_DIM, 48)?;
+    assert!(
+        decoded.width() < 1920,
+        "a 48px tile decoded a 1920x1080 source whole; scale-on-decode is not being reached"
+    );
     Ok(())
 }
 

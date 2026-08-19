@@ -27,10 +27,10 @@ export component EntityCardGrid inherits Rectangle {
     // Reveals the play-count badge where a row carries one; an unplayed row stays bare either way.
     in property <bool> show-play-count: false;
 
-    // Bumped by the host once the tier behind `request-cover` is warm. The card's binding *reads*
-    // it, which is the only thing making the bump re-run a `pure` callback whose result is
-    // otherwise cached until a dependency dirties; the host forwards the value too, so Rust can
-    // answer cache-only while the tier is still cold.
+    // Bumped by the host once the tier behind `request-cover` is warm, and again per scheduled
+    // decode batch that lands. The card's binding *reads* it, which is the only thing making a
+    // bump re-run a `pure` callback whose result is otherwise cached until a dependency dirties;
+    // the host forwards the value too, so Rust can answer cache-only while the tier is cold.
     in property <int> covers-generation: 0;
 
     callback row-clicked(int /*entity_id*/);
