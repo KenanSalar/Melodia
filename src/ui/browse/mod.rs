@@ -134,7 +134,7 @@ impl BrowseUi {
             sort_dir: Mutex::new("asc".to_owned()),
             cover_thumbs,
             grid_covers: Arc::new(CoverThumbs::with_config(
-                crate::ui::grid_prewarm::GRID_COVER_SIZE,
+                crate::ui::grid_prewarm::GRID_COVER_FALLBACK,
                 cards::DEFAULT_GRID_COVER_CAP,
             )),
             card_mode: AtomicBool::new(false),

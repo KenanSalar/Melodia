@@ -14,6 +14,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Image};
 
 use crate::AppWindow;
+use crate::media::artwork::STORE_MAX_DIM;
 use crate::media::cover_thumbs::CoverThumbs;
 
 /// Deduplicated, non-empty artwork paths from an iterator of optional path strings,
@@ -66,10 +67,8 @@ pub fn cover_cap(
     thumb_size: u32,
     fallback: NonZeroUsize,
 ) -> NonZeroUsize {
-    /// `GridGeometry`'s `min-card-w + gap`, the pitch it packs columns at.
-    const CARD_PITCH_W: u32 = 200;
     /// The same card's row pitch at that width: `min-card-w + card-text-h + gap`.
-    const ROW_PITCH_H: u32 = 246;
+    const ROW_PITCH_H: u32 = MIN_CARD_W + CARD_TEXT_H + GAP;
     const MIN_CAP: usize = 32;
     /// Ceiling on what one grid tier may hold, in bytes of RGB8. Set at what the old
     /// entry-count ceiling cost at the largest tier, so the worst case is where it always was
@@ -90,33 +89,86 @@ pub fn cover_cap(
     NonZeroUsize::new(cap).unwrap_or(fallback)
 }
 
-/// Square decode size (px) for every grid-card tile, at a 1× display.
+/// `GridGeometry`'s three defaults, which every one of its four mounts takes: they all bind
+/// `avail-width: body.width` and the shared gap and nothing else, so there is one answer to what
+/// a card measures and this is what derives it.
+const MIN_CARD_W: u32 = 180;
+const GAP: u32 = 20;
+const CARD_TEXT_H: u32 = 46;
+
+/// The pitch `GridGeometry` packs columns at.
+const CARD_PITCH_W: u32 = MIN_CARD_W + GAP;
+
+/// The size a tier is built at, before any geometry is known.
 ///
-/// `GridGeometry` packs toward `min-card-w`, so a card is largest in a narrow panel and
-/// only grows past this below three columns — where the tier holds almost nothing. Sized
-/// to the wide case rather than that edge: `FemtoVG` minifies bilinear with no mipmaps, so
-/// covering the edge costs every card in every grid to sharpen the layout needing it least.
-pub const GRID_COVER_SIZE: u32 = 256;
+/// A **fallback, not a tier size**: everything decoded at it is discarded the moment
+/// [`cover_size_for_window`] retunes, a genuine change clearing the cache. So it wants to be the
+/// cheap end rather than the safe-and-large one.
+pub const GRID_COVER_FALLBACK: u32 = 256;
 
-/// The same tile on a `HiDPI` display, which draws it at twice the pixels.
-pub const GRID_COVER_SIZE_HIDPI: u32 = 448;
+/// Steps the derived size falls on. Quantized because [`crate::media::cover_thumbs::CoverThumbs`]
+/// **clears the whole tier** when the size genuinely moves: a size that tracked the card width
+/// continuously would wipe and re-decode every grid on every column change of a resize drag.
+const SIZE_STEP: u32 = 64;
 
-/// Grid decode size for a display at `scale`. The threshold matches
-/// [`crate::media::cover_thumbs::row_cover_size`], the two tiers asking the same question
-/// about the same display.
-pub fn cover_size(scale: f64) -> u32 {
-    if scale > 1.25 {
-        GRID_COVER_SIZE_HIDPI
-    } else {
-        GRID_COVER_SIZE
-    }
+/// What `GridGeometry` packs a card to in a panel of this logical width.
+///
+/// Rust measures the *window* where the grid gets the body, so this runs a little wide or a
+/// little narrow depending on how the column count falls out — and it does not matter, because
+/// the [`SIZE_STEP`] ladder above absorbs the difference: window and body land on the same step
+/// at every size either can take.
+fn card_width(logical_w: u32) -> u32 {
+    let cols = logical_w.saturating_sub(GAP) / CARD_PITCH_W;
+    let cols = cols.max(1);
+    (logical_w.saturating_sub(GAP) / cols).saturating_sub(GAP).max(MIN_CARD_W)
+}
+
+/// Square decode size (px) for a grid-card tile on this window.
+///
+/// **Derived from what the card is actually drawn at**, rather than stepped off the scale factor
+/// alone. The two constants this replaced were a tier size for the wide case and twice it for
+/// `HiDPI`, which got the trade backwards: a card is *smallest* on the panels that mount the most
+/// of them, so the displays paying for the most buffers were the ones holding each one at roughly
+/// twice the pixels it drew. The physical size the card occupies is the whole question, and it is
+/// `card_width × scale`.
+///
+/// Clamped to [`STORE_MAX_DIM`], past which every tier would upscale from a source the store
+/// already discarded — which is also the ceiling on how sharp a single-column panel can get.
+pub fn cover_size(logical_w: u32, scale: f64) -> u32 {
+    let physical = f64::from(card_width(logical_w)) * if scale > 0.0 { scale } else { 1.0 };
+    let physical = pixel_extent(physical).max(MIN_CARD_W);
+    physical.div_ceil(SIZE_STEP).saturating_mul(SIZE_STEP).clamp(SIZE_STEP, STORE_MAX_DIM)
 }
 
 /// Grid decode size for the display this window is on. Unlike [`cover_cap_for_window`]
-/// this needs no winit round trip and has no failure arm, the scale factor being Slint's
-/// own.
+/// this needs no winit round trip, the scale factor being Slint's own; it shares that
+/// function's zero-extent bail, a window with no size having no card to measure.
 pub fn cover_size_for_window(app: &AppWindow) -> u32 {
-    cover_size(f64::from(app.window().scale_factor()))
+    let window = app.window();
+    let scale = f64::from(window.scale_factor());
+    let physical_w = window.size().width;
+    if physical_w == 0 {
+        return GRID_COVER_FALLBACK;
+    }
+    cover_size(logical_dim(physical_w, scale), scale)
+}
+
+/// A scaled extent back to whole pixels, floored at one — a zero-width tile is a resize the
+/// resampler refuses, which reads downstream as an undecodable cover.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a card extent stays well below u32::MAX; this is the saturating boundary"
+)]
+fn pixel_extent(value: f64) -> u32 {
+    let rounded = value.round();
+    if rounded.is_nan() || rounded <= 0.0 {
+        1
+    } else if rounded >= f64::from(u32::MAX) {
+        u32::MAX
+    } else {
+        rounded as u32
+    }
 }
 
 /// A physical pixel extent and DPI scale as a logical extent. The saturating boundary
@@ -152,10 +204,11 @@ pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroU
         return fallback;
     }
     let scale = f64::from(window.scale_factor());
+    let logical_w = logical_dim(physical.width, scale);
     cover_cap(
-        logical_dim(physical.width, scale),
+        logical_w,
         logical_dim(physical.height, scale),
-        cover_size(scale),
+        cover_size(logical_w, scale),
         fallback,
     )
 }

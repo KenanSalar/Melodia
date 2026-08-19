@@ -245,9 +245,10 @@ fn find_external_cover(file_path: &Path, cover_cache: &CoverCache) -> Option<Pat
 
 /// Longest edge a stored image may have.
 ///
-/// The store must hold at least what the largest tier decodes — `ui::grid_prewarm`'s
-/// `GRID_COVER_SIZE_HIDPI` at 448 — so that is a floor and this is the smallest round value
-/// clearing it, leaving room to retune a tier without rebuilding the store. It doubles as the
+/// The store must hold at least what the largest tier decodes, and since `ui::grid_prewarm`'s
+/// grid tier is *derived* from the card it draws rather than named, this is no longer a floor to
+/// clear but the **clamp that answer runs into** — `cover_size` takes it directly, so it is also
+/// the ceiling on how sharp a single-column panel on a scaled display can get. It doubles as the
 /// ceiling on every transient decode buffer in the app, each tier decoding the stored file whole
 /// before it resizes. A full-resolution artwork view would decode from the user's own file rather
 /// than raise this: the store exists to serve many small frequently-drawn tiles, and at 4K it

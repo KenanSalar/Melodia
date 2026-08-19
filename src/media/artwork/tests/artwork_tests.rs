@@ -119,12 +119,11 @@ fn nothing_writes_into_the_store_without_staging_and_renaming() {
 #[test]
 fn every_tier_decodes_within_the_store_cap() {
     use crate::media::cover_thumbs::row_cover_size;
-    use crate::ui::grid_prewarm::{GRID_COVER_SIZE, GRID_COVER_SIZE_HIDPI};
+    use crate::ui::grid_prewarm::{GRID_COVER_FALLBACK, cover_size};
     use crate::ui::util::COVER_SIZE;
 
     for (tier, size) in [
-        ("GRID_COVER_SIZE_HIDPI", GRID_COVER_SIZE_HIDPI),
-        ("GRID_COVER_SIZE", GRID_COVER_SIZE),
+        ("GRID_COVER_FALLBACK", GRID_COVER_FALLBACK),
         ("COVER_SIZE", COVER_SIZE),
         ("row_cover_size(1.0)", row_cover_size(1.0)),
         ("row_cover_size(2.0)", row_cover_size(2.0)),
@@ -134,6 +133,20 @@ fn every_tier_decodes_within_the_store_cap() {
             "{tier} is {size}, past the {STORE_MAX_DIM} px the store keeps — raise \
              `STORE_MAX_DIM` and renormalize, or the tier upscales from a capped source"
         );
+    }
+
+    // The grid tier is derived rather than named, so the question is what it can *answer*: a
+    // panel narrow enough to pack one huge card, on a display scaled far past anything the two
+    // retired constants covered.
+    for logical_w in [320, 480, 640, 960, 1280, 1920, 2560, 3840, 7680] {
+        for scale in [1.0, 1.25, 1.5, 2.0, 3.0] {
+            let size = cover_size(logical_w, scale);
+            assert!(
+                size <= STORE_MAX_DIM,
+                "the grid tier answers {size} px at {logical_w} logical / {scale}×, past the \
+                 {STORE_MAX_DIM} px the store keeps"
+            );
+        }
     }
 }
 

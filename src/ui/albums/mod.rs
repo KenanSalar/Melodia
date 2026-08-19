@@ -37,7 +37,7 @@ use crate::{
     TrackListRow as UiTrackListRow,
 };
 
-use crate::ui::grid_prewarm::GRID_COVER_SIZE;
+use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
 use state::{AlbumDetailState, AlbumGridState, DEFAULT_GRID_COVER_CAP, GridData};
 
 #[cfg(test)]
@@ -115,7 +115,7 @@ impl AlbumsUi {
             },
             cover_thumbs,
             grid_covers: Arc::new(CoverThumbs::with_config(
-                GRID_COVER_SIZE,
+                GRID_COVER_FALLBACK,
                 DEFAULT_GRID_COVER_CAP,
             )),
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),

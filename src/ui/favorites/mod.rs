@@ -129,13 +129,13 @@ impl FavoritesUi {
             cover_thumbs,
             hero_blur,
             most_played_thumbs: Arc::new(CoverThumbs::with_config(
-                crate::ui::grid_prewarm::GRID_COVER_SIZE,
+                crate::ui::grid_prewarm::GRID_COVER_FALLBACK,
                 GRID_THUMB_CAP,
             )),
             // Same tier as Most Played — the circular mask is applied at draw time, so the source
             // needs no extra resolution.
             artist_thumbs: Arc::new(CoverThumbs::with_config(
-                crate::ui::grid_prewarm::GRID_COVER_SIZE,
+                crate::ui::grid_prewarm::GRID_COVER_FALLBACK,
                 GRID_THUMB_CAP,
             )),
             section: SectionState::new(),

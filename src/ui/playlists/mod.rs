@@ -48,7 +48,7 @@ use crate::{
     Playlists, TrackListRow as UiTrackListRow,
 };
 
-use crate::ui::grid_prewarm::GRID_COVER_SIZE;
+use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
 use state::{DEFAULT_GRID_COVER_CAP, GridData, PlaylistDetailState, PlaylistGridState};
 
 #[cfg(test)]
@@ -100,7 +100,7 @@ pub struct PlaylistsUi {
     /// Row-tier cache — shared with Tracks / Browse — backs the
     /// detail track-list's artwork column.
     cover_thumbs: Arc<CoverThumbs>,
-    /// Grid-tier (`GRID_COVER_SIZE`) cache for the Playlists grid cards.
+    /// Grid-tier (`GRID_COVER_FALLBACK`) cache for the Playlists grid cards.
     /// Released when the user opens a detail (the grid is unmounted) and
     /// when leaving the section. Re-warmed on return.
     grid_covers: Arc<CoverThumbs>,
@@ -129,7 +129,7 @@ impl PlaylistsUi {
             },
             cover_thumbs,
             grid_covers: Arc::new(CoverThumbs::with_config(
-                GRID_COVER_SIZE,
+                GRID_COVER_FALLBACK,
                 DEFAULT_GRID_COVER_CAP,
             )),
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),

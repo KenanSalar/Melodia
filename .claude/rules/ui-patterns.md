@@ -579,8 +579,22 @@ silently miss the other.
     maximize overruns. It sets the cap exactly rather than growing it: a smaller window really
     does draw fewer cards.
 
-- **Decode size via `grid_prewarm::cover_size_for_window(app)`, in the same `tune_cache_for_display`
-  call** — the cap and the size are two halves of one budget, and both are answers about the
+- **Decode size via `grid_prewarm::cover_size_for_window(app)`, and it is derived from the card,
+  not stepped off the scale factor.** `GridGeometry` packs toward `min-card-w`, so a card is
+  *smallest* on the panels mounting the most of them: the two constants this replaced sized the
+  wide case generously and doubled it for `HiDPI`, which made the displays paying for the most
+  buffers hold each one at roughly twice the pixels it drew. `card_width × scale` is the whole
+  question, clamped to `STORE_MAX_DIM`, which is what caps a single-column panel's sharpness.
+  - **Quantized to a step, because a genuine `set_thumb_size` clears the tier.** A size tracking
+    the card continuously would wipe and re-decode every grid on every column change of a resize
+    drag. The ladder is also what lets Rust measure the *window* where the grid gets the body:
+    the two land on the same step at every size either can take.
+  - `GRID_COVER_FALLBACK` is what a tier is *built* at, before any geometry exists. A fallback,
+    not a tier size — everything decoded at it is discarded by the first retune, so it wants the
+    cheap end.
+
+- **The cap and the size are read together**, in the same `tune_cache_for_display`
+  call — two halves of one budget, and both are answers about the
   display. `GRID_COVER_SIZE` replaced a `448` copied into five files, each justifying it in its own
   doc comment off the same claim that flex-filled cards "run well past 260 px". They don't:
   `GridGeometry` packs toward `min-card-w`, so a card is **largest in a narrow panel** and lands
