@@ -164,8 +164,10 @@ sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio
 rodio = { version = "0.22.2", default-features = false, features = [
     "playback",
     # `mpa` over `mp3`: both are `symphonia-bundle-mp3`, already compiled either way, and
-    # the wider one adds the Layer I and II decoders alongside Layer III's. Those layers
-    # arrive inside MKV and ADTS as well as under their own extensions.
+    # the wider one adds the Layer I and II decoders alongside Layer III's. Neither layer
+    # has an extension of its own here, and neither needs one: they arrive as an `.mka`
+    # track, or as an `.mp3` whose frames say Layer II, the reader taking the layer off
+    # the frame header rather than off the name.
     "symphonia-mpa",
     "symphonia-flac",
     "symphonia-isomp4",

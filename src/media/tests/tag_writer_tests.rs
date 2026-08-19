@@ -738,25 +738,30 @@ fn an_oga_round_trips_a_full_edit_despite_its_extension() -> Result<(), AppError
     Ok(())
 }
 
+/// `.aifc` rides along because it is a different FORM type reached through the same reader, and
+/// a save that lost that distinction leaves a file the scan's strict re-read then rejects — the
+/// shape the `.oga` bug had from the outside.
 #[test]
-fn aiff_round_trips_a_full_edit_through_id3v2() -> Result<(), AppError> {
-    let tmp = TempDir::new()?;
-    let audio = stage(&tmp, "silence.aiff")?;
+fn aiff_and_aifc_round_trip_a_full_edit_through_id3v2() -> Result<(), AppError> {
+    for fixture in ["silence.aiff", "silence.aifc"] {
+        let tmp = TempDir::new()?;
+        let audio = stage(&tmp, fixture)?;
 
-    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(
-        unsupported.is_empty(),
-        "AIFF's primary tag is ID3v2, which maps every field: {:?}",
-        unsupported.0
-    );
+        let unsupported = apply_to_file(&audio, &full_edit(), None)?;
+        assert!(
+            unsupported.is_empty(),
+            "{fixture}: AIFF's primary tag is ID3v2, which maps every field: {:?}",
+            unsupported.0
+        );
 
-    let tag = read_primary(&audio)?;
-    assert_eq!(
-        tag.tag_type(),
-        TagType::Id3v2,
-        "not the sparse `AiffText` tag — the writer targets the primary type"
-    );
-    assert_full_edit_landed(&tag)?;
-    assert_eq!(text(&tag, ItemKey::IntegerBpm).as_deref(), Some("128"));
+        let tag = read_primary(&audio)?;
+        assert_eq!(
+            tag.tag_type(),
+            TagType::Id3v2,
+            "{fixture}: not the sparse `AiffText` tag — the writer targets the primary type"
+        );
+        assert_full_edit_landed(&tag)?;
+        assert_eq!(text(&tag, ItemKey::IntegerBpm).as_deref(), Some("128"), "{fixture}");
+    }
     Ok(())
 }

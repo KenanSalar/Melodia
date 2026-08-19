@@ -9,6 +9,12 @@ pub mod self_writes;
 pub mod tag_writer;
 pub mod watcher;
 
+// A walking pin rather than a module's own tests: what it asks is where in `src/` a lofty parse
+// may start, which no one file in here is positioned to answer.
+#[cfg(test)]
+#[path = "tests/lofty_open_tests.rs"]
+mod lofty_open_tests;
+
 /// The extensions the library scans, and the sole gate on what Melodia will ingest:
 /// every decoder we compile is reachable only through an entry here.
 ///
