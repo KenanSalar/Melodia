@@ -30,7 +30,7 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
     let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     assert!(
         fixtures.join("silence-1s.flac").exists(),
-        "fixture missing — regenerate with ffmpeg (see § J in BACKEND_PORT.md)"
+        "fixture missing — regenerate with ffmpeg"
     );
 
     let folder =
