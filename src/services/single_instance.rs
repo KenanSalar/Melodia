@@ -221,7 +221,7 @@ where
 
     let reader = {
         let on_launch = Arc::clone(on_launch);
-        std::thread::Builder::new().name("melodia-open-read".to_owned()).spawn(move || {
+        std::thread::Builder::new().name("melodia-read".to_owned()).spawn(move || {
             let paths = read_payload(stream).unwrap_or_else(|e| {
                 log::warn!("single_instance: forwarded launch unreadable: {e}");
                 Vec::new()
