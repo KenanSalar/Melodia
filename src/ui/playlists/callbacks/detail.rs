@@ -8,8 +8,8 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::library;
 use crate::state::AppState;
-use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Dialog, PlaylistDetail};
@@ -39,6 +39,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             // owns that teardown now, and the band fires it once the morph is
             // done. See `callbacks::my_library::release_collapsed_hero`.
             playlists_ui_mod::clear_detail(&pu);
+            // `clear_detail` only reaches the Rust needle; leaving the Slint
+            // half set would have the two disagree until the next open, on the
+            // property `reorder-enabled` reads.
+            g.set_filter(SharedString::new());
 
             let pu_swap = pu.clone();
             s.runtime.spawn_blocking(move || {
@@ -83,8 +87,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             }
             let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            spawn_logged!(s, "playlists::play_row",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+            spawn_logged!(
+                s,
+                "playlists::play_row",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
+            );
         });
     }
 
@@ -93,8 +100,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         detail.on_play_next(move |ids| {
             let id_vec = collect_track_ids(&ids);
             let s = s.clone();
-            spawn_logged!(s, "playlists::play_next",
-                library::queue::queue_play_next_many(&s, id_vec));
+            spawn_logged!(
+                s,
+                "playlists::play_next",
+                library::queue::queue_play_next_many(&s, id_vec)
+            );
         });
     }
 
@@ -103,7 +113,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         detail.on_add_to_queue(move |ids| {
             let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
             let s = s.clone();
-            spawn_logged!(s, "playlists::add_to_queue", library::queue::queue_add_tracks(&s, id_vec));
+            spawn_logged!(
+                s,
+                "playlists::add_to_queue",
+                library::queue::queue_add_tracks(&s, id_vec)
+            );
         });
     }
 
@@ -113,26 +127,26 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     {
         let pu = playlists_ui.clone();
         wire_row_flag!(detail, on_toggle_row_favorite, state, "playlists::set_favorite",
-            library::favorites::set_favorite, collect_track_ids,
-            captures: [weak, pu],
-            after: |id_vec, fav| {
-                for id in &id_vec {
-                    pu.flip_detail_favorite(*id, fav);
-                    playlists_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
-                }
-            });
+        library::favorites::set_favorite, collect_track_ids,
+        captures: [weak, pu],
+        after: |id_vec, fav| {
+            for id in &id_vec {
+                pu.flip_detail_favorite(*id, fav);
+                playlists_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
+            }
+        });
     }
     {
         let pu = playlists_ui.clone();
         wire_row_flag!(detail, on_set_row_rating, state, "playlists::set_rating",
-            library::ratings::set_rating, collect_track_ids,
-            captures: [weak, pu],
-            after: |id_vec, rating| {
-                for id in &id_vec {
-                    pu.flip_detail_rating(*id, rating);
-                    playlists_ui_mod::apply_detail_row_rating(&weak, *id, rating);
-                }
-            });
+        library::ratings::set_rating, collect_track_ids,
+        captures: [weak, pu],
+        after: |id_vec, rating| {
+            for id in &id_vec {
+                pu.flip_detail_rating(*id, rating);
+                playlists_ui_mod::apply_detail_row_rating(&weak, *id, rating);
+            }
+        });
     }
 
     {
@@ -160,10 +174,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         detail.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<PlaylistDetail>();
-            let (new_field, new_dir) = crate::ui::callbacks::next_sort(
+            // Third click lands back on the curated order, which is the only
+            // way back to it — no header cell asks for `"position"`.
+            let (new_field, new_dir) = crate::ui::callbacks::next_sort_with_natural(
                 g.get_sort_field().as_str(),
                 g.get_sort_dir().as_str(),
                 &field,
+                Some(playlists_ui_mod::POSITION_FIELD),
             );
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
@@ -184,9 +201,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<PlaylistDetail>().snapshot_visible();
             let s_disk = s.clone();
-            spawn_blocking_logged!(s, "playlists::toggle_column",
+            spawn_blocking_logged!(
+                s,
+                "playlists::toggle_column",
                 library::settings::update_view_columns(
-                    &s_disk, view_id::PLAYLIST_DETAIL.to_owned(), columns));
+                    &s_disk,
+                    view_id::PLAYLIST_DETAIL.to_owned(),
+                    columns
+                )
+            );
         });
     }
 
@@ -212,8 +235,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let weak = weak.clone();
         detail.on_reorder(move |from, to| {
             let Some(ui) = weak.upgrade() else { return };
-            let Ok(from_u) = usize::try_from(from) else { return };
-            let Ok(to_u) = usize::try_from(to) else { return };
+            let Ok(from_u) = usize::try_from(from) else {
+                return;
+            };
+            let Ok(to_u) = usize::try_from(to) else {
+                return;
+            };
             if from_u == to_u {
                 return;
             }
@@ -221,8 +248,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             if playlist_id < 0 {
                 return;
             }
-            let Some(snapshot) =
-                playlists_ui_mod::apply_optimistic_reorder(&ui, &pu, from_u, to_u)
+            let Some(snapshot) = playlists_ui_mod::apply_optimistic_reorder(&ui, &pu, from_u, to_u)
             else {
                 return;
             };
@@ -274,7 +300,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     dlg.set_kind(SharedString::from("edit-playlist-artwork"));
                     dlg.set_target_id(i32::try_from(id).unwrap_or(-1));
                     dlg.set_input_text(SharedString::from(""));
-                    dlg.set_mosaic_selection(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+                    dlg.set_mosaic_selection(ModelRc::new(VecModel::from(
+                        Vec::<SharedString>::new(),
+                    )));
                     dlg.set_mosaic_touched(false);
                     dlg.set_current_artwork(current_cover);
                     let cand_rows: Vec<SharedString> =
@@ -312,10 +340,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                if let Err(e) = library::playlists::remove_tracks_from_playlist_batch(
-                    &s, id, ids,
-                )
-                .await
+                if let Err(e) =
+                    library::playlists::remove_tracks_from_playlist_batch(&s, id, ids).await
                 {
                     log::warn!("playlists::remove_selected({id}): {e}");
                     return;
@@ -352,23 +378,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                if let Err(e) = library::playlists::remove_tracks_from_playlist_batch(
-                    &s,
-                    playlist_id,
-                    id_vec,
-                )
-                .await
+                if let Err(e) =
+                    library::playlists::remove_tracks_from_playlist_batch(&s, playlist_id, id_vec)
+                        .await
                 {
                     log::warn!("playlists::remove_track: {e}");
                     return;
                 }
-                if let Err(e) = playlists_ui_mod::refresh_detail(
-                    &s,
-                    &pu,
-                    weak.clone(),
-                    playlist_id,
-                )
-                .await
+                if let Err(e) =
+                    playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), playlist_id).await
                 {
                     log::warn!("playlists::remove_track refresh: {e}");
                 }

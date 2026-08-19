@@ -1,49 +1,39 @@
 import { Visualizer } from "../../globals/audio.slint";
 import { Player } from "../../globals/player.slint";
 
-// Oscilloscope trace: the signal itself rather than its spectrum, drawn as the
-// band between each column's loudest and quietest sample — what every audio
-// editor's waveform view draws, because a column a few hundred pixels wide
-// always covers several samples and any one of them misrepresents the rest.
-//
-// The geometry arrives as an SVG command string rather than as `LineTo`
-// children, because Slint rejects `for`-generated path elements outright
-// (slint-ui/slint#754). Rust rebuilds it each tick, and there is no `animate`
-// here for the reason the bars have none — the envelope is already smoothed.
+// Oscilloscope trace: the signal itself rather than its spectrum, drawn as the band between each
+// column's loudest and quietest sample — what every audio editor's waveform view draws, a column a
+// few hundred pixels wide always covering several samples and any one of them misrepresenting the
+// rest. The geometry arrives as an SVG command string rather than as `LineTo` children, Slint
+// rejecting `for`-generated path elements outright (slint-ui/slint#754); Rust rebuilds it each
+// tick, and there is no `animate` here for the reason the bars have none.
 export component WaveformTrace inherits Rectangle {
     Path {
         commands: Visualizer.wave-path;
 
-        // Rust normalizes into this box, so it's a constant and no column count
-        // crosses the boundary. It is not optional: without one, Slint fits the
-        // path's *own* bounding box to the element, renormalizing every frame
-        // and drawing a whisper as loud as a chorus.
+        // Rust normalizes into this box, so it's a constant and no column count crosses the
+        // boundary. Not optional: without one, Slint fits the path's *own* bounding box to the
+        // element, renormalizing every frame and drawing a whisper as loud as a chorus.
         viewbox-x: 0;
         viewbox-y: -1;
         viewbox-width: 1;
         viewbox-height: 2;
-        // The default `contain` preserves the viewbox's aspect ratio, which
-        // would letterbox this tall narrow box into a sliver down the middle.
+        // The default `contain` preserves aspect ratio and would letterbox this tall narrow box
+        // into a sliver down the middle.
         fit: fill;
 
-        // The per-artwork accent, so the trace harmonizes with the blur, but the
-        // tone-floored variant — a dark album's raw accent would sink into the
-        // scrimmed backdrop it's painted over.
+        // The per-artwork accent, so the trace harmonizes with the blur, but the tone-floored
+        // variant — a dark album's raw accent would sink into the scrimmed backdrop. A wash inside
+        // a defined edge, the metadata chips' translucency language: the fill alone reads as a
+        // shapeless blob at this height, the stroke alone loses the sense of a body of sound.
         //
-        // A wash inside a defined edge, the metadata chips' translucency
-        // language: the fill alone reads as a shapeless blob at this height, and
-        // the stroke alone loses the sense of a body of sound.
-        //
-        // The figure doubles back on itself by construction, so the two edges'
-        // strokes converge as the trace thins. `waveform::MIN_HALF_THICKNESS` is
-        // what holds them apart at every amplitude — without it a silent trace
-        // lands both edges on the axis, and stroking a path lying exactly on top
-        // of itself renders as a dashed line.
-        fill: Player.np-accent-bright.transparentize(0.55);
-        stroke: Player.np-accent-bright;
-        // Scaled off the strip, which is no longer a fixed height — a constant
-        // thins into a hairline as the strip grows. Capped before the stroke
-        // starts eating the wash it encloses.
+        // The figure doubles back on itself by construction, so the two edges' strokes converge as
+        // the trace thins — `waveform::MIN_HALF_THICKNESS` holds them apart at every amplitude,
+        // stroking a path lying exactly on top of itself rendering as a dashed line.
+        fill: Player.np-viz.transparentize(0.55);
+        stroke: Player.np-viz;
+        // Scaled off the strip, which is no longer a fixed height — a constant thins into a
+        // hairline as the strip grows. Capped before the stroke starts eating the wash.
         stroke-width: clamp(root.height / 45, 1.25px, 2px);
         stroke-line-join: round;
     }

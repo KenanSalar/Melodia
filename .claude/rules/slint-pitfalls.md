@@ -9,52 +9,516 @@ paths:
 
 # Slint Pitfalls (battle-tested)
 
-Melodia-specific, each one paid for once already. General Slint patterns are in
-`slint.md`; this file is the list of things that build, look right, and are wrong.
+Melodia-specific, each paid for once already. General Slint patterns are in `slint.md`;
+this file is what builds, looks right, and is wrong.
 
-- **`visible: false` doesn't remove from layout.** Hidden child still claims stretch. Fix: `if !collapsed: VerticalLayout { … }`. Ref: slint#7377.
-- **Don't `animate` a property driven by both toggle and continuous input** (drag micro-updates get full easing → spongy). Gate duration on bool: `animate width { duration: is-dragging ? 0ms : 250ms; }`. Boolean ternaries safe; #7999 only fires on array/list calcs.
-- **An animated property with a *binding* restarts whenever a dependency is marked dirty — not when its value changes.** The sharper form of the bullet above: the continuous input doesn't have to reach the animated value, only its dependency graph. `AnimatedBindingCallable::mark_dirty` (`i-slint-core/properties/properties_animations.rs`) checks `original_binding.dirty` and nothing else, sets `ShouldStart` and calls `animation_data.reset()` (start time ← now); the next `evaluate` then re-bases `from_value` on the current frame's value. Slint's dirty propagation is structural and eager, so a bool that *stays* `true` through a whole resize drag still restarts the ease every time the width feeding it moves. Symptom: the animation converges at whatever rate the input delivers events rather than on wall-clock — it **crawls and stalls under a slow drag and looks perfect under a fast one**, which reads as an easing-curve problem and isn't. Fix: **write** the property instead of binding it. An imperative assignment compiles to `Property::set_animated_value`, which calls `set_binding` and replaces the animated binding outright, so afterwards only a real write can restart it; keep the original expression as the declared *seed* so the first evaluation still lands in `NotAnimating` and mount doesn't animate (`tab-bar.slint`'s `compact-t`, seeded by its binding and owned by `changed compact`; `mini-player-switch.slint`'s `fade-opacity` is the same shape with a constant seed). **`states`/`transitions` only half-fixes it** — `StateInfoBinding::evaluate` *is* value-compared, so `change_time` survives the dirt and the timeline stays anchored, but `from_value` is still re-based every frame, so the curve collapses to the target early instead of crawling. Bit `tab-bar.slint`'s compact morph (via `avail-width`) and `search-bar.slint`'s focus swell (via `input-width`, which the Settings header drives off the live window width) — the latter fixed by easing the `focus-scale` float that `width`/`height` derive from rather than the dimensions themselves. **But the half it does fix is the whole cure when the dirt is *discrete* rather than continuous**, so don't read "only half" as "never": a target that lands once, late — an async result arriving mid-animation — restarts a plain `animate` and finishes a full duration after it, where a transition still ends at `change_time + duration` and merely re-bases toward the new value. `library-tab-band.slint`'s palette is the worked example: the four tab-bar brushes cross from `Theme.*` to `HeroBackdrop` tiers, and those tiers are solved from the measurement the *artwork decode* takes, so the hero half of every pair arrives well into the 400 ms morph — with four `animate` blocks the bar finished changing colour long after the band had finished growing, which reads as the colour lagging the geometry. The transition's cost is the flip side of the same re-basing: a target landing *after* it is adopted in one frame, its progress already being 1. So the band eases the four `HeroBackdrop` mirrors it crosses *to* on a short curve of their own and lets the transition follow them — the step becomes a move at both ends of the window.
-- **A shared component may not `animate` a brush its host hands it, because it cannot tell an eased input from a stepped one — so it eases a *float* instead and lets the brush track its source.** The mechanism is the entry above, seen from the wrong side of a component boundary: a host that crosses its palette over 400 ms re-dirties the leaf's binding *every frame*, so the leaf's own `animate` restarts every frame, re-bases from the current colour, and the value sits still until the source settles — then catches up in one late rush. Symptom: a colour that "changes at the end of the animation" in **both** directions, with nothing in either file looking wrong. `tab-bar.slint`'s `TabBarCell` is the worked example and it took two rounds, which is the part worth reading. Round one deleted a `dur-fast` `animate icon-color` that bought nothing on a tab pick and stalled the whole My Library band morph. **Round two is the carve-out that deletion left behind, and it was wrong.** The hover fill kept its `animate` on the argument that `touch.has-hover ? root.hover-fill : transparent` reads the input only on the hovered arm, so a morph with no pointer on the bar never dirties it — true, and beside the point: the tab you are *pointing at* while you click it **is** the hovered arm, so the cell you just picked held the idle theme's grey for the whole 400 ms and snapped to the hero tier at the end. Read as "hovering a tab while switching to it uses the default hover background", which sounds like a missing binding and isn't. **The cure is not to give the fade up.** Ease `hover-t: touch.has-hover ? 1.0 : 0.0` — a float no host can dirty — and paint `root.hover-fill.transparentize(1.0 - root.hover-t)`. The same shape then buys what a leaf could never have: `sel-t` on the underline's own `dur-med`/`ease-in-out` crosses the selected label and glyph *with* the sliding pill instead of stepping ahead of it. Two things make that spellable. **`transparentize` multiplies alpha where `with-alpha` sets it**, and it takes a `brush` (`ColorTransparentize: (Brush, Float32) -> Brush`), so a translucent hero tier keeps its own weight at full hover and two fades on one label compose. And **`mix()` has no brush overload** (`ColorMix: (Color, Color, Float32) -> Color`), so blending two host brushes is *two stacked layers* — with the **bottom at full alpha** and only the top riding the float: two layers at `t` and `1 - t` composite to three quarters coverage at the midpoint and the text visibly thins, while a full bottom also reverses for free. Keep the layers identical in everything but colour (`filled`, `font-size`, weight) or the crossing ghosts. Pinned by `ui::tab_bar::tests::{the_cell_eases_floats_and_never_a_brush, the_selected_colour_crosses_over_two_matched_layers}`. The exemption that *does* hold is the opposite case — a host that never eases what it hands over, which is why `icon-button.slint` keeps its two `animate`s; if a band ever routes the back disc's tiers through its mirrors, they go the same way. **There is a mirror image of this one worth reading beside it, and it bites the host rather than the leaf**: a layer may not ease *out of* a value nothing was painting. `HeroBackdrop` is deliberately held across a My Library tab leave, so a mirror bound to it unconditionally settles on a hero the band stopped painting tabs ago and then crosses out of it on the next open — a genre's pink under a playlist. The cure is the same shape as the one above, applied to the source instead of the animation: make the idle value honest (`root.detail-open ? <tier> : <idle token>`) rather than trying to suppress the ease on the right frame, which cannot work when the colour and the id land in the same tick. Argued in full in `ui-patterns.md`'s `HeroBackdrop` bullet.
-- **Drag handles inside resized element need absolute coords.** Snapshot `start_abs = self.absolute-position.x + self.pressed-x` on `down`, then `parent.width = clamp(start_w + (self.absolute-position.x + self.mouse-x - start_abs), ...)`.
-- **Material Symbols glyphs need a collapsed line-box.** `Text` defaults to ~1.2× `font-size`; pin inside fixed `icon-size × icon-size` Rectangle. `MaterialIcon` does this.
-- **Fixed-width children don't center in a wider `VerticalLayout`.** Let column track child's natural width, or wrap in `HorizontalLayout { alignment: center; … }`.
-- **`parent` not accessible from component's root binding.** Take host metric as explicit `in property <length> host-width;`.
-- **`height: 100%` on child + `height: Npx` on parent → unbounded layout.** Row swallows whole body; sibling `ListView` renders 0 rows. Pin fixed-size rows with `min-height` + `max-height` + `vertical-stretch: 0`. Never `height/width: 100%` on layout child.
-- **Nested ScrollView + ListView need `viewport-height: self.height` on outer.** Reverse: lock `viewport-width: self.width`.
-- **A nested `ListView` swallows the mouse wheel at its scroll edge — it never bubbles to an outer `ScrollView`** (`i-slint-core` `flickable.rs::process_wheel_event` returns `EventAccepted` at the edge during the scroll-capture window). So an outer scroller wrapping a *height-capped* (still-virtualizing) `TrackList` can't be wheeled once the inner list has travel, and no pure-Slint interceptor works. The **composite views** (Artist Detail and Browse — outer `below-sv := ScrollView` + capped inner `TrackList`) route vertical-dominant wheel through the winit layer: `winit_filter.rs`'s `MouseWheel` arm reads `CompositeScroll.hovered` (a per-view ancestor `hover-catch` TouchArea, `has-hover` set on the top-down filter pass even over child rows), converts the delta like the Slint backend (`LineDelta*60` / `PixelDelta.to_logical`), and drives the split via `CompositeScroll.wheel-{dy,tick}`. The Slint side — vbar/hbar `OverlayScrollbar` pair, outer/inner travel math, wheel-tick watch — lives once in the shared **`melodia-ui/ui/components/composite-scrollbars.slint`** (`CompositeScrollbars`): each view mounts it as the last root child (`x/y: 0`, `100%×100%` — mount contract in its header) and mirrors its named elements through plain props + two setters (`outer-viewport-y <=> below-sv.viewport-y`, travel dims, `set-inner-offset`/`set-h-offset` → the TrackList's clamping setters, plus the vbar band anchor — `below-hero` in the hero views, `body` in Browse). Every content-view switch owes a **`CompositeScroll.reset()`** — a `public function` on the global (same reasoning as `Dialog.closed-teardown()`: a callback's single handler slot must not be clobberable) that clears `hovered` *and* drops any un-applied `wheel-dy`. It is called from five `changed` handlers on the always-mounted `AppWindow` root — `watched-nav-idx`, `watched-my-library-tab`, `watched-now-playing-open`, `watched-artist-detail-id`, `watched-mini-render` — because Slint destroys the outgoing view instantly and gives no unmount hook, so nothing else can clear the flag its hover sentinel left set. Miss one and the winit filter keeps eating vertical wheel on the *new* view until the next mouse move. Those five are a subset of the ten mirrors that regrab keyboard focus (`ui-patterns.md`, "Keyboard shortcuts"): what obliges the grab is mirroring an `if` that mounts a view, *or* owning keys for an always-mounted overlay (`watched-queue-open`) — `watched-viz-active` does neither, so it owes nothing. Only the ones whose view is composite owe the reset. A new always-mounted mirror that unmounts a composite view needs a sixth call. Horizontal-dominant wheel stays native. `search-view` doesn't need it (full-height `TrackList`, inner ListView has no travel, wheel bubbles), and **both curated pages stopped needing it** when their strips became tabs — Favorites first, Recently Played after: one scroller per tab, each with plain `OverlayScrollbar`s, is the way *out* of this whole mechanism, so reach for tabs before reaching for the composite when a new page wants a list under a band of cards. The two mounts left are the ones where the upper section isn't a peer view but a header the list belongs under: `browse-view.slint`, and Artist Detail — now `views/my-library/artist-detail.slint`'s `ArtistDetailBody`, whose Albums strip sits over its track list inside one scroller.
-- **A `Flickable` claims a whole *gesture* on `TouchPhase::Started`, whatever direction it is going — so a touchpad scrolls where a wheel does not.** Sibling of the entry above and the same class, but a different trigger and a global cure rather than a per-view one. `flickable.rs`'s filter returns `Intercept` for that phase unconditionally, and `process_wheel_event` sets `capture_events` with no `is_allowed_scroll_direction` call, so the *outermost* `Flickable` under the pointer owns every event until `Ended` — where its `Moved` and `Cancelled` arms both check direction first, which is the whole of why a wheel behaves. **Only a precision device sends the phase**: Wayland folds a discrete axis to `Moved` (`wayland/seat/pointer/mod.rs`) and X11 and Win32 send nothing else, so this is Wayland and macOS only and invisible to a mouse. It bit every page whose body is a plain `TrackList`, that component wrapping its vertical `ListView` in a horizontal-only `ScrollView` for the column pan (`track-list.slint`'s `outer-scroll`, and `draggable-track-list.slint`'s) — the pan won the gesture and then ignored it. The cure is in `winit_filter.rs`'s `route_wheel`: swallow the native `Started` and re-send its delta through `Window::try_dispatch_event(PointerScrolled)`, which lands as a one-shot `Cancelled` (`i-slint-core/api.rs`), leaving the capture flag unset for the rest of the gesture. **It is ungated on purpose** — it reads no view state, so a new nested scroller is covered without owing a `hovered` sentinel or a `reset()`. What it costs is Slint's kinetic fling, gated on that same flag; macOS keeps coasting on its own momentum deltas, Wayland doesn't. `MouseWheel` carries no position, hence the `CursorMoved` mirror beside it.
+- **`visible: false` doesn't remove from layout.** Hidden child still claims stretch.
+  Fix: `if !collapsed: VerticalLayout { … }`. Ref: slint#7377.
+
+- **Don't `animate` a property driven by both toggle and continuous input** (drag micro-updates
+  get full easing → spongy). Gate duration on bool:
+  `animate width { duration: is-dragging ? 0ms : 250ms; }`. Boolean ternaries safe; #7999 only
+  fires on array/list calcs.
+
+- **An animated property with a *binding* restarts whenever a dependency is marked dirty — not
+  when its value changes.** `AnimatedBindingCallable::mark_dirty`
+  (`i-slint-core/properties/properties_animations.rs`) checks `original_binding.dirty` and
+  nothing else, resets the start time, and the next `evaluate` re-bases `from_value` on the
+  current frame. Dirty propagation is structural, so a bool that *stays* `true` through a resize
+  drag restarts the ease every time the width feeding it moves. Symptom: convergence tracks the
+  rate of input events rather than wall-clock — crawls under a slow drag, perfect under a fast
+  one, reading as an easing-curve problem.
+  Fix: **write** the property rather than bind it — an imperative assignment compiles to
+  `Property::set_animated_value`, replacing the animated binding, so only a real write restarts
+  it. Keep the original expression as the declared *seed* so the first evaluation lands in
+  `NotAnimating` and mount doesn't animate (`tab-bar.slint`'s `compact-t`).
+  **`states`/`transitions` only half-fix it**: `StateInfoBinding::evaluate` *is* value-compared,
+  so `change_time` survives the dirt and the timeline stays anchored, but `from_value` is still
+  re-based every frame and the curve collapses to the target early. **That half is the whole cure
+  when the dirt is *discrete***: a late one-shot target (an async result mid-animation) restarts a
+  plain `animate` and finishes a full duration after it, where a transition ends at
+  `change_time + duration` and adopts it in one frame. Hence `library-tab-band.slint`, whose
+  tab-bar brushes cross to `HeroBackdrop` tiers solved from the artwork decode — it eases the four
+  mirrors it crosses *to* on a short curve of their own and lets the transition follow.
+
+- **A shared component may not `animate` a brush its host hands it — it cannot tell an eased
+  input from a stepped one, so it eases a *float* and lets the brush track its source.** A host
+  crossing its palette over 400 ms re-dirties the leaf's binding every frame, so the leaf's
+  `animate` restarts every frame, sits still until the source settles, then catches up in one late
+  rush. Symptom: a colour that "changes at the end of the animation" in **both** directions.
+  `touch.has-hover ? hover-fill : transparent` is **not** an escape — the tab you point at while
+  clicking *is* the hovered arm. Cure: ease `hover-t: touch.has-hover ? 1.0 : 0.0`, a float no
+  host can dirty, and paint `root.hover-fill.transparentize(1.0 - root.hover-t)`;
+  `tab-bar.slint`'s `TabBarCell` does this for hover and for `sel-t`. Two primitives matter.
+  **`transparentize` multiplies alpha where `with-alpha` sets it** and takes a `brush`, so a
+  translucent tier keeps its weight at full hover and two fades compose. And **`mix()` has no
+  brush overload** (`ColorMix: (Color, Color, Float32) -> Color`), so blending two host brushes
+  means *two stacked layers* — **bottom at full alpha**, only the top riding the float, since
+  layers at `t` and `1 - t` composite to three quarters coverage at the midpoint and the text
+  thins; keep them identical in everything but colour or the crossing ghosts. The exemption is the
+  opposite case — a host that never eases what it hands over, hence `icon-button.slint`'s two
+  `animate`s. Pinned by `ui::tab_bar::tests::`
+  `{the_cell_eases_floats_and_never_a_brush, the_selected_colour_crosses_over_two_matched_layers}`.
+  **The mirror image bites the host**: a layer may not ease *out of* a value nothing was painting.
+  `HeroBackdrop` is held across a My Library tab leave, so a mirror bound to it unconditionally
+  settles on a hero the band stopped painting and crosses out of it on the next open — a genre's
+  pink under a playlist. Cure at the source, not the animation: make the idle value honest
+  (`root.detail-open ? <tier> : <idle token>`), suppressing the ease on the right frame being
+  impossible when the colour and the id land in the same tick. See `ui-patterns.md`.
+
+- **Drag handles inside resized element need absolute coords.** Snapshot
+  `start_abs = self.absolute-position.x + self.pressed-x` on `down`, then
+  `parent.width = clamp(start_w + (self.absolute-position.x + self.mouse-x - start_abs), ...)`.
+
+- **Material Symbols glyphs need a collapsed line-box.** `Text` defaults to ~1.2× `font-size`;
+  pin inside fixed `icon-size × icon-size` Rectangle. `MaterialIcon` does this.
+
+- **Fixed-width children don't center in a wider `VerticalLayout`.** Let column track child's
+  natural width, or wrap in `HorizontalLayout { alignment: center; … }`.
+
+- **`parent` not accessible from component's root binding.** Take host metric as explicit
+  `in property <length> host-width;`.
+
+- **`height: 100%` on child + `height: Npx` on parent → unbounded layout.** Row swallows whole
+  body; sibling `ListView` renders 0 rows. Pin fixed-size rows with `min-height` + `max-height` +
+  `vertical-stretch: 0`. Never `height/width: 100%` on layout child.
+
+- **Nested ScrollView + ListView need `viewport-height: self.height` on outer.** Reverse: lock
+  `viewport-width: self.width`.
+
+- **A nested `ListView` swallows the mouse wheel at its scroll edge — it never bubbles to an outer
+  `ScrollView`** (`flickable.rs::process_wheel_event` returns `EventAccepted` at the edge during
+  the scroll-capture window), so an outer scroller wrapping a *height-capped* (still virtualizing)
+  `TrackList` can't be wheeled once the inner list has travel, and no pure-Slint interceptor
+  works. The **composite views** route vertical-dominant wheel through winit instead:
+  `winit_filter.rs`'s `MouseWheel` arm reads `CompositeScroll.hovered` (a per-view ancestor
+  `hover-catch` TouchArea), converts the delta like the Slint backend (`LineDelta*60` /
+  `PixelDelta.to_logical`), and drives the split via `CompositeScroll.wheel-{dy,tick}`. The Slint
+  half lives once in `components/composite-scrollbars.slint`, mounted as the last root child
+  (`x/y: 0`, `100%×100%`; contract in its header).
+  **That arm also owes `ui.window().request_redraw()`** — `run_change_handlers` is reached only
+  from `new_events`, and what schedules that frame is `WindowRedrawTracker`, over the properties
+  the **render** pass read. Nothing paints `wheel-{dy,tick}`, so the loop slept on each delta
+  until the next notch woke it: every notch one late (#64). **A Rust write watched only by a
+  `changed` handler owes the frame; one that also moves something rendered gets it free.** Pinned
+  by `winit_filter::tests::the_composite_wheel_arm_asks_for_a_frame`, a source walk.
+  **Every content-view switch owes a `CompositeScroll.reset()`** — a `public function` (a
+  callback's single handler slot must not be clobberable, as with `Dialog.closed-teardown()`)
+  clearing `hovered` *and* any un-applied `wheel-dy`. Called from five `changed` handlers on the
+  always-mounted `AppWindow` root — `watched-nav-idx`, `watched-my-library-tab`,
+  `watched-now-playing-open`, `watched-artist-detail-id`, `watched-mini-render` — since Slint
+  destroys the outgoing view instantly and gives no unmount hook. Miss one and the filter keeps
+  eating vertical wheel on the *new* view until the next mouse move; a new always-mounted mirror
+  unmounting a composite view needs a sixth. (Only composite views owe it; the focus-regrab mirror
+  set in `ui-patterns.md` is wider.) Horizontal-dominant wheel stays native.
+  **Reach for tabs before the composite** when a page wants a list under a band of cards — one
+  scroller per tab with plain `OverlayScrollbar`s is the way out. The two mounts left are where
+  the upper section is a header the list belongs under, not a peer view: `browse-view.slint` and
+  `ArtistDetailBody`.
+
+- **A `Flickable` claims a whole *gesture* on `TouchPhase::Started`, whatever direction it is
+  going — so a touchpad scrolls where a wheel does not.** `flickable.rs`'s filter returns
+  `Intercept` for that phase unconditionally and `process_wheel_event` sets `capture_events` with
+  no `is_allowed_scroll_direction` call, so the *outermost* `Flickable` under the pointer owns
+  every event until `Ended` — its `Moved`/`Cancelled` arms do check direction, which is the whole
+  of why a wheel behaves. **Only a precision device sends the phase**: Wayland folds a discrete
+  axis to `Moved`, X11 and Win32 send nothing else — Wayland and macOS only, invisible to a mouse.
+  Bit every page whose body is a plain `TrackList`, which wraps its vertical `ListView` in a
+  horizontal-only `ScrollView` for the column pan. Cure in `winit_filter.rs`'s `route_wheel`:
+  swallow the native `Started` and re-send its delta through
+  `Window::try_dispatch_event(PointerScrolled)`, which lands as a one-shot `Cancelled` and leaves
+  the capture flag unset for the rest of the gesture. **Ungated on purpose** — it reads no view
+  state, so a new nested scroller is covered without owing a sentinel or a `reset()`. It costs
+  Slint's kinetic fling, gated on that same flag. `MouseWheel` carries no position, hence the
+  `CursorMoved` mirror beside it.
+
+- **The same `Flickable` steals a *mouse* drag, and there the cure is per-list —
+  `mouse-drag-pan-enabled`.** A row drag and a drag-pan are one gesture, only one element can own
+  it, and the pan wins by default: `ScrollView` publishes
+  `mouse-drag-pan-enabled <=> flickable.interactive` and `Flickable.interactive` defaults
+  **`true`**, so every bare `ListView` opts in. A press inside one returns `DelayForwarding`, and
+  `handle_mouse_grab` (`input.rs`) re-consults exactly those ancestors *during* the inner grab;
+  past `DISTANCE_THRESHOLD` (8 px) inside `DURATION_THRESHOLD` (500 ms) on a scrollable axis it
+  returns `Intercept`, and every item below is sent `MouseEvent::Exit`, delivered by `TouchArea`
+  as `PointerEventKind::Cancel`. The row's drag state is wiped and the committing pointer-up never
+  arrives. **The row arms at 4 px, i.e. inside that window**, so the failure is total rather than
+  occasional — and at 4–8 px of travel the computed slot is still the source's own, so no drop
+  indicator paints either. It still reads as intermittent, both escapes being real: a list shorter
+  than its viewport can't flick, and a press held past 500 ms before moving is never intercepted.
+  Both draggable lists opt out —
+  `draggable-track-list.slint` on `!reorder-enabled` (both axes; a diagonal drag steals sideways
+  once the columns overflow) and `queue-sheet.slint` outright — pinned by
+  `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
+  under a pointer. `!interactive` still forwards wheel events, so only drag-to-pan goes.
+
 - **Animating a binding derived from another animating property phase-lags.** Animate source only.
-- **Concurrent `animate` blocks aren't free at vsync** — re-evaluated per frame. For *periodic* visuals prefer one shared `Timer` + counter + math-derived bindings.
-- **An animated `width` on a *component root* eases the window's own minimum width.** Slint reports a root's bound `width` as both `min` *and* `max` in its `layout_info` (and rejects a `min-width` beside it — "Cannot specify both 'width' and 'min-width'"), so the element's layout floor tracks the animation. That floor propagates up every enclosing layout to the window, and dragging a window edge inward against a floor that is itself still easing **stutters**; the element also becomes the constraint that stops the window reaching widths its own responsive threshold is waiting for, so a measured breakpoint fires late or never depending on what else happens to be in the row. Fix: drop the bound `width` and spell out `min-width` (a constant floor) / `preferred-width` (the animated value — a centring or non-stretching host draws it identically) / `max-width`. Bit `tab-bar.slint` the moment its compact flip became a morph. Verify in the generated `app-window.rs`: in the component's `layout_info`, `min` reading back the root's own `width` property is the tell.
-- **The same is true of an animated `height`, and there the split obliges a `clip` rather than merely tolerating one.** `library-tab-band.slint` morphs between a ~132 px idle band and a 232 px hero, so it spells `min-height: compact-h` / `preferred-height: compact-h + (hero-h - compact-h) * hero-t` / `max-height: hero-h`; bound, that animated height would have eased the *window's* own minimum height, the entry above one axis over. What differs is the consequence of the freedom the split buys. On the width axis the element is drawn narrower than it asked and its incompressible children spill sideways under a neighbour; on the height axis it is drawn shorter than it asked and the hero's contents — the artwork tile, the title block, the chip strip — paint straight down out of the compact band and into the page body beneath it, on every frame of the shrink leg. `clip: true` on the root contains it, rectangular and borderless so it lowers to a scissor rather than the offscreen layer a rounded clip over text would cost. Pinned with the rest of the morph by `ui::library_tab_band_tests`.
-- **Components writing own `in-out property` orphan one-way `name: source` binding on first click.** `clicked => { root.selected-index = i; }` detaches `selected-index: SomeGlobal.field`. Fix: two-way `<=>`. `ToggleSwitch`: `manual: true` emits `toggled(new-value)` *without* mutating own `checked`. `Dropdown`: `manual: true` fires `selected(i)` *without* self-writing `selected-index`, so a one-way `selected-index: model.field` binding survives (used by the smart-playlist rule rows, where a field change resets the operator index and the op dropdown must re-read it).
-- **Rectangle-inheriting components don't size from `if`-conditional children — wrap in a layout.** `Rectangle { if has-matches: SectionCard { … } }` reports 0×0. Fix: `VerticalLayout { … }`. An `if` lowers to a repeater and `default_geometry::gen_layout_info_prop` folds a child *layout* into the root's layout info but skips a repeated one, so the generated `layout_info` reads straight off the root `Empty` item — check for the missing `+ …layoutinfo_v` term in `app-window.rs` if unsure. **It also skips any child that binds `x` or `y`, and that half is the inverse hazard.** A child positioned by hand contributes nothing, where the same content wrapped in a centring layout folds its whole constraint set — including whatever is *animated* inside it — into the root's `layout_info`, and so into the host layout's dependency graph. `IconButton` is the worked example: its glyph is centred by two lines of arithmetic rather than by a `HorizontalLayout` precisely so that a press-shrink animation doesn't re-solve the now-playing bar once per frame. Nothing visible moves when it does — a root pinning `min == max` has its folded `preferred` clamped straight back out by `solve_box_layout` — which is exactly what keeps it out of review; the tell is a `+ …layoutinfo_h` term in the generated `layout_info` that reaches an animated property. **A `min-height` beside it is what makes this survivable and therefore invisible**: `MetaChipStrip` shipped as `Rectangle { min-height: 26px; if show-rows: VerticalLayout { … } }`, so it reported `preferred: 0`, was handed exactly its 26 px floor, and drew every wrapped row *outside* that box — over the hero's action pill, or through the bottom of a fixed-height band. Nothing looks wrong until the content actually wraps, which on a chip strip means a narrow window or a locale whose plurals run long. `ui::hero_chips::tests::the_strip_rows_hang_off_a_layout_not_off_the_root` pins the wrapper. **And the wrapper owes a `min-width: 0px`**, which is the same fix seen from the other axis and the reason this entry is worth reading twice: a layout child is folded in *both* orientations, so the wrapper that fixes the vertical report hands the root a horizontal `min` equal to its widest row — and `layout_items` never shrinks a cell past its `min`, so the element keeps being allotted the width its content asked for while the panel around it narrows. On a strip that chunks itself against the width it is *handed*, that is a fixed point: it reports the old width back, never learns there is less room, and clips against the panel edge instead of wrapping. An explicit `min-width` **replaces** the merged constraint rather than maxing with it (same as the `min-height` beside it — check the `the_struct . r#min = (0f64)` in the generated `layout_info`), so the one line is the whole cure. `settings/chip-group.slint` carries it against a hidden ruler for the same reason; `ui::hero_chips::tests::the_strip_leaks_no_width_floor` pins it. Nothing higher up saves you: an explicit `min-width` on the root `Window` replaces the merged child min too, so the window keeps resizing and only the content overflows.
-- **`VerticalLayout` divides surplus equally when every child has `vertical-stretch: 0`.** Append trailing `Rectangle { vertical-stretch: 1; }`, or set `alignment: start`, which packs the children at the top and hands out no surplus at all. Inside a `GridLayout` one of the two is mandatory rather than decorative: a row is as tall as its taller cell and the shorter cell is stretched to match, so the surplus lands inside whatever that cell contains — a settings body column left on the default `stretch` grows its cards instead of ending above the taller column's floor.
-- **A `GridLayout` cannot do masonry, and the cure is to make each cell a column rather than an item.** Cells in a row are top-aligned to a row that is as tall as its tallest, so a short item is followed by dead space down to the next row rather than by the next item. There is no per-column flow to opt into and no `Flow` element to fall back on. Restructure instead: hand the grid one cell per column, each a `VerticalLayout` of the items, and the two sides flow independently for free. The Settings body does this — `views/settings/pages/*.slint` place *columns*, not cards. Two consequences worth planning for. The stacked (one-column) arrangement is column A's items then column B's, so a page's columns want to be **contiguous halves** of its list rather than alternating, else the reading order changes when the window narrows. And a page with fewer items than columns leaves a column empty, so an item that must not fill the surplus width needs a `max-width` of its own (`SectionCard` pins one alongside its `preferred-width`).
-- **`GridLayout` honours a runtime expression for `row`/`col` on a plain child, and forces `Auto` on a repeated one.** `llr/lower_layout_expression.rs`'s `convert_row_col_expr` lowers `RowColExpr::Named` to a `PropertyReference` read per layout pass, so `row: SomeGlobal.grid-row(1)` re-flows the grid reactively — which is how the Settings body swings its columns from side-by-side to stacked with every card still **mounted exactly once**. Two constraints. (1) `passes/lower_layout.rs`'s `add_element` forces `col_expr`/`row_expr` to `Auto` for an element with `repeated.is_some()`, so a `for`-loop's items can't place themselves; only `colspan`/`rowspan` survive. (2) `check_numbering_consistency` rejects **mixing** auto-numbering with runtime expressions for the same property, so once one child spells `row`, every child must — a literal is fine beside an expression, an omission is not. Mount-once matters more than it sounds: a component reads its children's `out` properties back (a settings page ORs its sections' `has-matches`), and an element inside an `if` branch can't be read from outside it, so the obvious alternative — one branch per column count — doesn't compile into anything usable.
-- **A `GridLayout` column starts at its cells' *preferred* width, so cells of different natural width give columns of different width.** `i-slint-core::layout::layout_items` sets `it.size = it.pref` for every column and only then distributes the surplus by stretch, so equal `horizontal-stretch` does **not** equalise columns — it adds an equal share to unequal starting points. Two cards side by side then sit at different widths and read as a misalignment rather than as a layout. Fix: pin every cell's `preferred-width` to the same number (`SectionCard` takes `SettingsPage.card-w`), leaving `min-width` alone so the cell still compresses. **Not `width`** — Slint reports a root's bound `width` as both `min` and `max`, which climbs out to the window's own floor (see the animated-width entry above).
-- **A view root's bottom padding sits *outside* its scroller's viewport, so it reads as a dead strip rather than as breathing room.** `padding: Theme.pad-lg` on a root `VerticalLayout` whose stretchy child is a list/grid/ScrollView pads all four sides, and the bottom one shortens the viewport instead of the content: the last row or card is clipped mid-glyph against the viewport edge and a band of bare `Theme.base` sits between it and the panel border, permanently, at every scroll position. It reads as an empty pane blocking the UI, and it is easy to mistake for the horizontal `OverlayScrollbar` that also lives at `y: parent.height - self.height` — the tell is the colour, since the bar's track is `surface0` at half alpha (≈`#272839` on Mocha), rounded and inset, where the strip is flat full-bleed `base`. Inset **left/right/top only** and let the scroller run flush to the border; if the content wants clearance at the end, put `padding-bottom` on the column *inside* the viewport so it scrolls in with the content. Album / Genre / Playlist Detail were already right (their header was full-bleed, so they inset per-child and never had a bottom pad); Settings, Tracks, Browse and the four entity grids all had it. **The header they were insetting around is gone** — the four are bodies under My Library's band now — so Album and Genre inset on the root like any grid page, while Artist and Playlist still can't and still don't: Artist's `below-hero` has to run full-bleed for `CompositeScrollbars` and the `CompositeScroll` hover sentinel, and Playlist's empty state and drop banner deliberately fill `body`. None of them grew a `padding-bottom` in the move, which is the part this entry is about.
-- **`changed` doesn't accept path expressions on globals — mirror via local property.** `changed Nav.selected-index => {}` fails to parse. Use `property <int> watched-nav-idx: Nav.selected-index; changed watched-nav-idx => {}`.
-- **A faked placeholder `Text` in a non-layout parent paints out of its input, and `overflow: elide` alone doesn't stop it.** Slint's raw `TextInput` has no `placeholder-text`, so all four placeholders in the tree are a sibling `Text` gated on the field being empty — and **three of them had this**: `search-bar.slint`, `labeled-input.slint`, and `smart-playlist-editor-body.slint`'s `RuleValueInput`. Their parent is a plain `Rectangle`, so `default_geometry`'s `make_default_implicit` sizes each one to `max(preferred, min)` of its **own** `layout_info` — the untruncated string — and the string paints straight through the pill's right edge. `overflow` defaults to `clip`, and clipping is against the element's own width, which *is* the full string. Elide is only half the cure: `i-slint-core::items::text_layout_info`'s horizontal arm computes `implicit_size(None, NoWrap)` and lowers only `min` to the width of one `…`, leaving `preferred` at the full string — so in a non-layout parent the element still takes the larger of the two and elide never fires. **Bound the width *and* elide.** The `TextInput` beside each one never had the bug, for both reasons at once: it fills its parent — `default_geometry` sizes an item with **no** implicit size to 100 %, so the input gets the field's width whether or not it spells one — and it clips itself besides (`sharedparley.rs::draw_text_input` opens with a `combine_clip` to its own size), so no container clip is owed anywhere. The fourth placeholder, **`multiline-input.slint`, is exempt and stays that way**: it is bounded to the scroller (`width: sv.width`) and wraps rather than elides, which is what a multi-line box wants. This is a **locale** bug in practice — English fits every slot and the catalogues run ~1.3× longer, Greek and French longer still — which is why it shipped. All four are pinned by `ui::placeholder_tests`.
-- **A `SearchBar`'s slot is sized off its own placeholder, so its root spells `min-width`/`preferred-width`/`max-width` and never binds `width`.** Same reason as `TabBar` above — a root's bound `width` is reported as both `min` and `max`, so a locale-sized default would drag the window's own resize floor along with it. The natural width is `placeholder-text.preferred-width + chrome-overhead`, read off the Text the bar draws (the `tab-bar.slint` `label-w` idiom: a Text's *horizontal* layout info is intrinsic to the string and never reads back the width it was handed, so it's a derivation and not a cycle). Only the **default** is measured — the four hosts that set `input-width` outright never evaluate it: the Settings page, the two shared hero bands (`MosaicTabHero` for Favorites and Recently Played, `LibraryTabBand` for My Library), and the Search view, which is the one of the four passing a literal rather than a budget. What every mount keeps either way is the `min-width` floor: below it the bar compresses and the placeholder elides, where a bound `width` drew across its neighbours instead. That floor is **published as `out property min-w`**, the `TabBar.compact-w` contract — a host that budgets its row reserves against it rather than restating the number, so the width the page stops handing over is the width the bar stops asking for (`ui::placeholder_tests` pins both ends).
-- **`has-hover` is not continuous, so a *translucent* fill may not read it raw.** Slint clears the flag from two places the pointer never left. `i-slint-core`'s `input_items.rs` drops it on a wheel event the `TouchArea` doesn't handle — the comment there says "It will be put back later", and the next mouse move does — so any hover surface sitting **over a scroller** blinks on every wheel tick. And `input.rs`'s `send_exit_events` compares an item's **stack index** rather than its membership (`new_input_state.item_stack.get(idx).is_none_or(|(x, _)| *x != it.0)`), so an item still under the pointer is handed a spurious `Exit` whenever the hit path's depth shifts around it. Both are one frame, which is why an *opaque* hover fill gets away with it: the swap is between two solid colours and the blink lands mid-`animate` on a value nobody can distinguish. A translucent one can't — each blink shows whatever is behind the element straight through it. `search-bar.slint` is the worked example and shows how the same bug hides for years: its rest fill is `Theme.floating-chrome-bg` (`surface0` at .75) and it sat in a band over flat `Theme.base`, where 0.75 and 1.0 of the same colour are the same pixel; the moment the Search view's bar started floating over its own results, every blink flashed the track rows through the pill. The fix is to **arm on the raw flag and release on a latch** — `engaged: pointer-inside || hover-held || has-focus`, with a `changed` handler setting `hover-held` on arrival and a short `Timer` clearing it only once the pointer has stayed gone. That is the sidebar rail tooltip's `held` shape, including why `hover-held` sits *beside* the raw flag rather than replacing it: `changed` doesn't fire on a first evaluation, so a component mounted under the pointer would otherwise never engage at all. Opaque hover fills (`PillButton`, the chips, the entity cards) are fine as they are — don't retrofit the latch where there is nothing to see through.
-- **Reusable filter SearchBar pattern.** (1) `text <=> SomeGlobal.filter`, `blur-trigger: SomeGlobal.blur-search-tick`; (2) backdrop `TouchArea { clicked => { SomeGlobal.blur-search-tick += 1; } }` at view root before content; (3) clear filter + bump blur tick on nav-away. **A page whose box describes more than one surface takes the same three steps against one global and dispatches in Rust.** My Library's band has the tree's only such box: `MyLibrary.filter` / `.blur-search-tick` are what the bar binds, and `ui::my_library::filter::dispatch` routes a settled keystroke to whichever of nine surfaces is mounted — a *write*, because a `.slint` binding belongs to the scope it is written in, so `Tracks.filter: MyLibrary.filter` is not spellable at all. Two things a single-surface page never has to think about follow. A tab pick clears **both sides** (the box, and the entering tab's own filter) — but the second side only when there *is* one: `filter::clear_mounted` guards the dispatch on the entering surface's needle being non-empty, because the pick runs ahead of the section gate and the surface it dispatches into has already had its Rust cache wiped by its own leave, so an unconditional rebuild writes `total-count = 0` plus an empty model, the exact pair `GridEmptyState` mounts on. Where a dispatch genuinely is owed, the sentinel goes back after it. And **anything that changes what the box *means* with nobody typing** — a detail id crossing zero, or a tab move that isn't a pick — reseats it: `filter::sync_box` reads the hand-off backwards and takes the newly-mounted surface's own filter. A reseat, not a clear, since clearing on the way out would drop the grid filter the user is coming back to. That is five `changed` mirrors in the sheet, not four: `dispatch` clears only the *entering* tab's needle, so a cross-tab drill or a Mouse-4/5 walk lands on a tab still filtered by an untouched one, under a box that says nothing about it. Matches tracked in Rust — through `src/ui/row_match.rs`, never a hand-rolled `to_lowercase().contains(…)` (see `ui-patterns.md`); Settings uses `pure callback SettingsPage.matches(...)`, which routes there too.
-- **Filter debounce via `FilterThrottle`** (`melodia-ui/ui/components/filter-throttle.slint`). Non-visual (wraps a `Timer`); host keeps one `property <int> filter-tick-pending`, bumps it in the SearchBar's `edited`, and mounts `FilterThrottle { pending: root.filter-tick-pending; fire() => { SomeGlobal.apply-filter(SomeGlobal.filter); } }`. Default `interval` 130 ms. Component owns the `applied` counter + `running` gate — don't hand-roll a `filter-tick-applied` property or inline `Timer`; every filterable view uses this. **`fire()` has a second shape, and Settings is the one taking it**: `fire() => { SettingsPage.search-query = SettingsPage.search-input; }`, one Slint property from another, with the `SearchBar` bound to the *input* and the eleven section cards reading the *query*. What decides which shape a view wants is where the cost lands — a list view debounces a model rebuild in Rust, where a keystroke on the Settings page mounts all five tab pages and fans out to three `SettingsPage.matches` round-trips per row, so the expensive work is Slint's own re-evaluation and the settled value has to be a property it can read. Both properties are then cleared together on nav-away and on a tab pick; clearing only the settled one leaves the box holding text the page is no longer filtered by.
-- **`PopupWindow.y: -self.height - …` needs explicit `width`/`height`.** Else `self.height` is 0 before first layout — popup lands above trigger top, expands downward. Canonical: `melodia-ui/ui/components/now-playing/overflow-menu.slint`.
-- **Playback-speed flyout lives in the overflow menu's single `PopupWindow`.** A "Playback speed" row opens a left-side preset flyout (`speed-flyout.slint`; 8 presets, `MIN_SPEED 0.25`…`MAX_SPEED 2.0`) **inside the same popup** (single-popup discipline, no nesting). Fixed-reserve geometry (volume-popup pattern): popup always sized for menu-column + flyout, both bottom-anchored so the menu stays pinned under the trigger; a transparent full-popup `TouchArea` (declared first) closes on stray clicks. Preset lists + row metrics live in shared `flyout-presets.slint` globals. **Persists** via `PlaybackFlags.playback_speed` (serde-default `1.0`) + `state/mod.rs` boot hydration; applied by `Player.set-playback-speed` → `library::playback::player_set_playback_speed` (sync) + `library::settings::set_playback_speed`.
-- **Sleep timer = a session-only cancel-and-replace tokio countdown + a `PlayerState` end-of-track flag** (`src/ui/sleep_timer.rs` — a **UI-layer** module, since `tasks/` may not import `ui::*` and the countdown writes a Slint property). Two modes via `Player.set-sleep-timer(minutes)` (0 off, `>0` duration, `-1` End-of-track); picking any preset cancels the previous token. **Duration is playback-linked** — each 1 s tick decrements only while `status_atomic == Playing` (lock-free), so pausing holds the timer and it never expires on a paused player. **Session-only** — never persisted. Bounds `[30 s, 2 h]`. **End of track** arms `PlayerState::pause_after_current_track`; how the playback monitor honours it is in `src/player/CLAUDE.md`.
-- **Flash-free image cross-fade = two slots, never cleared.** Two stacked `Image`s + `use-a` bool; Rust writes new image into the *inactive* slot then flips bool so both `opacity` animate. Slot `source` is never reset — outgoing layer stays painted for full fade.
-- **A rounded `clip: true` (or a `border`) on an element that *contains text/children* blurs + upscales that subtree on HiDPI.** FemtoVG renders such a subtree into an offscreen texture allocated at logical size, then upscales it by the display scale factor on blit. Don't wrap a scrolling text list in a bordered/rounded-clipped card: let the `ScrollView` clip its viewport rectangularly (cheap scissor, no layer) and paint the rounded border with a **childless overlay `Rectangle`** sibling. Canonical: `melodia-ui/ui/components/dialog/selectable-picker.slint::PickerListCard`.
-- **Nothing that draws text may be cut to its layout box, because the box is a line box and the ink is not. Two mechanisms cut, and both are invisible in Latin.** The shipped Vazirmatn faces are patched to a ~1.05 em line box (`hhea`/`sTypo` at `1650/-500` on 2048 UPM, `USE_TYPO_METRICS` set, so skrifa takes exactly those) while their outlines still reach `yMax 2163` / `yMin -1160` — a quarter of an em above the box and a third below. Latin ink fits inside it; Arabic marks do not, so **a crop that no reviewer on a Latin locale can see removes the hamza above an alif and the dots under a final ya, and nothing else.**
-  - **`opacity` under 1 rasterizes the subtree into a texture sized to child *geometry*.** `Opacity::need_layer` (`i-slint-core/items.rs`) has **two** bails and the second is the one that decides which sites cost anything: exactly 1.0, and a lone child that is itself childless — the property lowers to `Opacity { opacity <=> f.opacity; f := Foo { … } }` (`i-slint-compiler/passes/lower_property_to_element.rs`), so a hairline divider's `opacity: 0.5` is genuinely free while the same line over a layout is not. Past both it allocates through `render_and_blend_layer` (`i-slint-renderer-femtovg/itemrenderer.rs`), sized by `item_children_bounding_rect` — the union of the subtree's geometry, and every text item's `bounding_rect` returns its geometry verbatim (`i-slint-core/items/text.rs`). So a *fade* crops the marks for its whole duration and hands them back on the settling frame, which reads as the animation being unfinished. **It is the union that decides who bleeds**, which is why the block's first and last children are the ones to look at rather than every `Text` under a fade: a title at the top loses its ascender marks and a subtitle at the bottom its descenders, where the same run centred in a padded row has the slack to spare. **Fold the alpha into the brush** (`Theme.text.with-alpha(t)`, `HeroBackdrop.on-backdrop.with-alpha(t)`); where elements don't overlap it is pixel-identical and costs no texture. This is the same instruction the cost argument already gives for a *permanently* sub-unit opacity — the ink is why it binds to transient ones too. Cost bit `library-tab-band.slint`'s idle pane, count line and chip strip; ink bit its hero title block, which had been exempted precisely *because* its layer was transient. **The artwork tile is the third shape, and it is cost with no ink at stake** — an image fills its box, so that exemption was sound and was never the whole argument: `ArtworkImage`'s root has children, so `need_layer` never bailed, and the band clips against an *animating* height, so `render_and_blend_layer`'s clip-intersected size moved every frame and `render_layer` took its `Texture::new_empty_on_gpu` branch rather than its reuse one. Brush alpha is no cure there, an image having no brush to fold into, so the **component** took an `in property <float> fade` instead and spends it on the fill (via `transparentize`, which multiplies) and on whichever childless `Image` is mounted. Two things that generalise to the next such component. Per-element alpha is only pixel-identical where nothing overlaps, and a fill under an image does overlap — the tile reads a few percent heavier mid-fade, which is the honest trade rather than a bug. And the fade lands *inside* the root's own rounded clip, which is a layer at all times regardless of any of this; that one is sized off `item_rc.geometry()` (`visit_clip`, not `render_and_blend_layer`), so its texture is size-stable and reused, and dropping the per-frame *allocation* is the whole of the win. `library_tab_band_tests::the_hero_fades_on_the_morph_at_both_ends` pins all of it. **The back disc beside it is the fourth shape, and the one where folding into the brush is not merely useless but actively wrong** — which is what makes it the case to reach for when the first three don't fit. `IconButton` has brushes to fold into (`idle-bg` / `hover-bg` / `idle-fg`), and they feed its two `animate` blocks; an animated *binding* restarts on dependency **dirtiness** rather than on a value change, so a fade multiplied in there re-dirties both every frame and stalls each crossfade for the length of it. That is the `TabBarCell` entry below, met from the other direction, and its escape hatch fails identically: "no pointer is on the control while it animates" is false because you *click the back disc* to close the detail, so the pointer is on it for the whole collapse. **The cure is to make the faded element satisfy `need_layer`'s second bail rather than to avoid `opacity`** — the glyph moved out of the disc to be its sibling (both centred on the root, the glyph carrying its own `press-scale`, so no geometry moved), which leaves the disc *childless* and its `opacity` free, while the glyph fades through `MaterialIcon`'s own `fade` **after** `animate icon-color` has animated the unfaded brush. Confirm a claim like that in the generated tree rather than by reading the `.slint` — and reach for the artifact that exists: a **sub-component has no `ITEM_TREE` of its own**, its nodes being flattened into the enclosing one's array, so grepping `InnerIconButton_root_*` for one finds nothing at all. What is checkable inside that struct's own block is its item field list plus `item_geometry`'s index map. The injected `disc_Opacity_*` is the root's first child and carries the disc's own rect; the disc sits at `(0, 0)` inside it; and the glyph is a **sibling**, its `InnerMaterialIcon_root_*::init(…)` tree index falling inside the root's own children block where the disc's does not. One child, and that child childless, is the bail exactly. Anchor on the names — every numeric suffix in there shifts when an element is added anywhere earlier in the tree, which is how a pointer like this goes stale without anything about the claim changing. Two by-products worth knowing — that disc is a rounded *fill* rather than a rounded clip, so unlike the tile there is no permanent clip-layer whose cache the fade could dirty and the path allocates nothing at all; and the glyph's old `opacity: button-enabled ? 1 : 0.5` folded into the same float, retiring a layer *and* a line-box crop on every disabled button in the app. **Two costs the move brings with it, both stated at the component**: per-element alpha is only pixel-identical where nothing overlaps and the glyph overlaps the disc, so the button reads a shade heavier mid-fade; and the hoisted glyph carries its own `x`/`y` rather than a centring layout, for the `gen_layout_info_prop` reason in the folding entry below — a layout there hands the animated `press-scale` to the *host*'s layout solve. **Neither this fix nor the tile's was measured** — no flamegraph, no frame-time number, before or after; both were argued off `need_layer` and the generated tree, and per this tree's own standard that is worth saying rather than implying otherwise. The one place this stays unfixable is `components/view-transition.slint`, which fades whole pages and has no brush to reach — harmless only because no page puts text flush against its own edge.
-  - **A `Text`'s own default `overflow` is `clip`, and that pushes a scissor at its line box before a single glyph is emitted** (`i-slint-core/textlayout/sharedparley.rs`, `combine_clip(rect(0, 0, size))` → femtovg `intersect_scissor` → a per-fragment mask, so it cuts *through* glyphs). **`overflow: elide` pushes none at all** — which is the real reason the track rows, the Now Playing bar and the hero title render Arabic correctly, and it is load-bearing rather than incidental. Any `Text` that can hold user data wants `elide` even where nothing can overflow: on a content-sized element it retires the scissor and nothing else — **until the row it sits in is over-packed**, since `elide` also lowers that element's layout `min` to the width of one `…`. So a strip that used to overflow one chip now compresses and truncates all of them, which is the better failure and still a changed one (`components/meta-chip.slint`, and `ui::chips::estimated_chip_width` for the wrap estimate that keeps it out of reach). The corollary for a *fixed*-height `Text` is sharper — it is asking to be cut — so give it slack or leave the height alone.
-- **A `border-radius` past half an element's *height* becomes an ellipse, not a clamped stadium.** FemtoVG's `rounded_rect_varying` clamps a corner's x- and y-radii **independently** (`rad.min(halfw)` / `rad.min(halfh)`) and Slint's renderer passes the radius straight through, so a short wide rect with a large radius has arcs spanning its whole half-width and pinches to a lens. Any radius on a **size-varying** element must be clamped on both axes — `min(self.width / 2, self.height / 2, <cap>)`. Bit the spectrum bars at their resting floor and the EQ band fill at 0 dB; a fixed-size pill is fine with the usual `self.height / 2`.
-- **An explicit `background: transparent` costs a discarded path per element per frame.** `resolve_native_classes` picks an element's native class from *which properties have bindings*, regardless of value, so binding `background` at all promotes it out of `Empty` (never visited by the renderer) into `Rectangle` — and the FemtoVG item renderer builds the path *before* it looks at the paint. `Rectangle` already defaults to transparent, so the binding is pure cost; delete it rather than spelling out the default. Only matters at scale — it was 65 wasted paths a frame in `spectrum-bars.slint` (the root plus 64 bands), and is noise on a one-off container.
-- **Generated `Path` geometry has to arrive as an SVG `commands` string, and needs an explicit viewbox with `fit: fill`.** `for`-`in` inside a `Path` is rejected outright ("Path elements are not supported with `for`-`in` syntax, yet", slint-ui/slint#754), so anything with a computed vertex count is built in Rust as a command string. Then **declare the viewbox**: without one Slint fits the path's *own* bounding box to the element, renormalising every frame — a whisper draws as loud as a chorus. And `fit` must be `fill`, not the default `contain`, which preserves the viewbox's aspect ratio and letterboxes a tall narrow box into a sliver down the middle. Finally, emit a closed figure **lower-edge-first** so its signed area is positive: femtovg reads the winding to decide solid vs `Solidity::Hole`, and a lone subpath handed over as a hole is not something to rely on the renderer being sensible about. All four bit `melodia-ui/ui/components/now-playing/waveform-trace.slint`; `player::waveform::write_path_commands` is the writer.
-- **A `<=>` on a `Flickable`'s `viewport-y` silently disables Slint's own out-of-bounds correction — a one-way binding doesn't.** `i-slint-core`'s `Flickable::init` installs a change handler that pulls a scrolled-past-the-end viewport back in range, guarded on `if *y_out_of_bounds && !y.has_binding()` (`items/flickable.rs:112`), so a `viewport-y` carrying a binding opts out. **The distinction that matters is which kind survives a write.** Most scrollers here reach `viewport-y` imperatively (`sv.viewport-y = -o`), and although the generated tree does put a binding on them — 23 `set_property_binding` calls target a `Flickable`'s `viewport_y`, every one a constant `0px` seed — that binding is *orphaned by the first such write*, exactly as the one-way-binding pitfall above describes; until then the value is `0px`, which can't be out of bounds either way. So those scrollers keep the guard. `<=>` compiles to `Property::link_two_way`, which **does** survive a self-write, which is why the composite views mounting `CompositeScrollbars` with `outer-viewport-y <=> below-sv.viewport-y` — `browse-view.slint` and `views/my-library/artist-detail.slint`'s `ArtistDetailBody` — are the only permanently unguarded scrollers in the tree. Left uncorrected, any content that shrinks under the current offset paints a **blank region**, because the short content sits off-screen above the parked viewport: Browse navigating from a deep folder to the much shorter library-root list, or any of these views filtering a long list down to a few rows. Nothing about it looks wrong in the `.slint` source — the symptom is an empty view that fixes itself the moment you switch tabs, since the content-area `if` destroys and remounts the view with `viewport-y` back at 0. `CompositeScrollbars` now re-clamps itself on `changed v-outer-max`; a new scroller that two-way-binds `viewport-y` needs the same. To re-verify, anchor on the offset expression rather than grepping loosely — the generated file's lines are long enough that `link_two_way.*viewport_y` will straddle a link on one property and an unrelated `viewport_y` read further along the same line. Normalise whitespace first (`tr -s ' \n' '  '`), then count the anchor **including the empty parens the field offset is called with** — `r#Flickable :: FIELD_OFFSETS . r#viewport_y ())`, since dropping the ` ()` matches nothing at all. Preceded by `link_two_way ((Inner…` it should yield one per composite view — **2** since Recently Played became tabbed, down from the 4 that were there when both curated pages still nested a list under a strip; preceded by `set_property_binding (` it yields the 23 seeds, which are expected and benign.
-- **Stock Slint 1.16 + winit 0.30 have zero OS file-drop on Wayland.** `DragArea`/`DropArea` is in-process only — no `PathBuf`, and that's still true of released 1.17.x. Vendored winit PR #4009. The fix is landing upstream but not released: winit **#4571** (new `DataTransfer` DnD API, supersedes the #1881/#4009 lineage) merged 2026-07-16, and Slint is plumbing it on `feature/winit-0.31`. Tracked in `SLINT_NATIVE_ADOPTION.md`.
-- **`changed <local-prop>` doesn't fire when first layout settles directly on final value.** Native-titlebar reaches final grid width in one pass — derived counts never *transition*. Fix: pair handler with single-shot 1 ms `Timer` firing same body once at mount. **The `changed width => { self.<mirror> = self.width; }` idiom is the recurring victim and always owes the seed**: a window opened at its final size never *resizes*, so the mirror keeps its declared seed forever and every width derived from it is wrong until something moves the window. `settings-view.slint`'s `page-w` shipped without one and left the tab bar icon-only on any cold start with room to spare; `now-playing-bar.slint`'s `bar-w` had the same gap and hid it because every consumer is a `clamp` that saturates long before its 1100 px seed, so only windows under roughly 800 px diverged. Both now carry the timer.
-- **A `changed` handler inside an `if` outlives its branch, and whether that is fatal comes down to what it watches.** The generated `ChangeTracker` lives *in* the repeated component and holds a `VWeakMapped` back to it; `ChangeTracker::evaluate` (`i-slint-core/properties/change_tracker.rs`) opens with `self_weak.upgrade().unwrap()`. Dropping the branch drops the component's strong refs, but `VRc` keeps the allocation alive for the weaks — so the tracker is still constructed, still registered, and still reachable from `CHANGED_NODES`, with nothing left to upgrade to. It only fires if something re-dirties the watched property *after* the drop, and that is the whole distinction: a tracker reading a property driven from **inside** the branch dies quietly (`tooltip.slint`'s `changed hovered`, fed by its own `TouchArea` — nothing writes it once the area is gone), where one reading a **layout** property is re-dirtied by the *surviving parent* the moment that parent re-flows without the child (`meta-chip-strip.slint`'s `changed watched-w`, i.e. its own width). So the rule is about the **condition**, not the handler: a branch carrying a layout-watching tracker may only be dropped when nothing has re-dirtied that property in the same frame — never by an animated property, and never by anything a `changed` handler writes. The symptom is `called Option::unwrap() on a None value` at `app-window.rs`, in `InnerFoo::user_init::{closure#N}`, on a frame with no obvious cause and with the panic naming a component that is nowhere near the code you touched; the tell in the generated source is a `change_tracker<N>.init` whose *eval* closure reads a `_width` / `_height` / `_watched_w` property. **Don't read "a discrete write from Rust" as the cure — the writer is not what makes it safe, the quiet frame is.** A `Timer`'s `triggered` body really does sit outside the change-handler pass (`platform.rs::update_timers_and_animations` runs `update_animations` → `TimerList::maybe_activate_timers` → `ChangeTracker::run_change_handlers`, in that order), and a Rust callback sits in the same slot — and **both still panic** if they drop a branch whose width the frame just moved. That is why an animated predicate is fatal and a Rust write usually isn't: a morph re-flows the branch on *every* frame including its last, so the tracker is always queued exactly when the drop lands, where a discrete close lands on a band that has been sitting still. `library-tab-band.slint` is the worked example, and the shape it settled on is the one to copy. It used to split its hero across two predicates — the back slot and the artwork tile on `if root.hero-t > 0`, the title column beside them (the one mounting `HeroChipStrip`, hence `MetaChipStrip`) pinned to `if root.detail-open` — and paid at *both* ends: the two halves mounted a frame apart on the way in, so the title laid out where the tile wasn't yet and then jumped a tile's width right, and on the way out the title left on the frame the id cleared while the tile faded on for 400 ms. Now everything tracker-free rides one `hero-shown: root.detail-open || root.hero-t > 0` — the artwork tile fading through `ArtworkImage`'s own `fade` float and the title block on brush alpha, neither of them on an `opacity` any more, that split being the ink entry's rather than this one's — and **the chip strip is mounted for the life of the band** and fades by brush alpha too (`HeroChipStrip`'s `fade`, through `HeroBackdrop.chip-fill-at` so the tier's weight stays stated once). Brush alpha rather than `opacity` because the mount is permanent: `Opacity::need_layer` bails at exactly `1.0` and on a childless lone child, and an always-mounted layout is neither, so a subtree under one allocates and blends an offscreen layer on every frame, forever. Pinned by `ui::library_tab_band_tests::the_chip_strip_outlives_every_morph_it_is_painted_in` (a brace walk, not an indent walk — the band has `if`-gated *siblings* at shallower depths) and `…::the_hero_fades_on_the_morph_at_both_ends`.
-- **`init` runs *after* bindings resolve to final values — useless for entry animations.** Setting `shown: true` in `init` makes `true` the *initial* value, so `animate opacity` never runs. Fix: single-shot 1 ms `Timer` flips `shown` once at mount.
-- **Glyphs outside Vazirmatn inflate `Text` line-box and break patched-metrics centring.** Unicode arrows or any glyph the bundled font lacks pulls a fallback font; its taller `typoAsc/Desc` defines the line-box, so patched glyphs drift down. Fix: render foreign glyph as sibling `MaterialIcon` (collapsed em-box).
+
+- **Concurrent `animate` blocks aren't free at vsync** — re-evaluated per frame. For *periodic*
+  visuals prefer one shared `Timer` + counter + math-derived bindings.
+
+- **An animated `width` on a *component root* eases the window's own minimum width.** Slint
+  reports a root's bound `width` as both `min` *and* `max` in its `layout_info` (and rejects a
+  `min-width` beside it), so the layout floor tracks the animation and propagates up to the
+  window: dragging an edge inward against a still-easing floor **stutters**, and the element
+  becomes the constraint that stops the window reaching widths its own responsive threshold waits
+  for, so a measured breakpoint fires late or never. Fix: drop the bound `width` and spell out
+  `min-width` (constant floor) / `preferred-width` (the animated value — a centring or
+  non-stretching host draws it identically) / `max-width`. Tell: `layout_info`'s `min` reading
+  back the root's own `width`.
+
+- **The same is true of an animated `height`, and there the split obliges a `clip`.**
+  `library-tab-band.slint` morphs a ~132 px idle band to a 232 px hero via `min-height` /
+  `preferred-height: compact-h + (hero-h - compact-h) * hero-t` / `max-height`. Consequence of
+  that freedom: the element is drawn shorter than it asked and the hero's contents paint down out
+  of the band into the page body on every frame of the shrink leg (on the width axis they spill
+  sideways under a neighbour instead). `clip: true` on the root contains it — rectangular and
+  borderless, so it lowers to a scissor rather than the offscreen layer a rounded clip over text
+  would cost. Pinned by `ui::library_tab_band_tests`.
+
+- **Components writing own `in-out property` orphan one-way `name: source` binding on first
+  click.** `clicked => { root.selected-index = i; }` detaches `selected-index: SomeGlobal.field`.
+  Fix: two-way `<=>`. `ToggleSwitch`: `manual: true` emits `toggled(new-value)` *without* mutating
+  own `checked`. `Dropdown`: `manual: true` fires `selected(i)` *without* self-writing
+  `selected-index`, so a one-way `selected-index: model.field` binding survives — the
+  smart-playlist rule rows need that, a field change resetting the operator index the op dropdown
+  must re-read.
+
+- **Rectangle-inheriting components don't size from `if`-conditional children — wrap in a
+  layout.** `Rectangle { if has-matches: SectionCard { … } }` reports 0×0; fix
+  `VerticalLayout { … }`. An `if` lowers to a repeater and
+  `default_geometry::gen_layout_info_prop` folds a child *layout* into the root's layout info but
+  skips a repeated one (tell: the missing `+ …layoutinfo_v` term in `app-window.rs`).
+  **It also skips any child that binds `x` or `y`, and that half is the inverse hazard.** A
+  hand-positioned child contributes nothing, where the same content in a centring layout folds its
+  whole constraint set — including whatever is *animated* inside it — into the root's
+  `layout_info` and so into the host layout's dependency graph. `IconButton` centres its glyph by
+  arithmetic rather than a `HorizontalLayout` precisely so a press-shrink doesn't re-solve the
+  now-playing bar per frame; nothing visible moves when it does, so the only tell is that
+  `+ …layoutinfo_h` term reaching an animated property.
+  **A `min-height` beside it makes this survivable and therefore invisible**: `MetaChipStrip`
+  shipped as `Rectangle { min-height: 26px; if show-rows: VerticalLayout { … } }`, reported
+  `preferred: 0`, took its 26 px floor, and drew every wrapped row *outside* the box — only wrong
+  once content wraps, i.e. a narrow window or a long-plural locale. **And the wrapper owes a
+  `min-width: 0px`** — a layout child folds in *both* orientations, and `layout_items` never
+  shrinks a cell past its `min`, so a strip that chunks itself against the width it is handed
+  reports the old width back, never learns there is less room, and clips instead of wrapping. An
+  explicit `min-width` **replaces** the merged constraint rather than maxing with it, so one line
+  is the whole cure (`settings/chip-group.slint` carries it against a hidden ruler). Nothing
+  higher up saves you: the same replacement happens on the root `Window`. Pinned by
+  `ui::hero_chips::tests::{the_strip_rows_hang_off_a_layout_not_off_the_root,`
+  `the_strip_leaks_no_width_floor}`.
+
+- **`VerticalLayout` divides surplus equally when every child has `vertical-stretch: 0`.** Append
+  trailing `Rectangle { vertical-stretch: 1; }`, or set `alignment: start`, which hands out no
+  surplus at all. Inside a `GridLayout` one of the two is mandatory: a row is as tall as its
+  taller cell and the shorter is stretched to match, so surplus lands inside whatever that cell
+  contains — a settings body column left on `stretch` grows its cards instead of ending above the
+  taller column's floor.
+
+- **A `GridLayout` cannot do masonry, and the cure is to make each cell a column rather than an
+  item.** Cells are top-aligned to a row as tall as its tallest, so a short item is followed by
+  dead space down to the next row. No per-column flow, no `Flow` element to fall back on.
+  Restructure: one cell per column, each a `VerticalLayout` of the items
+  (`views/settings/pages/*.slint` place *columns*, not cards). Two consequences: stacked, it is
+  column A's items then column B's, so columns want to be **contiguous halves** of the list rather
+  than alternating; and a page with fewer items than columns leaves one empty, so an item that
+  must not fill the surplus width needs its own `max-width` (`SectionCard` pins one beside its
+  `preferred-width`).
+
+- **`GridLayout` honours a runtime expression for `row`/`col` on a plain child, and forces `Auto`
+  on a repeated one.** `convert_row_col_expr` lowers `RowColExpr::Named` to a `PropertyReference`
+  read per layout pass, so `row: SomeGlobal.grid-row(1)` re-flows the grid reactively — how the
+  Settings body swings its columns from side-by-side to stacked with every card still **mounted
+  exactly once**. Two constraints. (1) `passes/lower_layout.rs`'s `add_element` forces
+  `col_expr`/`row_expr` to `Auto` when `repeated.is_some()`, so a `for`-loop's items can't place
+  themselves; only `colspan`/`rowspan` survive. (2) `check_numbering_consistency` rejects
+  **mixing** auto-numbering with runtime expressions for the same property — once one child spells
+  `row`, every child must (a literal is fine, an omission is not). Mount-once matters: a component
+  reads its children's `out` properties back (a settings page ORs its sections' `has-matches`),
+  and an element inside an `if` can't be read from outside it — so one branch per column count is
+  unusable.
+
+- **A `GridLayout` column starts at its cells' *preferred* width, so cells of different natural
+  width give columns of different width.** `layout_items` sets `it.size = it.pref` for every
+  column and only then distributes surplus by stretch, so equal `horizontal-stretch` does **not**
+  equalise columns — it adds an equal share to unequal starting points, and two cards side by side
+  read as a misalignment. Fix: pin every cell's `preferred-width` to the same number
+  (`SectionCard` takes `SettingsPage.card-w`), leaving `min-width` alone so the cell still
+  compresses. **Not `width`** — that is reported as both `min` and `max` and climbs out to the
+  window's own floor.
+
+- **A view root's bottom padding sits *outside* its scroller's viewport, so it reads as a dead
+  strip rather than as breathing room.** `padding: Theme.pad-lg` on a root `VerticalLayout` whose
+  stretchy child is a list/grid/ScrollView pads all four sides, and the bottom one shortens the
+  viewport instead of the content: the last row is clipped mid-glyph and a band of bare
+  `Theme.base` sits between it and the panel border at every scroll position. Easy to mistake for
+  the horizontal `OverlayScrollbar` at the same `y` — the tell is colour: that track is `surface0`
+  at half alpha, rounded and inset, where the strip is flat full-bleed `base`. Inset
+  **left/right/top only**; for clearance at the end, put `padding-bottom` on the column *inside*
+  the viewport — which is exactly what `reserve-scrollbar-lane` does for the horizontal bar's own
+  slot, so the two read alike on screen and are opposite in the tree. Artist and Playlist can't inset on the root at all — Artist's `below-hero` must
+  run full-bleed for `CompositeScrollbars` and the hover sentinel, and Playlist's empty state and
+  drop banner deliberately fill `body`.
+
+- **`changed` doesn't accept path expressions on globals — mirror via local property.**
+  `changed Nav.selected-index => {}` fails to parse. Use
+  `property <int> watched-nav-idx: Nav.selected-index; changed watched-nav-idx => {}`.
+
+- **A faked placeholder `Text` in a non-layout parent paints out of its input, and
+  `overflow: elide` alone doesn't stop it.** Slint's raw `TextInput` has no `placeholder-text`, so
+  all four placeholders in the tree are a sibling `Text` gated on the field being empty. Under a
+  plain `Rectangle`, `make_default_implicit` sizes each to `max(preferred, min)` of its **own**
+  `layout_info` — the untruncated string — so it paints through the pill's right edge, and the
+  default `clip` is against that same full-string width. Elide is half the cure: `text_layout_info`
+  lowers only `min` to one `…`, leaving `preferred` at the full string, so a non-layout parent
+  hands over the larger and elide never fires. **Bound the width *and* elide.** The `TextInput`
+  beside each one never had the bug: it fills its parent (an item with **no** implicit size is
+  sized to 100 %) and clips itself besides. `multiline-input.slint` is exempt — bounded to its
+  scroller (`width: sv.width`) and wrapping rather than eliding. A **locale** bug in practice,
+  English fitting every slot where the catalogues run ~1.3× longer; pinned by
+  `ui::placeholder_tests`.
+
+- **A `SearchBar`'s slot is sized off its own placeholder, so its root spells
+  `min-width`/`preferred-width`/`max-width` and never binds `width`** — a bound `width` is
+  reported as both `min` and `max` and would drag the window's resize floor along with a
+  locale-sized default. The natural width is `placeholder-text.preferred-width + chrome-overhead`,
+  read off the Text the bar draws (the `label-w` idiom: a Text's *horizontal* layout info is
+  intrinsic to the string and never reads back the width it was handed, so it's a derivation and
+  not a cycle). Only the **default** is measured — the four hosts that set `input-width` outright
+  never evaluate it. What every mount keeps is the `min-width` floor: below it the bar compresses
+  and the placeholder elides. That floor is **published as `out property min-w`**, the
+  `TabBar.compact-w` contract — a host budgeting its row reserves against it rather than restating
+  the number. `ui::placeholder_tests` pins both ends.
+
+- **`has-hover` is not continuous, so a *translucent* fill may not read it raw.** Slint clears the
+  flag from two places the pointer never left: `input_items.rs` drops it on a wheel event the
+  `TouchArea` doesn't handle (restored on the next mouse move), so any hover surface **over a
+  scroller** blinks on every wheel tick; and `send_exit_events` compares an item's **stack index**
+  rather than its membership, so an item still under the pointer is handed a spurious `Exit`
+  whenever the hit path's depth shifts around it. Both last one frame, which is why an *opaque*
+  fill gets away with it — the blink lands mid-`animate` between two solid colours. A
+  translucent one shows what is behind the element straight through, and hides until the backdrop
+  changes: `search-bar.slint`'s `surface0` at .75 over flat `Theme.base` is the same pixel as 1.0,
+  until the bar floats over its own results. Fix: **arm on the raw flag and release on a latch** —
+  `engaged: pointer-inside || hover-held || has-focus`, a `changed` handler setting `hover-held`
+  on arrival and a short `Timer` clearing it once the pointer has stayed gone. That is the sidebar
+  rail tooltip's `held` shape, including why `hover-held` sits *beside* the raw flag rather than
+  replacing it: `changed` doesn't fire on a first evaluation, so a component mounted under the
+  pointer would never engage. Opaque fills are fine — don't retrofit the latch where there is
+  nothing to see through.
+
+- **Reusable filter SearchBar pattern.** (1) `text <=> SomeGlobal.filter`,
+  `blur-trigger: SomeGlobal.blur-search-tick`; (2) backdrop
+  `TouchArea { clicked => { SomeGlobal.blur-search-tick += 1; } }` at view root before content;
+  (3) clear filter + bump blur tick on nav-away. Match in Rust through `src/ui/row_match.rs`,
+  never a hand-rolled `to_lowercase().contains(…)`; Settings routes there via
+  `pure callback SettingsPage.matches(...)`.
+  **A page whose box describes more than one surface takes the same three steps against one global
+  and dispatches in Rust.** My Library's band is the tree's only one: the bar binds
+  `MyLibrary.filter` / `.blur-search-tick`, and `ui::my_library::filter::dispatch` routes a
+  settled keystroke to whichever of nine surfaces is mounted — a *write*, since a `.slint` binding
+  belongs to the scope it is written in, making `Tracks.filter: MyLibrary.filter` unspellable.
+  Two things follow. A tab pick clears **both sides**, but the entering tab's
+  own filter only when there *is* one: `filter::clear_mounted` guards on that needle being
+  non-empty, since the pick runs ahead of the section gate and the surface's Rust cache is already
+  wiped by its own leave — an unconditional rebuild writes `total-count = 0` plus an empty model,
+  the exact pair `GridEmptyState` mounts on. And **anything that changes what the box *means* with
+  nobody typing** — a detail id crossing zero, a tab move that isn't a pick — *reseats* it via
+  `filter::sync_box`, taking the newly-mounted surface's own filter; a reseat, not a clear, since
+  clearing on the way out would drop the grid filter the user is returning to. That is five
+  `changed` mirrors, not four: `dispatch` clears only the *entering* tab's needle, so a cross-tab
+  drill or a Mouse-4/5 walk otherwise lands on a tab filtered by an untouched one.
+
+- **Filter debounce via `FilterThrottle`** (`components/filter-throttle.slint`). Non-visual (wraps
+  a `Timer`); the host keeps one `property <int> filter-tick-pending`, bumps it in the SearchBar's
+  `edited`, and mounts
+  `FilterThrottle { pending: root.filter-tick-pending; fire() => { SomeGlobal.apply-filter(SomeGlobal.filter); } }`.
+  Default `interval` 130 ms. The component owns the `applied` counter + `running` gate — don't
+  hand-roll a `filter-tick-applied` property or inline `Timer`; every filterable view uses this.
+  **`fire()` has a second shape, and Settings takes it**:
+  `fire() => { SettingsPage.search-query = SettingsPage.search-input; }`, with the `SearchBar`
+  bound to the *input* and the section cards reading the *query*. The shape follows where the cost
+  lands — a list view debounces a model rebuild in Rust, where a Settings keystroke fans out to
+  three `SettingsPage.matches` round-trips per row across all five tab pages, so the expensive
+  work is Slint's own re-evaluation and the settled value must be a property it can read. Clear
+  both on nav-away and on a tab pick; clearing only the settled one leaves the box holding text
+  the page is no longer filtered by.
+
+- **`PopupWindow.y: -self.height - …` needs explicit `width`/`height`.** Else `self.height` is 0
+  before first layout — popup lands above trigger top, expands downward. Canonical:
+  `components/now-playing/overflow-menu.slint`.
+
+- **A flyout opens *inside* the overflow menu's single `PopupWindow` — no nesting.** The
+  playback-speed row (`speed-flyout.slint`, presets in shared `flyout-presets.slint` globals) is
+  the worked example. Fixed-reserve geometry, as with the volume popup: size the popup for
+  menu-column + flyout up front and bottom-anchor both, so the menu stays pinned under its
+  trigger; a transparent full-popup `TouchArea` **declared first** closes on stray clicks.
+
+- **Sleep timer = a session-only cancel-and-replace tokio countdown + a `PlayerState`
+  end-of-track flag.** In `src/ui/sleep_timer.rs` — a **UI-layer** module, because `tasks/` may
+  not import `ui::*` and the countdown writes a Slint property. **Duration is
+  playback-linked**: each 1 s tick decrements only while `status_atomic == Playing` (lock-free),
+  so pausing holds the timer and it never expires on a paused player. Never persisted; bounds
+  `[30 s, 2 h]`; `Player.set-sleep-timer(minutes)` takes 0 off / `>0` duration / `-1`
+  End-of-track, the last arming `PlayerState::pause_after_current_track` (monitor half in
+  `src/player/CLAUDE.md`).
+
+- **Flash-free image cross-fade = two slots, never cleared.** Two stacked `Image`s + `use-a` bool;
+  Rust writes the new image into the *inactive* slot then flips the bool so both `opacity`
+  animate. Slot `source` is never reset — the outgoing layer stays painted for the fade.
+
+- **A rounded `clip: true` (or a `border`) on an element that *contains text/children* blurs +
+  upscales that subtree on HiDPI.** FemtoVG renders it into an offscreen texture at logical size,
+  then upscales by the display scale factor on blit. Don't wrap a scrolling text list in a
+  bordered/rounded-clipped card: let the `ScrollView` clip its viewport rectangularly (cheap
+  scissor, no layer) and paint the rounded border with a **childless overlay `Rectangle`**
+  sibling. Canonical: `components/dialog/selectable-picker.slint::PickerListCard`.
+
+- **Nothing that draws text may be cut to its layout box — the box is a line box and the ink is
+  not. Two mechanisms cut, and both are invisible in Latin.** The shipped Vazirmatn faces are
+  patched to a ~1.05 em line box (`hhea`/`sTypo` at `1650/-500` on 2048 UPM, `USE_TYPO_METRICS`
+  set) while their outlines reach `yMax 2163` / `yMin -1160`. Latin ink fits; Arabic marks do not,
+  so **a crop no reviewer on a Latin locale can see removes the hamza above an alif and the dots
+  under a final ya.**
+  - **`opacity` under 1 rasterizes the subtree into a texture sized to child *geometry*.**
+    `Opacity::need_layer` (`i-slint-core/items.rs`) has **two** bails: exactly 1.0, and a lone
+    child that is itself childless — so a hairline divider's `opacity: 0.5` is free where the same
+    line over a layout is not. Past both, the texture is sized by `item_children_bounding_rect` —
+    the union of subtree geometry, and a text item's `bounding_rect` is its geometry verbatim. A
+    *fade* therefore crops the marks for its whole duration and hands them back on the settling
+    frame. **The union decides who bleeds** — the block's first and last children, not every
+    `Text` under the fade.
+    Three cures, in order of preference. **Fold the alpha into the brush**
+    (`Theme.text.with-alpha(t)`): pixel-identical where elements don't overlap, no texture.
+    **Where there is no brush, pass a `fade` float into the component** (`ArtworkImage` spends it
+    on the fill via `transparentize` and on a childless `Image`): an image has no brush, and a
+    layer clipped against an *animating* height re-allocates rather than reuses its texture every
+    frame; costs a few percent of extra weight wherever the faded elements overlap. **Where the
+    component's
+    brushes feed its own `animate` blocks, do neither** — a fade multiplied in re-dirties them
+    every frame and stalls each crossfade (the shared-brush entry above; "no pointer is on it
+    while it animates" is not an escape, since you *click* the back disc to close a detail).
+    Satisfy `need_layer`'s second bail instead: `IconButton`'s glyph moved out of the disc to be
+    its sibling, both centred on the root so no geometry moved, leaving the disc *childless*; the
+    glyph fades through `MaterialIcon`'s own `fade` and carries its own `x`/`y` rather than a
+    centring layout, for the `gen_layout_info_prop` reason above. Verify in the generated tree,
+    not the `.slint` — but a sub-component has no `ITEM_TREE` of its own, so anchor on names in
+    the enclosing struct's item field list. **None of the three were measured**, only argued off
+    `need_layer`. Unfixable in `components/view-transition.slint`, which fades whole pages with no
+    brush to reach. Pinned by `library_tab_band_tests::the_hero_fades_on_the_morph_at_both_ends`.
+  - **A `Text`'s default `overflow` is `clip`, and that pushes a scissor at its line box
+    before a single glyph is emitted** (`textlayout/sharedparley.rs` → femtovg
+    `intersect_scissor`, a per-fragment mask that cuts *through* glyphs). **`overflow: elide`
+    pushes none at all** — load-bearing: it is why the track rows, Now Playing bar and hero title
+    render Arabic correctly. Any `Text` that can hold user
+    data wants `elide` even where nothing can overflow — **but it also lowers that element's
+    layout `min` to the width of one `…`**, so an over-packed row that used to overflow one chip
+    now compresses and truncates all of them (`components/meta-chip.slint`;
+    `ui::chips::estimated_chip_width` keeps the wrap estimate out of reach). Sharper for a
+    *fixed*-height `Text` — it is asking to be cut, so give it slack or leave the height alone.
+
+- **A function's arguments are unreachable inside a gradient's stops, so a shared
+  `tile-gradient(a, b)` helper is unspellable.** `from_at_gradient` swaps `ctx.property_type` to
+  `Type::Color` per stop, and `ArgumentsLookup` yields nothing unless that field is a
+  `Callback`/`Function`. Tell: `Unknown unqualified identifier 'a'` on the stop, which reads like a
+  typo. **Unqualified** lookup is the half that breaks — `root.a` is fine — so the escape is a
+  component with an `out property <brush>`, which has to be mounted to be read, an element per
+  caller. Rust can't either: `slint` re-exports `Brush` but not
+  `LinearGradientBrush`/`GradientStop`. Hence the genre tile gradient spelled out at
+  `grid/genre-grid.slint`, `my-library-view.slint` and `search/top-result-card.slint`.
+
+- **A `border-radius` past half an element's *height* becomes an ellipse, not a clamped stadium.**
+  FemtoVG's `rounded_rect_varying` clamps a corner's x- and y-radii **independently**
+  (`rad.min(halfw)` / `rad.min(halfh)`) and Slint passes the radius straight through, so a short
+  wide rect with a large radius has arcs spanning its half-width and pinches to a lens. Any radius
+  on a **size-varying** element must be clamped on both axes —
+  `min(self.width / 2, self.height / 2, <cap>)`. Bit the spectrum bars at their resting floor and
+  the EQ band fill at 0 dB; a fixed-size pill is fine with the usual `self.height / 2`.
+
+- **An explicit `background: transparent` costs a discarded path per element per frame.**
+  `resolve_native_classes` picks an element's native class from *which properties have bindings*,
+  regardless of value, so binding `background` at all promotes it out of `Empty` (never visited by
+  the renderer) into `Rectangle` — and the FemtoVG item renderer builds the path *before* it looks
+  at the paint. `Rectangle` already defaults to transparent, so the binding is pure cost; delete
+  it rather than spelling out the default. Only matters at scale — 65 wasted paths a frame in
+  `spectrum-bars.slint` (root plus 64 bands); noise on a one-off container.
+
+- **Generated `Path` geometry has to arrive as an SVG `commands` string, and needs an explicit
+  viewbox with `fit: fill`.** `for`-`in` inside a `Path` is rejected outright (slint-ui/slint#754),
+  so a computed vertex count means building the string in Rust. Then **declare
+  the viewbox**: without one Slint fits the path's *own* bounding box to the element,
+  renormalising every frame — a whisper draws as loud as a chorus. And `fit` must be `fill`, not
+  the default `contain`, which preserves aspect ratio and letterboxes a tall narrow box into a
+  sliver. Finally, emit a closed figure **lower-edge-first** so its signed area is positive:
+  femtovg reads the winding to decide solid vs `Solidity::Hole`. All four bit
+  `waveform-trace.slint`; `player::waveform::write_path_commands` is the writer.
+
+- **A `<=>` on a `Flickable`'s `viewport-y` silently disables Slint's own out-of-bounds correction
+  — a one-way binding doesn't.** `Flickable::init` installs a change handler that pulls a
+  scrolled-past-the-end viewport back in range, guarded on
+  `if *y_out_of_bounds && !y.has_binding()` (`items/flickable.rs:112`), so a `viewport-y` carrying
+  a binding opts out. **The distinction is which kind survives a write.** Most scrollers here
+  reach `viewport-y` imperatively (`sv.viewport-y = -o`); the constant `0px` binding the generated
+  tree seeds them with is *orphaned by the first such write* (the one-way-binding pitfall above),
+  and until then `0px` can't be out of bounds either way — so they keep the guard. `<=>` compiles
+  to `Property::link_two_way`, which **does** survive a self-write, making the two composite views
+  (`browse-view.slint`, `ArtistDetailBody`) the only permanently unguarded scrollers in the tree.
+  Left uncorrected, content that shrinks under the current offset paints a **blank region** —
+  Browse leaving a deep folder for the much shorter library root, or either view filtering a long
+  list to a few rows. Nothing looks wrong in the source; the symptom is an empty view that fixes
+  itself when you switch tabs, the content-area `if` remounting it at 0. `CompositeScrollbars`
+  re-clamps on `changed v-outer-max`; a new scroller that two-way-binds `viewport-y` needs the
+  same. To audit, grep the generated file for `r#Flickable :: FIELD_OFFSETS . r#viewport_y ())`
+  (empty parens included): 2 `link_two_way` hits, 23 benign `set_property_binding` seeds.
+
+- **Stock Slint 1.16 + winit 0.30 have zero OS file-drop on Wayland.** `DragArea`/`DropArea` is
+  in-process only — no `PathBuf`, still true of released 1.17.x. Vendored winit PR #4009. Fix
+  merged upstream but unreleased: winit **#4571**, a new `DataTransfer` DnD API superseding
+  #1881/#4009.
+
+- **`changed <local-prop>` doesn't fire when first layout settles directly on final value.**
+  Native-titlebar reaches final grid width in one pass — derived counts never *transition*. Fix:
+  pair the handler with a single-shot 1 ms `Timer` firing the body once at mount. **The
+  `changed width => { self.<mirror> = self.width; }` idiom is the recurring victim and always owes
+  that seed**: a window opened at its final size never *resizes*, so the mirror keeps its declared
+  seed forever and every width derived from it is wrong until something moves the window. Bit
+  `settings-view.slint`'s `page-w` and `now-playing-bar.slint`'s `bar-w` (the latter hidden by
+  consumers that `clamp` well below its 1100 px seed); both now carry the timer.
+
+- **A `changed` handler inside an `if` outlives its branch, and whether that is fatal comes down
+  to what it watches.** The generated `ChangeTracker` lives *in* the repeated component and holds
+  a `VWeakMapped` back to it, and `ChangeTracker::evaluate` opens with
+  `self_weak.upgrade().unwrap()`. Dropping the branch drops the strong refs but `VRc` keeps the
+  allocation alive for the weaks, so the tracker stays registered in `CHANGED_NODES` with nothing
+  to upgrade to. It only fires if something re-dirties the watched property *after* the drop — the
+  whole distinction: a tracker reading a property driven from **inside** the branch dies quietly
+  (`tooltip.slint`'s `changed hovered`, fed by its own `TouchArea`), where one reading a **layout**
+  property is re-dirtied by the *surviving parent* the moment it re-flows without the child
+  (`meta-chip-strip.slint`'s `changed watched-w`). So the rule is about the **condition**, not the
+  handler: a branch carrying a layout-watching tracker may only be dropped when nothing has
+  re-dirtied that property in the same frame — never by an animated property, never by anything a
+  `changed` handler writes. **Don't read "a discrete write from Rust" as the cure — the quiet
+  frame is what makes it safe, not the writer.** A `Timer`'s `triggered` body and a Rust callback
+  both sit outside the change-handler pass and **both still panic** if they drop a branch whose
+  width the frame just moved; an animated predicate is fatal because a morph re-flows the branch
+  on *every* frame including its last.
+  Symptom: `called Option::unwrap() on a None value` at `app-window.rs` in
+  `InnerFoo::user_init::{closure#N}`, on a frame with no obvious cause, naming a component nowhere
+  near what you touched; the tell in the generated source is a
+  `change_tracker<N>.init` whose *eval* closure reads a `_width` / `_height` / `_watched_w`.
+  The shape to copy is `library-tab-band.slint`: everything tracker-free rides one
+  `hero-shown: root.detail-open || root.hero-t > 0` (which also stops the two halves mounting a
+  frame apart), and **the chip strip is mounted for the life of the band**, fading by brush alpha
+  through `HeroBackdrop.chip-fill-at` — brush alpha rather than `opacity` because a permanent
+  mount satisfies neither `need_layer` bail. Pinned by
+  `ui::library_tab_band_tests::the_chip_strip_outlives_every_morph_it_is_painted_in` (a brace
+  walk, not an indent walk — the band has `if`-gated *siblings* at shallower depths).
+
+- **`init` runs *after* bindings resolve to final values — useless for entry animations.** Setting
+  `shown: true` in `init` makes `true` the *initial* value, so `animate opacity` never runs. Fix:
+  single-shot 1 ms `Timer` flips `shown` once at mount.
+
+- **Glyphs outside Vazirmatn inflate `Text` line-box and break patched-metrics centring.** Unicode
+  arrows or any glyph the bundled font lacks pulls a fallback font; its taller `typoAsc/Desc`
+  defines the line-box, so patched glyphs drift down. Fix: render the foreign glyph as a sibling
+  `MaterialIcon` (collapsed em-box).

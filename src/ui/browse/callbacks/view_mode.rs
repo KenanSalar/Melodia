@@ -49,12 +49,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                     // `Some(Card)` is "we decoded for the card tier and still hold it" —
                     // the shape `should_announce_warm` takes, with the mode standing in
                     // for the tab a grid page would pass.
-                    let warmed = tokio::task::spawn_blocking(move || {
-                        bu_prewarm.prewarm_card_covers()
-                    })
-                    .await
-                    .unwrap_or(false)
-                    .then_some(browse_ui_mod::BrowseViewMode::Card);
+                    let warmed =
+                        tokio::task::spawn_blocking(move || bu_prewarm.prewarm_card_covers())
+                            .await
+                            .unwrap_or(false)
+                            .then_some(browse_ui_mod::BrowseViewMode::Card);
                     let _ = weak_bump.upgrade_in_event_loop(move |ui| {
                         // Both shadows are written on this thread, so this is the same
                         // re-check the prewarm made, against anything that landed after
@@ -71,13 +70,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                 });
             } else {
                 let bu_release = bu.clone();
-                s.runtime
-                    .spawn_blocking(move || bu_release.release_grid_covers());
+                s.runtime.spawn_blocking(move || bu_release.release_grid_covers());
             }
 
             let s_disk = s.clone();
-            spawn_blocking_logged!(s_disk, "browse::set_view_mode",
-                library::settings::set_browse_view_mode(&s_disk, mode_idx));
+            spawn_blocking_logged!(
+                s_disk,
+                "browse::set_view_mode",
+                library::settings::set_browse_view_mode(&s_disk, mode_idx)
+            );
         });
     }
 
@@ -93,7 +94,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
-    // request-card-cover: one card's thumbnail off Browse's own 448 px tier, decoded only
+    // request-card-cover: one card's thumbnail off Browse's own grid tier, decoded only
     // once `covers-generation` says the tier is warm.
     {
         let bu = browse_ui.clone();

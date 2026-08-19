@@ -85,43 +85,67 @@ impl AppError {
     /// `msg` is the operation context (`"Failed to open <path>"`); the typed cause
     /// rides on `.source()` so logs can walk the chain.
     pub fn metadata(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Metadata { msg: msg.into(), source: Some(source.into()) }
+        Self::Metadata {
+            msg: msg.into(),
+            source: Some(source.into()),
+        }
     }
 
     /// Metadata error from a message only (no underlying cause to preserve).
     pub fn metadata_msg(msg: impl Into<String>) -> Self {
-        Self::Metadata { msg: msg.into(), source: None }
+        Self::Metadata {
+            msg: msg.into(),
+            source: None,
+        }
     }
 
     /// Scanner error wrapping an underlying cause (usually a tokio `JoinError`).
     pub fn scanner(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Scanner { msg: msg.into(), source: Some(source.into()) }
+        Self::Scanner {
+            msg: msg.into(),
+            source: Some(source.into()),
+        }
     }
 
     /// Scanner error from a message only.
     pub fn scanner_msg(msg: impl Into<String>) -> Self {
-        Self::Scanner { msg: msg.into(), source: None }
+        Self::Scanner {
+            msg: msg.into(),
+            source: None,
+        }
     }
 
     /// Watcher error wrapping an underlying cause (notify).
     pub fn watcher(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Watcher { msg: msg.into(), source: Some(source.into()) }
+        Self::Watcher {
+            msg: msg.into(),
+            source: Some(source.into()),
+        }
     }
 
     /// Watcher error from a message only.
     pub fn watcher_msg(msg: impl Into<String>) -> Self {
-        Self::Watcher { msg: msg.into(), source: None }
+        Self::Watcher {
+            msg: msg.into(),
+            source: None,
+        }
     }
 
     /// Network error wrapping an underlying cause (reqwest / URL parse).
     pub fn network(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Network { msg: msg.into(), source: Some(source.into()) }
+        Self::Network {
+            msg: msg.into(),
+            source: Some(source.into()),
+        }
     }
 
     /// Network error from a message only (e.g. an HTTP status or scheme check
     /// that has no underlying transport error).
     pub fn network_msg(msg: impl Into<String>) -> Self {
-        Self::Network { msg: msg.into(), source: None }
+        Self::Network {
+            msg: msg.into(),
+            source: None,
+        }
     }
 }
 

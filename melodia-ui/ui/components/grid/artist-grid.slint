@@ -13,8 +13,12 @@ export component ArtistGrid inherits Rectangle {
     in property <length> row-height: 246px;
     in property <length> gap: 20px;
 
+    // Bumped by the host once a scheduled decode batch lands; the card's binding reads it so a
+    // `pure` callback re-runs. See `AlbumGrid`.
+    in property <int> covers-generation: 0;
+
     callback open-artist(int /*artist_id*/);
-    pure callback request-cover(string /*image_path*/) -> image;
+    pure callback request-cover(string /*image_path*/, int /*generation*/) -> image;
 
     out property <length> v-visible-height: list.visible-height;
     out property <length> v-viewport-height: list.viewport-height;
@@ -42,7 +46,7 @@ export component ArtistGrid inherits Rectangle {
                     circular: true;
                     fallback-icon: "person";
                     artwork-path: artist.image_path;
-                    cover: root.request-cover(artist.image_path);
+                    cover: root.request-cover(artist.image_path, root.covers-generation);
                     // A pronounced zoom on the placeholder, as on the other
                     // grids; real artwork stays gentle so a cover doesn't
                     // jitter inside the tile clip on hover.

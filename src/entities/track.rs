@@ -1,11 +1,33 @@
+//! Track rows, and the projections queries select into.
+//!
+//! [`Track`] is the whole row, and the callers that need all of it are few: scan
+//! ingest, hash backfill, the detail view, fixtures. Everything else selects a
+//! narrower struct through its `*_columns()` helper, since a list view fetching
+//! the full row pays a decode per unused column on every row it draws.
+//!
+//! Pick the slimmest projection that carries what the caller renders:
+//!
+//! | projection | for |
+//! |---|---|
+//! | [`TrackSummary`] | queue, Now Playing, the sync playback path (carries `ReplayGain` and rating) |
+//! | [`TrackListRow`] | every track list, Files and Browse included |
+//! | [`TrackMeta`] | the Now-Playing technical chips |
+//! | [`TagEditRow`] | the Edit-Track-Information dialog |
+//! | [`ScrobbleRow`] | a scrobble or love submission |
+//! | [`PlaylistExportRow`] | one M3U8 line |
+//!
+//! A new caller takes the closest existing projection rather than adding an
+//! eighth. Where the problem is instead a list held *resident* carrying columns
+//! it never draws, the answer is `ui::track_list_cache`, which converts at fetch
+//! and frees the rest.
+
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-/// Queue + `ViewModel` shape: the minimal fields the player and now-playing
-/// bar need to render and the queue-persistence file needs to round-trip.
-/// `~10 fields vs Track's 41` cuts clone/serialize cost ~75 %. Use this when
-/// you only need playback-relevant identity (id, path, title, artwork) plus
-/// the favorite flag — never as a query result for a list view.
+/// Queue + `ViewModel` shape: what the player and the now-playing bar render,
+/// and what the queue-persistence file round-trips. It is cloned into every
+/// published `ViewModel` and serialized on every queue save, so it carries
+/// playback identity and nothing a list draws. Use [`TrackListRow`] for those.
 #[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct TrackSummary {
     pub id: i64,
@@ -169,9 +191,22 @@ pub struct TrackListRow {
 /// now-playing-bar / playback paths actually read, instead of reading all
 /// 40 columns and discarding 32 of them.
 pub const TRACK_SUMMARY_COLUMNS: &[&str] = &[
-    "id", "file_path", "file_name", "title", "artist", "album", "duration_ms",
-    "artwork_path", "track_number", "disc_number", "last_position", "is_favorite",
-    "rating", "replaygain_track_gain", "replaygain_track_peak", "replaygain_album_gain",
+    "id",
+    "file_path",
+    "file_name",
+    "title",
+    "artist",
+    "album",
+    "duration_ms",
+    "artwork_path",
+    "track_number",
+    "disc_number",
+    "last_position",
+    "is_favorite",
+    "rating",
+    "replaygain_track_gain",
+    "replaygain_track_peak",
+    "replaygain_album_gain",
     "replaygain_album_peak",
 ];
 
@@ -187,9 +222,26 @@ pub fn track_summary_columns() -> &'static str {
 /// The explicit SELECT columns for `TrackListRow` queries.
 /// Used by `track.rs` queries (bare) and `playlist.rs` (with table alias via `track_list_columns_prefixed`).
 pub const TRACK_LIST_COLUMNS: &[&str] = &[
-    "id", "file_path", "file_name", "title", "artist", "album_artist", "album", "genre",
-    "track_number", "disc_number", "year", "duration_ms", "artwork_path", "is_favorite",
-    "rating", "album_id", "artist_id", "genre_id", "date_added", "sort_key",
+    "id",
+    "file_path",
+    "file_name",
+    "title",
+    "artist",
+    "album_artist",
+    "album",
+    "genre",
+    "track_number",
+    "disc_number",
+    "year",
+    "duration_ms",
+    "artwork_path",
+    "is_favorite",
+    "rating",
+    "album_id",
+    "artist_id",
+    "genre_id",
+    "date_added",
+    "sort_key",
 ];
 
 /// Comma-separated form of `TRACK_LIST_COLUMNS` for direct `SELECT` usage.
@@ -295,7 +347,14 @@ pub struct TrackMeta {
 /// `TrackMeta`'s field order for legibility — sqlx's derived `FromRow`
 /// matches by column name, so the order isn't load-bearing.
 pub const TRACK_META_COLUMNS: &[&str] = &[
-    "id", "codec", "bitrate", "sample_rate", "bit_depth", "channels", "year", "genre",
+    "id",
+    "codec",
+    "bitrate",
+    "sample_rate",
+    "bit_depth",
+    "channels",
+    "year",
+    "genre",
 ];
 
 /// Comma-separated form of `TRACK_META_COLUMNS` for direct `SELECT` usage.
@@ -344,10 +403,30 @@ pub struct TagEditRow {
 /// `TagEditRow`'s field order for legibility — sqlx's derived `FromRow`
 /// matches by column name, so the order isn't load-bearing.
 pub const TRACK_TAG_EDIT_COLUMNS: &[&str] = &[
-    "id", "file_path", "title", "artist", "album_artist", "album", "genre", "year",
-    "original_year", "track_number", "disc_number", "composer", "comment", "bpm",
-    "artwork_path", "codec", "bitrate", "sample_rate", "bit_depth", "channels",
-    "file_size", "date_modified", "duration_ms", "file_hash",
+    "id",
+    "file_path",
+    "title",
+    "artist",
+    "album_artist",
+    "album",
+    "genre",
+    "year",
+    "original_year",
+    "track_number",
+    "disc_number",
+    "composer",
+    "comment",
+    "bpm",
+    "artwork_path",
+    "codec",
+    "bitrate",
+    "sample_rate",
+    "bit_depth",
+    "channels",
+    "file_size",
+    "date_modified",
+    "duration_ms",
+    "file_hash",
 ];
 
 /// Comma-separated form of `TRACK_TAG_EDIT_COLUMNS` for direct `SELECT` usage.
@@ -380,8 +459,15 @@ pub struct ScrobbleRow {
 /// Explicit SELECT columns for `ScrobbleRow` queries, in field order for
 /// legibility (sqlx `FromRow` matches by name, so order isn't load-bearing).
 pub const SCROBBLE_ROW_COLUMNS: &[&str] = &[
-    "id", "title", "artist", "album", "album_artist", "duration_ms", "track_number",
-    "musicbrainz_track_id", "musicbrainz_release_id",
+    "id",
+    "title",
+    "artist",
+    "album",
+    "album_artist",
+    "duration_ms",
+    "track_number",
+    "musicbrainz_track_id",
+    "musicbrainz_release_id",
 ];
 
 /// Comma-separated form of `SCROBBLE_ROW_COLUMNS` for direct `SELECT` usage,

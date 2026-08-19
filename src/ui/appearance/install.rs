@@ -107,9 +107,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         reason = "corner_radius clamped to 0..=15: exact in i32 and exact in f32 (f32 mantissa has 23 bits)"
     )]
     {
-        let clamped = settings
-            .corner_radius
-            .min(services::settings::MAX_CORNER_RADIUS);
+        let clamped = settings.corner_radius.min(services::settings::MAX_CORNER_RADIUS);
         let radius = library::settings::snap_to_preset(clamped);
         ui.global::<Settings>().set_corner_radius(radius as i32);
         let theme = ui.global::<Theme>();
@@ -200,5 +198,9 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     window_settings::wire_overflow_buttons_changed(ui, state);
     window_settings::wire_close_to_tray_changed(ui, state);
 
-    Ok(AppearanceHandles { os_state, kick_tx, repaint_tx })
+    Ok(AppearanceHandles {
+        os_state,
+        kick_tx,
+        repaint_tx,
+    })
 }

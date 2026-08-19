@@ -32,7 +32,10 @@ const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/settings-view.s
 
 /// One tab page per tab, by name so a failure says which file.
 const PAGES: [(&str, &str); 5] = [
-    ("library-page", include_str!("../../../../melodia-ui/ui/views/settings/pages/library-page.slint")),
+    (
+        "library-page",
+        include_str!("../../../../melodia-ui/ui/views/settings/pages/library-page.slint"),
+    ),
     (
         "playback-page",
         include_str!("../../../../melodia-ui/ui/views/settings/pages/playback-page.slint"),
@@ -45,7 +48,10 @@ const PAGES: [(&str, &str); 5] = [
         "services-page",
         include_str!("../../../../melodia-ui/ui/views/settings/pages/services-page.slint"),
     ),
-    ("about-page", include_str!("../../../../melodia-ui/ui/views/settings/pages/about-page.slint")),
+    (
+        "about-page",
+        include_str!("../../../../melodia-ui/ui/views/settings/pages/about-page.slint"),
+    ),
 ];
 
 /// The `N` in `SettingsPage`'s `tab-count: N;`.
@@ -87,10 +93,8 @@ fn tab_count_matches_the_tabs_slint_declares() {
         "settings-page.slint's `tab-*` index constants don't add up to `tab-count`"
     );
 
-    let branches = ROUTER
-        .lines()
-        .filter(|line| line.contains("root.tab-index == SettingsPage.tab-"))
-        .count();
+    let branches =
+        ROUTER.lines().filter(|line| line.contains("root.tab-index == SettingsPage.tab-")).count();
     assert_eq!(branches, count, "settings-tabs.slint's router branches don't cover every tab");
 
     let search_mounts =
@@ -109,7 +113,11 @@ fn tab_count_matches_the_tabs_slint_declares() {
          settings-view.slint"
     );
     let labels = labels.unwrap_or_default();
-    assert_eq!(labels.split(',').count(), count, "the tab bar's `labels` array is the wrong length");
+    assert_eq!(
+        labels.split(',').count(),
+        count,
+        "the tab bar's `labels` array is the wrong length"
+    );
     // Counting `@tr(` too pins the "inline literal, never Rust-seeded"
     // contract: `@tr` registers msgids at codegen, so a `[string]` filled from
     // Rust would render untranslated.

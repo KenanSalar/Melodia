@@ -4,13 +4,13 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
+use crate::library;
+use crate::state::AppState;
+use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{
     collect_nonzero_track_ids, next_sort, persist_view_sort, persisted_sort, play_row_start,
 };
-use crate::library;
-use crate::state::AppState;
-use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Browse};
 
@@ -46,8 +46,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             }
             let start = play_row_start(&ids, id, idx);
             let s = s.clone();
-            spawn_logged!(s, "browse::play_row",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+            spawn_logged!(
+                s,
+                "browse::play_row",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
+            );
         });
     }
 
@@ -66,22 +69,19 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                 return;
             }
             let s = s.clone();
-            spawn_logged!(s, "browse::play_next",
-                library::queue::queue_play_next_many(&s, id_vec));
+            spawn_logged!(s, "browse::play_next", library::queue::queue_play_next_many(&s, id_vec));
         });
     }
 
     {
         let s = state.clone();
         g.on_add_to_queue(move |ids| {
-            let id_vec: Vec<i64> =
-                ids.iter().map(i64::from).filter(|&id| id != 0).collect();
+            let id_vec: Vec<i64> = ids.iter().map(i64::from).filter(|&id| id != 0).collect();
             if id_vec.is_empty() {
                 return;
             }
             let s = s.clone();
-            spawn_logged!(s, "browse::add_to_queue",
-                library::queue::queue_add_tracks(&s, id_vec));
+            spawn_logged!(s, "browse::add_to_queue", library::queue::queue_add_tracks(&s, id_vec));
         });
     }
 
@@ -92,26 +92,26 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
     {
         let bu = browse_ui.clone();
         wire_row_flag!(g, on_toggle_row_favorite, state, "browse::set_favorite",
-            library::favorites::set_favorite, collect_nonzero_track_ids,
-            captures: [weak, bu],
-            after: |id_vec, fav| {
-                for id in &id_vec {
-                    bu.flip_favorite(*id, fav);
-                    browse_ui_mod::apply_row_favorite(&weak, *id, fav);
-                }
-            });
+        library::favorites::set_favorite, collect_nonzero_track_ids,
+        captures: [weak, bu],
+        after: |id_vec, fav| {
+            for id in &id_vec {
+                bu.flip_favorite(*id, fav);
+                browse_ui_mod::apply_row_favorite(&weak, *id, fav);
+            }
+        });
     }
     {
         let bu = browse_ui.clone();
         wire_row_flag!(g, on_set_row_rating, state, "browse::set_rating",
-            library::ratings::set_rating, collect_nonzero_track_ids,
-            captures: [weak, bu],
-            after: |id_vec, rating| {
-                for id in &id_vec {
-                    bu.flip_rating(*id, rating);
-                    browse_ui_mod::apply_row_rating(&weak, *id, rating);
-                }
-            });
+        library::ratings::set_rating, collect_nonzero_track_ids,
+        captures: [weak, bu],
+        after: |id_vec, rating| {
+            for id in &id_vec {
+                bu.flip_rating(*id, rating);
+                browse_ui_mod::apply_row_rating(&weak, *id, rating);
+            }
+        });
     }
 
     // request-sort: clicking a header column. Same field flips dir; new

@@ -59,7 +59,10 @@ fn track_mode_falls_back_to_album_gain() {
 #[test]
 fn preamp_adds_to_gain() {
     // -6.02 dB gain + 6.02 dB preamp = 0 dB total = unity.
-    let baked = TrackReplayGain { album_gain: Some(-6.020_6), ..Default::default() };
+    let baked = TrackReplayGain {
+        album_gain: Some(-6.020_6),
+        ..Default::default()
+    };
     approx(compute_linear_gain(baked, RgMode::Album, 6.020_6, false), 1.0);
 }
 
@@ -79,7 +82,11 @@ fn prevent_clipping_clamps_boost_by_peak() {
 #[test]
 fn prevent_clipping_no_clamp_when_peak_absent() {
     // No peak → no static clamp; rely on the downstream limiter. Full ×2 boost.
-    let baked = TrackReplayGain { album_gain: Some(6.020_6), album_peak: None, ..Default::default() };
+    let baked = TrackReplayGain {
+        album_gain: Some(6.020_6),
+        album_peak: None,
+        ..Default::default()
+    };
     approx(compute_linear_gain(baked, RgMode::Album, 0.0, true), 2.0);
 }
 

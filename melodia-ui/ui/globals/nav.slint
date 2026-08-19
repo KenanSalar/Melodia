@@ -1,68 +1,47 @@
-// Which edge the next `ViewTransition` mount slides in from: lateral sidebar nav fades
-// up from `below`, drilling into a detail comes from the `right`, the back button from
-// the `left`. **The mount it steers is a *page*** — one of the content-panel branches in
-// `app-window.slint` — and no sub-page mount reads it. There are fourteen of those: the
-// two curated pages wrap their five tab bodies and take `hero.tab-enter-from`, so a tab
-// pick slides along the bar, and My Library's nine take a fixed `below` and hold still
-// entirely while the band morphs their `y` (`ViewTransition.slide`). So a drill or a back
-// that doesn't move `Nav.selected-index` steers nothing.
+// Which edge the next `ViewTransition` mount slides in from: lateral sidebar nav fades up from
+// `below`, a drill comes from the `right`, the back button from the `left`. **The mount it steers
+// is a *page***, so a drill that doesn't move `Nav.selected-index` steers nothing.
 export enum NavEnterFrom { below, right, left }
 
-// Which content view the shell shows. Rust persists the index and drives cross-tab
-// navigation off it:
+// Which content view the shell shows:
 //   0=search, 1=browse, 2=favorites, 3=my-library, 8=recently-played, 9=settings
-// **4–7 are retired.** They were Albums / Artists / Genres / Playlists, and with Tracks
-// they are the five tabs of My Library at index 3 — `MyLibrary.tab-idx` is what tells
-// them apart, and `boot::ui_setup` folds a persisted 4–7 onto 3. The gaps stay rather
-// than renumbering: 8 and 9 are in `views.json` on every install already.
-// **Sidebar order is source order, not index order** — Recently Played renders under
-// Favorites while keeping index 8.
+// **4–7 are retired** — they and Tracks are My Library's five tabs, told apart by
+// `MyLibrary.tab-idx`, and `boot::ui_setup` folds a persisted 4–7 onto 3. The gaps stay: 8 and 9
+// are already in `views.json` on every install. **Sidebar order is source order.**
 export global Nav {
     in-out property <int> selected-index: 3;
-    // The full-screen Now Playing view replacing the content area. Toggled from the
-    // bar's track-info card — the bar stays mounted, so the same card closes it — and
-    // also closed by the view's back button or any sidebar click.
+    // The full-screen Now Playing view. Toggled from the bar's track-info card, which stays
+    // mounted, so the same card closes it.
     in-out property <bool> now-playing-open: false;
-    // Mirrored into Rust so the Up Next subscriber can skip its rebuild while the view
-    // is closed. A global can't watch its own property, so `AppWindow` mirrors this
-    // locally and invokes the callback from that `changed` handler.
+    // Lets the Up Next subscriber skip its rebuild while the view is closed. A global can't
+    // watch its own property, so `AppWindow` mirrors this locally.
     callback now-playing-open-changed(bool);
-    // Invoked by `SidebarItem` right after it assigns `selected-index`, so the next
-    // launch reopens on the same section.
     callback persist-selected-index(int);
-    // Right-click "Open Containing Folder". Rust resolves the path from the DB and hands
-    // the parent directory to the OS file manager. **View-independent** — every context
-    // menu calls this one global with no per-view plumbing, unlike the `go-to-*`
+    // Right-click "Open Containing Folder". **View-independent**, unlike the `go-to-*`
     // callbacks, which need per-view origin context and are duplicated per global.
     callback reveal-in-folder(int /*track_id*/);
-    // Written synchronously on the UI thread **immediately before** the property flip
-    // that triggers the new mount. Typed rather than a string, so a Rust typo is a
-    // compile error; `ui/nav_transition.rs` has the `mark_*` helpers.
+    // Written synchronously **immediately before** the flip that triggers the new mount. Typed
+    // so a Rust typo is a compile error; `ui/nav_transition.rs` has the `mark_*` helpers.
     in-out property <NavEnterFrom> pending-enter-from: NavEnterFrom.below;
+    // Raised before `app.show()` for "Skip Startup Animation". The mount hands it back itself
+    // once settled — `view-transition.slint` says why Rust can't.
+    in-out property <bool> suppress-enter-animation: false;
     in-out property <bool> sidebar-collapsed: false;
     in-out property <length> sidebar-width: 180px;
-    // Set while the resize handle is being dragged, and read by the rows to disable
-    // their `padding-left` ease — without it every mouse move restarts a fresh one and
-    // the icons visibly lag the sidebar's edge. The Sidebar gates its own `width`
-    // animation the same way.
+    // Read by the rows to disable their `padding-left` ease, which every mouse move would
+    // otherwise restart, leaving the icons lagging the edge.
     in-out property <bool> sidebar-dragging: false;
-    // The collapsed rail's tooltip channel: the hovered row publishes what it is and
-    // where it sits, and `app-window.slint` paints one pill beside the rail. **It can't
-    // be mounted on the row** — `nav-scroll` clips its viewport, and the Sidebar is
-    // declared before the content panel, which paints over anything past the rail's edge.
-    //
-    // A global rather than an `out property` chain off `Sidebar`, because the rail's
-    // rows are ten hand-written mounts and routing hover up would put a forwarding line
-    // on each. -1 is nothing hovered, and **only the row owning the hover may clear
-    // it**, keyed on this index: a leave arriving after the next row's enter would
-    // otherwise blank a live tooltip.
+    // The collapsed rail's tooltip channel; `app-window.slint` paints one pill beside the rail.
+    // **It can't be mounted on the row** — `nav-scroll` clips its viewport, and the Sidebar is
+    // declared before the content panel, which paints over anything past the rail's edge. -1 is
+    // nothing hovered, and **only the row owning the hover may clear it**: a leave arriving after
+    // the next row's enter would blank a live tooltip.
     in-out property <int> sidebar-tip-idx: -1;
-    // The Collapse toggle's key. It sits in the rail and loses its label like any nav
-    // row but owns no nav index, so it takes a slot outside `selected-index`'s range.
+    // The Collapse toggle loses its label like any nav row but owns no nav index, so it takes
+    // a slot outside `selected-index`'s range.
     out property <int> sidebar-collapse-tip-idx: -2;
     in-out property <string> sidebar-tip-label;
-    // Snapshotted on enter. Nothing moves a row vertically except scrolling the rail,
-    // which puts a different row under the pointer and re-fires this anyway.
+    // Snapshotted on enter — only scrolling the rail moves a row, which re-fires this anyway.
     in-out property <length> sidebar-tip-y;
     in-out property <length> sidebar-tip-h;
 }

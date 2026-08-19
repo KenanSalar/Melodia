@@ -350,10 +350,7 @@ fn a_crossfade_shorter_than_the_gapless_preload_lead_still_fires() {
     // *timing-independent* predicate, `gapless_pending` stays false and the
     // crossfade still fires here.
     let cap = MIN_CROSSFADE_MS;
-    assert_eq!(
-        should_crossfade(true, false, false, 179_000, 180_000, cap),
-        Some(1_000)
-    );
+    assert_eq!(should_crossfade(true, false, false, 179_000, 180_000, cap), Some(1_000));
     // ...and a tick earlier, inside the preload lead but outside the crossfade
     // window, nothing fires.
     assert_eq!(should_crossfade(true, false, false, 178_500, 180_000, cap), None);
@@ -378,11 +375,9 @@ fn every_tick_phase_catches_the_window_at_the_shortest_crossfade() {
 
     let ticks_per_track = DURATION_MS / POLL_MS;
     for phase in 0..POLL_MS {
-        let fired = (0..ticks_per_track)
-            .map(|k| phase + k * POLL_MS)
-            .any(|position| {
-                should_crossfade(true, false, false, position, DURATION_MS, cap).is_some()
-            });
+        let fired = (0..ticks_per_track).map(|k| phase + k * POLL_MS).any(|position| {
+            should_crossfade(true, false, false, position, DURATION_MS, cap).is_some()
+        });
         assert!(
             fired,
             "tick phase {phase} ms never landed inside the crossfade window at the \
@@ -404,7 +399,10 @@ fn abort_ramp_is_short_enough_to_be_inaudible_but_not_a_step() {
 // --- manual_fade_ms --------------------------------------------------------
 
 fn manual_settings() -> CrossfadeSettings {
-    CrossfadeSettings { manual: true, ..settings() }
+    CrossfadeSettings {
+        manual: true,
+        ..settings()
+    }
 }
 
 #[test]

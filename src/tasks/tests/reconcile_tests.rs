@@ -22,11 +22,13 @@ const SENTINEL_MTIME: &str = "2001-02-03T04:05:06+00:00";
 /// A pool with `dir` registered as a library folder (id 1) and one track row at
 /// `<dir>/from.mp3` — the row a rename has to re-point.
 async fn seed_folder_with_track(dir: &std::path::Path) -> Result<(DbPool, i64), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let folder = dir.to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
 
-    let from = format!("{folder}/from.mp3");
+    // Joined, not interpolated: the handlers look the row up by the path `Path::join` gives
+    // them, so a hand-spelled `/` seeds a row Windows can never match.
+    let from = dir.join("from.mp3").to_string_lossy().into_owned();
     let id = insert_test_track(&db, &from, "Before", "Artist A", "Album One", "Rock").await?;
     Ok((db, id))
 }
@@ -91,14 +93,9 @@ async fn renamed_without_metadata_falls_back_to_a_stat() -> Result<(), AppError>
     assert!(on_disk.is_some(), "the temp file must have a readable mtime");
 
     let mut tx = db.write().begin().await?;
-    let changed = handle_renamed(
-        &mut tx,
-        &tmp.path().join("from.mp3"),
-        &to,
-        None,
-        &mut HashMap::new(),
-    )
-    .await?;
+    let changed =
+        handle_renamed(&mut tx, &tmp.path().join("from.mp3"), &to, None, &mut HashMap::new())
+            .await?;
     tx.commit().await?;
 
     assert!(changed);

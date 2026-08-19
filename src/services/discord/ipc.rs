@@ -1,11 +1,15 @@
 //! The blocking Discord IPC transport: framed JSON over a local unix socket
 //! (Linux/macOS) or named pipe (Windows), run on a dedicated `std::thread`.
 //!
-//! `std` only — no new dependency, no `unsafe`. The framing and payloads are
-//! pure (unit-tested over a `Vec<u8>`); only [`connect`] touches the OS. The
-//! socket-discovery table is lifted from `discord-rich-presence` (MIT) — the one
-//! part with real upstream value, so a new Discord packaging variant is a
-//! one-line addition here rather than a dependency bump.
+//! `std` only — no new dependency, no `unsafe`. Hand-rolled rather than taken
+//! from `discord-rich-presence`, which pins `uuid ^0.8` against the tree's 1.x:
+//! a second copy of that crate is a steep price for a transport this size. If
+//! the pin lifts, this file deletes and [`super::model`] is untouched. The
+//! framing and payloads are pure (unit-tested over a `Vec<u8>`); only
+//! [`connect`] touches the OS. The socket-discovery table is lifted from
+//! `discord-rich-presence` (MIT) — the one part with real upstream value, so a
+//! new Discord packaging variant is a one-line addition here rather than a
+//! dependency bump.
 //!
 //! Wire frame: `[u32 LE opcode][u32 LE len][JSON body]`. Opcodes: 0 handshake,
 //! 1 frame, 2 close, 3 ping, 4 pong.
@@ -155,7 +159,9 @@ fn serve(
 
         if *desired != last_sent {
             let body = match desired.as_ref() {
-                Some(presence) => payload::set_activity_json(presence, pid, &next_nonce(pid, nonce)),
+                Some(presence) => {
+                    payload::set_activity_json(presence, pid, &next_nonce(pid, nonce))
+                }
                 None => payload::clear_activity_json(pid, &next_nonce(pid, nonce)),
             };
             if let Err(e) = send_frame_and_ack(conn, &body) {
@@ -228,7 +234,11 @@ fn handle_command(cmd: Command, desired: &mut Option<Presence>, enabled: &mut bo
 }
 
 /// Apply any already-queued commands without blocking (latest state wins).
-fn drain_commands(rx: &mpsc::Receiver<Command>, desired: &mut Option<Presence>, enabled: &mut bool) {
+fn drain_commands(
+    rx: &mpsc::Receiver<Command>,
+    desired: &mut Option<Presence>,
+    enabled: &mut bool,
+) {
     while let Ok(cmd) = rx.try_recv() {
         handle_command(cmd, desired, enabled);
     }
@@ -270,9 +280,7 @@ fn log_error_ack(reply: &[u8]) {
         return;
     }
     let data = value.get("data");
-    let code = data
-        .and_then(|d| d.get("code"))
-        .and_then(serde_json::Value::as_i64);
+    let code = data.and_then(|d| d.get("code")).and_then(serde_json::Value::as_i64);
     let message = data
         .and_then(|d| d.get("message"))
         .and_then(serde_json::Value::as_str)
@@ -289,10 +297,7 @@ fn read_reply(conn: &mut Connection) -> io::Result<(u32, Vec<u8>)> {
         match opcode {
             OP_PING => write_frame(conn, OP_PONG, &body)?,
             OP_CLOSE => {
-                return Err(io::Error::new(
-                    io::ErrorKind::ConnectionAborted,
-                    "discord sent CLOSE",
-                ));
+                return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "discord sent CLOSE"));
             }
             _ => return Ok((opcode, body)),
         }
@@ -321,10 +326,7 @@ fn read_frame(r: &mut impl Read) -> io::Result<(u32, Vec<u8>)> {
     let opcode = u32::from_le_bytes(op_bytes);
     let len = u32::from_le_bytes(len_bytes);
     if len > MAX_FRAME_LEN {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "frame length exceeds cap",
-        ));
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "frame length exceeds cap"));
     }
     let mut body = vec![0u8; len as usize];
     r.read_exact(&mut body)?;

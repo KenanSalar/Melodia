@@ -30,9 +30,8 @@ impl SearchHistoryState {
     /// Load from disk (or return empty) and return the managed handle.
     pub async fn init(paths: &Paths) -> Self {
         let path = paths.search_history_path.clone();
-        let history: SearchHistory = crate::services::load_json_or_default(&path)
-            .await
-            .unwrap_or_default();
+        let history: SearchHistory =
+            crate::services::load_json_or_default(&path).await.unwrap_or_default();
         Self {
             inner: Mutex::new(history),
             path,

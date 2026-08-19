@@ -49,7 +49,11 @@ const RG_UNITY_EPSILON: f32 = 1e-4;
 /// Clamp a `ReplayGain` preamp value into the supported range.
 #[must_use]
 pub fn clamp_rg_preamp(db: f32) -> f32 {
-    if db.is_nan() { 0.0 } else { db.clamp(RG_MIN_PREAMP_DB, RG_MAX_PREAMP_DB) }
+    if db.is_nan() {
+        0.0
+    } else {
+        db.clamp(RG_MIN_PREAMP_DB, RG_MAX_PREAMP_DB)
+    }
 }
 
 /// Which gain pair `ReplayGain` applies. `enabled` on [`ReplayGainShared`] gates

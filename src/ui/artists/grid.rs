@@ -6,9 +6,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
-use super::state::{
-    DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache,
-};
+use super::state::{DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{ArtistsUi, to_slint_artist_row};
 use crate::error::AppResult;
 use crate::library;
@@ -129,12 +127,10 @@ fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiArti
 /// lowercased `data.keys`.
 fn sort_artist_indices(indices: &mut [usize], data: &GridData, field: &str, dir: &str) {
     match field {
-        "track_count" => indices.sort_by_cached_key(|&i| {
-            (data.artists[i].track_count, data.keys[i].name_lc.as_str())
-        }),
-        "album_count" => indices.sort_by_cached_key(|&i| {
-            (data.artists[i].album_count, data.keys[i].name_lc.as_str())
-        }),
+        "track_count" => indices
+            .sort_by_cached_key(|&i| (data.artists[i].track_count, data.keys[i].name_lc.as_str())),
+        "album_count" => indices
+            .sort_by_cached_key(|&i| (data.artists[i].album_count, data.keys[i].name_lc.as_str())),
         _ => indices.sort_by_cached_key(|&i| data.keys[i].name_lc.as_str()),
     }
     if dir == "desc" {
@@ -156,13 +152,15 @@ pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
 
 // --- Cap tuning -----------------------------------------------------------
 
-/// Retune the grid-tier cover cache to the real display resolution. Called
-/// once at startup after the winit window is live (`main.rs`); the cache is
+/// Retune the grid-tier cover cache to the real display resolution. Called after
+/// `app.show()` and again on every resize, off `WindowChrome.display-changed`; the cache is
 /// constructed with `DEFAULT_GRID_COVER_CAP` and resized here. The
 /// detail-tier `(cover, blur)` pair cache keeps its small fixed cap (see
 /// [`crate::ui::detail_artwork`]).
 pub fn tune_cache_for_display(app: &AppWindow, artists_ui: &ArtistsUi) {
     let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, DEFAULT_GRID_COVER_CAP);
+    let size = crate::ui::grid_prewarm::cover_size_for_window(app);
     artists_ui.grid_covers.resize(cap);
-    log::debug!("ui::artists artist-cover cache cap tuned to {cap}");
+    artists_ui.grid_covers.set_thumb_size(size);
+    log::debug!("ui::artists artist-cover cache tuned to cap {cap}, {size} px");
 }

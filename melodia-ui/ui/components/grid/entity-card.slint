@@ -3,13 +3,10 @@ import { ArtworkImage } from "../artwork-image.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The card every grid and strip draws: a square artwork tile with an elided title and
-// subtitle beneath it, inside a hover-highlighted rounded surface.
-//
-// **The outer slot is a fixed size**, so the grid layout stays stable — the host
-// computes both dimensions from the available width and passes them down — and a
-// trailing stretch Rectangle absorbs any slack, so a generous height doesn't distort the
-// artwork-to-text spacing.
+// The card every grid and strip draws: a square artwork tile with an elided title and subtitle
+// beneath it, inside a hover-highlighted rounded surface. **The outer slot is a fixed size**, so
+// the grid layout stays stable — the host computes both dimensions from the available width — and a
+// trailing stretch Rectangle absorbs any slack, so a generous height doesn't distort the spacing.
 export component EntityCard inherits Rectangle {
     in property <string> artwork-path;
     in property <image> cover;
@@ -17,14 +14,14 @@ export component EntityCard inherits Rectangle {
     in property <string> subtitle;
     in property <length> card-width: 180px;
     in property <length> card-height: 226px;
-    // The Artists grid's avatar mode: the tile takes a radius of half its size, and the
-    // text block beneath stays square-aligned.
+    // The Artists grid's avatar mode: the tile takes a radius of half its size, the text staying
+    // square-aligned.
     in property <bool> circular: false;
     // Artists passes `"person"`; everything else takes the default.
     in property <string> fallback-icon: "music-note";
 
-    // The tile's chrome. The Genres grid overrides both, painting its per-genre
-    // name-hashed gradient and tinting the fallback glyph against it.
+    // The tile's chrome. The Genres grid overrides both, painting its per-genre name-hashed
+    // gradient and tinting the fallback glyph against it.
     in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush> tile-icon-color: Theme.accent;
 

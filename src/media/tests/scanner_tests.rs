@@ -27,7 +27,14 @@ fn collects_audio_files() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     create_test_files(
         tmp.path(),
-        &["song.mp3", "track.flac", "audio.m4a", "clip.aac", "voice.ogg", "pcm.wav"],
+        &[
+            "song.mp3",
+            "track.flac",
+            "audio.m4a",
+            "clip.aac",
+            "voice.ogg",
+            "pcm.wav",
+        ],
     )?;
     let files = collect_media_files(tmp.path());
     assert_eq!(files.len(), 6);
@@ -64,10 +71,8 @@ fn follows_nested_directories() -> Result<(), AppError> {
 #[test]
 fn collects_all_supported_extensions() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
-    let audio_files: Vec<String> = AUDIO_EXTENSIONS
-        .iter()
-        .map(|ext| format!("file.{ext}"))
-        .collect();
+    let audio_files: Vec<String> =
+        AUDIO_EXTENSIONS.iter().map(|ext| format!("file.{ext}")).collect();
     let names: Vec<&str> = audio_files.iter().map(std::string::String::as_str).collect();
     create_test_files(tmp.path(), &names)?;
     let files = collect_media_files(tmp.path());
@@ -82,7 +87,13 @@ fn extension_match_is_case_insensitive() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     create_test_files(
         tmp.path(),
-        &["Track.FLAC", "Song.Mp3", "clip.AAC", "cover.JPG", "notes.TXT"],
+        &[
+            "Track.FLAC",
+            "Song.Mp3",
+            "clip.AAC",
+            "cover.JPG",
+            "notes.TXT",
+        ],
     )?;
     let mut names: Vec<String> = collect_media_files(tmp.path())
         .iter()
@@ -137,17 +148,41 @@ fn scan_files_parallel_empty_returns_empty() -> Result<(), AppError> {
     Ok(())
 }
 
+/// A file nothing can parse still reaches the library, titled from its filename. The
+/// formats with no tag reader at all (Matroska, CAF) arrive the same way, and a scan
+/// that dropped them would leave a file sitting in a watched folder that the library
+/// never mentions.
 #[test]
-fn scan_files_parallel_skips_unreadable_files() -> Result<(), AppError> {
+fn scan_files_parallel_keeps_a_filename_row_for_unparseable_tags() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let artwork_dir = tmp.path().join("artwork");
     fs::create_dir(&artwork_dir)?;
 
-    // Create a file with invalid audio content
     let bad_file = tmp.path().join("bad.mp3");
     fs::write(&bad_file, b"not valid audio")?;
 
     let files = vec![bad_file];
+    let result = scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &|_, _| {});
+
+    let [scanned] = result.as_slice() else {
+        return Err(AppError::Validation("the unparseable file produced no row".into()));
+    };
+    assert_eq!(scanned.metadata.title, "bad");
+    assert_eq!(scanned.metadata.duration_ms, 0);
+    assert_eq!(scanned.metadata.codec, None);
+    assert_eq!(scanned.metadata.artist, None);
+    Ok(())
+}
+
+/// The hash above the parse is what makes the fallback safe, so a file that can't be
+/// read at all must still drop rather than arrive as an empty row.
+#[test]
+fn scan_files_parallel_drops_files_it_cannot_read() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let artwork_dir = tmp.path().join("artwork");
+    fs::create_dir(&artwork_dir)?;
+
+    let files = vec![tmp.path().join("gone.mp3")];
     let result = scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &|_, _| {});
     assert!(result.is_empty());
     Ok(())
@@ -170,14 +205,9 @@ fn scan_files_parallel_calls_progress_callback() -> Result<(), AppError> {
     let callback_count = Arc::new(AtomicU32::new(0));
     let counter = callback_count.clone();
 
-    scan_files_parallel(
-        &files,
-        &artwork_dir,
-        &test_cover_cache(),
-        &move |_, _| {
-            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        },
-    );
+    scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &move |_, _| {
+        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    });
 
     // With 10 files, callback fires at file 10 (every 10 files)
     assert!(callback_count.load(std::sync::atomic::Ordering::Relaxed) >= 1);
@@ -195,7 +225,10 @@ fn existing_for(path: &Path) -> Result<HashMap<String, ExistingTrackSummary>, Ap
     let mut map = HashMap::new();
     map.insert(
         path.to_string_lossy().into_owned(),
-        ExistingTrackSummary { file_size: Some(size), date_modified: mtime },
+        ExistingTrackSummary {
+            file_size: Some(size),
+            date_modified: mtime,
+        },
     );
     Ok(map)
 }

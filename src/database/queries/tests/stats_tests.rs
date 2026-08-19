@@ -1,11 +1,11 @@
+use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::tests::helpers::*;
-use crate::database::DbPool;
 use crate::error::AppError;
 
 #[tokio::test]
 async fn recalculate_stats_produces_correct_counts() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Disable triggers so inserts don't update stats
@@ -50,11 +50,10 @@ async fn recalculate_stats_produces_correct_counts() -> Result<(), AppError> {
     assert_eq!(artist_y.2, 1);
 
     // Verify album stats
-    let album_p: (i64, i64) = sqlx::query_as(
-        "SELECT track_count, total_duration_ms FROM albums WHERE name = 'Album P'",
-    )
-    .fetch_one(db.read())
-    .await?;
+    let album_p: (i64, i64) =
+        sqlx::query_as("SELECT track_count, total_duration_ms FROM albums WHERE name = 'Album P'")
+            .fetch_one(db.read())
+            .await?;
     assert_eq!(album_p.0, 2, "Album P should have 2 tracks");
     assert_eq!(album_p.1, 360_000);
 
@@ -69,7 +68,7 @@ async fn recalculate_stats_produces_correct_counts() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn triggers_work_after_re_enable() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Disable, then re-enable triggers
@@ -92,7 +91,7 @@ async fn triggers_work_after_re_enable() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn disable_enable_recalculate_full_cycle() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Full cycle: disable → bulk insert → recalculate → enable

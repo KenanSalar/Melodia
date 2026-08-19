@@ -122,10 +122,7 @@ fn suppress_drops_modified_events_for_paths_we_wrote() {
     ];
 
     suppress_self_writes(&mut batch, &self_writes);
-    assert_eq!(
-        batch,
-        vec![FileEvent::Modified(PathBuf::from("/music/external.mp3"))]
-    );
+    assert_eq!(batch, vec![FileEvent::Modified(PathBuf::from("/music/external.mp3"))]);
 }
 
 #[test]

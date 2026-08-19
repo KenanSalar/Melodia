@@ -14,7 +14,7 @@ use std::sync::atomic::AtomicBool;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, VecModel, Weak};
 
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::cover_thumbs::{CoverThumbs, row_cover_size};
 use crate::state::AppState;
 use crate::{AppWindow, Queue, QueueRow};
 
@@ -47,17 +47,29 @@ pub fn install(
     state: &AppState,
 ) -> Result<QueueSheetHandles, slint::EventLoopError> {
     let queue_model: Rc<VecModel<QueueRow>> = Rc::new(VecModel::default());
-    ui.global::<Queue>()
-        .set_rows(ModelRc::from(queue_model.clone()));
+    ui.global::<Queue>().set_rows(ModelRc::from(queue_model.clone()));
 
     let shadow: Arc<Mutex<Vec<ShadowEntry>>> = Arc::new(Mutex::new(Vec::new()));
     let anchor: Arc<Mutex<Option<usize>>> = Arc::new(Mutex::new(None));
     let is_open = Arc::new(AtomicBool::new(false));
-    // The queue sheet's *own* 72 px cover cache — deliberately NOT the
+    // The queue sheet's *own* row-tier cover cache — deliberately NOT the
     // shared `cover_thumbs`. Private so it can be dropped wholesale when
     // the sheet closes (clearing the shared cache would yank covers the
     // Tracks / Browse views and the now-playing bar still need).
     let queue_covers = Arc::new(CoverThumbs::new());
+    // Deferred for the reason the grid tiers are: `install` runs long before
+    // `app.show()`, and `scale_factor` answers 1.0 until the window is on a
+    // monitor. The sheet can't be open yet, so the tier is empty either way.
+    let tune_covers = queue_covers.clone();
+    let tune_weak = ui.as_weak();
+    if let Err(e) = slint::invoke_from_event_loop(move || {
+        let Some(ui) = tune_weak.upgrade() else {
+            return;
+        };
+        tune_covers.set_thumb_size(row_cover_size(f64::from(ui.window().scale_factor())));
+    }) {
+        log::warn!("Failed to schedule queue-cover display tuning: {e}");
+    }
 
     // Lazy row covers, wired once — the `boot::ui_setup` `RowCovers` shape,
     // against this sheet's private tier.
@@ -84,15 +96,7 @@ pub fn install(
         });
     }
 
-    callbacks::wire_callbacks(
-        ui,
-        state,
-        &queue_model,
-        &queue_covers,
-        &shadow,
-        &anchor,
-        &is_open,
-    );
+    callbacks::wire_callbacks(ui, state, &queue_model, &queue_covers, &shadow, &anchor, &is_open);
     rows::spawn_queue_rows_subscriber(ui, state, queue_model, shadow, is_open.clone())?;
 
     // No install-time seed: the sheet is closed at startup, so the

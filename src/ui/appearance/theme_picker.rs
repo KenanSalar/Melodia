@@ -22,12 +22,15 @@ use super::{
     usize_from,
 };
 
-/// True when KDE Breeze + System is active *and* a parsed kdeglobals
-/// palette is in hand — i.e. the palette is sourced from Plasma's live
-/// scheme rather than the static Light/Dark tables. The Settings
-/// UI reads this via the `Settings.kde-system-active` property to hide
-/// the Accent Color row (Plasma already picked the accent).
-pub(super) fn kde_system_active(theme_id: &str, variant_id: &str, system: &SystemColorState) -> bool {
+/// True when KDE Breeze + System is active *and* a parsed `kdeglobals` palette is in
+/// hand — the palette coming from Plasma's live scheme rather than the static tables.
+/// The Settings page reads it to hide the Accent Color row, Plasma having already
+/// picked one.
+pub(super) fn kde_system_active(
+    theme_id: &str,
+    variant_id: &str,
+    system: &SystemColorState,
+) -> bool {
     if theme_id != "kde-breeze" || variant_id != themes::SYSTEM_VARIANT_ID {
         return false;
     }
@@ -62,15 +65,14 @@ pub(super) fn wire_theme_changed(
     let s = state.clone();
     ui.global::<Settings>().on_theme_changed(move |idx| {
         let Some(ui) = weak.upgrade() else { return };
-        let Some(theme) = registry_get(idx) else { return };
+        let Some(theme) = registry_get(idx) else {
+            return;
+        };
 
-        // Per-theme memory: each theme remembers its last (variant,
-        // accent) pair across switches. Tauri's `theme_preferences`
-        // map drives this; we read it synchronously from the UI thread
-        // because settings.json is tiny (a few KB) and a user-driven
-        // chip click is a coarse-grained event — the read is invisible
-        // next to the click latency. Falls back to the theme's canonical
-        // defaults on miss / read failure.
+        // Per-theme memory: each theme remembers its last (variant, accent) pair across
+        // switches. Read synchronously on the UI thread — `settings.json` is tiny and a
+        // chip click coarse-grained, so the read is invisible next to the click. Falls
+        // back to the theme's canonical defaults on a miss or a read failure.
         let (variant_id, accent_id) = lookup_remembered(&s, theme);
         let style_id = library::settings::get_settings(&s)
             .map_or_else(|_| "none".to_owned(), |c| c.dynamic_color_style);
@@ -85,25 +87,19 @@ pub(super) fn wire_theme_changed(
             last_static.as_deref(),
             &snapshot,
         );
-        // Update the synchronous accent shadow before the async write
-        // so any sibling callback that fires before the disk catches
-        // up (e.g. user clicks variant immediately after theme) reads
-        // the new accent, not the old one.
+        // Before the async write, so a sibling firing ahead of the disk — a variant
+        // click straight after a theme one — reads the new accent, not the old.
         accent_id.clone_into(&mut persisted_accent.lock());
-        // Persist + kick are sequenced inside the same spawn_blocking
-        // (see `persist_and_kick`) so the coordinator reads the new
-        // theme on wake, not the previous one. Switching to / away
-        // from material3 flips whether dynamic colour applies, so the
-        // coordinator must (re)generate or clear `material_you`.
+        // Sequenced inside one `spawn_blocking`, so the coordinator reads the new theme
+        // on wake rather than the previous one — switching to or from material3 flips
+        // whether dynamic colour applies at all.
         persist_and_kick(&s, theme.id, &variant_id, &accent_id, &kick_tx);
     });
 }
 
-/// Resolve `(variant_id, accent_id)` for `theme` from
-/// `settings.theme_preferences[theme.id]`, falling back to the theme's
-/// canonical defaults if the entry is missing, the read fails, or the
-/// stored ids no longer exist in the registry (theme palette changes
-/// across versions).
+/// Resolve `(variant_id, accent_id)` from `settings.theme_preferences[theme.id]`,
+/// falling back to the theme's canonical defaults when the entry is missing, the read
+/// fails, or the stored ids no longer exist in the registry.
 fn lookup_remembered(state: &AppState, theme: &ThemeDef) -> (String, String) {
     let defaults = || (theme.default_variant.to_owned(), theme.default_accent.to_owned());
     let Ok(settings) = library::settings::get_settings(state) else {
@@ -112,9 +108,8 @@ fn lookup_remembered(state: &AppState, theme: &ThemeDef) -> (String, String) {
     let Some(pref) = settings.theme_preferences.get(theme.id) else {
         return defaults();
     };
-    // Validate against the current registry — palette ids may have
-    // changed across upgrades. The synthetic "system" id passes through
-    // even though it isn't in `theme.variants`.
+    // Against the current registry: palette ids may have changed across upgrades. The
+    // synthetic "system" id passes through even though it isn't in `theme.variants`.
     let variant_known = theme.variant(&pref.variant).is_some()
         || (pref.variant == themes::SYSTEM_VARIANT_ID && theme.supports_system_mode);
     let variant = if variant_known {
@@ -122,11 +117,10 @@ fn lookup_remembered(state: &AppState, theme: &ThemeDef) -> (String, String) {
     } else {
         theme.default_variant.to_owned()
     };
-    // Material 3 alone accepts the synthetic `MATERIAL_YOU_ACCENT_ID` —
-    // it isn't in `theme.accents` (no static swatch exists for it), but
-    // it's a legitimate persisted value that the dynamic-colour pipeline
-    // resolves at paint time. Without this, switching themes through
-    // material3 would forget the user's MY pick on every round-trip.
+    // Material 3 alone accepts the synthetic `MATERIAL_YOU_ACCENT_ID`: it is in no
+    // `theme.accents`, having no static swatch, but is a legitimate persisted value the
+    // dynamic-colour pipeline resolves at paint time. Without this, switching themes
+    // through material3 forgets the user's pick on every round trip.
     let accent_known = theme.accent(&pref.accent).is_some()
         || (theme.id == "material3" && pref.accent == MATERIAL_YOU_ACCENT_ID);
     let accent = if accent_known {
@@ -151,13 +145,14 @@ pub(super) fn wire_variant_changed(
         let g = ui.global::<Settings>();
         let theme_idx = g.get_theme_idx();
         let accent_idx = g.get_accent_idx();
-        let Some(theme) = registry_get(theme_idx) else { return };
+        let Some(theme) = registry_get(theme_idx) else {
+            return;
+        };
 
         let i = usize_from(idx);
-        // The synthetic "System" chip sits at index `theme.variants.len()`
-        // when the theme opts in. Anything past that range is invalid and
-        // bails — chip indices come from Slint and are clamped on the UI
-        // side, but defending here is cheap and keeps the runtime honest.
+        // The synthetic "System" chip sits at `theme.variants.len()` when the theme
+        // opts in; anything past that bails. Slint clamps the index already, but the
+        // boundary shouldn't trust it.
         let variant_id: &str = if theme.supports_system_mode && i == theme.variants.len() {
             themes::SYSTEM_VARIANT_ID
         } else if let Some(v) = theme.variants.get(i) {
@@ -169,31 +164,26 @@ pub(super) fn wire_variant_changed(
         let snapshot = os_state.read().clone();
         let my_active = material_you_active(theme.id, &snapshot);
 
-        // Read the *persisted* accent from the synchronous shadow cell
-        // instead of `settings.json`: a sibling `wire_accent_changed`
-        // call can have updated the cell but not yet committed its disk
-        // write, in which case a disk read here would observe the old
-        // value and persist it — silently undoing the user's accent
-        // pick. The cell is updated by every wire_* callback before its
-        // async write, so it's always at least as fresh as the disk.
+        // The shadow cell rather than `settings.json`: a sibling `wire_accent_changed`
+        // can have updated the cell without committing its write yet, and a disk read
+        // here would then observe the old value and persist it, silently undoing the
+        // user's pick. Every `wire_*` updates the cell before its async write.
         let persisted_accent_str = persisted_accent.lock().clone();
         let last_static_owned = read_last_static_accent(&s, theme.id);
         let visible_accent_id = if my_active {
-            // Accent is whatever the dot grid currently highlights — the
-            // grid index is authoritative when MY is active because both
-            // its 9th dot and the 8 statics are clickable.
+            // The grid index is authoritative while Material You is active: its own dot
+            // and the statics are all clickable.
             accent_id_from_grid_idx(theme, usize_from(accent_idx), true)
                 .unwrap_or(theme.default_accent)
         } else {
-            // MY isn't a clickable dot here, so the visible accent is
-            // whichever static the grid highlights — but we still
-            // *persist* `persisted_accent` so a sticky MY stays sticky.
+            // Material You isn't a clickable dot here, so the visible accent is whichever
+            // static the grid highlights — but `persisted_accent` is still what gets
+            // written, so a sticky pick stays sticky.
             effective_accent_id(theme, &persisted_accent_str, false, last_static_owned.as_deref())
         };
 
-        // Repopulate the dot grid against the resolved real variant
-        // (matters when switching to "System" — the swatches need to
-        // render in dark/light mode based on the OS signal).
+        // Against the resolved *real* variant, which matters on a switch to "System":
+        // the swatches render dark or light off the OS signal.
         let accent_variant = if variant_id == themes::SYSTEM_VARIANT_ID {
             theme.resolve_system_variant(&snapshot.theme).id
         } else {
@@ -205,14 +195,12 @@ pub(super) fn wire_variant_changed(
         g_swatches.set_accent_names(ModelRc::from(Rc::new(VecModel::from(labels))));
         g.set_variant_idx(idx);
         g.set_kde_system_active(kde_system_active(theme.id, variant_id, &snapshot));
-        themes::apply(&ui, theme.id, variant_id, visible_accent_id, &snapshot);
-        // Persist the *original* accent_color: variant flips never
-        // demote a sticky MY pick to its static fallback. The shadow
-        // cell already holds this value — no need to update it.
-        // `persist_and_kick` sequences the write and kick inside a
-        // single spawn_blocking so the coordinator reads the new
-        // variant on wake (variant flips can change `is_dark` for
-        // the dynamic palette → regenerate).
+        super::apply_palette(&ui, theme.id, variant_id, visible_accent_id, &snapshot);
+        // The *original* accent: a variant flip never demotes a sticky Material You
+        // pick to its static fallback, and the shadow cell already holds this value.
+        // Write and kick are sequenced in one `spawn_blocking`, so the coordinator
+        // reads the new variant on wake — a flip can change `is_dark` and oblige a
+        // regenerate.
         persist_and_kick(&s, theme.id, variant_id, &persisted_accent_str, &kick_tx);
     });
 }

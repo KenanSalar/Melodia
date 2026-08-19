@@ -1,5 +1,8 @@
 use crate::error::AppError;
-use crate::test_support::{reading_env, with_env_set, with_env_var};
+use crate::test_support::{reading_env, with_env_set};
+// The corner-radius probe is the only caller and only Linux has a desktop to ask.
+#[cfg(target_os = "linux")]
+use crate::test_support::with_env_var;
 
 use super::*;
 
@@ -142,6 +145,20 @@ fn test_resume_on_startup_defaults_false() -> Result<(), AppError> {
     Ok(())
 }
 
+/// `MotionFlags` is `#[serde(flatten)]`ed like every other substruct, so its key sits at
+/// the top level of `settings.json` — a nested object here would be a shape change on
+/// installs that already have a file.
+#[test]
+fn test_skip_startup_animation_defaults_false_and_reads_a_top_level_key() -> Result<(), AppError> {
+    let absent: SettingsData = serde_json::from_str("{}").map_err(|e| json_err(&e))?;
+    assert!(!absent.motion.skip_startup_animation);
+
+    let present: SettingsData =
+        serde_json::from_str(r#"{"skip_startup_animation": true}"#).map_err(|e| json_err(&e))?;
+    assert!(present.motion.skip_startup_animation);
+    Ok(())
+}
+
 #[test]
 fn test_view_sort_roundtrip() -> Result<(), AppError> {
     let sort = ViewSort {
@@ -228,9 +245,8 @@ fn test_theme_preference_roundtrip() -> Result<(), AppError> {
     assert_eq!(deserialized.accent, "mauve");
     assert_eq!(deserialized.last_static_accent.as_deref(), Some("mauve"));
     // Backward compat: older settings.json without `last_static_accent` deserializes to None.
-    let legacy: ThemePreference =
-        serde_json::from_str(r#"{"variant":"mocha","accent":"mauve"}"#)
-            .map_err(|e| json_err(&e))?;
+    let legacy: ThemePreference = serde_json::from_str(r#"{"variant":"mocha","accent":"mauve"}"#)
+        .map_err(|e| json_err(&e))?;
     assert!(legacy.last_static_accent.is_none());
     Ok(())
 }
@@ -359,11 +375,7 @@ fn corner_radius_by_desktop_environment() {
     let radius_under = |desktop| with_env_var("XDG_CURRENT_DESKTOP", desktop, get_os_corner_radius);
 
     assert_eq!(radius_under(Some("GNOME")), 15, "GNOME should return 15");
-    assert_eq!(
-        radius_under(Some("ubuntu:GNOME")),
-        15,
-        "ubuntu:GNOME should return 15"
-    );
+    assert_eq!(radius_under(Some("ubuntu:GNOME")), 15, "ubuntu:GNOME should return 15");
     assert_eq!(radius_under(Some("KDE")), 6, "KDE should return 6");
     assert_eq!(radius_under(Some("i3")), 6, "unknown DE should return 6");
     assert_eq!(radius_under(None), 6, "missing env should return 6");

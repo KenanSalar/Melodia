@@ -27,7 +27,10 @@ component OverflowCheckCell inherits Rectangle {
 
         VerticalLayout {
             alignment: center;
-            Checkbox { checked: root.checked; }
+            Checkbox {
+                checked: root.checked;
+                unchecked-border: Theme.text-muted;
+            }
         }
         VerticalLayout {
             alignment: center;

@@ -1,18 +1,10 @@
-//! `views.json` persistence: the serde data model for per-view UI state
-//! plus its load / save / atomic read-mutate-write I/O.
+//! `views.json` persistence: the serde model for per-view UI state, plus its
+//! load / save / atomic read-mutate-write I/O.
 //!
-//! Kept separate from `settings.json` (see [`super::settings`]) so genuine
-//! app/user preferences (theme, locale, playback, window geometry) don't
-//! share a file with transient per-view layout state — column widths,
-//! column visibility, sort, browse path, the active nav tab, open detail
-//! ids, and section-collapse toggles. Both files live side-by-side in the
-//! data dir; this one mirrors `queue.json` / `search_history.json` as a
-//! purpose-scoped sibling.
-//!
-//! The shared boundary types ([`ColumnWidths`], [`ViewSort`]) stay defined
-//! in [`super::settings`] and are imported here — they're re-exported as
-//! `services::settings::*` and used by callbacks / UI code that predates
-//! this split.
+//! Separate from `settings.json` so genuine app preferences don't share a file
+//! with transient per-view layout state — a purpose-scoped sibling like
+//! `queue.json` and `search_history.json`. The shared boundary types stay
+//! defined in [`super::settings`] and are imported here.
 
 use std::collections::HashMap;
 
@@ -22,71 +14,44 @@ use crate::config::Paths;
 use crate::error::{AppError, AppResult};
 use crate::services::settings::{ColumnWidths, ViewSort};
 
-/// Per-view UI state persisted to `views.json` between launches. Every
-/// field is `#[serde(default)]` via the struct attribute, so a missing key
-/// (or a missing file) falls back to [`ViewStateData::default`] — matching
-/// first-launch behaviour.
+/// Per-view UI state persisted between launches. Every field is
+/// `#[serde(default)]` through the struct attribute, so a missing key — or a
+/// missing file — falls back to first-launch behaviour.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ViewStateData {
-    /// Per-view visible column ids in display order, keyed by view-id
-    /// (see `src/ui/track_list_view.rs::view_id`).
+    /// Keyed by view-id (`src/ui/track_list_view.rs::view_id`); one map each
+    /// covers every list or grid view.
     pub view_columns: HashMap<String, Vec<String>>,
-    /// Per-view track-list column widths, keyed by view-id.
     pub view_column_widths: HashMap<String, ColumnWidths>,
-    /// Per-view sort (field + direction), keyed by view-id. One map covers
-    /// every sortable list/grid view.
     pub view_sort: HashMap<String, ViewSort>,
-    /// Browse view's current folder path, so the next launch reopens at
-    /// the same location. `None` ⇒ land at the library-folder root.
+    /// Browse's folder at last shutdown. `None` lands at the library root.
     pub browse_path: Option<String>,
-    /// Browse view's presentation: 0 = the folder/track list, 1 = the card
-    /// grid. Clamped on read against `Browse.view-mode-count` (via
-    /// `ui::tab_bar::clamp_tab`, the same guard the four tab indices take), so
-    /// a value written by a build with more modes can't select a branch that
-    /// mounts nothing.
-    ///
-    /// An `i32` rather than a bool for the reason [`Self::favorites_tab`]
-    /// gives: a persisted view flag is an int / string / map.
+    /// Browse's presentation. Clamped on read through `ui::tab_bar::clamp_tab`,
+    /// the guard every tab index below takes, so a value from a build with more
+    /// modes can't select a branch that mounts nothing.
     pub browse_view_mode: i32,
-    /// Sidebar tab active at last shutdown. Hydrated into
-    /// `Nav.selected-index` at startup. Indices follow the `Nav` global
-    /// comment (0=search, 1=browse, 2=favorites, 3=my-library,
-    /// 8=recently-played, 9=settings). A file written before the five library
-    /// views became one page can hold 4–7; `ui::my_library::fold_retired_nav_index`
-    /// maps those onto 3 on the way in.
+    /// Sidebar tab at last shutdown, hydrated into `Nav.selected-index`. A file
+    /// written before the five library views became one page can hold 4–7;
+    /// `ui::my_library::fold_retired_nav_index` maps those onto 3 on the way in.
     pub last_nav_index: i32,
-    /// Detail-view ids open at last shutdown, keyed by view-id string.
-    /// Entry present ⇒ that view's detail page is hydrated at startup;
-    /// entry absent ⇒ that view lands on its root (grid / list).
+    /// Detail ids open at last shutdown, keyed by view-id. An absent entry lands
+    /// that view on its root.
     pub last_detail_ids: HashMap<String, i64>,
-    /// Artist Detail "Albums" sub-section header toggle. `true` hides the
-    /// horizontal album scroller so the all-tracks list claims that space.
+    /// Artist Detail's Albums header toggle. `true` hides the scroller so the
+    /// all-tracks list claims that space.
     pub artist_albums_collapsed: bool,
-    /// Settings page tab showing at last shutdown. Hydrated into
-    /// `SettingsPage.tab-idx` at startup, clamped against that global's
-    /// `tab-count` so a value written by a build with more tabs can't land
-    /// on a blank page.
+    /// The four page tabs at last shutdown, each clamped against its own
+    /// global's `tab-count`.
+    ///
+    /// An index rather than a set of bools, and that is the rule rather than a
+    /// preference: `favorites_tab` replaced two `*_collapsed` flags that sat
+    /// with `artist_albums_collapsed` exactly at clippy's
+    /// `struct_excessive_bools` cap. **A persisted view flag is an int, a string
+    /// or a map** — never a bool, whatever the current count.
     pub settings_tab: i32,
-    /// Favorites page tab showing at last shutdown (Songs / Most Played /
-    /// Favorite Artists). Same contract as [`Self::settings_tab`], clamped
-    /// against `Favorites.tab-count`.
-    ///
-    /// An index rather than a set of bools, and that is now the rule rather
-    /// than a preference: this replaced the two `favorites_*_collapsed` flags
-    /// the strips used, which together with [`Self::artist_albums_collapsed`]
-    /// sat exactly at clippy's `struct_excessive_bools` cap. A new persisted
-    /// view flag has to be an int / string / map.
     pub favorites_tab: i32,
-    /// Recently-Played page tab showing at last shutdown (Songs / Most Played).
-    /// Same contract again, clamped against `RecentlyPlayed.tab-count`.
     pub recently_played_tab: i32,
-    /// My Library page tab showing at last shutdown (Songs / Albums / Artists /
-    /// Genres / Playlists). Same contract again, clamped against
-    /// `MyLibrary.tab-count`.
-    ///
-    /// An `i32` for the reason [`Self::favorites_tab`] gives, not because the bool
-    /// count is close: a persisted view flag is an int / string / map.
     pub my_library_tab: i32,
 }
 
@@ -109,9 +74,8 @@ impl Default for ViewStateData {
     }
 }
 
-/// Matches the `Nav.selected-index` default in `melodia-ui/ui/globals/nav.slint`
-/// (3 = My Library). Fresh installs without a `views.json` land on that page's
-/// first tab.
+/// Matches `nav.slint`'s own `Nav.selected-index` default, so a fresh install
+/// lands where the Slint side already points.
 fn default_last_nav_index() -> i32 {
     3
 }
@@ -125,19 +89,14 @@ pub fn write_view_state(paths: &Paths, view_state: &ViewStateData) -> AppResult<
         .map_err(|e| AppError::Settings(format!("Failed to write view state: {e}")))
 }
 
-/// Process-wide lock around `views.json` mutation. Held by
-/// `mutate_view_state` for the entire read→mutate→write window so a burst
-/// of UI events (e.g. rapid column toggles across views) can't interleave
-/// their read snapshots and lose updates. Mirrors `settings`'s
-/// `MUTATE_LOCK`; plain `read_view_state` / `write_view_state` stay
-/// lock-free — single-shot reads and full-replacement writes are
-/// inherently race-free against each other.
+/// Held across the whole read→mutate→write window, so a burst of UI events can't
+/// interleave their read snapshots and lose updates. `settings`'s `MUTATE_LOCK`
+/// shape; the plain read and write stay lock-free, a single-shot read and a
+/// full-replacement write being race-free against each other.
 static MUTATE_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
-/// Atomically read → mutate → write `views.json`. Serializes against every
-/// other `mutate_view_state` caller so concurrent partial-update callsites
-/// (`update_view_columns`, `set_view_sort`, …) merge cleanly without
-/// tearing each other's reads.
+/// Atomically read → mutate → write `views.json`, serialized against every other
+/// caller so concurrent partial updates merge without tearing each other's reads.
 pub fn mutate_view_state<F>(paths: &Paths, mutate: F) -> AppResult<()>
 where
     F: FnOnce(&mut ViewStateData),
@@ -145,9 +104,8 @@ where
     mutate_view_state_with(paths, mutate)
 }
 
-/// Read → inspect/mutate → write `views.json` under the same `MUTATE_LOCK`
-/// as `mutate_view_state`, returning a value the caller wants to retain.
-/// Mirrors `services::settings::mutate_settings_with`.
+/// [`mutate_view_state`] returning a value the caller wants to keep. Mirrors
+/// `services::settings::mutate_settings_with`.
 pub fn mutate_view_state_with<F, R>(paths: &Paths, mutate: F) -> AppResult<R>
 where
     F: FnOnce(&mut ViewStateData) -> R,

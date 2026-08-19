@@ -23,10 +23,7 @@ pub fn get_search_history(state: &AppState) -> Result<Vec<String>, AppError> {
     Ok(state.search_history.get())
 }
 
-pub async fn add_search_history(
-    state: &AppState,
-    query: String,
-) -> Result<Vec<String>, AppError> {
+pub async fn add_search_history(state: &AppState, query: String) -> Result<Vec<String>, AppError> {
     state.search_history.add(&query).await
 }
 

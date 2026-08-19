@@ -106,10 +106,7 @@ pub async fn fetch_artist_images(
     db: &DbPool,
     client: &reqwest::Client,
 ) -> AppResult<u32> {
-    if PASS_IN_FLIGHT
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
+    if PASS_IN_FLIGHT.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_err() {
         PASS_REQUESTED_AGAIN.store(true, Ordering::Release);
         log::debug!("artist image fetch: a pass is in flight, deferring to its re-run");
         return Ok(0);
@@ -133,18 +130,17 @@ pub async fn fetch_artist_images(
 ///
 /// Runs one [`BATCH_SIZE`] batch of concurrent searches per [`BATCH_INTERVAL`],
 /// and abandons the rest if Deezer refuses on a code that says to stop asking.
-async fn run_pass(
-    paths: &Paths,
-    db: &DbPool,
-    client: &reqwest::Client,
-) -> AppResult<PassOutcome> {
+async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppResult<PassOutcome> {
     let mut artists = queries::artist::get_artists_without_images(db).await?;
     {
         let attempted = attempted_no_match().lock();
         artists.retain(|a| !attempted.contains(&a.id));
     }
     if artists.is_empty() {
-        return Ok(PassOutcome { fetched: 0, halted: false });
+        return Ok(PassOutcome {
+            fetched: 0,
+            halted: false,
+        });
     }
 
     let artists_dir = paths.artists_dir.clone();
@@ -245,7 +241,10 @@ async fn run_pass(
 
     // Fetched images land in the DB but nothing signals the UI, so a grid
     // that's already painted won't pick them up until its next refresh.
-    Ok(PassOutcome { fetched: fetched_count, halted })
+    Ok(PassOutcome {
+        fetched: fetched_count,
+        halted,
+    })
 }
 
 /// Spawn a background task to fetch artist images. Fire-and-forget.

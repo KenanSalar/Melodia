@@ -30,22 +30,26 @@ pub struct Paths {
 }
 
 impl Paths {
+    /// Resolves every path Melodia owns under the user's data directory,
+    /// creating the directories it names.
     pub fn resolve() -> AppResult<Self> {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| AppError::Settings("could not resolve user data directory".into()))?
             .join("Melodia");
-        std::fs::create_dir_all(&data_dir)?;
+        let paths = Self::rooted_at(data_dir);
+        paths.create_dirs()?;
+        Ok(paths)
+    }
 
-        let artwork_dir = data_dir.join("artwork");
-        let artists_dir = data_dir.join("artists");
-        let backups_dir = data_dir.join("backups");
-        let logs_dir = data_dir.join("logs");
-        std::fs::create_dir_all(&artwork_dir)?;
-        std::fs::create_dir_all(&artists_dir)?;
-        std::fs::create_dir_all(&backups_dir)?;
-        std::fs::create_dir_all(&logs_dir)?;
-
-        Ok(Self {
+    /// Derives every path Melodia owns from `data_dir`, touching no disk —
+    /// [`create_dirs`](Self::create_dirs) is the half that does.
+    ///
+    /// Split out so a test can root the tree in a `TempDir` directly. Steering
+    /// `dirs::data_dir()` through `XDG_DATA_HOME` instead is a process-global
+    /// mutation, which an integration test can only reach through `unsafe`.
+    #[must_use]
+    pub fn rooted_at(data_dir: PathBuf) -> Self {
+        Self {
             db_path: data_dir.join("melodia.db"),
             settings_path: data_dir.join("settings.json"),
             view_state_path: data_dir.join("views.json"),
@@ -54,11 +58,25 @@ impl Paths {
             scrobble_credentials_path: data_dir.join("scrobble_credentials.json"),
             scrobble_queue_path: data_dir.join("scrobble_queue.json"),
             scrobble_mbid_state_path: data_dir.join("scrobble_mbid_attempted.json"),
-            artwork_dir,
-            artists_dir,
-            backups_dir,
-            logs_dir,
+            artwork_dir: data_dir.join("artwork"),
+            artists_dir: data_dir.join("artists"),
+            backups_dir: data_dir.join("backups"),
+            logs_dir: data_dir.join("logs"),
             data_dir,
-        })
+        }
+    }
+
+    /// Creates the data directory and every subdirectory under it.
+    pub fn create_dirs(&self) -> AppResult<()> {
+        for dir in [
+            &self.data_dir,
+            &self.artwork_dir,
+            &self.artists_dir,
+            &self.backups_dir,
+            &self.logs_dir,
+        ] {
+            std::fs::create_dir_all(dir)?;
+        }
+        Ok(())
     }
 }

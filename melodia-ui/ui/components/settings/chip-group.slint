@@ -35,13 +35,10 @@ component Chip inherits Rectangle {
 
 // Pill-chip selector. A click writes `selected-index` and emits `selected(idx)`.
 //
-// Slint 1.16 has no wrapping layout and no `Flow`, so the group lays itself out
-// as a column of rows: it decides how many chips fit on a line and
-// `SettingsPage.chunk-indices` splits the options into index groups of that
-// size, each one a `HorizontalLayout`. Iterating real arrays both times is what
-// keeps it simple — the predecessor was a hand-unrolled 4+4 split capped at
-// eight chips, written that way because Slint rejects an inline `for … : if …`
-// and a wrapper around a filtered-out chip still claims its parent's spacing.
+// Slint 1.16 has no wrapping layout and no `Flow`, so the group lays itself out as a column of
+// rows: it decides how many chips fit on a line and `SettingsPage.chunk-indices` splits the options
+// into index groups of that size. Iterating real arrays both times is what keeps it simple — Slint
+// rejects an inline `for … : if …`, and a wrapper around a filtered-out chip still claims spacing.
 export component ChipGroup inherits Rectangle {
     in property <[string]> options;
     in-out property <int> selected-index;
@@ -58,16 +55,12 @@ export component ChipGroup inherits Rectangle {
 
     callback selected(int);
 
-    // The widest chip, measured rather than estimated: a hidden ruler mounts one
-    // **real** `Chip` per option, so the measured and the drawn shape can't
-    // drift, and a `VerticalLayout` reports the max of its children's widths —
-    // which is what "widest" means. Same idiom, and the same `visible: false`
-    // (a 0×0 clip that still computes layout info), as `tab-bar.slint`'s ruler.
-    //
-    // Sizing every row off the widest is deliberately conservative: the chips
-    // keep their natural widths, so a row is never full but can never overflow,
-    // and no per-chip measurement has to escape the repeater. The labels are
-    // translated, so it follows the running locale for free.
+    // The widest chip, measured rather than estimated: a hidden ruler mounts one **real** `Chip`
+    // per option, so measured and drawn shapes can't drift, and a `VerticalLayout` reports the max
+    // of its children's widths. Same idiom, and the same `visible: false` (a 0×0 clip that still
+    // computes layout info), as `tab-bar.slint`'s ruler. Sizing every row off the widest is
+    // deliberately conservative: a row is never full but can never overflow, and no per-chip
+    // measurement has to escape the repeater.
     measure := VerticalLayout {
         visible: false;
         for option in root.options: Chip {

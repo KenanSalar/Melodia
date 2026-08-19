@@ -1,46 +1,82 @@
-//! Shared detail-view helper macro.
+//! Shared hero-header helper macro.
 //!
-//! The four detail views — `AlbumDetail`, `ArtistDetail`, `GenreDetail`,
-//! `PlaylistDetail` — are distinct Slint-generated global types, so the
-//! two boilerplate helpers every detail module needs (`apply_detail_artwork`
-//! to write the cover + hero-blur pair, `replace_tracks_model` to swap the
-//! `tracks` `VecModel`) can't be plain generic functions. This macro
-//! stamps the typed body once per module, mirroring the
-//! `impl_track_list_column_state!` pattern in `track_list_view.rs`.
+//! Every global carrying a hero is a distinct Slint-generated type, so the helpers their
+//! modules need — `apply_detail_artwork` for the cover and hero-blur pair,
+//! `replace_tracks_model` for the `tracks` `VecModel`, and the curated pages'
+//! `publish_hero_artwork` / `republish_chips` — can't be generic functions. This stamps the
+//! typed body once per module, as `impl_track_list_column_state!` does.
 
-/// Generate the per-view detail helpers for a Slint detail global.
+/// Generate the per-view hero helpers for a Slint global.
 ///
-/// Two arms:
-/// * `artwork $Global` — views with a cover / hero-blur header
-///   (`AlbumDetail`, `ArtistDetail`, `PlaylistDetail`): emits both
-///   `apply_detail_artwork` and `replace_tracks_model`.
-/// * `no_artwork $Global` — the `GenreDetail` view (procedural, no
-///   intrinsic image): emits `replace_tracks_model` only.
+/// `artwork $Global` is a detail view with a cover / hero-blur header and emits both;
+/// `curated $Global, $Ui, $publish_chips` is one of the two curated pages, whose track model is
+/// its own tabbed cache's and whose banner is a composed collage;
+/// `no_artwork $Global` is the procedural `GenreDetail` and emits only the model swap.
 macro_rules! impl_detail_view_helpers {
     (artwork $Global:ty) => {
         impl_detail_view_helpers!(@tracks_model $Global);
+        impl_detail_view_helpers!(@artwork $Global);
+    };
+    (curated $Global:ty, $Ui:ty, $publish_chips:path) => {
+        impl_detail_view_helpers!(@artwork $Global);
 
-        /// Push a freshly-decoded `(cover, blur)` pair into the detail
-        /// global from the UI thread: write the cover slot directly and
-        /// route the blur through `write_crossfade_slot` so switching
-        /// entities fades the previous blur to the new one without
-        /// flashing. `animate: true` is the fresh-open path (a user
-        /// click); `false` is the watcher-driven refresh.
+        /// Publish a composed banner and claim it as the one on screen.
         ///
-        /// The hero's colour set is solved from the measurement the decode
-        /// took off that same blur, so the scrim can't fall out of step
-        /// with the buffer it is darkening.
+        /// **Gated whole, where a detail view fills its own slots even while hidden.** A curated
+        /// page's leave wipes its models and forgets the guard, so slots written behind it have
+        /// nothing to be ready for and their claim would suppress the re-enter's recompose. What
+        /// the gate mainly protects is `HeroBackdrop`, shared by all six heroes: a compose finishing
+        /// after a nav away would paint this page's solve under whichever hero mounted next.
+        fn publish_hero_artwork(
+            view: &std::sync::Arc<$Ui>,
+            weak: &slint::Weak<$crate::AppWindow>,
+            pair: $crate::ui::detail_artwork::DetailPair,
+            animate: bool,
+            paths: Vec<String>,
+        ) {
+            let view = view.clone();
+            let weak = weak.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                let Some(ui) = weak.upgrade() else { return };
+                if !view.section_active() || !view.state().last_mosaic_paths.claim(paths) {
+                    return;
+                }
+                apply_detail_artwork(&ui, &ui.global::<$Global>(), pair, animate, true);
+            });
+        }
+
+        /// Re-publish the band's chips on the UI thread.
         ///
-        /// **`section_active` gates the `HeroBackdrop` write and nothing
-        /// else.** The per-view properties above and below it are this
-        /// view's own, and writing them while hidden is what leaves the
-        /// page ready to paint — but `HeroBackdrop` is one global shared by
-        /// six heroes, so publishing into it from a view that isn't on
-        /// screen paints this entity's colours under whichever hero is.
-        /// Pass the section's synchronous shadow, never a literal: the
-        /// boot path fetches every persisted detail id regardless of which
-        /// section is being restored, so at cold start up to four of these
-        /// land while a *different* hero owns the band.
+        /// **Call this wherever one of the chips' inputs lands.** Both curated pages assemble their
+        /// band from more than one fetch and run those *concurrently*, so no ordering can be
+        /// assumed; the publish reads only finished values, so the worst a mistimed one can be is a
+        /// tick behind, never half-built. The grid path can't stand in for it — it publishes past a
+        /// signature early-return, and `mounted_content` is a constant `0` on the Songs tab.
+        pub fn republish_chips(
+            view: &std::sync::Arc<$Ui>,
+            weak: &slint::Weak<$crate::AppWindow>,
+        ) {
+            let view = view.clone();
+            let _ = weak.upgrade_in_event_loop(move |ui| {
+                $publish_chips(&ui, &view);
+            });
+        }
+    };
+    (@artwork $Global:ty) => {
+        /// Push a decoded `(cover, blur)` pair into the detail global from the UI
+        /// thread: the cover slot directly, the blur through `write_crossfade_slot` so
+        /// switching entities fades rather than flashes. `animate: true` is the
+        /// fresh-open path, `false` the watcher-driven refresh. The colour set comes off the
+        /// measurement the decode took beside these two buffers, so the scrim can't fall out
+        /// of step with the blur it is darkening.
+        ///
+        /// **`section_active` gates the `HeroBackdrop` write and nothing else.** The
+        /// per-view properties either side of it are this view's own, and writing them
+        /// while hidden is what leaves the page ready to paint — but `HeroBackdrop` is
+        /// one global for six heroes, so publishing into it from a view that isn't on
+        /// screen paints this entity's colours under whichever hero is. Pass the
+        /// section's synchronous shadow, never a literal: the boot path fetches every
+        /// persisted detail id whichever section is restored.
         fn apply_detail_artwork(
             ui: &$crate::AppWindow,
             g: &$Global,
@@ -69,10 +105,9 @@ macro_rules! impl_detail_view_helpers {
         impl_detail_view_helpers!(@tracks_model $Global);
     };
     (@tracks_model $Global:ty) => {
-        /// Swap the detail global's `tracks` `VecModel` contents in
-        /// place, falling back to a fresh model if the downcast fails
-        /// (never expected — the model is always installed as a
-        /// `VecModel`).
+        /// Swap the detail global's `tracks` `VecModel` contents in place, falling back
+        /// to a fresh model if the downcast fails — never expected, the model always
+        /// being installed as a `VecModel`.
         fn replace_tracks_model(g: &$Global, rows: Vec<$crate::TrackListRow>) {
             use slint::Model as _;
             let model = g.get_tracks();
@@ -89,11 +124,10 @@ macro_rules! impl_detail_view_helpers {
 
 pub(crate) use impl_detail_view_helpers;
 
-/// Resolve a view's sort as `(field, dir)` display strings from the
-/// persisted `view_sort[view_id]`, falling back to `default_field`
-/// ascending on a fresh install. Used by every detail `open_*` (so
-/// reopening any entity restores the last sort picked for that view type)
-/// and by `boot::spawn_initial_tracks_fetch` for the Tracks cold fetch.
+/// A view's sort as `(field, dir)` display strings from the persisted
+/// `view_sort[view_id]`, falling back to `default_field` ascending on a fresh install.
+/// Every detail `open_*` uses it, so reopening any entity restores the last sort picked
+/// for that view type, as does the Tracks cold fetch.
 pub fn resolve_view_sort(
     state: &crate::state::AppState,
     view_id: &str,

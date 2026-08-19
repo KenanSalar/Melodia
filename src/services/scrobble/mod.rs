@@ -171,9 +171,9 @@ impl ScrobbleService {
         let path = self.creds_path.clone();
         match tokio::task::spawn_blocking(move || credentials::save(&path, &snapshot)).await {
             Ok(result) => result,
-            Err(e) => Err(AppError::io_other(format!(
-                "scrobble credential persist task panicked: {e}"
-            ))),
+            Err(e) => {
+                Err(AppError::io_other(format!("scrobble credential persist task panicked: {e}")))
+            }
         }
     }
 
@@ -182,8 +182,7 @@ impl ScrobbleService {
         &self,
         credentials: Option<LastfmCredentials>,
     ) -> AppResult<()> {
-        self.persist_credentials_change(move |creds| creds.lastfm = credentials)
-            .await
+        self.persist_credentials_change(move |creds| creds.lastfm = credentials).await
     }
 
     /// Connect / disconnect `ListenBrainz`. Passing `None` disconnects.
@@ -191,8 +190,7 @@ impl ScrobbleService {
         &self,
         credentials: Option<ListenBrainzCredentials>,
     ) -> AppResult<()> {
-        self.persist_credentials_change(move |creds| creds.listenbrainz = credentials)
-            .await
+        self.persist_credentials_change(move |creds| creds.listenbrainz = credentials).await
     }
 
     /// The `ListenBrainz` token to use for MBID lookups — `Some` only when
@@ -201,11 +199,7 @@ impl ScrobbleService {
     pub fn mbid_lookup_token(&self) -> Option<String> {
         let runtime = self.runtime.read();
         if runtime.flags.mbid_auto_tag {
-            runtime
-                .credentials
-                .listenbrainz
-                .as_ref()
-                .map(|c| c.token.clone())
+            runtime.credentials.listenbrainz.as_ref().map(|c| c.token.clone())
         } else {
             None
         }
@@ -249,9 +243,7 @@ impl ScrobbleService {
         let path = self.queue_path.clone();
         match tokio::task::spawn_blocking(move || snapshot.save(&path)).await {
             Ok(result) => result,
-            Err(e) => Err(AppError::io_other(format!(
-                "scrobble queue persist task panicked: {e}"
-            ))),
+            Err(e) => Err(AppError::io_other(format!("scrobble queue persist task panicked: {e}"))),
         }
     }
 
@@ -335,7 +327,11 @@ impl ScrobbleService {
     /// wake, unlike per-track [`Self::enqueue_love`]. `ListenBrainz` skips rows
     /// without a `recording_mbid` (it keys on that). Returns how many loves were
     /// actually queued. A no-op returning `Ok(0)` when `target` isn't armed.
-    pub async fn backfill_loves(&self, rows: &[ScrobbleRow], target: LoveTarget) -> AppResult<usize> {
+    pub async fn backfill_loves(
+        &self,
+        rows: &[ScrobbleRow],
+        target: LoveTarget,
+    ) -> AppResult<usize> {
         if !self.love_target_armed(target) {
             return Ok(0);
         }
@@ -389,11 +385,7 @@ impl ScrobbleService {
         let (lastfm_creds, lb_creds) = {
             let runtime = self.runtime.read();
             (
-                runtime
-                    .flags
-                    .lastfm_enabled
-                    .then(|| runtime.credentials.lastfm.clone())
-                    .flatten(),
+                runtime.flags.lastfm_enabled.then(|| runtime.credentials.lastfm.clone()).flatten(),
                 runtime
                     .flags
                     .listenbrainz_enabled
@@ -421,7 +413,8 @@ impl ScrobbleService {
         if let Some(creds) = lb_creds {
             let client = self.client();
             tokio::spawn(async move {
-                if let Err(e) = listenbrainz::submit_playing_now(&client, &creds.token, &track).await
+                if let Err(e) =
+                    listenbrainz::submit_playing_now(&client, &creds.token, &track).await
                 {
                     log::debug!("ListenBrainz now-playing failed: {e}");
                 }
@@ -440,10 +433,7 @@ impl ScrobbleService {
         };
         let (lastfm_remaining, listenbrainz_remaining) = {
             let runtime = self.runtime.read();
-            (
-                runtime.lastfm_scrobble_ready(),
-                runtime.listenbrainz_scrobble_ready(),
-            )
+            (runtime.lastfm_scrobble_ready(), runtime.listenbrainz_scrobble_ready())
         };
         if !lastfm_remaining && !listenbrainz_remaining {
             return Ok(());

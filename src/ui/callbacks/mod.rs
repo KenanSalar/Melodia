@@ -1,16 +1,13 @@
-//! Pull-side glue: every `Player.on_*` callback declared in the Slint UI is
-//! wired here to a `library::*` function. Callbacks run on the Slint event
-//! loop thread and dispatch the actual work onto the tokio runtime.
+//! Pull-side glue: every `Player.on_*` callback declared in the Slint UI is wired here to
+//! a `library::*` function, on the event-loop thread, dispatching the work onto tokio.
 //!
-//! What is left here is the cross-cutting set — everything answering to no
-//! single view. `wire_all` is the root entry that wires the `Player` global
-//! itself plus the `Nav` persist callback; each view slice owns its own wiring
-//! under `ui/<view>/callbacks/` and reaches it through that slice's `install`.
+//! What is left here is the cross-cutting set, answering to no single view. `wire_all`
+//! wires the `Player` global itself plus the `Nav` persist callback; each view slice owns
+//! its wiring under `ui/<view>/callbacks/`.
 
-// `pub(in crate::ui)` rather than private: each view slice owns its own
-// `callbacks/` submodule, so the wiring reaching these is no longer a
-// descendant of this module. Still sealed inside `ui::` — nothing in
-// `library/`, `player/` or `boot/` can name either.
+// `pub(in crate::ui)` rather than private: each view slice owns its own `callbacks/`
+// submodule, so the wiring reaching these isn't a descendant of this module. Still sealed
+// inside `ui::` — nothing in `library/`, `player/` or `boot/` can name either.
 pub(in crate::ui) mod macros;
 
 pub(in crate::ui) mod cross_tab_nav;
@@ -38,30 +35,23 @@ pub use now_playing::{wire_now_playing_favorite, wire_now_playing_rating};
 pub use tags::wire_tags;
 pub use updater::wire as wire_updater;
 
-/// Convert a Slint `[int]` callback param into `Vec<i64>`. Used by every
-/// track-list row context-menu callback (`play-next`, `toggle-row-favorite`,
-/// `remove-track`) — single-row mode emits a 1-element array, multi-select
-/// emits the entire view selection, both feed through here. Centralising
-/// the cast keeps `i64::from` (vs `as`) discipline in one place.
+/// A Slint `[int]` callback param as `Vec<i64>`, for every track-row context-menu callback
+/// — single-row mode emits a 1-element array, multi-select the whole view selection.
 pub(super) fn collect_track_ids(ids: &ModelRc<i32>) -> Vec<i64> {
     ids.iter().map(i64::from).collect()
 }
 
-/// Variant that drops `id == 0`. Browse view's disk-only rows carry id 0
-/// (not in the library, can't be queued/favorited). Selection logic
-/// already filters those upstream in `browse/selection.rs`; this is the
-/// belt-and-braces guard for the single-row context-menu path.
+/// The variant that drops `id == 0` — Browse's disk-only rows, which aren't in the
+/// library and can't be queued or favorited. `browse/selection.rs` already filters them
+/// upstream; this guards the single-row context-menu path.
 pub(super) fn collect_nonzero_track_ids(ids: &ModelRc<i32>) -> Vec<i64> {
     ids.iter().filter(|&id| id != 0).map(i64::from).collect()
 }
 
-/// Resolve the queue slot a `play-row` activation should start on.
-///
-/// The row index a view hands over indexes its *displayed* rows, which is the
-/// same space as `ids` everywhere except Browse — that list also shows
-/// disk-only files, which `current_in_library_ids` drops. Fall back to a lookup
-/// by id there, and to the head of the queue when the track isn't in the list
-/// at all (`player_play_tracks` reads `None` as index 0).
+/// Resolve the queue slot a `play-row` activation should start on. The row index a view
+/// hands over indexes its *displayed* rows, the same space as `ids` everywhere but Browse,
+/// which also shows disk-only files that `current_in_library_ids` drops — so fall back to
+/// a lookup by id, and to the head of the queue if the track isn't in the list at all.
 pub(super) fn play_row_start(ids: &[i64], track_id: i64, idx: i32) -> Option<usize> {
     if let Ok(i) = usize::try_from(idx)
         && ids.get(i) == Some(&track_id)
@@ -71,33 +61,27 @@ pub(super) fn play_row_start(ids: &[i64], track_id: i64, idx: i32) -> Option<usi
     ids.iter().position(|&id| id == track_id)
 }
 
-/// Track ids of a live `VecModel<TrackListRow>`, in display order.
-///
-/// Only Search needs this. Every other view caches its displayed rows on a
-/// `*Ui` handle, but Search's visible set is a sorted, `COMPACT_TRACK_LIMIT`-
-/// truncated projection of `last_results` that is assembled at render time —
-/// so the model is the only place the displayed order actually exists. Result
-/// sets are LIMIT-bounded, so walking it on the UI thread is cheap.
+/// Track ids of a live `VecModel<TrackListRow>`, in display order. Only Search needs this:
+/// every other view caches its displayed rows on a `*Ui` handle, where Search's visible
+/// set is a sorted, truncated projection of `last_results` assembled at render time, so
+/// the model is the only place its display order exists. LIMIT-bounded, so the UI-thread
+/// walk is cheap.
 pub(super) fn model_track_ids(rows: &ModelRc<crate::TrackListRow>) -> Vec<i64> {
     rows.iter().map(|r| i64::from(r.id)).collect()
 }
 
-/// Replace the queue with `ids`, open on a random one, then turn shuffle on —
-/// the header Shuffle pill on the six views that carry one. `tag` names the
-/// call site in the two failure logs.
+/// Replace the queue with `ids`, open on a random one, then turn shuffle on — the header
+/// Shuffle pill on the six views that carry one.
 ///
-/// The two halves have to be sequenced (shuffle re-anchors around whatever is
-/// playing), so this is a spawned task rather than one `library::*` call. Use
-/// `queue_set_shuffle` and not a read-then-toggle pair: the pill means "on",
-/// and a toggle racing the transport's shuffle button would turn it off.
-///
-/// The start slot is random, and has to be: the shuffle anchors the current
-/// track at the front, so starting at the head would open every press on the
-/// same song — a shuffle whose first track you can predict.
+/// The two halves have to be sequenced, shuffle re-anchoring around whatever is playing.
+/// `queue_set_shuffle` rather than a read-then-toggle pair: the pill means "on", and a
+/// toggle racing the transport's own button would turn it off. The start slot is random
+/// because the shuffle anchors the current track at the front, so starting at the head
+/// opens every press on the same song.
 pub(super) fn spawn_play_then_shuffle(state: &AppState, tag: &'static str, ids: Vec<i64>) {
-    // Not just an early exit — `random_range` panics on an empty range, and a
-    // filter that matches nothing leaves a live pill over an empty list (the
-    // header gates on the view's *unfiltered* count).
+    // Not just an early exit: `random_range` panics on an empty range, and a filter
+    // matching nothing leaves a live pill over an empty list, the header gating on the
+    // view's *unfiltered* count.
     if ids.is_empty() {
         return;
     }
@@ -116,28 +100,43 @@ pub(super) fn spawn_play_then_shuffle(state: &AppState, tag: &'static str, ids: 
     });
 }
 
-/// Resolve a sort-pill (or column-header) click against the sort in force.
+/// Resolve a sort-pill (or column-header) click against the sort in force: the field
+/// already sorted on flips direction, a different one starts ascending.
 ///
-/// Clicking the field already sorted on flips the direction; clicking a
-/// different one starts it ascending. Every sortable view spelled this out
-/// identically, so a change of mind about the reset direction meant finding
-/// eleven copies.
-///
-/// `cur_dir` is read the way [`SortDir::from_token`] reads it — only `"desc"`
-/// is descending — rather than testing for `"asc"` and treating everything else
-/// as descending. The two only differ on a token neither side can currently
-/// produce, but disagreeing about it would leave that pill unable to reach
-/// descending at all.
+/// `cur_dir` is read the way [`SortDir::from_token`] reads it — only `"desc"` is
+/// descending — rather than testing for `"asc"`. The two differ only on a token neither
+/// side can currently produce, but disagreeing leaves that pill unable to reach descending
+/// at all.
 pub(super) fn next_sort(cur_field: &str, cur_dir: &str, clicked: &str) -> (String, SortDir) {
-    let flip = cur_field == clicked && cur_dir != "desc";
-    let dir = if flip { SortDir::Desc } else { SortDir::Asc };
-    (clicked.to_owned(), dir)
+    next_sort_with_natural(cur_field, cur_dir, clicked, None)
 }
 
-/// Spawn a fire-and-forget task that persists `view_id`'s sort field +
-/// direction into `views.json`'s `view_sort`. A write failure is logged, not
-/// surfaced — the in-memory re-sort already applied, so the only loss is
-/// across a restart. Shared by every sortable view's `on_request_sort`.
+/// [`next_sort`] for a view with an order of its own to fall back to: ascending,
+/// descending, then `natural`.
+///
+/// A *synthetic* order — one no column header can ask for — is otherwise unreachable the
+/// moment anything else is clicked, and the sort persists across restarts. Playlist Detail
+/// is the only caller: `"position"` is what drag-to-reorder is gated on, so one click on
+/// Title used to retire reordering for good. Nothing paints the third state, no header
+/// cell matching the natural field.
+pub(super) fn next_sort_with_natural(
+    cur_field: &str,
+    cur_dir: &str,
+    clicked: &str,
+    natural: Option<&str>,
+) -> (String, SortDir) {
+    if cur_field != clicked {
+        return (clicked.to_owned(), SortDir::Asc);
+    }
+    if cur_dir != "desc" {
+        return (clicked.to_owned(), SortDir::Desc);
+    }
+    (natural.unwrap_or(clicked).to_owned(), SortDir::Asc)
+}
+
+/// Persist `view_id`'s sort into `views.json`, fire-and-forget: the in-memory re-sort
+/// already applied, so the only loss is across a restart. Shared by every
+/// `on_request_sort`.
 pub(super) fn persist_view_sort(
     state: &AppState,
     view_id: &'static str,
@@ -153,25 +152,23 @@ pub(super) fn persist_view_sort(
     });
 }
 
-/// Read `view_id`'s persisted sort as `(field, dir)` display strings, or
-/// `None` when the view never persisted one (fresh install — caller keeps
-/// its Slint-global default). Counterpart of [`persist_view_sort`] used by
-/// each view's `wire_*` to seed the sort header at startup.
+/// `view_id`'s persisted sort as `(field, dir)` display strings, or `None` on a fresh
+/// install, where the caller keeps its Slint-declared default. Each view's `wire_*` uses
+/// it to seed the sort header at startup.
 pub(super) fn persisted_sort(state: &AppState, view_id: &str) -> Option<(String, &'static str)> {
     library::settings::get_view_sort(state, view_id).map(|s| (s.field, s.dir.as_str()))
 }
 
 /// Shadow of `views.json`'s `last_nav_index` plus the lock its writes serialize on.
 ///
-/// `Nav.persist-selected-index` can fire twice in one tick — `nav_history::replay`
-/// closes the departing detail first, and a close restores a cross-section origin —
-/// and two `spawn_blocking` writes have no ordering between them, so the origin can
-/// land last. `writer` supplies that ordering; `latest` lets a task holding it drop a
-/// write a newer index has superseded. **The load has to sit under `writer`**, or both
-/// tasks pass the check and race to land.
+/// `Nav.persist-selected-index` can fire twice in one tick — `nav_history::replay` closes
+/// the departing detail first, and a close restores a cross-section origin — and two
+/// `spawn_blocking` writes have no ordering, so the origin can land last. `writer` supplies
+/// that ordering and `latest` lets a task holding it drop a superseded write; **the load
+/// has to sit under `writer`**, or both tasks pass the check and race.
 ///
-/// Two fields rather than a `Mutex<i32>` so the UI thread publishes with a store
-/// instead of blocking on a guard held across file I/O.
+/// Two fields rather than a `Mutex<i32>`, so the UI thread publishes with a store instead
+/// of blocking on a guard held across file I/O.
 struct NavIndexPersist {
     /// Published on the UI thread before each spawn; read by writers under `writer`.
     latest: AtomicI32,
@@ -185,16 +182,34 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     let player = ui.global::<Player>();
     let ui_weak = ui.as_weak();
 
-    wire_sync_pb!(player, on_play_pause, state, "play_pause", library::playback::player_toggle_play_pause);
+    wire_sync_pb!(
+        player,
+        on_play_pause,
+        state,
+        "play_pause",
+        library::playback::player_toggle_play_pause
+    );
     wire_sync_pb!(player, on_next, state, "next", library::playback::player_next);
     wire_sync_pb!(player, on_previous, state, "previous", library::playback::player_previous);
-    wire_pb!(player, on_commit_volume, state, "commit_volume", library::playback::commit_player_settings);
+    wire_pb!(
+        player,
+        on_commit_volume,
+        state,
+        "commit_volume",
+        library::playback::commit_player_settings
+    );
     wire_pb!(player, on_toggle_mute, state, "toggle_mute", library::playback::player_toggle_mute);
-    wire_sync!(player, on_toggle_shuffle, state, "toggle_shuffle", library::queue::queue_toggle_shuffle);
+    wire_sync!(
+        player,
+        on_toggle_shuffle,
+        state,
+        "toggle_shuffle",
+        library::queue::queue_toggle_shuffle
+    );
     wire_sync!(player, on_cycle_repeat, state, "cycle_repeat", library::queue::queue_cycle_repeat);
 
-    // seek: hold the slider at the requested position until the backend
-    // reports a matching update (see Player.seek_pending_ms).
+    // seek: hold the slider at the requested position until the backend reports a
+    // matching update (`Player.seek_pending_ms`).
     {
         let s = state.clone();
         let weak = ui_weak.clone();
@@ -215,16 +230,17 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
             let s = s.clone();
             // Negative → 0 (try_from fails); then cap at the volume ceiling.
             let vol = u32::try_from(level).unwrap_or(0).min(crate::player::state::MAX_VOLUME);
-            spawn_logged_sync!(s, "set_volume", library::playback::player_set_volume(&s.playback_ctx(), vol));
+            spawn_logged_sync!(
+                s,
+                "set_volume",
+                library::playback::player_set_volume(&s.playback_ctx(), vol)
+            );
         });
     }
 
-    // set_playback_speed: apply to the live player AND persist (speed
-    // survives restarts — mirrors repeat/shuffle/volume). The flyout only
-    // ever sends valid preset values; downstream clamps anyway, so no
-    // clamp is needed here. Two steps like the gapless callback in
-    // `src/ui/settings/playback_settings.rs`: (a) fast synchronous runtime apply,
-    // (b) blocking-pool disk write.
+    // set_playback_speed: apply to the live player *and* persist, speed surviving restarts
+    // as repeat, shuffle and volume do. Two steps, as the gapless callback takes: a fast
+    // synchronous apply, then a blocking-pool write.
     {
         let s = state.clone();
         player.on_set_playback_speed(move |speed| {
@@ -235,9 +251,8 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
                 "set_playback_speed",
                 library::playback::player_set_playback_speed(&s_apply.playback_ctx(), speed)
             );
-            // `persist_blocking`, not the macro beside it: this writes
-            // `settings.json`, and the macro is the `views.json` shape. Its
-            // label already read as this one's, which was the tell.
+            // `persist_blocking`, not the macro beside it: this writes `settings.json`,
+            // where the macro is the `views.json` shape.
             s.persist_blocking("persist playback_speed", move |st| {
                 library::settings::set_playback_speed(st, speed)
             });
@@ -248,14 +263,11 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     // after every per-view wire fn) so it can fan the change into all three
     // surfaces that hold a per-row `is_favorite` (Tracks, Browse, AlbumDetail).
 
-    // Nav.persist-selected-index: fired by the sidebar TouchArea after every
-    // tab click. Persist into `views.json`'s `last_nav_index` on the blocking pool
-    // so a restart lands on the same section, and record a browser-style
-    // history entry so Mouse-4/Mouse-5 can walk back/forward through tab
-    // switches. The `record_current` read happens on the UI thread before
-    // any disk hop; reads the post-click `Nav.selected-index` + the
-    // section's current detail-id (if any), so the entry reflects what
-    // the user is actually about to see.
+    // Nav.persist-selected-index: fired after every sidebar click. Persists
+    // `last_nav_index` on the blocking pool and records a history entry so Mouse-4/5 can
+    // walk back through tab switches. `record_current` reads on the UI thread ahead of any
+    // disk hop, off the post-click index and detail id, so the entry is what the user is
+    // about to see.
     let nav = ui.global::<Nav>();
     {
         let s = state.clone();
@@ -271,8 +283,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
             // Ahead of the spawn — a queued write has to be able to see it.
             persist.latest.store(idx, Ordering::Release);
             // Spelled out rather than through `spawn_blocking_logged!`, which takes a
-            // string *literal*: the index is what makes this line worth reading, and a
-            // failure that doesn't say which section it dropped says almost nothing.
+            // string *literal*: a failure has to name the section it dropped.
             let s_disk = s.clone();
             let persist = Arc::clone(&persist);
             s.runtime.spawn_blocking(move || {
@@ -289,9 +300,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // Nav.reveal-in-folder: fired by the "Open Containing Folder" entry
-    // in every track-row context menu. Resolves the track's file path
-    // and opens its parent directory in the OS file manager.
+    // Nav.reveal-in-folder: "Open Containing Folder", in every track-row context menu.
     {
         let s = state.clone();
         nav.on_reveal_in_folder(move |track_id| {
@@ -310,9 +319,9 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
 #[path = "tests/play_row_tests.rs"]
 mod tests;
 
-// A second flat `#[path]` mod rather than nesting both under `tests` — the
-// play-row helpers reach `super::` for the fns they exercise, and nesting moves
-// that one level away from this file.
+// A second flat `#[path]` mod rather than nesting both under `tests`: the play-row
+// helpers reach `super::` for the fns they exercise, and nesting moves that one level
+// away from this file.
 #[cfg(test)]
 #[path = "tests/nav_persist_tests.rs"]
 mod nav_persist_tests;

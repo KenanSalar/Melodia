@@ -11,10 +11,8 @@ use super::clamp_u32;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::file_dialog;
-use crate::ui::shell::notifications::{
-    NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS,
-};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
+use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
 use crate::{AppWindow, Playlists, Settings};
 
 pub(super) fn wire(
@@ -50,9 +48,7 @@ pub(super) fn wire(
             let mut missing: u32 = 0;
             let mut failures: u32 = 0;
             for handle in &handles {
-                match library::playlist_files::import_playlist_from_file(&s, handle.path())
-                    .await
-                {
+                match library::playlist_files::import_playlist_from_file(&s, handle.path()).await {
                     Ok(r) => {
                         imported = imported.saturating_add(1);
                         tracks = tracks.saturating_add(r.matched_by_path + r.matched_by_hash);
@@ -60,10 +56,7 @@ pub(super) fn wire(
                     }
                     Err(e) => {
                         failures = failures.saturating_add(1);
-                        log::warn!(
-                            "import_playlist_from_file {}: {e}",
-                            handle.path().display()
-                        );
+                        log::warn!("import_playlist_from_file {}: {e}", handle.path().display());
                     }
                 }
             }

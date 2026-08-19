@@ -27,10 +27,7 @@ pub fn set_gapless_playback(state: &AppState, on: bool) -> Result<(), AppError> 
 /// switching overlays) is reactive off the Slint
 /// `Settings.play-button-animation-idx` property, so the UI already
 /// repainted before this disk write is scheduled.
-pub fn set_play_button_animation(
-    state: &AppState,
-    mode: String,
-) -> Result<(), AppError> {
+pub fn set_play_button_animation(state: &AppState, mode: String) -> Result<(), AppError> {
     let token = match mode.as_str() {
         "none" | "equalizer" => mode,
         _ => "none".to_owned(),
@@ -60,10 +57,7 @@ pub fn set_resume_on_startup(state: &AppState, on: bool) -> Result<(), AppError>
 /// `MIN_SPEED..=MAX_SPEED` range here too so a hand-edited `settings.json`
 /// can't pin an out-of-range value.
 pub fn set_playback_speed(state: &AppState, speed: f64) -> Result<(), AppError> {
-    let speed = speed.clamp(
-        crate::player::state::MIN_SPEED,
-        crate::player::state::MAX_SPEED,
-    );
+    let speed = speed.clamp(crate::player::state::MIN_SPEED, crate::player::state::MAX_SPEED);
     services::settings::mutate_settings(&state.paths, move |settings| {
         settings.playback.playback_speed = speed;
     })

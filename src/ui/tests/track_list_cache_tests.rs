@@ -100,7 +100,16 @@ fn the_packed_key_and_track_matches_agree_field_for_field() {
     for r in [row(1), nul] {
         let key = RowSearchKey::from_row(&r);
         for needle in [
-            "ghost", "specials", "various", "more", "ska", "1981", "198", "queen david", "zzz", "",
+            "ghost",
+            "specials",
+            "various",
+            "more",
+            "ska",
+            "1981",
+            "198",
+            "queen david",
+            "zzz",
+            "",
         ] {
             let folded = row_match::fold_needle(needle);
             assert_eq!(
@@ -205,18 +214,11 @@ fn a_stored_set_leaves_its_four_vectors_aligned() {
     seen.sort_unstable();
     assert_eq!(seen, [1, 2, 3, 4]);
 
-    let titles: Vec<String> = snap
-        .visible(&row_match::fold_needle(""))
-        .iter()
-        .map(|r| r.title.to_string())
-        .collect();
+    let titles: Vec<String> =
+        snap.visible(&row_match::fold_needle("")).iter().map(|r| r.title.to_string()).collect();
     let by_id: Vec<String> = ids
         .iter()
-        .map(|id| {
-            rows.iter()
-                .find(|r| r.id == *id)
-                .map_or_else(String::new, |r| r.title.clone())
-        })
+        .map(|id| rows.iter().find(|r| r.id == *id).map_or_else(String::new, |r| r.title.clone()))
         .collect();
     assert_eq!(titles, by_id, "visible() and ids_filtered() disagree on order");
 }
@@ -323,16 +325,10 @@ fn the_cache_conflates_a_zero_year_with_a_missing_one() {
     let rows = vec![null_year, zero_year];
 
     // DB rows: `None` first regardless of the tie-breaker.
-    assert_eq!(
-        track_sort::compute_track_order(&rows, "year", "asc"),
-        [0, 1]
-    );
+    assert_eq!(track_sort::compute_track_order(&rows, "year", "asc"), [0, 1]);
 
     // Cache: tied on year, so `sort_key` decides and row 2 leads.
     let cache = TrackListCache::new();
     cache.store(rows, "year", "asc");
-    assert_eq!(
-        cache.snapshot().ids_filtered(&row_match::fold_needle("")),
-        [2, 1]
-    );
+    assert_eq!(cache.snapshot().ids_filtered(&row_match::fold_needle("")), [2, 1]);
 }

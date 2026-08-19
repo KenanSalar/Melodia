@@ -1,25 +1,19 @@
+import { Theme } from "../theme.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 import { CompositeScroll } from "../globals/shell.slint";
 
-// The unified scrollbar pair and wheel routing every composite view mounts: an outer
-// `ScrollView` scrolls the sections while a height-capped, still-virtualizing inner
-// `TrackList` scrolls the rows, and **one vertical bar spans both travels**, splitting
-// drags at the boundary. The horizontal bar drives the list's column pan.
+// The scrollbar pair and wheel routing every composite view mounts: an outer `ScrollView` scrolls
+// the sections while a height-capped, still-virtualizing inner `TrackList` scrolls the rows, and
+// **one vertical bar spans both travels**, splitting drags at the boundary. It also owns the
+// `CompositeScroll` wheel-tick watch — one composite view is mounted at a time, so there is exactly
+// one live watcher, applying one composite step through the same split the drag uses.
 //
-// It also owns the `CompositeScroll` wheel-tick watch — the global being a singleton,
-// the mirror can live here, and only one composite view is mounted at a time, so there
-// is exactly one live watcher. The winit filter bumps the tick after accumulating a
-// delta, and the handler applies one composite step through the same split the drag
-// uses, leaving the host's height cap and the inner virtualization untouched.
+// Slint can't pass element handles into a component, so the host mirrors its named elements through
+// properties plus two setters forwarding to the list's own clamping ones. `outer-viewport-y` is
+// two-way so drags write back — an identity binding, so the sign-flip pitfall doesn't apply.
 //
-// Slint can't pass element handles into a component, so the host mirrors its named
-// elements through plain properties plus two setters that forward to the list's own
-// clamping ones. `outer-viewport-y` is two-way, so drags write back — an identity
-// binding, so the sign-flip pitfall from the `OverlayScrollbar` round-trip doesn't apply.
-//
-// **Mount contract**: the *last* child of the view root, at full size and zero offset.
-// The bars pin to this component's own right and bottom edges and the band coordinates
-// are host-root-relative, so the two must be congruent for them to line up.
+// **Mount contract**: the *last* child of the view root, at full size and zero offset — the bars
+// pin to this component's edges while the band coordinates are host-root-relative.
 export component CompositeScrollbars inherits Rectangle {
     // Outer ScrollView mirror (`below-sv`).
     in-out property <length> outer-viewport-y;
@@ -46,24 +40,21 @@ export component CompositeScrollbars inherits Rectangle {
     in property <length> h-region-x;
     in property <length> h-region-width;
 
-    // Both bars' hit thickness; the horizontal one reserves this much at its right end
-    // so it never runs under the vertical one.
-    property <length> bar-thickness: 10px;
+    // Both bars' hit thickness; the horizontal one reserves this much at its right end so it never
+    // runs under the vertical one.
+    property <length> bar-thickness: Theme.scrollbar-slot;
 
-    // The outer travel covers the sections, the inner one the rows, and the bar spans
-    // both — a drag splits its offset at the boundary.
+    // The outer travel covers the sections, the inner one the rows, and the bar spans both — a drag
+    // splits its offset at the boundary.
     property <length> v-outer-max: max(0px, root.outer-viewport-height - root.outer-visible-height);
     property <length> v-inner-max: max(0px, root.inner-viewport-height - root.inner-visible-height);
 
-    // **Pulls the outer offset back in range when content shrinks under it.** A
-    // `Flickable` self-corrects only for a `viewport-y` that carries *no* binding, and
-    // the mount contract binds it two-way. Every scroller that writes `viewport-y`
-    // imperatively orphans its binding on the first write and gets the guard back;
-    // `<=>` survives a self-write, so these views are the only ones permanently without
-    // it — and that same survival is what makes writing the property here safe. Left
-    // uncorrected the viewport parks past the end and the region paints blank: Browse
-    // leaving a deep folder for the much shorter root list, or any of these filtering a
-    // long list down to a few rows.
+    // **Pulls the outer offset back in range when content shrinks under it.** A `Flickable`
+    // self-corrects only for a `viewport-y` that carries *no* binding, and the mount contract binds
+    // it two-way: an imperative write orphans its binding and gets the guard back, where `<=>`
+    // survives a self-write, so these views are the only ones permanently without it — and that
+    // same survival is what makes writing the property here safe. Left uncorrected the viewport
+    // parks past the end and the region paints blank.
     changed v-outer-max => {
         if (-root.outer-viewport-y > root.v-outer-max) {
             root.outer-viewport-y = -root.v-outer-max;
@@ -96,9 +87,8 @@ export component CompositeScrollbars inherits Rectangle {
         }
     }
 
-    // Drives the list's column pan only: the strips have their own horizontal
-    // scrollbars, at different content widths and independent positions, so a unified
-    // bottom bar would mean nothing for them.
+    // Drives the list's column pan only: the strips have their own horizontal scrollbars, at
+    // different content widths and independent positions, so a unified bar would mean nothing.
     OverlayScrollbar {
         horizontal: true;
         x: root.h-region-x;

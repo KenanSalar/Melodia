@@ -84,10 +84,7 @@ pub(super) fn rebuild_rows(
     // patch path and must *not* count.
     let (row_set_changed, old_sel) = {
         let guard = shadow.lock();
-        let changed = guard
-            .iter()
-            .map(|e| e.id)
-            .ne(qvm.queue_tracks.iter().map(|t| t.id));
+        let changed = guard.iter().map(|e| e.id).ne(qvm.queue_tracks.iter().map(|t| t.id));
         let sel: std::collections::HashMap<i64, bool> =
             guard.iter().map(|e| (e.id, e.selected)).collect();
         (changed, sel)
@@ -96,10 +93,7 @@ pub(super) fn rebuild_rows(
     let mut new_rows: Vec<QueueRow> = Vec::with_capacity(qvm.queue_tracks.len());
     for t in &qvm.queue_tracks {
         let selected = old_sel.get(&t.id).copied().unwrap_or(false);
-        new_shadow.push(ShadowEntry {
-            id: t.id,
-            selected,
-        });
+        new_shadow.push(ShadowEntry { id: t.id, selected });
         new_rows.push(to_slint_queue_row(t.as_ref(), selected));
     }
 
@@ -134,7 +128,9 @@ pub(crate) fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
             return;
         };
         for i in 0..vm.row_count() {
-            let Some(mut r) = vm.row_data(i) else { continue };
+            let Some(mut r) = vm.row_data(i) else {
+                continue;
+            };
             if i64::from(r.id) == id && r.is_favorite != fav {
                 r.is_favorite = fav;
                 vm.set_row_data(i, r);

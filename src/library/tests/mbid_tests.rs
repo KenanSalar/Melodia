@@ -14,9 +14,10 @@ use crate::database::queries::tests::helpers::insert_test_track;
 use crate::error::AppError;
 use crate::media::artwork;
 use crate::media::self_writes::SelfWrites;
+use crate::test_support::ASSETS_DIR;
 
 fn assets_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets")
+    PathBuf::from(ASSETS_DIR)
 }
 
 fn stage(tmp: &TempDir, name: &str) -> Result<PathBuf, AppError> {
@@ -32,7 +33,7 @@ async fn seed_track(db: &DbPool, path: &str) -> Result<i64, AppError> {
 
 #[tokio::test]
 async fn writes_recording_id_to_file_and_db_and_preserves_stats() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
@@ -57,8 +58,7 @@ async fn writes_recording_id_to_file_and_db_and_preserves_stats() -> Result<(), 
 
     let mbid = "189002e7-3285-4e2e-92a3-7f6c30d407a2";
     let resolved: Vec<ResolvedMbid> = vec![(id, path_str.clone(), mbid.to_owned())];
-    let updated =
-        write_mbids(&db, &artwork_dir, &cover_cache, &self_writes, &resolved).await?;
+    let updated = write_mbids(&db, &artwork_dir, &cover_cache, &self_writes, &resolved).await?;
 
     assert_eq!(updated, 1);
 
@@ -83,16 +83,13 @@ async fn writes_recording_id_to_file_and_db_and_preserves_stats() -> Result<(), 
     assert_ne!(new_hash, old_hash, "writing the tag rewrites the file");
 
     // The write was marked so the watcher ignores its own echo.
-    assert!(
-        self_writes.take_recent(&path),
-        "the written path must be marked in SelfWrites",
-    );
+    assert!(self_writes.take_recent(&path), "the written path must be marked in SelfWrites");
     Ok(())
 }
 
 #[tokio::test]
 async fn a_missing_file_is_skipped_and_the_rest_commit() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
@@ -113,8 +110,7 @@ async fn a_missing_file_is_skipped_and_the_rest_commit() -> Result<(), AppError>
         (good_id, good_str, "rec-good".to_owned()),
         (ghost_id, ghost_str, "rec-ghost".to_owned()),
     ];
-    let updated =
-        write_mbids(&db, &artwork_dir, &cover_cache, &self_writes, &resolved).await?;
+    let updated = write_mbids(&db, &artwork_dir, &cover_cache, &self_writes, &resolved).await?;
 
     // Only the file that exists is written; the ghost is logged and skipped.
     assert_eq!(updated, 1);

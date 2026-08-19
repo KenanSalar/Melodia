@@ -1,7 +1,7 @@
 //! Technical-metadata chip row formatter + display helpers.
 
-use crate::entities::track::TrackMeta;
 use crate::TrackMetaRow;
+use crate::entities::track::TrackMeta;
 use slint::SharedString;
 
 /// Format the `TrackMeta` projection into the pre-formatted display
@@ -10,34 +10,12 @@ use slint::SharedString;
 pub(super) fn to_slint_track_meta(t: &TrackMeta) -> TrackMetaRow {
     TrackMetaRow {
         track_id: i32::try_from(t.id).unwrap_or(i32::MAX),
-        codec: t
-            .codec
-            .as_deref()
-            .map(str::to_uppercase)
-            .unwrap_or_default()
-            .into(),
-        bitrate: t
-            .bitrate
-            .map(|b| format!("{b} kbps"))
-            .unwrap_or_default()
-            .into(),
-        sample_rate: t
-            .sample_rate
-            .map(format_sample_rate)
-            .unwrap_or_default()
-            .into(),
-        bit_depth: t
-            .bit_depth
-            .map(|d| format!("{d}-bit"))
-            .unwrap_or_default()
-            .into(),
+        codec: t.codec.as_deref().map(str::to_uppercase).unwrap_or_default().into(),
+        bitrate: t.bitrate.map(|b| format!("{b} kbps")).unwrap_or_default().into(),
+        sample_rate: t.sample_rate.map(format_sample_rate).unwrap_or_default().into(),
+        bit_depth: t.bit_depth.map(|d| format!("{d}-bit")).unwrap_or_default().into(),
         channels: t.channels.map(format_channels).unwrap_or_default().into(),
-        year: t
-            .year
-            .filter(|y| *y > 0)
-            .map(|y| y.to_string())
-            .unwrap_or_default()
-            .into(),
+        year: t.year.filter(|y| *y > 0).map(|y| y.to_string()).unwrap_or_default().into(),
         genre: t.genre.as_deref().unwrap_or("").into(),
     }
 }

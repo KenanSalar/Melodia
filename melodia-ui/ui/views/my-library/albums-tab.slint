@@ -25,7 +25,8 @@ export component MyLibraryAlbumsTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         open-album(id) => { Albums.open-album(id); }
-        request-cover(p) => { Albums.request-cover(p) }
+        covers-generation: Albums.covers-generation;
+        request-cover(p, g) => { Albums.request-cover(p, g) }
     }
 
     if Albums.total-count == 0: GridEmptyState {

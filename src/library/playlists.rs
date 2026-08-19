@@ -17,9 +17,7 @@ pub async fn create_playlist(
     queries::playlist::create_playlist(&state.db, &name, description.as_deref()).await
 }
 
-pub async fn get_playlists(
-    state: &AppState,
-) -> Result<Vec<playlist::PlaylistStats>, AppError> {
+pub async fn get_playlists(state: &AppState) -> Result<Vec<playlist::PlaylistStats>, AppError> {
     queries::playlist::get_all_playlists(&state.db).await
 }
 
@@ -150,9 +148,7 @@ pub async fn set_playlist_thumbnail(
     image_paths: Vec<String>,
 ) -> Result<playlist::Playlist, AppError> {
     if image_paths.is_empty() || image_paths.len() > 4 {
-        return Err(AppError::Validation(
-            "Must provide 1-4 image paths".to_owned(),
-        ));
+        return Err(AppError::Validation("Must provide 1-4 image paths".to_owned()));
     }
 
     let artwork_dir = state.paths.artwork_dir.clone();
@@ -190,12 +186,7 @@ pub async fn import_files_to_playlist(
         let mut summaries = std::mem::take(&mut result.summaries);
         summaries.sort_by(|a, b| natord::compare(&a.title, &b.title));
         let sorted_ids: Vec<i64> = summaries.iter().map(|s| s.id).collect();
-        queries::playlist::add_tracks_to_playlist(
-            &state.db,
-            playlist_id,
-            &sorted_ids,
-        )
-        .await?;
+        queries::playlist::add_tracks_to_playlist(&state.db, playlist_id, &sorted_ids).await?;
         sorted_ids.len()
     };
 

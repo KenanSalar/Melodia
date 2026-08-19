@@ -48,10 +48,7 @@ pub(crate) async fn resolve_track_context(
     context: &str,
 ) -> Result<Option<ResolvedIds>, crate::error::AppError> {
     let Some(folder_id) = find_folder_for_path(tx, path_str).await? else {
-        log::debug!(
-            "{context} file not in any library folder, skipping: {}",
-            path.display()
-        );
+        log::debug!("{context} file not in any library folder, skipping: {}", path.display());
         return Ok(None);
     };
 
@@ -63,11 +60,8 @@ pub(crate) async fn resolve_track_context(
     // Group the album by its album-artist (falling back to the track artist when no
     // album-artist tag is present) so a per-track featured credit ("X & Y") doesn't
     // split the album into a second row.
-    let album_artist_name = meta
-        .album_artist
-        .as_deref()
-        .filter(|s| !s.is_empty())
-        .unwrap_or(artist_name);
+    let album_artist_name =
+        meta.album_artist.as_deref().filter(|s| !s.is_empty()).unwrap_or(artist_name);
     let album_artist_id = if album_artist_name == artist_name {
         artist_id
     } else {

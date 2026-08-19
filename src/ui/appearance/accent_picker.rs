@@ -39,14 +39,9 @@ pub(super) fn accent_swatches_with_my(
 ) -> (Vec<Brush>, Vec<SharedString>, bool) {
     let my_active = material_you_active(theme.id, system);
     let mut brushes = themes::accent_brushes(theme, variant_id);
-    let mut labels: Vec<SharedString> = theme
-        .accents
-        .iter()
-        .map(|a| SharedString::from(a.name))
-        .collect();
-    if my_active
-        && let Some((_, dyn_accent)) = &system.material_you
-    {
+    let mut labels: Vec<SharedString> =
+        theme.accents.iter().map(|a| SharedString::from(a.name)).collect();
+    if my_active && let Some((_, dyn_accent)) = &system.material_you {
         brushes.insert(0, brush_from_rgb(*dyn_accent));
         labels.insert(0, SharedString::from("Material You"));
     }
@@ -125,7 +120,9 @@ pub(super) fn wire_accent_changed(
         let g = ui.global::<Settings>();
         let theme_idx = g.get_theme_idx();
         let variant_idx = g.get_variant_idx();
-        let Some(theme) = registry_get(theme_idx) else { return };
+        let Some(theme) = registry_get(theme_idx) else {
+            return;
+        };
 
         let i = usize_from(variant_idx);
         let variant_id: &str = if theme.supports_system_mode && i == theme.variants.len() {
@@ -142,7 +139,7 @@ pub(super) fn wire_accent_changed(
             return;
         };
         g.set_accent_idx(idx);
-        themes::apply(&ui, theme.id, variant_id, accent_id, &snapshot);
+        super::apply_palette(&ui, theme.id, variant_id, accent_id, &snapshot);
         // Update the synchronous accent shadow before the async write
         // — a sibling `wire_variant_changed` that fires before the disk
         // commit will then read the new accent (not the previous one).

@@ -1,54 +1,40 @@
-# cargo-audit config. Consumed by `.github/actions/cargo-audit`, which runs
-# `cargo audit --deny unsound --deny unmaintained` from two callers: the `audit`
-# job in `pr-validation.yml` (every PR into `dev`) and the one in `release.yml`.
-#
-# `--deny unmaintained` is correct policy: a flagged advisory should block the
-# merge until the team decides what to do. The escape hatch lives here — and it
-# now unblocks a PR, not just a release, so an entry is on the critical path of
-# whoever is trying to land unrelated work.
+# cargo-audit config. `.github/actions/cargo-audit` owns the flags and both callers;
+# `.claude/rules/ci-packaging.md` argues the policy and why a stale entry here sits on the
+# critical path of unrelated work.
 #
 # Rules for adding an entry to `ignore`:
 #
-#   1. Include the advisory ID, the reason it doesn't apply to Melodia,
-#      and a `revisit:` date.
-#   2. Prefer pinning around the flagged crate (or removing the dep) over
-#      ignoring. Use this list only for transitive deps with no upgrade
-#      path that we've confirmed are safe to ship.
-#   3. Re-evaluate every `revisit:` date. Stale entries are worse than no
-#      entries — they hide real findings.
+#   1. Include the advisory ID, the reason it doesn't apply to Melodia, and a `revisit:` date.
+#   2. Prefer pinning around the flagged crate, or removing the dep, over ignoring. Use this list
+#      only for transitive deps with no upgrade path that we've confirmed are safe to ship.
+#   3. Re-evaluate every `revisit:` date. Stale entries are worse than none — they hide real
+#      findings.
 #
-# The format is documented at
-# https://github.com/RustSec/rustsec/tree/main/cargo-audit#configuration
+# Format: https://github.com/RustSec/rustsec/tree/main/cargo-audit#configuration
 
 [advisories]
 ignore = [
-    # bincode 2.0.1 unmaintained — pulled via i-slint-compiler 1.16.1 →
-    # typed-index-collections 3.5.0. Slint 1.16.1 is current; no upstream
-    # tracking issue. Build-time only (proc-macro / build.rs).
+    # bincode 2.0.1 unmaintained — via i-slint-compiler 1.16.1 → typed-index-collections 3.5.0.
+    # Slint 1.16.1 is current and there is no upstream tracking issue. Build-time only.
     # revisit: 2026-08-19
     "RUSTSEC-2025-0141",
 
-    # ttf-parser 0.25.1 unmaintained — pulled via i-slint-compiler /
-    # i-slint-core 1.16.1 → resvg 0.47 → usvg → fontdb. Slint 1.16.1 is
-    # current; no newer ttf-parser exists to update to. Parses only fonts
-    # bundled in the binary and installed system fonts, not downloaded
-    # content.
+    # ttf-parser 0.25.1 unmaintained — via i-slint-compiler / i-slint-core 1.16.1 → resvg 0.47 →
+    # usvg → fontdb, with no newer ttf-parser to update to. Parses only the fonts bundled in the
+    # binary and installed system fonts, never downloaded content.
     # revisit: 2026-10-06
     "RUSTSEC-2026-0192",
 
-    # rustybuzz 0.20.1 unmaintained — same chain as ttf-parser above
-    # (i-slint-compiler / i-slint-core 1.16.1 → resvg 0.47 → usvg). Text
-    # shaping for the bundled SVG icon assets only; no downloaded content
-    # reaches it. `unmaintained` flags the crate, so no version bump clears
-    # it — it lifts when Slint moves to a maintained shaper, and we're held
-    # on 1.16.1 by the 1.17 regressions tracked in SLINT_NATIVE_ADOPTION.md.
+    # rustybuzz 0.20.1 unmaintained — same chain as ttf-parser above. Text shaping for the bundled
+    # SVG icon assets only. `unmaintained` flags the crate, so no version bump clears it: it lifts
+    # when Slint moves to a maintained shaper, and we are held on 1.16.1 by the 1.17 regressions
+    # tracked in docs/plans/SLINT_NATIVE_ADOPTION.md.
     # revisit: 2026-10-06
     "RUSTSEC-2026-0206",
 
-    # paste 1.0.15 unmaintained — pulled via lofty 0.24.0 (direct dep) and
-    # rav1e 0.8.1 (transitive: slint → image → ravif → rav1e). Lofty has
-    # no migration plan; rav1e's pastey migration (PR #3430) merged
-    # 2025-06-22 but is unreleased.
+    # paste 1.0.15 unmaintained — via lofty 0.24.0 (direct) and rav1e 0.8.1 (slint → image →
+    # ravif → rav1e). Lofty has no migration plan; rav1e's pastey migration (PR #3430) is merged
+    # but unreleased.
     # revisit: 2026-08-19
     "RUSTSEC-2024-0436",
 ]

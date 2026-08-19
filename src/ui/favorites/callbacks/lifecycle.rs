@@ -1,15 +1,14 @@
-//! Favorites section lifecycle: the `section-active-changed` enter/leave
-//! handler (cache release + re-fetch), the `library_changed` subscriber,
-//! and the first-enter initial fetch. See [`super::wire`].
+//! Favorites section lifecycle: the `section-active-changed` enter/leave handler, the
+//! `library_changed` subscriber, and the first-enter initial fetch. See [`super::wire`].
 
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Image, SharedString};
+use slint::ComponentHandle;
 
-use crate::ui::favorites::NAV_FAVORITES;
 use crate::state::AppState;
-use crate::ui::callbacks::macros::release_shared_hero;
+use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
+use crate::ui::favorites::NAV_FAVORITES;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
@@ -23,18 +22,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     let weak = ui.as_weak();
 
     // --- Section-active mirror + cache release / re-enter --------
-    // Seed the synchronous shadow from the current nav state. This has to be
-    // right on its own: the gate's `ChangeTracker` baselines inside
-    // `AppWindow::new()` and fires only on a later difference, so a section
-    // the boot doesn't land on gets no edge at all, and the one it does land
-    // on gets its edge a frame late — after boot has already read this
-    // shadow. See the `SectionActiveGate` bullet in
-    // `.claude/rules/ui-patterns.md`. `boot::ui_setup::install_views`
-    // hydrates the persisted nav index before any `wire_*` runs, so the read
-    // below sees it.
-    // (The sibling `active_tab` shadow is seeded by `favorites::seed_tab`,
-    // which runs after this and is the only thing that knows the persisted
-    // value.)
+    // Seed the synchronous shadow from the current nav state — it has to be right on its own, the
+    // gate firing only on a later difference (`.claude/rules/ui-patterns.md`'s `SectionActiveGate`
+    // bullet). `boot::ui_setup::install_views` hydrates the persisted nav index before any `wire_*`
+    // runs, so the read below sees it; the sibling `active_tab` shadow is `favorites::seed_tab`'s.
     fav_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_FAVORITES);
     {
         let fu = fav_ui.clone();
@@ -43,49 +34,35 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         g.on_section_active_changed(move |active| {
             fu.set_section_active(active);
             if !active {
-                // Land synchronously on the UI thread *before* the
-                // release task is even spawned — the re-enter handler
-                // reads this via `take_dirty()` and must never observe
-                // stale data because release hadn't run yet. Mirrors
-                // `AlbumsUi::data_dirty`.
+                // Land synchronously on the UI thread *before* the release task is spawned — the
+                // re-enter handler reads this through `take_dirty()` and must never observe stale
+                // data because release hadn't run yet.
                 fu.mark_dirty();
             }
             if !active && let Some(ui) = weak.upgrade() {
-                // UI-thread teardown: clear Slint Image properties so
-                // the `SharedPixelBuffer` Arcs the LRU is about to
-                // clear release immediately (the dual-slot blur slots
-                // hold their own refs even after the LRU drops). Empty
-                // the grid + tracks models so their `SharedString`s
-                // also drop on the same tick.
+                // UI-thread teardown: hand back the banner's cover and blur slots so their
+                // `SharedPixelBuffer` Arcs release immediately — the dual blur slots hold their
+                // own refs even after the LRU drops — and empty the models so their
+                // `SharedString`s go on this tick.
                 let g = ui.global::<Favorites>();
-                g.set_blur_img_a(Image::default());
-                g.set_blur_img_b(Image::default());
-                g.set_has_blur(false);
-                // Same tick as the wipe above, and unconditional for the same
-                // reason: `release_section_state` bails out when the user has
-                // already come back, so leaving the guard to it can strand the
+                release_hero_slots!(g);
+                // Same tick as the wipe above, and unconditional: `release_section_state` bails
+                // when the user has already come back, so leaving the guard to it can strand the
                 // hero on the bare gradient floor until the next channel tick.
                 fu.forget_mosaic();
-                // Same tick, same reason: the models are emptied below, so a
-                // surviving signature would match the identical data on
-                // re-enter and skip the refill that fills them back in.
+                // Same tick, same reason: the models are emptied below, so a surviving signature
+                // would match the identical data on re-enter and skip the refill.
                 fu.forget_grid_signature();
-                // Six heroes share one colour set and one chip row, so hand
-                // both back rather than leaving this mosaic's solve and this
-                // tab's counts for the next hero to paint under.
+                // Six heroes share one colour set and one chip row, so hand both back rather than
+                // leaving this banner's solve for the next hero to paint under.
                 release_shared_hero!(ui);
-                // Both grid tiers go with `release_section_state` below, so
-                // rewind the counter that means "cold" — else the next enter
-                // reads a leftover bump as a warm tier and decodes on mount.
+                // Both grid tiers go with `release_section_state` below, so rewind the counter
+                // that means "cold" — else the next enter reads a leftover bump as a warm tier.
                 g.set_covers_generation(0);
-                // And rewind all three counts to "not fetched yet" on the same
-                // tick as the models they number, for the reason the folds are
-                // reset beside their caches: a count that outlives its model is
-                // the one thing these surfaces can state that is *wrong* rather
-                // than merely absent. `track-count` is the visible one — the
-                // hero square reads it, so a stale non-zero drew four
-                // placeholder mosaic slots over an emptied `mosaic-paths` until
-                // the re-enter fetch landed.
+                // And rewind all three counts on the same tick as the models they number: a count
+                // that outlives its model is the one thing these surfaces can state that is
+                // *wrong* rather than merely absent. `track-count` is the visible one, the hero
+                // square reading it to pick its fallback glyph.
                 g.set_track_count(UNFETCHED_COUNT);
                 g.set_most_played_count(UNFETCHED_COUNT);
                 g.set_artist_count(UNFETCHED_COUNT);
@@ -96,10 +73,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 );
                 clear_vec_model::<UiEntityGridRow>(&g.get_artist_rows(), "favorites: clear artist");
                 clear_vec_model::<i32>(&g.get_selected_ids(), "favorites: clear selected-ids");
-                clear_vec_model::<SharedString>(
-                    &g.get_mosaic_paths(),
-                    "favorites: clear mosaic-paths",
-                );
                 g.set_selection_anchor(-1);
             }
             let fu = fu.clone();
@@ -113,9 +86,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                     }
                 });
             } else {
-                // Off-thread heavy release — runs after UI-thread
-                // teardown so the LRU drop pairs with already-released
-                // Slint properties (no lingering Arc refs).
+                // Off-thread heavy release — runs after the UI-thread teardown so the LRU drop
+                // pairs with already-released Slint properties and no Arc ref lingers.
                 let runtime = s.runtime.clone();
                 runtime.spawn_blocking(move || fu.release_section_state());
             }
@@ -123,14 +95,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     }
 
     // --- library_changed_tx + stats_changed_tx subscriber ---
-    // `library_changed` is bumped after every `set_favorite` /
-    // `toggle_current_favorite` + every scan / file-event commit;
-    // `stats_changed` after every play-count flush. Favorites is
-    // the only surface that ranks by `play_count` (hero mosaic + the Most
-    // Played tab), so it alone listens to both channels. While the
-    // Favorites section is visible we refetch hero + grids + tracks
-    // in-place; while hidden we just mark dirty so the next enter
-    // triggers `kick_full_refresh`.
+    // `library_changed` is bumped after every favorite toggle and every scan / file-event commit;
+    // `stats_changed` after every play-count flush. Favorites is the only surface ranking by
+    // `play_count`, so it alone listens to both. Visible, it refetches in place; hidden, it marks
+    // dirty so the next enter triggers `kick_full_refresh`.
     {
         let s = state.clone();
         let fu = fav_ui.clone();
@@ -141,8 +109,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
             library_rx.mark_unchanged();
             stats_rx.mark_unchanged();
             loop {
-                // Both senders live in `AppState` for the process lifetime,
-                // so an `Err` only happens during teardown — exit the loop.
+                // Both senders live in `AppState` for the process lifetime, so an `Err` only
+                // happens during teardown — exit the loop.
                 tokio::select! {
                     changed = library_rx.changed() => {
                         if changed.is_err() {
@@ -164,14 +132,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         }));
     }
 
-    // First section enter: kick an initial fetch so the page paints
-    // with data instead of empty models when the user lands here. If
-    // the session starts on a different tab, `section-active-changed`
-    // will trigger the same fetch via `take_dirty()` (mark_dirty in
-    // the `else` arm above would never fire on a session that *never*
-    // visited Favorites). For the start-on-Favorites case, mark dirty
-    // synchronously here so the subsequent `section-active-changed`
-    // fire (or the next library_changed tick) re-fetches.
+    // First section enter: kick an initial fetch so the page paints with data rather than empty
+    // models. A session starting elsewhere gets the same fetch from `section-active-changed`
+    // through `take_dirty()`; the mark here is what covers a session starting *on* Favorites,
+    // whose `else` arm above never fires.
     fav_ui.mark_dirty();
     if fav_ui.section_active() {
         let s = state.clone();
@@ -187,24 +151,18 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
 
 /// Fetch the hero stats plus **whichever tab is mounted**, concurrently.
 ///
-/// `refresh_hero` always runs: it answers the count, the running time and the
-/// mosaic, which the band states on all three tabs, and it is self-contained —
-/// `get_favorite_stats` carries its own `artwork_paths` and reads neither grid
-/// cache. The other two are gated, because the three tabs are mutually exclusive
-/// `if`s and everything downstream already knows it: `build_filtered_tracks`
-/// returns `None` off Songs and `build_filtered_grids` materialises only the
-/// mounted tab. Ungated, a grid tab still paid `get_favorite_tracks`, a sort over
-/// every favourite and a conversion of the lot into rows that reached nothing —
-/// once per finished track, for as long as the page was up.
+/// `refresh_hero` always runs: it answers the count, running time and mosaic the band states on
+/// all three tabs, and it is self-contained. The other two are gated, the three tabs being
+/// mutually exclusive `if`s that everything downstream already knows about —
+/// `build_filtered_tracks` returns `None` off Songs and `build_filtered_grids` materialises only
+/// the mounted tab.
 ///
-/// **The fetching branch consumes its flag**, which is what stops a boot onto a
-/// tab paying for its own fetch twice; the branch that skips *sets* the other, so
-/// the pick that mounts it knows a tick went by. `refresh_grids` is one fetch for
-/// two tabs, hence two flags rather than three.
+/// **The fetching branch consumes its flag**, which is what stops a boot onto a tab fetching
+/// twice; the branch that skips *sets* the other, so the pick that mounts it knows a tick went by.
+/// `refresh_grids` is one fetch for two tabs, hence two flags rather than three.
 ///
-/// `refresh_grids` already logs its own per-tab errors (Most Played and Artists
-/// are applied independently), so it returns `()`; the other two return
-/// `AppResult<()>` and have their errors logged here.
+/// `refresh_grids` logs its own per-tab errors and returns `()`; the other two return
+/// `AppResult<()>` and are logged here.
 async fn kick_full_refresh(
     state: &AppState,
     fav_ui: &Arc<FavoritesUi>,

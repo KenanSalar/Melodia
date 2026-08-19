@@ -36,7 +36,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     let playlists = ui.global::<Playlists>();
     let weak = ui.as_weak();
 
-    // request-row-cover: 72 px row-tier lookup for the mosaic picker's
+    // request-row-cover: row-tier lookup for the mosaic picker's
     // small candidate tiles + preview slots. Shares the row-tier
     // `cover_thumbs` LRU with Tracks / Browse / detail track-lists.
     {
@@ -116,21 +116,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                match library::playlists::create_playlist(
-                    &s,
-                    name_str.clone(),
-                    description_opt,
-                )
-                .await
+                match library::playlists::create_playlist(&s, name_str.clone(), description_opt)
+                    .await
                 {
                     Ok(p) => {
                         if !pending_vec.is_empty()
-                            && let Err(e) = library::playlists::add_to_playlist(
-                                &s,
-                                p.id,
-                                pending_vec,
-                            )
-                            .await
+                            && let Err(e) =
+                                library::playlists::add_to_playlist(&s, p.id, pending_vec).await
                         {
                             log::warn!("playlists::create_playlist add pending: {e}");
                         }
@@ -266,13 +258,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                if let Err(e) = library::playlists::set_playlist_thumbnail(
-                    &s,
-                    id,
-                    path_vec,
-                )
-                .await
-                {
+                if let Err(e) = library::playlists::set_playlist_thumbnail(&s, id, path_vec).await {
                     log::warn!("playlists::apply_mosaic({id}): {e}");
                     return;
                 }
@@ -280,13 +266,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     log::warn!("playlists::apply_mosaic refetch grid: {e}");
                 }
                 if pu.detail_playlist_id() == id
-                    && let Err(e) = playlists_ui_mod::refresh_detail(
-                        &s,
-                        &pu,
-                        weak.clone(),
-                        id,
-                    )
-                    .await
+                    && let Err(e) =
+                        playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), id).await
                 {
                     log::warn!("playlists::apply_mosaic refresh detail: {e}");
                 }
@@ -307,8 +288,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                let Ok(current) = library::playlists::get_playlist_detail(&s, id).await
-                else {
+                let Ok(current) = library::playlists::get_playlist_detail(&s, id).await else {
                     return;
                 };
                 if let Err(e) = library::playlists::update_playlist(
@@ -327,13 +307,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     log::warn!("playlists::clear_artwork refetch grid: {e}");
                 }
                 if pu.detail_playlist_id() == id
-                    && let Err(e) = playlists_ui_mod::refresh_detail(
-                        &s,
-                        &pu,
-                        weak.clone(),
-                        id,
-                    )
-                    .await
+                    && let Err(e) =
+                        playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), id).await
                 {
                     log::warn!("playlists::clear_artwork refresh detail: {e}");
                 }
@@ -442,20 +417,19 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let dlg = ui.global::<Dialog>();
             let cur: Vec<SharedString> = dlg.get_mosaic_selection().iter().collect();
             let path_s = path.to_string();
-            let next: Vec<SharedString> = if let Some(pos) =
-                cur.iter().position(|p| p.as_str() == path_s.as_str())
-            {
-                let mut v = cur;
-                v.remove(pos);
-                v
-            } else if cur.len() < 4 {
-                let mut v = cur;
-                v.push(SharedString::from(path_s.as_str()));
-                v
-            } else {
-                // Cap reached — silently no-op.
-                cur
-            };
+            let next: Vec<SharedString> =
+                if let Some(pos) = cur.iter().position(|p| p.as_str() == path_s.as_str()) {
+                    let mut v = cur;
+                    v.remove(pos);
+                    v
+                } else if cur.len() < 4 {
+                    let mut v = cur;
+                    v.push(SharedString::from(path_s.as_str()));
+                    v
+                } else {
+                    // Cap reached — silently no-op.
+                    cur
+                };
             dlg.set_mosaic_selection(ModelRc::new(VecModel::from(next)));
             dlg.set_mosaic_touched(true);
         });
@@ -478,10 +452,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             if id < 0 {
                 return;
             }
-            let artwork_path = pu
-                .grid_stats_by_id(id)
-                .and_then(|p| p.thumbnail_path)
-                .unwrap_or_default();
+            let artwork_path =
+                pu.grid_stats_by_id(id).and_then(|p| p.thumbnail_path).unwrap_or_default();
             let s = s.clone();
             let pu = pu.clone();
             let weak = weak.clone();
@@ -494,7 +466,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     let current_cover = if artwork_path.is_empty() {
                         Image::default()
                     } else {
-                        pu.grid_cover(&artwork_path)
+                        pu.grid_cover_blocking(&artwork_path)
                     };
                     dlg.set_title(SharedString::from("Edit Artwork"));
                     dlg.set_message(SharedString::from(""));

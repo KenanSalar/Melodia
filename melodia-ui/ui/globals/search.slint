@@ -1,56 +1,50 @@
 import { TrackListRow, EntityStripRow } from "../models.slint";
 
-// The Search view: a Top Result card, a Songs list (compact until "Show all"), Albums
-// and Artists strips, and a recent-searches chip list while the input is empty. FTS5 for
-// tracks, `LIKE` for entity names. **The compact row count is Rust's
-// `COMPACT_TRACK_LIMIT`** — don't restate it here, it has gone stale once already.
+// The Search view: a Top Result card, a Songs list (compact until "Show all"), Albums and Artists
+// strips, and a recent-searches chip list while the input is empty. FTS5 for tracks, `LIKE` for
+// entity names. **The compact row count is Rust's `COMPACT_TRACK_LIMIT`** — don't restate it here,
+// it has gone stale once already.
 //
-// Both strips match through their own tracks as well as by name, so a query reaching
-// only track metadata still fills them — and with them the Top Result, which ranks over
-// those two plus genres. Genres have no strip; they surface as the Top Result only.
-//
-// **The query is the only driver.** Rust never auto-refreshes on `library_changed_tx`: a
-// scan finishing mid-query must not swap results out from under the user. Tab-leave
-// releases the strip cover LRUs but keeps `query` and `recent-rows`, so a brief flip to
-// Now Playing returns to the same page.
+// Both strips match through their own tracks as well as by name, so a query reaching only track
+// metadata still fills them — and with them the Top Result, which ranks over those two plus genres.
+// Genres have no strip. **The query is the only driver**: Rust never auto-refreshes on
+// `library_changed_tx`, a scan finishing mid-query not being allowed to swap results out from under
+// the user. Tab-leave releases the strip cover LRUs but keeps `query` and `recent-rows`.
 export global Search {
-    // Each keystroke bumps `pending`; a Timer in the view fires `commit-search` once it
-    // diverges from `applied` — the throttle shape the other filters use.
+    // Each keystroke bumps `pending`; a Timer in the view fires `commit-search` once it diverges
+    // from `applied` — the throttle shape the other filters use.
     in-out property <string> query;
     in-out property <int>    blur-search-tick: 0;
     in-out property <int>    debounce-tick-pending: 0;
     in-out property <int>    debounce-tick-applied: 0;
     in-out property <bool>   loading: false;
 
-    // The *visible* slice: capped by default, the whole backend result once
-    // `show-all-tracks` is on — and that outer cap is `search_all`'s own `LIMIT`, which
-    // belongs there rather than in a third copy here. Rust keeps the full set cached, so
-    // the toggle swaps with no DB hit; `tracks-total` is the pre-truncate count for the
-    // button's copy.
+    // The *visible* slice: capped by default, the whole backend result once `show-all-tracks` is
+    // on — and that outer cap is `search_all`'s own `LIMIT`, which belongs there rather than in a
+    // third copy here. Rust keeps the full set cached, so the toggle swaps with no DB hit;
+    // `tracks-total` is the pre-truncate count for the button's copy.
     in-out property <[TrackListRow]>   tracks;
     in-out property <int>              tracks-total;
     in-out property <bool>             show-all-tracks: false;
     in-out property <[EntityStripRow]> album-rows;
     in-out property <[EntityStripRow]> artist-rows;
 
-    // A discriminator plus scalars rather than a row struct, for two reasons: the badge
-    // text has to be localized inline here, since a Rust-pushed string can't `@tr`, and
-    // baking a `kind` field into `EntityStripRow` would warp every other consumer of it.
-    // An empty `top-kind` means no Top Result section.
+    // A discriminator plus scalars rather than a row struct, for two reasons: the badge text has
+    // to be localized inline here, a Rust-pushed string not reaching `@tr`, and baking a `kind`
+    // field into `EntityStripRow` would warp every other consumer. Empty means no Top Result.
     in-out property <string> top-kind;            // "album" | "artist" | "genre" | ""
     in-out property <int>    top-id;
     in-out property <string> top-title;
     in-out property <string> top-subtitle;
     in-out property <string> top-artwork-path;
-    // Read only for a genre card: a genre has no artwork, so its tile paints the same
-    // name-hashed gradient `GenreGrid` gives it and the two surfaces read as one genre.
-    // Two `color`s rather than a brush because Slint owns the `@linear-gradient`, as
-    // `GenreRow` does.
+    // Read only for a genre card: a genre has no artwork, so its tile paints the same name-hashed
+    // gradient `GenreGrid` gives it. Two `color`s rather than a brush because Slint owns the
+    // `@linear-gradient`, as `GenreRow` does.
     in-out property <color> top-tile-color-1;
     in-out property <color> top-tile-color-2;
 
-    // Shown only on an empty query. A chip click fills the query and commits; the chip's
-    // X removes optimistically and persists.
+    // Shown only on an empty query. A chip click fills the query and commits; its X removes
+    // optimistically and persists.
     in-out property <[string]> recent-rows;
 
     // Its `TrackList`'s columns, under view id "search".
@@ -88,8 +82,8 @@ export global Search {
     callback recent-remove(string);
     callback recent-clear();
 
-    // Each stamps `*Detail.origin-nav-index` **before** flipping `Nav.selected-index`,
-    // so the detail's back arrow returns here.
+    // Each stamps `*Detail.origin-nav-index` **before** flipping `Nav.selected-index`, so the
+    // detail's back arrow returns here.
     callback open-album(int /*album_id*/);
     callback open-artist(int /*artist_id*/);
     callback open-top-result();         // resolves top-kind / top-id
@@ -103,17 +97,15 @@ export global Search {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    // The row's other two "Go to …" entries reuse `open-album` / `open-artist` above,
-    // which carry the same cross-tab semantics.
+    // The row's other two "Go to …" entries reuse `open-album` / `open-artist` above.
     callback go-to-genre(int /*genre_id*/);
 
     // Mirrored into `SearchUi.section_active`; drives the strip-cache release.
     callback section-active-changed(bool);
 
-    // The Top Result subtitle, resolved per kind. Rust decides *which* line the card
-    // gets and calls the matching one from the UI thread — a string Rust formatted
-    // itself would render untranslated, `@tr` reaching only literals here. Both reuse a
-    // msgid the detail headers already carry, so no locale gains a string.
+    // The Top Result subtitle, resolved per kind. Rust decides *which* line the card gets and calls
+    // the matching one from the UI thread — a string Rust formatted itself would render
+    // untranslated. Both reuse a msgid the detail headers carry, so no locale gains a string.
     pure callback album-count-label(int /*count*/) -> string;
     album-count-label(count) => {
         return @tr("{n} album" | "{n} albums" % count);

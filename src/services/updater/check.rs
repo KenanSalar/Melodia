@@ -28,7 +28,9 @@ pub enum CheckOutcome {
     /// current platform (e.g. ARM Linux against an x86_64-only release).
     /// Treated as "up to date" by callers — there's nothing to install —
     /// but the etag is still cached.
-    NoAssetForTarget { etag: Option<String> },
+    NoAssetForTarget {
+        etag: Option<String>,
+    },
     /// Manifest declared a `manifest_schema_version` greater than the
     /// constant the running binary understands ([`manifest::SUPPORTED_MANIFEST_SCHEMA`]).
     /// Treated as "up to date" by callers — the user's current binary
@@ -101,5 +103,9 @@ pub async fn check_for_update(
         )));
     };
 
-    Ok(CheckOutcome::Available { manifest, asset, etag })
+    Ok(CheckOutcome::Available {
+        manifest,
+        asset,
+        etag,
+    })
 }

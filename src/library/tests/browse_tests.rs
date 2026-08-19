@@ -9,15 +9,11 @@ use super::*;
 /// library-folder check (which needs an `AppState`). The classification itself
 /// is the shipped code, not a copy of it.
 fn scan_directory(path: &std::path::Path) -> Result<DirScanResult, AppError> {
-    let canonical = crate::utils::canonicalize_path(path).map_err(|_| {
-        AppError::Validation(format!("Path does not exist: {}", path.display()))
-    })?;
+    let canonical = crate::utils::canonicalize_path(path)
+        .map_err(|_| AppError::Validation(format!("Path does not exist: {}", path.display())))?;
 
     if !canonical.is_dir() {
-        return Err(AppError::Validation(format!(
-            "Path is not a directory: {}",
-            path.display()
-        )));
+        return Err(AppError::Validation(format!("Path is not a directory: {}", path.display())));
     }
 
     let (folders, audio_paths) = classify_dir_entries(&canonical)?;

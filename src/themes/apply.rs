@@ -14,23 +14,16 @@ use super::system_color_state::SystemColorState;
 /// Brushes for the colour-dot picker — one per accent in `theme`, each
 /// rendered in `variant_id`'s shade.
 pub fn accent_brushes(theme: &ThemeDef, variant_id: &str) -> Vec<Brush> {
-    theme
-        .accents
-        .iter()
-        .map(|a| brush(a.hex_in(variant_id).unwrap_or(0x88_88_88)))
-        .collect()
+    theme.accents.iter().map(|a| brush(a.hex_in(variant_id).unwrap_or(0x88_88_88))).collect()
 }
 
-/// Resolve `(theme_id, variant_id, accent_id)` (with fallbacks) and write
-/// every theme-dependent brush into the Slint `Theme` global.
+/// Resolve `(theme_id, variant_id, accent_id)` with fallbacks and write every
+/// theme-dependent brush into the Slint `Theme` global.
 ///
-/// When `variant_id == SYSTEM_VARIANT_ID` and the theme opts in via
-/// `supports_system_mode`, the synthetic id is mapped to one of the
-/// theme's real variants based on `system.theme`. KDE Breeze additionally
-/// bypasses its static Light/Dark palette and re-sources every slot
-/// from the cached `kdeglobals` palette so the player matches Plasma's
-/// active colour scheme exactly. All other themes use their declared
-/// system pair palette unchanged — the OS only picks dark vs. light there.
+/// The synthetic system variant maps onto one of the theme's real ones, for a
+/// theme that opts in. KDE Breeze additionally bypasses its static palette and
+/// re-sources every slot from `kdeglobals`, so the player matches Plasma's
+/// active scheme exactly; everywhere else the OS only picks dark or light.
 pub fn apply(
     ui: &AppWindow,
     theme_id: &str,
@@ -40,13 +33,10 @@ pub fn apply(
 ) {
     let theme = super::get(theme_id);
 
-    // Material You: when the M3 coordinator has produced a dynamic palette
-    // for the current artwork, that palette wins over the static M3
-    // variants regardless of Dark / Light / System. The accent picker is
-    // independent — `MATERIAL_YOU_ACCENT_ID` follows the dynamic primary,
-    // any of the 8 static accents overrides just the accent while
-    // keeping dynamic surfaces. Placed before the System branch so
-    // `variant_id == "system"` still goes through dynamic colour.
+    // A dynamic palette wins over the static M3 variants whatever the variant
+    // id, which is why this sits above the System branch. The accent picker
+    // stays independent: `MATERIAL_YOU_ACCENT_ID` follows the dynamic primary,
+    // and a static accent overrides only the accent, keeping dynamic surfaces.
     if theme_id == "material3"
         && let Some((palette, dyn_accent)) = &system.material_you
     {
@@ -58,14 +48,10 @@ pub fn apply(
             } else {
                 variant_id
             };
-            theme
-                .accent_hex(accent_id, real_variant)
-                .unwrap_or(*dyn_accent)
+            theme.accent_hex(accent_id, real_variant).unwrap_or(*dyn_accent)
         };
-        // Material You has no OS-defined "inactive titlebar" concept —
-        // the dynamic palette is generated from artwork, not the WM —
-        // so the unfocused surface falls back to `base`, same visual
-        // as the pre-feature behaviour.
+        // A palette generated from artwork has no OS inactive-titlebar colour
+        // to offer, so the unfocused surface falls back to `base`.
         write_palette(ui, palette, accent_hex, palette.base);
         return;
     }
@@ -73,21 +59,16 @@ pub fn apply(
     if variant_id == SYSTEM_VARIANT_ID && theme.supports_system_mode {
         let resolved = theme.resolve_system_variant(&system.theme);
 
-        // KDE OS-colour override is the only branch that bypasses the
-        // static palette. Compiled out on non-Linux because
-        // `KdeColorPalette` lives behind `#[cfg(target_os = "linux")]`.
+        // The one branch that bypasses the static palette. Compiled out
+        // elsewhere, `KdeColorPalette` being Linux-only.
         #[cfg(target_os = "linux")]
         if theme_id == "kde-breeze"
             && let Some(kde) = &system.kde_palette
         {
             let palette = palette_from_kde(kde);
             let accent_hex = parse_hex_color(&kde.accent).unwrap_or(0x003d_aee9);
-            // KDE+System is the *only* path that pulls a real OS
-            // inactive-titlebar colour — `get_kde_colors()` reads
-            // `[WM] inactiveBackground` and stores it under
-            // `mantle_unfocused`. The user's KDE colour scheme drives
-            // the unfocused tint, so our painted surfaces match the
-            // OS frame exactly when the window loses focus.
+            // The *only* path pulling a real OS inactive-titlebar colour, so
+            // our painted surfaces match the frame exactly on focus loss.
             let mantle_unfocused_hex = kde
                 .colors
                 .get("mantle_unfocused")
@@ -104,41 +85,30 @@ pub fn apply(
 
     let variant = theme.resolved_variant(variant_id);
     let accent_hex = theme.resolved_accent_hex(accent_id, variant.id);
-    // Static variants (every non-KDE+System path) have no OS source for
-    // an inactive titlebar — fall back to `base`, the same visual as
-    // before this feature shipped.
+    // A static variant has no OS source for an inactive titlebar either.
     write_palette(ui, &variant.palette, accent_hex, variant.palette.base);
 }
 
-/// Parse a `"#RRGGBB"` (or `"RRGGBB"`) hex string into a packed `0x00RRGGBB`
-/// `u32` matching the rest of the palette tables. Returns `None` for
-/// malformed input — callers fall back to a sensible default.
-///
-/// Only `palette_from_kde` (Linux KDE) calls this; cfg-gated to match.
+/// A `"#RRGGBB"` hex string as the packed `0x00RRGGBB` the palette tables use.
+/// `None` on malformed input, which callers answer with a default.
 #[cfg(target_os = "linux")]
 fn parse_hex_color(s: &str) -> Option<u32> {
     let stripped = s.strip_prefix('#').unwrap_or(s);
     u32::from_str_radix(stripped, 16).ok()
 }
 
-/// Build a `Palette` from a parsed `kdeglobals` colour scheme. The 13 base /
-/// structure slots come directly from the `KdeColorPalette::colors` map
-/// (`get_kde_colors()` already synthesizes the entries we need); the three
-/// semantic slots come from its dedicated `red` / `green` / `yellow` fields,
-/// which carry Plasma's own `[Colors:View]` status foregrounds.
+/// A `Palette` from a parsed `kdeglobals` scheme: the structure slots straight
+/// off the colours map, the three semantic ones from Plasma's own status
+/// foregrounds.
 ///
-/// The Breeze hexes below are a second line, not the policy —
+/// The Breeze hexes below are a second line rather than the policy —
 /// `kde_palette_from_sections` already substitutes the same defaults for a
-/// scheme that omits a status foreground, and always hands back a parseable
-/// `#rrggbb`. They only fire if that ever stops being true.
+/// scheme that omits a status foreground, and always hands back something
+/// parseable. They fire only if that stops being true.
 #[cfg(target_os = "linux")]
 fn palette_from_kde(kde: &crate::services::system_theme::KdeColorPalette) -> Palette {
-    let g = |key: &str| -> u32 {
-        kde.colors
-            .get(key)
-            .and_then(|s| parse_hex_color(s))
-            .unwrap_or(0)
-    };
+    let g =
+        |key: &str| -> u32 { kde.colors.get(key).and_then(|s| parse_hex_color(s)).unwrap_or(0) };
     let overlay1 = g("overlay1");
     Palette {
         base: g("base"),
@@ -194,27 +164,21 @@ fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_
     // declarative defaults — re-evaluated whenever the source brushes update,
     // so we don't write them here.
 
-    // Windows: paint the OS-drawn caption with the same mantle colour so
-    // it blends into the chrome below, and flip the dark/light variant to
-    // match the resolved theme. No-op until the window has been shown
-    // (HWND only exists after `app.show()`) — `main.rs` fires a follow-up
-    // apply from a post-show `invoke_from_event_loop` to cover the boot
-    // path. See [`crate::services::dwm_titlebar`].
+    // Paint the OS-drawn caption in the same mantle so it blends into the chrome
+    // below. A no-op until the window is shown, which `main.rs`'s post-show
+    // one-shot covers. See [`crate::services::dwm_titlebar`].
     #[cfg(target_os = "windows")]
     crate::services::dwm_titlebar::apply(ui, p.mantle);
 }
 
-/// Pack a `0x00RRGGBB` value into an opaque solid `Brush`. Exposed at
-/// `pub(crate)` because the Now Playing view also packs a per-artwork
-/// accent (extracted via `services::material_you::extract_source_argb_from_rgb8`)
-/// into a Slint brush property.
+/// A `0x00RRGGBB` value as an opaque solid `Brush`. `pub(crate)` because Now
+/// Playing packs its per-artwork accent into a brush property too.
 pub(crate) fn brush(rgb: u32) -> Brush {
     Brush::SolidColor(color(rgb))
 }
 
-/// Unpack a `0x00RRGGBB` value into an opaque `Color`. The `brush` sibling
-/// above wraps this; the Now Playing gradient floor needs the bare `Color`,
-/// because Slint's `.mix()` and gradient stops take `color`, not `brush`.
+/// The same as a bare `Color`, which the Now Playing gradient floor needs —
+/// Slint's `.mix()` and gradient stops take `color`, not `brush`.
 pub(crate) fn color(rgb: u32) -> Color {
     let r = ((rgb >> 16) & 0xff) as u8;
     let g = ((rgb >> 8) & 0xff) as u8;
@@ -222,20 +186,23 @@ pub(crate) fn color(rgb: u32) -> Color {
     Color::from_rgb_u8(r, g, b)
 }
 
-/// Pack a `0x00RRGGBB` value plus a separate `alpha` into a translucent solid
-/// `Brush`. The two solved scrims are the callers — Now Playing's and the
-/// hero's — and their opacity is solved per artwork, so baking it into the
-/// brush keeps the Slint side a single `background: Player.np-scrim` instead of
-/// a colour plus a float the view would have to recombine.
+/// The same plus an alpha, for the two solved scrims. Their opacity is solved
+/// per artwork, so baking it in keeps the Slint side one `background:` binding
+/// rather than a colour plus a float the view has to recombine.
 pub(crate) fn brush_with_alpha(rgb: u32, alpha: u8) -> Brush {
-    Brush::SolidColor(color(rgb).with_alpha(f32::from(alpha) / 255.0))
+    Brush::SolidColor(color_with_alpha(rgb, f32::from(alpha) / 255.0))
 }
 
-/// Unpack a solid `Brush` back to `0x00RRGGBB`, dropping alpha. Used to read a
-/// live `Theme` brush back out of the Slint global when a solved surface — Now
-/// Playing or a hero — needs the theme accent's *hue* as an artwork-less
-/// fallback. A gradient brush answers with its first stop, which is the right
-/// approximation here.
+/// [`color`] carrying a weight in its alpha, for a gradient stop that has to stay a `color`. The
+/// aurora's tints arrive this way: `transparentize` on the Slint side multiplies rather than sets,
+/// so the falloff shape and the per-artwork weight compose without either restating the other.
+pub(crate) fn color_with_alpha(rgb: u32, alpha: f32) -> Color {
+    color(rgb).with_alpha(alpha)
+}
+
+/// A solid `Brush` back to `0x00RRGGBB`, dropping alpha — how a solved surface
+/// reads the theme accent's *hue* out of the global as an artwork-less fallback.
+/// A gradient answers with its first stop, the right approximation here.
 pub(crate) fn brush_to_rgb(brush: &Brush) -> u32 {
     color_to_rgb(brush.color())
 }
@@ -277,7 +244,11 @@ pub(super) fn on_accent_hex(accent_hex: u32) -> u32 {
     let g = f64::from((accent_hex >> 8) & 0xff) / 255.0;
     let b = f64::from(accent_hex & 0xff) / 255.0;
     let lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-    if lum > LUMA_THRESHOLD { 0x001e_1e2e } else { 0x00ff_ffff }
+    if lum > LUMA_THRESHOLD {
+        0x001e_1e2e
+    } else {
+        0x00ff_ffff
+    }
 }
 
 #[cfg(all(test, target_os = "linux"))]

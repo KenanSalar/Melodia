@@ -1,17 +1,12 @@
 //! Source-level pins on `melodia-ui/ui/components/hero/mosaic-tab-hero.slint`.
 //!
-//! The banner Favorites and Recently Played share. Each thing below is a fix that
-//! was paid for once and is invisible in review — which is the whole reason the
-//! band is one file rather than two — so they live beside it here rather than
-//! under either host, the `tab_bar_tests.rs` arrangement for the same reason.
-//!
-//! **Five of these used to be a second copy of `library_tab_band_tests.rs`**, worded
-//! the same way because the two sources were: the header row's own fixes. They are
-//! `tab_search_header_tests.rs` now, once, and what stays here is the half only this
-//! file can answer — that the band still mounts that row, hands it hero tiers, and
-//! forwards what its two pages read back.
+//! The banner Favorites and Recently Played share. Each pin below is a fix paid for once
+//! and invisible in review, so they live beside it here rather than under either host.
+//! The header row's own fixes are `tab_search_header_tests.rs`; what stays here is the
+//! half only this file can answer — that the band still mounts that row, hands it hero
+//! tiers, and forwards what its two pages read back.
 
-use crate::test_support::binding_value;
+use crate::test_support::{MIN_SLINT_SOURCES, UI_DIR, binding_value, stripped_sources};
 
 const HERO: &str = include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint");
 
@@ -20,16 +15,13 @@ fn binding(name: &str) -> &'static str {
     binding_value(HERO, name)
 }
 
-/// A mirrored width only reaches the bar through `changed width`, and `changed`
-/// doesn't fire when the first layout settles directly on the final value — which is
-/// every window opened at its size. Without the mount timer the seed is never
-/// corrected, and a roomy window draws icon-only tabs until something resizes it. It
-/// only looks fixed coming out of the miniplayer, where the floor's answer happens to
-/// be the right one.
+/// A mirrored width only reaches the bar through `changed width`, and `changed` doesn't
+/// fire when the first layout settles directly on the final value — which is every window
+/// opened at its size. Without the mount timer the seed is never corrected and a roomy
+/// window draws icon-only tabs until something resizes it.
 ///
 /// The mirror is the band's; **what it is seeded to** is `TabSearchHeader.row-floor`,
-/// pinned once for all three hosts by
-/// `tab_search_header_tests::every_tabbed_page_mounts_the_shared_row`.
+/// pinned once for all three hosts.
 #[test]
 fn the_page_width_mirror_has_a_mount_seed() {
     assert!(
@@ -49,28 +41,20 @@ fn the_page_width_mirror_has_a_mount_seed() {
     );
 }
 
-/// `TabSearchHeader`'s four brushes all default to `Theme.*` tokens, which is right
-/// for Settings and wrong on a banner — and a mount that omits one still builds and
-/// still looks correct in Settings, so nothing else catches it.
+/// `TabSearchHeader`'s four brushes default to `Theme.*` tokens, which is right for
+/// Settings and wrong on a banner — and a mount that omits one still builds and still
+/// looks correct in Settings, so nothing else catches it.
 ///
-/// `active-color` is the one this exists for. It was left at the default long after
-/// the other three moved, and it drives the selected label, its FILL=1 icon *and* the
-/// underline from one input, so the omission is three surfaces at once. Two things
-/// make it wrong rather than merely inconsistent: the band takes its hue from the
-/// mosaic now, and a theme accent has no contrast floor against it — Latte's mauve
-/// lands near 1.7:1 on the pinned band, under even the 3:1 non-text bar, where
-/// `HeroBackdrop.chrome` is solved to clear it.
+/// `active-color` is the one this exists for: it drives the selected label, its FILL=1 icon
+/// *and* the underline from one input, so an omission is three surfaces at once, and a
+/// theme accent has no contrast floor against a band whose hue rides the mosaic. Asserted
+/// as "reads *some* `HeroBackdrop` tier" rather than pinning which, the tier being a design
+/// call that may move where `Theme.*` is a bug at any tier.
 ///
-/// Asserted as "reads *some* `HeroBackdrop` tier" rather than pinning which one: the
-/// tier a brush should take is a design call that may move, but reaching for `Theme.*`
-/// here is a bug at any tier.
-///
-/// **They reach the bar through eased mirrors, not directly**, and this band needs that
-/// more than the morphing one does: its solve rides the *mosaic*, and `apply_hero_blur`
-/// posts an `invoke_from_event_loop` of its own after the atlas compose — so the title,
-/// the tile and the chips are on screen a hop before the colours are, and the bar used
-/// to snap. The bar itself must not ease them; see
-/// `tab_bar_tests::the_cell_eases_floats_and_never_a_brush`.
+/// **They reach the bar through eased mirrors**, and this band needs that more than the
+/// morphing one: `apply_hero_blur` posts an `invoke_from_event_loop` of its own after the
+/// atlas compose, so the title, tile and chips are on screen a hop before the colours. The
+/// bar itself must not ease them — see `tab_bar_tests`.
 #[test]
 fn the_hero_tab_bar_takes_every_brush_from_the_backdrop() {
     let mount = HERO
@@ -108,26 +92,29 @@ fn the_hero_tab_bar_takes_every_brush_from_the_backdrop() {
     );
 }
 
-/// The band forwards everything the shared header publishes, under the names its two
-/// pages already read.
-///
-/// The row itself is pinned by `tab_search_header_tests`; what only this file can
-/// check is that the forwards exist, because a band that mounts the header and drops
-/// them compiles, paints correctly, and silently loses the tab slide's direction and
-/// every compact tooltip. Two-way aliases rather than one-way bindings, so nothing
-/// here can be orphaned by a write.
+/// The band forwards everything the shared header publishes, under the names its two pages
+/// already read. The row itself is pinned by `tab_search_header_tests`; what only this file
+/// can check is that the forwards exist, a band that mounts the header and drops them
+/// compiling, painting correctly, and silently losing the tab slide's direction and every
+/// compact tooltip. Two-way aliases, so nothing here can be orphaned by a write.
 #[test]
 fn the_band_forwards_what_the_shared_row_publishes() {
-    for prop in ["tab-enter-from", "tab-anim-armed", "tip-w", "tip-h", "tip-label", "tip-visible"]
-    {
+    for prop in [
+        "tab-enter-from",
+        "tab-anim-armed",
+        "tip-w",
+        "tip-h",
+        "tip-label",
+        "tip-visible",
+    ] {
         assert!(
             HERO.contains(&format!("{prop} <=> header.{prop};")),
             "the hero band must re-publish `{prop}` off the shared header — its pages read that \
              name"
         );
     }
-    // The two positional anchors can't be plain aliases: they are relative to the
-    // header, and a page's frame is relative to the band.
+    // The two positional anchors can't be plain aliases: they are relative to the header,
+    // and a page's frame is relative to the band.
     for prop in ["tip-x", "tip-y"] {
         assert!(
             binding(&format!("out property <length> {prop}:")).contains(&format!("header.{prop}")),
@@ -136,9 +123,8 @@ fn the_band_forwards_what_the_shared_row_publishes() {
     }
 }
 
-/// The banner's height is derived, not a literal, so growing the artwork or the bar
-/// can't leave it cropping its own contents. The row's contribution comes off the
-/// header rather than a restated `48px`, which is what the band used to carry.
+/// The banner's height is derived, not a literal, so growing the artwork or the bar can't
+/// leave it cropping its own contents.
 #[test]
 fn the_hero_height_is_derived_from_what_it_stacks() {
     let height = binding("out property <length> hero-height:");
@@ -146,5 +132,24 @@ fn the_hero_height_is_derived_from_what_it_stacks() {
         height.contains("header.row-h") && height.contains("Theme.hero-artwork"),
         "`hero-height` must sum the header row's own height and the artwork tile — a literal \
          drifts silently the moment either grows"
+    );
+}
+
+/// `CoverMosaic` lays a live 2×2 out in Slint, and this banner used to draw one — four lazy
+/// per-tile lookups beside a second composition of the same covers for the backdrop. It draws one
+/// composed collage now, and this stops that branch returning: the picker is the component's whole
+/// remaining audience, and it wants the live form, its tiles following an uncomposed selection.
+#[test]
+fn the_cover_mosaic_is_the_pickers_alone() {
+    let mounts: Vec<String> = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES)
+        .into_iter()
+        .filter(|(_, src)| src.contains("CoverMosaic {"))
+        .map(|(path, _)| path)
+        .collect();
+    assert_eq!(
+        mounts,
+        ["components/dialog/playlist-mosaic-picker.slint"],
+        "only the playlist mosaic picker may mount `CoverMosaic` — a hero wanting a live \
+         mosaic is a hero composing its covers twice"
     );
 }

@@ -100,11 +100,8 @@ pub async fn fetch_and_apply(
     // `build_breadcrumbs` needs it to truncate the trail at the library
     // root. Previously each re-queried it independently — two identical
     // full-table `folders` reads per navigation.
-    let library_folders = library::settings::get_folders(state)
-        .await
-        .unwrap_or_default();
-    let result =
-        library::browse::browse_directory(state, path.clone(), &library_folders).await;
+    let library_folders = library::settings::get_folders(state).await.unwrap_or_default();
+    let result = library::browse::browse_directory(state, path.clone(), &library_folders).await;
 
     let token = browse_ui.fetch_token.load(Ordering::Relaxed);
     if token != my_token {
@@ -181,10 +178,8 @@ pub async fn fetch_and_apply(
                 // move, no clone (the old `clone_from` deep-cloned the
                 // whole `Vec<BrowseFile>` a second time). Covers resolve
                 // lazily per visible row via `RowCovers.request`.
-                let ui_rows: Vec<UiTrackListRow> = files
-                    .iter()
-                    .map(to_slint_browse_track_row)
-                    .collect();
+                let ui_rows: Vec<UiTrackListRow> =
+                    files.iter().map(to_slint_browse_track_row).collect();
                 replace_folder_model(&g, ui_folders);
                 replace_rows_model(&g, ui_rows);
                 replace_breadcrumb_model(&g, breadcrumbs);

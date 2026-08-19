@@ -10,12 +10,16 @@ import { MaterialIcon } from "material-icon.slint";
 // click.
 export component Checkbox inherits Rectangle {
     in property <bool> checked;
+    // The empty box's rim, a knob because hosts disagree: the Settings overflow grid
+    // and the track row want it as present as the text beside them, where the popup
+    // and queue boxes stay quiet.
+    in property <brush> unchecked-border: Theme.surface1;
 
     width: 16px;
     height: 16px;
     border-radius: 4px;
     background: root.checked ? Theme.accent : transparent;
-    border-color: root.checked ? Theme.accent : Theme.surface1;
+    border-color: root.checked ? Theme.accent : root.unchecked-border;
     border-width: 1px;
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
     animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }

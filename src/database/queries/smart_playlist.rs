@@ -12,8 +12,8 @@ use sqlx::{QueryBuilder, Sqlite};
 
 use crate::database::DbPool;
 use crate::entities::smart_criteria::{
-    LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit, ValueType,
-    ops_for,
+    LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
+    ValueType, ops_for,
 };
 use crate::entities::track;
 use crate::error::AppError;
@@ -33,11 +33,8 @@ pub async fn get_smart_playlist_tracks(
         // Unlimited: fall back to the natural display order.
         qb.push(order_by_fragment(None));
     }
-    let rows = qb
-        .build_query_as::<track::TrackListRow>()
-        .persistent(false)
-        .fetch_all(db.read())
-        .await?;
+    let rows =
+        qb.build_query_as::<track::TrackListRow>().persistent(false).fetch_all(db.read()).await?;
     Ok(rows)
 }
 
@@ -72,11 +69,7 @@ pub async fn count_smart_playlist(
         qb.push(" LIMIT ").push_bind(i64::from(limit.count));
         qb.push(")");
     }
-    let row = qb
-        .build_query_as::<(i64, i64)>()
-        .persistent(false)
-        .fetch_one(db.read())
-        .await?;
+    let row = qb.build_query_as::<(i64, i64)>().persistent(false).fetch_one(db.read()).await?;
     Ok(row)
 }
 
@@ -85,11 +78,7 @@ pub async fn count_smart_playlist(
 /// are silently skipped; an all-skipped rule set yields no `WHERE` (matches the
 /// whole library).
 fn push_where(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
-    let rules: Vec<&Rule> = criteria
-        .rules
-        .iter()
-        .filter(|r| rule_is_renderable(r))
-        .collect();
+    let rules: Vec<&Rule> = criteria.rules.iter().filter(|r| rule_is_renderable(r)).collect();
     if rules.is_empty() {
         return;
     }
@@ -176,7 +165,12 @@ fn push_presence(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp, is_text: 
 
 /// Text-column predicates: substring/prefix/suffix `LIKE`, case-insensitive
 /// equality, and presence.
-fn push_text_predicate(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp, value: Option<&RuleValue>) {
+fn push_text_predicate(
+    qb: &mut QueryBuilder<Sqlite>,
+    col: &str,
+    op: RuleOp,
+    value: Option<&RuleValue>,
+) {
     match op {
         RuleOp::IsSet | RuleOp::IsNotSet => push_presence(qb, col, op, true),
         RuleOp::Contains | RuleOp::NotContains | RuleOp::StartsWith | RuleOp::EndsWith => {
@@ -268,7 +262,12 @@ fn push_bool_predicate(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp) {
 }
 
 /// Date-column predicates: the relative-date window tests and presence.
-fn push_date_predicate(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp, value: Option<&RuleValue>) {
+fn push_date_predicate(
+    qb: &mut QueryBuilder<Sqlite>,
+    col: &str,
+    op: RuleOp,
+    value: Option<&RuleValue>,
+) {
     match op {
         RuleOp::IsSet | RuleOp::IsNotSet => push_presence(qb, col, op, false),
         RuleOp::InLast | RuleOp::NotInLast => {

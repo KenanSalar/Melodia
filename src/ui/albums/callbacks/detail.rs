@@ -8,8 +8,8 @@ use slint::{ComponentHandle, SharedString};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
-use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AlbumDetail, AppWindow};
@@ -119,8 +119,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             }
             let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            spawn_logged!(s, "albums::play_row",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+            spawn_logged!(
+                s,
+                "albums::play_row",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
+            );
         });
     }
 
@@ -129,8 +132,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
         detail.on_play_next(move |ids| {
             let id_vec = collect_track_ids(&ids);
             let s = s.clone();
-            spawn_logged!(s, "albums::play_next",
-                library::queue::queue_play_next_many(&s, id_vec));
+            spawn_logged!(s, "albums::play_next", library::queue::queue_play_next_many(&s, id_vec));
         });
     }
 
@@ -150,26 +152,26 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     {
         let au = albums_ui.clone();
         wire_row_flag!(detail, on_toggle_row_favorite, state, "albums::set_favorite",
-            library::favorites::set_favorite, collect_track_ids,
-            captures: [weak, au],
-            after: |id_vec, fav| {
-                for id in &id_vec {
-                    au.flip_detail_favorite(*id, fav);
-                    albums_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
-                }
-            });
+        library::favorites::set_favorite, collect_track_ids,
+        captures: [weak, au],
+        after: |id_vec, fav| {
+            for id in &id_vec {
+                au.flip_detail_favorite(*id, fav);
+                albums_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
+            }
+        });
     }
     {
         let au = albums_ui.clone();
         wire_row_flag!(detail, on_set_row_rating, state, "albums::set_rating",
-            library::ratings::set_rating, collect_track_ids,
-            captures: [weak, au],
-            after: |id_vec, rating| {
-                for id in &id_vec {
-                    au.flip_detail_rating(*id, rating);
-                    albums_ui_mod::apply_detail_row_rating(&weak, *id, rating);
-                }
-            });
+        library::ratings::set_rating, collect_track_ids,
+        captures: [weak, au],
+        after: |id_vec, rating| {
+            for id in &id_vec {
+                au.flip_detail_rating(*id, rating);
+                albums_ui_mod::apply_detail_row_rating(&weak, *id, rating);
+            }
+        });
     }
 
     // select-row / clear-selection: modifier-aware selection, mirroring the
@@ -210,12 +212,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
             albums_ui_mod::resort_detail(&ui, &au);
-            crate::ui::callbacks::persist_view_sort(
-                &s,
-                view_id::ALBUM_DETAIL,
-                new_field,
-                new_dir,
-            );
+            crate::ui::callbacks::persist_view_sort(&s, view_id::ALBUM_DETAIL, new_field, new_dir);
         });
     }
 
@@ -229,9 +226,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<AlbumDetail>().snapshot_visible();
             let s = s.clone();
-            spawn_blocking_logged!(s, "albums::toggle_column",
+            spawn_blocking_logged!(
+                s,
+                "albums::toggle_column",
                 library::settings::update_view_columns(
-                    &s, view_id::ALBUM_DETAIL.to_owned(), columns));
+                    &s,
+                    view_id::ALBUM_DETAIL.to_owned(),
+                    columns
+                )
+            );
         });
     }
 

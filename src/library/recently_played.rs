@@ -1,9 +1,8 @@
 //! Recently-Played library API — thin async wrappers over the
 //! `queries::track` recency/most-played queries. Mirrors `library::favorites`.
 //!
-//! The view is read-only over data written elsewhere: `last_played` is stamped
-//! by the play-count flusher (`tasks::play_count_flusher`) which also bumps
-//! `stats_changed_tx`, so the Recently-Played lifecycle re-fetches on that
+//! Read-only over data written elsewhere: `tasks::play_count_flusher` stamps
+//! `last_played` and bumps `stats_changed_tx`, so the lifecycle re-fetches on that
 //! signal exactly like Favorites.
 
 use crate::database::queries;
@@ -22,15 +21,10 @@ pub async fn get_recently_played(state: &AppState) -> Result<Vec<track::TrackLis
 
 /// The most-played tracks across the whole library, for the "Most Played" tab.
 ///
-/// Uncapped: the tab is a virtualized grid, so it has nothing to gain by
-/// truncating, and it used to take a `limit` clamped to `[1, 100]` — the right
-/// shape for the ten-card carousel this replaced, and now a ceiling the user can
-/// scroll into. `favorites::get_most_played_favorites` made the same call, but
-/// **the two sets are not comparable**: that one is a strict subset of its own
-/// Songs tab, this one is everything ever played. See the query's own doc
-/// comment for what that costs per `stats_changed` tick.
-pub async fn get_most_played(
-    state: &AppState,
-) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
+/// Uncapped: a virtualized grid has nothing to gain by truncating, and a clamp would be a ceiling
+/// to scroll into rather than a bound. `favorites::get_most_played_favorites` makes the same call
+/// over a strict subset of its own Songs tab, where this one is everything ever played — the
+/// query's own doc comment says what that costs per `stats_changed` tick.
+pub async fn get_most_played(state: &AppState) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
     queries::track::get_most_played(&state.db).await
 }

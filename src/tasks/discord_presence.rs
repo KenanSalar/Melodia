@@ -147,7 +147,10 @@ impl Detector {
     /// Read current truth from the watch, project it through the model, and push
     /// any resulting update. Assumes the feature is armed. Records the send time
     /// so the throttle window starts from it.
-    async fn evaluate_and_send(&mut self, vm_rx: &mut watch::Receiver<Option<PlayerViewModelLight>>) {
+    async fn evaluate_and_send(
+        &mut self,
+        vm_rx: &mut watch::Receiver<Option<PlayerViewModelLight>>,
+    ) {
         if !self.was_armed {
             self.presence.reset();
             self.was_armed = true;

@@ -30,7 +30,7 @@ exclude = ["winit"]
 # Inherited by both packages, so `melodia-ui` can't drift from the app. The
 # three toolchain-less scrapes (`release.yml`, `build-rpm.sh`,
 # `build-appimage.sh`) anchor on this table by name, not by position.
-version = "0.10.0"
+version = "0.11.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
@@ -115,10 +115,11 @@ Melodia is a modern, local-first desktop music player with a Material
 3-inspired interface. Your music collection stays entirely on your own
 machine, with no accounts, streaming or cloud. It pairs a Slint user
 interface with a pure-Rust backend: gapless playback via Rodio and
-Symphonia (MP3, FLAC, M4A/AAC, OGG, WAV, ALAC and AIFF), a fast local
-SQLite library with full-text search, browsing by album, artist, genre
-and playlist, OS media controls (MPRIS), and pluggable themes including
-system light/dark and Material You."""
+Symphonia (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis, WAV,
+AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
+full-text search, browsing by album, artist, genre and playlist, OS
+media controls (MPRIS), and pluggable themes including system light/dark
+and Material You."""
 # The reverse-DNS dest names match the AppStream component id, which is what
 # makes KDE Discover / GNOME Software merge the desktop entry with the MetaInfo
 # component instead of listing them separately.
@@ -162,7 +163,12 @@ sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio
 # Audio
 rodio = { version = "0.22.2", default-features = false, features = [
     "playback",
-    "symphonia-mp3",
+    # `mpa` over `mp3`: both are `symphonia-bundle-mp3`, already compiled either way, and
+    # the wider one adds the Layer I and II decoders alongside Layer III's. Neither layer
+    # has an extension of its own here, and neither needs one: they arrive as an `.mka`
+    # track, or as an `.mp3` whose frames say Layer II, the reader taking the layer off
+    # the frame header rather than off the name.
+    "symphonia-mpa",
     "symphonia-flac",
     "symphonia-isomp4",
     "symphonia-aac",
@@ -170,6 +176,17 @@ rodio = { version = "0.22.2", default-features = false, features = [
     "symphonia-vorbis",
     "symphonia-wav",
     "symphonia-pcm",
+    # Two containers rather than two codecs: whatever they carry is decoded by the
+    # entries around them, so an `.mka` holding Opus demuxes and then finds no decoder
+    # until #35 lands. Lofty reads neither, so both scan through the filename-row
+    # fallback in `media::metadata`.
+    "symphonia-mkv",
+    "symphonia-caf",
+    # The RIFF demuxer already resolves the two ADPCM wave formats to their codec types
+    # and then finds no decoder registered for either, so this is the missing half of a
+    # path that otherwise demuxes and dies. It does *not* reach `.aifc` ADPCM, which the
+    # AIFC common chunk rejects before any codec is looked up.
+    "symphonia-adpcm",
     "symphonia-alac",
     "symphonia-aiff",
 ] }
@@ -197,12 +214,52 @@ natord = "1.0.9"
 # spellings `tracks_fts`'s `remove_diacritics 2` tokenizer does. Already in the
 # lock file transitively, so this line costs no extra build.
 unicode-normalization = "0.1.25"
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+# The format list is what a lofty picture's MIME type can name plus what the
+# cover pickers accept, so it has to be the superset `media::artwork`'s
+# `STORED_EXTENSIONS` is written against — a format the store may name but this
+# list omits is one written to disk and never drawable.
+image = { version = "0.25.10", default-features = false, features = [
+    "jpeg",
+    "png",
+    "webp",
+    "gif",
+    "bmp",
+    "tiff",
+] }
+# Every cover the app draws is resized, most of them more than once, and
+# `image`'s own resamplers go through `get_pixel` — bounds-checked per output
+# pixel, with the output size as their floor, so no store cap reaches them. This
+# is the same convolution written over the flat slice with SIMD. It carries
+# `unsafe` internally, which `unsafe_code = "deny"` doesn't reach and which is
+# the reason the choice is written down here rather than arrived at by
+# `cargo add`; `media::image_decode::resize_rgb8` is the only place it is named.
+#
+# The `image` feature is the compat layer that lets it read and write this tree's
+# own buffers in place. Its `image` requirement is `0.25.6` against the `0.25.10`
+# above, so it unifies rather than resolving a second copy, and it enables no
+# format features of its own.
+fast_image_resize = { version = "6.1.0", features = ["image"] }
+# Scale-on-decode, which `image`'s JPEG path cannot reach: it decodes through
+# `zune-jpeg`, whose reduced IDCTs are chosen by coefficient content and whose
+# `DecoderOptions` exposes only size *limits*. Every tier draws a cover far
+# smaller than the store holds, so decoding at 1/8 or 1/4 and resizing from
+# there is work the full decode was always going to throw away — and it is
+# nearly the whole store, JPEG being what the normalizer re-encodes to.
+# `media::image_decode::decode_capped_to` is the only place it is named, and it
+# falls back to `image` for every format and colour space this doesn't cover.
+jpeg-decoder = "0.3.2"
 lru = "0.18.2"
 
 # Material 3 dynamic colour (Material You). Its optional `image`/`serde`/`libm`
 # features stay off — we feed it quantized pixel data ourselves.
 material-colors = "0.4.2"
+
+# The backdrop's own quantizer, beside rather than instead of the one above: the
+# two answer different questions, and only one of them is "what is this cover
+# mostly made of". Median-cut over a fixed histogram, so it costs a fraction of
+# a millisecond where Celebi's k-means costs tens on photographic art. Its one
+# dependency, `rgb`, is already in the lock file.
+color-thief = "0.2.2"
 
 # Serde / config
 serde = { version = "1.0.229", features = ["derive"] }
@@ -239,6 +296,14 @@ rfd = "0.17.2"
 # Hands a path to the OS default handler — used by the track-row
 # "Open Containing Folder" context-menu action.
 open = "5.4.0"
+
+# The single-instance socket (`services::single_instance`). One abstraction over
+# a Linux abstract unix socket and a Windows named pipe, which is the whole
+# reason for the dependency: `discord::ipc` hand-rolls the *client* half in std,
+# but a named-pipe **server** means `CreateNamedPipeW` — an eighth FFI site no
+# Linux runner ever compiles. Default features only; `tokio` would pull in
+# `tokio/net`, which the runtime above deliberately leaves off.
+interprocess = "2.4.3"
 
 # Auto-updater — see `src/services/updater/`. `minisign-verify` is zero-dep and
 # verify-only. `semver` powers `is_upgrade()`, so an older-or-equal manifest
@@ -277,7 +342,10 @@ libc = "0.2.189"
 # `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, the
 # fallback for when `Melodia.exe.old` is still loaded (a second window open at
 # quit). `main()`'s early `remove_file` clears the stale rename otherwise.
-windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem", "Win32_Graphics_Dwm", "Win32_Foundation"] }
+# `Win32_Globalization` covers `GetUserDefaultLocaleName`: the declaration is the
+# half of an FFI site nothing checks, so it comes from here rather than a
+# hand-rolled `extern` block whose signature only review can keep true.
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem", "Win32_Graphics_Dwm", "Win32_Foundation", "Win32_Globalization"] }
 
 # `std::fs::canonicalize` returns the extended-length form (`\\?\C:\...`) on
 # Windows, which lands in `folders.path` / `tracks.file_path` and then fails to

@@ -1,0 +1,52 @@
+import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+
+// Motion the shell plays that answers to neither the palette nor the window frame — one row
+// today, the entrance every content view mounts through. Its own card rather than a fourth
+// row on `appearance-section.slint`, which is palette config and says so in its title.
+//
+// Search visibility follows `language-section.slint`.
+export component MotionSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> tab-name;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.tab-name, @tr("Motion"),
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    property <bool> show-skip-startup: row-visible(@tr("Skip Startup Animation"),
+        @tr("Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."));
+
+    out property <bool> has-matches: show-skip-startup;
+
+    // Wrapper so the root's preferred-height tracks the card — see `language-section.slint`.
+    VerticalLayout {
+        if has-matches: SectionCard {
+            title: @tr("Motion");
+
+            // Read at launch only: `boot::ui_setup` turns it into
+            // `Nav.suppress-enter-animation` before the window is shown, and the first
+            // settled view hands that back, so navigation keeps its transition either way.
+            // The description names the detail-page exception because the flag cannot reach
+            // it — a restored detail id arrives from a query long after the band mounted, so
+            // the band morphs rather than taking the settled mount `hero-t` is seeded for.
+            if root.show-skip-startup: SettingRow {
+                icon: "animation";
+                label: @tr("Skip Startup Animation");
+                description: @tr("Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads.");
+                ToggleSwitch {
+                    checked <=> Settings.skip-startup-animation;
+                    toggled(v) => { Settings.skip-startup-animation-changed(v); }
+                }
+            }
+        }
+    }
+}

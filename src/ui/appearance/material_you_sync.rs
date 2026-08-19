@@ -31,10 +31,7 @@ pub(super) fn wire_color_style_changed(
     ui.global::<Settings>().on_color_style_changed(move |idx| {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Settings>();
-        let style = SchemeStyle::all()
-            .get(usize_from(idx))
-            .copied()
-            .unwrap_or(SchemeStyle::None);
+        let style = SchemeStyle::all().get(usize_from(idx)).copied().unwrap_or(SchemeStyle::None);
 
         // Snapshot the variant + theme on the UI thread so the
         // spawn_blocking task below doesn't need any UI access. Owned
@@ -42,8 +39,7 @@ pub(super) fn wire_color_style_changed(
         let theme_idx = g.get_theme_idx();
         let variant_idx = g.get_variant_idx();
         let on_material3 = registry_get(theme_idx).is_some_and(|t| t.id == "material3");
-        let theme_id: Option<&'static str> =
-            registry_get(theme_idx).map(|t| t.id);
+        let theme_id: Option<&'static str> = registry_get(theme_idx).map(|t| t.id);
         let variant_id_owned: Option<String> = registry_get(theme_idx).map(|t| {
             let i = usize_from(variant_idx);
             if t.supports_system_mode && i == t.variants.len() {
@@ -70,7 +66,9 @@ pub(super) fn wire_color_style_changed(
         let new_accent: Option<String> = if on_material3 {
             let current_accent = persisted_accent.lock().clone();
             match style {
-                SchemeStyle::None if current_accent == MATERIAL_YOU_ACCENT_ID => Some(String::new()),
+                SchemeStyle::None if current_accent == MATERIAL_YOU_ACCENT_ID => {
+                    Some(String::new())
+                }
                 SchemeStyle::None => None,
                 _ if current_accent == MATERIAL_YOU_ACCENT_ID => None,
                 _ => Some(MATERIAL_YOU_ACCENT_ID.to_owned()),
@@ -104,9 +102,7 @@ pub(super) fn wire_color_style_changed(
         let persisted_accent_for_blocking = persisted_accent.clone();
         s.runtime.spawn_blocking(move || {
             let mut all_persists_ok = true;
-            if let Err(e) =
-                library::settings::set_dynamic_color_style(&s_clone, style_owned)
-            {
+            if let Err(e) = library::settings::set_dynamic_color_style(&s_clone, style_owned) {
                 log::warn!("persist material3 colour style: {e}");
                 all_persists_ok = false;
             }

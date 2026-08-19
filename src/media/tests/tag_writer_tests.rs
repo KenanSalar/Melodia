@@ -17,12 +17,13 @@ use tempfile::TempDir;
 use super::*;
 use crate::error::AppError;
 use crate::media::artwork;
-use crate::media::metadata::extract_metadata;
+use crate::media::metadata::{extract_metadata, read_tags};
+use crate::test_support::ASSETS_DIR;
 
 // ---------------------------------------------------------------- helpers
 
 fn assets_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets")
+    PathBuf::from(ASSETS_DIR)
 }
 
 /// Copy a checked-in fixture into `tmp` and hand back the working copy.
@@ -37,14 +38,11 @@ fn missing(what: &str) -> AppError {
     AppError::Validation(format!("missing {what}"))
 }
 
-/// Re-read a file's **primary** tag — the same tag the writer targets.
+/// Re-read a file's **primary** tag through the reader the writer now shares, so a fixture
+/// whose extension lofty's own map misses re-reads here too.
 fn read_primary(path: &Path) -> Result<Tag, AppError> {
-    let tagged = lofty::probe::read_from_path(path)
-        .map_err(|e| AppError::metadata(format!("read {}", path.display()), e))?;
-    let tag = tagged
-        .primary_tag()
-        .ok_or_else(|| missing("primary tag"))?
-        .clone();
+    let tagged = read_tags(path, false)?;
+    let tag = tagged.primary_tag().ok_or_else(|| missing("primary tag"))?.clone();
     Ok(tag)
 }
 
@@ -75,20 +73,11 @@ fn full_edit() -> TagEdit {
 
 fn assert_full_edit_landed(tag: &Tag) -> Result<(), AppError> {
     assert_eq!(text(tag, ItemKey::TrackTitle).as_deref(), Some("New Title"));
-    assert_eq!(
-        text(tag, ItemKey::TrackArtist).as_deref(),
-        Some("New Artist")
-    );
-    assert_eq!(
-        text(tag, ItemKey::AlbumArtist).as_deref(),
-        Some("New Album Artist")
-    );
+    assert_eq!(text(tag, ItemKey::TrackArtist).as_deref(), Some("New Artist"));
+    assert_eq!(text(tag, ItemKey::AlbumArtist).as_deref(), Some("New Album Artist"));
     assert_eq!(text(tag, ItemKey::AlbumTitle).as_deref(), Some("New Album"));
     assert_eq!(text(tag, ItemKey::Genre).as_deref(), Some("Shoegaze"));
-    assert_eq!(
-        text(tag, ItemKey::Composer).as_deref(),
-        Some("New Composer")
-    );
+    assert_eq!(text(tag, ItemKey::Composer).as_deref(), Some("New Composer"));
     assert_eq!(text(tag, ItemKey::Comment).as_deref(), Some("New Comment"));
     assert_eq!(tag.track(), Some(7));
     assert_eq!(tag.disk(), Some(2));
@@ -97,10 +86,7 @@ fn assert_full_edit_landed(tag: &Tag) -> Result<(), AppError> {
     assert_eq!(date.year, 2024);
 
     let original = text(tag, ItemKey::OriginalReleaseDate).ok_or_else(|| missing("orig year"))?;
-    assert!(
-        original.starts_with("1999"),
-        "original year should round-trip, got {original:?}"
-    );
+    assert!(original.starts_with("1999"), "original year should round-trip, got {original:?}");
     Ok(())
 }
 
@@ -109,17 +95,21 @@ fn assert_full_edit_landed(tag: &Tag) -> Result<(), AppError> {
 #[test]
 fn default_edit_is_a_noop() {
     assert!(TagEdit::default().is_noop());
-    assert!(!TagEdit {
-        title: FieldEdit::Set("x".into()),
-        ..TagEdit::default()
-    }
-    .is_noop());
+    assert!(
+        !TagEdit {
+            title: FieldEdit::Set("x".into()),
+            ..TagEdit::default()
+        }
+        .is_noop()
+    );
     // Artwork alone is enough to make it real work.
-    assert!(!TagEdit {
-        artwork: ArtworkEdit::Remove,
-        ..TagEdit::default()
-    }
-    .is_noop());
+    assert!(
+        !TagEdit {
+            artwork: ArtworkEdit::Remove,
+            ..TagEdit::default()
+        }
+        .is_noop()
+    );
 }
 
 #[test]
@@ -184,14 +174,8 @@ fn keep_leaves_replaygain_and_musicbrainz_keys_untouched() {
     };
     apply_edit(&mut tag, &edit, None);
 
-    assert_eq!(
-        text(&tag, ItemKey::ReplayGainTrackGain).as_deref(),
-        Some("-6.50 dB")
-    );
-    assert_eq!(
-        text(&tag, ItemKey::MusicBrainzRecordingId).as_deref(),
-        Some("mbid-123")
-    );
+    assert_eq!(text(&tag, ItemKey::ReplayGainTrackGain).as_deref(), Some("-6.50 dB"));
+    assert_eq!(text(&tag, ItemKey::MusicBrainzRecordingId).as_deref(), Some("mbid-123"));
 }
 
 #[test]
@@ -350,10 +334,7 @@ fn read_lyrics_round_trips_on_flac_and_mp3() -> Result<(), AppError> {
         },
         None,
     )?;
-    assert_eq!(
-        read_lyrics(&flac)?.as_deref(),
-        Some("first line\nsecond line")
-    );
+    assert_eq!(read_lyrics(&flac)?.as_deref(), Some("first line\nsecond line"));
 
     let mp3 = stage(&tmp, "silence.mp3")?;
     apply_to_file(
@@ -390,11 +371,7 @@ fn m4a_artwork_replace_actually_replaces() -> Result<(), AppError> {
     // Sanity: the fixture really does start with an embedded cover, else the trap
     // couldn't manifest and this test would pass vacuously.
     let before = read_primary(&audio)?;
-    assert_eq!(
-        before.pictures().len(),
-        1,
-        "fixture must carry exactly one embedded cover"
-    );
+    assert_eq!(before.pictures().len(), 1, "fixture must carry exactly one embedded cover");
     let old_bytes = before.pictures()[0].data().to_vec();
 
     let new_cover = assets_dir().join("cover.jpg");
@@ -447,10 +424,7 @@ fn m4a_artwork_remove_actually_removes() -> Result<(), AppError> {
     apply_to_file(&audio, &edit, None)?;
 
     let after = read_primary(&audio)?;
-    assert!(
-        after.pictures().is_empty(),
-        "Remove must clear the `Other`-typed cover MP4 gives us"
-    );
+    assert!(after.pictures().is_empty(), "Remove must clear the `Other`-typed cover MP4 gives us");
     Ok(())
 }
 
@@ -535,11 +509,7 @@ fn flac_round_trips_a_full_edit_with_lyrics_under_the_lyrics_key() -> Result<(),
     let audio = stage(&tmp, "silence.flac")?;
 
     let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(
-        unsupported.is_empty(),
-        "VorbisComments maps every field: {:?}",
-        unsupported.0
-    );
+    assert!(unsupported.is_empty(), "VorbisComments maps every field: {:?}", unsupported.0);
 
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::VorbisComments);
@@ -572,11 +542,7 @@ fn an_embedded_picture_survives_an_edit_that_does_not_touch_artwork() -> Result<
     apply_to_file(&audio, &edit, None)?;
 
     let after = read_primary(&audio)?;
-    assert_eq!(
-        after.pictures().len(),
-        1,
-        "the embedded picture must survive a text-only edit"
-    );
+    assert_eq!(after.pictures().len(), 1, "the embedded picture must survive a text-only edit");
     assert_eq!(after.pictures()[0].data(), cover_bytes.as_slice());
     Ok(())
 }
@@ -589,11 +555,7 @@ fn mp3_round_trips_a_full_edit_with_bpm_in_tbpm() -> Result<(), AppError> {
     let audio = stage(&tmp, "silence.mp3")?;
 
     let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(
-        unsupported.is_empty(),
-        "ID3v2 maps every field: {:?}",
-        unsupported.0
-    );
+    assert!(unsupported.is_empty(), "ID3v2 maps every field: {:?}", unsupported.0);
 
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::Id3v2);
@@ -681,16 +643,9 @@ fn an_id3v1_only_mp3_gains_a_fresh_id3v2_tag_and_loses_nothing() -> Result<(), A
 
     // Precondition: the fixture really has ID3v1 and no ID3v2, else this proves
     // nothing.
-    let tagged = lofty::probe::read_from_path(&audio)
-        .map_err(|e| AppError::metadata("read fixture", e))?;
-    assert!(
-        tagged.tag(TagType::Id3v2).is_none(),
-        "fixture must not already carry an ID3v2 tag"
-    );
-    assert!(
-        tagged.tag(TagType::Id3v1).is_some(),
-        "fixture must carry an ID3v1 tag"
-    );
+    let tagged = read_tags(&audio, false)?;
+    assert!(tagged.tag(TagType::Id3v2).is_none(), "fixture must not already carry an ID3v2 tag");
+    assert!(tagged.tag(TagType::Id3v1).is_some(), "fixture must carry an ID3v1 tag");
 
     let unsupported = apply_to_file(&audio, &full_edit(), None)?;
     assert!(unsupported.is_empty(), "{:?}", unsupported.0);
@@ -704,14 +659,8 @@ fn an_id3v1_only_mp3_gains_a_fresh_id3v2_tag_and_loses_nothing() -> Result<(), A
     assert_full_edit_landed(&tag)?;
 
     // The four fields ID3v1 has no key for — the whole point of the fix.
-    assert_eq!(
-        text(&tag, ItemKey::AlbumArtist).as_deref(),
-        Some("New Album Artist")
-    );
-    assert_eq!(
-        text(&tag, ItemKey::Composer).as_deref(),
-        Some("New Composer")
-    );
+    assert_eq!(text(&tag, ItemKey::AlbumArtist).as_deref(), Some("New Album Artist"));
+    assert_eq!(text(&tag, ItemKey::Composer).as_deref(), Some("New Composer"));
     assert_eq!(text(&tag, ItemKey::IntegerBpm).as_deref(), Some("128"));
     assert_eq!(text(&tag, ItemKey::UnsyncLyrics).as_deref(), Some("la la la"));
     Ok(())
@@ -757,11 +706,7 @@ fn ogg_round_trips_a_full_edit() -> Result<(), AppError> {
     let audio = stage(&tmp, "silence.ogg")?;
 
     let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(
-        unsupported.is_empty(),
-        "VorbisComments maps every field: {:?}",
-        unsupported.0
-    );
+    assert!(unsupported.is_empty(), "VorbisComments maps every field: {:?}", unsupported.0);
 
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::VorbisComments);
@@ -773,25 +718,50 @@ fn ogg_round_trips_a_full_edit() -> Result<(), AppError> {
     Ok(())
 }
 
+/// `.oga` is the one extension we scan whose format lofty parses while its own map has no entry
+/// for it, so every open of one resolves through the reader's header sniff. The scan already
+/// read these; until the writer shared that opener, saving an edit to one failed as an unknown
+/// format and so did the Lyrics tab.
 #[test]
-fn aiff_round_trips_a_full_edit_through_id3v2() -> Result<(), AppError> {
+fn an_oga_round_trips_a_full_edit_despite_its_extension() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
-    let audio = stage(&tmp, "silence.aiff")?;
+    let audio = tmp.path().join("quiet.oga");
+    std::fs::copy(assets_dir().join("silence.ogg"), &audio)?;
 
     let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(
-        unsupported.is_empty(),
-        "AIFF's primary tag is ID3v2, which maps every field: {:?}",
-        unsupported.0
-    );
+    assert!(unsupported.is_empty(), "VorbisComments maps every field: {:?}", unsupported.0);
 
     let tag = read_primary(&audio)?;
-    assert_eq!(
-        tag.tag_type(),
-        TagType::Id3v2,
-        "not the sparse `AiffText` tag — the writer targets the primary type"
-    );
+    assert_eq!(tag.tag_type(), TagType::VorbisComments);
     assert_full_edit_landed(&tag)?;
-    assert_eq!(text(&tag, ItemKey::IntegerBpm).as_deref(), Some("128"));
+    assert_eq!(read_lyrics(&audio)?.as_deref(), Some("la la la"));
+    Ok(())
+}
+
+/// `.aifc` rides along because it is a different FORM type reached through the same reader, and
+/// a save that lost that distinction leaves a file the scan's strict re-read then rejects — the
+/// shape the `.oga` bug had from the outside.
+#[test]
+fn aiff_and_aifc_round_trip_a_full_edit_through_id3v2() -> Result<(), AppError> {
+    for fixture in ["silence.aiff", "silence.aifc"] {
+        let tmp = TempDir::new()?;
+        let audio = stage(&tmp, fixture)?;
+
+        let unsupported = apply_to_file(&audio, &full_edit(), None)?;
+        assert!(
+            unsupported.is_empty(),
+            "{fixture}: AIFF's primary tag is ID3v2, which maps every field: {:?}",
+            unsupported.0
+        );
+
+        let tag = read_primary(&audio)?;
+        assert_eq!(
+            tag.tag_type(),
+            TagType::Id3v2,
+            "{fixture}: not the sparse `AiffText` tag — the writer targets the primary type"
+        );
+        assert_full_edit_landed(&tag)?;
+        assert_eq!(text(&tag, ItemKey::IntegerBpm).as_deref(), Some("128"), "{fixture}");
+    }
     Ok(())
 }

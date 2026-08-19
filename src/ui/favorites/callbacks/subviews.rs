@@ -6,12 +6,12 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::ui::favorites::NAV_FAVORITES;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{cross_tab_nav, next_sort, persist_view_sort};
+use crate::ui::favorites::NAV_FAVORITES;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::{UNFETCHED_COUNT, should_announce_warm};
@@ -43,8 +43,11 @@ pub(super) fn wire(
             }
             let start = ids.iter().position(|&i| i == id);
             let s = s.clone();
-            spawn_logged!(s, "favorites::play_track",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+            spawn_logged!(
+                s,
+                "favorites::play_track",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
+            );
         });
     }
 
@@ -104,11 +107,15 @@ pub(super) fn wire(
             // flag is what keeps a pick back and forth from re-querying a cache
             // nothing has invalidated. See `lifecycle::kick_full_refresh`.
             let songs = entering == favorites_ui_mod::FavoritesTab::Songs;
-            let needs_fetch = if songs { fu.take_songs_dirty() } else { fu.take_grids_dirty() };
+            let needs_fetch = if songs {
+                fu.take_songs_dirty()
+            } else {
+                fu.take_grids_dirty()
+            };
 
             // The entering tier was cleared when its tab was last left, so the
             // cards mount cold: hold the lookups at cache-only until the
-            // prewarm below reports back, or each visible card drags a 448 px
+            // prewarm below reports back, or each visible card drags a grid-tier
             // decode onto this thread in the frame that paints the grid.
             g.set_covers_generation(0);
 

@@ -1,53 +1,41 @@
 import { Theme } from "../theme.slint";
 
-// The square artwork tile. A decoded `cover` renders; otherwise the fallback glyph
-// paints over `tile-bg`.
-//
-// **Where that image comes from is the host's business**, and the two kinds differ: a
-// repeated tile binds `cover` to a lazy per-path lookup, so only a mounted tile costs a
-// cache hit, while the singletons — the bar, the mini player, the detail heroes, the tag
-// editor — are handed one image Rust decoded eagerly.
+// The square artwork tile. A decoded `cover` renders; otherwise the fallback glyph paints over
+// `tile-bg`. **Where that image comes from is the host's business**, and the two kinds differ: a
+// repeated tile binds `cover` to a lazy per-path lookup, so only a mounted tile costs a cache hit,
+// while the singletons are handed one image Rust decoded eagerly.
 export component ArtworkImage inherits Rectangle {
     in property <string> artwork-path;
     in property <image> cover;
-    // **Lets a host suppress a `cover` it has no way to withhold.** Slint has no
-    // empty-`image` literal, so a host choosing between several globals' covers still has
-    // to bind *one* of them on the arm that owns none — `LibraryTabBand`'s Genre hero is
-    // the case, its tile being a name-hashed gradient with no image behind it. Left to
-    // `cover.width` alone, that arm paints whichever sibling detail happened to be open.
-    // Defaulted `true`, so every mount handing over its own cover is unaffected.
+    // **Lets a host suppress a `cover` it has no way to withhold.** Slint has no empty-`image`
+    // literal, so a host choosing between several globals' covers still has to bind *one* of them
+    // on the arm that owns none — `LibraryTabBand`'s Genre hero is the case. Left to `cover.width`
+    // alone, that arm paints whichever sibling detail happened to be open. Defaulted `true`.
     in property <bool> has-cover: true;
     in property <length> tile-size: 56px;
     in property <length> tile-radius: Theme.radius-md;
-    // Painted when no cover is present, as an SVG asset rather than a font glyph — see
-    // the branch below. Each entity view passes the name matching its own sidebar icon,
-    // so an empty tile reads as that kind of thing rather than as a stray note.
+    // Painted when no cover is present, as an SVG asset rather than a font glyph — see the branch
+    // below. Each entity view passes the name matching its own sidebar icon.
     in property <string> fallback-icon: "music-note";
-    // Scales the cover *inside* the tile frame for the hover zoom; the tile's own clip
-    // crops it, so it can't escape the host's bounds.
+    // Scales the cover *inside* the tile frame for the hover zoom; the tile's own clip crops it.
     in property <float> cover-scale: 1.0;
-    // **The animated mirror, and what the ease belongs on.** Easing this rather than the
-    // derived size means a tile *frame* resize — the grid reflowing as the sidebar
-    // collapses — tracks instantly while a hover toggle still eases; animating the size
-    // conflates the two inputs and produces a delayed zoom-bounce.
+    // **The animated mirror, and what the ease belongs on.** Easing this rather than the derived
+    // size means a tile *frame* resize — the grid reflowing as the sidebar collapses — tracks
+    // instantly while a hover toggle still eases; animating the size conflates the two inputs.
     property <float> anim-scale: root.cover-scale;
     animate anim-scale { duration: Theme.dur-fast; easing: ease-in-out; }
     // The shared default: a faintly accent-tinted square with an accent-coloured glyph.
     in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush> tile-icon-color: Theme.accent;
-    // Fades the tile without a host `opacity`, which would layer — this root has children,
-    // so `need_layer` bails on neither condition. Three things an edit here can get wrong,
-    // the first and last argued in `slint-pitfalls.md`'s `opacity` entry: `transparentize`
-    // multiplies alpha where `with-alpha` sets it and `tile-bg` is translucent by default;
-    // the icons fade on `opacity` rather than through `colorize`, which the renderer caches
-    // per item as its own texture (`ItemGraphicsCacheEntry::ColorizedImage`), so a brush
-    // moving per frame re-renders it per frame; and per-element alpha isn't pixel-identical
-    // to a group one where the fill and the image overlap, so the tile reads a few percent
-    // heavier mid-fade.
+    // Fades the tile without a host `opacity`, which would layer — this root has children, so
+    // `need_layer` bails on neither condition. Two things an edit here can get wrong:
+    // `transparentize` multiplies alpha where `with-alpha` sets it and `tile-bg` is translucent by
+    // default; and the icons fade on `opacity` rather than through `colorize`, which the renderer
+    // caches per item as its own texture, so a brush moving per frame re-renders it per frame.
     in property <float> fade: 1.0;
 
-    // The one question the tile asks, stated once — the five fallback branches below each
-    // used to spell its negation.
+    // The one question the tile asks, stated once — the six fallback branches each spelled its
+    // negation before.
     property <bool> shows-cover: root.has-cover && root.cover.width > 0;
 
     width: tile-size;
@@ -57,8 +45,7 @@ export component ArtworkImage inherits Rectangle {
     clip: true;
 
     if root.shows-cover: Image {
-        // Derived from the animating source, so size and centring track per frame with
-        // no phase lag.
+        // Derived from the animating source, so size and centring track per frame with no lag.
         width: parent.width * root.anim-scale;
         height: parent.height * root.anim-scale;
         x: (parent.width - self.width) / 2;
@@ -68,13 +55,10 @@ export component ArtworkImage inherits Rectangle {
         opacity: root.fade;
     }
 
-    // **An SVG `Image`, not a Material Symbols glyph.** A glyph scales from its
-    // text-metrics origin and isn't centred within its advance box, so scaling
-    // `font-size` for the hover zoom drifts it sideways; an `Image` scales its *content*
-    // to fill the box, so it zooms from the true geometric centre.
-    //
-    // One `if` per name, because Slint can't compose an `@image-url` from a runtime
-    // string — resources are resolved at codegen.
+    // **An SVG `Image`, not a Material Symbols glyph.** A glyph scales from its text-metrics origin
+    // and isn't centred within its advance box, so scaling `font-size` for the hover zoom drifts it
+    // sideways; an `Image` scales its *content* to fill the box. One `if` per name, because Slint
+    // can't compose an `@image-url` from a runtime string — resources resolve at codegen.
     if !root.shows-cover && root.fallback-icon == "music-note": Image {
         source: @image-url("../assets/icons/music-note.svg");
         colorize: root.tile-icon-color;

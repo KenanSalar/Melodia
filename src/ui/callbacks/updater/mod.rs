@@ -102,7 +102,9 @@ pub fn wire(
             }
             let state_for_disk = state.clone();
             state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::updates::set_skipped_release(&state_for_disk, version) {
+                if let Err(e) =
+                    library::settings::updates::set_skipped_release(&state_for_disk, version)
+                {
                     log::warn!("updater: set_skipped_release: {e}");
                 }
             });
@@ -125,7 +127,9 @@ pub fn wire(
         updater.on_auto_check_changed(move |on| {
             let state_for_disk = state.clone();
             state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::updates::set_auto_check_enabled(&state_for_disk, on) {
+                if let Err(e) =
+                    library::settings::updates::set_auto_check_enabled(&state_for_disk, on)
+                {
                     log::warn!("updater: set_auto_check_enabled: {e}");
                 }
             });

@@ -37,10 +37,7 @@ pub async fn import_files_to_library(
     let mut valid_paths: Vec<String> = Vec::with_capacity(file_paths.len());
     for file_path in file_paths {
         let path = PathBuf::from(file_path);
-        let is_audio = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(is_audio_extension);
+        let is_audio = path.extension().and_then(|e| e.to_str()).is_some_and(is_audio_extension);
         if !is_audio {
             failed_paths.push(file_path.clone());
             continue;
@@ -64,11 +61,8 @@ pub async fn import_files_to_library(
     let existing_map = queries::track::get_track_ids_by_paths(&state.db, &valid_paths).await?;
     let mut all_track_ids: Vec<i64> = existing_map.values().copied().collect();
 
-    let new_paths: Vec<PathBuf> = valid_paths
-        .iter()
-        .filter(|p| !existing_map.contains_key(*p))
-        .map(PathBuf::from)
-        .collect();
+    let new_paths: Vec<PathBuf> =
+        valid_paths.iter().filter(|p| !existing_map.contains_key(*p)).map(PathBuf::from).collect();
 
     let mut imported_count: u32 = 0;
 

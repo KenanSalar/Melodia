@@ -5,50 +5,41 @@ use std::path::{Path, PathBuf};
 use super::redact_home;
 use super::{describe, redact_prefix, undeleted_exe};
 use crate::error::AppError;
-use crate::test_support::{REPO_ROOT, SRC_DIR, font_sources, rel_path, stripped_sources};
 #[cfg(unix)]
 use crate::test_support::with_env_var;
+use crate::test_support::{REPO_ROOT, SRC_DIR, font_sources, rel_path, stripped_sources};
 
-/// A Windows home directory, spelled the way `Path::display` spells it. The
-/// resolution used to go through `$HOME`, which Windows does not set — so every
-/// path in a crash report and in the bundle a user attaches to a public issue
-/// shipped the account name verbatim. Nothing on a Linux runner can exercise
-/// `dirs::home_dir`'s Windows arm, so the *shape* is pinned here instead.
+/// A Windows home directory, spelled the way `Path::display` spells it. Nothing on a Linux runner
+/// can exercise `dirs::home_dir`'s Windows arm, so the *shape* is pinned here instead.
 #[test]
 fn a_windows_home_is_redacted_like_a_unix_one() {
-    let redacted = redact_prefix(
-        r"WARN scan failed for C:\Users\Alice\Music\x.flac",
-        r"C:\Users\Alice",
-    );
+    let redacted =
+        redact_prefix(r"WARN scan failed for C:\Users\Alice\Music\x.flac", r"C:\Users\Alice");
 
     assert_eq!(redacted, r"WARN scan failed for ~\Music\x.flac");
 }
 
-/// Every occurrence, not just the first: one log line can name a source path and
-/// a destination, and a backtrace names the home once per frame.
+/// Every occurrence, not just the first: one log line can name a source path and a destination,
+/// and a backtrace names the home once per frame.
 #[test]
 fn every_occurrence_goes() {
-    let redacted = redact_prefix(
-        "moved /home/alice/a.flac to /home/alice/b.flac",
-        "/home/alice",
-    );
+    let redacted = redact_prefix("moved /home/alice/a.flac to /home/alice/b.flac", "/home/alice");
 
     assert_eq!(redacted, "moved ~/a.flac to ~/b.flac");
 }
 
-/// The common case is a line with no home in it at all, and it must not
-/// allocate a copy of every log record on the way past.
+/// The common case is a line with no home in it at all, and it must not allocate a copy of every
+/// log record on the way past.
 #[test]
 fn text_without_the_home_is_borrowed() {
     let borrowed = redact_prefix("INFO Melodia starting", "/home/alice");
     assert!(matches!(borrowed, Cow::Borrowed(_)));
 }
 
-/// The Unix half of the resolution, which is what the crash-report and
-/// diagnostics tests lean on: `dirs::home_dir` reads `$HOME` before it falls
-/// back to the password database. Gated, because that is exactly the arm
-/// Windows doesn't have — `known_folder_profile` ignores the variable — and the
-/// point of the whole change is that the two platforms resolve differently.
+/// The Unix half of the resolution: `dirs::home_dir` reads `$HOME` before it falls back to the
+/// password database. Gated, because that is exactly the arm Windows doesn't have —
+/// `known_folder_profile` ignores the variable, and the two platforms resolving differently is the
+/// point.
 #[cfg(unix)]
 #[test]
 fn the_home_directory_comes_from_the_environment_on_unix() {
@@ -59,10 +50,9 @@ fn the_home_directory_comes_from_the_environment_on_unix() {
     assert_eq!(redacted, "~/Music/x.flac");
 }
 
-/// Every process asks for its own path at least once a run, and almost none of
-/// them is running from an unlinked file — so the suffix test has to come before
-/// the filesystem, not after it. Counted rather than asserted on the result,
-/// since returning the path unchanged is what *both* orderings do.
+/// Every process asks for its own path at least once a run, and almost none of them is running
+/// from an unlinked file — so the suffix test has to come before the filesystem. Counted rather
+/// than asserted on the result, since returning the path unchanged is what *both* orderings do.
 #[test]
 fn a_path_without_the_marker_costs_no_filesystem_question() {
     let asked = std::cell::Cell::new(0_u32);
@@ -77,10 +67,9 @@ fn a_path_without_the_marker_costs_no_filesystem_question() {
     assert_eq!(asked.get(), 0);
 }
 
-/// A file genuinely named `… (deleted)` is not this bug, and redirecting it to a
-/// sibling would be a worse failure than the one being fixed — silently running
-/// a different binary. The live-file guard is the only thing separating the two
-/// cases, both of which end in the marker.
+/// A file genuinely named `… (deleted)` is not this bug, and redirecting it to a sibling would be
+/// a worse failure than the one being fixed — silently running a different binary. The live-file
+/// guard is the only thing separating the two cases, both of which end in the marker.
 #[test]
 fn a_live_file_named_deleted_keeps_its_own_path() {
     let odd = PathBuf::from("/srv/builds/Melodia (deleted)");
@@ -91,25 +80,20 @@ fn a_live_file_named_deleted_keeps_its_own_path() {
     assert_eq!(resolved, odd);
 }
 
-/// The case this exists for: a package upgrade (or a cargo re-uplift) unlinked
-/// the running binary and put its replacement at the same path. Resolving to
-/// that replacement is what makes the respawn relaunch what the user now has
-/// installed rather than dying.
+/// The case this exists for: a package upgrade (or a cargo re-uplift) unlinked the running binary
+/// and put its replacement at the same path. Resolving to that replacement is what makes the
+/// respawn relaunch what the user now has installed rather than dying.
 #[test]
 fn an_unlinked_binary_resolves_to_the_file_that_replaced_it() {
     let replacement = Path::new("/usr/bin/Melodia");
 
-    let resolved = undeleted_exe(
-        PathBuf::from("/usr/bin/Melodia (deleted)"),
-        |p| p == replacement,
-    );
+    let resolved = undeleted_exe(PathBuf::from("/usr/bin/Melodia (deleted)"), |p| p == replacement);
 
     assert_eq!(resolved, replacement);
 }
 
-/// Nothing at either path — the binary was uninstalled rather than replaced.
-/// Handing back the kernel's own string keeps the caller's error report honest
-/// about what it was told.
+/// Nothing at either path — the binary was uninstalled rather than replaced. Handing back the
+/// kernel's own string keeps the caller's error report honest about what it was told.
 #[test]
 fn an_unresolvable_marker_comes_back_verbatim() {
     let reported = PathBuf::from("/usr/bin/Melodia (deleted)");
@@ -119,23 +103,21 @@ fn an_unresolvable_marker_comes_back_verbatim() {
     assert_eq!(resolved, reported);
 }
 
-/// The raw call, in the one spelling that can't be dodged: every path form has to
-/// name the module (`std::env::current_exe`, or `env::current_exe` under a
-/// `use std::env`). The evasion left is a `use std::env::current_exe` and a bare
-/// call — which reads identically to the helper at the call site, and is the same
-/// hole `ui::file_dialog`'s pin documents for a renaming `use`.
+/// The raw call, in the one spelling that can't be dodged: every path form has to name the module
+/// (`std::env::current_exe`, or `env::current_exe` under a `use std::env`). The evasion left is a
+/// `use std::env::current_exe` and a bare call, the same hole `ui::file_dialog`'s pin documents
+/// for a renaming `use`.
 const RAW_CALL: &str = "env::current_exe";
 
-/// The files that may spell it, and **how many times each**. A count rather than a
-/// file-level pass, because `desktop_integration` is exactly where a *second* raw
-/// call would be the bug this guards — it is the module that writes the `Exec=`
-/// line — so forgiving the whole file would pre-authorise the regression. Paths
-/// are relative to [`SRC_DIR`].
+/// The files that may spell it, and **how many times each**. A count rather than a file-level
+/// pass, because `desktop_integration` is exactly where a *second* raw call would be the bug this
+/// guards — it is the module that writes the `Exec=` line — so forgiving the whole file would
+/// pre-authorise the regression. Paths are relative to [`SRC_DIR`].
 const EXEMPT: [(&str, usize); 3] = [
     // The helper itself.
     ("services/mod.rs", 1),
-    // `is_dev_build`, the one sanctioned reader: it takes `parent()/parent()` and
-    // the marker lands on the file name, so it reaches nothing that fn looks at.
+    // `is_dev_build`, the one sanctioned reader: it takes `parent()/parent()` and the marker
+    // lands on the file name, so it reaches nothing that fn looks at.
     ("services/desktop_integration.rs", 1),
     // This pin, which has to spell the needle to grep for it.
     ("services/tests/mod_tests.rs", 1),
@@ -144,19 +126,15 @@ const EXEMPT: [(&str, usize); 3] = [
 /// A floor, so a walk that silently found nothing can't pass vacuously.
 const MIN_SOURCES: usize = 200;
 
-/// A test comparing `install_target()` against `services::current_exe()` cannot
-/// fail: with no marker in the test process the two agree, so it passes just as
-/// well against the raw call it exists to rule out. The routing is only checkable
-/// from the corpus — which is the right shape anyway, since what this guards is a
-/// *next* call site rather than any existing one, and a marked path is unreachable
-/// on any machine a reviewer runs the suite on.
+/// A test comparing `install_target()` against `services::current_exe()` cannot fail: with no
+/// marker in the test process the two agree, so it passes just as well against the raw call it
+/// exists to rule out. The routing is only checkable from the corpus, and what this guards is a
+/// *next* call site rather than any existing one.
 ///
-/// Its reach is [`SRC_DIR`], which is where a call that matters can live — a
-/// binary path is executed, installed to or written down by the app, not by
-/// `tests/` or a build script. Two seams it does not cover, both shared with the
-/// tree's other corpus pins: `strip_line_comments` handles `//` and not `/* */`,
-/// so a block comment naming the call in a non-exempt file would read as one, and
-/// the needle is a substring rather than a parse.
+/// Its reach is [`SRC_DIR`], where a call that matters can live — a binary path is executed,
+/// installed to or written down by the app, not by `tests/` or a build script. Two seams it does
+/// not cover, both shared with the tree's other corpus pins: `strip_line_comments` handles `//`
+/// and not `/* */`, and the needle is a substring rather than a parse.
 #[test]
 fn nothing_outside_the_helper_asks_the_os_for_the_binary_path() {
     let mut raw = Vec::new();
@@ -192,13 +170,86 @@ fn nothing_outside_the_helper_asks_the_os_for_the_binary_path() {
     );
 }
 
-/// The two `Display` shapes in this tree, which is what makes `describe` reachable
-/// without knowing which one is in hand. `Network` names an operation and leaves
-/// the cause on `.source()`, so the walk is the whole point; `Io` is
-/// `#[error("IO error: {0}")]` over the field `#[from]` also makes the source, so
-/// a walk that appended unconditionally would print it twice — and sqlx nests that
-/// same shape, which is how one constraint failure reached a log line three times
-/// over.
+/// The setters that spell a thread name: `std::thread::Builder`'s, and the fixed-string form
+/// tokio's and rayon's builders share. Anchored on the setter rather than on `Builder::new()`,
+/// which two of the call sites leave on the line above.
+const NAME_SETTERS: [&str; 2] = [".name(\"", ".thread_name(\""];
+
+/// The setter's closure form, which computes a name per thread instead of spelling one.
+const RUNTIME_SETTER: &str = ".thread_name(|";
+
+/// `TASK_COMM_LEN` less its NUL. Written out rather than taken from `libc`, which doesn't export
+/// it, and which has nothing to export on the platforms that impose no cap.
+const MAX_THREAD_NAME: usize = 15;
+
+/// A floor, so a walk that silently found nothing can't pass vacuously.
+const MIN_THREAD_NAMES: usize = 5;
+
+/// The files that compute a name rather than spelling one, where reading the literal measures
+/// nothing. Paths are relative to [`SRC_DIR`].
+const RUNTIME_NAMED: [&str; 2] = [
+    // `cover-decode-{i}`, whose budget is the prefix plus the widest index the decode pool's
+    // clamp can reach; raising that clamp is a thread-name change.
+    "media/cover_thumbs.rs",
+    // This pin, which has to spell the needle to grep for it.
+    "services/tests/mod_tests.rs",
+];
+
+/// Linux keeps `TASK_COMM_LEN` bytes of a thread name and std truncates ahead of it rather than
+/// erroring, so an over-long name compiles, runs, and is wrong only in `htop`, `perf` and
+/// `/proc`: the three places the name exists for, and none of them a place review looks.
+///
+/// Checkable from the corpus and nowhere else. The truncation happens inside the OS and leaves no
+/// value behind, `Thread::name()` still handing back the full string.
+///
+/// Three seams. Two are shared with the pin above: `strip_line_comments` handles `//` and not
+/// `/* */`, and the needle is a substring rather than a parse, so an unrelated builder taking a
+/// short literal name would be measured too. That one is harmless while it fits the budget, and a
+/// fair prompt to narrow the needle if one ever doesn't. The third is this pin's own:
+/// [`RUNTIME_NAMED`] ledgers the computed form of `thread_name`, but `Builder::name` takes any
+/// `Into<String>`, so a `format!`ed std thread name matches neither needle and goes unmeasured.
+#[test]
+fn no_thread_name_outgrows_what_the_kernel_keeps() {
+    let mut names = Vec::new();
+    let mut computed = Vec::new();
+
+    for (path, src) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
+        for setter in NAME_SETTERS {
+            for start in src.match_indices(setter).map(|(at, _)| at + setter.len()) {
+                if let Some(len) = src[start..].find('"') {
+                    names.push((path.clone(), src[start..start + len].to_owned()));
+                }
+            }
+        }
+        if src.contains(RUNTIME_SETTER) {
+            computed.push(path);
+        }
+    }
+
+    let docked: Vec<_> = names.iter().filter(|(_, name)| name.len() > MAX_THREAD_NAME).collect();
+    assert!(
+        docked.is_empty(),
+        "{docked:?} run past the {MAX_THREAD_NAME} bytes Linux keeps, so each arrives docked in \
+         every tool that reads it. Shorten them"
+    );
+    assert!(
+        names.len() >= MIN_THREAD_NAMES,
+        "only {} thread names found; a renamed setter empties this walk with nothing to see",
+        names.len()
+    );
+
+    computed.sort();
+    assert_eq!(
+        computed, RUNTIME_NAMED,
+        "the set of files computing a thread name has moved; each one owes its own argument for \
+         why the widest name it can produce still fits in {MAX_THREAD_NAME} bytes"
+    );
+}
+
+/// The two `Display` shapes in this tree, which is what makes `describe` reachable without knowing
+/// which one is in hand. `Network` names an operation and leaves the cause on `.source()`, so the
+/// walk is the whole point; `Io` is `#[error("IO error: {0}")]` over the field `#[from]` also
+/// makes the source, so an unconditional walk would print it twice — and sqlx nests that shape.
 #[test]
 fn a_cause_is_appended_once_and_never_repeated() {
     let denied = || std::io::Error::from(std::io::ErrorKind::PermissionDenied);
@@ -224,50 +275,40 @@ const ATTRIBUTION: &str = include_str!("../../../licenses/ATTRIBUTION.txt");
 
 /// The floor for the font walk: the five faces that ship today.
 ///
-/// A floor rather than an exact set, and the asymmetry is the point — it blocks
-/// the silent *loss* the walk can't otherwise see while still permitting the
-/// *addition* this pin exists to catch. Retiring a face is a deliberate act that
-/// moves this number; a subdirectory dropping out of the walk is not, and three
-/// of the five sit in one. Tight rather than loose, unlike the source-tree floors
-/// in `test_support`: the corpus is five files that change about once a release
-/// cycle, so a number that only catches *most* of a loss buys nothing.
+/// A floor rather than an exact set, and the asymmetry is the point: it blocks the silent *loss*
+/// the walk can't see while permitting the *addition* the pin exists to catch. Retiring a face
+/// moves this number deliberately; a subdirectory dropping out of the walk does not, and three of
+/// the five sit in one. Tight rather than loose, unlike `test_support`'s source-tree floors — five
+/// files changing once a release cycle, where catching *most* of a loss buys nothing.
 ///
-/// Here rather than beside `FONTS_DIR`, which is the opposite placement from those
-/// three. What put them there was duplication — four pins walked one corpus and
-/// each carried its own copy of the number. This has one caller, and being tight
-/// it is an assertion about the corpus rather than a vacuity guard on the walk, so
-/// it belongs with the pin that makes the claim. Move it the day a second pin
+/// Beside the pin rather than `FONTS_DIR` because it has one caller and, being tight, asserts
+/// about the corpus rather than guarding the walk against vacuity. Move it the day a second pin
 /// walks the font tree.
 const MIN_FONTS: usize = 5;
 
-/// A face imported by a `.slint` file is `include_bytes!`d into the binary, so it
-/// starts being redistributed by all five package formats the moment that import
-/// lands — and by the git tree immediately. Neither licence we carry is satisfied
-/// by the font's own name table alone: Apache-2.0 §4(a) wants a copy of the
-/// licence delivered to recipients, and Material Symbols carries no licence
-/// string in its name table at all.
+/// A face imported by a `.slint` file is `include_bytes!`d into the binary, so it starts being
+/// redistributed by all five package formats the moment that import lands — and by the git tree
+/// immediately. Neither licence we carry is satisfied by the font's own name table alone:
+/// Apache-2.0 §4(a) wants a copy of the licence delivered to recipients, and Material Symbols
+/// carries no licence string in its name table at all.
 ///
-/// Asks the *directory* rather than the imports, which over-approximates on
-/// purpose: a face committed under `melodia-ui/ui/assets/fonts/` is redistributed
-/// by the repo whether or not anything imports it yet, and the import is the edit
-/// most likely to arrive in a later commit than the file. [`font_sources`] holds
-/// the one carve-out that needs one.
+/// Asks the *directory* rather than the imports, over-approximating on purpose: a committed face
+/// is redistributed by the repo whether or not anything imports it yet. [`font_sources`] holds the
+/// one carve-out.
 ///
-/// Keyed on each face's repo-relative path rather than on a family name, because
-/// the family is not derivable from the file: `MaterialSymbolsRoundedFilled.ttf`
-/// declares "Material Symbols Rounded Filled", and no split of the stem gets there
-/// without knowing the answer. The path is exact, and the `Files:` list it checks
-/// is what a packager reads anyway.
+/// Keyed on the repo-relative path, not a family name, the family not being derivable from the
+/// file — `MaterialSymbolsRoundedFilled.ttf` declares "Material Symbols Rounded Filled" and no
+/// split of the stem gets there without already knowing.
 ///
-/// **Walk, don't list.** A sixth face is precisely the regression, and a fixed
-/// list of the five is what it walks past.
+/// **Walk, don't list.** A sixth face is precisely the regression, and a fixed list of the five is
+/// what it walks past.
 #[test]
 fn every_bundled_font_is_named_in_the_attribution() {
     let (fonts, unreadable) = font_sources();
     assert!(unreadable.is_empty(), "unreadable font directories: {unreadable:?}");
     assert!(
         fonts.len() >= MIN_FONTS,
-        "only {} .ttf files found under the font tree — a dropped subdirectory \
+        "only {} faces found under the font tree — a dropped subdirectory \
          silently narrows this pin to whatever is left",
         fonts.len()
     );
@@ -290,16 +331,13 @@ fn every_bundled_font_is_named_in_the_attribution() {
 
 /// Which packaging file carries `licenses/`, and the spelling that does it.
 ///
-/// The needle is the mechanism rather than the word: every one of these files can
-/// mention the directory in a comment, and a pin that accepts a mention is a pin
-/// that goes green on a format which stopped shipping it.
+/// The needle is the mechanism rather than the word: every one of these files can mention the
+/// directory in a comment, and a pin that accepts a mention goes green on a format which stopped
+/// shipping it.
 ///
-/// The RPM is the one where staging and shipping are separate statements, so the
-/// needle has to be the second. `build-rpm.sh` copies `licenses/` into the source
-/// tarball and `%license` is what pulls it out of the unpacked tree into the
-/// package; drop the `%files` line and the staged copy simply goes unread, in the
-/// *build* directory, which `check-files` never looks at — no warning, no package,
-/// and a pin on the `cp` still green.
+/// The RPM stages and ships in separate statements, so the needle has to be the second: drop the
+/// `%files` line and the staged copy goes unread in the *build* directory, which `check-files`
+/// never looks at — no warning, and a pin on the `cp` still green.
 const LICENSE_SHIPPERS: [(&str, &str); 5] = [
     ("scripts/build-rpm.sh", "%license LICENSE licenses/"),
     ("Cargo.toml", "[\"licenses/*\""),
@@ -308,22 +346,19 @@ const LICENSE_SHIPPERS: [(&str, &str); 5] = [
     ("wix/main.wxs", "$(var.RepoRoot)\\licenses\\"),
 ];
 
-/// Five formats built by five unrelated toolchains, four of which no reviewer on
-/// this machine can run and one of which (the MSI) no Linux runner can build at
-/// all. That is exactly the shape where one format quietly stops shipping the
-/// licence text and nothing says so until a distro packager files it.
+/// Five formats built by five unrelated toolchains, four of which no reviewer on this machine can
+/// run and one of which (the MSI) no Linux runner can build at all. That is exactly the shape
+/// where one format quietly stops shipping the licence text and nothing says so until a distro
+/// packager files it.
 ///
-/// A `%license` line, an asset triple, a `cp` and an MSI `File` have nothing in
-/// common but their effect, so this is a named list rather than a walk — the
-/// opposite call from the font pin above, and for the opposite reason: the set of
-/// package formats is closed and changing it is a deliberate act, where the set of
-/// fonts is open and adding to it is not.
+/// A `%license` line, an asset triple, a `cp` and an MSI `File` share nothing but their effect, so
+/// a named list rather than a walk — the opposite call from the font pin above and for the
+/// opposite reason: the set of formats is closed and changing it is deliberate, where the set of
+/// fonts is open.
 ///
-/// `.github/workflows/release.yml` is why that file is no longer on
-/// `pr-validation.yml`'s skip denylist. It was excluded there on the grounds that
-/// it compiles nothing, which is true and beside the point now that it is an input
-/// to this test: a PR touching only that file skipped the `test` job, and the gate
-/// counts `skipped` as a pass.
+/// Naming `release.yml` is also why it must stay off `pr-validation.yml`'s skip denylist: it
+/// compiles nothing, but a PR touching only that file would skip `test`, and the gate counts
+/// `skipped` as a pass.
 #[test]
 fn every_package_format_ships_the_licenses_dir() {
     let root = Path::new(REPO_ROOT);
@@ -351,14 +386,12 @@ fn every_package_format_ships_the_licenses_dir() {
 
 /// `src` with every `<!-- … -->` block removed.
 ///
-/// `test_support::strip_line_comments`' argument, in the one markup language that
-/// doesn't use `//`: prose about the markup reads exactly like the markup to a pin
-/// that greps for a construct. Kept local rather than shared because it has one
-/// caller and `main.wxs` is the only XML in the tree a pin reads.
+/// `test_support::strip_line_comments`' argument, in the one markup language that doesn't use
+/// `//`. Kept local rather than shared because it has one caller and `main.wxs` is the only XML in
+/// the tree a pin reads.
 ///
-/// An unterminated `<!--` swallows the rest of the file, which is the safe
-/// direction — the pin then finds nothing and fails, where keeping the tail would
-/// silently search markup the compiler never sees either.
+/// An unterminated `<!--` swallows the rest of the file, which is the safe direction — the pin
+/// then finds nothing and fails.
 fn strip_xml_comments(src: &str) -> String {
     let mut out = String::with_capacity(src.len());
     let mut rest = src;
@@ -373,24 +406,19 @@ fn strip_xml_comments(src: &str) -> String {
     out
 }
 
-/// The sibling above catches `main.wxs` dropping `licenses/` altogether. This
-/// catches one file going missing from it, which is the likelier half and the one
-/// no reviewer here can see: the other four formats glob the directory, so a
-/// fourth licence text ships in all of them for free and is absent from exactly
-/// the format no Linux runner can build.
+/// The sibling above catches `main.wxs` dropping `licenses/` altogether. This catches one file
+/// going missing from it, which is the likelier half and the one no reviewer here can see: the
+/// other four formats glob the directory, so a fourth licence text ships in all of them for free
+/// and is absent from exactly the format no Linux runner can build.
 ///
-/// A walk rather than a list, which is [`every_bundled_font_is_named_in_the_attribution`]'s
-/// call and not [`every_package_format_ships_the_licenses_dir`]'s — the set of
-/// package formats is closed, the set of licence texts is not, and an addition to
-/// an open set is precisely what a fixed list walks past.
+/// A walk rather than a list, which is [`every_bundled_font_is_named_in_the_attribution`]'s call
+/// and not [`every_package_format_ships_the_licenses_dir`]'s — the set of licence texts is open,
+/// and an addition to an open set is precisely what a fixed list walks past.
 ///
-/// Keyed on the file *name* rather than the `Source=` path, so it holds whichever
-/// way the attribute is spelled — the `$(var.RepoRoot)` prefix is the sibling's
-/// needle and this one has no opinion about it. Which is only safe **because the
-/// comments come out first**: `main.wxs`'s own comment names all three files while
-/// explaining why each needs a `<File>`, so a needle run over the raw source
-/// survives deleting the element it is looking for. Verified by deleting one — the
-/// pin passed until [`strip_xml_comments`] went in.
+/// Keyed on the file *name* rather than the `Source=` path, so it holds whichever way the
+/// attribute is spelled. Which is only safe **because the comments come out first**: `main.wxs`'s
+/// own comment names all three files while explaining why each needs a `<File>`, so a needle run
+/// over the raw source survives deleting the element it is looking for.
 #[test]
 fn the_msi_names_every_licence_file() {
     let root = Path::new(REPO_ROOT);
@@ -421,12 +449,51 @@ fn the_msi_names_every_licence_file() {
     );
 }
 
-/// `licenses/Vazirmatn-OFL-1.1.txt` and the root `LICENSE`, restated as a DEP-5
-/// field body: one leading space per line, trailing whitespace dropped, and a
-/// blank line written ` .`.
+/// The two keys an extension has to appear under, and the reason the pin asks for both rather
+/// than for the name anywhere in the file: they feed different lists. `SupportedTypes` is the
+/// "Open with" menu, `FileAssociations` is what the Default apps page reads, and an extension
+/// written to one of them is offered in exactly half the places a user goes looking.
+const MSI_EXTENSION_KEYS: [&str; 2] = [
+    r"Software\Classes\Applications\Melodia.exe\SupportedTypes",
+    r"Software\Melodia\Capabilities\FileAssociations",
+];
+
+/// Windows offers a file type only where `main.wxs` writes the rows for it, and there is no glob
+/// there any more than for the licences — so a new entry in [`crate::media::AUDIO_EXTENSIONS`]
+/// is one the app imports happily and Explorer never offers.
 ///
-/// The one transformation, so the pin below is its own specification rather than
-/// a second opinion about it.
+/// A walk rather than a list, and comment-stripped first, both for
+/// [`the_msi_names_every_licence_file`]'s reasons.
+#[test]
+fn the_msi_offers_every_audio_extension() {
+    let raw =
+        std::fs::read_to_string(Path::new(REPO_ROOT).join("wix/main.wxs")).unwrap_or_default();
+    assert!(!raw.is_empty(), "wix/main.wxs won't read — did the MSI source move?");
+    let wxs = strip_xml_comments(&raw);
+
+    let mut unoffered = Vec::new();
+    for ext in crate::media::AUDIO_EXTENSIONS {
+        for key in MSI_EXTENSION_KEYS {
+            if !wxs.contains(&format!("Key=\"{key}\" Name=\".{ext}\"")) {
+                unoffered.push(format!(".{ext} under {key}"));
+            }
+        }
+    }
+    assert!(
+        unoffered.is_empty(),
+        "{} are scanned into the library and written nowhere in wix/main.wxs, so Windows \
+         leaves Melodia out of Open with, out of Default apps, or out of both. Each extension \
+         owes a `<RegistryValue>` under each of the two keys. The needle is one literal, \
+         `Key=\"…\" Name=\".ext\"`, so every row failing at once means the attributes were \
+         reordered, not deleted.",
+        unoffered.join(", ")
+    );
+}
+
+/// `licenses/Vazirmatn-OFL-1.1.txt` and the root `LICENSE`, restated as a DEP-5 field body: one
+/// leading space per line, trailing whitespace dropped, and a blank line written ` .`.
+///
+/// The one transformation, so the pin below is its own specification rather than a second opinion.
 fn as_dep5_field_body(text: &str) -> String {
     let mut out = String::with_capacity(text.len() + text.len() / 40);
     for line in text.lines() {
@@ -442,28 +509,23 @@ fn as_dep5_field_body(text: &str) -> String {
     out
 }
 
-/// `usr/share/doc/melodia/copyright` is the first thing a Debian packager reads,
-/// and cargo-deb generates it from `license` + `authors` unless handed a file
-/// that already opens with DEP-5 keys — which is to say the default states the
-/// whole package is AGPL-3.0-or-later by one author, and the bundled fonts and
-/// the vendored winit both falsify that.
+/// `usr/share/doc/melodia/copyright` is the first thing a Debian packager reads, and cargo-deb
+/// generates it from `license` + `authors` unless handed a file that already opens with DEP-5
+/// keys — which is to say the default states the whole package is AGPL-3.0-or-later by one author,
+/// and the bundled fonts and the vendored winit both falsify that.
 ///
-/// Debian Policy 12.5 lets a package *reference* `/usr/share/common-licenses`
-/// only for the licences shipped there. Apache-2.0 is one; AGPL-3 and OFL-1.1
-/// are not, so both are quoted in full — and a quoted licence is a second copy
-/// that can drift from the one the package actually ships. This re-derives both
-/// from their sources rather than trusting the copy.
+/// Debian Policy 12.5 lets a package *reference* `/usr/share/common-licenses` only for the
+/// licences shipped there. Apache-2.0 is one; AGPL-3 and OFL-1.1 are not, so both are quoted in
+/// full — and a quoted licence is a second copy that can drift from the one the package actually
+/// ships. This re-derives both from their sources rather than trusting the copy.
 ///
-/// `LICENSE` is the second file this suite reads that used to sit on
-/// `pr-validation.yml`'s skip denylist — see
-/// [`every_package_format_ships_the_licenses_dir`] for the argument. An edit to
-/// the very file this drift check is anchored on was the one edit it could not
-/// run for.
+/// `LICENSE` is the second file this suite reads that must stay off `pr-validation.yml`'s skip
+/// denylist — see [`every_package_format_ships_the_licenses_dir`].
 #[test]
 fn the_debian_copyright_quotes_the_licences_it_ships() {
     let root = Path::new(REPO_ROOT);
-    let copyright = std::fs::read_to_string(root.join("packaging/debian-copyright"))
-        .unwrap_or_default();
+    let copyright =
+        std::fs::read_to_string(root.join("packaging/debian-copyright")).unwrap_or_default();
 
     assert!(
         !copyright.is_empty(),
@@ -478,7 +540,10 @@ fn the_debian_copyright_quotes_the_licences_it_ships() {
          second, contradictory declaration"
     );
 
-    for (source, licence) in [("LICENSE", "AGPL-3.0-or-later"), ("licenses/Vazirmatn-OFL-1.1.txt", "OFL-1.1")] {
+    for (source, licence) in [
+        ("LICENSE", "AGPL-3.0-or-later"),
+        ("licenses/Vazirmatn-OFL-1.1.txt", "OFL-1.1"),
+    ] {
         let text = std::fs::read_to_string(root.join(source)).unwrap_or_default();
         assert!(!text.is_empty(), "{source} won't read");
         assert!(
@@ -496,10 +561,9 @@ fn the_debian_copyright_quotes_the_licences_it_ships() {
     );
 }
 
-/// A truncated or placeholder copy satisfies every path check above while
-/// delivering nothing, and the two texts are large enough that no reviewer diffs
-/// them against upstream. One phrase apiece, from deep enough in each to require
-/// the body rather than the header.
+/// A truncated or placeholder copy satisfies every path check above while delivering nothing, and
+/// the two texts are large enough that no reviewer diffs them against upstream. One phrase apiece,
+/// from deep enough in each to require the body rather than the header.
 #[test]
 fn the_bundled_licence_texts_are_the_real_ones() {
     let root = Path::new(REPO_ROOT);

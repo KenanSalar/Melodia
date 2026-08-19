@@ -3,21 +3,22 @@
 //! ranking tier is exercised independently — a single regression in the
 //! function body would flip the corresponding tier's expected winner.
 
-#![allow(clippy::expect_used, clippy::unwrap_used)]
+#![expect(
+    clippy::expect_used,
+    reason = "a missing Top Result is the assertion; the message names the tier that failed"
+)]
 
 use super::{TopKind, TopSubtitle, compute_top_result};
-use crate::library::search::SearchResults;
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
 use crate::entities::genre::GenreStats;
+use crate::library::search::SearchResults;
 
-const CARD: &str =
-    include_str!("../../../../melodia-ui/ui/views/search/top-result-card.slint");
+const CARD: &str = include_str!("../../../../melodia-ui/ui/views/search/top-result-card.slint");
 const ROUTER: &str = include_str!("../callbacks/results.rs");
 const ARTWORK_IMAGE: &str =
     include_str!("../../../../melodia-ui/ui/components/artwork-image.slint");
-const GENRE_GRID: &str =
-    include_str!("../../../../melodia-ui/ui/components/grid/genre-grid.slint");
+const GENRE_GRID: &str = include_str!("../../../../melodia-ui/ui/components/grid/genre-grid.slint");
 
 /// Collapse every run of whitespace so a `.slint` binding can be matched
 /// as one string regardless of how it happens to be wrapped.
@@ -113,10 +114,7 @@ fn empty_results_returns_none() {
 fn tier_1_exact_album_wins_over_exact_artist() {
     // Both an exact-album and an exact-artist match are present.
     // Tier 1 (album) should beat tier 2 (artist).
-    let r = results(
-        vec![album(10, "Metal")],
-        vec![artist(20, "Metal"), artist(21, "Metallica")],
-    );
+    let r = results(vec![album(10, "Metal")], vec![artist(20, "Metal"), artist(21, "Metallica")]);
     let top = compute_top_result(&r, "metal").expect("top result");
     assert_eq!(top.kind, TopKind::Album);
     assert_eq!(top.id, 10);
@@ -150,21 +148,12 @@ fn tier_3_exact_genre_beats_a_starts_with_album() {
 /// ...but never an exact album or artist. Genre is last in its band.
 #[test]
 fn tier_3_exact_genre_loses_to_an_exact_album_or_artist() {
-    let with_album = results_with_genres(
-        vec![album(10, "Metal")],
-        Vec::new(),
-        vec![genre(30, "Metal")],
-    );
-    assert_eq!(
-        compute_top_result(&with_album, "metal").expect("top result").kind,
-        TopKind::Album
-    );
+    let with_album =
+        results_with_genres(vec![album(10, "Metal")], Vec::new(), vec![genre(30, "Metal")]);
+    assert_eq!(compute_top_result(&with_album, "metal").expect("top result").kind, TopKind::Album);
 
-    let with_artist = results_with_genres(
-        Vec::new(),
-        vec![artist(20, "Metal")],
-        vec![genre(30, "Metal")],
-    );
+    let with_artist =
+        results_with_genres(Vec::new(), vec![artist(20, "Metal")], vec![genre(30, "Metal")]);
     assert_eq!(
         compute_top_result(&with_artist, "metal").expect("top result").kind,
         TopKind::Artist
@@ -173,10 +162,7 @@ fn tier_3_exact_genre_loses_to_an_exact_album_or_artist() {
 
 #[test]
 fn tier_4_album_starts_with_wins_when_no_exact() {
-    let r = results(
-        vec![album(10, "Metal Album")],
-        vec![artist(20, "Metallica")],
-    );
+    let r = results(vec![album(10, "Metal Album")], vec![artist(20, "Metallica")]);
     let top = compute_top_result(&r, "metal").expect("top result");
     assert_eq!(top.kind, TopKind::Album);
     assert_eq!(top.id, 10);
@@ -219,10 +205,7 @@ fn tier_7_first_album_when_no_exact_or_starts_with() {
 
 #[test]
 fn tier_8_first_artist_when_no_albums() {
-    let r = results(
-        Vec::new(),
-        vec![artist(20, "Iron Maiden"), artist(21, "Megadeth")],
-    );
+    let r = results(Vec::new(), vec![artist(20, "Iron Maiden"), artist(21, "Megadeth")]);
     let top = compute_top_result(&r, "metal").expect("top result");
     assert_eq!(top.kind, TopKind::Artist);
     assert_eq!(top.id, 20);
@@ -357,10 +340,7 @@ fn the_top_tile_matches_artwork_image_and_the_genre_grid() {
 /// being wrong rather than as a folding bug.
 #[test]
 fn an_accent_stripped_query_still_wins_the_exact_band() {
-    let r = results(
-        vec![album(1, "Debut"), album(2, "Homogenic")],
-        vec![artist(9, "Björk")],
-    );
+    let r = results(vec![album(1, "Debut"), album(2, "Homogenic")], vec![artist(9, "Björk")]);
 
     let top = compute_top_result(&r, "bjork").expect("a top result");
     assert_eq!(top.kind, TopKind::Artist, "expected the exact artist match");
@@ -388,11 +368,7 @@ fn the_prefix_band_folds_and_stays_below_the_exact_band() {
 
     // An accent-folded *exact* genre outranks an accent-folded album prefix,
     // exactly as the unaccented pair already did.
-    let both = results_with_genres(
-        vec![album(1, "Née Again")],
-        vec![],
-        vec![genre(7, "Née")],
-    );
+    let both = results_with_genres(vec![album(1, "Née Again")], vec![], vec![genre(7, "Née")]);
     let top = compute_top_result(&both, "nee").expect("a top result");
     assert_eq!(top.kind, TopKind::Genre, "exact genre must beat album prefix");
     assert_eq!(top.subtitle, TopSubtitle::TrackCount(genre(7, "Née").track_count));

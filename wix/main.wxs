@@ -106,6 +106,7 @@
             <ComponentRef Id="ThirdPartyLicenses" />
             <ComponentRef Id="binary0" />
             <ComponentRef Id="StartMenuShortcut" />
+            <ComponentRef Id="FileAssociations" />
 
             <Feature Id="Environment" Title="PATH Environment Variable" Description="Add the install location of the [ProductName] executable to the PATH system environment variable. This allows the [ProductName] executable to be called from any location." Level="1">
                 <ComponentRef Id="Path" />
@@ -278,6 +279,83 @@
                               default.
                             -->
                             <util:RestartResource Id="MelodiaProcess" ProcessName="Melodia.exe" />
+                        </Component>
+                        <!--
+                          Audio file associations, as plain RegistryValues
+                          rather than WiX's ProgId / Extension / Verb:
+                          those predate Vista, produce none of the
+                          Capabilities + RegisteredApplications keys
+                          Windows 10/11 reads for Default apps, and
+                          `Extension` claims `HKCR\.mp3`'s default
+                          outright — seizing a file type without asking.
+                          Nothing here takes a default; it makes Melodia
+                          offerable and the user picks.
+
+                          KeyPath as `Path` / `StartMenuShortcut` above.
+
+                          One ProgId across every extension rather than
+                          one apiece: the cost is a generic "Audio File" in
+                          Explorer's Type column, against a further four
+                          rows per extension all needing to stay in step
+                          with `media::AUDIO_EXTENSIONS`. The list is
+                          pinned against that constant by
+                          `services::tests::the_msi_offers_every_audio_extension`.
+                        -->
+                        <Component Id="FileAssociations" Guid="3C1F84A0-6D25-4E9B-9A73-0B5E2C8F41D7">
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Components" Name="FileAssociations" Type="integer" Value="1" KeyPath="yes" />
+
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Melodia.AssocFile.Audio" Value="Audio File" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Melodia.AssocFile.Audio\DefaultIcon" Value="[#exe0],0" Type="string" />
+                            <!--
+                              `Player` hands a whole multi-selection to one
+                              invocation; without it the shell launches one
+                              process per file and stops offering the verb
+                              past a handful.
+                            -->
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Melodia.AssocFile.Audio\shell\open" Name="MultiSelectModel" Value="Player" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Melodia.AssocFile.Audio\shell\open\command" Value="&quot;[#exe0]&quot; &quot;%1&quot;" Type="string" />
+
+                            <!-- The "Open with" route, independent of any default. -->
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe" Name="FriendlyAppName" Value="Melodia" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\shell\open\command" Value="&quot;[#exe0]&quot; &quot;%1&quot;" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".mp3" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".flac" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".m4a" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".m4b" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".aac" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".ogg" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".oga" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".wav" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".aiff" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".aif" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".aifc" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".mka" Value="" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Melodia.exe\SupportedTypes" Name=".caf" Value="" Type="string" />
+
+                            <!--
+                              ApplicationDescription is required, not
+                              decorative: without it Windows leaves the app
+                              out of the Default apps list entirely and
+                              every key below becomes unreachable.
+                            -->
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities" Name="ApplicationName" Value="Melodia" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities" Name="ApplicationDescription" Value="Cross-platform desktop music player." Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".mp3" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".flac" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".m4a" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".m4b" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".aac" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".ogg" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".oga" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".wav" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".aiff" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".aif" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".aifc" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".mka" Value="Melodia.AssocFile.Audio" Type="string" />
+                            <RegistryValue Root="HKLM" Key="Software\Melodia\Capabilities\FileAssociations" Name=".caf" Value="Melodia.AssocFile.Audio" Type="string" />
+
+                            <!-- Where Windows looks for the block above. -->
+                            <RegistryValue Root="HKLM" Key="Software\RegisteredApplications" Name="Melodia" Value="Software\Melodia\Capabilities" Type="string" />
                         </Component>
                     </Directory>
                 </Directory>

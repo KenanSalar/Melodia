@@ -158,6 +158,12 @@ export component ArtistDetailBody inherits Rectangle {
                         tl := TrackList {
                             horizontal-stretch: 1;
                             vertical-stretch: 0;
+                            // The composite's hbar takes this list's x and width, so at
+                            // the cap — where the list reaches the view's bottom edge —
+                            // it lands on the last row. The content-fit arm carries the
+                            // lane too, that arm being a hand-sum of what the list holds:
+                            // rows, header, spacing, and now the reserve.
+                            reserve-scrollbar-lane: true;
                             // **Capped at the outer viewport**: a small list keeps the
                             // content-tall layout, a large one pins to the visible region
                             // so the inner list virtualizes instead of instantiating every
@@ -167,7 +173,7 @@ export component ArtistDetailBody inherits Rectangle {
                                     * (ArtistDetail.show-artwork
                                         ? Theme.row-h
                                         : Theme.row-h-compact)
-                                    + 32px + Theme.pad-xs,
+                                    + 32px + Theme.pad-xs + Theme.scrollbar-slot,
                                 below-sv.visible-height);
 
                             rows: ArtistDetail.tracks;

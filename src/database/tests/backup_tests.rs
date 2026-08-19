@@ -57,21 +57,14 @@ async fn a_backup_round_trips_as_an_openable_database() -> Result<(), AppError> 
     assert!(wal > 32, "nothing was left in the WAL for the backup to fold in");
 
     let path = create(db.write(), &paths.backups_dir, 20_260_514_000_000).await?;
-    assert_eq!(
-        entry_names(&paths.backups_dir)?,
-        ["melodia-v20260514000000.db"],
-    );
+    assert_eq!(entry_names(&paths.backups_dir)?, ["melodia-v20260514000000.db"],);
     db.close().await;
 
     let opts =
         SqliteConnectOptions::from_str(&format!("sqlite:{}", path.display()))?.read_only(true);
-    let restored = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(opts)
-        .await?;
-    let (tracks,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks")
-        .fetch_one(&restored)
-        .await?;
+    let restored = SqlitePoolOptions::new().max_connections(1).connect_with(opts).await?;
+    let (tracks,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM tracks").fetch_one(&restored).await?;
     restored.close().await;
 
     assert_eq!(tracks, 1);
@@ -111,10 +104,7 @@ fn prune_keeps_the_newest_and_deletes_the_rest() -> Result<(), AppError> {
 
     prune(tmp.path());
 
-    assert_eq!(
-        entry_names(tmp.path())?,
-        ["melodia-v3.db", "melodia-v4.db", "melodia-v5.db"],
-    );
+    assert_eq!(entry_names(tmp.path())?, ["melodia-v3.db", "melodia-v4.db", "melodia-v5.db"],);
     Ok(())
 }
 

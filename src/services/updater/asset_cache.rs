@@ -1,25 +1,17 @@
 //! In-memory cache of the most-recently-observed `Available` asset.
 //!
-//! [`Updater.install`](crate::ui::callbacks::wire_updater) re-fetches
-//! `latest.json` to pick up the asset blob (URL + signature + size)
-//! before downloading. The re-fetch is cheap on the happy path (the
-//! cached `ETag` usually short-circuits to 304), but fails outright when
-//! the user is on a flaky network — and a failure between "user saw
-//! the Available toast" and "user clicked Install" produced a
-//! confusing `"re-fetch before install failed: …"` toast.
+//! [`Updater.install`](crate::ui::callbacks::wire_updater) re-fetches `latest.json`
+//! for the asset blob (URL + signature + size) before downloading. That is cheap on
+//! the happy path — the cached `ETag` usually 304s — but fails outright on a flaky
+//! network, and a failure between the Available toast and the Install click surfaced
+//! as a confusing re-fetch error.
 //!
-//! This cache holds the last `PlatformAsset` from a successful
-//! `Available` outcome (manual check, daily task, or the install
-//! flow's own re-fetch). `spawn_install` consults the cache as a
-//! fallback when the live re-fetch fails — the cached asset stays
-//! valid as long as the release hasn't been retracted, and the
-//! signature check downstream catches any URL drift.
-//!
-//! Lifetime: process-scoped. Cleared on `Installed` to avoid
-//! re-using a stale asset across an in-process re-check (we shouldn't
-//! be installing the same artifact twice). Never persisted to disk —
-//! `last_known_release` in settings tracks the version label for the
-//! UI, not the download target.
+//! So `spawn_install` falls back to the last `PlatformAsset` from a successful
+//! `Available` outcome: it stays valid as long as the release hasn't been retracted,
+//! and the signature check downstream catches any URL drift. Process-scoped, cleared
+//! on `Installed` so a stale asset can't survive into an in-process re-check, and
+//! never persisted — `last_known_release` tracks the version label for the UI, not
+//! the download target.
 
 use std::sync::OnceLock;
 
@@ -27,12 +19,10 @@ use parking_lot::Mutex;
 
 use super::manifest::PlatformAsset;
 
-/// The cached entry pairs the asset with the manifest version it was
-/// observed under. The version is forwarded to
-/// [`super::install::download_and_install`] for the trusted-comment
-/// cross-check in `verify_stream` — pinning the asset to its version
-/// at observation time means the fallback can't trip the cross-check
-/// just because we lost track of what version that asset belonged to.
+/// Pairs the asset with the manifest version it was observed under, which
+/// [`super::install::download_and_install`] forwards to `verify_stream`'s
+/// trusted-comment cross-check: pinning the two together at observation time is what
+/// stops the fallback tripping that check over a version it merely lost track of.
 #[derive(Debug, Clone)]
 pub struct CachedAsset {
     pub version: String,
@@ -45,24 +35,20 @@ fn slot() -> &'static Mutex<Option<CachedAsset>> {
     CACHE.get_or_init(|| Mutex::new(None))
 }
 
-/// Replace the cached asset with `(version, asset)`. Called from every
-/// place that observes a `CheckOutcome::Available` (manual check, daily
-/// task, install re-fetch's own Available branch).
+/// Replace the cached asset. Called from everything that observes a
+/// `CheckOutcome::Available` — manual check, daily task, install re-fetch.
 pub fn store(version: String, asset: PlatformAsset) {
     *slot().lock() = Some(CachedAsset { version, asset });
 }
 
-/// Return a clone of the cached entry, or `None` if nothing has been
-/// observed yet this process. The clone is cheap relative to the
-/// network round-trip it spares.
+/// A clone of the cached entry, or `None` if nothing has been observed yet this
+/// process. Cheap relative to the network round-trip it spares.
 pub fn snapshot() -> Option<CachedAsset> {
     slot().lock().clone()
 }
 
-/// Drop the cached asset. Called after a successful install so the
-/// cache can't fool a subsequent click into re-downloading the same
-/// artifact (the live re-fetch would catch this anyway, but explicit
-/// clear keeps the state machine clean).
+/// Drop the cached asset after a successful install, so a later click can't be
+/// fooled into re-downloading the same artifact.
 pub fn clear() {
     *slot().lock() = None;
 }

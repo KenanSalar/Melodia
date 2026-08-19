@@ -11,6 +11,7 @@
 //!   section-collapse toggles — plus the `snap_to_preset` helper.
 //! - [`folders`]: library folder CRUD, watcher toggle, and `scan_folder*`.
 //! - [`diagnostics`]: the Verbose Logging switch.
+//! - [`motion`]: the Skip Startup Animation switch.
 //! - [`support`]: the launch counter behind the one-time Ko-fi prompt.
 //!
 //! `settings.json` setters funnel through
@@ -26,6 +27,7 @@ pub mod diagnostics;
 pub mod discord;
 pub mod equalizer;
 pub mod folders;
+pub mod motion;
 pub mod playback;
 pub mod replaygain;
 pub mod scrobble;
@@ -51,6 +53,7 @@ pub use folders::{
     add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
     scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
 };
+pub use motion::set_skip_startup_animation;
 pub use playback::{
     set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
 };
@@ -71,8 +74,8 @@ pub use updates::{
 pub use view::{
     get_view_sort, set_artist_albums_collapsed, set_browse_path, set_browse_view_mode,
     set_favorites_tab, set_last_detail_id, set_last_nav_index, set_locale, set_my_library_tab,
-    set_overflow_button, set_recently_played_tab, set_settings_tab, set_view_sort,
-    snap_to_preset, update_view_columns,
+    set_overflow_button, set_recently_played_tab, set_settings_tab, set_view_sort, snap_to_preset,
+    update_view_columns,
 };
 pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 
@@ -91,10 +94,7 @@ pub fn get_view_state(state: &AppState) -> Result<ViewStateData, AppError> {
     services::view_state::read_view_state(&state.paths)
 }
 
-pub fn update_settings(
-    state: &AppState,
-    settings: &SettingsData,
-) -> Result<(), AppError> {
+pub fn update_settings(state: &AppState, settings: &SettingsData) -> Result<(), AppError> {
     services::settings::write_settings(&state.paths, settings)
 }
 

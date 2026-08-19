@@ -10,9 +10,9 @@
 //!    whether to generate or clear Material You — view-model wakes (the
 //!    per-emit playback hot path) never touch the filesystem.
 //! 3. CPU-bound extraction + palette generation runs on
-//!    `tokio::task::spawn_blocking`. Source ARGB is cached in a
-//!    bounded `SeedCache` (cap 32) so prev/next/prev round-trips don't
-//!    re-quantize the same artwork.
+//!    `tokio::task::spawn_blocking`. Source ARGB is cached in a bounded
+//!    `SeedCache` so prev/next/prev round-trips don't re-quantize the
+//!    same artwork.
 //! 4. Writes `(Palette, accent_hex)` back into `os_state.material_you`
 //!    and triggers a repaint via `slint::invoke_from_event_loop`.
 //!
@@ -28,6 +28,7 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use crate::library;
+use crate::media::cover_thumbs::CoverThumbs;
 use crate::player::state::PlayerViewModelLight;
 use crate::services::material_you::{
     SchemeStyle, SeedCache, extract_source_argb_from_rgb8, generate_palette,
@@ -35,7 +36,6 @@ use crate::services::material_you::{
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use crate::themes::{Palette, SystemColorState};
-use crate::media::cover_thumbs::CoverThumbs;
 
 /// Spawn the coordinator on the shared task lifecycle so the main shutdown
 /// sequence waits for any in-flight palette generation to settle before the
@@ -55,15 +55,7 @@ pub fn spawn(
     cover_thumbs: Arc<CoverThumbs>,
 ) {
     spawner.spawn_cancellable(move |shutdown| {
-        run(
-            state,
-            os_state,
-            view_model_rx,
-            kick_rx,
-            repaint_tx,
-            cover_thumbs,
-            shutdown,
-        )
+        run(state, os_state, view_model_rx, kick_rx, repaint_tx, cover_thumbs, shutdown)
     });
 }
 
@@ -246,21 +238,25 @@ async fn react(
         return;
     }
 
-    // Reuse the 72×72 RGB8 thumbnail `CoverThumbs` already decoded for
-    // the now-playing-bar / queue-sheet rows. Avoids opening + decoding
-    // the artwork file a second time — on large embedded covers the
-    // duplicate decode produced a multi-MB transient that glibc didn't
-    // fully return to the OS, surfacing as a ~30 MiB residual RSS bump
-    // whenever the current track was DnD-imported. `get_or_load_rgb8`
-    // hits the cache on the warm path (seeded by `seed_initial_view_model`
-    // / `to_slint_player_vm`) and decodes via `decode_thumb_buffer`'s
-    // `MAX_SOURCE_DIM = 8192` cap on the cold path.
+    // Reuse the RGB8 thumbnail `CoverThumbs` already decoded for the
+    // now-playing-bar / queue-sheet rows rather than opening the artwork a
+    // second time — on large embedded covers the duplicate decode produced a
+    // multi-MB transient that glibc didn't fully return to the OS, surfacing
+    // as a ~30 MiB residual RSS bump whenever the current track was
+    // DnD-imported. Inside the seed cache's closure and inside the blocking
+    // task, both deliberately: a remembered seed needs no buffer at all, and
+    // a miss races `ui::shell::bridge::warm_vm_cover` for the same path, so
+    // the fallback is a full `decode_thumb_buffer` that has no business on a
+    // runtime worker.
     let artwork_for_block = artwork.clone();
-    let buf_for_block = cover_thumbs.get_or_load_rgb8(&artwork);
+    let thumbs = cover_thumbs.clone();
     let mut tmp_cache = std::mem::take(seed_cache);
     let blocking_result = tokio::task::spawn_blocking(move || {
         let seed = tmp_cache.get_or_insert_with(&artwork_for_block, || {
-            buf_for_block.as_ref().and_then(extract_source_argb_from_rgb8)
+            thumbs
+                .get_or_load_rgb8(&artwork_for_block)
+                .as_ref()
+                .and_then(extract_source_argb_from_rgb8)
         });
         let palette = seed.map(|s| generate_palette(s, is_dark, style));
         (tmp_cache, palette)
@@ -277,10 +273,7 @@ async fn react(
     *seed_cache = returned_cache;
 
     let Some((palette, accent_hex)) = palette else {
-        log::warn!(
-            "material_you: extraction failed for {}",
-            artwork.display()
-        );
+        log::warn!("material_you: extraction failed for {}", artwork.display());
         os_state.write().material_you = None;
         publish_repaint(repaint_tx, os_state);
         return;
@@ -296,11 +289,7 @@ async fn react(
     publish_repaint(repaint_tx, os_state);
 }
 
-fn write_palette(
-    os_state: &Arc<RwLock<SystemColorState>>,
-    palette: Palette,
-    accent_hex: u32,
-) {
+fn write_palette(os_state: &Arc<RwLock<SystemColorState>>, palette: Palette, accent_hex: u32) {
     let mut guard = os_state.write();
     guard.material_you = Some((palette, accent_hex));
 }

@@ -15,9 +15,10 @@ use crate::error::AppError;
 use crate::media::artwork;
 use crate::media::self_writes::SelfWrites;
 use crate::media::tag_writer::{ArtworkEdit, FieldEdit, TagEdit};
+use crate::test_support::ASSETS_DIR;
 
 fn assets_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets")
+    PathBuf::from(ASSETS_DIR)
 }
 
 /// Copy a checked-in fixture into `tmp` and hand back the working copy.
@@ -34,7 +35,7 @@ async fn seed_track(db: &DbPool, path: &str) -> Result<i64, AppError> {
 
 #[tokio::test]
 async fn single_track_edit_updates_row_and_preserves_stats() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
@@ -81,16 +82,13 @@ async fn single_track_edit_updates_row_and_preserves_stats() -> Result<(), AppEr
     assert_eq!(play_count, 5, "play_count must survive the metadata refresh");
     assert_eq!(rating, 4, "rating must survive the metadata refresh");
     assert_eq!(is_favorite, 1, "is_favorite must survive the metadata refresh");
-    assert_ne!(
-        new_hash, old_hash,
-        "a tag write rewrites the file, so file_hash changes"
-    );
+    assert_ne!(new_hash, old_hash, "a tag write rewrites the file, so file_hash changes");
     Ok(())
 }
 
 #[tokio::test]
 async fn batch_edit_reports_failure_and_commits_the_rest() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
@@ -100,11 +98,7 @@ async fn batch_edit_reports_failure_and_commits_the_rest() -> Result<(), AppErro
     let good_id = seed_track(&db, &good_str).await?;
 
     // A DB row whose file does not exist on disk — the write fails at read.
-    let ghost_str = tmp
-        .path()
-        .join("ghost.mp3")
-        .to_string_lossy()
-        .into_owned();
+    let ghost_str = tmp.path().join("ghost.mp3").to_string_lossy().into_owned();
     let ghost_id = seed_track(&db, &ghost_str).await?;
 
     let artwork_dir = tmp.path().join("artwork");
@@ -142,7 +136,7 @@ async fn batch_edit_reports_failure_and_commits_the_rest() -> Result<(), AppErro
 
 #[tokio::test]
 async fn album_rename_moves_track_to_new_album_id() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;
@@ -188,7 +182,7 @@ async fn album_rename_moves_track_to_new_album_id() -> Result<(), AppError> {
 /// `apply_replace_artwork`.
 #[tokio::test]
 async fn replace_artwork_lands_on_every_track_and_the_shared_album() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folder = tmp.path().to_string_lossy().into_owned();
     queries::folder::insert_folder(&db, &folder, true).await?;

@@ -6,9 +6,7 @@ use crate::services::{
 };
 use crate::state::AppState;
 
-pub fn get_always_on_top_capability(
-    state: &AppState,
-) -> Result<AlwaysOnTopCapability, AppError> {
+pub fn get_always_on_top_capability(state: &AppState) -> Result<AlwaysOnTopCapability, AppError> {
     Ok(state.always_on_top.clone())
 }
 
@@ -79,6 +77,17 @@ pub fn set_close_to_tray(state: &AppState, on: bool) -> Result<(), AppError> {
 pub fn set_tray_enabled(state: &AppState, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |s| {
         s.tray.tray_enabled = on;
+    })
+}
+
+/// Persist the user toggle for "Aurora Backdrop". When `false` (the default) the
+/// artwork-derived surfaces blur the cover behind them, and the two artwork tiers build a
+/// blurred half per decode; when `true` they wash the cover's own colours over `Theme.base`
+/// and no blur is built at all. Restart-gated through the `restart-backdrop` `Dialog` flow —
+/// `boot::ui_setup::apply_backdrop_style` is what reads it, before the first tier exists.
+pub fn set_aurora_backdrop(state: &AppState, on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |s| {
+        s.backdrop.aurora_backdrop = on;
     })
 }
 

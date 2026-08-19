@@ -1,12 +1,10 @@
 use super::{UNFETCHED_COUNT, clamp_tab, grid_signature, should_announce_warm};
 
-/// A representative tab count. The real ones live in each host's Slint global
-/// and are pinned there; this is just a fixture for the arithmetic.
+/// A fixture for the arithmetic — the real counts live in each host's Slint global.
 const TABS: i32 = 5;
 
-/// Stands in for a host's tab enum. Both functions below are about a tab rather
-/// than about what one contains, so a fixture is the honest subject — which tabs
-/// exist is each view's own business and pinned under it.
+/// Stands in for a host's tab enum. Both functions below are about a tab rather than what
+/// one contains, so a fixture is the honest subject.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum TestTab {
     First,
@@ -28,19 +26,16 @@ fn clamp_tab_pulls_out_of_range_back_in() {
     assert_eq!(clamp_tab(-1, TABS), 0);
 }
 
-/// `clamp(0, -1)` panics, so the upper bound is floored at 0. Not reachable
-/// while both globals declare tabs, but the arithmetic shouldn't be the thing
-/// that decides that.
+/// `clamp(0, -1)` panics, so the upper bound is floored at 0 — unreachable while both
+/// globals declare tabs, but the arithmetic shouldn't be what decides that.
 #[test]
 fn clamp_tab_survives_a_zero_tab_count() {
     assert_eq!(clamp_tab(0, 0), 0);
     assert_eq!(clamp_tab(7, 0), 0);
 }
 
-/// Both shape what is on screen independently of the data — a tab switch fills
-/// one model and empties the other, a column change re-chunks the same cards
-/// into different rows. Leave either out of the signature and the apply that
-/// most needs to run is the one that gets skipped.
+/// Both shape what is on screen independently of the data, so leaving either out skips
+/// the apply that most needed to run.
 #[test]
 fn the_signature_folds_in_the_tab_and_the_column_count() {
     let base = grid_signature(TestTab::First, 4, 7);
@@ -50,12 +45,10 @@ fn the_signature_folds_in_the_tab_and_the_column_count() {
     assert_ne!(base, grid_signature(TestTab::First, 4, 8), "the contents must count");
 }
 
-/// The re-enter case, and the one that was broken: a grid's rows can land before
-/// the prewarm returns (the view's mount-time `columns-changed` writes them), so
-/// by the time the decodes are done there is nothing left to repaint — and the
-/// tier is warm regardless. Gating the announcement on the write left
-/// `covers-generation` at its cold 0 and every card on a placeholder until the
-/// next tab pick.
+/// The re-enter case: a grid's rows can land before the prewarm returns (the view's
+/// mount-time `columns-changed` writes them), so by the time the decodes are done there is
+/// nothing left to repaint — and the tier is warm regardless. Gating the announcement on
+/// the write leaves `covers-generation` at its cold 0 until the next tab pick.
 #[test]
 fn a_landed_prewarm_announces_even_when_the_rows_did_not_move() {
     assert!(should_announce_warm(
@@ -65,8 +58,8 @@ fn a_landed_prewarm_announces_even_when_the_rows_did_not_move() {
     ));
 }
 
-/// A leave that landed mid-refresh has already rewound the counter and dropped
-/// the buffers, so there is no tier to announce and nothing on screen to hear it.
+/// A leave that landed mid-refresh has already rewound the counter and dropped the
+/// buffers, so there is no tier to announce and nothing on screen to hear it.
 #[test]
 fn a_section_left_mid_refresh_announces_nothing() {
     assert!(!should_announce_warm(
@@ -74,14 +67,14 @@ fn a_section_left_mid_refresh_announces_nothing() {
         /* section_active */ false,
         TestTab::Second,
     ));
-    // `None` is the same refresh finding the section already hidden before it
-    // ever spawned the prewarm — no decode ran, so nothing is warm.
+    // `None` is the same refresh finding the section already hidden before it spawned the
+    // prewarm — no decode ran, so nothing is warm.
     assert!(!should_announce_warm(None, true, TestTab::Second));
 }
 
-/// A tab pick that overtook the decodes owns a different tier — `swap_tab_covers`
-/// cleared the one this task warmed. Announcing it would put the entering tab's
-/// cards straight back on the UI-thread decoding path.
+/// A tab pick that overtook the decodes owns a different tier, `swap_tab_covers` having
+/// cleared the one this task warmed. Announcing it would put the entering tab's cards
+/// straight back on the UI-thread decoding path.
 #[test]
 fn a_tab_pick_that_overtook_the_prewarm_announces_nothing() {
     assert!(!should_announce_warm(Some(TestTab::Second), true, TestTab::First));
@@ -89,16 +82,15 @@ fn a_tab_pick_that_overtook_the_prewarm_announces_nothing() {
 
 const CURATED: &str = include_str!("../../../melodia-ui/ui/globals/curated.slint");
 
-/// One curated page's sources and the counts its two globals-plus-lifecycle have
-/// to agree about. Named fields rather than a tuple because `global` and `label`
-/// are both strings that read as "the page" and are used for different things —
-/// one slices `CURATED`, the other builds the view filename in a failure message.
+/// One curated page's sources and the counts its globals and lifecycle must agree about.
+/// Named fields rather than a tuple because `global` and `label` both read as "the page"
+/// and do different things — one slices `CURATED`, the other names a failure.
 struct CuratedPage {
     /// The page's `-view.slint` basename, and how a failure names it.
     label: &'static str,
     /// The Slint global declaring this page's counts. `track-count` and
-    /// `most-played-count` are declared by *both*, so a search over the whole
-    /// file can't tell which page lost its default.
+    /// `most-played-count` are declared by *both*, so a whole-file search can't tell which
+    /// page lost its default.
     global: &'static str,
     view: &'static str,
     lifecycle: &'static str,
@@ -122,31 +114,22 @@ const CURATED_PAGES: [CuratedPage; 2] = [
     },
 ];
 
-/// The body of one `export global` block in `curated.slint`.
-///
-/// Bounded at the next `export global` rather than at a closing brace: the
-/// globals carry nested blocks, and matching braces here would be a parser.
+/// The body of one `export global` block, bounded at the next `export global` rather than
+/// at a closing brace — the globals carry nested blocks, and matching braces is a parser.
 fn global_body<'a>(source: &'a str, name: &str) -> &'a str {
-    let after_header = source
-        .split_once(&format!("export global {name} {{"))
-        .map_or("", |(_, body)| body);
-    after_header
-        .split_once("\nexport global")
-        .map_or(after_header, |(body, _)| body)
+    let after_header =
+        source.split_once(&format!("export global {name} {{")).map_or("", |(_, body)| body);
+    after_header.split_once("\nexport global").map_or(after_header, |(body, _)| body)
 }
 
-/// Every count is declared at the sentinel and rewound to it on section leave.
+/// Every count is declared at the sentinel and rewound to it on section leave, and the two
+/// halves fail differently: a count declared at Slint's `0` default asserts "nothing here"
+/// before any fetch has run, where one left at its last real value across a leave
+/// suppresses the empty state over a model the leave just emptied.
 ///
-/// Both halves matter and they fail differently. A count declared at Slint's `0`
-/// default asserts "nothing here" on the very first entry, before any fetch has
-/// run; a count left at its last real value across a leave suppresses the empty
-/// state over a model the leave just emptied — a derived value outliving its
-/// source, which is the rule the hero folds already follow.
-///
-/// The declaration half is asserted against the page's **own** global body, not
-/// against the file: two of the three names are declared by both globals, so a
-/// whole-file search passes on the sibling's default and the page that lost one
-/// goes unnoticed.
+/// The declaration half is asserted against the page's **own** global body: two of the
+/// three names are declared by both globals, so a whole-file search passes on the
+/// sibling's default and the page that lost one goes unnoticed.
 #[test]
 fn every_curated_count_starts_and_returns_to_unfetched() {
     for page in CURATED_PAGES {
@@ -175,16 +158,13 @@ fn every_curated_count_starts_and_returns_to_unfetched() {
     }
 }
 
-/// `MosaicHeroTile` is the one reader that splits on `== 0` *and* `> 0`, so the
-/// sentinel satisfies neither and the square would paint nothing between them —
-/// no glyph, no tiles. Both mounts clamp it onto 0 so the empty glyph shows,
-/// which is what matches the `mosaic-paths` model cleared beside the count.
+/// `MosaicHeroTile` is the one reader that splits on `== 0` *and* `> 0`, so the sentinel
+/// satisfies neither and the square paints nothing between them. Both mounts clamp onto 0
+/// so the empty glyph shows.
 ///
-/// The mutation this exists for is dropping the `max` while the page still looks
-/// correct everywhere else: the tile is blank only during a re-enter's fetch
-/// window, which is exactly the window nobody reviews. The clamped operand is
-/// named too, so pointing the mount at the sibling page's count fails here rather
-/// than only on screen.
+/// The mutation this exists for is dropping the `max`: the tile is blank only during a
+/// re-enter's fetch window, exactly the window nobody reviews. The clamped operand is
+/// named too, so pointing the mount at the sibling page's count fails here.
 #[test]
 fn both_mosaic_mounts_clamp_the_unfetched_sentinel() {
     for page in CURATED_PAGES {
@@ -208,10 +188,9 @@ fn both_mosaic_mounts_clamp_the_unfetched_sentinel() {
 /// ternary that has to carry all five guards.
 const MY_LIBRARY_VIEW: &str = include_str!("../../../melodia-ui/ui/views/my-library-view.slint");
 
-/// One library-list page's count and the two files that have to agree about it. A
-/// second array rather than a widened [`CuratedPage`]: these five declare one count
-/// each in five separate globals, and the sheet guard below has no counterpart on
-/// the curated pages.
+/// One library-list page's count and the two files that must agree about it. A second
+/// array rather than a widened [`CuratedPage`]: these five declare one count each in five
+/// separate globals, and the sheet guard below has no curated counterpart.
 struct LibraryPage {
     /// The tab the count belongs to, and how a failure names it.
     label: &'static str,
@@ -220,9 +199,9 @@ struct LibraryPage {
     source: &'static str,
     /// The Rust handler owning the section leave.
     lifecycle: &'static str,
-    /// Whether that leave owes the sentinel rewind. True for the four that empty
-    /// their models on the way out; see [`every_library_leave_rewinds_the_count_it_numbered`]
-    /// for why Tracks is the exception.
+    /// Whether that leave owes the sentinel rewind — true for the four that empty their
+    /// models on the way out; [`every_library_leave_rewinds_the_count_it_numbered`] has
+    /// why Tracks is the exception.
     rewinds_on_leave: bool,
 }
 
@@ -264,19 +243,14 @@ const LIBRARY_PAGES: [LibraryPage; 5] = [
     },
 ];
 
-/// Every library count starts at the sentinel, and the line it feeds says nothing
-/// until there is an answer.
+/// Every library count starts at the sentinel, and the line it feeds says nothing until
+/// there is an answer.
 ///
-/// The guard is the half with no counterpart on the curated pages, and the half
-/// that ships something visibly wrong rather than merely absent: all five counts
-/// are interpolated into a gettext plural, so an unguarded `@tr` spells the
-/// sentinel out and the band reads "-1 albums" for the length of every re-fetch.
-/// The curated counts only ever gate `== 0` / `> 0`, which the sentinel satisfies
-/// by missing both.
-///
-/// It is one file's business now rather than five: the five headers became one
-/// `count-text` ternary on the band, so a guard dropped from any arm is a guard
-/// dropped from the only line that renders that count.
+/// The guard has no curated counterpart, and it is the half that ships something visibly
+/// wrong rather than merely absent: all five counts are interpolated into a gettext
+/// plural, so an unguarded `@tr` spells the sentinel out and the band reads "-1 albums"
+/// for the length of every re-fetch. One file's business rather than five, the headers
+/// having become one `count-text` ternary.
 #[test]
 fn every_library_count_starts_at_the_unfetched_sentinel() {
     for page in LIBRARY_PAGES {
@@ -303,23 +277,15 @@ fn every_library_count_starts_at_the_unfetched_sentinel() {
     }
 }
 
-/// A section leave rewinds the count on the same tick it stops standing for
-/// anything — and Tracks is the one leave with nothing to rewind.
+/// A section leave rewinds the count on the same tick it stops standing for anything —
+/// and Tracks is the one leave with nothing to rewind, its leave touching neither
+/// `Tracks.rows` nor the cached `Vec`. The rule is about a *derived value outliving its
+/// source*, so what decides it is whether the leave drops the rows.
 ///
-/// The rule is about a *derived value outliving its source*, so what decides it is
-/// whether the leave drops the rows. The four grid tabs empty their models, so a
-/// count left at its last real value would suppress an empty state over nothing.
-/// Tracks doesn't: `TracksUi` has no `release_section_state` and the Songs leave
-/// touches neither `Tracks.rows` nor the cached `full` Vec, so its count stays
-/// true for as long as the rows it numbers are there.
-///
-/// It did rewind once, and that is what makes the exception worth stating rather
-/// than merely allowing. A rewind is only honest beside a `mark_dirty()` — nothing
-/// else re-fetches this list — and marking dirty on a *tab* leave turned every
-/// return to Songs into a full `get_tracks` plus a library-sized row build on the
-/// event loop. Both went together, because neither was load-bearing without the
-/// other. So the mutation this guards is a rewind reappearing in `tracks.rs`
-/// without the model clear that would justify it.
+/// A rewind is only honest beside a `mark_dirty()`, and marking dirty on a *tab* leave
+/// turns every return to Songs into a full query plus a library-sized row build on the
+/// event loop. So the mutation this guards is a rewind reappearing in `tracks.rs` without
+/// the model clear that would justify it.
 #[test]
 fn every_library_leave_rewinds_the_count_it_numbered() {
     for page in LIBRARY_PAGES {
@@ -337,13 +303,11 @@ fn every_library_leave_rewinds_the_count_it_numbered() {
 const SECTION_GATE: &str =
     include_str!("../../../melodia-ui/ui/components/section-active-gate.slint");
 
-/// The gate's tab sub-predicate is opt-in, and `-1` is what opts out.
-///
-/// A tabless mount passes neither property, so the two defaults are the whole of
-/// what keeps nine sections working. A `0` default — or a predicate spelling the
-/// tab comparison without the negative escape — makes `tab-index == current-tab`
-/// the answer for all of them, and every section but whichever one happens to sit
-/// at tab 0 goes inactive for the length of the session.
+/// The gate's tab sub-predicate is opt-in, and `-1` is what opts out. A tabless mount
+/// passes neither property, so the two defaults are the whole of what keeps nine sections
+/// working: a `0` default — or a predicate without the negative escape — makes
+/// `tab-index == current-tab` the answer for all of them, and every section but whichever
+/// sits at tab 0 goes inactive for the session.
 #[test]
 fn the_section_gate_ignores_its_tab_predicate_when_a_section_has_none() {
     for prop in ["tab-index", "current-tab"] {
@@ -362,17 +326,12 @@ fn the_section_gate_ignores_its_tab_predicate_when_a_section_has_none() {
 
 const TAB_BAR: &str = include_str!("../../../melodia-ui/ui/components/tab-bar.slint");
 
-/// The compact morph has to be *written*, not left to the binding that seeds
-/// it. Slint restarts an animated binding whenever a dependency is marked
-/// dirty — `AnimatedBindingCallable::mark_dirty` resets the start time and
-/// re-bases the from-value, with no check that the value changed — and
-/// `compact` reads `avail-width`, which a resize drag rewrites on every pointer
-/// motion. Bound, the 350 ms curve was torn down every few milliseconds and the
-/// bar crawled toward its target at whatever rate the drag delivered events.
-/// The write in `changed compact` swaps that binding for an animation of its
-/// own and is the entire fix — and it is invisible in the source, since it sits
-/// one line under a binding computing the same thing. Delete it and the file
-/// still builds, still looks right, and stutters again.
+/// The compact morph has to be *written*, not left to the binding that seeds it. Slint
+/// restarts an animated binding whenever a dependency is marked dirty, with no check that
+/// the value changed, and `compact` reads `avail-width`, which a resize drag rewrites on
+/// every pointer motion — so bound, the curve is torn down every few milliseconds and the
+/// bar crawls at whatever rate the drag delivers events. The write in `changed compact` is
+/// invisible in the source, sitting one line under a binding computing the same thing.
 #[test]
 fn the_compact_morph_is_written_not_bound() {
     assert!(
@@ -380,9 +339,8 @@ fn the_compact_morph_is_written_not_bound() {
         "tab-bar.slint must still ease `compact-t` — this test guards how it's driven"
     );
 
-    // `changed is-hovered` is the only sibling handler, so this anchor is
-    // unambiguous; a miss leaves `handler` empty and fails below rather than
-    // passing vacuously.
+    // `changed is-hovered` is the only sibling handler, so the anchor is unambiguous; a
+    // miss leaves `handler` empty and fails below rather than passing vacuously.
     let handler = TAB_BAR
         .split_once("changed compact =>")
         .and_then(|(_, rest)| rest.split_once('}'))
@@ -396,21 +354,19 @@ fn the_compact_morph_is_written_not_bound() {
     );
 }
 
-/// Splitting the bar's `width` into `min`/`preferred`/`max` is what keeps the
-/// morph off the window's own minimum, and it buys that by letting the layout
-/// draw the bar narrower than it asked for. On the shrink leg `compact` flips
-/// the instant the threshold is crossed while `tab-w` takes 350 ms to follow, so
-/// `preferred-width` is still a row of natural cells against a header that can
-/// no longer seat them — and the cells bind their widths, so they can't
-/// compress. Without the clip they paint under the search input. Rectangular
-/// and borderless is the point: that lowers to a scissor rather than the
-/// offscreen layer a rounded clip over text would cost.
+/// Splitting the bar's `width` into `min`/`preferred`/`max` keeps the morph off the
+/// window's own minimum, and buys that by letting the layout draw the bar narrower than
+/// it asked for. On the shrink leg `compact` flips the instant the threshold is crossed
+/// while `tab-w` eases after it, so `preferred-width` is still a row of natural cells
+/// against a header that can't seat them — and the cells bind their widths, so they
+/// can't compress. Without the clip they paint under the search input. Rectangular and
+/// borderless is the point: a scissor rather than the layer a rounded clip would cost.
 #[test]
 fn the_bar_clips_what_the_width_split_lets_it_overdraw() {
-    // Anchored past `TabBarCell`, which is declared above the bar in the same
-    // file and clips its own label slot — an unanchored search would pass on
-    // that one and never notice the root's going missing.
-    let bar = TAB_BAR.split_once("export component TabBar").map(|(_, body)| body).unwrap_or_default();
+    // Anchored past `TabBarCell`, declared above the bar in the same file and clipping
+    // its own label slot — an unanchored search passes on that one.
+    let bar =
+        TAB_BAR.split_once("export component TabBar").map(|(_, body)| body).unwrap_or_default();
 
     assert!(
         bar.contains("clip: true"),
@@ -419,12 +375,10 @@ fn the_bar_clips_what_the_width_split_lets_it_overdraw() {
     );
 }
 
-/// Every brush the bar paints with has to be reachable from the call site.
-/// The bar is mounted on a hero blur as well as on a page background, and
-/// `ui-patterns.md` is explicit that anything on a hero reads `HeroBackdrop`
-/// rather than a `Theme.*` token — a hardcoded `Theme.text` label or
-/// `Theme.surface1` divider looks correct in Settings and washes out on the
-/// banner. Defaults keep Settings on the tokens it always used.
+/// Every brush the bar paints with has to be reachable from the call site: it mounts on a
+/// hero blur as well as a page background, and a hardcoded `Theme.text` label or
+/// `Theme.surface1` divider looks correct in Settings and washes out on the banner. The
+/// defaults keep Settings on the tokens it always used.
 #[test]
 fn every_painted_brush_is_an_input() {
     for prop in ["label-color", "active-color", "hover-fill", "divider-color"] {
@@ -435,10 +389,10 @@ fn every_painted_brush_is_an_input() {
         );
     }
 
-    // The cells and the underline must read those inputs, not the tokens
-    // directly. `Theme.*` still appears in the file for geometry, durations and
-    // the defaults themselves, so anchor on the two paint sites that regressed.
-    let bar = TAB_BAR.split_once("export component TabBar").map(|(_, body)| body).unwrap_or_default();
+    // `Theme.*` still appears in the file for geometry, durations and the defaults
+    // themselves, so anchor on the two paint sites that regressed.
+    let bar =
+        TAB_BAR.split_once("export component TabBar").map(|(_, body)| body).unwrap_or_default();
     assert!(
         !bar.contains("background: Theme.surface1"),
         "the divider must paint `divider-color`, not `Theme.surface1` directly"
@@ -449,24 +403,15 @@ fn every_painted_brush_is_an_input() {
     );
 }
 
-/// **A cell eases floats and never a brush**, because it cannot tell an eased
-/// input from a stepped one.
+/// **A cell eases floats and never a brush**, because it cannot tell an eased input from a
+/// stepped one. Every colour it paints is handed down by its host, and `LibraryTabBand`
+/// hands all four over *animating*; an animated binding restarts on **dirtiness** rather
+/// than a value change, so a leaf easing one sits still until the source settles, then
+/// catches up in one late rush.
 ///
-/// Every colour it paints is handed down by its host, and `LibraryTabBand` hands
-/// all four over *animating* for the length of its 400 ms morph. An animated
-/// binding restarts on **dirtiness** rather than on a value change, so a leaf
-/// easing one of them re-bases from the current colour with its clock back at
-/// zero on every frame of the crossing: the value sits still until the source
-/// settles, then catches up in one late rush. That is the whole "the tab colours
-/// change at the end of the morph" symptom, in both directions.
-///
-/// The icon went first. The **hover fill** was then exempted on the grounds that
-/// `has-hover ? hover-fill : transparent` reads the input only on the hovered
-/// arm, so a morph with no pointer on the bar never dirties it — true, and beside
-/// the point: the tab you are pointing at while you click it *is* the hovered arm,
-/// so the cell you just picked kept the idle theme's grey for the whole morph and
-/// snapped to the hero tier at the end. Both fades are floats now, and the two
-/// brush expressions track their sources unanimated.
+/// `has-hover ? hover-fill : transparent` looks exempt, reading the input only on the
+/// hovered arm — but the tab you point at while clicking it *is* that arm. Both fades are
+/// floats, and the two brush expressions track their sources unanimated.
 #[test]
 fn the_cell_eases_floats_and_never_a_brush() {
     let cell = cell_body();
@@ -494,22 +439,17 @@ fn the_cell_eases_floats_and_never_a_brush() {
     }
 }
 
-/// The selected colour crosses by **stacking two layers**, and three things about
-/// that stack are load-bearing in a way the source alone doesn't force.
+/// The selected colour crosses by **stacking two layers**, Slint's `mix()` taking `color`
+/// operands where every brush here is a `brush`. Three things about that stack are
+/// load-bearing in a way the source alone doesn't force:
 ///
-/// Slint's `mix()` takes `color` operands (`ColorMix: (Color, Color, Float32)`)
-/// and every brush here is a `brush`, so a blend between the idle and the active
-/// tier can only be two elements with the top one faded. Then:
-///
-/// - the **bottom layer paints at full alpha** and only the top rides `sel-t`.
-///   Two layers at `t` and `1 - t` composite to three quarters coverage at the
-///   midpoint, so the word and the glyph visibly thin halfway through every pick —
-///   and it still looks right at both ends, which is what makes it worth pinning.
-/// - the two layers differ in **colour only**. A divergent `font-size`, weight or
-///   `filled` ghosts for the length of the crossing.
-/// - the fades **multiply** (`transparentize`) rather than being set
-///   (`with-alpha`), so the compact close still takes the label away whichever tab
-///   is selected, and a translucent hero tier keeps its own weight.
+/// - the **bottom layer paints at full alpha** and only the top rides `sel-t`. Two layers
+///   at `t` and `1 - t` composite to three quarters coverage at the midpoint, so the word
+///   and glyph thin halfway through every pick — and still look right at both ends.
+/// - the two layers differ in **colour only**; a divergent `font-size`, weight or `filled`
+///   ghosts for the length of the crossing.
+/// - the fades **multiply** rather than set, so the compact close still takes the label
+///   away whichever tab is selected and a translucent hero tier keeps its weight.
 #[test]
 fn the_selected_colour_crosses_over_two_matched_layers() {
     let cell = cell_body();
@@ -536,8 +476,8 @@ fn the_selected_colour_crosses_over_two_matched_layers() {
          FILL=1 face swap stays the single frame it always was"
     );
 
-    // Only the *active* half may read `sel-t`: the idle half underneath is what
-    // keeps the ink constant across the crossing and reverses it for free.
+    // Only the *active* half may read `sel-t`: the idle half underneath keeps the ink
+    // constant across the crossing and reverses it for free.
     for idle in [
         "icon-color: root.label-color-idle;",
         "color: root.label-color-idle.transparentize(1.0 - root.label-alpha);",
@@ -562,8 +502,8 @@ fn the_selected_colour_crosses_over_two_matched_layers() {
     );
 }
 
-/// The cell's body with comments dropped, so the prose arguing an absence can
-/// neither satisfy a pin nor trip one.
+/// The cell's body with comments dropped, so prose arguing an absence can neither satisfy
+/// a pin nor trip one.
 fn cell_body() -> String {
     TAB_BAR
         .split_once("component TabBarCell")
@@ -576,15 +516,12 @@ fn cell_body() -> String {
         .join("\n")
 }
 
-/// A cell writes `selected-index` before it emits `selected`, and it has to —
-/// the `<=>` on that property is what carries the pick out to the host. So by
-/// the time a host's handler runs, `selected-index` and anything two-way bound
-/// to it already read the tab just picked, and a host wanting the *previous*
-/// one has nowhere to get it. `previous-index` is that place, which makes the
-/// capture's position the whole contract: written after the line below it still
-/// compiles, still publishes a plausible index, and hands back the new tab —
-/// so the Favorites slide would compare `i` against `i` and enter from the left
-/// whichever way the pick went. Hence offsets rather than containment.
+/// A cell writes `selected-index` before it emits `selected`, and it has to — the `<=>` on
+/// that property is what carries the pick out. So a host's handler already reads the tab
+/// just picked, and `previous-index` is the only place the outgoing one survives. That
+/// makes the capture's *position* the whole contract: written after the line below it
+/// still compiles, still publishes a plausible index, and hands back the new tab, so a
+/// slide compares `i` against `i` and enters from the left whichever way the pick went.
 #[test]
 fn the_cell_captures_the_previous_index_before_it_moves() {
     assert!(
@@ -593,9 +530,8 @@ fn the_cell_captures_the_previous_index_before_it_moves() {
          `selected-index`, which the cell has already overwritten"
     );
 
-    // Anchored past `TabBarCell`, whose own TouchArea forwards a `clicked` of
-    // the same name — unanchored, the split lands on that one and every `find`
-    // below comes back `None`.
+    // Anchored past `TabBarCell`, whose own TouchArea forwards a `clicked` of the same
+    // name — unanchored, the split lands on that one and every `find` comes back `None`.
     let handler = TAB_BAR
         .split_once("export component TabBar")
         .and_then(|(_, bar)| bar.split_once("clicked => {"))

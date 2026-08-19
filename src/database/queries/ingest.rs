@@ -4,8 +4,8 @@ use std::collections::{HashMap, HashSet};
 use rayon::prelude::*;
 use sqlx::AssertSqlSafe;
 
-use crate::database::queries;
 use crate::database::SQLITE_BIND_LIMIT;
+use crate::database::queries;
 use crate::error::AppError;
 use crate::media::scanner::ScannedFile;
 
@@ -103,9 +103,9 @@ pub async fn ingest_scanned_files(
         let sql = format!(
             "SELECT file_path, file_size, date_modified FROM tracks WHERE file_path IN ({placeholders})"
         );
-        let mut query = sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(AssertSqlSafe(sql));
-        let path_cows: Vec<Cow<'_, str>> =
-            chunk.iter().map(|f| f.path.to_string_lossy()).collect();
+        let mut query =
+            sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(AssertSqlSafe(sql));
+        let path_cows: Vec<Cow<'_, str>> = chunk.iter().map(|f| f.path.to_string_lossy()).collect();
         for cow in &path_cows {
             query = query.bind(cow.as_ref());
         }
@@ -136,10 +136,8 @@ pub async fn ingest_scanned_files(
     // row. The `existing_old_paths_present` set holds the subset that still
     // exists on disk — those are duplicates and fall through to insert; the
     // rest are treated as moves.
-    let candidate_old_paths: Vec<String> = hash_to_existing
-        .values()
-        .map(|(_, p)| p.clone())
-        .collect();
+    let candidate_old_paths: Vec<String> =
+        hash_to_existing.values().map(|(_, p)| p.clone()).collect();
     let existing_old_paths_present = batch_stat_existence(candidate_old_paths).await;
 
     // Collect (file_path, artwork_path) for unchanged-but-missing-artwork
@@ -161,9 +159,7 @@ pub async fn ingest_scanned_files(
             if unchanged {
                 // File unchanged — skip metadata write, queue an artwork
                 // backfill if the existing row is missing artwork.
-                if update_artwork_on_existing
-                    && let Some(ref art_path) = meta.artwork_path
-                {
+                if update_artwork_on_existing && let Some(ref art_path) = meta.artwork_path {
                     artwork_backfill
                         .entry(art_path.clone())
                         .or_default()
@@ -203,24 +199,15 @@ pub async fn ingest_scanned_files(
             hash_to_existing.get(meta.file_hash.as_str()).cloned()
             && !existing_old_paths_present.contains(&old_path)
         {
-            let Some(folder_id) = resolve_folder_id(
-                tx,
-                folder_resolution,
-                file,
-                file_path_str,
-                &mut caches.folder,
-            )
-            .await?
+            let Some(folder_id) =
+                resolve_folder_id(tx, folder_resolution, file, file_path_str, &mut caches.folder)
+                    .await?
             else {
                 continue;
             };
 
-            let file_name = file
-                .path
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or("")
-                .to_string();
+            let file_name =
+                file.path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
 
             // `hash_to_existing` was resolved inside this transaction and
             // nothing deletes rows before this loop (orphan pruning runs
@@ -254,12 +241,7 @@ pub async fn ingest_scanned_files(
             folder_id,
         };
 
-        let file_name = file
-            .path
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("")
-            .to_string();
+        let file_name = file.path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
 
         // Buffer instead of executing one 43-bind INSERT per file —
         // `insert_tracks_batch` flushes a full chunk as a single
@@ -352,10 +334,7 @@ async fn batch_stat_existence(paths: Vec<String>) -> HashSet<String> {
         return HashSet::new();
     }
     if paths.len() < STAT_PAR_THRESHOLD {
-        return paths
-            .into_iter()
-            .filter(|p| std::path::Path::new(p).exists())
-            .collect();
+        return paths.into_iter().filter(|p| std::path::Path::new(p).exists()).collect();
     }
     tokio::task::spawn_blocking(move || {
         paths
@@ -393,9 +372,8 @@ async fn flush_artwork_backfill(
     }
 
     for chunk in pairs.chunks(chunk_size) {
-        let row_placeholders = std::iter::repeat_n("(?,?)", chunk.len())
-            .collect::<Vec<_>>()
-            .join(",");
+        let row_placeholders =
+            std::iter::repeat_n("(?,?)", chunk.len()).collect::<Vec<_>>().join(",");
         let sql = format!(
             "WITH v(path, art) AS (VALUES {row_placeholders})
              UPDATE tracks
@@ -424,11 +402,8 @@ async fn resolve_folder_id(
     match folder_resolution {
         FolderResolution::Fixed(id) => Ok(Some(*id)),
         FolderResolution::FromParentDir => {
-            let parent_dir = file
-                .path
-                .parent()
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_default();
+            let parent_dir =
+                file.path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
             if parent_dir.is_empty() {
                 log::warn!("Skipping file with no parent directory: {file_path_str}");
                 return Ok(None);
@@ -476,11 +451,8 @@ async fn resolve_ids(
     // Resolve the album-artist (album_artist tag, else the track artist) — the album
     // groups by this so a per-track featured credit doesn't split it. Reuses the
     // artist cache.
-    let album_artist_name = meta
-        .album_artist
-        .as_deref()
-        .filter(|s| !s.is_empty())
-        .unwrap_or(artist_name);
+    let album_artist_name =
+        meta.album_artist.as_deref().filter(|s| !s.is_empty()).unwrap_or(artist_name);
     let album_artist_id = if album_artist_name == artist_name {
         artist_id
     } else if let Some(&id) = caches.artist.get(album_artist_name) {
@@ -492,19 +464,13 @@ async fn resolve_ids(
     };
 
     // Resolve album (two-level cache, keyed on the album-artist)
-    let album_id = if let Some(&id) = caches
-        .album
-        .get(album_name)
-        .and_then(|by_artist| by_artist.get(&album_artist_id))
+    let album_id = if let Some(&id) =
+        caches.album.get(album_name).and_then(|by_artist| by_artist.get(&album_artist_id))
     {
         id
     } else {
         let id = queries::scan::upsert_album(tx, album_name, album_artist_id, meta.year).await?;
-        caches
-            .album
-            .entry(album_name.to_owned())
-            .or_default()
-            .insert(album_artist_id, id);
+        caches.album.entry(album_name.to_owned()).or_default().insert(album_artist_id, id);
         id
     };
 

@@ -1,11 +1,9 @@
 import { Theme } from "../theme.slint";
 
-// Horizontal M3 Expressive slider — twin slim bars meeting at the thumb, a
-// parent-background stadium masking the seam, and a vertical-pill thumb that
-// shrinks along the value axis on press. `volume-popup`'s slider rotated 90°.
-//
-// The mask colour MUST match the parent surface, hence the property: volume's
-// is `Theme.crust` only because its `PopupSurface` paints crust, where the
+// Horizontal M3 Expressive slider — twin slim bars meeting at the thumb, a parent-background
+// stadium masking the seam, and a vertical-pill thumb that shrinks along the value axis on press.
+// `volume-popup`'s slider rotated 90°. The mask colour MUST match the parent surface, hence the
+// property: volume's is `Theme.crust` only because its `PopupSurface` paints crust, where the
 // now-playing bar paints `mantle` / `mantle-unfocused`.
 export component SliderTrack inherits Rectangle {
     in property <float> value;          // bound source-of-truth (0..1)

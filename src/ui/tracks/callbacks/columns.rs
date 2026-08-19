@@ -22,8 +22,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
         let Some(ui) = weak.upgrade() else { return };
         let columns = ui.global::<Tracks>().snapshot_visible();
         let s = s.clone();
-        spawn_blocking_logged!(s, "tracks::toggle_column",
-            library::settings::update_view_columns(
-                &s, view_id::TRACKS.to_owned(), columns));
+        spawn_blocking_logged!(
+            s,
+            "tracks::toggle_column",
+            library::settings::update_view_columns(&s, view_id::TRACKS.to_owned(), columns)
+        );
     });
 }

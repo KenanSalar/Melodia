@@ -38,20 +38,15 @@ component MosaicSlot inherits Rectangle {
     }
 }
 
-// Reusable 1/2/3/4-tile artwork mosaic. Pure layout — the caller owns the outer
-// chrome, and only the inner tiles are drawn here, so an effective count of 0
-// draws nothing and the caller's own empty state shows through. Every tile
-// resolves through `request-cover`, so each consumer keeps its own LRU tier.
+// Reusable 1/2/3/4-tile artwork mosaic, and the live preview of what
+// `media::artwork::compose_artwork` will bake — shared layouts, so the picker shows the collage it
+// is about to persist. That function rather than its lenient sibling `compose_cover` is what makes
+// the preview a promise: a source dropping out would bake a collage slot-for-slot different. Pure
+// layout, so no paths draws nothing and the caller's own empty state shows through, and tiles
+// resolve through `request-cover` so the consumer keeps its own LRU tier.
 //
-// The layouts mirror the canonical playlist composition: 1 = full bleed,
-// 2 = left/right, 3 = left full-height + right split, 4 = 2×2.
-//
-// **`tile-count` versus `artwork-paths.length` is what separates the two
-// consumers.** The picker leaves it 0 and takes the path count, since its shape
-// follows a selection where every slot has real artwork. A hero sets it from the
-// *entity* count, so slots past the distinct covers fall back to placeholders —
-// five favorites over two covers give a 2×2 of two covers and two placeholders,
-// not the two duplicated.
+// One consumer: `components/dialog/playlist-mosaic-picker.slint`. The curated heroes drew this once
+// and now draw the composed collage itself, so the styling inputs below are the picker's defaults.
 export component CoverMosaic inherits Rectangle {
     in property <[string]> artwork-paths;
     in property <length>   gutter-size: 3px;
@@ -62,16 +57,12 @@ export component CoverMosaic inherits Rectangle {
     // The `ArtworkImage` placeholder vocabulary, shared with `EntityCard` and
     // `LibraryTabBand`.
     in property <string>   placeholder-icon: "music-note";
-    // The defaults are `ArtworkImage`'s accent tint, right on a dialog surface.
-    // Both hero mosaics override them with `HeroBackdrop` tiers instead: they
-    // paint on the solved band, where a light theme's accent lands dark-on-dark.
+    // `ArtworkImage`'s accent tint, which is right on the dialog surface this sits on.
     in property <brush>    tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush>    tile-icon-color: Theme.accent;
-    in property <int>      tile-count: 0;
     pure callback request-cover(string) -> image;
 
-    private property <int> effective-count:
-        root.tile-count > 0 ? root.tile-count : root.artwork-paths.length;
+    private property <int> effective-count: root.artwork-paths.length;
 
     if root.effective-count == 1: MosaicSlot {
         idx: 0;

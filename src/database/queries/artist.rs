@@ -3,11 +3,10 @@ use crate::entities::artist;
 use crate::error::AppError;
 
 pub async fn get_all_artists(db: &DbPool) -> Result<Vec<artist::ArtistStats>, AppError> {
-    let artists = sqlx::query_as::<_, artist::ArtistStats>(
-        "SELECT * FROM artist_stats ORDER BY name ASC"
-    )
-    .fetch_all(db.read())
-    .await?;
+    let artists =
+        sqlx::query_as::<_, artist::ArtistStats>("SELECT * FROM artist_stats ORDER BY name ASC")
+            .fetch_all(db.read())
+            .await?;
     Ok(artists)
 }
 
@@ -21,7 +20,7 @@ pub async fn get_artist_by_id(db: &DbPool, id: i64) -> Result<artist::ArtistStat
 
 pub async fn get_artists_without_images(db: &DbPool) -> Result<Vec<artist::Artist>, AppError> {
     let artists = sqlx::query_as::<_, artist::Artist>(
-        "SELECT * FROM artists WHERE image_path IS NULL OR image_path = ''"
+        "SELECT * FROM artists WHERE image_path IS NULL OR image_path = ''",
     )
     .fetch_all(db.read())
     .await?;

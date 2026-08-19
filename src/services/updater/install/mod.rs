@@ -1,18 +1,12 @@
-//! Download + verify + atomic swap (or package-manager install).
+//! Download, verify, and swap or package-install.
 //!
-//! Critical ordering: verify completes before any rename touches the
-//! live binary path **and** before any package-manager subprocess
-//! runs. On verify failure the downloaded `.new` file is removed and
-//! the live binary is left untouched.
+//! **The verify completes before any rename touches the live binary path and
+//! before any package-manager subprocess runs.** On failure the downloaded file
+//! is removed and the live binary is left untouched.
 //!
-//! Split by stage:
-//!
-//! * [`staging`] — staging-path selection + the partial-download
-//!   sidecar fingerprint.
-//! * [`download`] — streaming download, HTTP-range resume, size bound.
-//! * [`verify`] — minisign signature check + post-swap smoke test +
-//!   rollback.
-//! * [`swap`] — the atomic in-place swap / elevated package install.
+//! Split by stage: [`staging`] picks the path and fingerprints a partial
+//! download, [`download`] streams it, [`verify`] checks the signature and runs
+//! the post-swap smoke test, [`swap`] does the swap or the elevated install.
 
 mod download;
 mod staging;
@@ -26,8 +20,8 @@ use super::manifest::PlatformAsset;
 
 use download::download_to_file;
 use staging::{
-    InstallMethod, resolve_install_method, resolve_staged_path, sidecar_meta_path,
-    staged_msi_path, staged_package_path,
+    InstallMethod, resolve_install_method, resolve_staged_path, sidecar_meta_path, staged_msi_path,
+    staged_package_path,
 };
 use swap::{install_via_msiexec, install_via_package_manager};
 use verify::{attempt_post_swap_rollback, verify_staged, verify_swapped_binary};
@@ -35,29 +29,19 @@ use verify::{attempt_post_swap_rollback, verify_staged, verify_swapped_binary};
 pub use staging::prune_stale_staging;
 pub use swap::swap_in_place;
 
-// `old_path` derives `<binary>.old`; re-exported because:
-//   * Linux production: `super::install_target_old` (called from
-//     `main.rs` at startup) needs the exact same path-derivation
-//     logic the swap uses to reap a successful boot's stale `.old`.
-//   * Windows tests: `install_tests::swap_retains_old_snapshot_*` /
-//     `swap_clears_stale_old_*` exercise `windows_swap` and need
-//     `old_path` to assert the `.old` sibling.
-//
-// Windows production doesn't need it — installs flow through
-// `msiexec /i` of a signed MSI (no `.old` ever produced at the
-// install target). Gating Windows behind `cfg(test)` keeps the lib
-// build's unused-imports lint clean while preserving test coverage of
-// the swap helpers.
+// Re-exported for two reasons: `super::install_target_old` needs the swap's own
+// derivation to reap a stale `.old` at startup, and the Windows swap tests need
+// it to assert the sibling. Windows *production* never produces one — installs
+// flow through msiexec — so gating it behind `cfg(test)` there keeps the lib
+// build's unused-import lint clean without losing the coverage.
 #[cfg(any(target_os = "linux", all(test, target_os = "windows")))]
 pub(crate) use swap::old_path;
 
-/// Stream-download `asset.url` to a sibling of the install target,
-/// stream-verify the downloaded file against `asset.signature`, then
-/// atomically swap it over the live binary. Calls `on_progress` with a
-/// 0..=100 percentage on each chunk.
+/// Stream-download `asset.url`, stream-verify it against `asset.signature`,
+/// then install it. Calls `on_progress` with a 0..=100 percentage per chunk.
 ///
-/// On any error before swap, the partially-downloaded `.new` file is
-/// removed. The live binary is only touched once verification passes.
+/// Any error before the swap removes the partial file; the live binary is only
+/// touched once verification passes.
 pub async fn download_and_install(
     http: &reqwest::Client,
     asset: &PlatformAsset,
@@ -72,17 +56,12 @@ pub async fn download_and_install(
         InstallMethod::AtomicSwap => resolve_staged_path(&target)?,
     };
 
-    // Best-effort cleanup of stale staging artifacts (older than 7d)
-    // before we start. Failed / auth-cancelled installs deliberately
-    // keep their staged files for a retry; this gathers them up later.
     prune_stale_staging().await;
 
     download_to_file(http, &asset.url, expected_version, asset.size, &staged, &on_progress).await?;
 
-    // Hand the blocking phases (stream-verify of a multi-MB file, then
-    // either an in-place rename / `msiexec /i` spawn / `pkexec dnf
-    // install` subprocess) to the blocking pool so the async worker
-    // stays free for other tasks.
+    // Both blocking phases — the stream-verify of a multi-MB file, then whichever
+    // install the method picks — go on the blocking pool.
     let verify_staged_path = staged.clone();
     let verify_signature = asset.signature.clone();
     let verify_version = expected_version.to_string();
@@ -108,55 +87,26 @@ pub async fn download_and_install(
     .map_err(|e| AppError::Settings(format!("update install task join error: {e}")))?;
     install_result?;
 
-    // Drop the orphan sidecar *before* the smoke test so a
-    // rollback-on-smoke-fail path doesn't leak it; a future
-    // `prune_stale_staging` pass shouldn't pick it up as leftover
-    // state and `discard_staging_if_sidecar_mismatches` on the next
-    // attempt shouldn't be fed a phantom fingerprint.
-    //
-    // The staged bytes themselves are consumed differently per method:
-    //   * `AtomicSwap` — renamed away by `swap_in_place`.
-    //   * `LinuxPackage` — `install_via_package_manager` removes the
-    //     file after a successful `dnf/apt install`.
-    //   * `WindowsMsi` — `install_via_msiexec` spawns msiexec
-    //     non-blocking; msiexec may still be reading the `.msi` when
-    //     this function returns. The file stays on disk until the
-    //     7d pruner reaps it (or a successful next-install attempt
-    //     finds it stale and replaces it).
+    // Dropped *before* the smoke test, so a rollback doesn't leak it — a later
+    // prune must not read it as leftover state, and the next attempt's
+    // `discard_staging_if_sidecar_mismatches` must not be fed a phantom
+    // fingerprint. The staged bytes themselves are each method's own business:
+    // renamed away, removed after a successful install, or left for the pruner
+    // because msiexec may still be reading them.
     let _ = std::fs::remove_file(sidecar_meta_path(&staged));
 
-    // Smoke-test the newly-installed binary on the atomic-swap path.
-    // Cheap defence against the rare class of failures the signature
-    // check can't catch: a successful `rename(2)` to a file that the
-    // kernel will refuse to exec (broken `interpreter` line on a
-    // wrapper, exec-bit lost in an upstream packaging mishap, ABI
-    // mismatch with the running kernel, …). Failure rolls back from
-    // the retained `.old`.
+    // The smoke test is cheap defence against what a signature check can't
+    // catch: a successful rename onto a file the kernel refuses to exec. Failure
+    // rolls back from the retained `.old`.
     //
-    // Skipped on the package-manager + Windows MSI paths. The reasons
-    // are symmetric across both:
-    //   1. No in-process rollback exists once `dnf`/`apt`/`msiexec`
-    //      has started — the staged bytes are owned by the package
-    //      format, not retained as a `.old` snapshot we could rename
-    //      back.
-    //   2. Each install format is journaled and recoverable out-of-
-    //      band: `dnf history undo`, `apt install <prev-version>`,
-    //      or Windows Installer's per-product rollback via Add/Remove
-    //      Programs → "Modify". A smoke-test failure here couldn't do
-    //      anything the user can't already do better with one of
-    //      those.
-    //   3. Running a 5 s blocking subprocess immediately after the
-    //      elevation prompt (polkit / UAC) makes the post-install
-    //      spinner look hung for no actionable benefit. On Windows
-    //      it's also racy — msiexec may be mid-replace when we'd try
-    //      to exec the new binary, which would either spawn the old
-    //      version (mid-rename window) or fail with "file in use".
-    //
-    // (Note: dnf/apt verify package signature + checksum at install
-    // time and Windows Installer enforces the same on the MSI summary
-    // stream, but none of them runs `Melodia --version`. So the skip
-    // isn't "the package manager already smoke-tested for us" — it's
-    // the three reasons above.)
+    // Skipped on both package paths, for three symmetric reasons. There is no
+    // in-process rollback once the package manager has started — the bytes are
+    // its, not a `.old` we could rename back. Each format is journaled and
+    // recoverable out of band, better than anything a failure here could do. And
+    // a blocking subprocess immediately after an elevation prompt makes the
+    // spinner look hung; on Windows it is racy besides, msiexec possibly being
+    // mid-replace. (They verify their own signatures, but none of them runs
+    // `Melodia --version`, so that is not the reason.)
     match method {
         InstallMethod::AtomicSwap => {
             if let Err(e) = verify_swapped_binary(&target, expected_version).await {

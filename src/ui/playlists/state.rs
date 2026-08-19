@@ -135,11 +135,6 @@ pub(super) struct PlaylistDetailState {
     pub filter: Mutex<Needle>,
 }
 
-/// Square decode size (px) for the Playlists **grid card** tiles. Matches
-/// the Albums grid tier — playlists in the grid render at the same
-/// per-card footprint as albums.
-pub(super) const GRID_COVER_SIZE: u32 = 448;
-
 /// Fallback LRU capacity for the **grid** cover cache, used at
 /// construction and whenever the display can't be queried. Mirrors the
 /// Albums tier.

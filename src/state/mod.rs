@@ -168,10 +168,10 @@ impl AppState {
             s.is_muted = settings.playback.is_muted;
             s.pre_mute_volume = s.volume;
             s.gapless_enabled = settings.playback.gapless_playback;
-            s.playback_speed = settings.playback.playback_speed.clamp(
-                crate::player::state::MIN_SPEED,
-                crate::player::state::MAX_SPEED,
-            );
+            s.playback_speed = settings
+                .playback
+                .playback_speed
+                .clamp(crate::player::state::MIN_SPEED, crate::player::state::MAX_SPEED);
             let vol = s.effective_volume();
             let speed = s.playback_speed;
             drop(s);
@@ -218,18 +218,13 @@ impl AppState {
         // scrobble service, so the app has a single connection pool built on
         // first actual request.
         let http_client = Arc::new(OnceLock::new());
-        let scrobble = Arc::new(ScrobbleService::init(
-            &paths,
-            &settings.scrobble,
-            http_client.clone(),
-        ));
+        let scrobble =
+            Arc::new(ScrobbleService::init(&paths, &settings.scrobble, http_client.clone()));
         // Persists nothing (the application id is a compile-time constant, not a
         // secret), so unlike scrobble it needs no `&paths` — but it shares the
         // one `http_client` pool for the album-cover lookup.
-        let discord = Arc::new(DiscordPresenceService::init(
-            &settings.discord,
-            http_client.clone(),
-        ));
+        let discord =
+            Arc::new(DiscordPresenceService::init(&settings.discord, http_client.clone()));
 
         let state = Self {
             paths: Arc::new(paths),

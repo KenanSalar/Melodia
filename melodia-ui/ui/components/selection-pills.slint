@@ -1,27 +1,16 @@
 import { Theme } from "../theme.slint";
 import { PillButton, PillDivider, PillLabel } from "action-pill.slint";
 
-// The multi-select trailer every list view's `ActionPill` grows once rows are selected:
-// how many, and a way to drop them.
+// The multi-select trailer every list view's `ActionPill` grows once rows are selected.
 //
-// **Mount it behind the host's own `if`, not with a count of zero.** The three slots are
-// unconditional inside, so an unselected list mounts nothing at all — where a component
-// that hid its own children would still occupy a cell in the pill's layout and claim one
-// `pad-xs` of spacing, widening the chip permanently by the width of a gap. That is also
-// what retires the triple-spelled predicate each site used to carry, one `if` per slot.
+// **Mount it behind the host's own `if`, not with a count of zero** — the three slots are
+// unconditional inside, so a component hiding its own children would still claim a `pad-xs` of the
+// pill's spacing and widen the chip permanently. `divider-trails` follows position, not taste: the
+// divider always sits between this group and whatever shares the pill with it.
 //
-// `divider-trails` picks which side the separator falls on, and it follows position rather
-// than taste: the divider always sits between this group and whatever shares the pill with
-// it. Six mounts put the group last and take the default; the two that put it first — My
-// Library's Songs tab and Browse, both of which follow it with a column toggle — set the
-// flag.
-//
-// **Playlist Detail's row is the one that stays hand-rolled**, and deliberately. Its group
-// carries a destructive "Remove from playlist" pill *between* the count and the close, with
-// a divider of its own and gated on the playlist not being smart. Absorbing it costs this
-// component a children slot plus a `has-action` bool restating that same `is_smart`
-// predicate at the mount — five knobs and a duplicated condition for one caller, which is
-// a worse trade than the twenty lines it would save.
+// **Playlist Detail's row stays hand-rolled**, its destructive pill sitting *between* the count and
+// the close. Absorbing it costs a children slot plus a `has-action` bool restating the `is_smart`
+// predicate at the mount — a worse trade for one caller.
 export component SelectionPills inherits HorizontalLayout {
     in property <int> count;
     in property <bool> divider-trails: false;

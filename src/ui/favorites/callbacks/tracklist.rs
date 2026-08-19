@@ -8,8 +8,8 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::library;
 use crate::state::AppState;
-use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort, play_row_start};
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort, play_row_start};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Favorites};
@@ -33,8 +33,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
             }
             let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            spawn_logged!(s, "favorites::play_row",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+            spawn_logged!(
+                s,
+                "favorites::play_row",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
+            );
         });
     }
     {
@@ -42,8 +45,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         g.on_play_next(move |ids| {
             let id_vec = collect_track_ids(&ids);
             let s = s.clone();
-            spawn_logged!(s, "favorites::play_next",
-                library::queue::queue_play_next_many(&s, id_vec));
+            spawn_logged!(
+                s,
+                "favorites::play_next",
+                library::queue::queue_play_next_many(&s, id_vec)
+            );
         });
     }
     {
@@ -51,8 +57,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         g.on_add_to_queue(move |ids| {
             let id_vec = collect_track_ids(&ids);
             let s = s.clone();
-            spawn_logged!(s, "favorites::add_to_queue",
-                library::queue::queue_add_tracks(&s, id_vec));
+            spawn_logged!(
+                s,
+                "favorites::add_to_queue",
+                library::queue::queue_add_tracks(&s, id_vec)
+            );
         });
     }
     // toggle-row-favorite: optimistic local removal (favourite ⇒ not-
@@ -64,14 +73,14 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     {
         let fu = fav_ui.clone();
         wire_row_flag!(g, on_toggle_row_favorite, state, "favorites::set_favorite",
-            library::favorites::set_favorite, collect_track_ids,
-            captures: [weak, fu],
-            after: |id_vec, fav| {
-                for id in &id_vec {
-                    fu.flip_or_remove_track(*id, fav);
-                }
-                favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
-            });
+        library::favorites::set_favorite, collect_track_ids,
+        captures: [weak, fu],
+        after: |id_vec, fav| {
+            for id in &id_vec {
+                fu.flip_or_remove_track(*id, fav);
+            }
+            favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
+        });
     }
 
     // set-row-rating: rating is independent of favorite membership, so the
@@ -80,17 +89,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     {
         let fu = fav_ui.clone();
         wire_row_flag!(g, on_set_row_rating, state, "favorites::set_rating",
-            library::ratings::set_rating, collect_track_ids,
-            captures: [weak, fu],
-            after: |id_vec, rating| {
-                // Rating never removes the row (unlike the favorite toggle) and
-                // there's no in-table rating sort, so patch each row in place
-                // instead of rebuilding the whole filtered list.
-                for id in &id_vec {
-                    fu.flip_track_rating(*id, rating);
-                    favorites_ui_mod::apply_row_rating(&weak, *id, rating);
-                }
-            });
+        library::ratings::set_rating, collect_track_ids,
+        captures: [weak, fu],
+        after: |id_vec, rating| {
+            // Rating never removes the row (unlike the favorite toggle) and
+            // there's no in-table rating sort, so patch each row in place
+            // instead of rebuilding the whole filtered list.
+            for id in &id_vec {
+                fu.flip_track_rating(*id, rating);
+                favorites_ui_mod::apply_row_rating(&weak, *id, rating);
+            }
+        });
     }
 
     // --- Filter / sort --------------------------------------------
@@ -137,9 +146,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<Favorites>().snapshot_visible();
             let s_disk = s.clone();
-            spawn_blocking_logged!(s, "favorites::toggle_column",
+            spawn_blocking_logged!(
+                s,
+                "favorites::toggle_column",
                 library::settings::update_view_columns(
-                    &s_disk, view_id::FAVORITES.to_owned(), columns));
+                    &s_disk,
+                    view_id::FAVORITES.to_owned(),
+                    columns
+                )
+            );
         });
     }
     // select-row / clear-selection — modifier-aware selection with

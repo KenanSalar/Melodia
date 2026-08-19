@@ -13,9 +13,7 @@ use crate::player::tests::helpers::{TestSource, bits};
 /// can't pass by accidentally matching at the wrong offset. `u16 → f32` is
 /// lossless and the divisor is a power of two, so no value is rounded.
 fn counted(len: usize) -> Vec<f32> {
-    (0..len)
-        .map(|i| f32::from(u16::try_from(i + 1).unwrap_or(u16::MAX)) / 65_536.0)
-        .collect()
+    (0..len).map(|i| f32::from(u16::try_from(i + 1).unwrap_or(u16::MAX)) / 65_536.0).collect()
 }
 
 /// Drain a tap over `input` and return `(passed-through samples, ring window)`.

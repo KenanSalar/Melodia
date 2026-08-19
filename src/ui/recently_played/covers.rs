@@ -1,11 +1,10 @@
-//! The Recently-Played view's three cover tiers: what each holds, when it warms,
+//! The Recently-Played view's two cover tiers: what each holds, when it warms,
 //! and when it is handed back.
 //!
-//! Two of them are the view's own — the hero mosaic (128 px) and Most Played
-//! (grid-sized) — and the third is the shared 72 px row tier the Songs tab's
-//! `TrackList` draws from, which this module only ever reads. Tab-leave is a
-//! release event as much as a section leave is, so the grid tier is dropped and
-//! re-warmed on a tab pick too.
+//! One is the view's own — Most Played, at grid size — and the other is the
+//! shared row tier the Songs tab's `TrackList` draws from, which this module
+//! only ever reads. Tab-leave is a release event as much as a section leave is,
+//! so the grid tier is dropped and re-warmed on a tab pick too.
 
 use std::path::PathBuf;
 
@@ -15,7 +14,7 @@ use super::state::{GRID_PREWARM_AHEAD, GRID_THUMB_CAP};
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::AppWindow;
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::ui::grid_prewarm::{grid_cover, nonempty_artwork_path};
+use crate::ui::grid_prewarm::grid_cover;
 
 impl RecentlyPlayedUi {
     /// First-screenful cover paths for the Most Played tab, in display order.
@@ -35,7 +34,7 @@ impl RecentlyPlayedUi {
     }
 
     /// The cover tier a tab draws from. `None` for Songs, whose row covers come
-    /// from the shared 72 px tier instead.
+    /// from the shared row tier instead.
     fn grid_tier(&self, tab: RecentlyPlayedTab) -> Option<&CoverThumbs> {
         match tab {
             RecentlyPlayedTab::MostPlayed => Some(&self.most_played_thumbs),
@@ -105,13 +104,6 @@ impl RecentlyPlayedUi {
         warm
     }
 
-    /// Lazy cover lookup for the hero 2×2 mosaic tiles. Routed via
-    /// `RecentlyPlayed.request-mosaic-cover`.
-    pub fn mosaic_cover(&self, artwork_path: &str) -> Image {
-        self.mosaic_thumbs
-            .get_or_load_opt(nonempty_artwork_path(artwork_path))
-    }
-
     /// Lazy cover lookup for the Most Played grid cards. Routed via
     /// `RecentlyPlayed.request-most-played-cover`.
     pub fn most_played_cover(&self, artwork_path: &str, generation: i32) -> Image {
@@ -119,12 +111,14 @@ impl RecentlyPlayedUi {
     }
 }
 
-/// Retune the Most Played cover cache to the real display resolution. Called
-/// once at startup after the winit window is live, alongside the entity grids'
-/// own tuning — the tab draws the same card at the same size, so it takes the
+/// Retune the Most Played cover cache to the real display resolution. Called after
+/// `app.show()` and again on every resize, alongside the entity grids' own
+/// tuning — the tab draws the same card at the same size, so it takes the
 /// same band.
 pub fn tune_cache_for_display(app: &AppWindow, rp_ui: &RecentlyPlayedUi) {
     let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, GRID_THUMB_CAP);
+    let size = crate::ui::grid_prewarm::cover_size_for_window(app);
     rp_ui.most_played_thumbs.resize(cap);
-    log::debug!("ui::recently_played grid-cover cache cap tuned to {cap}");
+    rp_ui.most_played_thumbs.set_thumb_size(size);
+    log::debug!("ui::recently_played grid-cover cache tuned to cap {cap}, {size} px");
 }

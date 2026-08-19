@@ -24,7 +24,7 @@ fn most_played(play_count: i32) -> MostPlayedFavorite {
 
 /// A handle with one played track cached and `tab` mounted.
 fn seeded(tab: RecentlyPlayedTab, play_count: i32) -> RecentlyPlayedUi {
-    let rp_ui = RecentlyPlayedUi::new(std::sync::Arc::new(CoverThumbs::new()));
+    let rp_ui = RecentlyPlayedUi::new(std::sync::Arc::new(CoverThumbs::new()), None);
     *rp_ui.state().most_played.lock() = vec![most_played(play_count)];
     rp_ui.set_active_tab(tab);
     rp_ui
@@ -41,16 +41,12 @@ fn seeded(tab: RecentlyPlayedTab, play_count: i32) -> RecentlyPlayedUi {
 #[test]
 fn only_the_mounted_tabs_rows_are_built() {
     assert_eq!(
-        build_filtered_grid(&seeded(RecentlyPlayedTab::MostPlayed, 3))
-            .most_played
-            .len(),
+        build_filtered_grid(&seeded(RecentlyPlayedTab::MostPlayed, 3)).most_played.len(),
         1,
         "the Most Played tab must build its own rows"
     );
     assert!(
-        build_filtered_grid(&seeded(RecentlyPlayedTab::Songs, 3))
-            .most_played
-            .is_empty(),
+        build_filtered_grid(&seeded(RecentlyPlayedTab::Songs, 3)).most_played.is_empty(),
         "the Songs tab mounts no grid, so building card rows for one is pure cost"
     );
 }

@@ -12,14 +12,11 @@ use crate::{
     RecentlyPlayed, TrackListRow as UiTrackListRow,
 };
 
-/// Bind empty Slint `VecModel`s for the Most Played grid, the Songs list, the
-/// selection set, and the mosaic-path string list. Subsequent updates locate
-/// them by downcasting back to `VecModel<T>` from the UI thread.
+/// Bind empty Slint `VecModel`s for the Most Played grid, the Songs list and the
+/// selection set. Subsequent updates locate them by downcasting back to
+/// `VecModel<T>` from the UI thread.
 pub(super) fn install_recently_played_models(ui: &AppWindow) {
     let g = ui.global::<RecentlyPlayed>();
-
-    let mosaic_paths: Rc<VecModel<SharedString>> = Rc::new(VecModel::default());
-    g.set_mosaic_paths(ModelRc::from(mosaic_paths));
 
     let most_played: Rc<VecModel<UiEntityGridRow>> = Rc::new(VecModel::default());
     g.set_most_played_rows(ModelRc::from(most_played));

@@ -88,7 +88,7 @@ fn try_create_controls(
     match create_controls(hwnd, tx) {
         Ok(controls) => Some(controls),
         Err(e) => {
-            log::warn!("Failed to initialize OS media controls: {e}");
+            log::warn!("Failed to initialize OS media controls: {}", super::describe(&e));
             None
         }
     }
@@ -110,10 +110,7 @@ impl MediaControlsHandle {
     pub fn attach_smtc(&self, hwnd: *mut std::ffi::c_void) -> bool {
         // Clone the event sender under a short lock; bail if SMTC is already up.
         let tx = {
-            let guard = self
-                .inner
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let guard = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             if guard.controls.is_some() {
                 return false;
             }
@@ -126,10 +123,7 @@ impl MediaControlsHandle {
             return false;
         };
 
-        let mut guard = self
-            .inner
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut guard = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if guard.controls.is_some() {
             // Lost a race with another `attach_smtc` — drop the spare controls.
             return false;
@@ -143,22 +137,20 @@ impl MediaControlsHandle {
 fn create_controls(
     hwnd: Option<*mut std::ffi::c_void>,
     tx: mpsc::Sender<MediaControlEvent>,
-) -> Result<MediaControls, String> {
+) -> Result<MediaControls, souvlaki::Error> {
     let config = PlatformConfig {
         dbus_name: "melodia",
         display_name: "Melodia",
         hwnd,
     };
 
-    let mut controls = MediaControls::new(config).map_err(|e| format!("{e}"))?;
+    let mut controls = MediaControls::new(config)?;
 
-    controls
-        .attach(move |event: MediaControlEvent| {
-            if let Err(e) = tx.try_send(event) {
-                log::warn!("Dropped media control event due to full channel: {e}");
-            }
-        })
-        .map_err(|e| format!("{e}"))?;
+    controls.attach(move |event: MediaControlEvent| {
+        if let Err(e) = tx.try_send(event) {
+            log::warn!("Dropped media control event due to full channel: {e}");
+        }
+    })?;
 
     Ok(controls)
 }
@@ -203,9 +195,7 @@ fn translate_event(event: MediaControlEvent) -> Option<PlayerEvent> {
         MediaControlEvent::Previous => Some(PlayerEvent::Previous),
         MediaControlEvent::Stop => Some(PlayerEvent::Stop),
         MediaControlEvent::SetPosition(MediaPosition(pos)) => {
-            Some(PlayerEvent::SeekTo(
-                u64::try_from(pos.as_millis()).unwrap_or(u64::MAX),
-            ))
+            Some(PlayerEvent::SeekTo(u64::try_from(pos.as_millis()).unwrap_or(u64::MAX)))
         }
         MediaControlEvent::SetVolume(vol) => {
             let vol = vol.clamp(0.0, 1.0);
@@ -249,8 +239,7 @@ impl MediaControlsSync for MediaControlsHandle {
         let track_changed = guard.last_track_id != track_id;
         let status_changed = guard.last_status != Some(status);
         let position_changed = guard.last_position_ms != vm.position_ms;
-        let volume_changed =
-            guard.last_volume != vm.volume || guard.last_is_muted != vm.is_muted;
+        let volume_changed = guard.last_volume != vm.volume || guard.last_is_muted != vm.is_muted;
 
         if !track_changed && !status_changed && !position_changed && !volume_changed {
             return;
@@ -262,10 +251,7 @@ impl MediaControlsSync for MediaControlsHandle {
 
         if track_changed {
             if let Some(ref track) = vm.current_track {
-                let cover_url = track
-                    .artwork_path
-                    .as_ref()
-                    .map(|p| format!("file://{p}"));
+                let cover_url = track.artwork_path.as_ref().map(|p| format!("file://{p}"));
 
                 if let Err(e) = controls.set_metadata(MediaMetadata {
                     title: Some(&track.title),
@@ -312,10 +298,7 @@ impl MediaControlsSync for MediaControlsHandle {
     /// Linux MPRIS relies on state-change syncs and doesn't need this.
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     fn update_position(&self, position_ms: u64) {
-        let mut guard = self
-            .inner
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut guard = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(controls) = guard.controls.as_mut() {
             let progress = Some(MediaPosition(Duration::from_millis(position_ms)));
             if let Err(e) = controls.set_playback(MediaPlayback::Playing { progress }) {

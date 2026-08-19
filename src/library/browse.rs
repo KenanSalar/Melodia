@@ -23,7 +23,9 @@ struct DirScanResult {
 /// Split out of [`browse_directory`]'s blocking closure so the tests exercise
 /// the shipped walk instead of a copy of it — they can't drive the closure
 /// itself, which needs an `AppState` and the library-folder guard.
-fn classify_dir_entries(dir: &std::path::Path) -> Result<(Vec<BrowseFolder>, Vec<PathBuf>), AppError> {
+fn classify_dir_entries(
+    dir: &std::path::Path,
+) -> Result<(Vec<BrowseFolder>, Vec<PathBuf>), AppError> {
     let mut folders = Vec::new();
     let mut audio_paths = Vec::new();
 
@@ -80,9 +82,7 @@ pub async fn browse_directory(
             .map_err(|_| AppError::Validation(format!("Path does not exist: {path}")))?;
 
         if !canonical.is_dir() {
-            return Err(AppError::Validation(format!(
-                "Path is not a directory: {path}"
-            )));
+            return Err(AppError::Validation(format!("Path is not a directory: {path}")));
         }
 
         let in_library = enabled_canonical.iter().any(|cp| canonical.starts_with(cp));
@@ -110,18 +110,14 @@ pub async fn browse_directory(
     // in-library file never deep-clones its ~18-field `TrackListRow` — the
     // only per-row clone is the `file_path` key (one `String` vs ~6 heap
     // allocs for a full row clone).
-    let mut track_map: HashMap<String, TrackListRow> = tracks
-        .into_iter()
-        .map(|t| (t.file_path.clone(), t))
-        .collect();
+    let mut track_map: HashMap<String, TrackListRow> =
+        tracks.into_iter().map(|t| (t.file_path.clone(), t)).collect();
 
     let mut files: Vec<BrowseFile> = Vec::with_capacity(scan.audio_paths.len());
     for audio_path in &scan.audio_paths {
         let path_str = audio_path.to_string_lossy();
-        let file_name = audio_path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
+        let file_name =
+            audio_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
 
         if let Some(row) = track_map.remove(path_str.as_ref()) {
             files.push(BrowseFile {
@@ -165,7 +161,8 @@ pub async fn browse_directory(
 
     let name = scan
         .canonical
-        .file_name().map_or_else(|| dir_str.to_string(), |n| n.to_string_lossy().into_owned());
+        .file_name()
+        .map_or_else(|| dir_str.to_string(), |n| n.to_string_lossy().into_owned());
 
     Ok(BrowseResult {
         path: dir_str.into_owned(),

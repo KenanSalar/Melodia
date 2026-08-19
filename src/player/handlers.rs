@@ -14,9 +14,7 @@ use super::crossfade;
 use super::event_sink::PlayerSinks;
 use super::replaygain::TrackReplayGain;
 use super::rodio_backend::{PlaybackCheck, RodioPlayer};
-use super::state::{
-    PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state,
-};
+use super::state::{PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state};
 use super::types::PlaybackStatus;
 
 /// How often the monitor wakes: tight enough that gapless preload triggers and
@@ -151,10 +149,7 @@ pub fn evaluate_playing_tick(
         // Capture the next track's baked ReplayGain alongside its path — it must
         // travel with *its own* source (the preloaded track has different tags
         // than the playing one), so the gain is baked per source, not shared.
-        state
-            .queue
-            .peek_next()
-            .map(|t| (t.file_path.clone(), t.replaygain()))
+        state.queue.peek_next().map(|t| (t.file_path.clone(), t.replaygain()))
     } else {
         None
     };
@@ -227,9 +222,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             }
 
             // Quick check: skip tick when not playing (lock-free via atomic mirror)
-            let is_playing = player_state
-                .status_atomic
-                .load(std::sync::atomic::Ordering::Relaxed)
+            let is_playing = player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed)
                 == PlaybackStatus::Playing as u8;
 
             if !is_playing {
@@ -256,7 +249,8 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         // branch, when this new current track approaches its own end.
                         if let Some(track) = state.queue.advance().cloned() {
                             state.position_ms = 0;
-                            state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
+                            state.duration_ms =
+                                u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
                             state.current_track = Some(track);
                         }
 
@@ -346,10 +340,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             if save_tick_counter == 0 {
                 let (track_data, persistable) = {
                     let state = lock_state(&player_state);
-                    let td = state
-                        .current_track
-                        .as_ref()
-                        .map(|t| (t.id, state.position_ms));
+                    let td = state.current_track.as_ref().map(|t| (t.id, state.position_ms));
                     (td, state.queue.to_persistable())
                 };
                 if let Some((track_id, position_ms)) = track_data

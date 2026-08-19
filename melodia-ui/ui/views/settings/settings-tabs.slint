@@ -7,18 +7,13 @@ import { ServicesPage } from "pages/services-page.slint";
 import { AboutPage } from "pages/about-page.slint";
 
 // The Settings router: one tab, or all five at once while a search is running.
+// `settings-view.slint` owns the chrome around it.
 //
-// **Search deliberately escapes the tabs.** Filtering only the selected one
-// would answer "no matching settings" for a query whose row sits a tab over —
-// the failure that makes tabbed settings worse than a single scroll. Mounting
-// every page gives back the flat cross-category list, and needs no filtering
-// logic of its own since each card already hides itself.
-//
-// Both modes mount the same five pages, so which card lives on which tab is
-// stated once, in the page files; search-mode ordering then falls out of tab
-// order, and a result's position says where the setting lives.
-//
-// `settings-view.slint` owns the chrome around this.
+// **Search deliberately escapes the tabs.** Filtering only the selected one would answer "no
+// matching settings" for a query whose row sits a tab over — the failure that makes tabbed settings
+// worse than a single scroll. Mounting every page gives back the flat cross-category list and needs
+// no filtering logic of its own, each card already hiding itself. Both modes mount the same five
+// pages, so which card lives on which tab is stated once, in the page files.
 export component SettingsTabs inherits Rectangle {
     in property <int> tab-index;
     in property <bool> searching;

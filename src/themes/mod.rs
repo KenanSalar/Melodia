@@ -32,7 +32,9 @@ pub mod palette;
 pub mod system_color_state;
 
 pub use apply::{accent_brushes, apply};
-pub(crate) use apply::{brush, brush_to_rgb, brush_with_alpha, color, color_to_rgb};
+pub(crate) use apply::{
+    brush, brush_to_rgb, brush_with_alpha, color, color_to_rgb, color_with_alpha,
+};
 pub use palette::{
     AccentDef, MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef, Variant,
 };
@@ -55,38 +57,23 @@ pub fn registry() -> &'static [&'static ThemeDef] {
 
 /// Find a theme by id; falls back to Catppuccin if the id is unknown.
 pub fn get(id: &str) -> &'static ThemeDef {
-    registry()
-        .iter()
-        .copied()
-        .find(|t| t.id == id)
-        .unwrap_or(&catppuccin::CATPPUCCIN)
+    registry().iter().copied().find(|t| t.id == id).unwrap_or(&catppuccin::CATPPUCCIN)
 }
 
 /// Index of `theme_id` in [`registry`], or 0 (Catppuccin) on miss. Used by
 /// `ui::appearance` to seed `Settings.theme-idx` from `SettingsData.theme_id`.
 pub fn theme_index(theme_id: &str) -> usize {
-    registry()
-        .iter()
-        .position(|t| t.id == theme_id)
-        .unwrap_or(0)
+    registry().iter().position(|t| t.id == theme_id).unwrap_or(0)
 }
 
 /// Index of `variant_id` in `theme.variants`, or 0 on miss.
 pub fn variant_index(theme: &ThemeDef, variant_id: &str) -> usize {
-    theme
-        .variants
-        .iter()
-        .position(|v| v.id == variant_id)
-        .unwrap_or(0)
+    theme.variants.iter().position(|v| v.id == variant_id).unwrap_or(0)
 }
 
 /// Index of `accent_id` in `theme.accents`, or 0 on miss.
 pub fn accent_index(theme: &ThemeDef, accent_id: &str) -> usize {
-    theme
-        .accents
-        .iter()
-        .position(|a| a.id == accent_id)
-        .unwrap_or(0)
+    theme.accents.iter().position(|a| a.id == accent_id).unwrap_or(0)
 }
 
 #[cfg(test)]

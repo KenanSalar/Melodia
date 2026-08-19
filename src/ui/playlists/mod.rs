@@ -37,19 +37,19 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::playlist::PlaylistStats;
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::ui::detail_artwork::DetailArtwork;
+use crate::ui::artwork_cache::BlurSpec;
+use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::ui::view_ctx::ViewCtx;
 use crate::{
-    AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow,
-    PlaylistRow as UiPlaylistRow, Playlists, TrackListRow as UiTrackListRow,
+    AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow,
+    Playlists, TrackListRow as UiTrackListRow,
 };
 
-use state::{
-    DEFAULT_GRID_COVER_CAP, GRID_COVER_SIZE, GridData, PlaylistDetailState, PlaylistGridState,
-};
+use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
+use state::{DEFAULT_GRID_COVER_CAP, GridData, PlaylistDetailState, PlaylistGridState};
 
 #[cfg(test)]
 use grid::compute_indices;
@@ -66,7 +66,7 @@ pub use grid::{fetch_grid, tune_cache_for_display};
 // `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is
 // exactly that reach.
 pub(super) use detail::{
-    apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail,
+    POSITION_FIELD, apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail,
     apply_optimistic_reorder, clear_detail, open_playlist, refresh_detail, resort_detail,
     rollback_reorder, set_filter,
 };
@@ -85,7 +85,8 @@ pub use callbacks::wire_files;
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
     install_models(cx.app);
-    let playlists_ui = Arc::new(PlaylistsUi::new(cx.cover_thumbs.clone()));
+    let playlists_ui =
+        Arc::new(PlaylistsUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, &playlists_ui);
     playlists_ui
 }
@@ -96,10 +97,10 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
 pub struct PlaylistsUi {
     grid: PlaylistGridState,
     detail: PlaylistDetailState,
-    /// Row-tier (72 px) cache — shared with Tracks / Browse — backs the
+    /// Row-tier cache — shared with Tracks / Browse — backs the
     /// detail track-list's artwork column.
     cover_thumbs: Arc<CoverThumbs>,
-    /// Grid-tier (`GRID_COVER_SIZE`) cache for the Playlists grid cards.
+    /// Grid-tier (`GRID_COVER_FALLBACK`) cache for the Playlists grid cards.
     /// Released when the user opens a detail (the grid is unmounted) and
     /// when leaving the section. Re-warmed on return.
     grid_covers: Arc<CoverThumbs>,
@@ -112,7 +113,7 @@ pub struct PlaylistsUi {
 }
 
 impl PlaylistsUi {
-    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>, hero_blur: Option<BlurSpec>) -> Self {
         Self {
             grid: PlaylistGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
@@ -128,10 +129,10 @@ impl PlaylistsUi {
             },
             cover_thumbs,
             grid_covers: Arc::new(CoverThumbs::with_config(
-                GRID_COVER_SIZE,
+                GRID_COVER_FALLBACK,
                 DEFAULT_GRID_COVER_CAP,
             )),
-            detail_artwork: Arc::new(DetailArtwork::new()),
+            detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),
         }
     }
@@ -269,7 +270,20 @@ impl PlaylistsUi {
     /// `Playlists.request-cover`. Resolves against the grid-tier cache.
     pub fn grid_cover(&self, artwork_path: &str) -> slint::Image {
         self.grid_covers
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+            .get_or_schedule_opt(crate::ui::grid_prewarm::nonempty_artwork_path(artwork_path))
+    }
+
+    /// The grid tier itself, for the wiring that has to reach past a lookup — the
+    /// `Albums::grid_thumbs` contract.
+    pub fn grid_thumbs(&self) -> Arc<CoverThumbs> {
+        self.grid_covers.clone()
+    }
+
+    /// The inline sibling, for the Edit Artwork dialog's current-cover slot: it is written once as
+    /// a property rather than read from a binding, so a scheduled decode has nothing to re-run and
+    /// the placeholder would stand for the life of the dialog.
+    pub fn grid_cover_blocking(&self, artwork_path: &str) -> slint::Image {
+        crate::ui::grid_prewarm::grid_cover_blocking(&self.grid_covers, artwork_path)
     }
 
     /// Lookup of a playlist's canonical stats by id, against the cached
@@ -282,15 +296,14 @@ impl PlaylistsUi {
         data.playlists.iter().find(|p| p.id == id).cloned()
     }
 
-    /// Row-tier (72 px) cover lookup — backs
+    /// Row-tier cover lookup — backs
     /// `Playlists.request-row-cover`, used by the mosaic-picker
     /// dialog's 64 px candidate tiles and preview slots. Resolves
     /// against the shared `cover_thumbs` LRU (the same one the detail
     /// track-list artwork column uses), so the dialog doesn't pay for
     /// a full-size grid-tier decode for a 64 px tile.
     pub fn row_cover(&self, artwork_path: &str) -> slint::Image {
-        self.cover_thumbs
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+        self.cover_thumbs.get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 }
 
@@ -305,12 +318,10 @@ fn install_models(ui: &AppWindow) {
     ui.global::<Playlists>().set_rows(ModelRc::from(flat));
 
     let tracks: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
-    ui.global::<PlaylistDetail>()
-        .set_tracks(ModelRc::from(tracks));
+    ui.global::<PlaylistDetail>().set_tracks(ModelRc::from(tracks));
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
-    ui.global::<PlaylistDetail>()
-        .set_selected_ids(ModelRc::from(sel));
+    ui.global::<PlaylistDetail>().set_selected_ids(ModelRc::from(sel));
 }
 
 /// Convert a `PlaylistStats` into the Slint `PlaylistRow` an `EntityCard`
@@ -323,17 +334,13 @@ pub fn to_slint_playlist_row(p: &PlaylistStats) -> UiPlaylistRow {
         description: SharedString::from(p.description.as_deref().unwrap_or("")),
         artwork_path: SharedString::from(p.thumbnail_path.as_deref().unwrap_or("")),
         track_count: p.track_count,
-        total_duration_ms: i32::try_from(
-            p.total_duration_ms.clamp(0, i64::from(i32::MAX)),
-        )
-        .unwrap_or(i32::MAX),
+        total_duration_ms: i32::try_from(p.total_duration_ms.clamp(0, i64::from(i32::MAX)))
+            .unwrap_or(i32::MAX),
         is_smart: p.is_smart,
     }
 }
 
-// Compile-time assertion, not runtime code: an anonymous `const _` is
-// type-checked but never dead-code-flagged, so the bound is enforced
-// without an `#[allow(dead_code)]` on a fn nothing calls.
+// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<PlaylistsUi>();

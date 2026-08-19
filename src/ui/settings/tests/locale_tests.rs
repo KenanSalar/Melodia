@@ -61,7 +61,9 @@ fn collect_from_slint(src: &str, into: &mut Msgids) {
     let mut at = 0;
     while let Some(offset) = stripped.get(at..).and_then(|rest| rest.find("@tr(")) {
         at += offset + "@tr(".len();
-        let Some((one, after)) = read_literal(&stripped, at) else { continue };
+        let Some((one, after)) = read_literal(&stripped, at) else {
+            continue;
+        };
         into.singular.insert(one.to_owned());
 
         let mut i = after;
@@ -90,7 +92,9 @@ fn read_po_value(lines: &[&str], at: usize, keyword: &str) -> Option<String> {
         if !line.starts_with('"') {
             break;
         }
-        let Some((chunk, _)) = read_literal(line, 0) else { break };
+        let Some((chunk, _)) = read_literal(line, 0) else {
+            break;
+        };
         value.push_str(chunk);
     }
     Some(value)
@@ -160,11 +164,7 @@ fn every_translated_literal_has_a_msgid_in_every_catalogue() {
 
         let missing: Vec<&str> =
             wanted.singular.difference(&have.singular).map(String::as_str).collect();
-        assert!(
-            missing.is_empty(),
-            "{code} is missing {} msgid(s): {missing:?}",
-            missing.len()
-        );
+        assert!(missing.is_empty(), "{code} is missing {} msgid(s): {missing:?}", missing.len());
 
         let missing_plurals: Vec<&(String, String)> =
             wanted.plural.difference(&have.plural).collect();

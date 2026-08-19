@@ -4,22 +4,22 @@ import { TrackListRow } from "../../models.slint";
 import { TrackListHeader } from "track-list-header.slint";
 import { TrackListRowItem } from "track-list-row.slint";
 
-// Drag-reorderable sibling of `TrackList` — same external contract plus a
-// `reorder(from, to)` fired on a successful drop. **The shared `TrackList`
-// stays drag-free**; Playlist Detail is this one's only consumer.
+// Drag-reorderable sibling of `TrackList` — same external contract plus a `reorder(from, to)` fired
+// on a successful drop. **The shared `TrackList` stays drag-free**; Playlist Detail is the only
+// consumer. The drag itself lives inside `TrackListRowItem`, behind its `enable-drag`: wrapping the
+// row in an outer TouchArea does not work, the row's own `touch` capturing press and up exclusively
+// under Slint's deepest-wins routing, so an outer one sees `moved` but never `pointer-event(up)`.
 //
-// The drag itself lives inside `TrackListRowItem`, behind its `enable-drag`.
-// Wrapping the row in an outer TouchArea does not work: the row's own `touch`
-// captures press and up exclusively under Slint's deepest-wins routing, so an
-// outer one sees `moved` but never `pointer-event(up)` and the ghost and drop
-// line stay stuck after every drop.
-//
-// The state (`drag-source` / `drop-slot`) sits at list level and every row
-// `<=>`s into it. Rust drives none of it — only the final `reorder` crosses the
-// boundary — but it does have to *abort* a drag, which is why Playlist Detail
-// binds both onto its global; see that view. Gated on `reorder-enabled`, since
-// a reorder is ambiguous in any sort but the insertion one.
+// The state (`drag-source` / `drop-slot`) sits at list level and every row `<=>`s into it. Rust
+// drives none of it — only the final `reorder` crosses the boundary — but it does have to *abort* a
+// drag, which is why Playlist Detail binds both onto its global. Gated on `reorder-enabled`, a
+// reorder being ambiguous in any sort but the insertion one.
 export component DraggableTrackList inherits Rectangle {
+    // The drop line runs the full column width, which overruns the visible list once the
+    // columns do. Same reason `queue-sheet.slint` draws its line inside a clip; the root is
+    // square and borderless, so this is a scissor rather than an offscreen layer.
+    clip: true;
+
     in property <[TrackListRow]> rows;
 
     in-out property <length> w-number: 56px;
@@ -46,6 +46,11 @@ export component DraggableTrackList inherits Rectangle {
     in property <int> playing-track-id;
 
     in property <bool> reorder-enabled: false;
+
+    // See `TrackList`. Sharper here: the after-the-last-row drop line pins to exactly the
+    // bottom edge the host's horizontal bar covers, so without the lane that slot has no
+    // indicator at all.
+    in property <bool> reserve-scrollbar-lane: false;
 
     out property <length> total-w: 16px
         + (root.show-number ? root.w-number + 8px : 0px)
@@ -126,9 +131,13 @@ export component DraggableTrackList inherits Rectangle {
         horizontal-scrollbar-policy: always-off;
         vertical-scrollbar-policy: always-off;
         viewport-height: self.height;
+        // A diagonal drag steals the grab on this axis too, once the columns
+        // overflow; see `inner-list` below for the mechanism.
+        mouse-drag-pan-enabled: !root.reorder-enabled;
 
         VerticalLayout {
             spacing: Theme.pad-xs;
+            padding-bottom: root.reserve-scrollbar-lane ? Theme.scrollbar-slot : 0px;
 
             TrackListHeader {
                 w-number <=> root.w-number;
@@ -154,6 +163,14 @@ export component DraggableTrackList inherits Rectangle {
                 vertical-scrollbar-policy: always-off;
                 horizontal-scrollbar-policy: always-off;
                 width: root.total-w;
+                // A row drag and a drag-pan are one gesture, and left to itself
+                // the pan wins: Slint re-consults the `Flickable` *during* the
+                // row's grab and intercepts at 8px of travel, which reaches the
+                // row as a pointer cancel rather than the release that commits.
+                // The row arms at 4px, inside that window, and only on a list
+                // long enough to scroll — which is why this read as
+                // intermittent rather than broken.
+                mouse-drag-pan-enabled: !root.reorder-enabled;
                 for r[idx] in root.rows: TrackListRowItem {
                     row-data: r;
                     row-index: idx;

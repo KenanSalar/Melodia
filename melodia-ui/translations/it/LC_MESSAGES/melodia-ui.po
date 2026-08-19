@@ -402,6 +402,26 @@ msgstr "Neutrale"
 msgid "Monochrome"
 msgstr "Monocromatico"
 
+msgid "Aurora Backdrop"
+msgstr "Sfondo aurora"
+
+msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
+msgstr "Colora le intestazioni di album, playlist e «In riproduzione» con i colori dell'album stesso, invece di una copia sfocata della sua copertina. Non c'è nulla da sfocare, quindi le intestazioni compaiono prima e Melodia resta più leggero. Richiede il riavvio."
+
+msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
+msgstr "Per cambiare lo stile dello sfondo è necessario riavviare Melodia. Riavviare ora?"
+
+# ---- Motion section ---------------------------------------------------------
+
+msgid "Motion"
+msgstr "Animazioni"
+
+msgid "Skip Startup Animation"
+msgstr "Salta l'animazione di avvio"
+
+msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
+msgstr "Apri con la libreria già visibile, invece di mostrarla con una dissolvenza e uno scorrimento. Una pagina di dettaglio che hai lasciato aperta si espande comunque al caricamento."
+
 # Title of the window-chrome settings card.
 msgid "Window"
 msgstr "Finestra"

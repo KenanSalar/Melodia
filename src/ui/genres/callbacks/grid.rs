@@ -88,17 +88,23 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             let s_fetch = s.clone();
             let gu_fetch = gu.clone();
             let weak_fetch = weak.clone();
-            spawn_logged!(s_fetch, "genres::open_genre",
+            spawn_logged!(
+                s_fetch,
+                "genres::open_genre",
                 genres_ui_mod::open_genre(
-                    &s_fetch, &gu_fetch, weak_fetch, id, crate::NavEnterFrom::Right));
+                    &s_fetch,
+                    &gu_fetch,
+                    weak_fetch,
+                    id,
+                    crate::NavEnterFrom::Right
+                )
+            );
 
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_last_detail_id(
-                    &s_disk,
-                    view_id::GENRE_DETAIL,
-                    Some(id),
-                ) {
+                if let Err(e) =
+                    library::settings::set_last_detail_id(&s_disk, view_id::GENRE_DETAIL, Some(id))
+                {
                     log::warn!("genres::open_genre persist: {e}");
                 }
             });

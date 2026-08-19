@@ -1,37 +1,20 @@
-//! Linux package-format detection + install-command resolution.
+//! Linux package-format detection, and the install command that follows from it.
 //!
-//! When a user installs Melodia from a `.rpm` or `.deb` they downloaded
-//! directly (no `dnf`/`apt` repository), the binary lands at
-//! `/usr/bin/melodia` — root-owned, the same path a tarball under
-//! `/opt/` would take. To let the in-app updater drive an upgrade for
-//! these users we need to:
+//! A `.rpm` or `.deb` installed directly, with no repository behind it, lands
+//! the binary at a root-owned path indistinguishable from a tarball under
+//! `/opt/`. Detecting which format owns it is what lets the manifest lookup ask
+//! for the packaged asset rather than the tarball, and what routes the verified
+//! file through `pkexec dnf install` at swap time.
 //!
-//!   1. **Detect** which package format owns the running binary so the
-//!      manifest lookup in [`super::target::current_target_key`] can
-//!      ask for `linux-x86_64-rpm` or `linux-x86_64-deb` instead of the
-//!      tarball.
-//!   2. **Resolve** the right elevated install command at swap time so
-//!      [`super::install::download_and_install`] can route the verified
-//!      `.rpm`/`.deb` through `pkexec dnf install` /
-//!      `pkexec apt install`.
+//! Detection probes `rpm -qf` then `dpkg -S`, both O(1) lookups against a local
+//! database, and **memoises** the result — package ownership of a running binary
+//! can't change mid-process. Command resolution is deliberately **not** cached:
+//! it costs one `PATH` walk per install attempt, and re-resolving covers the user
+//! who installs a newer `dnf5` mid-session.
 //!
-//! Detection probes `rpm -qf <install_target>` first, then
-//! `dpkg -S <install_target>`. Both are O(1) lookups against a local
-//! database — typical wall-time well under 50 ms. Probe result is
-//! memoised in a `OnceLock` since the package ownership of the running
-//! binary can't change during a process lifetime (modulo a `dnf
-//! reinstall` mid-run, which would leave the open fd intact anyway).
-//!
-//! Command resolution is **not** cached — the cost is one
-//! `std::env::split_paths` walk per install attempt, which only happens
-//! when the user clicks "Download & install". Re-resolving keeps the
-//! code shorter and dodges the corner case where the user installs a
-//! newer `dnf5` mid-session.
-//!
-//! `AppImage` runs are short-circuited via `$APPIMAGE`: the squashfs
-//! mount path is by definition not owned by `rpm`/`dpkg`, but skipping
-//! the subprocess spawn keeps boot quiet and avoids polluting logs with
-//! "not owned by any package" stderr.
+//! An `AppImage` short-circuits on `$APPIMAGE`. Its squashfs mount is owned by
+//! nothing by definition, and skipping the spawn keeps "not owned by any
+//! package" out of the log.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -39,33 +22,23 @@ use std::sync::OnceLock;
 
 use super::install_target;
 
-/// The two Linux package formats the in-app updater knows how to
-/// install via `pkexec`. Anything else (Arch `pacman`, Slackware,
-/// genuinely manual `/opt/` drops) returns `None` from [`detect`] and
-/// falls through to the existing tarball path.
+/// The two formats the in-app updater can install through `pkexec`. Anything
+/// else — `pacman`, a manual `/opt/` drop — answers `None` from [`detect`] and
+/// falls through to the tarball path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinuxPackageFormat {
     Rpm,
     Deb,
 }
 
-/// Cached detection result. `None` means "no probe yet"; the inner
-/// `Option<LinuxPackageFormat>` is the actual answer (`None` = not
-/// package-owned). Skipped under `cfg(test)` so the test binary at
-/// `target/debug/deps/<name>` doesn't poison subsequent runs that may
-/// want to override probe behaviour.
+/// The unset cell means "no probe yet"; the inner `Option` is the answer.
+/// Skipped under `cfg(test)`, so the test binary's own path can't poison a
+/// later run that wants to override the probe.
 static CACHED: OnceLock<Option<LinuxPackageFormat>> = OnceLock::new();
 
-/// Returns the package format that owns the running binary, or `None`
-/// when no probe matches.
-///
-/// - **Linux + `AppImage`** → `None` (squashfs mount, never package-owned).
-/// - **Linux + RPM-owned binary** → `Some(Rpm)`.
-/// - **Linux + dpkg-owned binary** → `Some(Deb)`.
-/// - **Linux + unknown** → `None`. Caller falls back to the tarball
-///   asset or hides the in-app updater entirely (see
-///   `system_install.rs`).
-/// - **Non-Linux** → `None` (compiled out).
+/// The package format owning the running binary, or `None` when no probe
+/// matches — where the caller falls back to the tarball asset, or hides the
+/// in-app updater outright.
 pub fn detect() -> Option<LinuxPackageFormat> {
     if cfg!(test) {
         return probe();
@@ -94,11 +67,9 @@ fn probe() -> Option<LinuxPackageFormat> {
 }
 
 fn owned_by_rpm(path: &PathBuf) -> bool {
-    // `rpm -qf <path>` exits 0 when the file is owned by an installed
-    // package and prints the NEVRA on stdout. Non-zero exit (1 is the
-    // canonical "not owned" code) means no match. A missing `rpm`
-    // binary returns `Err` from `output()` — treated as "not owned",
-    // which is correct because we can't elevate via `dnf` without it.
+    // Exits 0 when the file is owned by an installed package. A missing `rpm`
+    // reads as "not owned", which is correct — there is no `dnf` to elevate
+    // through without it.
     Command::new("rpm")
         .arg("-qf")
         .arg("--")
@@ -119,22 +90,13 @@ fn owned_by_dpkg(path: &PathBuf) -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
-/// Returns the `(program, must-precede-args)` pair to drive an elevated
-/// install of `format` via `pkexec`. The caller appends the staged
-/// package path.
+/// The program to drive an elevated install of `format`, or `None` when no
+/// candidate is on `$PATH` — which the caller surfaces as an error rather than
+/// guessing.
 ///
-/// Preference order:
-///   - **RPM**: `dnf5` → `dnf`. Both expose `install -y <local.rpm>`
-///     identically; `dnf5` (Fedora 41+) is preferred because Fedora is
-///     moving the legacy `dnf` shim to a deprecated state.
-///   - **DEB**: `apt` → `apt-get`. Modern `apt` is the user-facing
-///     wrapper introduced in apt 1.0 (2014); `apt-get` remains as the
-///     scripting-stable fallback. Both accept absolute paths to local
-///     `.deb` files as of apt 1.1 (2015), well below any supported
-///     distro's apt version.
-///
-/// Returns `None` when no candidate is on `$PATH`. The caller surfaces
-/// that as a "no supported package manager" error rather than guessing.
+/// `dnf5` is preferred over `dnf`, Fedora deprecating the legacy shim, and
+/// `apt` over `apt-get`, which stays as the scripting-stable fallback. Each pair
+/// takes a local package path identically.
 pub fn resolve_install_program(format: LinuxPackageFormat) -> Option<&'static str> {
     let candidates: &[&'static str] = match format {
         LinuxPackageFormat::Rpm => &["dnf5", "dnf"],
@@ -144,11 +106,9 @@ pub fn resolve_install_program(format: LinuxPackageFormat) -> Option<&'static st
 }
 
 fn program_exists(name: &str) -> bool {
-    // PATH lookup without spawning. `Command::new(name).status()` would
-    // execute the binary just to find out if it exists — wasteful, and
-    // `--version` calls vary by program. Walking `$PATH` ourselves is a
-    // few stat() calls and keeps the install code path side-effect free
-    // until the user actually clicks "Install".
+    // Walked rather than spawned: executing a binary to learn it exists is
+    // wasteful and its `--version` flag varies, where a few `stat`s keep the
+    // install path side-effect free until the user actually clicks Install.
     let Ok(path_var) = std::env::var("PATH") else {
         return false;
     };
@@ -161,17 +121,13 @@ fn program_exists(name: &str) -> bool {
     false
 }
 
-/// `true` when `path` resolves to a regular file the current process
-/// could `exec(3)` — i.e. the file exists and at least one execute bit
-/// is set. On non-Unix builds (compiled but unreachable at runtime —
-/// `resolve_install_program` only meaningfully runs on Linux) this
-/// reduces to a plain file check.
+/// `true` when `path` is a regular file with at least one execute bit set. On
+/// non-Unix — compiled but unreachable — a plain file check.
 fn is_executable_file(path: &Path) -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::metadata(path)
-            .is_ok_and(|m| m.is_file() && (m.permissions().mode() & 0o111) != 0)
+        std::fs::metadata(path).is_ok_and(|m| m.is_file() && (m.permissions().mode() & 0o111) != 0)
     }
     #[cfg(not(unix))]
     {

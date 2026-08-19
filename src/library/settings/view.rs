@@ -1,35 +1,27 @@
-//! View-section setters: locale, overflow-menu buttons, snap-to-preset
-//! corner radius helper, and per-view column visibility.
+//! View-section setters: locale, overflow-menu buttons, the snap-to-preset corner radius helper,
+//! and per-view column visibility.
 
 use crate::error::AppError;
 use crate::services;
 use crate::state::AppState;
 
-/// Persist the active locale. Validates against
-/// [`services::settings::SUPPORTED_LOCALES`] before the disk write so a
-/// malformed UI write (or a stale `language-changed` index from a race
-/// against a hot-reload of the list) can't pin `settings.json` to a code
-/// that has no bundled `.po`. The runtime application
-/// (`slint::select_bundled_translation`) happens synchronously in
-/// `src/ui/settings/locale.rs::wire_language_changed` *before* this async persist —
-/// the UI re-renders immediately; this write only carries the choice
-/// across the next process boot.
+/// Persist the active locale. Validates against [`services::settings::SUPPORTED_LOCALES`] before
+/// the disk write, so a malformed UI write can't pin `settings.json` to a code with no bundled
+/// `.po`. The runtime application happens synchronously in
+/// `ui::settings::locale::wire_language_changed` *before* this async persist — the UI re-renders
+/// immediately, and this write only carries the choice across the next boot.
 pub fn set_locale(state: &AppState, code: String) -> Result<(), AppError> {
     if !services::settings::SUPPORTED_LOCALES.contains(&code.as_str()) {
-        return Err(AppError::Validation(format!(
-            "Unsupported locale: {code}"
-        )));
+        return Err(AppError::Validation(format!("Unsupported locale: {code}")));
     }
     services::settings::mutate_settings(&state.paths, move |settings| {
         settings.locale = code;
     })
 }
 
-/// Persist a single Overflow Menu Buttons toggle. Mirrors the Tauri
-/// frontend's `updateSetting("overflow_buttons", current)` write: the
-/// id is removed unconditionally first (idempotent dedupe), then
-/// re-appended iff `overflow_on` is true. Callers don't need to know
-/// whether the id was already present.
+/// Persist a single Overflow Menu Buttons toggle. The id is removed unconditionally first, an
+/// idempotent dedupe, then re-appended iff `overflow_on` — so callers needn't know whether it was
+/// already present.
 pub fn set_overflow_button(
     state: &AppState,
     id: String,
@@ -43,19 +35,14 @@ pub fn set_overflow_button(
     })
 }
 
-/// Snap an arbitrary radius to the nearest chip preset (0, 6, 8, 10, 15).
-/// The chip group is the only legitimate input path now — the manual
-/// stepper was removed — but `settings.json` is user-editable and a
-/// future preset addition could leave older values stranded between
-/// chips. This snap keeps the chip selection and the painted radius in
-/// agreement: `px-to-preset(snap_to_preset(x))` always returns a valid
-/// chip index, never `-1`.
+/// Snap an arbitrary radius to the nearest chip preset (0, 6, 8, 10, 15). The chip group is the
+/// only input path, but `settings.json` is user-editable and a future preset addition could leave
+/// older values stranded between chips. The snap keeps the chip selection and the painted radius
+/// in agreement: `px-to-preset(snap_to_preset(x))` always returns a valid chip index, never `-1`.
 ///
-/// Tie-breaking rounds toward the larger preset (3 → 6, 7 → 8, 9 → 10)
-/// so off-preset values lean rounder rather than squarer — matches the
-/// "feel more native" framing of the OS-aware defaults. Caller is
-/// expected to clamp to `MAX_CORNER_RADIUS` first; this fn maps any
-/// value > 12 to 15.
+/// Tie-breaking rounds toward the larger preset (3 → 6, 7 → 8, 9 → 10) so off-preset values lean
+/// rounder rather than squarer. The caller clamps to `MAX_CORNER_RADIUS` first; anything past 12
+/// maps to 15.
 #[must_use]
 pub fn snap_to_preset(px: u32) -> u32 {
     match px {
@@ -67,30 +54,27 @@ pub fn snap_to_preset(px: u32) -> u32 {
     }
 }
 
-/// Persist the Browse view's "current path" so the next launch opens at
-/// the same folder. Passing `None` clears the field — the next launch
-/// will land at the root (library folder list). No runtime kick: the
-/// Slint property is already updated synchronously by the open-folder
-/// callback before this write runs.
+/// Persist the Browse view's current path so the next launch opens at the same folder. `None`
+/// clears it and the next launch lands at the library folder list. No runtime kick: the Slint
+/// property is already updated synchronously by the open-folder callback.
 pub fn set_browse_path(state: &AppState, path: Option<String>) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.browse_path = path;
     })
 }
 
-/// Persist the Browse view's list-versus-cards presentation. Same no-kick
-/// shape as [`set_browse_path`]: the toggle callback has already written
-/// `Browse.view-mode` and rebuilt the models by the time this runs.
+/// Persist the Browse view's list-versus-cards presentation. Same no-kick shape as
+/// [`set_browse_path`]: the toggle callback has already written `Browse.view-mode` and rebuilt the
+/// models by the time this runs.
 pub fn set_browse_view_mode(state: &AppState, mode: i32) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.browse_view_mode = mode;
     })
 }
 
-/// Persist the active sidebar tab so the next launch reopens on the same
-/// section. Indices follow the `Nav` global comment in `melodia-ui/ui/globals/nav.slint`.
-/// Out-of-range writes (negative / > 9) are clamped to the valid range so a
-/// corrupt write can't pin the app to an unselectable tab.
+/// Persist the active sidebar tab so the next launch reopens on the same section. Indices follow
+/// `melodia-ui/ui/globals/nav.slint`. Out-of-range writes are clamped so a corrupt file can't pin
+/// the app to an unselectable tab.
 pub fn set_last_nav_index(state: &AppState, idx: i32) -> Result<(), AppError> {
     let clamped = idx.clamp(0, 9);
     services::view_state::mutate_view_state(&state.paths, move |s| {
@@ -98,15 +82,10 @@ pub fn set_last_nav_index(state: &AppState, idx: i32) -> Result<(), AppError> {
     })
 }
 
-/// Persist (or clear) the detail-view id open for `view_id` in
-/// `views.json`'s `last_detail_ids`. `Some(id)` means the next launch on that
-/// tab reopens this detail page; `None` removes the entry so the tab
-/// lands on its root (grid / list). The map is keyed by the same view-id
-/// strings as `view_columns` / `view_sort` (see
-/// `src/ui/track_list_view.rs::view_id`), so one call covers Album,
-/// Artist, Genre, Playlist detail (and any future drill-in views)
-/// without a new field per view. No runtime kick: the Slint property is
-/// already up-to-date before this write runs.
+/// Persist (or clear) the detail-view id open for `view_id` in `views.json`'s `last_detail_ids`.
+/// `Some(id)` reopens that detail on the next launch; `None` removes the entry so the tab lands on
+/// its root. The map is keyed by the same view-id strings as `view_columns` / `view_sort`, so one
+/// call covers every drill-in view without a field per view. No runtime kick.
 pub fn set_last_detail_id(
     state: &AppState,
     view_id: &str,
@@ -123,59 +102,50 @@ pub fn set_last_detail_id(
     })
 }
 
-/// Persist the Artist Detail "Albums" sub-section collapsed flag so the
-/// next launch reopens the sub-section in the same state. No runtime
-/// kick: the Slint property is updated synchronously by the toggle
-/// callback before this write runs.
-pub fn set_artist_albums_collapsed(
-    state: &AppState,
-    collapsed: bool,
-) -> Result<(), AppError> {
+/// Persist the Artist Detail "Albums" sub-section collapsed flag so the next launch reopens it in
+/// the same state. No runtime kick: the toggle callback already updated the Slint property.
+pub fn set_artist_albums_collapsed(state: &AppState, collapsed: bool) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.artist_albums_collapsed = collapsed;
     })
 }
 
-/// Persist the Settings page's active tab so re-entering the page lands
-/// where the user left it. Same no-kick shape as the collapse flag above:
-/// `SettingsPage.tab-idx` is two-way bound to the tab bar, so the Slint side
-/// is already correct by the time this write runs.
+/// Persist the Settings page's active tab so re-entering the page lands where the user left it.
+/// Same no-kick shape as the collapse flag above: `SettingsPage.tab-idx` is two-way bound to the
+/// tab bar, so the Slint side is already correct.
 pub fn set_settings_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.settings_tab = tab;
     })
 }
 
-/// Persist the Favorites page's active tab. Same contract as
-/// [`set_settings_tab`] — `Favorites.tab-idx` is two-way bound to its tab
-/// bar, so this write is pure catch-up.
+/// Persist the Favorites page's active tab. Same contract as [`set_settings_tab`] —
+/// `Favorites.tab-idx` is two-way bound to its tab bar, so this write is pure catch-up.
 pub fn set_favorites_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.favorites_tab = tab;
     })
 }
 
-/// Persist the Recently-Played page's active tab. Same contract again —
-/// `RecentlyPlayed.tab-idx` is two-way bound to its tab bar.
+/// Persist the Recently-Played page's active tab. Same contract again — `RecentlyPlayed.tab-idx`
+/// is two-way bound to its tab bar.
 pub fn set_recently_played_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.recently_played_tab = tab;
     })
 }
 
-/// Persist the My Library page's active tab. Same contract again —
-/// `MyLibrary.tab-idx` is two-way bound to its tab bar.
+/// Persist the My Library page's active tab. Same contract again — `MyLibrary.tab-idx` is two-way
+/// bound to its tab bar.
 pub fn set_my_library_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.my_library_tab = tab;
     })
 }
 
-/// Persist the visible-column list for `view_id` (e.g. "tracks") into
-/// `views.json`'s `view_columns`. Full file rewrite, matching how the Tauri
-/// app handled this. `columns` is the list of CURRENTLY VISIBLE column
-/// IDs in display order. Serialized via `mutate_view_state` to avoid the
-/// read-then-write race when multiple views save concurrently.
+/// Persist the visible-column list for `view_id` into `views.json`'s `view_columns`. `columns` is
+/// the currently *visible* ids in display order. Serialized through `mutate_view_state` to avoid
+/// the read-then-write race when multiple views save concurrently.
 pub fn update_view_columns(
     state: &AppState,
     view_id: String,
@@ -186,12 +156,10 @@ pub fn update_view_columns(
     })
 }
 
-/// Persist the active sort (field + direction) for `view_id` into
-/// `views.json`'s `view_sort`. Keyed by the same view-id strings as
-/// `view_columns` / `last_detail_ids` so one map covers Tracks, Albums,
-/// Artists, Genres, Playlists, Favorites without a new top-level field
-/// per view. No runtime kick: the Slint property is updated synchronously
-/// by the sort-pill callback before this write runs.
+/// Persist the active sort for `view_id` into `views.json`'s `view_sort`. Keyed by the same
+/// view-id strings as `view_columns` / `last_detail_ids`, so one map covers every sortable view
+/// without a top-level field per view. No runtime kick: the sort-pill callback already updated the
+/// Slint property.
 pub fn set_view_sort(
     state: &AppState,
     view_id: String,
@@ -202,16 +170,10 @@ pub fn set_view_sort(
     })
 }
 
-/// Read the persisted sort for `view_id`, if any. Cheap clone — `ViewSort`
-/// is two small owned fields. Returns `None` when the view has never
-/// persisted a sort (caller picks its own default) or when `views.json`
-/// fails to load (a fresh launch or a corrupt write — the caller's
-/// default keeps the view usable either way).
+/// Read the persisted sort for `view_id`, if any. `None` when the view has never persisted one, or
+/// when `views.json` fails to load — the caller's default keeps the view usable either way.
 #[must_use]
-pub fn get_view_sort(
-    state: &AppState,
-    view_id: &str,
-) -> Option<services::settings::ViewSort> {
+pub fn get_view_sort(state: &AppState, view_id: &str) -> Option<services::settings::ViewSort> {
     services::view_state::read_view_state(&state.paths)
         .ok()
         .and_then(|s| s.view_sort.get(view_id).cloned())

@@ -13,11 +13,19 @@ const FAVORITES: i32 = 2;
 const BROWSE: i32 = 1;
 
 fn tab(tab: i32, detail: Option<i64>) -> NavEntry {
-    NavEntry { section: NAV_MY_LIBRARY, tab, detail_id: detail }
+    NavEntry {
+        section: NAV_MY_LIBRARY,
+        tab,
+        detail_id: detail,
+    }
 }
 
 fn section(section: i32) -> NavEntry {
-    NavEntry { section, tab: NO_TAB, detail_id: None }
+    NavEntry {
+        section,
+        tab: NO_TAB,
+        detail_id: None,
+    }
 }
 
 #[test]

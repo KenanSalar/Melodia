@@ -76,12 +76,9 @@ pub(super) fn read_initial_system_state() -> SystemColorState {
 }
 
 pub(super) fn seed_theme_names(ui: &AppWindow) {
-    let names: Vec<SharedString> = themes::registry()
-        .iter()
-        .map(|t| SharedString::from(t.name))
-        .collect();
-    ui.global::<Settings>()
-        .set_theme_names(ModelRc::from(Rc::new(VecModel::from(names))));
+    let names: Vec<SharedString> =
+        themes::registry().iter().map(|t| SharedString::from(t.name)).collect();
+    ui.global::<Settings>().set_theme_names(ModelRc::from(Rc::new(VecModel::from(names))));
 }
 
 /// Look up `theme_preferences[theme_id].last_static_accent` in the
@@ -92,6 +89,23 @@ pub(super) fn read_last_static_accent(state: &AppState, theme_id: &str) -> Optio
     library::settings::get_settings(state)
         .ok()
         .and_then(|s| s.theme_preferences.get(theme_id).and_then(|p| p.last_static_accent.clone()))
+}
+
+/// Write the palette, then re-solve the two artwork-derived tiers against it.
+///
+/// **The only place `themes::apply` may be called from.** Both tiers are snapshots taken when a
+/// hero or a track landed, so a palette change reaches neither on its own — visibly, since the
+/// aurora's whole tier set is the theme's own and Now Playing republishes only on the next track.
+pub(super) fn apply_palette(
+    ui: &AppWindow,
+    theme_id: &str,
+    variant_id: &str,
+    accent_id: &str,
+    system: &SystemColorState,
+) {
+    themes::apply(ui, theme_id, variant_id, accent_id, system);
+    crate::ui::hero_backdrop::republish_for_palette(ui);
+    crate::ui::now_playing::republish_for_palette(ui);
 }
 
 /// Persist the user's pick on tokio's blocking pool — `set_appearance`
@@ -144,10 +158,7 @@ pub(super) fn registry_get(idx: i32) -> Option<&'static ThemeDef> {
 }
 
 pub(super) fn resolved_variant_id(theme: &ThemeDef, idx: usize) -> &'static str {
-    theme
-        .variants
-        .get(idx)
-        .map_or(theme.default_variant, |v| v.id)
+    theme.variants.get(idx).map_or(theme.default_variant, |v| v.id)
 }
 
 #[allow(

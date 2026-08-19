@@ -38,9 +38,7 @@ pub async fn search_album_cover(
     // arms come back the same way; see `deezer::DeezerAnswer::HttpStatus`.
     let status = response.status();
     if !status.is_success() {
-        return Err(AppError::network_msg(format!(
-            "iTunes album search returned HTTP {status}"
-        )));
+        return Err(AppError::network_msg(format!("iTunes album search returned HTTP {status}")));
     }
 
     let body = response
@@ -48,10 +46,7 @@ pub async fn search_album_cover(
         .await
         .map_err(|e| AppError::network("Failed to parse iTunes album response", e))?;
 
-    Ok(body
-        .results
-        .first()
-        .and_then(|a| a.artwork_url_100.as_deref().map(upsize_artwork_url)))
+    Ok(body.results.first().and_then(|a| a.artwork_url_100.as_deref().map(upsize_artwork_url)))
 }
 
 /// iTunes returns a 100 px thumbnail (`.../100x100bb.jpg`); swap the size token for a

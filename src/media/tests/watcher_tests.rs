@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use notify::event::{CreateKind, DataChange, ModifyKind, RemoveKind, RenameMode};
 use notify::EventKind;
+use notify::event::{CreateKind, DataChange, ModifyKind, RemoveKind, RenameMode};
 
 // === Audio file detection ===
 
@@ -64,7 +64,9 @@ fn classify_create_file_audio() {
     let paths = vec![PathBuf::from("/music/song.mp3")];
     let events = super::classify_event(kind, &paths);
     assert_eq!(events.len(), 1);
-    assert!(matches!(&events[0], super::FileEvent::Created(p) if p == Path::new("/music/song.mp3")));
+    assert!(
+        matches!(&events[0], super::FileEvent::Created(p) if p == Path::new("/music/song.mp3"))
+    );
 }
 
 #[test]
@@ -90,7 +92,9 @@ fn classify_remove_file() {
     let paths = vec![PathBuf::from("/music/song.mp3")];
     let events = super::classify_event(kind, &paths);
     assert_eq!(events.len(), 1);
-    assert!(matches!(&events[0], super::FileEvent::Removed(p) if p == Path::new("/music/song.mp3")));
+    assert!(
+        matches!(&events[0], super::FileEvent::Removed(p) if p == Path::new("/music/song.mp3"))
+    );
 }
 
 #[test]
@@ -187,7 +191,9 @@ fn classify_rename_audio_to_non_audio_as_removed() {
     ];
     let events = super::classify_event(kind, &paths);
     assert_eq!(events.len(), 1);
-    assert!(matches!(&events[0], super::FileEvent::Removed(p) if p == Path::new("/music/song.mp3")));
+    assert!(
+        matches!(&events[0], super::FileEvent::Removed(p) if p == Path::new("/music/song.mp3"))
+    );
 }
 
 #[test]
@@ -199,7 +205,9 @@ fn classify_rename_non_audio_to_audio_as_created() {
     ];
     let events = super::classify_event(kind, &paths);
     assert_eq!(events.len(), 1);
-    assert!(matches!(&events[0], super::FileEvent::Created(p) if p == Path::new("/music/song.mp3")));
+    assert!(
+        matches!(&events[0], super::FileEvent::Created(p) if p == Path::new("/music/song.mp3"))
+    );
 }
 
 #[test]
@@ -231,4 +239,21 @@ fn rescan_flag_round_trips_through_notify_event() {
 
     let normal = Event::new(EventKind::Create(CreateKind::File));
     assert!(!normal.need_rescan());
+}
+
+/// Every extension the library walk collects must also reach the watcher, or a format
+/// scans on startup and then goes stale for the rest of the session.
+#[test]
+fn audio_file_covers_every_scanned_extension() {
+    for ext in crate::media::AUDIO_EXTENSIONS {
+        let path = PathBuf::from("music").join(format!("song.{ext}"));
+        assert!(super::is_audio_file(&path), "the watcher ignores .{ext}");
+    }
+}
+
+/// ALAC ships inside `.m4a`; nothing writes a bare `.alac`. Listing it cost the walk a
+/// lookup per file and could only ever have produced a row lofty refuses to read.
+#[test]
+fn alac_is_not_an_audio_extension() {
+    assert!(!super::is_audio_file(&PathBuf::from("music").join("song.alac")));
 }

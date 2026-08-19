@@ -1,23 +1,13 @@
-//! Miniplayer module — wires the `MiniPlayer` Slint global's
-//! `active-changed` and `square-changed` callbacks to the Up Next
-//! subscriber's visibility gate and the square-variant artwork cache
-//! lifecycle.
+//! Wires the `MiniPlayer` global's `active-changed` and `square-changed` to the Up Next
+//! subscriber's visibility gate and the square variant's artwork-cache lifecycle.
 //!
-//! ## Resize-only trigger
+//! **Resize-only trigger.** The miniplayer engages purely on the window being shrunk
+//! past the threshold `app-window.slint` derives; there is no entry or exit button
+//! anywhere, and the user grows the window again to leave.
 //!
-//! Tauri parity: the miniplayer is engaged purely by the OS window being
-//! shrunk past the threshold derived inside `melodia-ui/ui/app-window.slint`
-//! (`mini-active: self.width < 550px || self.height < 250px`). There is
-//! no entry or exit button anywhere in the UI — the user grows the
-//! window past the threshold again to leave (or double-clicks the bare
-//! drag region to maximise, which also exits mini).
-//!
-//! ## Why not a module under `window_chrome`
-//!
-//! `window_chrome` owns OS-frame concerns (the custom titlebar, drag
-//! region, restart flow, minimise/maximise). The miniplayer is a
-//! responsive *layout* concern; keeping it sibling-level makes the
-//! dataflow greppable and avoids mixing orthogonal axes.
+//! Sibling to `window_chrome` rather than under it: that module owns OS-frame concerns —
+//! the titlebar, the drag region, the restart flow — where this is a responsive *layout*
+//! concern, and mixing the two axes makes neither greppable.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -30,25 +20,17 @@ use crate::ui::now_playing::NowPlayingState;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, MiniPlayer};
 
-/// Hydrate `np_state.mini_square` from the live `MiniPlayer.square`
-/// global. Necessary because `square-changed` only fires on actual
-/// flips — a window already in a square aspect before entering mini
-/// would leave the Rust mirror stale, and `kick_artwork()` would be
-/// skipped on entry. Called from `on_active_changed` on entry.
+/// Hydrate `np_state.mini_square` from the live global, because `square-changed` only
+/// fires on actual flips — a window already square before entering mini would leave the
+/// mirror stale and `kick_artwork()` skipped on entry.
 fn sync_mini_square(weak: &slint::Weak<AppWindow>, np_state: &NowPlayingState) {
     let Some(ui) = weak.upgrade() else { return };
-    np_state
-        .mini_square
-        .set(ui.global::<MiniPlayer>().get_square());
+    np_state.mini_square.set(ui.global::<MiniPlayer>().get_square());
 }
 
-/// Off-thread release of the [`NowPlayingArtwork`] LRU + a glibc
-/// `malloc_trim` to hand the freed pages back to the kernel. Mirrors the
-/// release path in `wire_now_playing_open` (see
-/// `src/ui/now_playing/up_next.rs`) — the heavy `(cover, blur)` buffers
-/// are pinned only while a surface (the full Now Playing view *or* the
-/// square miniplayer) renders them, and freeing on the transition keeps
-/// RSS in line with the rest of the app's memory discipline.
+/// Off-thread release of the [`NowPlayingArtwork`] LRU plus a `malloc_trim` to hand the
+/// pages back, mirroring `wire_now_playing_open`'s: the heavy `(cover, blur)` buffers
+/// are pinned only while a surface renders them.
 fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowPlayingArtwork>) {
     let np = np_artwork.clone();
     state.runtime.spawn_blocking(move || {
@@ -57,11 +39,10 @@ fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowPlayingArtwo
     });
 }
 
-/// Wire `MiniPlayer.{active-changed, square-changed}` to the Up Next
-/// subscriber's `mini_visible` gate and the square-variant artwork
-/// cache lifecycle. Runs on the Slint event-loop thread, between
-/// `AppWindow::new()` and `app.run()` — same install window as the
-/// `now_playing` / `window_chrome` modules.
+/// Wire both callbacks to the Up Next subscriber's `mini_visible` gate and the square
+/// variant's artwork-cache lifecycle. Runs on the event-loop thread between
+/// `AppWindow::new()` and `app.run()`, the same window as `now_playing` and
+/// `window_chrome`.
 pub fn install(
     app: &AppWindow,
     state: &AppState,
@@ -70,13 +51,10 @@ pub fn install(
 ) -> Result<(), AppError> {
     let mini = app.global::<MiniPlayer>();
 
-    // active-changed: enter/leave mini state. On enter, flip the gates,
-    // re-seed the Up Next list (so the square variant doesn't render an
-    // empty list when the queue hasn't changed since the subscriber
-    // started stashing), and — when entering directly into the square
-    // variant — seed the high-res cover. On exit, release the artwork
-    // LRU + trim glibc: neither the Now Playing view nor any miniplayer
-    // surface needs the 384 px buffers in full-UI mode.
+    // active-changed: on enter, flip the gates, re-seed Up Next so the square variant
+    // doesn't render an empty list, and seed the high-res cover if the entry is
+    // directly into square. On exit, release the artwork LRU — nothing in full-UI mode
+    // needs those buffers.
     {
         let np_state = np_state.clone();
         let state = state.clone();
@@ -85,10 +63,8 @@ pub fn install(
         mini.on_active_changed(move |is_active| {
             np_state.mini_visible.set(is_active);
             if is_active {
-                // Hydrate from the Slint global — `square-changed` only
-                // fires on actual flips, so a tall-aspect window already
-                // in `MiniPlayer.square = true` before entry would leave
-                // the Rust mirror at its `Cell::new(false)` init.
+                // `square-changed` only fires on actual flips, so a window already
+                // square before entry would leave the mirror at its `false` init.
                 sync_mini_square(&weak, &np_state);
                 np_state.kick_up_next();
                 if np_state.mini_square.get() {
@@ -100,11 +76,9 @@ pub fn install(
         });
     }
 
-    // square-changed: rectangle ↔ square flip while mini-active. The
-    // square variant renders the high-res cover; the rectangle variant
-    // uses the 48 px row-tier thumb. On rectangle→square seed the cover;
-    // on square→rectangle release the cache so the 384 px buffers
-    // don't linger while the only visible tile is 48 px.
+    // square-changed: only the square variant renders the high-res cover, the rectangle
+    // one taking the row tier's thumb — so seed on the way in, release on the way out
+    // rather than leaving the large buffers behind a small tile.
     {
         let np_state = np_state.clone();
         let state = state.clone();

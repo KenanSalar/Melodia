@@ -1,17 +1,11 @@
-//! The app shell — the surfaces that surround every view rather than being one.
+//! The app shell — the surfaces that surround every view rather than being one:
+//! the three `watch` subscribers behind the `Player` global ([`bridge`]), the
+//! toast stack, the tray's two directions plus its close-to-tray visibility
+//! shadow, and the miniplayer swap.
 //!
-//! * [`bridge`] — the three `watch` subscribers that drive the `Player` global,
-//!   plus the view-model → Slint row conversions.
-//! * [`notifications`] — the toast stack.
-//! * [`tray_bridge`] — tray actions in, tray state out, and the close-to-tray
-//!   window visibility shadow.
-//! * [`mini_player`] — the miniplayer swap and its square artwork tier.
-//! * [`event_sink`] — OS media-control events onto the runtime. Imports no
-//!   Slint at all, which is what lets `tasks/` reach it.
-//!
-//! What distinguishes these from the shared component library still at the
-//! `ui/` root is that none of them is reusable machinery a view reaches for —
-//! each *is* a piece of the window, installed once at boot.
+//! What keeps them out of the shared component library at the `ui/` root is that none is
+//! machinery a view reaches for — each *is* a piece of the window, installed once at boot.
+//! [`event_sink`] imports no Slint at all, which is what lets `tasks/` reach it.
 
 pub mod bridge;
 pub mod event_sink;

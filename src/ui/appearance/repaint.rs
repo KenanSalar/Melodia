@@ -18,11 +18,7 @@ use crate::{AppWindow, Settings};
 /// style) and repaint the palette using the supplied `system` snapshot.
 /// Used by the Material You coordinator after it writes a fresh dynamic
 /// palette into `system.material_you` — must run on the UI thread.
-pub fn repaint_from_settings(
-    ui: &AppWindow,
-    state: &AppState,
-    system: &SystemColorState,
-) {
+pub fn repaint_from_settings(ui: &AppWindow, state: &AppState, system: &SystemColorState) {
     let settings = match library::settings::get_settings(state) {
         Ok(s) => s,
         Err(e) => {
@@ -95,10 +91,7 @@ pub fn apply_and_seed(
     // an accent the user actually chose.
     let effective_id = effective_accent_id(theme, accent_id, my_active, last_static_accent);
     let accent_idx = accent_idx_in_grid(theme, effective_id, my_active);
-    let style_idx = SchemeStyle::all()
-        .iter()
-        .position(|s| s.as_id() == style_id)
-        .unwrap_or(0);
+    let style_idx = SchemeStyle::all().iter().position(|s| s.as_id() == style_id).unwrap_or(0);
 
     let g = ui.global::<Settings>();
     g.set_theme_idx(apply_and_seed_to_i32(theme_idx));
@@ -108,5 +101,5 @@ pub fn apply_and_seed(
     g.set_kde_system_active(theme_picker::kde_system_active(theme.id, variant_id, system));
     g.set_material_you_active(my_active);
 
-    themes::apply(ui, theme.id, resolved_variant, effective_id, system);
+    super::apply_palette(ui, theme.id, resolved_variant, effective_id, system);
 }

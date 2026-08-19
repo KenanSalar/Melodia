@@ -1,0 +1,8 @@
+# Tree-wide mechanical rewrites, skipped by `git blame` so a line keeps the
+# commit that actually wrote it. Only the revisions listed here are skipped.
+#
+# GitHub's blame view reads this automatically; locally it is opt-in, once:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style(fmt): the wrapping nobody was enforcing, and the nine lints it was hiding
+24b4b2b7f06a5cc3fdc9ebb8685db10611e9b452

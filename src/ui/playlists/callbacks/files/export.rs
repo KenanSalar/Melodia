@@ -11,9 +11,7 @@ use super::{clamp_u32, refresh_export_selection_meta, set_all_picks, toggle_pick
 use crate::library;
 use crate::state::AppState;
 use crate::ui::file_dialog;
-use crate::ui::shell::notifications::{
-    NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS,
-};
+use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
 use crate::{
     AppWindow, Dialog, PlaylistExportPickRow as UiPlaylistExportPickRow, Playlists, Settings,
 };

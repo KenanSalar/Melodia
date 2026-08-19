@@ -407,6 +407,26 @@ msgstr "Nötr"
 msgid "Monochrome"
 msgstr "Tek Renkli"
 
+msgid "Aurora Backdrop"
+msgstr "Aurora Arka Planı"
+
+msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
+msgstr "Albüm, çalma listesi ve “Şimdi Çalıyor” başlıklarını, kapak görselinin bulanık bir kopyası yerine albümün kendi renkleriyle boya. Bulanıklaştırılacak bir şey olmadığı için başlıklar daha erken görünür ve Melodia daha hafif kalır. Uygulamak için yeniden başlatma gerekir."
+
+msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
+msgstr "Arka plan stilini değiştirmek Melodia'nın yeniden başlatılmasını gerektirir. Şimdi yeniden başlatılsın mı?"
+
+# ---- Motion section ---------------------------------------------------------
+
+msgid "Motion"
+msgstr "Hareket"
+
+msgid "Skip Startup Animation"
+msgstr "Başlangıç animasyonunu atla"
+
+msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
+msgstr "Kitaplığı belirip kayarak yerine oturması yerine, açılışta doğrudan ekranda göster. Açık bıraktığın bir ayrıntı sayfası yüklendiğinde yine de genişleyerek açılır."
+
 # Title of the window-chrome settings card.
 msgid "Window"
 msgstr "Pencere"

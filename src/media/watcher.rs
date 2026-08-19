@@ -3,9 +3,7 @@ use std::time::Duration;
 
 use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
 use notify::{EventKind, RecursiveMode};
-use notify_debouncer_full::{
-    new_debouncer, DebounceEventResult, Debouncer, RecommendedCache,
-};
+use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer};
 use tokio::sync::mpsc;
 
 use crate::error::AppError;
@@ -17,7 +15,10 @@ pub enum FileEvent {
     Created(PathBuf),
     Removed(PathBuf),
     Modified(PathBuf),
-    Renamed { from: PathBuf, to: PathBuf },
+    Renamed {
+        from: PathBuf,
+        to: PathBuf,
+    },
     /// Kernel queue overflow (Linux inotify `IN_Q_OVERFLOW` or platform
     /// equivalent) — surfaced by `notify` via `event.need_rescan()`. The
     /// per-file event stream is no longer trustworthy; consumer should
@@ -44,10 +45,8 @@ impl FolderWatcher {
 
         let tx = self.tx.clone();
 
-        let mut debouncer = new_debouncer(
-            Duration::from_secs(2),
-            None,
-            move |result: DebounceEventResult| {
+        let mut debouncer =
+            new_debouncer(Duration::from_secs(2), None, move |result: DebounceEventResult| {
                 match result {
                     Ok(events) => {
                         // Any rescan flag in the batch means the kernel dropped events
@@ -69,9 +68,7 @@ impl FolderWatcher {
                                 // consumer is slow rather than silently dropping events;
                                 // failure means the receiver was dropped (i.e. shutdown).
                                 if let Err(e) = tx.blocking_send(file_event) {
-                                    log::warn!(
-                                        "File event channel closed (shutdown?): {e}"
-                                    );
+                                    log::warn!("File event channel closed (shutdown?): {e}");
                                 }
                             }
                         }
@@ -82,9 +79,8 @@ impl FolderWatcher {
                         }
                     }
                 }
-            },
-        )
-        .map_err(|e| AppError::watcher("Failed to create watcher", e))?;
+            })
+            .map_err(|e| AppError::watcher("Failed to create watcher", e))?;
 
         for path in paths {
             if path.exists() {
@@ -169,9 +165,7 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
 }
 
 pub(crate) fn is_audio_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(is_audio_extension)
+    path.extension().and_then(|e| e.to_str()).is_some_and(is_audio_extension)
 }
 
 #[cfg(test)]

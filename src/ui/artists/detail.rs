@@ -1,7 +1,6 @@
-//! Artist Detail header + Albums sub-section + track list: fetch, artwork
-//! pair decode, re-sort, refresh-preserving, startup seed. Mirrors
-//! `src/ui/albums/detail.rs`, plus an `albums` slice that drives the
-//! horizontal Albums strip above the all-tracks `TrackList`.
+//! Artist Detail header + Albums sub-section + track list: fetch, artwork pair decode, re-sort,
+//! refresh-preserving, startup seed. Mirrors `src/ui/albums/detail.rs`, plus an `albums` slice
+//! driving the horizontal Albums strip above the all-tracks `TrackList`.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -32,14 +31,12 @@ use crate::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, NavEnterFrom, TrackListRow as UiTrackListRow,
 };
 
-// `apply_detail_artwork` (cover + hero-blur write) and
-// `replace_tracks_model` (in-place `tracks` `VecModel` swap) — see
-// `src/ui/detail_view.rs`.
+// `apply_detail_artwork` (cover + hero-blur write) and `replace_tracks_model` (in-place `tracks`
+// `VecModel` swap) — see `src/ui/detail_view.rs`.
 impl_detail_view_helpers!(artwork ArtistDetail);
 
-/// Fetch an artist's header + albums sub-section + track list, and prewarm
-/// the row-tier covers for the tracks. Shared by [`open_artist`] and
-/// [`refresh_detail`].
+/// Fetch an artist's header + albums sub-section + track list, and prewarm the row-tier covers for
+/// the tracks. Shared by [`open_artist`] and [`refresh_detail`].
 async fn fetch_artist_detail(
     state: &AppState,
     artists_ui: &ArtistsUi,
@@ -53,11 +50,9 @@ async fn fetch_artist_detail(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
         artists_ui.cover_thumbs.capacity(),
     );
-    // The Albums strip resolves its cards through the borrowed Albums
-    // grid tier (`request-album-cover` → `AlbumsUi::grid_cover`,
-    // decode-on-miss on the UI thread). Prewarm those covers alongside
-    // the track rows so a detail open with a cold cache doesn't freeze
-    // the UI for one full-res decode per album card at first paint.
+    // The Albums strip resolves its cards through the borrowed Albums grid tier, decode-on-miss on
+    // the UI thread. Prewarm those covers alongside the track rows so a detail open with a cold
+    // cache doesn't freeze the UI for one full-res decode per album card at first paint.
     let strip_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         albums.iter().map(|a| a.artwork_path.as_deref()),
         artists_ui.albums_grid_covers.capacity(),
@@ -78,10 +73,9 @@ async fn fetch_artist_detail(
     Ok((detail, albums, tracks))
 }
 
-/// Fetch an artist's header + albums + tracks, populate the
-/// `ArtistDetail` global, and flip `artist-id >= 0` to swap the grid for
-/// the detail view. Fresh-open semantics: resets the detail sort to the
-/// default and clears any prior selection.
+/// Fetch an artist's header + albums + tracks, populate the `ArtistDetail` global, and flip
+/// `artist-id >= 0` to swap the grid for the detail view. Fresh-open semantics: resets the detail
+/// sort to the default and clears any prior selection.
 pub async fn open_artist(
     state: &AppState,
     artists_ui: &Arc<ArtistsUi>,
@@ -92,20 +86,14 @@ pub async fn open_artist(
     open_artist_with(state, artists_ui, weak, artist_id, enter_from, |_ui| {}).await
 }
 
-/// Same as [`open_artist`] but the caller can hook into the **same**
-/// `upgrade_in_event_loop` closure that writes `artist-id`. The hook
-/// runs as the last statement on the UI thread, after every detail
-/// property is set, so a follow-on global write (e.g. flipping
-/// `Nav.selected-index` for cross-tab nav from Favorites) lands in
-/// the same frame — Slint paints `ArtistDetailBody` directly with no
-/// Artists-grid frame in between. Mirrors `albums::open_album_with`
-/// exactly.
+/// Same as [`open_artist`] but the caller can hook into the **same** `upgrade_in_event_loop`
+/// closure that writes `artist-id`. The hook runs after every detail property is set, so a
+/// follow-on global write — flipping `Nav.selected-index` for a cross-tab drill — lands in the
+/// same frame, and Slint paints `ArtistDetailBody` with no Artists-grid frame in between.
 ///
-/// `enter_from` chooses the enter direction for the **page** mount a
-/// cross-section drill produces, not for `ArtistDetailBody` — that takes a
-/// fixed `below` and holds still while the band morphs. Pass
-/// [`NavEnterFrom::Right`] for any user drill-in and
-/// [`NavEnterFrom::Below`] for the first-launch seed path.
+/// `enter_from` chooses the enter direction for the **page** mount a cross-section drill produces,
+/// not for `ArtistDetailBody`, which takes a fixed `below` and holds still while the band morphs.
+/// [`NavEnterFrom::Right`] for any user drill-in, [`NavEnterFrom::Below`] for the seed path.
 pub async fn open_artist_with<F>(
     state: &AppState,
     artists_ui: &Arc<ArtistsUi>,
@@ -117,25 +105,17 @@ pub async fn open_artist_with<F>(
 where
     F: FnOnce(&AppWindow) + Send + 'static,
 {
-    let (detail, albums, mut tracks) =
-        fetch_artist_detail(state, artists_ui, artist_id).await?;
+    let (detail, albums, mut tracks) = fetch_artist_detail(state, artists_ui, artist_id).await?;
 
-    // Apply the persisted detail sort on the worker so the per-row prep
-    // below runs in display order; the UI thread can then drop the
-    // already-sorted rows straight into the Slint model without an
-    // additional reorder pass. One shared sort for every artist —
-    // restored across opens and restarts; `album` ascending is the
-    // fresh-install default.
-    let (sort_field, sort_dir) =
-        resolve_view_sort(state, view_id::ARTIST_DETAIL, "album");
+    // Apply the persisted detail sort on the worker so the per-row prep below runs in display
+    // order, and the UI thread can drop already-sorted rows straight into the model. One shared
+    // sort for every artist; `album` ascending is the fresh-install default.
+    let (sort_field, sort_dir) = resolve_view_sort(state, view_id::ARTIST_DETAIL, "album");
     sort_track_list_rows(&mut tracks, &sort_field, &sort_dir);
 
-    let pair = decode_detail_pair(
-        state,
-        artists_ui.detail_artwork.clone(),
-        detail.image_path.clone(),
-    )
-    .await;
+    let pair =
+        decode_detail_pair(state, artists_ui.detail_artwork.clone(), detail.image_path.clone())
+            .await;
 
     let prepared: Vec<PreparedTrackRow> =
         tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
@@ -151,80 +131,64 @@ where
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<ArtistDetail>();
 
-        let ui_tracks: Vec<UiTrackListRow> = prepared
-            .into_iter()
-            .map(crate::ui::tracks::finish_track_list_row)
-            .collect();
+        let ui_tracks: Vec<UiTrackListRow> =
+            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
 
         let header = to_slint_artist_row(&detail);
         g.set_artist(header);
 
         // Albums sub-section model — small grid above the track list.
-        let album_rows: Vec<UiAlbumRow> = albums
-            .iter()
-            .map(crate::ui::albums::to_slint_album_row)
-            .collect();
+        let album_rows: Vec<UiAlbumRow> =
+            albums.iter().map(crate::ui::albums::to_slint_album_row).collect();
         write_albums_model(&g, album_rows);
 
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &artists_ui);
-        // Fresh open clears the filter so the user lands on the full
-        // tracks + albums set, not a stale filter from the previous
-        // detail. Slint property + Rust cache cleared together.
+        // Fresh open clears the filter so the user lands on the full tracks + albums set, not a
+        // stale needle from the previous detail. Slint property and Rust cache cleared together.
         g.set_filter(SharedString::from(""));
         artists_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
-        // Set the page's enter direction before the `on_applied` hook can
-        // flip `Nav.selected-index`, so a cross-section drill's new page
-        // samples it on first paint. Inert on a same-page drill, whose
-        // body reads a fixed `below` — see `ui::nav_transition`.
+        // Set the page's enter direction before the `on_applied` hook can flip
+        // `Nav.selected-index`, so a cross-section drill's new page samples it on first paint.
+        // Inert on a same-page drill, whose body reads a fixed `below`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_artist_id(clamp_i64_to_i32(artist_id));
-        // Fresh open: no filter, so the displayed cache equals the
-        // canonical full set.
+        // Fresh open: no filter, so the displayed cache equals the canonical full set.
         artists_ui.detail.all_tracks.lock().clone_from(&tracks);
         *artists_ui.detail.tracks.lock() = tracks;
         *artists_ui.detail.albums.lock() = albums;
-        // Run after `artist-id` is set so any global writes the hook
-        // performs (Nav.selected-index for cross-tab nav, …) land in
-        // the same UI-thread tick as the detail flip.
+        // Run after `artist-id` is set so any global writes the hook performs land in the same
+        // UI-thread tick as the detail flip.
         on_applied(&ui);
-        // The two globals six heroes share, written last because their gate is
-        // the **live** tab rather than the `section_active` shadow — see
-        // `albums::detail::open_album_with` for the drill this exists to fix.
+        // The two globals six heroes share, written last because their gate is the **live** tab
+        // rather than the `section_active` shadow — see `albums::detail::open_album_with`.
         let on_screen = tab_is_mounted(&ui, MyLibraryTab::Artists);
         crate::ui::hero_chips::publish_artist(&ui, &detail, years, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
-        // Record a browser-style history entry — see the matching
-        // `record_current` in `albums::detail::open_album_with` for
-        // the rationale.
+        // Record a browser-style history entry — see `albums::detail::open_album_with`.
         crate::ui::nav_history::record_current(&state_for_history, &ui);
-        // Reseat the page's shared filter box, which the clear above
-        // doesn't reach — same reasoning, and same closure position, as
-        // `albums::detail::open_album_with`.
+        // Reseat the page's shared filter box, which the clear above doesn't reach — same
+        // reasoning, and same closure position, as `albums::detail::open_album_with`.
         ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }
 
-/// Re-fetch an already-open artist's header + albums + tracks after a
-/// library change, preserving the user's current sort + selection.
+/// Re-fetch an already-open artist's header + albums + tracks after a library change, preserving
+/// the user's current sort and selection.
 pub async fn refresh_detail(
     state: &AppState,
     artists_ui: &Arc<ArtistsUi>,
     weak: Weak<AppWindow>,
     artist_id: i64,
 ) -> AppResult<()> {
-    let (detail, albums, mut tracks) =
-        fetch_artist_detail(state, artists_ui, artist_id).await?;
+    let (detail, albums, mut tracks) = fetch_artist_detail(state, artists_ui, artist_id).await?;
 
-    let pair = decode_detail_pair(
-        state,
-        artists_ui.detail_artwork.clone(),
-        detail.image_path.clone(),
-    )
-    .await;
+    let pair =
+        decode_detail_pair(state, artists_ui.detail_artwork.clone(), detail.image_path.clone())
+            .await;
 
     let years = crate::ui::hero_folds::year_span(&albums);
 
@@ -246,47 +210,37 @@ pub async fn refresh_detail(
         crate::ui::hero_chips::publish_artist(&ui, &detail, years, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
-        // Refresh the canonical Rust caches (all_tracks + albums) with
-        // the freshly-fetched data. The displayed `tracks` cache + the
-        // Slint models are then rewritten through `apply_filtered_detail`
-        // so the user's existing filter (if any) survives the refresh —
-        // no flash of unfiltered rows.
+        // Refresh the canonical Rust caches with the freshly-fetched data. The displayed `tracks`
+        // cache and the Slint models are then rewritten through `apply_filtered_detail` so the
+        // user's existing filter survives the refresh, with no flash of unfiltered rows.
         *artists_ui.detail.all_tracks.lock() = tracks;
         *artists_ui.detail.albums.lock() = albums;
-        // Prune `selected-ids` to ids that still exist after the
-        // refresh — otherwise the chip + applied-selection drift
-        // out of sync with reality.
-        let valid: std::collections::HashSet<i32> = artists_ui
-            .detail
-            .all_tracks
-            .lock()
-            .iter()
-            .map(|t| clamp_i64_to_i32(t.id))
-            .collect();
+        // Prune `selected-ids` to ids that still exist after the refresh — otherwise the chip and
+        // the applied-selection shadow drift out of sync with reality.
+        let valid: std::collections::HashSet<i32> =
+            artists_ui.detail.all_tracks.lock().iter().map(|t| clamp_i64_to_i32(t.id)).collect();
         let pruned: Vec<i32> =
             g.get_selected_ids().iter().filter(|id| valid.contains(id)).collect();
         write_selection(&g, pruned);
         artists_ui.detail.applied_selection.lock().clear();
 
-        // Hand off the model swap to `apply_filtered_detail` so the
-        // filter + selection re-stamp pass runs in one place.
+        // Hand the model swap to `apply_filtered_detail` so the filter and selection re-stamp pass
+        // runs in one place.
         drop(g);
         apply_filtered_detail(&weak_for_filter, &artists_ui_clone);
     });
     Ok(())
 }
 
-/// Re-sort the cached detail tracks to the current `ArtistDetail` sort
-/// state, then reorder the existing rows to match. No DB hit, no row
-/// rebuild. Selection is preserved.
+/// Re-sort the cached detail tracks to the current `ArtistDetail` sort state, then reorder the
+/// existing rows to match. No DB hit, no row rebuild. Selection is preserved.
 pub fn resort_detail(ui: &AppWindow, artists_ui: &ArtistsUi) {
     let g = ui.global::<ArtistDetail>();
     let field = g.get_sort_field().to_string();
     let dir = g.get_sort_dir().to_string();
 
-    // Sort the canonical full set + the displayed subset in lockstep so
-    // `play-row` / range-select read consistent order and widening the
-    // filter later still yields sorted rows.
+    // Sort the canonical full set and the displayed subset in lockstep so `play-row` /
+    // range-select read a consistent order and widening the filter still yields sorted rows.
     let order: Vec<i32> = {
         sort_track_list_rows(&mut artists_ui.detail.all_tracks.lock(), &field, &dir);
         let mut tracks = artists_ui.detail.tracks.lock();
@@ -319,25 +273,21 @@ pub fn clear_detail(artists_ui: &ArtistsUi) {
     artists_ui.detail.applied_selection.lock().clear();
 }
 
-/// Update the cached filter needle. The Slint side already mirrors the
-/// live text via `<=>` binding; this Rust mirror lets the re-fetch path
-/// (`open_artist_with` / `refresh_detail`) re-apply the filter to fresh
-/// data without round-tripping through the UI thread for the property
-/// read. Always stored folded so the per-keystroke walk doesn't re-fold
-/// per row.
+/// Update the cached filter needle. The Slint side already mirrors the live text via the `<=>`
+/// binding; this Rust mirror lets the re-fetch path re-apply the filter to fresh data without
+/// round-tripping the UI thread for the property read. Always stored folded so the per-keystroke
+/// walk doesn't re-fold per row.
 pub fn set_filter(artists_ui: &ArtistsUi, needle: &str) {
     *artists_ui.detail.filter.lock() = row_match::fold_needle(needle);
 }
 
-/// Re-walk the canonical `all_tracks` + `albums` Vecs through the
-/// current filter and push the resulting Slint models. The track match is
-/// the shared [`track_matches`] walk; the album match is on album name
-/// only. Cheap enough to invoke on every
-/// keystroke — the lists are fully in-memory. The filtered track result
-/// is stored back into the displayed `tracks` cache so it stays in
-/// lockstep with the model (the generic selection/sort logic maps id ↔
-/// row-index through that cache). Selection state is re-stamped onto the
-/// filtered rows so existing selections survive a filter change.
+/// Re-walk the canonical `all_tracks` and `albums` Vecs through the current filter and push the
+/// resulting Slint models. The track match is the shared [`track_matches`] walk; the album match
+/// is on album name only.
+///
+/// The filtered track result is stored back into the displayed `tracks` cache so it stays in
+/// lockstep with the model — the generic selection/sort logic maps id ↔ row-index through that
+/// cache. Selection is re-stamped onto the filtered rows so it survives a filter change.
 pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>) {
     let needle = artists_ui.detail.filter.lock().clone();
 
@@ -351,10 +301,8 @@ pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>
         cache.iter().filter(|a| needle.contains(&a.name)).cloned().collect()
     };
 
-    let prepared: Vec<PreparedTrackRow> = displayed_tracks
-        .iter()
-        .map(crate::ui::tracks::prepare_track_list_row)
-        .collect();
+    let prepared: Vec<PreparedTrackRow> =
+        displayed_tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
     let album_rows: Vec<UiAlbumRow> =
         filtered_albums.iter().map(crate::ui::albums::to_slint_album_row).collect();
 
@@ -363,18 +311,15 @@ pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<ArtistDetail>();
 
-        let mut ui_tracks: Vec<UiTrackListRow> = prepared
-            .into_iter()
-            .map(crate::ui::tracks::finish_track_list_row)
-            .collect();
+        let mut ui_tracks: Vec<UiTrackListRow> =
+            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
         restamp_selection(&g, &mut ui_tracks);
         // Keep the displayed `tracks` cache in lockstep with the model.
         *artists_ui.detail.tracks.lock() = displayed_tracks;
         replace_tracks_model(&g, ui_tracks);
         write_albums_model(&g, album_rows);
-        // The displayed model changed shape — a stale shift-range
-        // anchor would now index the wrong row, so drop it.
-        // `restamp_selection` already stamped the rows, so the `applied`
+        // The displayed model changed shape — a stale shift-range anchor would now index the
+        // wrong row, so drop it. `restamp_selection` already stamped the rows, so the `applied`
         // shadow just mirrors `selected-ids` for the next click diff.
         g.set_selection_anchor(-1);
         *artists_ui.detail.applied_selection.lock() = g.get_selected_ids().iter().collect();
@@ -401,27 +346,18 @@ pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
 }
 
 /// Reopen the artist that was visible at the last shutdown, if any.
-pub fn seed_detail_from_settings(
-    ui: &AppWindow,
-    state: &AppState,
-    artists_ui: &Arc<ArtistsUi>,
-) {
-    let Some(id) = library::settings::get_view_state(state)
-        .ok()
-        .and_then(|s| {
-            s.last_detail_ids
-                .get(crate::ui::track_list_view::view_id::ARTIST_DETAIL)
-                .copied()
-        })
-    else {
+pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
+    let Some(id) = library::settings::get_view_state(state).ok().and_then(|s| {
+        s.last_detail_ids.get(crate::ui::track_list_view::view_id::ARTIST_DETAIL).copied()
+    }) else {
         return;
     };
     let s = state.clone();
     let au = artists_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // Below = first-launch fade-up, not a drill-in slide. The user
-        // didn't navigate — we're just restoring their last view.
+        // Below = first-launch fade-up, not a drill-in slide: the user didn't navigate, this is
+        // restoring their last view.
         if let Err(e) = open_artist(&s, &au, weak, id, NavEnterFrom::Below).await {
             log::warn!("artists::seed_detail_from_settings open_artist({id}): {e}");
         }

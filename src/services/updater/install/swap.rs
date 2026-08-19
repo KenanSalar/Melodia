@@ -1,10 +1,10 @@
-//! The final install step: an atomic in-place binary swap (per-user
-//! installs) or an elevated package-manager install (RPM / .deb).
+//! The final install step: an atomic in-place binary swap for a per-user
+//! install, or an elevated package-manager install for RPM / deb.
 //!
-//! `std::fs::rename` returns `EXDEV` across filesystems, and tmpfs is
-//! a different filesystem from the user's home or `/opt`; this is why
-//! the writable-parent case stays as a sibling, not under `$TEMP`. The
-//! `install_tests::same_dir_swap_succeeds` regression test pins that.
+//! `std::fs::rename` returns `EXDEV` across filesystems and tmpfs is a different
+//! filesystem from the user's home or `/opt`, which is why the writable-parent
+//! case stages as a *sibling* rather than under `$TEMP`. Pinned by
+//! `install_tests::same_dir_swap_succeeds`.
 
 use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -16,43 +16,29 @@ use crate::error::{AppError, AppResult};
 use crate::services::updater::linux_pkg;
 use crate::services::updater::linux_pkg::LinuxPackageFormat;
 
-/// Runs `pkexec <dnf|dnf5|apt|apt-get> install -y <staged>` so the
-/// resolved package manager validates the local file, installs it, and
-/// updates its DB. KDE / GNOME's polkit agent prompts the user for the
-/// admin password.
+/// Hand the staged package to the resolved package manager under `pkexec`, so
+/// it validates the file, installs it and updates its own DB.
 ///
-/// Staged file is **kept** on every non-success exit. Auth-failure
-/// (126) and missing-pkexec / no-polkit-agent (127) are obviously
-/// retriable; package-manager failures (other exit codes) cover a
-/// long tail of transient causes — `dnf` / `apt` transaction lock,
-/// repo metadata expiry, mid-dep-download network blip — that retry
-/// without re-download fixes. Stale files (>7d) are pruned at the
-/// start of the next install attempt by [`super::staging::prune_stale_staging`].
+/// The staged file is **kept** on every non-success exit: an auth failure is
+/// obviously retriable, and the package-manager exit codes cover a long tail of
+/// transient causes — transaction lock, expired repo metadata, a mid-download
+/// blip — that a retry without re-download fixes.
+/// [`super::staging::prune_stale_staging`] reaps what goes unused.
 ///
-/// **Failure-detection latency differs from the atomic-swap path.** The
-/// per-user atomic-swap branch ([`swap_in_place`]) catches a broken new
-/// binary inside [`super::verify::verify_swapped_binary`]'s 5 s smoke
-/// test and rolls back from `.old` before the caller returns. This path
-/// skips the smoke test ([`super::download_and_install`] gates on
-/// `pkg_format.is_none()`): the bytes are consumed by `dnf`/`apt` with
-/// no `.old` snapshot to restore, and the install is journaled, so a
-/// broken upgrade is recoverable out-of-band via `dnf history undo` /
-/// `apt install <prev-version>` — but failure is only observed by the
-/// user on the *next* launch, not by the updater inline.
+/// **Failure detection is later here than on the atomic-swap path.** That branch
+/// catches a broken binary in [`super::verify::verify_swapped_binary`]'s smoke
+/// test and rolls back from `.old` before returning; this one has no `.old` to
+/// restore and skips the test, so a broken upgrade surfaces on the *next* launch
+/// and is recovered out-of-band through the package manager's own journal.
 #[cfg(target_os = "linux")]
 pub(super) fn install_via_package_manager(
     format: LinuxPackageFormat,
     staged: &Path,
 ) -> AppResult<()> {
-    // Prefer the branded polkit helper at `/usr/libexec/melodia-update-helper`
-    // when it's installed — the polkit policy
-    // `com.github.kenansalar.melodia.update` registers that path and
-    // makes the KDE/GNOME auth dialog show "Install Melodia update"
-    // instead of the raw `dnf install ...` command. Both the RPM spec
-    // and the deb `[package.metadata.deb]` assets list ship the helper
-    // and the .policy file. Falls back to the direct `pkexec dnf/apt`
-    // form when the helper is absent (development builds, hand-installed
-    // tarball that somehow got rpm/dpkg-owned, …).
+    // The polkit policy registers this path, so the auth dialog reads "Install
+    // Melodia update" rather than a raw `dnf install …` command line. Both the
+    // RPM spec and the deb assets list ship it; absent (a development build,
+    // say) we fall back to invoking the package manager directly.
     const HELPER: &str = "/usr/libexec/melodia-update-helper";
     let use_helper = std::path::Path::new(HELPER).is_file();
 
@@ -80,10 +66,9 @@ pub(super) fn install_via_package_manager(
              {HELPER} not installed — falling back to direct invocation",
             staged.display()
         );
-        // No `--` end-of-options token: dnf5 (Fedora 41+) rejects a
-        // bare `--` after the `install` subcommand. `staged` is an
-        // absolute path under the update-staging dir, so it can't be
-        // mistaken for a flag.
+        // No `--` end-of-options token — dnf5 rejects a bare one after the
+        // `install` subcommand, and `staged` is an absolute path under the
+        // staging dir so it can't be mistaken for a flag.
         cmd.arg(program).arg("install").arg("-y").arg(staged);
     }
 
@@ -92,8 +77,8 @@ pub(super) fn install_via_package_manager(
     let output = match output {
         Ok(o) => o,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            // Don't delete `staged`; a retry with polkit installed
-            // reuses the verified bytes.
+            // Keep `staged` — a retry with polkit installed reuses the verified
+            // bytes.
             return Err(AppError::Settings(
                 "polkit (pkexec) is not installed; install polkit or run \
                  `dnf update melodia` / `apt install ./melodia.deb` manually"
@@ -113,14 +98,9 @@ pub(super) fn install_via_package_manager(
                 stderr.trim()
             ),
             other => {
-                // Package-manager failure (broken dep, bad signature in
-                // their own repo metadata, conflicting package, dnf/apt
-                // transaction lock, mid-dep-download network blip, ...).
-                // Keep the staged file — the verified `.rpm` / `.deb`
-                // bytes are by definition not the problem (sig already
-                // passed), so a retry without re-download often clears
-                // the failure. `prune_stale_staging` reaps files older
-                // than 7d at the next install attempt.
+                // The staged bytes already passed signature verification, so
+                // they are by definition not the problem and a retry without
+                // re-download often clears this.
                 format!("{program} install exited {other}: {}", stderr.trim())
             }
         };
@@ -134,9 +114,8 @@ pub(super) fn install_via_package_manager(
         )));
     }
 
-    // Successful install rewrites `/usr/bin/melodia`; the running
-    // process's open fd points at the unlinked inode and stays valid
-    // until exec/respawn at the next event-loop quit.
+    // The install rewrote the live binary; this process's open fd points at the
+    // unlinked inode and stays valid until the respawn.
     let _ = std::fs::remove_file(staged);
     Ok(())
 }
@@ -146,41 +125,27 @@ pub(super) fn install_via_package_manager(
     _format: LinuxPackageFormat,
     _staged: &Path,
 ) -> AppResult<()> {
-    // `current_target_key()` never returns rpm/deb off Linux, so
-    // `resolve_install_method()` never picks `LinuxPackage` and this
-    // branch is dead. The stub exists to keep the call site
-    // compile-clean on non-Linux.
-    Err(AppError::Settings(
-        "package-manager install is only supported on Linux".into(),
-    ))
+    // Unreachable — `resolve_install_method` never picks `LinuxPackage` off
+    // Linux. The stub keeps the call site compile-clean.
+    Err(AppError::Settings("package-manager install is only supported on Linux".into()))
 }
 
-/// Launches `msiexec /i <staged>.msi /qb!` to install the signed MSI.
-/// Mirrors `install_via_package_manager` shape-for-shape but for
-/// Windows: elevation comes from the per-machine MSI's UAC prompt
-/// rather than polkit; the `MajorUpgrade` element +
-/// `util:RestartResource` in `wix/main.wxs` replace the running
-/// version cleanly via Windows Installer's Restart Manager.
+/// [`install_via_package_manager`]'s Windows twin: elevation comes from the
+/// per-machine MSI's UAC prompt, and `wix/main.wxs`'s `MajorUpgrade` +
+/// `util:RestartResource` replace the running version through Restart Manager.
 ///
-/// **Non-blocking by design.** Spawned without `.output()` so the
-/// running `Melodia.exe` can exit cleanly while msiexec works in the
-/// background — Restart Manager would otherwise `WM_CLOSE` us mid-call
-/// and dangling the parent process inside `spawn_blocking` would block
-/// the runtime thread. The staged `.msi` survives this function
-/// returning; msiexec reads it lazily and the 7d staging pruner reaps
-/// it on the next install attempt.
+/// **Non-blocking by design** — spawned without `.output()` so this process can
+/// exit cleanly while msiexec works, Restart Manager otherwise `WM_CLOSE`ing us
+/// mid-call and dangling the parent inside `spawn_blocking`. msiexec reads the
+/// staged file lazily and the staging pruner reaps it.
 ///
-/// **Same skip-smoke-test rationale as the Linux package branch.** No
-/// in-process rollback exists once msiexec starts, no `.old` snapshot
-/// is retained, and running `Melodia --version` after spawning msiexec
-/// would race the live binary's replacement.
+/// Skips the smoke test for the same reason the Linux package branch does; there
+/// is additionally nothing to run, `--version` after spawning msiexec racing the
+/// live binary's replacement.
 ///
-/// `/qb!` = basic UI (progress dialog, *no* cancel button). The user
-/// already confirmed the install in-app; surfacing a second cancel
-/// midway through is footgun-shaped (cancelling mid-write leaves the
-/// install half-done, and Windows Installer's rollback isn't bullet-
-/// proof when Restart Manager is in play). `/qb` (with cancel) is the
-/// safer general default but a worse fit for the auto-update flow.
+/// `/qb!` is basic UI with **no** cancel button. The user already confirmed the
+/// install, and cancelling mid-write leaves it half-done — Windows Installer's
+/// rollback is not bulletproof with Restart Manager in play.
 #[cfg(target_os = "windows")]
 pub(super) fn install_via_msiexec(staged: &Path) -> AppResult<()> {
     use std::process::Command;
@@ -192,57 +157,38 @@ pub(super) fn install_via_msiexec(staged: &Path) -> AppResult<()> {
         ))
     })?;
     log::info!("updater: launching msiexec /i {path_str} /qb!");
-    // Keep the staged file on disk on failure — a retry without
-    // re-download reuses the verified bytes. PATH issues are the
-    // most likely failure cause (msiexec lives at
-    // `%SystemRoot%\System32\msiexec.exe` and shouldn't be missing,
-    // but stripped containers / sandboxed dev envs can drop the
-    // System32 dir from PATH).
-    Command::new("msiexec")
-        .args(["/i", path_str, "/qb!"])
-        .spawn()
-        .map_err(|e| {
-            AppError::Settings(format!(
-                "failed to spawn msiexec for {}: {e} — install requires \
+    // Keep the staged file on failure, so a retry reuses the verified bytes. A
+    // PATH missing System32 is the likeliest cause — stripped containers and
+    // sandboxed dev environments drop it.
+    Command::new("msiexec").args(["/i", path_str, "/qb!"]).spawn().map_err(|e| {
+        AppError::Settings(format!(
+            "failed to spawn msiexec for {}: {e} — install requires \
                  Windows Installer (msiexec.exe). The staged file is \
                  retained for retry; the 7d staging pruner reaps it if \
                  unused.",
-                staged.display()
-            ))
-        })?;
+            staged.display()
+        ))
+    })?;
     Ok(())
 }
 
 #[cfg(not(target_os = "windows"))]
 pub(super) fn install_via_msiexec(_staged: &Path) -> AppResult<()> {
-    // `current_target_key()` never returns windows-*-msi off Windows,
-    // so `resolve_install_method()` never picks `WindowsMsi` and this
-    // branch is dead. The stub exists to keep the call site
-    // compile-clean on non-Windows.
-    Err(AppError::Settings(
-        "msiexec install is only supported on Windows".into(),
-    ))
+    // Unreachable — `resolve_install_method` never picks `WindowsMsi` off
+    // Windows. The stub keeps the call site compile-clean.
+    Err(AppError::Settings("msiexec install is only supported on Windows".into()))
 }
 
 /// Atomic in-place swap of the live binary at `target` with the
-/// already-verified `staged` file. Branches on `cfg!(target_os)`:
+/// already-verified `staged` file.
 ///
-/// * **Linux** — `fs::rename(staged, target)` directly over the
-///   running file. The kernel unlinks the old inode but the running
-///   process's open fd stays valid; new launches pick up the swapped
-///   binary. If the rename fails with `PermissionDenied` (RPM/.deb
-///   install at `/usr/bin/`), falls back to `pkexec mv` so KDE /
-///   GNOME's polkit agent can prompt the user for elevation.
-/// * **Windows** — Windows refuses to delete or rename a file that's
-///   currently loaded as a running executable. The dance is: rename
-///   the running `Melodia.exe` → `Melodia.exe.old`, rename
-///   `Melodia.exe.new` → `Melodia.exe`, then schedule
-///   `Melodia.exe.old` for delete on reboot via
-///   `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)`. Most of the time
-///   the early `remove_file` in `main()` will clear the stale `.old`
-///   on the next launch (before it's loaded again); the reboot
-///   fallback only kicks in if `.old` is still pinned (e.g. user
-///   opened a second window before quitting).
+/// **Linux** renames straight over the running file — the kernel unlinks the old
+/// inode while this process's open fd stays valid — falling back to `pkexec mv`
+/// on `PermissionDenied` at a root-owned target. **Windows** refuses to rename a
+/// loaded executable at all, so it dances: running → `.old`, staged → running,
+/// then `.old` scheduled for delete on reboot. `main()`'s startup `remove_file`
+/// usually clears it first; the reboot fallback only matters if `.old` is still
+/// pinned.
 pub fn swap_in_place(target: &Path, staged: &Path) -> AppResult<()> {
     #[cfg(target_os = "windows")]
     {
@@ -261,23 +207,14 @@ pub fn swap_in_place(target: &Path, staged: &Path) -> AppResult<()> {
 
 #[cfg(target_os = "linux")]
 fn linux_swap(target: &Path, staged: &Path) -> AppResult<()> {
-    // Same-filesystem two-step rename so we keep a `.old` snapshot of
-    // the previously-running binary for rollback if `verify_swapped_binary`
-    // (back in the async caller) reports the new binary won't boot.
-    // Mirrors `windows_swap`.
-    //
-    // Step 1: clear any stale `.old` from a previous swap (best-effort —
-    // a stuck `.old` would only be reaped by `main()`'s startup remove,
-    // which doesn't run if the current process is the one that left it).
+    // A same-filesystem two-step rename, mirroring `windows_swap`, so a `.old`
+    // snapshot survives for rollback if `verify_swapped_binary` reports the new
+    // binary won't boot. Clearing a stale one first is best-effort.
     let old = old_path(target);
     let _ = std::fs::remove_file(&old);
 
-    // Step 2: target → target.old (same-fs rename, atomic, preserves
-    // the inode for rollback). If this fails with PermissionDenied
-    // (root-owned dir like /opt/) or CrossesDevices, we can't keep a
-    // `.old` and have to fall through to the pkexec path. That path
-    // doesn't carry rollback safety — see the comment on
-    // `elevate_swap_via_pkexec`.
+    // `PermissionDenied` (a root-owned dir) or `CrossesDevices` means no `.old`
+    // is possible, so fall through to pkexec — which carries no rollback safety.
     if let Err(e) = std::fs::rename(target, &old) {
         if matches!(
             e.kind(),
@@ -288,9 +225,8 @@ fn linux_swap(target: &Path, staged: &Path) -> AppResult<()> {
         return Err(AppError::from(e));
     }
 
-    // Step 3: staged → target. If this fails, rename `.old` back so
-    // the live binary path isn't missing. Restore failure is logged
-    // but doesn't override the original swap error.
+    // On failure rename `.old` back so the live binary path isn't missing; a
+    // failed restore is logged but must not override the original error.
     if let Err(e) = std::fs::rename(staged, target) {
         if let Err(restore_err) = std::fs::rename(&old, target) {
             log::warn!(
@@ -304,65 +240,45 @@ fn linux_swap(target: &Path, staged: &Path) -> AppResult<()> {
         return Err(AppError::from(e));
     }
 
-    // `.old` deliberately stays on disk. Reaped by main()'s startup
-    // remove on first successful boot of the new binary (which only
-    // gets a chance to run after `verify_swapped_binary` accepts).
+    // `.old` deliberately stays, reaped by `main()`'s startup remove on the
+    // first boot of the new binary — which only happens once
+    // `verify_swapped_binary` has accepted it.
     Ok(())
 }
 
-/// `pkexec mv` is **not atomic** when the source and target live on
-/// different filesystems — `mv` falls back to copy-then-unlink, so a
-/// power loss mid-copy can leave a partial target. We accept that
-/// trade-off here: the alternative is two pkexec invocations (one to
-/// stage inside the target's filesystem, one to rename) which doubles
-/// the polkit prompts. Production RPM/deb installs never reach this
-/// path because `is_system_install()` gates the UI before the daily
-/// task spawns; what's left is the rare "user dropped a tarball under
-/// root-owned `/opt/`" case where retry-on-fail is acceptable.
+/// `pkexec mv` is **not atomic** across filesystems — `mv` falls back to
+/// copy-then-unlink, so a power loss mid-copy leaves a partial target. Accepted:
+/// the alternative is two pkexec invocations and so two polkit prompts.
+/// Production RPM/deb installs never reach here, `is_system_install()` gating
+/// the UI first; what is left is a tarball dropped under a root-owned `/opt/`,
+/// where retry-on-fail is fine.
 #[cfg(target_os = "linux")]
 fn elevate_swap_via_pkexec(target: &Path, staged: &Path) -> AppResult<()> {
-    // KDE: polkit-kde-authentication-agent-1 catches the request and
-    // shows a password dialog parented to the active session.
-    // GNOME: polkit-gnome-authentication-agent-1.
-    // Both ship by default on Fedora KDE / Workstation. On stripped
-    // installs without polkit we surface a clear error and let the
-    // user pick a per-user install instead.
-    log::info!(
-        "updater: elevating swap via pkexec ({} → {})",
-        staged.display(),
-        target.display()
-    );
-    let output = std::process::Command::new("pkexec")
-        .arg("mv")
-        .arg("--")
-        .arg(staged)
-        .arg(target)
-        .output();
+    log::info!("updater: elevating swap via pkexec ({} → {})", staged.display(), target.display());
+    let output =
+        std::process::Command::new("pkexec").arg("mv").arg("--").arg(staged).arg(target).output();
 
     let output = match output {
         Ok(o) => o,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            // Clean up the staged file so we don't leak it; the
-            // user's next action will be to re-install elsewhere.
+            // Drop the staged file rather than leak it — the next action here is
+            // to re-install somewhere else.
             let _ = std::fs::remove_file(staged);
             return Err(AppError::Settings(
                 "polkit (pkexec) is not installed; install it or move Melodia to \
-                 a user-writable location like ~/.local/share/Melodia/".into(),
+                 a user-writable location like ~/.local/share/Melodia/"
+                    .into(),
             ));
         }
         Err(e) => return Err(AppError::Io(e)),
     };
 
     if !output.status.success() {
-        // pkexec exit codes per pkexec(1): 126 = user dismissed the
-        // auth dialog; 127 = catch-all for "not authorized OR no
-        // polkit agent OR missing policy OR D-Bus error OR auth
-        // failed" — pkexec does not distinguish these, so we surface
-        // stderr verbatim. Anything else is the spawned `mv` failing
-        // (or a `mv`-exit code that happens to overlap pkexec's 127,
-        // which is unavoidable). Don't delete `staged` here — keep it
-        // so a retry can re-use the verified bytes (download was
-        // successful + signature already checked).
+        // Per pkexec(1), 127 is a catch-all — not authorized, no agent, missing
+        // policy, D-Bus error, auth failed — which it doesn't distinguish, so
+        // stderr goes through verbatim. Anything else is the spawned `mv`, or a
+        // `mv` code overlapping 127, which is unavoidable. Keep `staged` so a
+        // retry reuses the verified bytes.
         let code = output.status.code().unwrap_or(-1);
         let stderr = String::from_utf8_lossy(&output.stderr);
         let reason = match code {
@@ -390,25 +306,24 @@ fn windows_swap(target: &Path, staged: &Path) -> AppResult<()> {
     use windows_sys::Win32::Storage::FileSystem::{MOVEFILE_DELAY_UNTIL_REBOOT, MoveFileExW};
 
     let old = old_path(target);
-    // Clear any stale `.old` from a previous incomplete swap. Best-effort
-    // — on the rare case where it's still loaded the reboot-delete will
-    // pick it up.
+    // Best-effort: if a stale `.old` is still loaded, the reboot-delete below
+    // picks it up instead.
     let _ = std::fs::remove_file(&old);
 
     std::fs::rename(target, &old)?;
     if let Err(e) = std::fs::rename(staged, target) {
-        // Try to undo the first rename so the user isn't left with a
-        // missing executable. If that fails too the user has to recover
-        // manually — but the more common case is a transient AV lock
-        // that lets the rollback succeed.
+        // Undo the first rename so the user isn't left with no executable. The
+        // common cause is a transient AV lock, which lets the rollback succeed.
         let _ = std::fs::rename(&old, target);
         return Err(AppError::from(e));
     }
 
     let wide: Vec<u16> = wide_with_nul(&old);
-    // Best-effort: returns 0 on failure but the binary swap already
-    // succeeded — the user keeps a stale `.old` until reboot or the
-    // next launch's `remove_file` cleanup. Logged, not failed.
+    // Best-effort — the swap already succeeded, so a failure only leaves a stale
+    // `.old` until reboot or the next launch's cleanup.
+    // SAFETY: `wide` is NUL-terminated by `wide_with_nul` and outlives the call.
+    // The null `lpNewFileName` is not an omission — it is what
+    // `MOVEFILE_DELAY_UNTIL_REBOOT` documents as delete-on-reboot.
     let ok = unsafe { MoveFileExW(wide.as_ptr(), std::ptr::null(), MOVEFILE_DELAY_UNTIL_REBOOT) };
     if ok == 0 {
         log::warn!(
@@ -419,21 +334,15 @@ fn windows_swap(target: &Path, staged: &Path) -> AppResult<()> {
     Ok(())
 }
 
-/// `<target>.old` — the rollback copy preserved by `linux_swap` and
-/// `windows_swap` after a successful binary rename. Mirrors the layout
-/// of [`super::staging::staged_path`] (which appends `.new`) so the swap
-/// dance leaves `target` + `target.old` siblings on disk until first
-/// successful boot reaps the `.old`.
+/// `<target>.old` — the rollback copy both swaps keep after a successful
+/// rename, laid out like [`super::staging::staged_path`]'s `.new` sibling.
 ///
 /// `pub(crate)` rather than module-private so
-/// `services::updater::install_target_old()` (the version `main.rs`
-/// calls at startup) shares this exact path-derivation logic.
+/// `services::updater::install_target_old()`, which `main.rs` calls at startup,
+/// shares this exact derivation.
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub(crate) fn old_path(target: &Path) -> PathBuf {
-    let mut name = target
-        .file_name()
-        .map(std::ffi::OsStr::to_os_string)
-        .unwrap_or_default();
+    let mut name = target.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
     name.push(".old");
     target.with_file_name(name)
 }

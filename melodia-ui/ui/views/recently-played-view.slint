@@ -12,18 +12,15 @@ import { FilterThrottle } from "../components/filter-throttle.slint";
 import { RecentlyPlayedMostPlayedTab } from "recently-played/most-played-tab.slint";
 import { RecentlyPlayedSongsTab } from "recently-played/songs-tab.slint";
 
-// A **pinned** hero banner — the shared `MosaicTabHero`, carrying the `TabBar`
-// and the filter `SearchBar` over the mosaic, title and chips — above two
-// mutually exclusive sub-views: the recency `TrackList` and the Most Played card
-// grid. Only the body scrolls, so the tabs stay reachable.
+// A **pinned** hero banner — the shared `MosaicTabHero`, carrying the `TabBar` and the filter
+// `SearchBar` over the mosaic, title and chips — above two mutually exclusive sub-views: the
+// recency `TrackList` and the Most Played card grid. Only the body scrolls, so the tabs stay
+// reachable.
 //
-// **Each tab owns exactly one scroller**, which is why this view mounts plain
-// `OverlayScrollbar`s rather than `CompositeScrollbars`. It used to be one outer
-// `ScrollView` over a Most Played strip and a height-capped `TrackList`, and a
-// nested `ListView` swallows the wheel at its own edge instead of bubbling — so
-// the page needed the winit wheel routing to be usable at all. One scroller per
-// tab retires that whole mechanism, along with the hover sentinel and the two-way
-// `viewport-y` binding that opted out of Slint's own out-of-bounds correction.
+// **Each tab owns exactly one scroller**, which is why this view mounts plain `OverlayScrollbar`s
+// rather than `CompositeScrollbars`: a nested `ListView` swallows the wheel at its own edge instead
+// of bubbling, and one scroller per tab retires that whole mechanism along with the hover sentinel
+// and the two-way `viewport-y` binding that opts out of Slint's out-of-bounds correction.
 export component RecentlyPlayedView inherits Rectangle {
     // Bumped per keystroke; `FilterThrottle` collapses the burst into one filter.
     property <int> filter-tick-pending: 0;
@@ -78,10 +75,10 @@ export component RecentlyPlayedView inherits Rectangle {
             empty-copy: @tr("No recently played tracks");
 
             // Clamped, unlike every other reader of this count — see the same mount in
-            // `favorites-view.slint`: `MosaicHeroTile` splits on `== 0` and `> 0`, so the
-            // not-yet-fetched `-1` satisfies neither and the square paints nothing.
+            // `favorites-view.slint`: `MosaicHeroTile` picks its fallback glyph on `== 0`, so
+            // the not-yet-fetched `-1` draws the generic placeholder note instead.
             mosaic-count: max(RecentlyPlayed.track-count, 0);
-            mosaic-paths: RecentlyPlayed.mosaic-paths;
+            mosaic-cover: RecentlyPlayed.cover;
             // Matches the sidebar entry's glyph.
             empty-glyph: "history";
 
@@ -93,9 +90,6 @@ export component RecentlyPlayedView inherits Rectangle {
             filter <=> RecentlyPlayed.filter;
             blur-tick: RecentlyPlayed.blur-search-tick;
 
-            request-cover(p) => {
-                return RecentlyPlayed.request-mosaic-cover(p);
-            }
             search-edited(t) => { root.filter-tick-pending += 1; }
             tab-selected(i) => {
                 // A recency filter carried into the Most Played grid would

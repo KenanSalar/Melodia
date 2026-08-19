@@ -6,12 +6,12 @@
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Image, SharedString};
+use slint::ComponentHandle;
 
-use crate::ui::recently_played::NAV_RECENTLY_PLAYED;
 use crate::state::AppState;
-use crate::ui::callbacks::macros::release_shared_hero;
+use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
 use crate::ui::model_diff::clear_vec_model;
+use crate::ui::recently_played::NAV_RECENTLY_PLAYED;
 use crate::ui::recently_played::{
     self as recently_played_ui_mod, RecentlyPlayedTab, RecentlyPlayedUi,
 };
@@ -46,14 +46,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 ru.mark_dirty();
             }
             if !active && let Some(ui) = weak.upgrade() {
-                // UI-thread teardown: clear the hero blur Image slots so their
+                // UI-thread teardown: hand back the banner's cover and blur slots so their
                 // `SharedPixelBuffer` Arcs release immediately, and empty the
                 // models so their `SharedString`s drop on the same tick as the
                 // LRU release below.
                 let g = ui.global::<RecentlyPlayed>();
-                g.set_blur_img_a(Image::default());
-                g.set_blur_img_b(Image::default());
-                g.set_has_blur(false);
+                release_hero_slots!(g);
                 // Unconditional, on the same tick as the wipe — see the
                 // matching call in `favorites/lifecycle.rs`.
                 ru.forget_mosaic();
@@ -62,7 +60,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // and skip the refill that fills them back in.
                 ru.forget_grid_signature();
                 // Six heroes share one colour set and one chip row, so hand
-                // both back rather than leaving this mosaic's solve and this
+                // both back rather than leaving this banner's solve and this
                 // view's counts for the next hero to paint under.
                 release_shared_hero!(ui);
                 // The grid tier goes with `release_section_state` below, so
@@ -74,19 +72,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // beside their caches: a count that outlives its model is the
                 // one thing these surfaces can state that is *wrong* rather
                 // than merely absent. `track-count` is the visible one — the
-                // hero square reads it, so a stale non-zero drew four
-                // placeholder mosaic slots over an emptied `mosaic-paths` until
-                // the re-enter fetch landed.
+                // hero square reads it to pick its fallback glyph.
                 g.set_track_count(UNFETCHED_COUNT);
                 g.set_most_played_count(UNFETCHED_COUNT);
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "recently_played: clear tracks");
                 clear_vec_model::<UiEntityGridRow>(
                     &g.get_most_played_rows(),
                     "recently_played: clear most-played",
-                );
-                clear_vec_model::<SharedString>(
-                    &g.get_mosaic_paths(),
-                    "recently_played: clear mosaic-paths",
                 );
                 clear_vec_model::<i32>(
                     &g.get_selected_ids(),

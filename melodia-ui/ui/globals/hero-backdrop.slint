@@ -1,70 +1,64 @@
-// The hero band's solved colour set — the same `ui/backdrop.rs` solve the `np-*` tier
-// runs, applied to the detail / Favorites / Recently-Played heroes.
-//
-// **One global for six views**, because only one hero can exist at a time: every
-// hero-bearing view sits under a mutually exclusive `if`, and `ViewTransition` is
-// enter-only since Slint's `if` destroys the outgoing view instantly. Whoever opens last
-// owns the set.
-//
-// Everything the `np-*` block says about hue-not-polarity applies verbatim, including
-// why the defaults are literals rather than `Theme.*` bindings.
+// The hero band's colour set — the same `ui/backdrop.rs` answer the `np-*` tier runs, applied to the
+// detail / Favorites / Recently-Played heroes. **One global for six views**, only one hero being
+// mountable at a time; whoever opens last owns the set. The `np-*` block's argument applies verbatim.
 export global HeroBackdrop {
     // Alpha baked in — see `np-scrim`.
     in-out property <brush> scrim: #0a0a0e73;
 
-    // What shows for an entity with no artwork, and the whole backdrop for Genre Detail,
-    // which paints its name-hashed stops here. **`floor-start` has a third reader**: the
-    // two mosaic heroes fill their artwork square with it *even when the mosaic is
-    // populated*, the placeholder slots over it being translucent and needing a
-    // known-dark base.
+    // The no-artwork fill, Genre Detail's blur-arm backdrop, and the aurora's base — flat
+    // `Theme.base` in both stops on that arm. **`floor-start` has a third reader**: the mosaic heroes
+    // fill their square with it even when populated, so square and surface move together on either
+    // arm.
     in-out property <color> floor-start: #2b2135;
     in-out property <color> floor-end: #14101a;
 
-    // The hue-carrying tier, solved to 3:1 against the composited backdrop. Read by the
-    // `LibraryTabBand` tile fallback, the smart-playlist badge, the chips' label, and both
-    // mosaic heroes' empty state and placeholder slots.
+    // `Player.np-tint-*`'s twin, off the same solve — the defaults have to agree with that block and
+    // with `AuroraBackdrop`'s own. Always populated: a cover supplies them, a genre its saturated
+    // hashed pair, anything coverless the accent seated to a wash tone plus a deeper sibling.
+    in-out property <color> tint-1: #3a2d4a;
+    in-out property <color> tint-2: #2d3a4a;
+    in-out property <color> tint-3: #4a2d3a;
+
+    // Written once at boot, answering to the renderer rather than to the artwork;
+    // `ui::aurora::dither_tile` argues it.
+    in-out property <image> dither;
+
+    // The hue-carrying tier. Solved to 3:1 against the composited backdrop on the blur, and a
+    // neutral ink at partial alpha on the aurora, where the wash beneath supplies the colour.
     in-out property <brush> chrome: #cba6f7;
 
-    // Derived here rather than at each call site, so surfaces meant to match can't
-    // drift — the `np-accent-pill` precedent, at the same alpha, the hero chips and the
-    // Now Playing ones being the same component.
-    //
-    // **The function is what lets a morphing band fade the tier without respelling it.**
-    // `with-alpha` *sets* alpha rather than multiplying it, so a caller wanting the pill at
-    // a fraction of its weight would have to know the 0.16 — and a second copy of that
-    // number is exactly the drift the tier exists to stop. `LibraryTabBand` is the one
-    // caller; it fades by brush and not by `opacity` because its chip strip is mounted for
-    // the life of the page (see the band's own note) and an `opacity` under 1 on a subtree
-    // with children costs an offscreen layer every frame, at rest included.
+    // A coverless hero square — its fill at a fraction, its glyph whole. `chrome`'s own value on the
+    // blur, its own answer only on the aurora, where that tier is a neutral ink: right for a chip the
+    // wash reads through, a pale slab across 140px. `Theme.accent` there instead, reached through
+    // Rust like every tier so the hero owns no `Theme.*` binding.
+    in-out property <brush> placeholder: #cba6f7;
+
+    // The same tier at the weight lettering wants, and the pill behind it at its own — solved in Rust
+    // rather than derived here, the two arms wanting different answers (`ui::backdrop`'s
+    // `AURORA_CHROME_TEXT_ALPHA` / `AURORA_CHIP_FILL_ALPHA`).
+    in-out property <brush> chrome-text: #cba6f7;
+    in-out property <brush> chip-fill: #cba6f733;
+
+    // Lets a morphing band fade the fill without its own copy of the weight; `LibraryTabBand` is the
+    // one caller, fading by brush because its chip strip stays mounted. **`transparentize`, not
+    // `with-alpha`** — a fraction of the tier has to stay a fraction of whatever Rust solved.
     public pure function chip-fill-at(alpha: float) -> brush {
-        return root.chrome.with-alpha(0.16 * alpha);
+        return root.chip-fill.transparentize(1.0 - alpha);
     }
-    out property <brush> chip-fill: root.chip-fill-at(1.0);
 
-    // The band's back button on hover, at `np-accent-disc-hover`'s weight — the two discs
-    // are the same control on two backdrops, so they climb the same ladder. Named for the
-    // reason that one is, despite the single reader: `IconButton` defaults `hover-bg` to
-    // an opaque `Theme.surface0`, so a mount that forgets it flashes the theme's grey over
-    // the blur, and a tier is harder to forget than an alpha.
-    out property <brush> disc-hover: root.chrome.with-alpha(0.3);
+    // The band's back disc, idle and hovered. An affordance rather than a surface, so it keeps the
+    // weight the chips left behind. Named despite the one reader each because `IconButton` defaults
+    // `hover-bg` to an opaque `Theme.surface0`, which flashes grey over the blur.
+    out property <brush> disc-fill: root.chrome.transparentize(0.84);
+    out property <brush> disc-hover: root.chrome.transparentize(0.7);
 
-    // The title and its secondary line, and the meta line under them. Solved per artwork
-    // exactly as `np-*` is — same call, same 4.5:1 and 3:1 targets against the
-    // *composited* band, same chroma caps — so a hero reads as near-white carrying a
-    // whisper of the album's warmth, and the two surfaces floating on a blur speak with
-    // one voice. They were fixed constants once, on the argument that a pinned backdrop
-    // leaves nothing for a per-artwork tone to fix: true of legibility, and beside a Now
-    // Playing view that *does* tint, the flat white read as a different app.
-    //
-    // `on-backdrop` has one non-text reader — the hairline below, which is why the edge
-    // derives from it rather than being a tier of its own.
+    // Title, secondary and meta lines, answered exactly as `np-*` is. The hairline below is
+    // `on-backdrop`'s one non-text reader, hence the edge deriving from it.
     in-out property <brush> on-backdrop: #f0eef5;
     in-out property <brush> on-backdrop-muted: #c9c5d3;
 
-    // The mosaic heroes' artwork square, the only bordered hero surface —
-    // `LibraryTabBand`'s tile is borderless. A `Theme.border` hairline was a wash against
-    // the old `surface1` fill under either theme, but against a fill pinned dark it
-    // vanishes under Mocha and turns a hard bright ring under every light theme, so the
-    // edge is a hero token for the same reason the fill is.
-    out property <brush> tile-edge: root.on-backdrop.with-alpha(0.12);
+    // The mosaic heroes' square, the only bordered hero surface. A `Theme.border` hairline is
+    // solved for neither backdrop — it vanishes over the blur's dark floor and turns a hard ring
+    // over a light aurora — so the edge is a hero token for the same reason the fill is.
+    out property <brush> tile-edge: root.on-backdrop.transparentize(0.88);
 }

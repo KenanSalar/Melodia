@@ -10,7 +10,14 @@ fn registry_lists_six_themes_in_display_order() {
     let ids: Vec<_> = registry().iter().map(|t| t.id).collect();
     assert_eq!(
         ids,
-        vec!["catppuccin", "gnome-adwaita", "kde-breeze", "macos", "material3", "windows-fluent"],
+        vec![
+            "catppuccin",
+            "gnome-adwaita",
+            "kde-breeze",
+            "macos",
+            "material3",
+            "windows-fluent"
+        ],
     );
 }
 
@@ -128,28 +135,41 @@ fn on_accent_picks_dark_text_for_light_accent() {
     assert_eq!(on_accent_hex(0x00000000), 0x00ffffff);
 }
 
-/// `theme.slint`'s `Theme.ink-on` is a hand-copy of `on_accent_hex`, for the
-/// surfaces whose fill isn't the accent. Nothing links the two, so pin the copy
-/// — a silent divergence here is exactly the bug that put `accent-text` on the
-/// destructive confirm button.
-#[test]
-fn theme_slint_ink_on_matches_on_accent_hex() {
-    const THEME_SLINT: &str = include_str!("../../../melodia-ui/ui/theme.slint");
+const THEME_SLINT: &str = include_str!("../../../melodia-ui/ui/theme.slint");
 
-    // Every number comes off the Rust side — the weights and threshold as
-    // consts, the two inks by asking the function itself — so the pin holds in
+/// Whitespace-normalized, so re-wrapping a Slint expression doesn't fail a pin.
+fn theme_slint_flat() -> String {
+    THEME_SLINT.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// `theme.slint`'s `Theme.is-light` is a hand-copy of the luma test inside
+/// `on_accent_hex`. Nothing links the two, so pin the copy — a silent
+/// divergence here is exactly the bug that put `accent-text` on the destructive
+/// confirm button.
+#[test]
+fn theme_slint_is_light_matches_on_accent_hex() {
+    // The weights and threshold come off the Rust consts, so the pin holds in
     // both directions rather than only catching an edit to the Slint copy.
-    let dark_ink = on_accent_hex(0x00ffffff);
-    let light_ink = on_accent_hex(0x00000000);
     let expected = format!(
         "return ({LUMA_R} * fill.red + {LUMA_G} * fill.green + {LUMA_B} * fill.blue) \
-         / 255 > {LUMA_THRESHOLD} ? #{dark_ink:06x} : #{light_ink:06x};"
+         / 255 > {LUMA_THRESHOLD};"
     );
 
-    // Normalized so re-wrapping the Slint expression doesn't fail the test.
-    let declaration = THEME_SLINT.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        declaration.contains(&expected),
+        theme_slint_flat().contains(&expected),
+        "theme.slint's `is-light` drifted from `on_accent_hex` — update both or neither"
+    );
+}
+
+/// The other half: `ink-on` picks the same two inks `on_accent_hex` returns.
+#[test]
+fn theme_slint_ink_on_picks_the_same_inks_as_on_accent_hex() {
+    let dark_ink = on_accent_hex(0x00ffffff);
+    let light_ink = on_accent_hex(0x00000000);
+    let expected = format!("return root.is-light(fill) ? #{dark_ink:06x} : #{light_ink:06x};");
+
+    assert!(
+        theme_slint_flat().contains(&expected),
         "theme.slint's `ink-on` drifted from `on_accent_hex` — update both or neither"
     );
 }

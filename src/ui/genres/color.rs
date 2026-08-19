@@ -107,12 +107,7 @@ fn jitter_0_to_15(rotated_hash: u32) -> f32 {
 /// to. Alpha is fixed at 1.0 — the gradient stops are always opaque
 /// and the scrim is applied separately in Slint.
 fn hsv_to_color(hue: f32, sat: f32, val: f32) -> Color {
-    Color::from_hsva(
-        hue.rem_euclid(360.0),
-        sat.clamp(0.0, 1.0),
-        val.clamp(0.0, 1.0),
-        1.0,
-    )
+    Color::from_hsva(hue.rem_euclid(360.0), sat.clamp(0.0, 1.0), val.clamp(0.0, 1.0), 1.0)
 }
 
 #[cfg(test)]

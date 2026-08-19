@@ -38,7 +38,10 @@ fn file(id: i64, title: &str, artist: Option<&str>, in_library: bool) -> BrowseF
 
 #[test]
 fn folders_lead_and_every_file_keeps_its_row_index() {
-    let folders = [folder("Live Sets", "/music/live"), folder("Demos", "/music/demos")];
+    let folders = [
+        folder("Live Sets", "/music/live"),
+        folder("Demos", "/music/demos"),
+    ];
     let files = [
         file(7, "One", Some("Artist"), true),
         file(9, "Two", Some("Artist"), true),

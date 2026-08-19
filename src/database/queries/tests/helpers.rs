@@ -52,16 +52,12 @@ pub async fn insert_test_track(
     let mut tx = db.write().begin().await?;
 
     let unknown_artist_id = 1; // sentinel from schema.sql
-    let artist_id =
-        queries::scan::upsert_artist(&mut tx, artist_name, unknown_artist_id).await?;
-    let album_id =
-        queries::scan::upsert_album(&mut tx, album_name, artist_id, Some(2024)).await?;
+    let artist_id = queries::scan::upsert_artist(&mut tx, artist_name, unknown_artist_id).await?;
+    let album_id = queries::scan::upsert_album(&mut tx, album_name, artist_id, Some(2024)).await?;
     let genre_id = queries::scan::upsert_genre(&mut tx, genre_name).await?;
 
-    let file_name = std::path::Path::new(file_path)
-        .file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or("test.mp3");
+    let file_name =
+        std::path::Path::new(file_path).file_name().and_then(|f| f.to_str()).unwrap_or("test.mp3");
 
     let mut meta = make_test_metadata(title);
     meta.artist = if artist_name.is_empty() {
@@ -102,7 +98,7 @@ pub async fn insert_test_track(
 
 /// Create a test pool pre-seeded with a folder and 3 tracks.
 pub async fn setup_seeded_db() -> Result<DbPool, AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
 
     // Insert a folder
     queries::folder::insert_folder(&db, "/music", true).await?;

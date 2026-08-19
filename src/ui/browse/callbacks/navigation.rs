@@ -41,8 +41,11 @@ fn spawn_fetch(
 /// root, which is what an empty path means everywhere else in this slice.
 fn persist_path(state: &AppState, path: Option<String>) {
     let s = state.clone();
-    spawn_blocking_logged!(s, "browse::set_browse_path",
-        library::settings::set_browse_path(&s, path));
+    spawn_blocking_logged!(
+        s,
+        "browse::set_browse_path",
+        library::settings::set_browse_path(&s, path)
+    );
 }
 
 /// The path a navigation target names, as [`persist_path`] wants it: `None` for the

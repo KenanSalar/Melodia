@@ -3,11 +3,10 @@ use crate::entities::genre;
 use crate::error::AppError;
 
 pub async fn get_all_genres(db: &DbPool) -> Result<Vec<genre::GenreStats>, AppError> {
-    let genres = sqlx::query_as::<_, genre::GenreStats>(
-        "SELECT * FROM genre_stats ORDER BY name ASC"
-    )
-    .fetch_all(db.read())
-    .await?;
+    let genres =
+        sqlx::query_as::<_, genre::GenreStats>("SELECT * FROM genre_stats ORDER BY name ASC")
+            .fetch_all(db.read())
+            .await?;
     Ok(genres)
 }
 

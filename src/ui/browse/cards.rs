@@ -8,7 +8,7 @@
 //! mode-gated: rows built for the surface that isn't mounted reach nothing (the
 //! `favorites::grids::apply::build_filtered_grids` precedent).
 //!
-//! The cover tier here is **private and 448 px**, never the shared 72 px row tier
+//! The cover tier here is **private and grid-sized**, never the shared row tier
 //! `BrowseUi::cover_thumbs` points at: the two hold buffers an order of magnitude
 //! apart in size, so mixing them would evict the row thumbnails Tracks and the
 //! now-playing bar are also using.
@@ -24,15 +24,8 @@ use crate::ui::grid_prewarm;
 use crate::ui::grid_rows::{chunk_built_rows, write_grid};
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{
-    AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
-    BrowseCardRow as UiBrowseCardRow,
+    AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow, BrowseCardRow as UiBrowseCardRow,
 };
-
-/// Square decode size (px) for Browse's card tiles. The same tier every other
-/// card grid uses, and for the same reason: a flex-filled card runs well past
-/// 280 px on a wide panel, and `FemtoVG` minifies bilinear with no mipmaps, so a
-/// tile upscaled past its decode size visibly softens.
-pub(super) const GRID_COVER_SIZE: u32 = 448;
 
 /// Fallback LRU capacity for the card cover cache, used at construction and
 /// whenever the display can't be queried. [`tune_cache_for_display`] replaces it
@@ -99,10 +92,7 @@ pub fn mode_index(g: &Browse<'_>, mode: BrowseViewMode) -> i32 {
 /// exists for. A folder card's subtitle is left empty and supplied as a literal by
 /// the grid delegate: `@tr` only translates literals at codegen, so a string Rust
 /// pushed would render untranslated.
-pub fn to_browse_card_rows(
-    folders: &[BrowseFolder],
-    files: &[BrowseFile],
-) -> Vec<UiBrowseCardRow> {
+pub fn to_browse_card_rows(folders: &[BrowseFolder], files: &[BrowseFile]) -> Vec<UiBrowseCardRow> {
     let mut cards = Vec::with_capacity(folders.len() + files.len());
     cards.extend(folders.iter().map(|f| UiBrowseCardRow {
         id: 0,
@@ -115,7 +105,11 @@ pub fn to_browse_card_rows(
         enabled: true,
     }));
     cards.extend(files.iter().enumerate().map(|(idx, f)| UiBrowseCardRow {
-        id: if f.in_library { clamp_i64_to_i32(f.row.id) } else { 0 },
+        id: if f.in_library {
+            clamp_i64_to_i32(f.row.id)
+        } else {
+            0
+        },
         row_index: len_as_i32(idx),
         path: SharedString::from(""),
         title: SharedString::from(f.row.title.as_str()),
@@ -159,11 +153,22 @@ pub fn first_screenful_paths(files: &[BrowseFile]) -> Vec<PathBuf> {
     )
 }
 
-/// Size the card cover cache against the display it will be drawn on. Called once
-/// from `install_views`, after the winit window is live.
+/// Re-run the mounted card bindings once a scheduled decode has landed — the
+/// `favorites::grids::apply::repaint_covers` contract, never moving off 0.
+pub fn repaint_covers(ui: &AppWindow) {
+    let g = ui.global::<Browse>();
+    let generation = g.get_covers_generation();
+    if generation > 0 {
+        g.set_covers_generation(generation.saturating_add(1));
+    }
+}
+
+/// Size the card cover cache against the display it will be drawn on. Called after `app.show()`
+/// and again on every resize, off `WindowChrome.display-changed`.
 pub fn tune_cache_for_display(app: &AppWindow, browse_ui: &BrowseUi) {
     let cap = grid_prewarm::cover_cap_for_window(app, DEFAULT_GRID_COVER_CAP);
     browse_ui.grid_covers.resize(cap);
+    browse_ui.grid_covers.set_thumb_size(grid_prewarm::cover_size_for_window(app));
 }
 
 #[cfg(test)]

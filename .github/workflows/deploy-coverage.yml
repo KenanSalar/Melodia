@@ -1,35 +1,26 @@
 name: Deploy Coverage
 
-# Coverage is manual-only, and off the PR path entirely. The instrumented build
-# is the most expensive thing in this repo's CI (it has OOM-killed the runner),
-# and a coverage delta is not what anyone reads to decide a merge — so
-# pr-validation.yml runs a plain `cargo test`, and this runs when someone
-# actually wants a report.
+# Manual-only, and off the PR path entirely: the instrumented build is the most
+# expensive thing in this repo's CI (it has OOM-killed the runner) and a coverage
+# delta is not what anyone reads to decide a merge. A paths filter wouldn't help
+# — "this merge touched Rust" is a different question from "someone wants a
+# report today", and asking beats guessing for a job this expensive.
 #
-# It used to fire on every push to `dev`, which spent that build on merges that
-# had not touched a line of Rust. There is no paths filter here to lean on, and
-# adding one would only move the guess: "this merge touched Rust" is not the
-# same question as "someone wants a coverage report today". Asking beats
-# guessing for a job this expensive.
-#
-# `workflow_dispatch` takes a ref, so the Run workflow button's branch dropdown
-# chooses what gets measured — and runs THAT branch's copy of this file. Two
-# constraints on that dropdown: the button only appears because this workflow
-# exists on the default branch (`main`), and `deploy` is gated by the
-# `github-pages` environment, whose branch policy currently allows `dev` and
-# `main` only. A run from anywhere else builds the report, uploads the artifact
-# and then fails at the publish — widen that policy rather than expecting a
-# third branch to deploy.
+# `workflow_dispatch` takes a ref, so the Run workflow dropdown picks what gets
+# measured and runs THAT branch's copy of this file. Two constraints on it: the
+# button exists only because this workflow is on the default branch, and `deploy`
+# is gated by the `github-pages` environment, whose branch policy allows `dev`
+# and `main` only. Anywhere else builds and uploads, then fails at the publish —
+# widen the policy rather than expecting a third branch to deploy.
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# Never cancel an in-flight Pages deployment; just queue the next one. The
-# trade: two dispatches in quick succession queue two full instrumented builds
-# rather than cancelling the first. That beats risking a half-published report,
-# and manual dispatch makes the collision rarer than it already was.
+# Never cancel an in-flight Pages deployment. Two dispatches in quick succession
+# therefore queue two full instrumented builds, which still beats risking a
+# half-published report.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -42,22 +33,17 @@ jobs:
   coverage:
     name: coverage
     runs-on: ubuntu-latest
-    # The instrumented build OOM-killed the runner (143) once the crate grew.
-    # LLVM source-based coverage carries its own file/region table in
-    # `__llvm_covmap` and reads nothing from DWARF, so debug info can go to zero
-    # rather than `line-tables-only` — verified against cargo-llvm-cov 0.8.7,
-    # both the summary and the annotated-source HTML render identically without
-    # it. Nothing reads a backtrace out of this job, so there is no trade here.
-    # It is worth ~0.5 GiB off the peak; `CARGO_BUILD_JOBS` below is the lever
-    # that actually keeps this job inside the runner's memory.
+    # Debug info goes to zero rather than `line-tables-only`: LLVM source-based
+    # coverage carries its own file/region table in `__llvm_covmap` and reads
+    # nothing from DWARF, so the summary and annotated HTML render identically
+    # without it, and nothing reads a backtrace out of this job.
     #
-    # jobs=4 matches the runner's vCPUs and overrides the repo's dev-machine
-    # jobs=8 in .cargo/config.toml — but it is a memory cap first. The peak is
-    # `rustc` on the `melodia-ui` crate (the Slint compiler's ~390k-line
-    # output), and the job count scales one rustc's peak because its LLVM
-    # codegen threads draw jobserver tokens. On a 16 GB runner jobs=8 does not
-    # fail, it swaps, and the job silently runs for most of an hour looking like
-    # a hang. Don't drop this to pick up the config default.
+    # `CARGO_BUILD_JOBS` is the lever that actually keeps this inside the
+    # runner's memory — a cap, not a CPU match, overriding the dev-machine jobs=8
+    # in .cargo/config.toml. The peak is a single `rustc` on `melodia-ui`, whose
+    # LLVM codegen threads draw jobserver tokens, so the job count scales one
+    # process's peak. At jobs=8 a 16 GB runner swaps rather than failing, and
+    # this build has OOM-killed it (143) outright.
     env:
       CARGO_BUILD_JOBS: 4
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -65,8 +51,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/linux-system-deps
-      # The pin drives the toolchain, and `llvm-tools-preview` (needed by
-      # cargo-llvm-cov) comes from its `components` list, not a workflow input.
+      # `llvm-tools-preview`, which cargo-llvm-cov needs, comes from the pin's
+      # `components` list rather than a workflow input.
       - name: Install pinned Rust toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -77,12 +63,10 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      # `tests/headless.rs` boots AppState, which opens rodio's default output
-      # device (cpal -> ALSA). Headless runners have no sound card, and the
-      # GitHub Azure kernel ships no snd-dummy/snd-aloop module, so point ALSA's
-      # default PCM at the built-in userspace `null` device (part of alsa-lib —
-      # no kernel module, daemon, or extra package). rodio/cpal open it and
-      # discard output; verified locally against tests/headless.rs.
+      # `tests/headless.rs` boots AppState, which opens rodio's default device.
+      # Runners have no sound card and the Azure kernel ships no
+      # snd-dummy/snd-aloop, so point ALSA at alsa-lib's built-in userspace
+      # `null` — no kernel module, daemon or extra package.
       - name: Set up dummy ALSA device (userspace null)
         run: |
           sudo tee /etc/asound.conf >/dev/null <<'EOF'
@@ -90,19 +74,17 @@ jobs:
           ctl.!default { type null }
           EOF
 
-      # One instrumented test run feeds both the HTML report and the text
-      # summary (the report phases don't re-run tests).
+      # One instrumented run feeds both outputs — the report phases re-run no
+      # tests.
       #
-      # The regex drops `melodia-ui`'s generated `app-window.rs` from the report.
-      # cargo-llvm-cov's built-in excludes cover the rustc sysroot and
-      # ~/.cargo/registry, not a workspace member's OUT_DIR — and that file is
-      # ~390k lines, enough to swamp the denominator and make the headline
-      # percentage meaningless. Scoped to that crate rather than every
-      # `build/*/out/`, so a build script that one day generates code the tests
-      # actually exercise doesn't vanish from the report without anyone noticing.
+      # The regex drops `melodia-ui`'s generated `app-window.rs`, which is large
+      # enough to swamp the denominator on its own; cargo-llvm-cov's built-in
+      # excludes reach the sysroot and the registry but not a workspace member's
+      # OUT_DIR. Scoped to that crate rather than every `build/*/out/`, so a build
+      # script that one day generates exercised code doesn't vanish unnoticed.
       #
-      # `pipefail` because the default `run:` shell is `bash -e` without it, so a
-      # failing `report` would be swallowed by `tee` and publish an empty summary.
+      # `pipefail` because the default shell is `bash -e` without it, so a failing
+      # `report` would be swallowed by `tee` and publish an empty summary.
       - name: Run tests with coverage
         env:
           IGNORE_GENERATED: '.*/build/melodia-ui-[^/]*/out/.*'
@@ -147,10 +129,9 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # Same-run artifact. This used to reach into the pr-validation workflow via
-      # dawidd6/action-download-artifact, which needed `actions: read`, a retry
-      # step and an is-it-empty guard because the fetch could come back with
-      # nothing. Producing coverage in this workflow removes all of that.
+      # Same-run artifact, which is why there's no cross-workflow fetch here and
+      # none of the `actions: read` grant, retry step and is-it-empty guard one
+      # would need.
       - name: Download coverage report
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -160,8 +141,7 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
-      # The llvm-cov HTML tree has its own index.html at the root, so it is
-      # served as-is with no landing page of ours.
+      # The llvm-cov tree has its own root index.html, so it serves as-is.
       - name: Upload to Pages
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

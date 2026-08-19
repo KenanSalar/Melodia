@@ -67,19 +67,15 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
         return false;
     }
 
-    let icon = super::decode_icon().and_then(|(w, h, rgba)| {
-        match Icon::from_rgba(rgba, w, h) {
-            Ok(icon) => Some(icon),
-            Err(e) => {
-                log::warn!("tray: embedded icon rejected: {e}");
-                None
-            }
+    let icon = super::decode_icon().and_then(|(w, h, rgba)| match Icon::from_rgba(rgba, w, h) {
+        Ok(icon) => Some(icon),
+        Err(e) => {
+            log::warn!("tray: embedded icon rejected: {e}");
+            None
         }
     });
 
-    let mut builder = TrayIconBuilder::new()
-        .with_menu(Box::new(menu))
-        .with_tooltip("Melodia");
+    let mut builder = TrayIconBuilder::new().with_menu(Box::new(menu)).with_tooltip("Melodia");
     if let Some(icon) = icon {
         builder = builder.with_icon(icon);
     }

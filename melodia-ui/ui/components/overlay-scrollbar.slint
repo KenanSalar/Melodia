@@ -1,18 +1,17 @@
 import { Theme } from "../theme.slint";
 
-// **The only scrollbar in the tree** — std-widgets' bar paints inside padded containers
-// and can't be reskinned. Every colour comes off `Theme`, so a new theme re-skins it for
-// free, and the thumb keeps one size at all times: only the colour shifts on hover.
+// **The only scrollbar in the tree** — std-widgets' bar paints inside padded containers and can't
+// be reskinned. Every colour comes off `Theme`, and the thumb keeps one size at all times, only the
+// colour shifting on hover.
 //
 // Generic across both axes. It reads the viewport and content extents, renders the thumb
-// proportionally, and emits `scroll-to` on interaction. **The host owns the source of
-// truth**: it binds `offset` from its scroller and writes the negated value back on
-// every emit, which feeds through the binding — no two-way `<=>`, which the sign flip
-// would block anyway.
+// proportionally, and emits `scroll-to` on interaction. **The host owns the source of truth**: it
+// binds `offset` from its scroller and writes the negated value back on every emit — no two-way
+// `<=>`, which the sign flip would block anyway.
 //
-// The drag works in **absolute** coordinates, snapshotted on press, so the thumb tracks
-// the cursor 1:1 even if the host resizes mid-drag — the `ResizeHandle` fix. A click on
-// the bare track jumps the thumb's centre to the cursor and drags on from there.
+// The drag works in **absolute** coordinates, snapshotted on press, so the thumb tracks the cursor
+// 1:1 even if the host resizes mid-drag — the `ResizeHandle` fix. A click on the bare track jumps
+// the thumb's centre to the cursor and drags on from there.
 export component OverlayScrollbar inherits Rectangle {
     in property <bool> horizontal: false;
     in property <length> visible-size;

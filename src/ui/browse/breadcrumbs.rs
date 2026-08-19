@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 
 use slint::SharedString;
 
+use crate::BreadcrumbRow as UiBreadcrumbRow;
 use crate::entities::browse::BrowseFile;
 use crate::entities::folder::Folder;
 use crate::ui::track_sort::sort_track_rows_by;
-use crate::BreadcrumbRow as UiBreadcrumbRow;
 
 /// Build a breadcrumb trail that starts at the **library folder root**
 /// and walks down to `path`. The leading filesystem prefix is hidden so
@@ -99,11 +99,5 @@ pub(super) fn folder_basename(path: &str) -> String {
 /// order. Delegates the shared `match field` shape to
 /// [`crate::ui::track_sort::sort_track_rows_by`].
 pub(super) fn sort_browse_files(files: &mut [BrowseFile], field: &str, dir: &str) {
-    sort_track_rows_by(
-        files,
-        field,
-        dir,
-        |f| &f.row,
-        |f| f.row.file_name.to_lowercase(),
-    );
+    sort_track_rows_by(files, field, dir, |f| &f.row, |f| f.row.file_name.to_lowercase());
 }

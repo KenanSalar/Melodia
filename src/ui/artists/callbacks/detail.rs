@@ -10,8 +10,8 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
-use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, ArtistDetail};
@@ -127,8 +127,11 @@ pub(super) fn wire(
             }
             let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            spawn_logged!(s, "artists::play_row",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+            spawn_logged!(
+                s,
+                "artists::play_row",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
+            );
         });
     }
 
@@ -137,8 +140,11 @@ pub(super) fn wire(
         detail.on_play_next(move |ids| {
             let id_vec = collect_track_ids(&ids);
             let s = s.clone();
-            spawn_logged!(s, "artists::play_next",
-                library::queue::queue_play_next_many(&s, id_vec));
+            spawn_logged!(
+                s,
+                "artists::play_next",
+                library::queue::queue_play_next_many(&s, id_vec)
+            );
         });
     }
 
@@ -157,26 +163,26 @@ pub(super) fn wire(
     {
         let au = artists_ui.clone();
         wire_row_flag!(detail, on_toggle_row_favorite, state, "artists::set_favorite",
-            library::favorites::set_favorite, collect_track_ids,
-            captures: [weak, au],
-            after: |id_vec, fav| {
-                for id in &id_vec {
-                    au.flip_detail_favorite(*id, fav);
-                    artists_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
-                }
-            });
+        library::favorites::set_favorite, collect_track_ids,
+        captures: [weak, au],
+        after: |id_vec, fav| {
+            for id in &id_vec {
+                au.flip_detail_favorite(*id, fav);
+                artists_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
+            }
+        });
     }
     {
         let au = artists_ui.clone();
         wire_row_flag!(detail, on_set_row_rating, state, "artists::set_rating",
-            library::ratings::set_rating, collect_track_ids,
-            captures: [weak, au],
-            after: |id_vec, rating| {
-                for id in &id_vec {
-                    au.flip_detail_rating(*id, rating);
-                    artists_ui_mod::apply_detail_row_rating(&weak, *id, rating);
-                }
-            });
+        library::ratings::set_rating, collect_track_ids,
+        captures: [weak, au],
+        after: |id_vec, rating| {
+            for id in &id_vec {
+                au.flip_detail_rating(*id, rating);
+                artists_ui_mod::apply_detail_row_rating(&weak, *id, rating);
+            }
+        });
     }
 
     {
@@ -212,12 +218,7 @@ pub(super) fn wire(
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
             artists_ui_mod::resort_detail(&ui, &au);
-            crate::ui::callbacks::persist_view_sort(
-                &s,
-                view_id::ARTIST_DETAIL,
-                new_field,
-                new_dir,
-            );
+            crate::ui::callbacks::persist_view_sort(&s, view_id::ARTIST_DETAIL, new_field, new_dir);
         });
     }
 
@@ -228,9 +229,15 @@ pub(super) fn wire(
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<ArtistDetail>().snapshot_visible();
             let s = s.clone();
-            spawn_blocking_logged!(s, "artists::toggle_column",
+            spawn_blocking_logged!(
+                s,
+                "artists::toggle_column",
                 library::settings::update_view_columns(
-                    &s, view_id::ARTIST_DETAIL.to_owned(), columns));
+                    &s,
+                    view_id::ARTIST_DETAIL.to_owned(),
+                    columns
+                )
+            );
         });
     }
 
@@ -254,7 +261,7 @@ pub(super) fn wire(
     // restores the same state. Collapsing also drops the borrowed
     // grid-tier cover LRU (`AlbumsUi.grid_covers`): the
     // `if !albums-collapsed` gate has unmounted the scroller, so its
-    // 448 px covers are no longer visible or queried via
+    // grid-tier covers are no longer visible or queried via
     // `request-album-cover`. Safe because while Artist Detail is open
     // the Albums tab is not the active section — `grid_covers` holds
     // only this strip's covers. Re-expanding re-decodes them lazily.
@@ -272,8 +279,11 @@ pub(super) fn wire(
                 s.runtime.spawn_blocking(move || au_albums.release_grid_covers());
             }
             let s = s.clone();
-            spawn_blocking_logged!(s, "artists::set_albums_collapsed",
-                library::settings::set_artist_albums_collapsed(&s, new_state));
+            spawn_blocking_logged!(
+                s,
+                "artists::set_albums_collapsed",
+                library::settings::set_artist_albums_collapsed(&s, new_state)
+            );
         });
     }
 }

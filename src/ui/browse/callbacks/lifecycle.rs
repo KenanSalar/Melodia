@@ -43,7 +43,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             bu.set_section_active(active);
             if !active {
                 // The card tier is Browse's only cache, and it is worth a section's
-                // release: at 448 px a full LRU is tens of megabytes. The generation
+                // release: at grid-tier size a full LRU is tens of megabytes. The generation
                 // rewinds beside it so `0` keeps meaning "cold" rather than "first toggle
                 // of the session".
                 //
@@ -66,8 +66,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                 let s = s.clone();
                 let bu = bu.clone();
                 let weak = weak.clone();
-                spawn_logged!(s, "browse::section_enter",
-                    browse_ui_mod::fetch_and_apply(&s, &bu, weak, path));
+                spawn_logged!(
+                    s,
+                    "browse::section_enter",
+                    browse_ui_mod::fetch_and_apply(&s, &bu, weak, path)
+                );
             }
         });
     }
@@ -98,8 +101,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                 let s = s.clone();
                 let bu = bu.clone();
                 let weak = weak.clone();
-                spawn_logged!(s, "browse::library_changed",
-                    browse_ui_mod::fetch_and_apply(&s, &bu, weak, path));
+                spawn_logged!(
+                    s,
+                    "browse::library_changed",
+                    browse_ui_mod::fetch_and_apply(&s, &bu, weak, path)
+                );
             }
         }));
     }

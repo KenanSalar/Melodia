@@ -88,22 +88,16 @@ pub(super) async fn resolve_album_cover(
         return hit.clone();
     }
 
-    let deezer = run_lookup(
-        crate::media::deezer::search_album_cover(client, artist, album),
-        "deezer",
-    )
-    .await;
+    let deezer =
+        run_lookup(crate::media::deezer::search_album_cover(client, artist, album), "deezer").await;
     let deezer_definite_miss = matches!(deezer, Lookup::Miss);
     if let Lookup::Found(url) = deezer {
         cache.lock().put(key, Some(url.clone()));
         return Some(url);
     }
 
-    let itunes = run_lookup(
-        crate::media::itunes::search_album_cover(client, artist, album),
-        "itunes",
-    )
-    .await;
+    let itunes =
+        run_lookup(crate::media::itunes::search_album_cover(client, artist, album), "itunes").await;
     match itunes {
         Lookup::Found(url) => {
             cache.lock().put(key, Some(url.clone()));

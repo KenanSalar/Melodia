@@ -13,72 +13,49 @@ use crate::config::Paths;
 /// The root of the Slint tree, for the pins that walk it rather than naming files.
 pub(crate) const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui");
 
-/// The vacuity floor for a walk over [`UI_DIR`], so a traversal that silently found
-/// nothing can't pass every pin standing on it.
-///
-/// Beside the directory it bounds rather than at each caller: the four pins that walk
-/// this corpus each carried their own copy of the number, two of them under a comment
-/// naming a third as where it came from. Loose on purpose — the tree is well past it, and
-/// a floor tight enough to matter would trip on an ordinary file deletion.
-///
-/// **It is one of three floors in this file, and they bound three different corpora.**
-/// The `SRC_DIR` walks use 200 over the whole Rust tree (`file_dialog_tests`,
-/// `services::tests::mod_tests`, each keeping its own `MIN_SOURCES`), and
-/// [`MIN_UI_SOURCES`] is 180 over `UI_SRC_DIR` alone. Same name, same purpose, different
-/// trees — so a walk takes the one matching the root it passes, and none of the three is
+/// Vacuity floor for a walk over [`UI_DIR`], so a traversal that found nothing can't pass
+/// every pin standing on it. Loose on purpose — one tight enough to matter would trip on an
+/// ordinary file deletion. One of three floors, each bounding a different corpus; none is
 /// derivable from another.
 pub(crate) const MIN_SLINT_SOURCES: usize = 100;
 
-/// The root of the Rust tree, for the pins that have to answer "does anything in
-/// the tree do X" rather than "do these named files do X" — the native-dialog
-/// check being the first, since what it guards against is a *new* call site
-/// rather than an edit to a known one.
+/// The root of the Rust tree, for the pins answering "does anything in the tree do X" rather
+/// than "do these named files do X" — what they guard against is a *new* call site.
 pub(crate) const SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
 
-/// The bundled font faces, which the Slint build compiles into the binary — so
-/// every artifact this repo ships redistributes them and owes their licence text.
+/// The bundled font faces, which the Slint build compiles into the binary — so every
+/// artifact this repo ships redistributes them and owes their licence text.
 pub(crate) const FONTS_DIR: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui/assets/fonts");
 
-/// The repo root, for the pins that reach packaging — which lives beside `src/`
-/// rather than under it.
+/// The repo root, for the pins that reach packaging — it lives beside `src/`, not under it.
 pub(crate) const REPO_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
-/// The Rust UI tree, for the pins that ask the same question of every slice's
-/// wiring rather than of one subtree.
-///
-/// Anchored on the manifest dir like its two siblings rather than spelled
-/// relative: a bare `"src/ui"` resolves against the harness's working directory,
-/// which is the package root only because that is what `cargo test` happens to
-/// set.
+/// The checked-in fixtures, for the tests that need a real file rather than a synthesized one.
+/// Anchored on the manifest dir for the reason [`UI_SRC_DIR`] gives.
+pub(crate) const ASSETS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/assets");
+
+/// The Rust UI tree, for the pins asking the same question of every slice's wiring. Anchored
+/// on the manifest dir like its siblings: a bare `"src/ui"` resolves against the harness's
+/// working directory, which is the package root only because that is what `cargo test` sets.
 pub(crate) const UI_SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/ui");
 
-/// The subsystem-contract rules, whose `paths:` frontmatter decides which of
-/// them loads for which file.
-///
-/// Pinned from here because a stale glob fails *silently and invisibly*: the
-/// rule simply stops loading for the code it governs, and nothing in the build,
-/// the lint gate or the test suite is looking. One `src/ui/` re-home broke four
-/// of them at once while updating a fifth.
+/// The subsystem-contract rules, whose `paths:` frontmatter decides which loads for which
+/// file. Pinned because a stale glob fails *silently* — the rule stops loading for the code
+/// it governs and nothing in the build, the lint gate or the test suite is looking.
 pub(crate) const RULES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.claude/rules");
 
-/// Every module that owns callback wiring: the cross-cutting root plus the
-/// eleven view slices that keep their own.
+/// Every module that owns callback wiring: the cross-cutting root plus the eleven view
+/// slices that keep their own.
 ///
-/// **Checked for equality, not containment.** What this guards is a subtree that
-/// stops existing — renamed, deleted, or folded somewhere the walk no longer
-/// reaches. A floor cannot see that: the walk finds fifty sources where there
-/// were fifty-four, every count-based pin over the corpus quietly loses that
-/// slice's coverage, and all of them still pass. An exact set turns it into a
-/// failing assertion *at the ledger*, naming the home that went missing, rather
-/// than a gap somewhere downstream that nothing reports.
+/// **Checked for equality, not containment.** What this guards is a subtree that stops
+/// existing, which a floor cannot see: every count-based pin over the corpus quietly loses
+/// that slice's coverage and all of them still pass.
 pub(crate) const CALLBACK_HOMES: [&str; 12] = [
     "albums",
     "artists",
     "browse",
-    // The cross-cutting root: the macros, cross-tab nav, the now-playing
-    // fan-out, tags, the updater and library settings — everything that answers
-    // to no single view.
+    // The cross-cutting root: everything answering to no single view.
     "callbacks",
     "favorites",
     "genres",
@@ -90,25 +67,21 @@ pub(crate) const CALLBACK_HOMES: [&str; 12] = [
     "tracks",
 ];
 
-/// A floor under the walk itself, so a traversal that found nothing can't pass
-/// vacuously *ahead of* the set check. Loose on purpose — [`CALLBACK_HOMES`] is
-/// the real guard, and a floor tight enough to matter would trip on every
-/// unrelated file deletion.
+/// A floor under the walk itself, so it can't pass vacuously *ahead of* the set check.
+/// Loose on purpose — [`CALLBACK_HOMES`] is the real guard.
 const MIN_UI_SOURCES: usize = 180;
 
 /// Every wiring source under [`UI_SRC_DIR`], comment-stripped and paired with its
-/// `src/ui`-relative path (`albums/callbacks/lifecycle.rs`,
-/// `callbacks/cross_tab_nav.rs`, `queue_sheet/callbacks.rs`).
+/// `src/ui`-relative path.
 ///
 /// A file counts as wiring iff it sits under a `callbacks` *directory* or *is* a
-/// `callbacks.rs` — the two shapes the tree uses, a directory once a slice's
-/// wiring outgrows one file and a flat file until then. Recognising both is what
-/// lets a slice grow from one into the other with no edit here.
+/// `callbacks.rs` — recognising both is what lets a slice grow from one into the other with
+/// no edit here.
 ///
 /// # Panics
 ///
-/// If the set of wiring homes found is not exactly [`CALLBACK_HOMES`], or if
-/// [`stripped_sources`]' own floor / unreadable-path checks trip.
+/// If the set of homes found is not exactly [`CALLBACK_HOMES`], or [`stripped_sources`]' own
+/// checks trip.
 pub(crate) fn callback_sources() -> Vec<(String, String)> {
     use std::collections::BTreeSet;
 
@@ -139,15 +112,21 @@ pub(crate) fn callback_sources() -> Vec<(String, String)> {
     out
 }
 
-/// Every file under `root` with extension `ext`, sorted, alongside the
-/// directories that wouldn't list.
+/// Every file under `root` with extension `ext`, sorted, alongside the directories that
+/// wouldn't list.
 ///
-/// The unreadable paths come back rather than being skipped: a dropped subtree
-/// lowers whatever a caller counts and its pin goes quiet, and the source-count
-/// floors those pins carry are far too loose to notice one missing folder. Every
-/// caller asserts the second list is empty.
+/// Unreadable paths come back rather than being skipped — a dropped subtree lowers whatever
+/// a caller counts and its pin goes quiet, the floors being far too loose to notice one
+/// missing folder. Every caller asserts the second list is empty.
 fn sources_under(root: &str, ext: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
-    fn walk(dir: &Path, ext: &str, out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
+    sources_under_any(root, &[ext])
+}
+
+/// [`sources_under`] over a set of extensions, in one pass. A walk apiece would report an
+/// unlistable directory once per extension and hand back sorted halves whose concatenation
+/// isn't sorted.
+fn sources_under_any(root: &str, exts: &[&str]) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    fn walk(dir: &Path, exts: &[&str], out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(dir) else {
             unreadable.push(dir.to_path_buf());
             return;
@@ -155,73 +134,63 @@ fn sources_under(root: &str, ext: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                walk(&path, ext, out, unreadable);
-            } else if path.extension().is_some_and(|found| found == ext) {
+                walk(&path, exts, out, unreadable);
+            } else if path.extension().is_some_and(|found| exts.iter().any(|ext| found == *ext)) {
                 out.push(path);
             }
         }
     }
 
     let (mut sources, mut unreadable) = (Vec::new(), Vec::new());
-    walk(Path::new(root), ext, &mut sources, &mut unreadable);
+    walk(Path::new(root), exts, &mut sources, &mut unreadable);
     sources.sort();
     (sources, unreadable)
 }
 
-/// Every `.slint` file under [`UI_DIR`], as paths.
-///
-/// The raw form, for the one pin that reports on the walk itself — the
-/// translation check counts the sources it found and names the ones it couldn't
-/// read. Anything that only wants the file *contents* wants
-/// [`stripped_sources`] instead.
+/// Every `.slint` file under [`UI_DIR`], as paths. The raw form, for the one pin reporting on
+/// the walk itself; anything wanting the file *contents* wants [`stripped_sources`].
 pub(crate) fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
     sources_under(UI_DIR, "slint")
 }
 
-/// Every shipped `.ttf` under [`FONTS_DIR`], as paths.
+/// What a `.slint` `import` embeds a face from, taken from the compiler's own check
+/// (`i-slint-compiler`'s `object_tree.rs`) rather than from what is committed today: the format
+/// nothing uses yet is the one that arrives unlicensed.
+const FONT_EXTENSIONS: [&str; 3] = ["ttc", "ttf", "otf"];
+
+/// Every shipped face under [`FONTS_DIR`], as paths. The walk recurses, so a face added
+/// under a new subdirectory is found with no edit here.
 ///
-/// Paths rather than contents, these being the one corpus in the tree that isn't
-/// text — the licence pin keys on each face's repo-relative path, and the walk
-/// recurses, so a face added under a new subdirectory is found without an edit
-/// here.
+/// Every container format the compiler takes, not just the one committed today: an `.otf`'s CFF
+/// outlines and a `.ttc`'s several faces reach the same `ttf-parser` a `.ttf` does, and nothing
+/// past the `import` cares which arrived. A filter narrower than [`FONT_EXTENSIONS`] is a list
+/// wearing a walk's clothes.
 ///
-/// `originals/` is the one subdirectory held back, and it is the counterexample
-/// to the walk's own premise. Slint embeds a face because a `.slint` file
-/// `import`s it, not because it sits under this root; that directory is
-/// gitignored scratch space for the pristine upstream Vazirmatn
-/// `scripts/patch_vazirmatn.py` reads, so its faces are redistributed by neither
-/// the binary nor the repo. Walking them made the documented re-patch workflow
-/// fail a licence pin on a developer's own machine.
+/// `originals/` is held back, and it is the counterexample to the walk's own premise: Slint
+/// embeds a face because a `.slint` file `import`s it, not because it sits under this root,
+/// and that directory is gitignored scratch space for the pristine upstream Vazirmatn
+/// `scripts/patch_vazirmatn.py` reads.
 pub(crate) fn font_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
-    let (mut fonts, unreadable) = sources_under(FONTS_DIR, "ttf");
+    let (mut fonts, unreadable) = sources_under_any(FONTS_DIR, &FONT_EXTENSIONS);
     fonts.retain(|path| !path.components().any(|part| part.as_os_str() == "originals"));
     (fonts, unreadable)
 }
 
-/// `path` relative to `root`, forward-slashed so a pin can compare it against a
-/// literal on either platform.
-///
-/// A path that doesn't sit under `root` comes back whole rather than erroring —
-/// every caller is walking a tree it just rooted at `root`, so the fallback is
-/// unreachable, and reporting the absolute path is more use than a panic if it
-/// ever isn't.
+/// `path` relative to `root`, forward-slashed so a pin can compare it against a literal on
+/// either platform. A path not under `root` comes back whole rather than erroring —
+/// reporting the absolute path is more use than a panic if that ever happens.
 pub(crate) fn rel_path(root: &str, path: &Path) -> String {
     path.strip_prefix(root).unwrap_or(path).display().to_string().replace('\\', "/")
 }
 
-/// Every source under `root` with extension `ext`, comment-stripped and paired
-/// with its `root`-relative path, forward-slashed so a pin can compare against a
-/// literal on either platform.
-///
-/// Shared for the reason [`sources_under`] is, one layer up: both tree-walking
-/// pins need this same loop over a different tree, and a copy in each is a copy
-/// that can disagree about what "the sources" are.
+/// Every source under `root` with extension `ext`, comment-stripped and paired with its
+/// `root`-relative path, forward-slashed for comparison against a literal on either platform.
+/// Shared for the reason [`sources_under`] is: a copy per walking pin is a copy that can
+/// disagree about what "the sources" are.
 ///
 /// # Panics
 ///
-/// If fewer than `floor` files turn up, or any path won't read. The floor is a
-/// vacuity guard — a traversal that silently found nothing otherwise passes every
-/// pin over it.
+/// If fewer than `floor` files turn up, or any path won't read.
 pub(crate) fn stripped_sources(root: &str, ext: &str, floor: usize) -> Vec<(String, String)> {
     let (paths, mut unreadable) = sources_under(root, ext);
     assert!(paths.len() >= floor, "only {} .{ext} files found under {root}", paths.len());
@@ -238,15 +207,12 @@ pub(crate) fn stripped_sources(root: &str, ext: &str, floor: usize) -> Vec<(Stri
     out
 }
 
-/// `src` with everything after an unquoted `//` dropped on each line, keeping the
-/// line structure.
+/// `src` with everything after an unquoted `//` dropped on each line, keeping the line
+/// structure.
 ///
-/// Shared because prose about the code reads exactly like the code to any pin
-/// that greps for a construct, and the two that walk the whole tree both trip on
-/// it. The translation pin would collect a msgid off the ellipsis placeholders
-/// `tab-bar.slint` and `overflow-menu-section.slint` spell inside comments
-/// (`@tr("…")`); the scrollbar pin's brace walk would be thrown by any comment
-/// quoting an unbalanced `{`.
+/// Prose about the code reads exactly like the code to any pin grepping for a construct: the
+/// translation pin would collect a msgid off an `@tr("…")` inside a comment, and the
+/// scrollbar pin's brace walk is thrown by any comment quoting an unbalanced `{`.
 pub(crate) fn strip_line_comments(src: &str) -> String {
     let mut out = String::with_capacity(src.len());
     for line in src.lines() {
@@ -272,20 +238,44 @@ pub(crate) fn strip_line_comments(src: &str) -> String {
     out
 }
 
-/// Runs of whitespace collapsed to one space, so a pin reads a token sequence rather
-/// than one file's indentation.
+/// The body of the block whose `{` sits at `open`, braces excluded.
 ///
-/// Pair it with [`strip_line_comments`] rather than using it alone — this joins lines,
-/// so a trailing comment would otherwise run into the code that followed it.
+/// Quote-aware, and pair it with [`strip_line_comments`] — an unbalanced `{` throws the count
+/// whether it sits in a string or in prose. A pin that greps flat instead lets a nested block
+/// answer for its parent.
+pub(crate) fn block_body(src: &str, open: usize) -> Option<&str> {
+    let bytes = src.as_bytes();
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut i = open;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' if in_string => i += 1,
+            b'"' => in_string = !in_string,
+            b'{' if !in_string => depth += 1,
+            b'}' if !in_string => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&src[open + 1..i]);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Runs of whitespace collapsed to one space, so a pin reads a token sequence rather than one
+/// file's indentation. Pair it with [`strip_line_comments`] — this joins lines, so a trailing
+/// comment would otherwise run into the code after it.
 pub(crate) fn normalize_ws(src: &str) -> String {
     src.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// The value of a `name:` binding in `src`, up to its terminating `;`, or `""` when
-/// `name` doesn't appear.
-///
-/// The empty string is the caller's failure to report — every pin over this asserts
-/// something about the value, and there is no binding whose expected value is nothing.
+/// The value of a `name:` binding in `src`, up to its terminating `;`, or `""` when `name`
+/// doesn't appear — the caller's failure to report, there being no binding whose expected
+/// value is nothing.
 pub(crate) fn binding_value<'a>(src: &'a str, name: &str) -> &'a str {
     src.split_once(name)
         .and_then(|(_, rest)| rest.split_once(';'))
@@ -294,14 +284,10 @@ pub(crate) fn binding_value<'a>(src: &'a str, name: &str) -> &'a str {
 
 /// The `N` in a global's `out property <int> tab-count: N;`.
 ///
-/// `None` covers both "no such declaration" and "not a plain integer literal", which are
-/// one failure to every caller: the count is the sole definition of how many tabs a page
-/// has, and Rust clamps the persisted index against it, so anything it can't read is a
-/// page that can restore onto a branch mounting nothing.
-///
-/// Takes the source rather than reading a file, because the two curated globals share
-/// one — `RecentlyPlayed`'s pin scopes to its own global's body first, else `Favorites`
-/// growing a tab would answer for it.
+/// `None` covers both "no such declaration" and "not a plain integer literal": Rust clamps
+/// the persisted index against this count, so anything unreadable is a page that can restore
+/// onto a branch mounting nothing. Takes the source rather than a path because the two
+/// curated globals share one file — a caller scopes to its own global's body first.
 pub(crate) fn declared_tab_count(src: &str) -> Option<usize> {
     src.split_once("out property <int> tab-count:")
         .and_then(|(_, rest)| rest.split_once(';'))
@@ -310,26 +296,20 @@ pub(crate) fn declared_tab_count(src: &str) -> Option<usize> {
 
 /// The body of an inline `marker … ];` array literal in `src`.
 ///
-/// The `@tr` arrays a `TabBar` mount hands over have to stay literals — a `[string]`
-/// seeded from Rust renders untranslated — so several pins count what is inside one.
+/// The `@tr` arrays a `TabBar` mount hands over have to stay literals — a `[string]` seeded
+/// from Rust renders untranslated — so several pins count what is inside one.
 pub(crate) fn array_body<'a>(src: &'a str, marker: &str) -> Option<&'a str> {
-    src.split_once(marker)
-        .and_then(|(_, rest)| rest.split_once("];"))
-        .map(|(body, _)| body)
+    src.split_once(marker).and_then(|(_, rest)| rest.split_once("];")).map(|(body, _)| body)
 }
 
 /// The `labels` and `fields` arrays of the one `SortPillRow` mount in `src` whose
 /// `sort-field` reads `field_property`, as raw comma-separated element lists.
 ///
-/// `field_property` is the whole property path the mount binds — `Albums.sort-field`,
-/// or `Favorites.artist-sort-field` where one global sorts more than one thing. It is
-/// the only binding naming both the component and the global, so it locates the mount;
-/// the two arrays are then read backwards from it, both being declared above. Returns
-/// `None` when no such mount exists, which is itself the failure a caller reports.
-///
-/// Shared because both sort-pill pins ask the same question of two different view
-/// files, and a parser copied into each is a parser that can disagree with itself
-/// about what a mount looks like.
+/// `field_property` is the whole property path the mount binds (`Albums.sort-field`, or
+/// `Favorites.artist-sort-field` where one global sorts more than one thing) — the only
+/// binding naming both the component and the global, so it locates the mount, and the two
+/// arrays are read backwards from it. `None` when no such mount exists, which is itself the
+/// failure a caller reports.
 pub(crate) fn sort_pill_row_arrays<'a>(
     src: &'a str,
     field_property: &str,
@@ -344,14 +324,8 @@ pub(crate) fn sort_pill_row_arrays<'a>(
     Some((array_after(head.rfind("labels:")?)?, array_after(head.rfind("fields:")?)?))
 }
 
-/// A solid-colour `side` × `side` PNG in a fresh temp dir. The dir is returned
-/// alongside the path so the caller can keep it alive — dropping it deletes the
-/// file, which is the failure mode to watch for when adopting this.
-///
-/// Shared because every cover-cache test needs a real decodable image and the
-/// two that did each wrote their own; the tier tests want a large source to
-/// downscale from and the lookup tests only want *an* image, so the size is the
-/// one thing worth parameterising.
+/// A solid-colour `side` × `side` PNG in a fresh temp dir. The dir comes back alongside the
+/// path so the caller can keep it alive — dropping it deletes the file.
 pub(crate) fn write_test_png(
     side: u32,
 ) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
@@ -361,81 +335,58 @@ pub(crate) fn write_test_png(
     Ok((tmp, path))
 }
 
-/// A [`Paths`] rooted in a throwaway directory, with the same subdirectories
-/// [`Paths::resolve`] creates already in place — so a test that writes into one
-/// doesn't have to know which of the fields is a directory.
+/// [`write_test_png`]'s counterpart, for the decode paths that only fire on JPEG.
 ///
-/// Shared rather than hand-rolled per test file because the struct literal names
-/// every field, so each copy is one more site to fix when `Paths` grows.
-/// Directory creation is best-effort: the caller passed a `TempDir` it just
-/// created, and a failure here surfaces as a plain missing-file error in the
-/// test body.
-pub(crate) fn paths_in(dir: &Path) -> Paths {
-    let artwork_dir = dir.join("artwork");
-    let artists_dir = dir.join("artists");
-    let backups_dir = dir.join("backups");
-    let logs_dir = dir.join("logs");
-    for sub in [&artwork_dir, &artists_dir, &backups_dir, &logs_dir] {
-        let _ = std::fs::create_dir_all(sub);
-    }
-
-    Paths {
-        data_dir: dir.to_path_buf(),
-        db_path: dir.join("melodia.db"),
-        settings_path: dir.join("settings.json"),
-        view_state_path: dir.join("views.json"),
-        queue_path: dir.join("queue.json"),
-        search_history_path: dir.join("search_history.json"),
-        scrobble_credentials_path: dir.join("scrobble_credentials.json"),
-        scrobble_queue_path: dir.join("scrobble_queue.json"),
-        scrobble_mbid_state_path: dir.join("scrobble_mbid_attempted.json"),
-        artwork_dir,
-        artists_dir,
-        backups_dir,
-        logs_dir,
-    }
+/// A gradient rather than a flat fill: a solid colour is one DC coefficient per block, so every
+/// scale factor reproduces it exactly and a scaled decode that ignored the size it was asked for
+/// would pass anyway.
+pub(crate) fn write_test_jpeg(
+    side: u32,
+) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
+    write_test_jpeg_sized(side, side)
 }
 
-/// Serialises every test in this binary that mutates the process environment,
-/// and every test that opts into reading it through [`reading_env`].
-///
-/// One lock for the whole binary, not one per file or per variable: `cargo
-/// test` runs `#[test]` bodies in parallel threads of a single process, the
-/// environment is process-global, and glibc's `setenv` may reallocate `environ`
-/// out from under another thread's `getenv`. Two tests holding *different*
-/// locks are therefore still racing, however careful each is on its own — which
-/// is exactly the race Rust 2024 made `set_var`/`remove_var` unsafe for. It
-/// lives at the crate root rather than beside any one caller because the set of
-/// callers spans unrelated modules and the variables they touch overlap through
-/// readers neither of them owns: `SettingsData::default()` reaches
-/// `XDG_CURRENT_DESKTOP` via `is_kde_desktop()` *and* all four locale variables
-/// via `default_locale()`, and `install_target()` reaches `$APPIMAGE` through
-/// `target::current_target_key()`.
-///
-/// **The read side is opt-in, and that is the limit of what this enforces.**
-/// `set_var`'s contract is symmetric — std spells it "no other threads
-/// concurrently writing or *reading*(!) the environment" — so a test that only
-/// reads is as much a party to the race as a second writer. Nothing makes such a
-/// test take a lock; [`reading_env`] is how one opts in, and a reader that
-/// hasn't is still racing. Wrap one as soon as you find it rather than assuming
-/// this lock already covers it.
-///
-/// **Private on purpose** — the helpers below are the only way to take it. A
-/// `pub(crate)` lock invites a caller to hand-roll the snapshot/restore around
-/// it, and three of those had already diverged before they were consolidated
-/// here; the restore is the half that goes missing.
+/// [`write_test_jpeg`] at an arbitrary aspect ratio, for the half of the scaled-decode contract a
+/// square source cannot fail: a scale picked off the long edge alone still clears the short one.
+pub(crate) fn write_test_jpeg_sized(
+    width: u32,
+    height: u32,
+) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("cover.jpg");
+    let channel = |value: u32| u8::try_from(value % 256).unwrap_or(0);
+    image::RgbImage::from_fn(width, height, |x, y| {
+        image::Rgb([channel(x), channel(y), channel(x + y)])
+    })
+    .save(&path)?;
+    Ok((tmp, path))
+}
+
+/// A [`Paths`] rooted in a throwaway directory, with the subdirectories [`Paths::resolve`]
+/// creates already in place. Creation is best-effort — a failure surfaces as a missing-file
+/// error in the test body.
+pub(crate) fn paths_in(dir: &Path) -> Paths {
+    let paths = Paths::rooted_at(dir.to_path_buf());
+    let _ = paths.create_dirs();
+    paths
+}
+
+/// Serialises every test in this binary that mutates the process environment, and every test
+/// opting into reading it through [`reading_env`]. `.claude/rules/unsafe-rust.md` owns the
+/// argument; what binds at the definition is that it is one lock for the whole *binary* —
+/// two tests holding different locks are still racing — that the read side is opt-in, so a
+/// reader that hasn't wrapped itself is still racing, and that it stays private, a
+/// `pub(crate)` lock inviting the hand-rolled snapshot/restore whose restore goes missing.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 thread_local! {
-    /// Set while this thread holds [`ENV_LOCK`]. The mutex is not reentrant, so
-    /// a nested call would hang the binary with no message and no failing
-    /// assertion — the worst failure mode to leave undetected. This turns it
-    /// into a named panic instead.
+    /// Set while this thread holds [`ENV_LOCK`]. The mutex is not reentrant, so a nested
+    /// call would hang the binary with no message; this turns that into a named panic.
     static ENV_LOCK_HELD: Cell<bool> = const { Cell::new(false) };
 }
 
-/// [`ENV_LOCK`] and the reentrancy flag held together, so both are released on
-/// the way out of a panicking body as well as a returning one.
+/// [`ENV_LOCK`] and the reentrancy flag held together, so both release on the way out of a
+/// panicking body as well as a returning one.
 struct EnvGuard {
     _lock: MutexGuard<'static, ()>,
 }
@@ -443,8 +394,7 @@ struct EnvGuard {
 impl EnvGuard {
     /// # Panics
     ///
-    /// If this thread already holds the lock. Panicking is the point: the
-    /// alternative is a silent deadlock.
+    /// If this thread already holds the lock — the alternative is a silent deadlock.
     fn acquire() -> Self {
         assert!(
             !ENV_LOCK_HELD.get(),
@@ -453,8 +403,7 @@ impl EnvGuard {
              and no failing assertion. A per-variable wrapper must *delegate* to \
              `with_env_set` rather than lock and then call it."
         );
-        // A poisoned guard is accepted: the previous holder restored the
-        // environment before it resumed unwinding, so the state is consistent.
+        // Poison is accepted — the previous holder restored the environment before unwinding.
         let lock = ENV_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
         ENV_LOCK_HELD.set(true);
         Self { _lock: lock }
@@ -467,23 +416,19 @@ impl Drop for EnvGuard {
     }
 }
 
-/// Runs `body` with `clear` removed from the environment and `set` applied on
-/// top, then restores the originals — including when `body` panics, so a failing
-/// assertion can't leak a variable into the rest of the process.
+/// Runs `body` with `clear` removed from the environment and `set` applied on top, then
+/// restores the originals — including when `body` panics, so a failing assertion can't leak a
+/// variable into the rest of the process.
 ///
-/// The whole shape in one place: **lock → snapshot → clear → set →
-/// `catch_unwind` → restore → `resume_unwind`.** Every variable in `set` must
-/// also appear in `clear`, or there is nothing snapshotted to put it back from.
-///
-/// Safe to call, and that is encapsulation rather than a gap: this is the only
-/// place in the binary that mutates the environment, so "every mutation happens
-/// under `ENV_LOCK`" is a property of this module instead of something each
-/// caller re-argues.
+/// Every variable in `set` must also appear in `clear`, or there is nothing snapshotted to
+/// put it back from. Safe to call, which is encapsulation rather than a gap: this being the
+/// binary's only mutation site, "every mutation happens under `ENV_LOCK`" is a property of
+/// the module rather than something each caller re-argues.
 ///
 /// # Panics
 ///
-/// Re-raises whatever `body` panicked with, after the environment is restored.
-/// Panics up front on a nested call — see [`ENV_LOCK_HELD`].
+/// Re-raises whatever `body` panicked with, after the environment is restored. Panics up
+/// front on a nested call — see [`ENV_LOCK_HELD`].
 #[allow(
     unsafe_code,
     reason = "env::set_var/remove_var are unsafe in Rust 2024; every mutation in the test binary happens in this function, under ENV_LOCK, restored under catch_unwind."
@@ -502,12 +447,10 @@ pub(crate) fn with_env_set<F: FnOnce() -> R, R>(
     let saved: Vec<(&str, Option<String>)> =
         clear.iter().map(|&v| (v, std::env::var(v).ok())).collect();
 
-    // SAFETY: `ENV_LOCK` is held across every mutation below *and* across
-    // `body`, and the restore runs whether `body` returns or unwinds — so with
-    // every other mutation in the binary coming through here too, no writer can
-    // overlap another. That discharges the writer half of `set_var`'s contract;
-    // the reader half is `reading_env`'s job and is opt-in, which the `ENV_LOCK`
-    // doc says plainly rather than letting this comment imply otherwise.
+    // SAFETY: `ENV_LOCK` is held across every mutation below *and* across `body`, and the
+    // restore runs whether `body` returns or unwinds — so with every other mutation in the
+    // binary coming through here too, no writer can overlap another. That discharges the
+    // writer half of `set_var`'s contract; the reader half is `reading_env`'s, and opt-in.
     unsafe {
         for &v in clear {
             std::env::remove_var(v);
@@ -545,10 +488,8 @@ pub(crate) fn with_env_var<F: FnOnce() -> R, R>(var: &str, value: Option<&str>, 
 
 /// Runs `body` with `$APPIMAGE` set to `value`, or cleared when it is `None`.
 ///
-/// Named rather than spelled out at each call site because three unrelated test
-/// modules override it — `updater::{target,linux_pkg,system_install}::tests` —
-/// and it reaches production code none of them owns (`install_target()` →
-/// `target::current_target_key()`).
+/// Named rather than spelled at each call site because three unrelated test modules override
+/// it and it reaches production code none of them owns (`install_target()`).
 pub(crate) fn with_appimage_env<F: FnOnce() -> R, R>(value: Option<&str>, body: F) -> R {
     with_env_var("APPIMAGE", value, body)
 }
@@ -556,16 +497,29 @@ pub(crate) fn with_appimage_env<F: FnOnce() -> R, R>(value: Option<&str>, body: 
 /// Runs `body` under the same lock the mutating helpers take, without touching a
 /// variable.
 ///
-/// For a test that only *reads* the environment, directly or through production
-/// code that does. `set_var`'s contract is symmetric, so such a test races a
-/// sibling's mutation exactly as a second mutator would; this is how it opts out
-/// of that race. `SettingsData::default()` is the reader in this tree — it
-/// reaches `XDG_CURRENT_DESKTOP` and all four locale variables through its serde
-/// defaults, and the tests that build one sit in the same file as the tests that
-/// mutate both.
+/// For a test that only *reads* the environment, directly or through production code that
+/// does: `set_var`'s contract is symmetric, so such a test races a sibling's mutation exactly
+/// as a second mutator would. `SettingsData::default()` is the reader in this tree, reaching
+/// `XDG_CURRENT_DESKTOP` and all four locale variables through its serde defaults.
 pub(crate) fn reading_env<F: FnOnce() -> R, R>(body: F) -> R {
     let _guard = EnvGuard::acquire();
     body()
+}
+
+/// The home directory `services::redact_home` will actually resolve, if there is one.
+///
+/// A redaction test builds its fixture from this rather than spelling `/home/testuser` under a
+/// faked `$HOME`: `dirs::home_dir()` asks Win32 for the profile folder and never reads the
+/// environment, so the faked form is a fixture only Linux can honour and every such test was
+/// red on Windows. `None` leaves the caller nothing to assert against.
+///
+/// Deliberately the production resolver rather than a second copy of it. A test that resolved
+/// home its own way would agree with `redact_home` only by coincidence, and the coincidence
+/// breaks on whichever platform the two happen to disagree about — which is the entire class
+/// of bug this helper exists because of. The Unix `$HOME` arm is pinned separately, by
+/// `services::tests::mod_tests`, which is where a faked variable still belongs.
+pub(crate) fn resolved_home() -> Option<String> {
+    crate::services::home_dir_string()
 }
 
 #[cfg(test)]

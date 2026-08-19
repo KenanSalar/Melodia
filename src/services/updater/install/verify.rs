@@ -47,10 +47,7 @@ pub(super) fn verify_staged(
 /// the contrived gap where the swap target somehow ended up pointing
 /// at a different, well-formed CLI tool that happens to exit 0 on
 /// `--version` — that would pass the previous "non-empty stdout" check.
-pub(super) async fn verify_swapped_binary(
-    target: &Path,
-    expected_version: &str,
-) -> AppResult<()> {
+pub(super) async fn verify_swapped_binary(target: &Path, expected_version: &str) -> AppResult<()> {
     use tokio::time::{Duration, timeout};
 
     log::info!(

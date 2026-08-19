@@ -1,47 +1,30 @@
 //! Publishes the hero band's metadata chips into the `HeroChips` global.
 //!
-//! The thin half of [`crate::ui::chips`]: that module wraps a list of chips
-//! into rows, this one decides which chips a given hero has and hands them
-//! over. Six views share one global — see `globals/hero-chips.slint` for why
-//! one is enough — so every hero opens by calling exactly one `publish_*`.
+//! The thin half of [`crate::ui::chips`]: that module wraps a list of chips into rows,
+//! this one decides which chips a hero has. Six views share one global, so every hero
+//! opens by calling exactly one `publish_*`.
 //!
-//! **No chip costs a query, and no `publish_*` walks a `Vec`.** Every fact is
-//! either on a stats struct the caller already holds at its existing push site,
-//! or folded out of a `Vec` the same fetch just walked — by the fetch, *on that
-//! worker*, so a 20 000-track genre never hashes its track list inside an
-//! `upgrade_in_event_loop`. `AlbumStats::disc_count` and `is_compilation` are
-//! the clearest case of the first: both fetched today and dropped on the floor
-//! by `to_slint_album_row`, because nothing painted them. The second is what
-//! [`crate::ui::hero_folds`] is: the pure `&[T] -> Copy` folds each fetch runs
-//! beside itself, split off here so the channel below owns only the record of
-//! what is on screen.
+//! **No chip costs a query, and no `publish_*` walks a `Vec`.** Every fact is either on a
+//! stats struct the caller already holds or folded out of a `Vec` the same fetch walked —
+//! by the fetch, *on that worker*, so a 20 000-track genre never hashes its track list
+//! inside an `upgrade_in_event_loop`. Those pure folds are [`crate::ui::hero_folds`]. A
+//! publisher also reads no Slint property it doesn't own: taking the facts as arguments
+//! makes the caller's write order irrelevant.
 //!
-//! A publisher also reads no Slint property it doesn't own. Two of them used
-//! to, and the cost was an ordering constraint the call site had to honour and
-//! a comment had to state — "after the counts, never before". Taking the facts
-//! as arguments (or off the section's own handle) makes the write order
-//! irrelevant, which is the difference between a rule and a hazard.
+//! **The gate is the live tab, and the row remembers who filled it.** Both halves exist
+//! for the same event — a cross-section drill moves the tab from inside the very closure
+//! that publishes. Read off the `section_active` shadow, which `SectionActiveGate` only
+//! updates next frame, the gate answers for the tab being *left* and drops the publish;
+//! and once it lands, the departing tab's own leave arrives in the same change-handler
+//! drain and would clear it, a leave being unable to tell a hand-off whose destination
+//! has already published from one still fetching. [`ChipOwner`] is what can.
 //!
-//! **The gate is the live tab, and the row remembers who filled it.** Both
-//! halves exist for the same event: a cross-section drill moves the tab from
-//! inside the very closure that publishes. Read from the `section_active`
-//! shadow, which the `SectionActiveGate` only updates next frame, the gate
-//! answered for the tab the user was *leaving* and dropped the publish — so the
-//! band wore the previous hero's counts until the section-enter had re-run a
-//! grid fetch plus the whole detail fetch again. And once the publish lands, the
-//! departing tab's own leave arrives in the same change-handler drain and would
-//! have cleared it, because a leave cannot tell a hand-off whose destination has
-//! already published from one still fetching. [`ChipOwner`] is what can.
+//! **A band states facts about the set the page is about, never the current filter** —
+//! forced rather than chosen, an album's chips being unable to follow its track filter
+//! without lying about the album.
 //!
-//! **A band states facts about the set the page is about, never about the
-//! current filter.** That is forced rather than chosen: an album's chips cannot
-//! follow its track filter without lying about the album, so the alternative
-//! rule would hold on two heroes out of six. The counts that *do* track a
-//! filter already exist — they gate the grids' empty states.
-//!
-//! Order matters, because the band wraps at [`HERO_MAX_ROWS`] and drops what
-//! still doesn't fit. Each builder puts the fact a user is most likely to be
-//! looking for first, so a narrow window loses the least.
+//! Order matters: the band wraps at [`HERO_MAX_ROWS`] and drops what still doesn't fit,
+//! so each builder leads with the fact a user is most likely scanning for.
 
 use std::cell::RefCell;
 
@@ -55,46 +38,30 @@ use crate::ui::chips;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi, NAV_FAVORITES};
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::my_library::{MyLibraryTab, NAV_MY_LIBRARY, tab_from_index};
-use crate::ui::recently_played::{
-    NAV_RECENTLY_PLAYED, RecentlyPlayedTab, RecentlyPlayedUi,
-};
+use crate::ui::recently_played::{NAV_RECENTLY_PLAYED, RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::tracks::format_duration_ms;
 use crate::ui::util::len_as_i32;
 use crate::{
-    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, HeroChips, MyLibrary, Nav,
-    PlaylistDetail,
+    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, HeroChips, MyLibrary, Nav, PlaylistDetail,
 };
 
 /// How many rows a hero band gives its chips before dropping the rest.
 ///
-/// Two, not one: every hero leaves slack between its meta block and its action
-/// pill (the trailing `Rectangle { vertical-stretch: 1 }`), and a second 26 px
-/// row plus its 4 px gap fits inside it on all six — so a narrow window wraps
-/// into space that was already there rather than growing the band.
+/// Two, measured rather than picked: a second row plus its gap fits the slack every
+/// hero's trailing spacer already leaves. A third overruns the tile on all six and pushes
+/// the action pill out of the banner — unlike the Now Playing strip, which passes `None`.
 ///
-/// The two heroes carrying a second text line (Album's artist, Playlist's
-/// description) are the ones that had to be argued for, since their band is
-/// `Theme.hero-artwork` plus padding and nothing else. It fits because that
-/// line sits *under the title, inside the title row*, where the `SearchBar`
-/// beside it has already claimed the height — a subtitle on a row of its own
-/// spent about a chip row's worth of the tile, and the wrap then overran it.
-/// Moving either one back out is what breaks this, not the row count.
-///
-/// That makes `Theme.hero-title-size` and `font-size-md` a *pair*: the title
-/// row is as tall as those two stacked, and the `SearchBar` only covers the
-/// first. Raising either spends the same slack the second chip row needs.
-///
-/// Not unbounded like the Now Playing strip (which passes `None`), because a
-/// third row overruns the tile on all six and pushes the pill out of the
-/// banner.
+/// What makes the second row fit on the two heroes carrying a subtitle (Album's artist,
+/// Playlist's description) is that the line sits *under the title, inside the title row*,
+/// where the `SearchBar` beside it has already claimed the height. Moving either onto a
+/// row of its own is what breaks this, not the row count — and it makes
+/// `Theme.hero-title-size` and `font-size-md` a pair, raising either spending the slack.
 const HERO_MAX_ROWS: usize = 2;
 
-/// The translated labels a builder needs.
-///
-/// A trait rather than the Slint global directly, so the builders — which are
-/// the part with the actual decisions in them — can be tested without standing
-/// up an `AppWindow`. `@tr` folds literals at codegen and nothing else, so
-/// production has to route through the global's callbacks either way.
+/// The translated labels a builder needs. A trait rather than the global directly, so the
+/// builders — the part with the decisions in them — are testable without an `AppWindow`.
+/// `@tr` folds literals at codegen and nothing else, so production routes through the
+/// global's callbacks either way.
 trait ChipLabels {
     fn tracks(&self, count: i32) -> SharedString;
     fn albums(&self, count: i32) -> SharedString;
@@ -129,9 +96,8 @@ impl ChipLabels for HeroChips<'_> {
     }
 }
 
-/// Everything the Favorites band can state, across its three tabs. Which fields
-/// are read follows the tab — the band describes whatever the body below it is
-/// listing.
+/// Everything the Favorites band can state, across its three tabs. Which fields get
+/// read follows the tab — the band describes whatever the body below it is listing.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct FavoritesFacts {
     pub tab: FavoritesTab,
@@ -152,12 +118,10 @@ struct RecentlyPlayedFacts {
     pub most_played: MostPlayedTotals,
 }
 
-/// Whose facts the band is currently stating.
-///
-/// **A teardown clears only chips it owns**, which is the whole of what this is
-/// for — see [`clear_if_stale`]. The four details carry their id because a band
-/// holds its banner across a tab switch, so "is this still the Album Detail's
-/// row" has to mean *that* album's.
+/// Whose facts the band is currently stating. **A teardown clears only chips it owns**,
+/// which is the whole of what this is for — see [`clear_if_stale`]. The four details
+/// carry their id because a band holds its banner across a tab switch, so "is this
+/// still the Album Detail's row" has to mean *that* album's.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ChipOwner {
     Album(i64),
@@ -168,13 +132,11 @@ pub enum ChipOwner {
     RecentlyPlayed,
 }
 
-/// The published chips, who published them, and the width they were chunked
-/// against.
+/// The published chips, who published them, and the width they were chunked against.
 ///
-/// UI-thread state, so a `thread_local` rather than something threaded through
-/// six call sites that only ever hold an `&AppWindow`. Keeping the width across
-/// a hero swap is deliberate: the incoming strip re-reports it a frame later
-/// anyway, and until it does the cached value is a far better guess than zero.
+/// UI-thread state, so a `thread_local` rather than something threaded through six call
+/// sites that only hold an `&AppWindow`. The width deliberately survives a hero swap: the
+/// incoming strip re-reports it a frame later, and until then it beats zero.
 struct PublishedChips {
     width: f32,
     owner: Option<ChipOwner>,
@@ -201,23 +163,20 @@ pub fn install(ui: &AppWindow) {
     ui.global::<HeroChips>().on_recompute(move |width| {
         let Some(ui) = weak.upgrade() else { return };
         PUBLISHED.with_borrow_mut(|p| p.width = width);
-        // The one caller that may re-chunk to the shape already on screen, and
-        // the one that fires per pointer motion of a resize drag.
+        // The one caller that may re-chunk to the shape already on screen, and the one
+        // that fires per pointer motion of a resize drag.
         write_rows(&ui, false);
     });
 }
 
-/// Replace the band's chips and re-chunk — but only when the publishing view
-/// is the one on screen. Callers reach for a `publish_*` wrapper below; this is
-/// the seam they share, and the single place the gate lives.
+/// Replace the band's chips and re-chunk, but only when the publishing view is on screen.
+/// Callers reach for a `publish_*` wrapper below; this is the seam they share.
 ///
-/// **The gate is not optional.** `HeroChips` is one global for six heroes, and
-/// the boot path fetches every persisted detail id regardless of which section
-/// is being restored — so at cold start up to four of these land while a
-/// *different* hero owns the band, and the last one to finish wins. A view that
-/// drops its publish here re-publishes on section-enter, which always re-fetches
-/// (the leave marks it dirty). Exactly the contract
-/// `hero_backdrop::apply` is held to by `apply_detail_artwork`.
+/// **The gate is not optional.** One global serves six heroes and the boot path fetches
+/// every persisted detail id whichever section is restored, so at cold start up to four
+/// of these land while a *different* hero owns the band and the last to finish wins. A
+/// view that drops its publish here re-publishes on section-enter, which always
+/// re-fetches — the contract `apply_detail_artwork` holds `hero_backdrop::apply` to.
 fn publish(ui: &AppWindow, owner: ChipOwner, chips: Vec<SharedString>, section_active: bool) {
     if !section_active {
         return;
@@ -229,12 +188,12 @@ fn publish(ui: &AppWindow, owner: ChipOwner, chips: Vec<SharedString>, section_a
     write_rows(ui, true);
 }
 
-/// Drop the band's chips unconditionally. The page-level teardown, where nothing
-/// can bring a banner back without a fetch that republishes all of it.
+/// Drop the band's chips unconditionally — the page-level teardown, where nothing can
+/// bring a banner back without a fetch that republishes all of it.
 ///
-/// Every *other* teardown reaches for [`clear_if_stale`] instead — the two mosaic
-/// heroes also reset the backdrop when their mosaic empties out while the view is
-/// still on screen, and clearing there would blank a live band.
+/// Every *other* teardown reaches for [`clear_if_stale`]: the two mosaic heroes also
+/// reset the backdrop when their mosaic empties while the view is still on screen, and
+/// clearing there would blank a live band.
 pub fn clear(ui: &AppWindow) {
     PUBLISHED.with_borrow_mut(|p| {
         p.owner = None;
@@ -243,32 +202,22 @@ pub fn clear(ui: &AppWindow) {
     write_rows(ui, true);
 }
 
-/// Drop the band's chips **unless the band is still painting the hero that
-/// published them**, so backing out of one hero and into another can't leave the
-/// previous entity's counts under the new title.
+/// Drop the band's chips **unless the band is still painting the hero that published
+/// them**, so backing out of one hero and into another can't leave the previous entity's
+/// counts under the new title.
 ///
-/// This is the one question every teardown but the page's own asks, and it is the
-/// record's to answer rather than the departing view's. A leave used to hand its
-/// tab over and let a three-case predicate decide; that could not tell a hand-off
-/// whose destination had *already published* — which is now every cross-tab drill,
-/// since the publish gate stopped reading a frame-stale shadow — from one still
-/// waiting on a fetch. The first must hold and the second must clear.
+/// The record's question to answer rather than the departing view's: a predicate taking
+/// the *departing tab* cannot tell a hand-off whose destination has already published
+/// from one still waiting on a fetch, and a cross-tab drill fills the strip in the tick
+/// that moves the tab. Two ways the band is still painting these, per [`should_clear`]:
 ///
-/// Two ways the band is still painting these chips, and [`should_clear`] is where
-/// the decision itself lives:
-///
-/// * **Nothing took over.** The mounted view would publish this same owner — a
-///   detail still open on the mounted tab, or the curated page the nav index is
-///   on. Now Playing *covering* a band lands here too, and correctly: the same
-///   hero comes back underneath, so blinking its counts out and in is a flicker on
-///   every press of `F`.
-/// * **The band is collapsing out of it.** Nothing on this page clears a detail id
-///   on a tab leave, so an owner whose own id is still set is a banner the band is
-///   mid-morph over — for the whole 400 ms. `MyLibrary.hero-collapsed` clears it at
-///   the end of that, through this same function, by which point either the detail
-///   really closed (its id is `-1`, so this clears) or a tab switch collapsed it
-///   and picking that tab again morphs the same banner back open with its counts
-///   intact.
+/// * **Nothing took over** — the mounted view would publish this same owner. Now Playing
+///   *covering* a band lands here correctly, the same hero coming back underneath.
+/// * **The band is collapsing out of it.** Nothing clears a detail id on a tab leave, so
+///   an owner whose id is still set is a banner the band is mid-morph over.
+///   `MyLibrary.hero-collapsed` asks again at the end, by which point either the detail
+///   really closed (id `-1`, so this clears) or a tab switch collapsed it and picking
+///   that tab again morphs the banner back open with its counts intact.
 pub fn clear_if_stale(ui: &AppWindow) {
     let recorded = PUBLISHED.with_borrow(|p| p.owner);
     let Some(recorded) = recorded else {
@@ -279,15 +228,14 @@ pub fn clear_if_stale(ui: &AppWindow) {
     }
 }
 
-/// The pure half of [`clear_if_stale`]. Split out so the decision is testable
-/// without an `AppWindow`, the [`crate::ui::my_library::fold_retired_nav_index`]
-/// precedent.
+/// The pure half of [`clear_if_stale`], split out so the decision is testable without
+/// an `AppWindow`.
 fn should_clear(recorded: ChipOwner, band: Option<ChipOwner>, still_open: bool) -> bool {
     if band == Some(recorded) {
         return false;
     }
-    // No hero is mounted and the owner's own id survives: the band is collapsing
-    // over the banner these belong to, and `hero-collapsed` asks again at the end.
+    // No hero is mounted and the owner's own id survives: the band is collapsing over
+    // the banner these belong to, and `hero-collapsed` asks again at the end.
     !(band.is_none() && still_open)
 }
 
@@ -315,14 +263,10 @@ fn band_owner(ui: &AppWindow) -> Option<ChipOwner> {
     )
 }
 
-/// Which detail the mounted My Library tab has open, given the four live ids.
-///
-/// The pure half of [`band_owner`], split out for the reason
-/// [`crate::ui::my_library::fold_retired_nav_index`] is: the answer is worth
-/// testing and a window is not worth building to test it. **The tab is what
-/// discriminates, not the id** — `seed_detail_from_settings` runs for all four
-/// detail views at boot whichever tab is restored, so more than one can be `>= 0`
-/// at a time. Songs is the arm with no detail.
+/// Which detail the mounted My Library tab has open, given the four live ids — the pure
+/// half of [`band_owner`]. **The tab is what discriminates, not the id**:
+/// `seed_detail_from_settings` runs for all four detail views at boot whichever tab is
+/// restored, so more than one can be `>= 0` at a time.
 fn my_library_owner(
     tab: MyLibraryTab,
     album_id: i32,
@@ -347,20 +291,17 @@ fn is_open(ui: &AppWindow, owner: ChipOwner) -> bool {
         ChipOwner::Album(id) => i64::from(ui.global::<AlbumDetail>().get_album_id()) == id,
         ChipOwner::Artist(id) => i64::from(ui.global::<ArtistDetail>().get_artist_id()) == id,
         ChipOwner::Genre(id) => i64::from(ui.global::<GenreDetail>().get_genre_id()) == id,
-        ChipOwner::Playlist(id) => {
-            i64::from(ui.global::<PlaylistDetail>().get_playlist_id()) == id
-        }
+        ChipOwner::Playlist(id) => i64::from(ui.global::<PlaylistDetail>().get_playlist_id()) == id,
         ChipOwner::Favorites | ChipOwner::RecentlyPlayed => false,
     }
 }
 
 /// Re-chunk and hand the split to Slint.
 ///
-/// `force` is the caller answering "did my chips move?" — `true` from [`publish`]
-/// and [`clear`], which is the only way they can, and `false` from the width
-/// channel, where they cannot. Unforced, an unchanged shape skips the write:
-/// `set_rows` is a model reset, so repainting a strip that re-chunked to the
-/// same two rows rebuilds every chip for nothing, once per pointer motion.
+/// `force` is the caller answering "did my chips move?" — `true` from [`publish`] and
+/// [`clear`], the only two that can. Unforced, an unchanged shape skips the write:
+/// `set_rows` is a model reset, so a strip re-chunking to the same two rows would rebuild
+/// every chip once per pointer motion.
 fn write_rows(ui: &AppWindow, force: bool) {
     let Some(rows) = PUBLISHED.with_borrow_mut(|p| {
         let rows = chips::chunk_chips_to_rows(&p.chips, p.width, Some(HERO_MAX_ROWS));
@@ -373,16 +314,14 @@ fn write_rows(ui: &AppWindow, force: bool) {
     }) else {
         return;
     };
-    ui.global::<HeroChips>()
-        .set_rows(chips::rows_to_model(rows));
+    ui.global::<HeroChips>().set_rows(chips::rows_to_model(rows));
 }
 
 // --- Per-hero publishers ------------------------------------------------
 //
-// Each reads the global once and hands it to the matching builder, so a call
-// site is one line and the label plumbing stays in this file. The extra
-// argument each takes is the fold its own fetch produced — see the module doc
-// for why that is the caller's job and not this module's.
+// Each reads the global once and hands it to the matching builder, so a call site is
+// one line and the label plumbing stays here. The extra argument each takes is the fold
+// its own fetch produced, for the module doc's reason.
 
 pub fn publish_album(
     ui: &AppWindow,
@@ -419,33 +358,22 @@ pub fn publish_playlist(
     publish(ui, ChipOwner::Playlist(playlist.id), chips, section_active);
 }
 
-/// Favorites is the one hero assembled from three fetches rather than one, so
-/// it takes the handle and gathers rather than being handed a struct — no call
-/// site holds all of it. Every field is a finished value the fetch that owns it
-/// already folded on its own worker (`FavoritesUiState::songs_fold`,
-/// `::most_played_totals`), which is what keeps this cheap enough to call from
-/// wherever an input lands: a publish that beats a sibling fetch is a tick
+/// Favorites is assembled from three fetches, so it takes the handle and gathers rather
+/// than being handed a struct — no call site holds all of it. Every field is a finished
+/// value its owning fetch already folded, so a publish beating a sibling fetch is a tick
 /// stale, never half-built.
-///
-/// Nothing here is read back off a Slint property, and nothing walks a `Vec`.
-/// Both mattered: the first made the caller's write order load-bearing, and the
-/// second put a fold over every favourite on the UI thread.
 pub fn publish_favorites(ui: &AppWindow, fav_ui: &FavoritesUi) {
     let state = fav_ui.state();
-    // Taken and released one at a time. These are four sibling locks with no
-    // ordering anyone has argued, and a struct literal would hold every guard
-    // it built until the statement ended — nothing here needs two at once.
+    // One at a time: four sibling locks with no argued ordering, and a struct literal
+    // would hold every guard it built until the statement ended.
     let (tracks, duration_ms) = {
         let stats = state.stats.lock();
-        (
-            i32::try_from(stats.count).unwrap_or(i32::MAX),
-            stats.total_duration_ms,
-        )
+        (i32::try_from(stats.count).unwrap_or(i32::MAX), stats.total_duration_ms)
     };
     let songs = *state.songs_fold.lock();
     let most_played = *state.most_played_totals.lock();
-    // The whole set, not the filtered grid: a band names the page it sits on,
-    // and the filtered count is the one gating that tab's empty state.
+    // The whole set, not the filtered grid: a band names the page it sits on, and the
+    // filtered count is the one gating that tab's empty state.
     let artists = len_as_i32(state.fav_artists.lock().len());
 
     let facts = FavoritesFacts {
@@ -460,20 +388,12 @@ pub fn publish_favorites(ui: &AppWindow, fav_ui: &FavoritesUi) {
     publish(ui, ChipOwner::Favorites, chips, fav_ui.section_active());
 }
 
-/// Recently Played is the second hero assembled from more than one fetch — the
-/// recency list and the Most Played grid land independently — so like Favorites
-/// it takes the handle and gathers rather than being handed a struct. Every
-/// field is a finished value the fetch that owns it already folded on its own
-/// worker (`RecentlyPlayedUiState::songs_totals`, `::songs_fold`,
-/// `::most_played_totals`), which is what keeps this cheap enough to call from
-/// wherever an input lands.
-///
-/// Nothing here is read back off a Slint property, and nothing walks a `Vec`.
+/// The second hero assembled from more than one fetch — the recency list and the Most
+/// Played grid land independently — so it gathers like Favorites, under the same
+/// contract.
 pub fn publish_recently_played(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
     let state = rp_ui.state();
-    // Taken and released one at a time, the `publish_favorites` reason: these
-    // are sibling locks with no ordering anyone has argued, and a struct literal
-    // would hold every guard it built until the statement ended.
+    // One at a time, the `publish_favorites` reason.
     let songs_totals = *state.songs_totals.lock();
     let songs = *state.songs_fold.lock();
     let most_played = *state.most_played_totals.lock();
@@ -491,8 +411,8 @@ pub fn publish_recently_played(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
 
 // --- Builders -----------------------------------------------------------
 
-/// Year first — it is what distinguishes two pressings of the same record, and
-/// the only chip here a user might be scanning a page for.
+/// Year first — what distinguishes two pressings of the same record, and the only chip
+/// here a user might be scanning a page for.
 fn album_chips(
     labels: &impl ChipLabels,
     album: &AlbumStats,
@@ -511,8 +431,8 @@ fn album_chips(
     if album.is_compilation {
         out.push(labels.compilation());
     }
-    // Last: it is the one chip here that isn't about *this* release, so it is
-    // the one worth losing first on a narrow band.
+    // Last: the one chip that isn't about *this* release, so the one worth losing first
+    // on a narrow band.
     if let Some(genre) = genre {
         out.push(SharedString::from(genre));
     }
@@ -536,12 +456,9 @@ fn artist_chips(
     out
 }
 
-/// The shape four of the six heroes share: what the list holds, how long it
-/// runs, and how far it spreads. Album and Artist are the two that don't —
-/// they lead with a year and gate on facts the others have no equivalent of.
-///
-/// `count` arrives already rendered because it is the one chip whose *noun*
-/// varies: Favorites' Songs tab counts favorites, everyone else counts tracks.
+/// The shape four of the six heroes share: what the list holds, how long it runs, how far
+/// it spreads. `count` arrives already rendered, being the one chip whose *noun* varies —
+/// Favorites' Songs tab counts favorites, everyone else tracks.
 fn list_chips(
     labels: &impl ChipLabels,
     count: SharedString,
@@ -556,12 +473,7 @@ fn list_chips(
 }
 
 fn genre_chips(labels: &impl ChipLabels, genre: &GenreStats, fold: HeroFold) -> Vec<SharedString> {
-    list_chips(
-        labels,
-        labels.tracks(genre.track_count),
-        genre.total_duration_ms,
-        fold,
-    )
+    list_chips(labels, labels.tracks(genre.track_count), genre.total_duration_ms, fold)
 }
 
 /// No "Smart" chip — the title already carries the `auto_awesome` badge, and
@@ -571,63 +483,44 @@ fn playlist_chips(
     playlist: &PlaylistStats,
     fold: HeroFold,
 ) -> Vec<SharedString> {
-    list_chips(
-        labels,
-        labels.tracks(playlist.track_count),
-        playlist.total_duration_ms,
-        fold,
-    )
+    list_chips(labels, labels.tracks(playlist.track_count), playlist.total_duration_ms, fold)
 }
 
-/// Empty on an empty tab, whichever of the three it is: each paints its own
-/// "nothing here yet" copy — a sentence on Songs, a `GridEmptyState` on the
-/// other two — and a lone "0 favorites" chip beside one of those states the same
-/// thing far more bleakly.
-///
-/// The guards read the *unfiltered* counts, so a filter that matches nothing
-/// still leaves the band stating what the page holds. That is the same split as
-/// everywhere else here: the empty states are the surfaces that follow a filter.
+/// Empty on an empty tab, whichever of the three: each paints its own "nothing here yet"
+/// copy, and a lone "0 favorites" chip beside one says it far more bleakly. The guards
+/// read the *unfiltered* counts, the empty states being the surfaces that follow a
+/// filter.
 fn favorites_chips(labels: &impl ChipLabels, facts: &FavoritesFacts) -> Vec<SharedString> {
     match facts.tab {
         FavoritesTab::MostPlayed => most_played_chips(labels, facts.most_played),
         FavoritesTab::Artists if facts.artists > 0 => vec![labels.artists(facts.artists)],
-        FavoritesTab::Songs if facts.tracks > 0 => list_chips(
-            labels,
-            labels.favorites(facts.tracks),
-            facts.duration_ms,
-            facts.songs,
-        ),
+        FavoritesTab::Songs if facts.tracks > 0 => {
+            list_chips(labels, labels.favorites(facts.tracks), facts.duration_ms, facts.songs)
+        }
         _ => Vec::new(),
     }
 }
 
-/// Same empty-state split as Favorites, for the same reason, over two tabs
-/// instead of three. The Songs count is `tracks`, not `favorites` — the noun is
-/// the one chip whose wording follows the page.
+/// Same empty-state split as Favorites over two tabs instead of three. The Songs count
+/// is `tracks`, not `favorites` — the noun is the one chip whose wording follows the page.
 fn recently_played_chips(
     labels: &impl ChipLabels,
     facts: &RecentlyPlayedFacts,
 ) -> Vec<SharedString> {
     match facts.tab {
         RecentlyPlayedTab::MostPlayed => most_played_chips(labels, facts.most_played),
-        RecentlyPlayedTab::Songs if facts.tracks > 0 => list_chips(
-            labels,
-            labels.tracks(facts.tracks),
-            facts.duration_ms,
-            facts.songs,
-        ),
+        RecentlyPlayedTab::Songs if facts.tracks > 0 => {
+            list_chips(labels, labels.tracks(facts.tracks), facts.duration_ms, facts.songs)
+        }
         RecentlyPlayedTab::Songs => Vec::new(),
     }
 }
 
-/// What a Most Played tab states about itself. Shared by the two pages that have
-/// one — the tab is the same list under a different predicate, so it says the
-/// same three things.
+/// What a Most Played tab states about itself, shared by the two pages that have one.
 ///
-/// **It sums itself.** Favorites' query is `is_favorite = TRUE AND play_count > 0`,
-/// a strict subset of its Songs tab, and Recently Played's is the whole library
-/// where its Songs tab is the last 200 played — so on both pages borrowing the
-/// Songs duration would be a different set's total.
+/// **It sums itself.** Favorites' query is a strict subset of its Songs tab and Recently
+/// Played's is the whole library where its Songs tab is the last 200 played, so borrowing
+/// the Songs duration would be a different set's total on either page.
 fn most_played_chips(labels: &impl ChipLabels, totals: MostPlayedTotals) -> Vec<SharedString> {
     if totals.tracks == 0 {
         return Vec::new();
@@ -652,8 +545,8 @@ fn format_year_span((first, last): (i32, i32)) -> String {
     }
 }
 
-/// The spread chips, in the order they'd be missed: a list of one artist or one
-/// album says nothing, so neither is stated at one.
+/// The spread chips, in the order they'd be missed. A spread of one says nothing, so
+/// neither is stated at one.
 fn push_fold(out: &mut Vec<SharedString>, labels: &impl ChipLabels, fold: HeroFold) {
     if fold.artists > 1 {
         out.push(labels.artists(fold.artists));
@@ -663,8 +556,8 @@ fn push_fold(out: &mut Vec<SharedString>, labels: &impl ChipLabels, fold: HeroFo
     }
 }
 
-/// A zero-length entity has nothing to say about its running time, and "0:00"
-/// beside "0 tracks" is noise rather than information.
+/// A zero-length entity has nothing to say about its running time, and "0:00" beside
+/// "0 tracks" is noise rather than information.
 fn push_duration(out: &mut Vec<SharedString>, total_duration_ms: i64) {
     if total_duration_ms > 0 {
         out.push(SharedString::from(format_duration_ms(total_duration_ms)));

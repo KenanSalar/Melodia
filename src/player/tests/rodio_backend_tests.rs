@@ -1,55 +1,39 @@
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use super::{compute_position, evaluate_playback_check, media_to_output_ms, PlaybackCheck};
+use super::{PlaybackCheck, compute_position, evaluate_playback_check, media_to_output_ms};
+use crate::test_support::ASSETS_DIR;
 
 // --- evaluate_playback_check ---
 
 #[test]
 fn gapless_transition_when_pending_and_queue_at_one() {
-    assert_eq!(
-        evaluate_playback_check(true, 1, false),
-        PlaybackCheck::GaplessTransition
-    );
+    assert_eq!(evaluate_playback_check(true, 1, false), PlaybackCheck::GaplessTransition);
 }
 
 #[test]
 fn gapless_transition_when_pending_and_queue_empty() {
-    assert_eq!(
-        evaluate_playback_check(true, 0, true),
-        PlaybackCheck::GaplessTransition
-    );
+    assert_eq!(evaluate_playback_check(true, 0, true), PlaybackCheck::GaplessTransition);
 }
 
 #[test]
 fn end_of_stream_when_empty_and_no_gapless() {
-    assert_eq!(
-        evaluate_playback_check(false, 0, true),
-        PlaybackCheck::EndOfStream
-    );
+    assert_eq!(evaluate_playback_check(false, 0, true), PlaybackCheck::EndOfStream);
 }
 
 #[test]
 fn playing_when_queue_has_sources() {
-    assert_eq!(
-        evaluate_playback_check(false, 2, false),
-        PlaybackCheck::Playing
-    );
+    assert_eq!(evaluate_playback_check(false, 2, false), PlaybackCheck::Playing);
 }
 
 #[test]
 fn playing_when_gapless_pending_but_queue_still_two_deep() {
-    assert_eq!(
-        evaluate_playback_check(true, 2, false),
-        PlaybackCheck::Playing
-    );
+    assert_eq!(evaluate_playback_check(true, 2, false), PlaybackCheck::Playing);
 }
 
 #[test]
 fn playing_when_single_source_no_gapless() {
-    assert_eq!(
-        evaluate_playback_check(false, 1, false),
-        PlaybackCheck::Playing
-    );
+    assert_eq!(evaluate_playback_check(false, 1, false), PlaybackCheck::Playing);
 }
 
 // --- compute_position ---
@@ -135,4 +119,41 @@ fn seek_round_trips_through_compute_position() {
             "speed {speed}: media {media_ms} -> output {output_ms} -> {read_back}"
         );
     }
+}
+
+// --- probe_duration ---
+
+fn asset(name: &str) -> PathBuf {
+    Path::new(ASSETS_DIR).join(name)
+}
+
+/// The function exists for the containers lofty can't identify, so those are the cases worth
+/// pinning: without this answer their rows reach the library reading 0:00.
+#[test]
+fn probe_duration_reads_the_containers_lofty_cannot() {
+    for fixture in ["silence.mka", "silence.caf"] {
+        let probed = super::probe_duration(&asset(fixture));
+        assert_eq!(probed.map(|d| d.as_secs()), Some(1), "{fixture}");
+    }
+}
+
+/// Two files that demux and then need a codec registered separately from their container:
+/// AIFF-C's A-law, which the common chunk resolves and `symphonia-pcm` decodes, and the MS ADPCM
+/// `symphonia-adpcm` exists for. Losing either leaves a file that scans, lists, and then refuses
+/// to play, which nothing reading tags would notice.
+#[test]
+fn probe_duration_decodes_past_the_container_to_the_codec() {
+    for fixture in ["silence.aifc", "silence-adpcm.wav"] {
+        let probed = super::probe_duration(&asset(fixture));
+        assert_eq!(probed.map(|d| d.as_secs()), Some(1), "{fixture}");
+    }
+}
+
+#[test]
+fn probe_duration_is_none_when_nothing_decodes() -> Result<(), crate::error::AppError> {
+    let tmp = tempfile::TempDir::new()?;
+    let junk = tmp.path().join("not-audio.mka");
+    std::fs::write(&junk, b"not valid audio")?;
+    assert_eq!(super::probe_duration(&junk), None);
+    Ok(())
 }

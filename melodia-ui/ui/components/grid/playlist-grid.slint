@@ -19,7 +19,10 @@ export component PlaylistGrid inherits Rectangle {
     callback delete-playlist(int /*playlist_id*/);
     callback edit-playlist-artwork(int /*playlist_id*/);
     callback rename-playlist(int /*playlist_id*/);
-    pure callback request-cover(string /*artwork_path*/) -> image;
+    // Bumped by the host once a scheduled decode batch lands; the card's binding reads it so a
+    // `pure` callback re-runs. See `AlbumGrid`.
+    in property <int> covers-generation: 0;
+    pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
     out property <length> v-visible-height: list.visible-height;
     out property <length> v-viewport-height: list.viewport-height;
@@ -45,7 +48,7 @@ export component PlaylistGrid inherits Rectangle {
                     card-width: root.card-width;
                     card-height: root.card-height;
                     artwork-path: playlist.artwork_path;
-                    cover: root.request-cover(playlist.artwork_path);
+                    cover: root.request-cover(playlist.artwork_path, root.covers-generation);
                     fallback-icon: "playlist";
                     // A pronounced zoom on the placeholder, as on the other
                     // grids; real artwork stays gentle so a cover doesn't

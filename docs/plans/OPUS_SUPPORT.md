@@ -144,12 +144,12 @@ reading for the record.
       comment covering: what it pulls (`symphonia-adapter-libopus` → `opusic-sys` →
       vendored libopus, built by CMake), and why the adapter rather than native
       Symphonia.
-- [ ] Add `"opus"` to `AUDIO_EXTENSIONS` (`src/media/mod.rs:12`). That single const is
+- [ ] Add `"opus"` to `AUDIO_EXTENSIONS` (`src/media/mod.rs`). That single const is
       the whole gate — library walk, watcher, DnD import and Browse all route through
       `is_audio_extension`.
-- [ ] Consider `"oga"` and `"spx"` in the same edit. Symphonia's Ogg demuxer already
-      claims both; `.oga` is commonly Opus or Vorbis and would work, `.spx` (Speex) has
-      no decoder and would fail at playback — **so add `oga`, not `spx`.**
+- [x] ~~Consider `"oga"` and `"spx"` in the same edit.~~ `oga` landed ahead of this plan
+      in `74fba0c`, along with the header sniff its extension needs (lofty's own map has
+      no entry for it). `spx` stays out: Speex has no decoder and would fail at playback.
 - [ ] Verify `decode_file` needs no change: it passes the extension as `with_hint`, and
       `"opus"` is the documented hint. Expected zero-diff.
 
@@ -188,7 +188,7 @@ honour neither.
 
 ### 4a — `R128_TRACK_GAIN` / `R128_ALBUM_GAIN` (required)
 
-`src/media/metadata.rs:210-213` reads only `ItemKey::ReplayGain{Track,Album}{Gain,Peak}`.
+`src/media/metadata.rs:322-325` reads only `ItemKey::ReplayGain{Track,Album}{Gain,Peak}`.
 Lofty 0.24 has **no `R128` handling at all** (grepped: zero hits) — it maps
 `REPLAYGAIN_TRACK_GAIN` in VorbisComments to `ItemKey::ReplayGainTrackGain`, and leaves
 `R128_TRACK_GAIN` as an unmapped custom comment.
@@ -305,7 +305,8 @@ targets the **primary tag type**. For Ogg Opus that's VorbisComments.
 
 ## Phase 8 — Docs and exit
 
-- [ ] `README.md` — format list in the feature section.
+- [ ] `README.md` — format list in the feature section, plus the "Opus is not decoded
+      yet" paragraph below it, which this plan retires.
 - [ ] `CLAUDE.md`:
       - Symphonia formats bullet: add Opus, and note the decoder is libopus via the
         adapter, not Symphonia native.

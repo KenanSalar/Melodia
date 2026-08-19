@@ -14,22 +14,15 @@ import { ScrobbleListenbrainzBody } from "scrobble-listenbrainz-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The modal overlay the `Dialog` global drives, mounted once at the root. A caller sets
-// the chrome and the routing payload, then flips `open`. Cancel is a conditional element
-// rather than `visible: false`, so an info-only dialog keeps its primary button flush
-// right with no phantom slot.
+// The modal overlay the `Dialog` global drives, mounted once at the root. Cancel is a conditional
+// element rather than `visible: false`, so an info-only dialog keeps its primary button flush right
+// with no phantom slot.
 //
-// **Only `t` animates.** The backdrop's alpha and the card's opacity and y-offset are
-// pure derivations of it — a second `animate` on a derived binding phase-lags — and `x`
-// isn't animated at all, since `width` doesn't move.
-//
-// The card derives a *faster* `card-t` so its small-area fade finishes early, landing
-// about when the backdrop's dim hits its perceptual ceiling. Without that bias the
-// uniform full-viewport dim wins the race and the card reads as arriving after it, even
-// though both literally start together.
-//
-// **Always rendered**, never gated on `open`, so the closing animation can play; the
-// backdrop's TouchArea is `enabled` only while open, so it catches nothing meanwhile.
+// **Only `t` animates** — the backdrop's alpha and the card's opacity and y-offset are pure
+// derivations, a second `animate` on a derived binding phase-lagging. The card's `card-t` is
+// deliberately *faster*, so its small-area fade lands about when the backdrop's dim hits its
+// perceptual ceiling; unbiased, the uniform full-viewport dim wins. **Always rendered**, never
+// gated on `open`, so the closing animation can play; the TouchArea is `enabled` only while open.
 export component DialogOverlay inherits Rectangle {
     width: 100%;
     height: 100%;
@@ -100,7 +93,11 @@ export component DialogOverlay inherits Rectangle {
             DialogGlobal.kind == "remove-queue-selected" ? "playlist_remove" :
             DialogGlobal.kind == "remove-folder" ? "folder_off" :
             DialogGlobal.kind == "clear-queue" ? "clear_all" :
-            DialogGlobal.kind == "restart-titlebar" ? "restart_alt" :
+            // One arm for all three restart flows rather than three lines; the tray one had no
+            // entry at all and rendered with no tile.
+            DialogGlobal.kind == "restart-titlebar"
+                || DialogGlobal.kind == "restart-tray"
+                || DialogGlobal.kind == "restart-backdrop" ? "restart_alt" :
             "";
         width: min(self.max-w, max(360px, parent.width - 96px));
         x: (parent.width - self.width) / 2;

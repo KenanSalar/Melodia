@@ -46,7 +46,8 @@ fn run_rg(
     input: Vec<f32>,
 ) -> Vec<f32> {
     let shared = EqShared::new(eq_enabled, &[0.0; NUM_BANDS]);
-    EqSource::new(TestSource::new(input, 1, 44_100), shared, rg, baked, FadeShared::idle()).collect()
+    EqSource::new(TestSource::new(input, 1, 44_100), shared, rg, baked, FadeShared::idle())
+        .collect()
 }
 
 // --- tests -----------------------------------------------------------------
@@ -329,7 +330,10 @@ fn replaygain_applies_with_eq_disabled() {
     let rg = ReplayGainShared::new();
     rg.set_enabled(true);
     rg.set_mode(RgMode::Album);
-    let baked = TrackReplayGain { album_gain: Some(-6.020_6), ..Default::default() };
+    let baked = TrackReplayGain {
+        album_gain: Some(-6.020_6),
+        ..Default::default()
+    };
 
     let out = run_rg(false, rg, baked, input.clone());
 
@@ -357,7 +361,10 @@ fn live_replaygain_change_is_observed_via_generation() {
     // ReplayGain generation too.
     let input = ramp(2048);
     let rg = ReplayGainShared::new(); // starts disabled
-    let baked = TrackReplayGain { album_gain: Some(-6.020_6), ..Default::default() };
+    let baked = TrackReplayGain {
+        album_gain: Some(-6.020_6),
+        ..Default::default()
+    };
 
     let shared = EqShared::new(true, &[0.0; NUM_BANDS]);
     let mut src = EqSource::new(
@@ -374,11 +381,7 @@ fn live_replaygain_change_is_observed_via_generation() {
     rg.set_enabled(true);
     let tail: Vec<f32> = src.collect();
     assert!(tail.iter().all(|s| s.is_finite()));
-    assert_ne!(
-        bits(&tail),
-        bits(&input[256..]),
-        "a live ReplayGain-only change must take effect"
-    );
+    assert_ne!(bits(&tail), bits(&input[256..]), "a live ReplayGain-only change must take effect");
 }
 
 // --- crossfade ramp --------------------------------------------------------

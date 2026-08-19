@@ -2,17 +2,17 @@ pub mod albums;
 pub mod appearance;
 pub mod artists;
 pub mod artwork_cache;
+pub mod aurora;
 pub mod backdrop;
 pub mod browse;
 pub mod callbacks;
 pub mod chips;
+pub mod cover_generation;
 pub mod detail_artwork;
 pub mod detail_filter;
 pub mod detail_selection;
 pub mod detail_view;
 pub mod equalizer;
-pub mod replaygain;
-pub mod visualizer;
 pub mod favorites;
 pub mod file_dialog;
 pub mod genres;
@@ -25,7 +25,6 @@ pub mod launcher;
 pub mod list_selection;
 pub mod model_diff;
 pub mod model_patch;
-pub mod mosaic_blur;
 pub mod mosaic_hero;
 pub mod my_library;
 pub mod nav_history;
@@ -35,6 +34,7 @@ pub mod now_playing_artwork;
 pub mod playlists;
 pub mod queue_sheet;
 pub mod recently_played;
+pub mod replaygain;
 pub mod row_match;
 pub mod search;
 pub mod section_state;
@@ -51,6 +51,7 @@ pub mod tracks;
 pub mod util;
 pub mod view_ctx;
 pub mod view_tag;
+pub mod visualizer;
 pub mod window_chrome;
 
 // Source pins for shared components with no Rust module of their own — the
@@ -68,6 +69,13 @@ pub mod window_chrome;
 // published an anchor — and `nav_transition_tests`, which asks every mount whether it wrote
 // its own enter edge. That last one has a Rust module (`nav_transition`), but what it pins
 // is the Slint half of the same contract, so it sits with the other tree walks.
+// `startup_motion_tests` pins two components across that same seam: what the shell and the
+// view mounted inside it do on the frame the window opens. `titlebar_tests` reaches a third
+// tree — it holds the brand mark's theme brush to the asset it is painted over, the only
+// thing here a dark-palette reviewer cannot see going wrong.
+#[cfg(test)]
+#[path = "tests/aurora_backdrop_tests.rs"]
+mod aurora_backdrop_tests;
 #[cfg(test)]
 #[path = "tests/hero_blur_backdrop_tests.rs"]
 mod hero_blur_backdrop_tests;
@@ -90,5 +98,11 @@ mod placeholder_tests;
 #[path = "tests/scrollbar_tests.rs"]
 mod scrollbar_tests;
 #[cfg(test)]
+#[path = "tests/startup_motion_tests.rs"]
+mod startup_motion_tests;
+#[cfg(test)]
 #[path = "tests/tab_search_header_tests.rs"]
 mod tab_search_header_tests;
+#[cfg(test)]
+#[path = "tests/titlebar_tests.rs"]
+mod titlebar_tests;
