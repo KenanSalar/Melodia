@@ -2,9 +2,20 @@
 
 **A fast, lightweight cross-platform desktop music player built with [Slint](https://slint.dev/) and pure Rust.**
 
-Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving off the embedded WebKitGTK browser engine cut the real-world footprint from a combined **~900 MB** down to **~155 MB RSS / ~85 MB PSS on Fedora** and **below 100 MB on Windows**, with no IPC layer and no web runtime.
+Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900 MB** to the figures below, with no IPC layer and no web runtime.
 
-Those are idle figures on a track list; the heaviest view — a maximized window on the album grid — sits near **200 MB RSS / 125 MB PSS**. Grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves either number, though a higher-resolution screen raises both. PSS is the fairer figure on a desktop already running other GL applications: RSS charges the shared graphics driver stack in full, and on this machine that alone is around 80 MB of it.
+| Scenario | RSS | PSS | Heap | Mapped | CPU |
+| --- | --- | --- | --- | --- | --- |
+| Idle (Fedora) | 157 MB | 86 MB | 34 MB | 122 MB | 0.3% |
+| Playing, list view (Fedora) | 157 MB | 87 MB | 35 MB | 122 MB | 0.6–0.7% |
+| Playing, visualizer live (Fedora) | 163 MB | 93 MB | 34 MB | 128 MB | 5.0% |
+| Idle (Windows) | — | n/a | — | — | — |
+| Playing, list view (Windows) | — | n/a | — | — | — |
+| Playing, visualizer live (Windows) | — | n/a | — | — | — |
+
+Release build against a 512-track library, Fedora/Wayland on a 16-core machine, nothing else contending for the GPU. Memory from `smaps_rollup` and `/proc/self/status`, CPU as a share of **one** core averaged over paired 30-second windows. Windows figures to follow; it reports a working set rather than PSS, so that cell has no equivalent to fill.
+
+**Heap** is `RssAnon`, what the application itself allocates, and it is the number that stays flat: grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it, though a higher-resolution screen raises the totals. The visualizer costs none of it, reusing its buffers frame to frame. **Mapped** is `RssFile`, and the two together are essentially all of RSS: most of what the process appears to occupy is the binary and the shared graphics stack, not anything Melodia allocated. That is also why **PSS** is the fairer whole-process figure on a desktop already running other GL applications, since RSS charges those shared pages in full, around 80 MB of it here.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/github/v/release/KenanSalar/Melodia?label=version&color=blueviolet)](https://github.com/KenanSalar/Melodia/releases)
