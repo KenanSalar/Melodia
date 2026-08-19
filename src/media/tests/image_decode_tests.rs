@@ -137,6 +137,25 @@ fn a_small_target_decodes_below_the_source() -> TestResult {
     Ok(())
 }
 
+/// Picking the arm off the name is what keeps a non-JPEG cover to one `open` instead of two, and
+/// the cost of guessing from a name is that it can be wrong. It may only ever cost the fast path:
+/// the fallback guesses the format from the header, so a JPEG under any other name still decodes,
+/// at its own size.
+#[test]
+fn a_mislabelled_jpeg_still_decodes_through_the_fallback() -> TestResult {
+    let (tmp, jpeg) = write_test_jpeg(200)?;
+    let misnamed = tmp.path().join("cover.png");
+    std::fs::rename(&jpeg, &misnamed)?;
+
+    let decoded = decode_capped_to(&misnamed, MAX_SOURCE_DIM, 48)?;
+    assert_eq!(
+        (decoded.width(), decoded.height()),
+        (200, 200),
+        "the name sends this down the fallback, which sniffs the header and must still decode it"
+    );
+    Ok(())
+}
+
 /// The dimension bound stays [`capped_limits`]' alone: the fast path *declines* an oversized
 /// source rather than reporting it, and the fallback runs the same file through the guard. What
 /// must not happen is the fast path answering where the fallback would refuse.

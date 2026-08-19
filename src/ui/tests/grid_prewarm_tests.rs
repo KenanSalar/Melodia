@@ -42,25 +42,58 @@ fn a_zero_cap_yields_nothing() {
     assert!(paths(&[Some("a.jpg")], 0).is_empty());
 }
 
-/// The cap has to grow with the display and stop at both ends: too small and
-/// a 4K grid re-decodes every scroll, too large and the tier alone is tens of
-/// megabytes of resident buffers on a laptop that can't show them. It lived in
-/// three byte-identical copies under `albums` / `artists` / `playlists`, each
-/// with its own copy of this test, so the band had three places to drift.
+/// The cap has to grow with the display and stop at both ends: too small and the grid's overflow
+/// paints placeholders, too large and the tier alone is tens of megabytes of resident buffers on
+/// a laptop that can't show them. It lived in three byte-identical copies under `albums` /
+/// `artists` / `playlists`, each with its own copy of this test, so the band had three places to
+/// drift.
 #[test]
 fn cover_cap_clamps_and_scales_with_resolution() {
     let fallback = NonZeroUsize::new(48).unwrap_or(NonZeroUsize::MIN);
-    let cap = |w, h| super::cover_cap(w, h, fallback).get();
+    let cap = |w, h, tier| super::cover_cap(w, h, tier, fallback).get();
 
     // A tiny display can't fill many cards — clamps to the floor (32).
-    assert_eq!(cap(640, 480), 32);
-    // A 4K panel shows far more than the ceiling — clamps to the cap (96).
-    assert_eq!(cap(3840, 2160), 96);
-    // A mid-range display lands strictly between the clamps...
-    let mid = cap(1920, 1080);
-    assert!(mid > 32 && mid < 96, "1080p cap {mid} should sit between the clamps");
-    // ...and the cap is monotonic in display area.
-    assert!(cap(1280, 720) <= mid && mid <= cap(2560, 1440));
+    assert_eq!(cap(640, 480, super::GRID_COVER_SIZE), 32);
+    // A mid-range display lands off both clamps...
+    let mid = cap(1920, 1080, super::GRID_COVER_SIZE);
+    assert!(mid > 32, "1080p cap {mid} should sit off the floor");
+    // ...and the cap is monotonic in display area at a fixed tier.
+    assert!(cap(1280, 720, super::GRID_COVER_SIZE) <= mid);
+    assert!(mid <= cap(2560, 1440, super::GRID_COVER_SIZE));
+}
+
+/// **The ceiling is bytes, so the same grid affords more entries at the smaller tier.** An entry
+/// count is wrong by the square of the tier size, and it was wrong the expensive way round: the
+/// big logical desktops that mount the most cards are the ones running the 1× tier, where the
+/// buffers are a fifth the size. A 4K panel at 1× used to be clamped to the same 96 as a 5K one
+/// at 150%, and paid for it in placeholders.
+#[test]
+fn the_ceiling_is_bytes_rather_than_entries() {
+    let fallback = NonZeroUsize::new(48).unwrap_or(NonZeroUsize::MIN);
+    let cap = |w, h, tier| super::cover_cap(w, h, tier, fallback).get();
+
+    let small_tier = cap(3840, 2160, super::GRID_COVER_SIZE);
+    let large_tier = cap(3840, 2160, super::GRID_COVER_SIZE_HIDPI);
+    assert!(
+        small_tier > large_tier,
+        "the same grid affords {small_tier} entries at {}px and {large_tier} at {}px — a ceiling \
+         that doesn't move with the buffer size is one of the two answers being wrong",
+        super::GRID_COVER_SIZE,
+        super::GRID_COVER_SIZE_HIDPI
+    );
+
+    // Neither tier may spend more than the budget the ceiling exists to hold.
+    for (entries, side) in [
+        (small_tier, super::GRID_COVER_SIZE),
+        (large_tier, super::GRID_COVER_SIZE_HIDPI),
+    ] {
+        let side = usize::try_from(side).unwrap_or(usize::MAX);
+        let bytes = entries.saturating_mul(side).saturating_mul(side).saturating_mul(3);
+        assert!(
+            bytes <= 56 * 1024 * 1024,
+            "{entries} entries at {side}px is {bytes} bytes, past the tier budget"
+        );
+    }
 }
 
 /// `GridGeometry`'s own arithmetic, so the pin below measures the cap against the number of
@@ -83,25 +116,34 @@ fn mounted_cards(logical_w: u32, logical_h: u32) -> u32 {
 /// grid doesn't use is wrong by a ratio at every size.
 ///
 /// The margin is that `cover_cap` measures the *window* while the grid gets what's left of it
-/// after the sidebar and the bands. Above the ceiling the guarantee stops, deliberately — a
-/// panel that wide is bounded on bytes instead.
+/// after the sidebar and the bands. Above the byte ceiling the guarantee stops, deliberately.
+///
+/// Sizes are paired with the tier they can actually occur at: `cover_size` steps up past a 1.25
+/// scale factor, so a large *logical* desktop is by construction running the 1× tier, and the
+/// `HiDPI` one only ever sees the smaller logical sizes a scaled display leaves.
 #[test]
 fn the_cap_covers_the_cards_the_grid_mounts() {
     let fallback = NonZeroUsize::new(48).unwrap_or(NonZeroUsize::MIN);
 
-    for (w, h) in [
-        (1280, 720),
-        (1366, 768),
-        (1600, 900),
-        (1920, 1080),
-        (2560, 1440),
+    for (w, h, tier) in [
+        (1280, 720, super::GRID_COVER_SIZE),
+        (1366, 768, super::GRID_COVER_SIZE),
+        (1600, 900, super::GRID_COVER_SIZE),
+        (1920, 1080, super::GRID_COVER_SIZE),
+        (2560, 1440, super::GRID_COVER_SIZE),
+        // A 4K panel at 1×, the case an entry-count ceiling could not cover.
+        (3840, 2160, super::GRID_COVER_SIZE),
+        // The same panel at 200%, and a 5K at 150% — the largest logical sizes the HiDPI tier
+        // is reachable at.
+        (1920, 1080, super::GRID_COVER_SIZE_HIDPI),
+        (2560, 1440, super::GRID_COVER_SIZE_HIDPI),
     ] {
-        let cap = super::cover_cap(w, h, fallback).get();
+        let cap = super::cover_cap(w, h, tier, fallback).get();
         let mounted = usize::try_from(mounted_cards(w, h)).unwrap_or(usize::MAX);
         assert!(
             cap >= mounted,
-            "{w}x{h} mounts {mounted} cards against a tier of {cap} — the overflow can only \
-             paint placeholders"
+            "{w}x{h} at the {tier}px tier mounts {mounted} cards against a cap of {cap} — the \
+             overflow can only paint placeholders"
         );
     }
 }

@@ -503,8 +503,11 @@ silently miss the other.
     re-queue whatever the last batch evicted, forever, at frame rate. A miss the burst hasn't seen
     clears that state, which is what tells a moved visible set apart from a thrashing one.
   - **A reset invalidates whatever is mid-decode.** `clear` and a genuine `set_thumb_size` bump a
-    tier epoch under the queue lock; a batch that captured the old one drops its buffers rather
-    than landing behind the section leave that released them, or at a size nobody asked for.
+    tier epoch, and a batch that captured the old one drops its buffers rather than landing behind
+    the section leave that released them, or at a size nobody asked for. **The bump belongs under
+    the *cache* lock**, that being the one a finished batch takes to insert: emptying the tier and
+    invalidating the batch have to be one step, or a batch reading the epoch between them lands in
+    the tier the reset just emptied.
   - **A surface with no generation to come back on takes `grid_prewarm::grid_cover_blocking`
     instead** — Artist Detail's Albums strip, whose callback carries no counter, and the Edit
     Artwork dialog's cover slot, which is a one-shot property write with no binding to re-run.
@@ -558,13 +561,23 @@ silently miss the other.
     its tier being warmed by a fetch.
 
 - **Cache cap via `grid_prewarm::cover_cap_for_window(app, fallback)`** — one band for every grid,
-  they all draw the same card. Derives its cap from the monitor's *logical* resolution against
-  `GridGeometry`'s own pitches; resized from `install_views` once the winit window is live, the
-  fallback passed in so a module keeps its own default and a monitor reporting `None` lands there.
-  **The pitches have to be the grid's, not a footprint estimate**: the cap has to come out at or
-  above the cards actually mounted, or the scheduling lookup leaves the overflow on placeholders
-  until a scroll. Margin comes from measuring the window rather than the grid's own box;
-  `grid_prewarm_tests` pins the two against each other below the ceiling.
+  they all draw the same card. Derives its cap from the **window's** own logical size against
+  `GridGeometry`'s pitches, deliberately not the monitor's: the monitor caps against a screen the
+  window may occupy a corner of, and asking costs a `with_winit_window` round trip that answers
+  `None` for the whole window-less boot. The fallback is passed in so a module keeps its own
+  default and a zero extent lands there.
+  - **The pitches have to be the grid's, not a footprint estimate**: the cap has to come out at or
+    above the cards actually mounted, or the scheduling lookup leaves the overflow on placeholders
+    until a scroll. Margin comes from measuring the window rather than the grid's own box;
+    `grid_prewarm_tests` pins the two against each other.
+  - **The ceiling is bytes, not entries.** A decoded buffer costs the square of the tier size, so
+    one entry count is two different budgets — and it was wrong the expensive way round, a large
+    logical desktop being by construction a 1× one, where the buffers are a fifth the size and the
+    same bytes buy several times the entries.
+  - **Read after `app.show()` and again on every resize**, through `WindowChrome.display-changed`
+    off the winit `Resized` filter. Read once, a cap sized for the launch window is one a later
+    maximize overruns. It sets the cap exactly rather than growing it: a smaller window really
+    does draw fewer cards.
 
 - **Decode size via `grid_prewarm::cover_size_for_window(app)`, in the same `tune_cache_for_display`
   call** — the cap and the size are two halves of one budget, and both are answers about the

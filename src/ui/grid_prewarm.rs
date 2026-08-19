@@ -53,24 +53,40 @@ pub fn unique_artwork_paths<'a>(
 /// grid's own box: the sidebar and the bands above and below are headroom this never subtracts.
 /// `rows` adds one more for the partially-visible row.
 ///
+/// **The ceiling is on bytes, not on entries**, `thumb_size` being what a decoded buffer costs:
+/// a fixed entry count is wrong by the square of the tier size, and it was wrong in the
+/// direction that hurts — the big logical desktops that mount the most cards are exactly the
+/// ones running the *small* 1× tier, where the same bytes buy several times the entries.
+///
 /// One function rather than one per grid: every grid draws the same card at the same size,
-/// so the pitches and clamps are the only knobs.
-pub fn cover_cap(logical_w: u32, logical_h: u32, fallback: NonZeroUsize) -> NonZeroUsize {
+/// so the pitches and the budget are the only knobs.
+pub fn cover_cap(
+    logical_w: u32,
+    logical_h: u32,
+    thumb_size: u32,
+    fallback: NonZeroUsize,
+) -> NonZeroUsize {
     /// `GridGeometry`'s `min-card-w + gap`, the pitch it packs columns at.
     const CARD_PITCH_W: u32 = 200;
     /// The same card's row pitch at that width: `min-card-w + card-text-h + gap`.
     const ROW_PITCH_H: u32 = 246;
     const MIN_CAP: usize = 32;
-    /// Ceiling on resident grid buffers. A panel wide enough to reach it draws more cards than
-    /// the tier keeps, which the scheduling lookup degrades to placeholders rather than to
-    /// re-decoding; every one of these caches is released entirely on section leave.
-    const MAX_CAP: usize = 96;
+    /// Ceiling on what one grid tier may hold, in bytes of RGB8. Set at what the old
+    /// entry-count ceiling cost at the largest tier, so the worst case is where it always was
+    /// and only the small-tier cases gain. Every one of these caches is released entirely on
+    /// section leave.
+    const MAX_TIER_BYTES: usize = 56 * 1024 * 1024;
 
     let cols = logical_w.div_ceil(CARD_PITCH_W).max(1);
     // `+ 1` for the partially-visible row — the only scroll headroom.
     let rows = logical_h.div_ceil(ROW_PITCH_H) + 1;
-    let visible = usize::try_from(cols.saturating_mul(rows)).unwrap_or(MAX_CAP);
-    let cap = visible.clamp(MIN_CAP, MAX_CAP);
+
+    let side = usize::try_from(thumb_size.max(1)).unwrap_or(usize::MAX);
+    let bytes_each = side.saturating_mul(side).saturating_mul(3).max(1);
+    let affordable = (MAX_TIER_BYTES / bytes_each).max(MIN_CAP);
+
+    let visible = usize::try_from(cols.saturating_mul(rows)).unwrap_or(affordable);
+    let cap = visible.clamp(MIN_CAP, affordable);
     NonZeroUsize::new(cap).unwrap_or(fallback)
 }
 
@@ -136,7 +152,12 @@ pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroU
         return fallback;
     }
     let scale = f64::from(window.scale_factor());
-    cover_cap(logical_dim(physical.width, scale), logical_dim(physical.height, scale), fallback)
+    cover_cap(
+        logical_dim(physical.width, scale),
+        logical_dim(physical.height, scale),
+        cover_size(scale),
+        fallback,
+    )
 }
 
 /// Resolve one grid card's cover without ever decoding on the calling thread.

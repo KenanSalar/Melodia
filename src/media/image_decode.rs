@@ -66,7 +66,8 @@ pub fn decode_capped(path: &Path, max_dim: u32) -> image::ImageResult<DynamicIma
 ///
 /// Falls back to [`decode_capped`] for every other format, for the two colour spaces it does not
 /// convert, and for a source over `max_dim` — the bound stays [`capped_limits`]'s alone rather
-/// than being spelled a second time here.
+/// than being spelled a second time here. **Which arm runs is decided from the name**, so a cover
+/// that was never going to take the fast path is opened once rather than twice.
 ///
 /// **Blocking** — same contract as [`decode_capped`].
 pub fn decode_capped_to(
@@ -83,7 +84,17 @@ pub fn decode_capped_to(
 /// The JPEG half of [`decode_capped_to`]. `None` wherever the caller owes a fallback, which
 /// includes a source this refuses on size: erroring here would put the dimension bound in two
 /// places, where declining sends the same file through [`capped_limits`] for the same failure.
+///
+/// **The one thing in this module that reads a name instead of a header**, and it is a question
+/// about cost rather than about content: sniffing means opening every cover to read two bytes
+/// most of them will decline on, where the extension is already in hand. Nothing rests on the
+/// answer — both arms end in a real decode against a guessed format, so a mislabelled file loses
+/// the fast path and stays correct. Every caller passes a store path, and `media::artwork` puts
+/// the format in the name.
 fn decode_jpeg_scaled(path: &Path, max_dim: u32, target: u32) -> Option<DynamicImage> {
+    if !is_jpeg_name(path) {
+        return None;
+    }
     let file = std::fs::File::open(path).ok()?;
     let mut decoder = jpeg_decoder::Decoder::new(std::io::BufReader::new(file));
     decoder.read_info().ok()?;
@@ -106,6 +117,14 @@ fn decode_jpeg_scaled(path: &Path, max_dim: u32, target: u32) -> Option<DynamicI
         // `image` has both, and neither reaches a real cover often enough to copy here.
         PixelFormat::L16 | PixelFormat::CMYK32 => None,
     }
+}
+
+/// Both spellings `media::artwork` writes for a JPEG, case-folded — a user's own picked cover
+/// keeps whatever case its filesystem gave it.
+fn is_jpeg_name(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("jpg") || ext.eq_ignore_ascii_case("jpeg"))
 }
 
 /// The scale request that makes a decode clear `target` on the source's **short** edge.

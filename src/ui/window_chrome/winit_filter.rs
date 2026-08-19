@@ -177,7 +177,11 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     })
                     .unwrap_or(false);
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    ui.global::<crate::WindowChrome>().set_is_maximized(maximized);
+                    let chrome = ui.global::<crate::WindowChrome>();
+                    chrome.set_is_maximized(maximized);
+                    // The cover tiers size themselves against the window, so this is the edge
+                    // that re-derives them — see the handler in `boot::ui_setup`.
+                    chrome.invoke_display_changed();
                 });
                 slint::winit_030::EventResult::Propagate
             }

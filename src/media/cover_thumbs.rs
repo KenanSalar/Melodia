@@ -180,8 +180,7 @@ impl CoverThumbs {
     /// Drop every cached buffer, for a per-view tier released on section leave. Callers pair this
     /// with `heap_trim::trim()` so glibc hands the freed pages back to the OS.
     pub fn clear(&self) {
-        self.cache.lock().clear();
-        self.reset_pending();
+        self.reset();
     }
 
     /// Retune the LRU capacity in place, once the real display size is known. Shrinking evicts
@@ -198,19 +197,22 @@ impl CoverThumbs {
         if self.thumb_size.swap(thumb_size, Ordering::Relaxed) == thumb_size {
             return;
         }
-        self.cache.lock().clear();
-        self.reset_pending();
+        self.reset();
     }
 
-    /// Drop the queue and invalidate whatever is mid-decode, for the two resets above.
+    /// Drop every buffer and every queued miss, and invalidate whatever is mid-decode.
     ///
-    /// The bump happens **under the queue lock**, which the drain also takes to claim a batch,
-    /// so the two can't interleave: a batch is either claimed before this and drops itself on
-    /// the epoch it captured, or after it and never existed.
-    fn reset_pending(&self) {
+    /// **Both locks, cache first**, which is the order every other path here takes them in — and
+    /// this is the only one holding both, so there is no second order to invert against. The
+    /// epoch bump belongs under the *cache* lock rather than the queue's, that being the lock a
+    /// finished batch takes to insert: clearing the cache and invalidating the batch have to be
+    /// one step, or a batch reading the epoch between them lands in the tier this just emptied.
+    fn reset(&self) {
+        let mut cache = self.cache.lock();
         let mut pending = self.pending.lock();
         self.epoch.fetch_add(1, Ordering::Relaxed);
         pending.reset();
+        cache.clear();
     }
 
     /// Current LRU capacity. A `prewarm` caller building a display-ordered path list can
@@ -358,14 +360,16 @@ impl CoverThumbs {
                 })
                 .collect();
 
-            // A reset landed while this decoded: the buffers are either the size nobody asked
-            // for any more or the memory a section leave has already handed back.
-            if self.epoch.load(Ordering::Relaxed) != epoch {
-                continue;
-            }
-
             {
                 let mut cache = self.cache.lock();
+                // Read under the cache lock, which [`Self::reset`] takes to bump it: a reset is
+                // either complete and visible here, or waiting behind this insert and about to
+                // discard it. Outside the lock the two interleave and the batch lands in a tier
+                // that was just emptied — the buffers being either the size nobody asked for any
+                // more, or the memory a section leave has already handed back.
+                if self.epoch.load(Ordering::Relaxed) != epoch {
+                    continue;
+                }
                 for (path, buf) in decoded {
                     // A `prewarm` or a `get_or_load` could have inserted the same key while this
                     // batch was decoding; theirs is no staler than ours and keeping it spares the

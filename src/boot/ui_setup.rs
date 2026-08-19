@@ -223,7 +223,7 @@ pub fn install_views(
     let (tune_recent, tune_browse) = (recently_played_ui.clone(), browse_ui.clone());
     let tune_rows = cover_thumbs.clone();
     let weak = app.as_weak();
-    if let Err(e) = slint::invoke_from_event_loop(move || {
+    let retune = move || {
         let Some(app) = weak.upgrade() else { return };
         ui::albums::tune_cache_for_display(&app, &tune_albums);
         ui::artists::tune_cache_for_display(&app, &tune_artists);
@@ -236,7 +236,14 @@ pub fn install_views(
         tune_rows.set_thumb_size(media::cover_thumbs::row_cover_size(f64::from(
             app.window().scale_factor(),
         )));
-    }) {
+    };
+    // **And again on every resize.** Both answers move with the window, and a cap read once at
+    // launch is the cap a later maximize overruns — the cards past it can only paint
+    // placeholders, the lookup behind them scheduling against a tier that cannot hold them.
+    // Setting the cap exactly rather than growing it: a smaller window really does draw fewer
+    // cards, and a drag that oscillates re-warms through the model rebuild it triggers anyway.
+    app.global::<melodia::WindowChrome>().on_display_changed(retune.clone());
+    if let Err(e) = slint::invoke_from_event_loop(retune) {
         log::warn!("Failed to schedule cover-cache display tuning: {e}");
     }
 
