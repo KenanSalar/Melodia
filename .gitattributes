@@ -53,9 +53,9 @@ src/services/updater/tests/fixtures/*.json -text -merge
 *.webp binary
 *.ico  binary
 
-# Linguist, so nothing here changes a checkout. The vendored fork is a quarter
-# of the tracked Rust and is not ours to be measured on, and top-level `winit/`
-# is not on linguist's own vendor list. The lockfile is generated, and folding
-# it shut is what keeps it from burying a review.
+# Linguist, so nothing here changes a checkout. The vendored fork is a large
+# share of the tracked Rust and is not ours to be measured on, and top-level
+# `winit/` is not on linguist's own vendor list. The lockfile is generated, and
+# folding it shut is what keeps it from burying a review.
 winit/**   linguist-vendored
 Cargo.lock linguist-generated=true

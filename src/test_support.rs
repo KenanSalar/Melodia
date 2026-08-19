@@ -142,16 +142,27 @@ pub(crate) fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
     sources_under(UI_DIR, "slint")
 }
 
-/// Every shipped `.ttf` under [`FONTS_DIR`], as paths. The walk recurses, so a face added
+/// Every shipped face under [`FONTS_DIR`], as paths. The walk recurses, so a face added
 /// under a new subdirectory is found with no edit here.
+///
+/// Both container formats, because the compiler gates on neither: an embedded font is whatever
+/// a `.slint` `import` names, and the CFF outlines an `.otf` carries are read at runtime by the
+/// same `ttf-parser` the `.ttf`s go through. An extension filter of one is a list wearing a
+/// walk's clothes.
 ///
 /// `originals/` is held back, and it is the counterexample to the walk's own premise: Slint
 /// embeds a face because a `.slint` file `import`s it, not because it sits under this root,
 /// and that directory is gitignored scratch space for the pristine upstream Vazirmatn
 /// `scripts/patch_vazirmatn.py` reads.
 pub(crate) fn font_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
-    let (mut fonts, unreadable) = sources_under(FONTS_DIR, "ttf");
+    let (mut fonts, mut unreadable) = sources_under(FONTS_DIR, "ttf");
+    let (opentype, opentype_unreadable) = sources_under(FONTS_DIR, "otf");
+    fonts.extend(opentype);
+    unreadable.extend(opentype_unreadable);
+
     fonts.retain(|path| !path.components().any(|part| part.as_os_str() == "originals"));
+    // Each walk sorted its own half; the concatenation of two sorted halves is not sorted.
+    fonts.sort();
     (fonts, unreadable)
 }
 
