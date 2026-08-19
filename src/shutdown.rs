@@ -123,7 +123,7 @@ pub fn flush_tasks_and_db(runtime: &tokio::runtime::Runtime, state: AppState) ->
 /// Drop the runtime off the exit path: its `Drop` waits on worker-thread join,
 /// which can block on `Drop`s of audio / D-Bus / accesskit threads we don't own.
 pub fn drop_runtime_in_background(runtime: tokio::runtime::Runtime) {
-    let res = std::thread::Builder::new().name("melodia-runtime-drop".into()).spawn(move || {
+    let res = std::thread::Builder::new().name("melodia-rt-drop".into()).spawn(move || {
         drop(runtime);
     });
     if let Err(e) = res {

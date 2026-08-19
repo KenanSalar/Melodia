@@ -466,7 +466,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     let current_cover = if artwork_path.is_empty() {
                         Image::default()
                     } else {
-                        pu.grid_cover(&artwork_path)
+                        pu.grid_cover_blocking(&artwork_path)
                     };
                     dlg.set_title(SharedString::from("Edit Artwork"));
                     dlg.set_message(SharedString::from(""));

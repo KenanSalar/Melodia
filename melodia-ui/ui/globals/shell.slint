@@ -26,6 +26,14 @@ export global WindowChrome {
     callback restart-app();
     callback restart-tray();
     callback restart-backdrop();
+    // Fired by the winit `Resized` filter, handled in `boot::ui_setup`. Rust to Rust through a
+    // global because the two ends are far apart: the filter is installed before the view handles
+    // exist, and the handler needs all seven of them. Nothing in Slint reads it.
+    //
+    // Every cover tier's capacity and decode size are answers about the window, and they were
+    // read once after `app.show()` — so a window maximized afterwards mounted more cards than
+    // its tier could hold and left the overflow on placeholders.
+    callback display-changed();
 }
 
 // The compact player replacing the full UI once the window shrinks past a threshold, and the

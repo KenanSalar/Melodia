@@ -370,6 +370,14 @@ impl Default for DiscordFlags {
 pub struct LibraryFlags {
     pub folder_watching_enabled: bool,
     pub music_folder_auto_added: bool,
+    /// Whether the artwork store has been brought inside its size bounds once.
+    ///
+    /// Normalization happens at the writer, so it only ever reaches newly-scanned files —
+    /// `scanner::track_is_current` guarantees an unchanged track's artwork is never re-derived.
+    /// A pass over what is already there is therefore one-shot rather than continuous, and
+    /// marked here rather than inferred, there being no cheap way to ask the store whether it
+    /// has been swept short of reading every file in it.
+    pub artwork_store_normalized: bool,
 }
 
 impl Default for LibraryFlags {
@@ -377,6 +385,7 @@ impl Default for LibraryFlags {
         Self {
             folder_watching_enabled: true,
             music_folder_auto_added: false,
+            artwork_store_normalized: false,
         }
     }
 }

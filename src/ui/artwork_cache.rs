@@ -22,7 +22,9 @@ use lru::LruCache;
 use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
+use crate::media::image_decode::{
+    FilterType, MAX_SOURCE_DIM, decode_capped_to, fit_within, resize_rgb8,
+};
 use crate::ui::backdrop::BackdropSample;
 use crate::ui::util::{BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
 
@@ -109,7 +111,9 @@ impl ArtworkCache {
 
 /// Decode `path` **once**, then derive both halves from that single `DynamicImage`.
 fn decode_artwork(path: &Path, blur_spec: Option<BlurSpec>) -> CachedArtwork {
-    Some(pair_from_image(&decode_capped(path, MAX_SOURCE_DIM).ok()?, blur_spec))
+    // `COVER_SIZE` rather than the blur band's target: both halves come off this one decode and
+    // the tile is the larger of them, so it is what the source has to still cover.
+    pair_from_image(&decode_capped_to(path, MAX_SOURCE_DIM, COVER_SIZE).ok()?, blur_spec)
 }
 
 /// Both halves plus the measurement, from an image already in hand.
@@ -120,24 +124,29 @@ fn decode_artwork(path: &Path, blur_spec: Option<BlurSpec>) -> CachedArtwork {
 /// blur's preamble does. That second downscale exists to make `fast_blur` cheap, so with no blur to
 /// make cheap the quantizer reads the cover tile already in hand and takes no brightness. The tile
 /// is the better sample besides, sharp and aspect-preserved where the band's buffer is squashed.
-pub(crate) fn pair_from_image(decoded: &DynamicImage, blur_spec: Option<BlurSpec>) -> ArtworkPair {
-    // `thumbnail`, not `thumbnail_exact`: aspect-preserving, so a non-square cover keeps
-    // its ratio and the Slint side's `image-fit: cover` crops it to the square tile.
-    let cover = buffer_from_rgb(&decoded.thumbnail(COVER_SIZE, COVER_SIZE).to_rgb8());
+pub(crate) fn pair_from_image(
+    decoded: &DynamicImage,
+    blur_spec: Option<BlurSpec>,
+) -> Option<ArtworkPair> {
+    // Aspect-preserving, so a non-square cover keeps its ratio and the Slint side's
+    // `image-fit: cover` crops it to the square tile.
+    let (cover_w, cover_h) = fit_within(decoded.width(), decoded.height(), COVER_SIZE, COVER_SIZE);
+    let cover = buffer_from_rgb(&resize_rgb8(decoded, cover_w, cover_h, FilterType::Box)?);
 
     let Some(spec) = blur_spec else {
         let sample = BackdropSample::quantize(cover.as_bytes());
-        return ArtworkPair {
+        return Some(ArtworkPair {
             cover,
             blur: None,
             sample,
-        };
+        });
     };
 
-    // Downscale hard first, so the blur is cheap. `thumbnail_exact` is the integer-only
-    // fast path and its aspect distortion is invisible once blurred and re-cropped;
+    // Downscale hard first, so the blur is cheap. The aspect distortion is deliberate — a square
+    // cover squashed into a landscape band — and invisible once blurred and re-cropped;
     // `fast_blur`'s 3-pass box blur is indistinguishable from a true Gaussian here.
-    let small = decoded.thumbnail_exact(BLUR_TARGET, spec.height).to_rgb8();
+    let (band_w, band_h) = fit_within(BLUR_TARGET, spec.height, decoded.width(), decoded.height());
+    let small = resize_rgb8(decoded, band_w, band_h, FilterType::Box)?;
     let blur = buffer_from_rgb(&fast_blur(&small, spec.sigma));
 
     // Seeds off the sharp downscale, brightness off the blurred one — `BackdropSample::measure`
@@ -145,11 +154,11 @@ pub(crate) fn pair_from_image(decoded: &DynamicImage, blur_spec: Option<BlurSpec
     // so both are paid once per cover rather than once per open.
     let sample = BackdropSample::measure(small.as_raw(), blur.as_bytes());
 
-    ArtworkPair {
+    Some(ArtworkPair {
         cover,
         blur: Some(blur),
         sample,
-    }
+    })
 }
 
 #[cfg(test)]

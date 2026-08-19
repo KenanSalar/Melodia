@@ -115,7 +115,14 @@ pub(crate) fn callback_sources() -> Vec<(String, String)> {
 /// a caller counts and its pin goes quiet, the floors being far too loose to notice one
 /// missing folder. Every caller asserts the second list is empty.
 fn sources_under(root: &str, ext: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
-    fn walk(dir: &Path, ext: &str, out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
+    sources_under_any(root, &[ext])
+}
+
+/// [`sources_under`] over a set of extensions, in one pass. A walk apiece would report an
+/// unlistable directory once per extension and hand back sorted halves whose concatenation
+/// isn't sorted.
+fn sources_under_any(root: &str, exts: &[&str]) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    fn walk(dir: &Path, exts: &[&str], out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(dir) else {
             unreadable.push(dir.to_path_buf());
             return;
@@ -123,15 +130,15 @@ fn sources_under(root: &str, ext: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                walk(&path, ext, out, unreadable);
-            } else if path.extension().is_some_and(|found| found == ext) {
+                walk(&path, exts, out, unreadable);
+            } else if path.extension().is_some_and(|found| exts.iter().any(|ext| found == *ext)) {
                 out.push(path);
             }
         }
     }
 
     let (mut sources, mut unreadable) = (Vec::new(), Vec::new());
-    walk(Path::new(root), ext, &mut sources, &mut unreadable);
+    walk(Path::new(root), exts, &mut sources, &mut unreadable);
     sources.sort();
     (sources, unreadable)
 }
@@ -142,15 +149,25 @@ pub(crate) fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
     sources_under(UI_DIR, "slint")
 }
 
-/// Every shipped `.ttf` under [`FONTS_DIR`], as paths. The walk recurses, so a face added
+/// What a `.slint` `import` embeds a face from, taken from the compiler's own check
+/// (`i-slint-compiler`'s `object_tree.rs`) rather than from what is committed today: the format
+/// nothing uses yet is the one that arrives unlicensed.
+const FONT_EXTENSIONS: [&str; 3] = ["ttc", "ttf", "otf"];
+
+/// Every shipped face under [`FONTS_DIR`], as paths. The walk recurses, so a face added
 /// under a new subdirectory is found with no edit here.
+///
+/// Every container format the compiler takes, not just the one committed today: an `.otf`'s CFF
+/// outlines and a `.ttc`'s several faces reach the same `ttf-parser` a `.ttf` does, and nothing
+/// past the `import` cares which arrived. A filter narrower than [`FONT_EXTENSIONS`] is a list
+/// wearing a walk's clothes.
 ///
 /// `originals/` is held back, and it is the counterexample to the walk's own premise: Slint
 /// embeds a face because a `.slint` file `import`s it, not because it sits under this root,
 /// and that directory is gitignored scratch space for the pristine upstream Vazirmatn
 /// `scripts/patch_vazirmatn.py` reads.
 pub(crate) fn font_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
-    let (mut fonts, unreadable) = sources_under(FONTS_DIR, "ttf");
+    let (mut fonts, unreadable) = sources_under_any(FONTS_DIR, &FONT_EXTENSIONS);
     fonts.retain(|path| !path.components().any(|part| part.as_os_str() == "originals"));
     (fonts, unreadable)
 }
@@ -314,6 +331,33 @@ pub(crate) fn write_test_png(
     Ok((tmp, path))
 }
 
+/// [`write_test_png`]'s counterpart, for the decode paths that only fire on JPEG.
+///
+/// A gradient rather than a flat fill: a solid colour is one DC coefficient per block, so every
+/// scale factor reproduces it exactly and a scaled decode that ignored the size it was asked for
+/// would pass anyway.
+pub(crate) fn write_test_jpeg(
+    side: u32,
+) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
+    write_test_jpeg_sized(side, side)
+}
+
+/// [`write_test_jpeg`] at an arbitrary aspect ratio, for the half of the scaled-decode contract a
+/// square source cannot fail: a scale picked off the long edge alone still clears the short one.
+pub(crate) fn write_test_jpeg_sized(
+    width: u32,
+    height: u32,
+) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("cover.jpg");
+    let channel = |value: u32| u8::try_from(value % 256).unwrap_or(0);
+    image::RgbImage::from_fn(width, height, |x, y| {
+        image::Rgb([channel(x), channel(y), channel(x + y)])
+    })
+    .save(&path)?;
+    Ok((tmp, path))
+}
+
 /// A [`Paths`] rooted in a throwaway directory, with the subdirectories [`Paths::resolve`]
 /// creates already in place. Creation is best-effort — a failure surfaces as a missing-file
 /// error in the test body.
@@ -456,6 +500,22 @@ pub(crate) fn with_appimage_env<F: FnOnce() -> R, R>(value: Option<&str>, body: 
 pub(crate) fn reading_env<F: FnOnce() -> R, R>(body: F) -> R {
     let _guard = EnvGuard::acquire();
     body()
+}
+
+/// The home directory `services::redact_home` will actually resolve, if there is one.
+///
+/// A redaction test builds its fixture from this rather than spelling `/home/testuser` under a
+/// faked `$HOME`: `dirs::home_dir()` asks Win32 for the profile folder and never reads the
+/// environment, so the faked form is a fixture only Linux can honour and every such test was
+/// red on Windows. `None` leaves the caller nothing to assert against.
+///
+/// Deliberately the production resolver rather than a second copy of it. A test that resolved
+/// home its own way would agree with `redact_home` only by coincidence, and the coincidence
+/// breaks on whichever platform the two happen to disagree about — which is the entire class
+/// of bug this helper exists because of. The Unix `$HOME` arm is pinned separately, by
+/// `services::tests::mod_tests`, which is where a faked variable still belongs.
+pub(crate) fn resolved_home() -> Option<String> {
+    crate::services::home_dir_string()
 }
 
 #[cfg(test)]

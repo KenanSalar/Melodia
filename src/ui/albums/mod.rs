@@ -37,7 +37,7 @@ use crate::{
     TrackListRow as UiTrackListRow,
 };
 
-use crate::ui::grid_prewarm::GRID_COVER_SIZE;
+use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
 use state::{AlbumDetailState, AlbumGridState, DEFAULT_GRID_COVER_CAP, GridData};
 
 #[cfg(test)]
@@ -115,7 +115,7 @@ impl AlbumsUi {
             },
             cover_thumbs,
             grid_covers: Arc::new(CoverThumbs::with_config(
-                GRID_COVER_SIZE,
+                GRID_COVER_FALLBACK,
                 DEFAULT_GRID_COVER_CAP,
             )),
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
@@ -244,7 +244,14 @@ impl AlbumsUi {
     /// Backs `Albums.request-cover`, so a card's cover is resolved only once it
     /// is on screen.
     pub fn grid_cover(&self, artwork_path: &str) -> slint::Image {
-        self.grid_covers.get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+        self.grid_covers
+            .get_or_schedule_opt(crate::ui::grid_prewarm::nonempty_artwork_path(artwork_path))
+    }
+
+    /// The inline sibling, for Artist Detail's Albums strip — its callback carries no generation,
+    /// so a scheduled cover would have nothing to bring the card back.
+    pub fn grid_cover_blocking(&self, artwork_path: &str) -> slint::Image {
+        crate::ui::grid_prewarm::grid_cover_blocking(&self.grid_covers, artwork_path)
     }
 
     /// The grid tier itself, for a surface that borrows it — Artist Detail's

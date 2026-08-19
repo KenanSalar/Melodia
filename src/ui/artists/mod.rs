@@ -41,7 +41,7 @@ use crate::{
     ArtistRow as UiArtistRow, Artists, TrackListRow as UiTrackListRow,
 };
 
-use crate::ui::grid_prewarm::GRID_COVER_SIZE;
+use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
 use state::{ArtistDetailState, ArtistGridState, DEFAULT_GRID_COVER_CAP, GridData};
 
 #[cfg(test)]
@@ -130,7 +130,7 @@ impl ArtistsUi {
             },
             cover_thumbs,
             grid_covers: Arc::new(CoverThumbs::with_config(
-                GRID_COVER_SIZE,
+                GRID_COVER_FALLBACK,
                 DEFAULT_GRID_COVER_CAP,
             )),
             albums_grid_covers,
@@ -249,7 +249,14 @@ impl ArtistsUi {
     /// Lazy cover lookup for an Artists **grid card** — backs `Artists.request-cover`, resolving
     /// against the grid-tier cache.
     pub fn grid_cover(&self, image_path: &str) -> slint::Image {
-        self.grid_covers.get_or_load_opt(Some(image_path).filter(|s| !s.is_empty()))
+        self.grid_covers
+            .get_or_schedule_opt(crate::ui::grid_prewarm::nonempty_artwork_path(image_path))
+    }
+
+    /// The grid tier itself, for the wiring that has to reach past a lookup — the
+    /// `AlbumsUi::grid_thumbs` contract.
+    pub fn grid_thumbs(&self) -> Arc<CoverThumbs> {
+        self.grid_covers.clone()
     }
 }
 

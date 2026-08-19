@@ -19,8 +19,9 @@ export global Playlists {
     callback apply-filter(string);
     callback open-playlist(int /*playlist_id*/);
     // Lazy per-card lookup against a private grid tier, the `Albums.request-cover`
-    // contract — only on-screen cards decode.
-    pure callback request-cover(string /*artwork_path*/) -> image;
+    // contract — only on-screen cards resolve, and a miss schedules rather than decoding.
+    pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
+    in property <int> covers-generation: 0;
     // The row tier instead, backing the mosaic picker's small candidate tiles: no point
     // paying for grid-size decodes at dialog-tile size.
     pure callback request-row-cover(string /*artwork_path*/) -> image;

@@ -178,20 +178,34 @@ jobs:
             -e 's|http://ports\.ubuntu\.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
             /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
 
-      # Defence in depth over the mirror swap above, for short hiccups.
+      # Defence in depth over the mirror swap above, for short hiccups. Bounds
+      # and recovery match `.github/actions/linux-system-deps`, where they are
+      # argued; the packaging-only `rpm` is why this is a copy rather than a
+      # `uses:` of it.
       - name: Install Linux system deps
         if: runner.os == 'Linux'
         run: |
           sudo systemctl stop unattended-upgrades || true
+
+          apt_opts=(
+            -o DPkg::Lock::Timeout=60
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=15
+          )
           for attempt in 1 2 3; do
-            if sudo apt-get update -qq -o DPkg::Lock::Timeout=60 && \
-               sudo apt-get install -qq -y -o DPkg::Lock::Timeout=60 \
-                 libasound2-dev libxkbcommon-dev libfontconfig1-dev libfreetype-dev \
-                 libwayland-dev libdbus-1-dev libssl-dev pkg-config rpm; then
+            rc=0
+            sudo timeout -k 30 120 apt-get update -qq "${apt_opts[@]}" && \
+              sudo timeout -k 30 240 apt-get install -qq -y "${apt_opts[@]}" \
+                libasound2-dev libxkbcommon-dev libfontconfig1-dev libfreetype-dev \
+                libwayland-dev libdbus-1-dev libssl-dev pkg-config rpm || rc=$?
+            if [ "$rc" -eq 0 ]; then
               exit 0
             fi
-            echo "::warning::apt install (system deps) attempt $attempt failed; retrying in 15s"
-            sleep 15
+            echo "::warning::apt install (system deps) attempt $attempt failed (exit $rc)"
+            sudo dpkg --configure -a || true
+            if [ "$attempt" -lt 3 ]; then
+              sleep 15
+            fi
           done
           echo "::error::apt install (system deps) failed after 3 attempts"
           exit 1

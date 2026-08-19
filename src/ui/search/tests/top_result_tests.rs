@@ -3,7 +3,10 @@
 //! ranking tier is exercised independently — a single regression in the
 //! function body would flip the corresponding tier's expected winner.
 
-#![allow(clippy::expect_used, clippy::unwrap_used)]
+#![expect(
+    clippy::expect_used,
+    reason = "a missing Top Result is the assertion; the message names the tier that failed"
+)]
 
 use super::{TopKind, TopSubtitle, compute_top_result};
 use crate::entities::album::AlbumStats;

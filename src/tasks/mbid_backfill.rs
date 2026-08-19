@@ -7,11 +7,13 @@
 //! sweep, a `library_changed_tx` subscription (new imports get resolved), and a
 //! manual kick from the Settings button. No `ui::*` imports.
 //!
-//! An in-memory `attempted` set keeps unmatched tracks from being re-looked-up on
-//! every subsequent `library_changed` bump — they stay NULL in the DB but are
-//! skipped until the next full sweep (a manual kick clears the set). The writer
-//! deliberately doesn't bump `library_changed_tx`, so this task never wakes
-//! itself.
+//! A persisted `attempted` set (`scrobble_mbid_attempted.json`) keeps unmatched
+//! tracks from being re-looked-up on every subsequent `library_changed` bump, or
+//! on the next launch: they stay NULL in the DB and are skipped until the manual
+//! kick, which clears both the set and the file. Being id-keyed, it also skips a
+//! track retagged *after* its miss, so a library that grows better tags needs
+//! that button. The writer deliberately doesn't bump `library_changed_tx`, so
+//! this task never wakes itself.
 
 use std::collections::HashSet;
 use std::path::Path;

@@ -1,0 +1,62 @@
+# The repo stores LF and every checkout gets LF, whatever `core.autocrlf` says.
+# Without this, a Windows clone rewrites line endings on the way out and the
+# test suite goes red in three separate ways: source walks that split on "\n}\n"
+# stop matching, generated packaging text stops comparing equal to LICENSE, and
+# the signed updater fixtures below no longer hash to what was signed.
+* text=auto eol=lf
+
+# Built-in hunk-header drivers, so an `@@` line names the enclosing item. Git
+# ships these but applies none of them by extension; a file only gets one by
+# opting in here. `.slint` has to go without: a custom driver is an `xfuncname`
+# in gitconfig, which is not versioned and so reaches no other clone.
+*.rs diff=rust
+*.py diff=python
+*.md diff=markdown
+
+# Signed payloads and their signatures — byte-exact or the verification tests
+# are testing nothing. The path rule is for `test-manifest.json`, signed like the
+# rest but carrying an extension that is text everywhere else in the tree:
+# regenerate it on a host that writes CRLF, sign those bytes, and `text=auto`
+# would normalise the payload out from under its own signature on the way into
+# the index. Scoped to the payloads — the `regen-*.sh` beside them are scripts
+# and want the normalising. `-merge` for the same reason one step later: a
+# three-way merge of a signed payload yields a file that still parses and no
+# longer verifies, and regenerating plus re-signing is the only resolution, so
+# git should refuse rather than guess.
+src/services/updater/tests/fixtures/*.json -text -merge
+*.bin     binary
+*.minisig binary
+
+# The shipped updater pubkey wants that same byte-exactness, but not `binary`'s
+# `-diff`: rotating the key is the one change in this tree that most needs a
+# human reading the diff, and `binary` renders it as "Binary file not shown".
+# The three test pubkeys ride along; a diff of base64 costs nothing.
+*.b64     -text -merge
+
+# The vendored winit fork's X11 fixture — a captured xsettings blob with no NUL in
+# the first 8000 bytes, so git's heuristic reads it as text and would happily
+# rewrite a CR inside a length-prefixed record.
+*.dat     binary
+
+# Media, fonts and images. Git's own heuristic already catches most of these;
+# spelling them out is what keeps a new fixture from depending on it.
+*.flac binary
+*.mp3  binary
+*.m4a  binary
+*.ogg  binary
+*.wav  binary
+*.aiff binary
+*.ttf  binary
+*.otf  binary
+*.ttc  binary
+*.png  binary
+*.jpg  binary
+*.webp binary
+*.ico  binary
+
+# Linguist, so nothing here changes a checkout. The vendored fork is a large
+# share of the tracked Rust and is not ours to be measured on, and top-level
+# `winit/` is not on linguist's own vendor list. The lockfile is generated, and
+# folding it shut is what keeps it from burying a review.
+winit/**   linguist-vendored
+Cargo.lock linguist-generated=true

@@ -1,3 +1,11 @@
+//! Favorite reads and writes, and the one place a favorite becomes a love.
+//!
+//! `set_favorite` and `toggle_current_favorite` are the two write entry points
+//! and both end in `sync_love`, so provider arming, batching and the
+//! best-effort policy are argued once rather than at each caller.
+//! `backfill_loves` covers the library already favorited before the love toggle
+//! was ever turned on.
+
 use std::sync::Arc;
 
 use crate::database::queries;

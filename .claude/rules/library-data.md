@@ -28,6 +28,18 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   and skip `recalculate_all_stats` entirely. Orphans + artwork rollup + recalc land in one final
   tx; `library_changed_tx` bumps once after it.
 
+- **The artwork sweep runs *after* that tx commits, never inside it** (`tasks::artwork_sweep`,
+  spawned beside `retroactive_hash`). It deletes by reference rather than by refcount — artwork is
+  shared, so no per-track delete can safely unlink a file, and a sweep cannot undercount because it
+  never counts. Two gates, both required: the name has to parse back into the scheme
+  `media::artwork` writes, and nothing in the reference set may name it. **That set is four
+  columns** — `tracks.artwork_path`, `albums.artwork_path`, `artists.image_path` and
+  **`playlists.thumbnail_path`**, the last carrying composites reachable through no other row, so a
+  three-column union blanks every custom playlist mosaic. A one-hour grace window covers the file a
+  tag edit or scan worker has written but not yet committed a row for. `queries::artwork` owns both
+  the read side and the four `UPDATE`s the renormalize pass re-points with, pinned against one
+  column ledger — a missing column is silent one way and destructive the other.
+
 - **`stats_changed_tx` vs `library_changed_tx`.** Play-count flushes bump the stats channel only;
   its two subscribers are Favorites (hero mosaic + Most Played rank by `play_count`) and
   Recently-Played (ordered by `last_played`, written on the same flush). Everything structural —
@@ -92,89 +104,17 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     definition. Don't reintroduce a sort parameter for a fifth caller; retain and permute like the
     other two.
 
-- **`tracks_fts` indexes eight columns, and adding a ninth is a migration, not an edit.** `title,
-  artist, album_artist, album, genre, composer, year, file_name` — external-content fts5
-  (`content='tracks'`, `content_rowid='id'`) kept in sync by three triggers. `search_all` matches
-  the whole table at once (`WHERE tracks_fts MATCH ?`), so **what is searchable is decided entirely
-  by that column list**: it shipped as the first four, and genre and year — both *track-list
-  columns* — matched nothing at all until `20260802000001` rebuilt it. fts5 has no `ALTER`, so a
-  change means dropping the table plus all three triggers, recreating them, and `INSERT INTO
-  tracks_fts (tracks_fts) VALUES ('rebuild')` to repopulate from the content table (no disk
-  re-read, no rescan — existing libraries become searchable on the next launch). Three things to
-  get right: the **`AFTER UPDATE OF` list must name every indexed column**, else a tag edit
-  touching only one of them leaves the index stale while everything still builds and looks right
-  (`a_narrow_retag_reindexes_the_new_fts_columns` pins it); the `'delete'` trigger must pass the
-  **old** values for every column; and `year` is an INTEGER that fts5 indexes as text, so the app's
-  uniform `*` suffix (`build_fts_query`) makes `"199"` a decade search.
-
-  - **A ninth column is two edits, not one**: the per-view filter boxes never touch this index —
-    they walk in-memory caches through `ui::row_match::search_fields`, which mirrors this column
-    list by hand. It carries six of the eight; `composer` isn't on `TrackListRow`, and `file_name`
-    is deliberately left out since the bm25 weight that keeps a filename echo in its place has no
-    equivalent in an unranked substring filter. `.claude/rules/ui-patterns.md` owns that side,
-    including the two places the answers deliberately diverge (the accent fold and years).
-
-  - **`ORDER BY rank` is bm25 under column weights that same migration sets, not the fts5
-    default.** `INSERT INTO tracks_fts (tracks_fts, rank) VALUES ('rank', 'bm25(…)')` persists
-    eight weights into `tracks_fts_config`, ordered *positionally* against the column list — which
-    is why they sit in the migration directly under that list rather than in `search.rs`, and why a
-    ninth column shifts every one of them onto the wrong field while the table still builds and
-    search still works (`bm25_weights_cover_every_indexed_column` reads the applied config back, so
-    a weight list that never took can't pass it either). They earn their place because `file_name`
-    normally repeats the title and artist beside it (`01 - Artist - Title.flac`), so at the uniform
-    default a filename echo outranks the track the query actually names — and since `LIMIT 50` sits
-    under the same `ORDER BY rank`, that decided which rows came back, not just their order. It
-    stays indexed at a tiebreaker weight because it is the only column carrying what the tags
-    don't: the extension, a track-number prefix, a spelling the metadata never had. Not an untagged
-    file, though — `extract_metadata` falls back to the file *stem* for a missing title, so that
-    case already matches at full title weight. Only **`DROP TABLE` takes the row with it** (both
-    `'rebuild'` and `'optimize'` leave it in place), so it is a *table swap*, not a reindex, that
-    has to re-issue the INSERT.
-
-  - **The tokenizer is explicit for a parallel reason — `unicode61 remove_diacritics 2`, not the
-    default 1**, which folds a single combining mark (so it already reaches Björk) but leaves
-    two-mark scripts like Vietnamese unmatched by an ASCII query. **The folding stops at the
-    index**, which is the asymmetry to know before promising it anywhere: the `name LIKE` arms
-    below are not folded, so an unaccented query reaches an accented album or artist only *through
-    their tracks* — landing in a Top Result fall-through tier rather than an exact-name one — and
-    an accented genre, whose only arm is that `LIKE`, doesn't surface as a genre result at all. A
-    tokenizer- or weight-only change needs the table swapped but **not the triggers**: they are
-    re-resolved by name at execution time and keep driving the replacement, *provided the column
-    list is unchanged*.
-
-  - **Nothing outside that migration and that one test may name a shadow table** —
-    `tracks_fts_{data,idx,docsize,config}` are fts5's private storage, they take no foreign key
-    (`content_rowid='id'` plus the three triggers *are* the relation), and none is droppable:
-    `_docsize` least of all, since bm25 reads it, and `columnsize=0` would trade it for a re-fetch
-    and re-tokenize of the row per candidate. `DbPool::close` issues the fts5 `'optimize'` at
-    shutdown beside `PRAGMA optimize` — unrelated commands despite the name. It is the *full*
-    collapse to a single segment, not the only thing tidying the index: `automerge` already folds
-    segments as writes accumulate, and a delete's tombstone goes when a merge reaches the oldest
-    level. The bounded `'merge'` is the documented incremental alternative and would work, but has
-    nothing to win here — the full collapse leaves the next call a no-op where a page budget only
-    spreads the same work across more shutdowns, and an unfinished one costs nothing but the
-    tidying, the force-exit rolling it back. The expensive case is the session that scanned a
-    library in, which is also the one with the most segments to fold.
-
-  - **Genres/albums/artists are matched by `LIKE` against their `*_stats` views instead** — small
-    tables, and `search_all` runs all four queries in one `try_join!`. **The album and artist arms
-    additionally match through their own tracks, re-running the same FTS expression**, which is
-    what keeps the two halves of the page agreeing about what "matched": whatever the index covers,
-    the strips cover. Without it, a query reaching only track metadata — a song title, a year, a
-    composer, a genre — left both strips empty *and* left the page with **no Top Result card at
-    all**, since `compute_top_result` ranks over albums/artists/genres and nothing else; a lone
-    Songs list was the whole page. The genre result has no strip and feeds only that card (tiers
-    3 / 6 / 9 — genre sits last within each exactness band, so no album-vs-artist outcome moved).
-    Two consequences to keep: the name arms are **ordered first**
-    (`ORDER BY (name LIKE ?) DESC, name ASC`) because both kinds of match share 20 slots and a
-    broad query can otherwise push an album out of its own search; and the two FTS subqueries are
-    deliberately unbounded — fts5 scores every match either way, but where the tracks arm pulls
-    only its 50 ranked rows through the join, each subquery does a `tracks` rowid lookup **per
-    match**, two more walks rather than a doubling of one. Both ride the same `try_join!` and
-    finish inside it, so the page waits on neither. That card's subtitle crosses the thread
-    boundary as a `TopSubtitle` *count*, not a sentence: `@tr` only reaches literals inside
-    `.slint`, so the plural resolves on the UI thread through `Search.album-count-label` /
-    `track-count-label`, and the same two callbacks localize the artist strip's cards.
+- **`tracks_fts` indexes eight columns, and adding a ninth is a migration, not an edit.** fts5 has
+  no `ALTER`, so a change means dropping the table plus all three triggers and rebuilding.
+  Migration `20260802000001` carries the column list, the tokenizer and the bm25 weights with the
+  argument for each; `src/database/queries/search.rs` carries the query shape and the folding
+  asymmetry. Two things neither of them can tell you: **a ninth column is two edits**, since the
+  per-view filter boxes never touch this index and walk in-memory caches through
+  `ui::row_match::search_fields`, which mirrors the column list by hand
+  (`.claude/rules/ui-patterns.md` owns that side, including the two places the answers deliberately
+  diverge); and **nothing outside that migration and `search_tests` may name a shadow table**,
+  `tracks_fts_{data,idx,docsize,config}` being fts5's private storage, taking no foreign key and
+  none of it droppable, `_docsize` least of all since bm25 reads it.
 
 ## Ratings
 

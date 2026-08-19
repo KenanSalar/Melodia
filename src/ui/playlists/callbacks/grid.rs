@@ -21,7 +21,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     // playlist-tier `CoverThumbs`. Only on-screen cards invoke this.
     {
         let pu = playlists_ui.clone();
-        playlists.on_request_cover(move |path| pu.grid_cover(path.as_str()));
+        // `generation` is read for its effect on the binding, never its value.
+        playlists.on_request_cover(move |path, _generation| pu.grid_cover(path.as_str()));
+        crate::ui::cover_generation::notify_on_decode(&playlists_ui.grid_thumbs(), ui, |app| {
+            let playlists = app.global::<Playlists>();
+            playlists.set_covers_generation(playlists.get_covers_generation().wrapping_add(1));
+        });
     }
 
     {

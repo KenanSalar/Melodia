@@ -210,3 +210,16 @@ pub fn mark_covers_warm(ui: &AppWindow) {
     let g = ui.global::<Favorites>();
     g.set_covers_generation(g.get_covers_generation().saturating_add(1));
 }
+
+/// Re-run the mounted card bindings once a scheduled decode has landed.
+///
+/// Deliberately not [`mark_covers_warm`]: it never moves off 0, so a batch landing after a
+/// tab-leave cleared the tier cannot read as warm and cost the next mount the cache-only frame
+/// the gate exists for.
+pub fn repaint_covers(ui: &AppWindow) {
+    let g = ui.global::<Favorites>();
+    let generation = g.get_covers_generation();
+    if generation > 0 {
+        g.set_covers_generation(generation.saturating_add(1));
+    }
+}

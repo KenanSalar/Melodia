@@ -33,7 +33,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     // `AlbumDetail.cover` at `open_album` time (see `albums.rs`).
     {
         let au = albums_ui.clone();
-        albums.on_request_cover(move |path| au.grid_cover(path.as_str()));
+        // `generation` is read for its effect on the binding, never its value.
+        albums.on_request_cover(move |path, _generation| au.grid_cover(path.as_str()));
+        crate::ui::cover_generation::notify_on_decode(&albums_ui.grid_thumbs(), ui, |app| {
+            let albums = app.global::<Albums>();
+            albums.set_covers_generation(albums.get_covers_generation().wrapping_add(1));
+        });
     }
 
     // columns-changed: the view recomputed its integer column count and

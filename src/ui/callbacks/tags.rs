@@ -27,7 +27,9 @@ use crate::entities::track::TagEditRow;
 use crate::error::AppError;
 use crate::library;
 use crate::library::tags::TagEditReport;
-use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
+use crate::media::image_decode::{
+    FilterType, MAX_SOURCE_DIM, decode_capped, fit_within, resize_rgb8,
+};
 use crate::media::tag_writer::{self, ArtworkEdit, FieldEdit, TagEdit};
 use crate::state::AppState;
 use crate::ui::file_dialog;
@@ -645,7 +647,9 @@ fn clamp_i32(n: usize) -> i32 {
 fn decode_cover_preview(path: &Path) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
     // The dialog tile renders at 160 px, so the shared 384 px cover tier keeps
     // it crisp on HiDPI while staying a small bounded buffer.
-    let rgb = decode_capped(path, MAX_SOURCE_DIM).ok()?.thumbnail(COVER_SIZE, COVER_SIZE).to_rgb8();
+    let decoded = decode_capped(path, MAX_SOURCE_DIM).ok()?;
+    let (width, height) = fit_within(decoded.width(), decoded.height(), COVER_SIZE, COVER_SIZE);
+    let rgb = resize_rgb8(&decoded, width, height, FilterType::Box)?;
     Some(buffer_from_rgb(&rgb))
 }
 

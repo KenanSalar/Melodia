@@ -6,6 +6,11 @@
 //! overwhelmingly alpha-free, and `FemtoVG` converts on upload rather than per draw), evicted LRU,
 //! and decoded under `image::Limits` so a forged dimension header can't allocate gigabytes.
 //!
+//! **Downscaled only.** A source already smaller than the tier keeps its own size: it is drawn at
+//! the tier's size either way, so padding the buffer out to it spends memory on pixels carrying no
+//! information — and hands the GPU a box-filtered upscale where it would otherwise magnify
+//! bilinearly at draw time.
+//!
 //! **`thumb_size` is per-instance.** Views draw artwork at wildly different sizes and `FemtoVG`
 //! minifies with plain bilinear and no mipmaps, so one size either softens the big tiles or wastes
 //! memory on the small ones; mixing grid-sized buffers into the row tier's LRU would also evict
@@ -15,17 +20,20 @@
 //! nor `Sync`, so it can neither live in a cross-thread cache nor come out of a Rayon pipeline.
 //! `SharedPixelBuffer<Rgb8Pixel>` is both, and refcounted.
 
+use std::collections::{HashSet, VecDeque};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use lru::LruCache;
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 
-use super::image_decode::{MAX_SOURCE_DIM, decode_capped, source_pixels};
+use super::image_decode::{
+    FilterType, MAX_SOURCE_DIM, decode_capped_to, resize_rgb8, source_pixels,
+};
 
 /// Row-tier thumbnail size at a 1× display — just over the now-playing bar's tile, the larger of
 /// the tier's two consumers.
@@ -91,11 +99,53 @@ fn decode_pool() -> Option<&'static rayon::ThreadPool> {
         .as_ref()
 }
 
+/// Misses [`CoverThumbs::get_or_schedule_opt`] has handed to the decode pool.
+///
+/// `draining` is what coalesces a screenful of them into one batch: the first miss spawns the
+/// drain and every miss behind it only joins the queue. It is cleared under the same lock that
+/// finds the queue empty, so a miss arriving as a drain finishes cannot be left with nothing
+/// scheduled to pick it up.
+#[derive(Default)]
+struct Pending {
+    /// Waiting misses, oldest first, capped at the tier's capacity — queueing more than the
+    /// cache can hold means the tail of the batch evicts the head of it. Newest wins, that
+    /// being the one a card is currently asking for; `queued` is the membership half.
+    queue: VecDeque<PathBuf>,
+    queued: HashSet<PathBuf>,
+    /// What this burst has already handed to the pool.
+    ///
+    /// A path coming back is one the tier decoded and then dropped to fit the rest of the
+    /// batch, so decoding it again would evict whatever took its place and the notifier would
+    /// ask a third time — a grid mounting more cards than its tier holds would never settle.
+    /// Cleared by the first miss the burst hasn't seen, which is what distinguishes a moved
+    /// visible set from a cache thrashing under a fixed one.
+    settled: HashSet<PathBuf>,
+    draining: bool,
+}
+
+impl Pending {
+    /// Forget everything waiting and everything the burst learned, for a tier being reset. A
+    /// drain already on the pool is left to notice on its own.
+    fn reset(&mut self) {
+        self.queue.clear();
+        self.queued.clear();
+        self.settled.clear();
+    }
+}
+
 pub struct CoverThumbs {
     cache: Mutex<LruCache<PathBuf, CachedBuf>>,
     /// Side length every cover in this cache is downscaled to. Atomic because the tiers are held
     /// behind `Arc` and [`Self::set_thumb_size`] retunes them once the scale factor is known.
     thumb_size: AtomicU32,
+    /// Bumped by every reset. A batch reads it before decoding and again before inserting, so
+    /// what a [`Self::clear`] or a [`Self::set_thumb_size`] invalidated mid-flight is dropped
+    /// rather than landing in the tier behind them.
+    epoch: AtomicU64,
+    pending: Mutex<Pending>,
+    /// Fired once per landed batch, for the UI to invalidate the bindings that missed. Set at
+    /// wire time and never replaced, a tier having exactly one surface to tell.
+    on_decoded: OnceLock<Box<dyn Fn() + Send + Sync>>,
 }
 
 impl Default for CoverThumbs {
@@ -103,6 +153,9 @@ impl Default for CoverThumbs {
         Self {
             cache: Mutex::new(LruCache::new(CACHE_CAP)),
             thumb_size: AtomicU32::new(ROW_THUMB_SIZE),
+            epoch: AtomicU64::new(0),
+            pending: Mutex::new(Pending::default()),
+            on_decoded: OnceLock::new(),
         }
     }
 }
@@ -120,13 +173,14 @@ impl CoverThumbs {
         Self {
             cache: Mutex::new(LruCache::new(cache_cap)),
             thumb_size: AtomicU32::new(thumb_size),
+            ..Self::default()
         }
     }
 
     /// Drop every cached buffer, for a per-view tier released on section leave. Callers pair this
     /// with `heap_trim::trim()` so glibc hands the freed pages back to the OS.
     pub fn clear(&self) {
-        self.cache.lock().clear();
+        self.reset();
     }
 
     /// Retune the LRU capacity in place, once the real display size is known. Shrinking evicts
@@ -143,7 +197,22 @@ impl CoverThumbs {
         if self.thumb_size.swap(thumb_size, Ordering::Relaxed) == thumb_size {
             return;
         }
-        self.cache.lock().clear();
+        self.reset();
+    }
+
+    /// Drop every buffer and every queued miss, and invalidate whatever is mid-decode.
+    ///
+    /// **Both locks, cache first**, which is the order every other path here takes them in — and
+    /// this is the only one holding both, so there is no second order to invert against. The
+    /// epoch bump belongs under the *cache* lock rather than the queue's, that being the lock a
+    /// finished batch takes to insert: clearing the cache and invalidating the batch have to be
+    /// one step, or a batch reading the epoch between them lands in the tier this just emptied.
+    fn reset(&self) {
+        let mut cache = self.cache.lock();
+        let mut pending = self.pending.lock();
+        self.epoch.fetch_add(1, Ordering::Relaxed);
+        pending.reset();
+        cache.clear();
     }
 
     /// Current LRU capacity. A `prewarm` caller building a display-ordered path list can
@@ -190,6 +259,133 @@ impl CoverThumbs {
         self.cache.lock().get(Path::new(p)).map_or_else(Image::default, buf_to_image)
     }
 
+    /// Register what to call when a scheduled batch lands. First caller wins.
+    ///
+    /// Takes a plain closure rather than anything UI-shaped so this module stays unaware of Slint
+    /// globals; the caller is what knows which binding to invalidate.
+    pub fn set_decoded_notifier(&self, notify: impl Fn() + Send + Sync + 'static) {
+        let _ = self.on_decoded.set(Box::new(notify));
+    }
+
+    /// [`Self::get_or_load_opt`] with the miss moved off the calling thread.
+    ///
+    /// **For the Slint model getters, which run on the UI thread.** `get_or_load_opt` decodes
+    /// inline, which is bounded and invisible while `prewarm` has covered the surface — and
+    /// stops being either once a library holds more unique covers than the tier's cap, where
+    /// scrolling past the prewarmed prefix turns every row into a decode on the event loop.
+    /// This serves the placeholder instead, hands the path to the decode pool, and leaves the
+    /// notifier to bring the row back.
+    pub fn get_or_schedule_opt(self: &Arc<Self>, path: Option<&str>) -> Image {
+        let Some(path) = path.filter(|p| !p.is_empty()) else {
+            return Image::default();
+        };
+        let path = Path::new(path);
+        if let Some(maybe_buf) = self.cache.lock().get(path) {
+            return buf_to_image(maybe_buf);
+        }
+        self.schedule(path.to_path_buf());
+        Image::default()
+    }
+
+    /// Queue one miss, spawning the drain if nothing is already draining.
+    fn schedule(self: &Arc<Self>, path: PathBuf) {
+        // Read before the queue lock — `capacity` takes the cache's, and nothing else here
+        // holds both.
+        let capacity = self.capacity();
+        {
+            let mut pending = self.pending.lock();
+            if pending.queued.contains(&path) || pending.settled.contains(&path) {
+                return;
+            }
+            // A miss this burst hasn't seen means the visible set moved, so what it learned
+            // about the old one no longer stands.
+            pending.settled.clear();
+            pending.queued.insert(path.clone());
+            pending.queue.push_back(path);
+            while pending.queue.len() > capacity {
+                if let Some(dropped) = pending.queue.pop_front() {
+                    pending.queued.remove(&dropped);
+                }
+            }
+            if pending.draining {
+                return;
+            }
+            pending.draining = true;
+        }
+        let this = Arc::clone(self);
+        let drain = move || this.drain_pending();
+        match decode_pool() {
+            Some(pool) => pool.spawn(drain),
+            None => rayon::spawn(drain),
+        }
+    }
+
+    /// Decode everything queued, then everything queued while that ran, until the queue is empty.
+    ///
+    /// Looping rather than one batch per spawn because the misses arrive as fast as rows mount:
+    /// a scroll would otherwise spawn a drain per frame, each contending for the same pool.
+    fn drain_pending(&self) {
+        loop {
+            let (epoch, batch) = {
+                let mut pending = self.pending.lock();
+                if pending.queue.is_empty() {
+                    pending.draining = false;
+                    return;
+                }
+                pending.queued.clear();
+                let batch: Vec<PathBuf> = pending.queue.drain(..).collect();
+                // Doubles as the in-flight guard `queued` was: a binding re-running mid-decode
+                // must not queue what this batch is already carrying.
+                pending.settled.extend(batch.iter().cloned());
+                (self.epoch.load(Ordering::Relaxed), batch)
+            };
+
+            // Non-promoting, so this can't reorder a prefix `prewarm` warmed. A tab pick mounts
+            // rows *before* its prewarm runs, so the two routinely ask for the same covers and
+            // without this every one of them is decoded twice.
+            let batch: Vec<PathBuf> = {
+                let cache = self.cache.lock();
+                batch.into_iter().filter(|path| !cache.contains(path)).collect()
+            };
+            if batch.is_empty() {
+                continue;
+            }
+
+            let thumb_size = self.thumb_size.load(Ordering::Relaxed);
+            let decoded: Vec<(PathBuf, CachedBuf)> = batch
+                .into_par_iter()
+                .map(|path| {
+                    let buf = decode_thumb_buffer(&path, thumb_size);
+                    (path, buf)
+                })
+                .collect();
+
+            {
+                let mut cache = self.cache.lock();
+                // Read under the cache lock, which [`Self::reset`] takes to bump it: a reset is
+                // either complete and visible here, or waiting behind this insert and about to
+                // discard it. Outside the lock the two interleave and the batch lands in a tier
+                // that was just emptied — the buffers being either the size nobody asked for any
+                // more, or the memory a section leave has already handed back.
+                if self.epoch.load(Ordering::Relaxed) != epoch {
+                    continue;
+                }
+                for (path, buf) in decoded {
+                    // A `prewarm` or a `get_or_load` could have inserted the same key while this
+                    // batch was decoding; theirs is no staler than ours and keeping it spares the
+                    // LRU a promotion.
+                    if !cache.contains(&path) {
+                        cache.put(path, buf);
+                    }
+                }
+            }
+
+            if let Some(notify) = self.on_decoded.get() {
+                notify();
+            }
+        }
+    }
+
     /// [`Self::get_or_load`]'s contract over the raw buffer rather than a [`slint::Image`].
     /// Material You seeds its palette from the already-decoded thumbnail this way, rather than
     /// decoding the full-resolution artwork a second time.
@@ -217,7 +413,7 @@ impl CoverThumbs {
         let missing: Vec<PathBuf> = {
             let cache = self.cache.lock();
             let cap = cache.cap().get();
-            let mut seen = std::collections::HashSet::with_capacity(paths.len().min(cap));
+            let mut seen = HashSet::with_capacity(paths.len().min(cap));
             paths
                 .iter()
                 .filter(|p| !cache.contains(*p) && seen.insert(*p))
@@ -265,12 +461,14 @@ fn decode_thumb_buffer(path: &Path, thumb_size: u32) -> CachedBuf {
         .is_some_and(|pixels| pixels > LARGE_SOURCE_PIXELS)
         .then(|| LARGE_DECODE_GATE.lock());
 
-    let dyn_img = decode_capped(path, MAX_SOURCE_DIM).ok()?;
+    let dyn_img = decode_capped_to(path, MAX_SOURCE_DIM, thumb_size).ok()?;
 
-    // `thumbnail_exact` is integer-only and doesn't preserve aspect, which is moot for
-    // overwhelmingly square album art — and `image-fit: cover` on the Slint side would have
-    // re-cropped a non-square one anyway. Far cheaper than `resize_to_fill`.
-    let thumb = dyn_img.thumbnail_exact(thumb_size, thumb_size).to_rgb8();
+    // Square and aspect-blind, which is moot for overwhelmingly square album art — and
+    // `image-fit: cover` on the Slint side would have re-cropped a non-square one anyway.
+    // Bounded by the source's own long edge: a cover smaller than the tier is drawn at the
+    // tier's size either way, and enlarging it here only buys a bigger buffer.
+    let side = thumb_size.min(dyn_img.width().max(dyn_img.height()));
+    let thumb = resize_rgb8(&dyn_img, side, side, FilterType::Box)?;
     let (w, h) = thumb.dimensions();
     let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
     buf.make_mut_bytes().copy_from_slice(thumb.as_raw());

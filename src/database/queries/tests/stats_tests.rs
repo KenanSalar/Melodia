@@ -5,7 +5,7 @@ use crate::error::AppError;
 
 #[tokio::test]
 async fn recalculate_stats_produces_correct_counts() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Disable triggers so inserts don't update stats
@@ -68,7 +68,7 @@ async fn recalculate_stats_produces_correct_counts() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn triggers_work_after_re_enable() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Disable, then re-enable triggers
@@ -91,7 +91,7 @@ async fn triggers_work_after_re_enable() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn disable_enable_recalculate_full_cycle() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Full cycle: disable → bulk insert → recalculate → enable

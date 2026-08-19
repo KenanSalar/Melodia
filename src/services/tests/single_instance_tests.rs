@@ -2,11 +2,12 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
 
+use interprocess::local_socket::{Stream, prelude::*};
 use tempfile::tempdir;
 
 use super::{
-    Claim, LENGTH_PREFIX_LEN, MAX_PAYLOAD_LEN, claim, decode_paths, encode_frame, name_is_taken_on,
-    serve, socket_name,
+    Claim, LENGTH_PREFIX_LEN, MAX_PAYLOAD_LEN, allow_missing_timeout, claim, decode_paths,
+    encode_frame, name_is_taken_on, serve, socket_name,
 };
 use crate::test_support::reading_env;
 
@@ -103,6 +104,25 @@ fn a_taken_name_is_recognised_in_both_spellings() {
     assert!(!taken_on(std::io::ErrorKind::NotFound, true));
 }
 
+/// The socket test below only ever exercises the transport the runner has, and the one that
+/// answers this question differently has no runner. Getting it wrong is not a dropped
+/// timeout: `forward` propagates, `claim` reads that as `Unenforced`, and the second launch
+/// opens a second window and a second writer onto one database.
+#[test]
+fn a_transport_without_timeouts_still_forwards() {
+    let refused = |kind| allow_missing_timeout(Err(std::io::Error::from(kind)));
+
+    assert!(
+        refused(std::io::ErrorKind::Unsupported).is_ok(),
+        "a Windows named pipe has no settable timeout, and that may not cost us the claim"
+    );
+    assert!(
+        refused(std::io::ErrorKind::BrokenPipe).is_err(),
+        "a real failure on the way to setting one is still a failure"
+    );
+    assert!(allow_missing_timeout(Ok(())).is_ok());
+}
+
 /// Keyed on the data directory, that being what two Melodias would corrupt.
 #[test]
 fn two_data_directories_get_two_names() {
@@ -156,6 +176,50 @@ fn a_second_launch_hands_its_paths_to_the_first_and_stands_down() {
             delivered,
             Some(vec![opened.to_string_lossy().into_owned()]),
             "the primary never saw the forwarded launch — `None` is the timeout, i.e. a deadlock"
+        );
+    });
+}
+
+/// What `spawn_reader` exists for. A peer that connects and then says nothing is a read that
+/// only one transport will ever cut short — a Windows named pipe takes no deadline at all — so
+/// read on the accept thread it costs every launch behind it, not just itself.
+///
+/// The silent peer connects first so it is mid-read when the real launch arrives, and the
+/// assertion window is inside `IO_TIMEOUT`: this fails on a Linux runner too, where the read
+/// does eventually give up, because "eventually" is the whole complaint.
+#[test]
+fn a_silent_peer_does_not_cost_the_launch_behind_it() {
+    let Ok(data_dir) = tempdir() else {
+        unreachable!("no writable temp directory")
+    };
+    let (tx, rx) = mpsc::channel();
+
+    reading_env(|| {
+        let Claim::Primary(listener) = claim(data_dir.path(), &[]) else {
+            unreachable!("an unused data directory must be claimable")
+        };
+        serve(listener, move |paths| {
+            let _ = tx.send(paths);
+        });
+
+        let Ok(name) = socket_name(data_dir.path()) else {
+            unreachable!("the name just claimed must still spell")
+        };
+        let Ok(_silent) = Stream::connect(name) else {
+            unreachable!("the primary is listening")
+        };
+
+        let opened = PathBuf::from("/music/Album/02 - Track.flac");
+        assert!(
+            matches!(claim(data_dir.path(), std::slice::from_ref(&opened)), Claim::Secondary),
+            "a claim against a held name must forward rather than bind"
+        );
+
+        let delivered = rx.recv_timeout(Duration::from_secs(1)).ok();
+        assert_eq!(
+            delivered,
+            Some(vec![opened.to_string_lossy().into_owned()]),
+            "a peer that said nothing parked the accept loop and the launch behind it was lost"
         );
     });
 }

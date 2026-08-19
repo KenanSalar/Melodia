@@ -92,8 +92,15 @@ pub struct UiHandles {
 /// no slice's `install`, serving every view.
 fn install_row_covers(app: &AppWindow, cover_thumbs: &Arc<media::cover_thumbs::CoverThumbs>) {
     let ct = cover_thumbs.clone();
-    app.global::<melodia::RowCovers>()
-        .on_request(move |path| ct.get_or_load_opt(Some(path.as_str()).filter(|s| !s.is_empty())));
+    // `generation` is read for its effect on the binding, never its value — see `RowCovers`.
+    app.global::<melodia::RowCovers>().on_request(move |path, _generation| {
+        ct.get_or_schedule_opt(ui::grid_prewarm::nonempty_artwork_path(path.as_str()))
+    });
+
+    ui::cover_generation::notify_on_decode(cover_thumbs, app, |app| {
+        let covers = app.global::<melodia::RowCovers>();
+        covers.set_generation(covers.get_generation().wrapping_add(1));
+    });
 }
 
 /// Install every view slice and its callbacks. Seeds the persisted nav index
@@ -216,7 +223,7 @@ pub fn install_views(
     let (tune_recent, tune_browse) = (recently_played_ui.clone(), browse_ui.clone());
     let tune_rows = cover_thumbs.clone();
     let weak = app.as_weak();
-    if let Err(e) = slint::invoke_from_event_loop(move || {
+    let retune = move || {
         let Some(app) = weak.upgrade() else { return };
         ui::albums::tune_cache_for_display(&app, &tune_albums);
         ui::artists::tune_cache_for_display(&app, &tune_artists);
@@ -229,7 +236,14 @@ pub fn install_views(
         tune_rows.set_thumb_size(media::cover_thumbs::row_cover_size(f64::from(
             app.window().scale_factor(),
         )));
-    }) {
+    };
+    // **And again on every resize.** Both answers move with the window, and a cap read once at
+    // launch is the cap a later maximize overruns — the cards past it can only paint
+    // placeholders, the lookup behind them scheduling against a tier that cannot hold them.
+    // Setting the cap exactly rather than growing it: a smaller window really does draw fewer
+    // cards, and a drag that oscillates re-warms through the model rebuild it triggers anyway.
+    app.global::<melodia::WindowChrome>().on_display_changed(retune.clone());
+    if let Err(e) = slint::invoke_from_event_loop(retune) {
         log::warn!("Failed to schedule cover-cache display tuning: {e}");
     }
 

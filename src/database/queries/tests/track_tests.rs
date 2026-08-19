@@ -5,7 +5,7 @@ use crate::database::queries::tests::helpers::*;
 use crate::error::AppError;
 
 async fn seed_db() -> Result<DbPool, AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/alpha.mp3", "Alpha", "Zeta Artist", "B Album", "Pop").await?;
     insert_test_track(&db, "/music/beta.mp3", "Beta", "Alpha Artist", "A Album", "Rock").await?;
@@ -27,7 +27,7 @@ async fn seed_db() -> Result<DbPool, AppError> {
 /// insertion order as the rowid order its tiebreakers have to *beat*, so
 /// flipping it would hand that test the answer it exists to prove.
 async fn seed_db_inserted_backwards() -> Result<DbPool, AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/gamma.mp3", "Gamma", "Alpha Artist", "A Album", "Rock").await?;
     insert_test_track(&db, "/music/beta.mp3", "Beta", "Alpha Artist", "A Album", "Rock").await?;
@@ -95,10 +95,11 @@ async fn get_track_by_id_happy_path() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn get_track_by_id_not_found() {
-    let db = DbPool::test_pool().await;
+async fn get_track_by_id_not_found() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
     let result = queries::track::get_track_by_id(&db, 99999).await;
     assert!(result.is_err());
+    Ok(())
 }
 
 #[tokio::test]
@@ -165,7 +166,7 @@ async fn update_last_position() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn get_tracks_in_directory_direct_only() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     // Use the platform's native separator — `get_tracks_in_directory`
     // builds its LIKE pattern with `MAIN_SEPARATOR`, so Unix-style `/`
     // hardcoded test paths wouldn't match on Windows.
@@ -231,7 +232,7 @@ async fn get_track_ids_by_hashes() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn get_duplicate_tracks_returns_groups() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Insert two tracks with the same hash (simulating duplicate files)
@@ -266,7 +267,7 @@ async fn get_duplicate_tracks_empty_when_no_dupes() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn batch_update_hashes_sets_values() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     let id = insert_test_track(&db, "/music/song.mp3", "Song", "Art", "Alb", "Rock").await?;
 
@@ -292,7 +293,7 @@ async fn batch_update_hashes_sets_values() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn get_unhashed_track_paths_finds_null_hashes() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     let id = insert_test_track(&db, "/music/song.mp3", "Song", "Art", "Alb", "Rock").await?;
 

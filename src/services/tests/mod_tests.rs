@@ -170,6 +170,82 @@ fn nothing_outside_the_helper_asks_the_os_for_the_binary_path() {
     );
 }
 
+/// The setters that spell a thread name: `std::thread::Builder`'s, and the fixed-string form
+/// tokio's and rayon's builders share. Anchored on the setter rather than on `Builder::new()`,
+/// which two of the call sites leave on the line above.
+const NAME_SETTERS: [&str; 2] = [".name(\"", ".thread_name(\""];
+
+/// The setter's closure form, which computes a name per thread instead of spelling one.
+const RUNTIME_SETTER: &str = ".thread_name(|";
+
+/// `TASK_COMM_LEN` less its NUL. Written out rather than taken from `libc`, which doesn't export
+/// it, and which has nothing to export on the platforms that impose no cap.
+const MAX_THREAD_NAME: usize = 15;
+
+/// A floor, so a walk that silently found nothing can't pass vacuously.
+const MIN_THREAD_NAMES: usize = 5;
+
+/// The files that compute a name rather than spelling one, where reading the literal measures
+/// nothing. Paths are relative to [`SRC_DIR`].
+const RUNTIME_NAMED: [&str; 2] = [
+    // `cover-decode-{i}`, whose budget is the prefix plus the widest index the decode pool's
+    // clamp can reach; raising that clamp is a thread-name change.
+    "media/cover_thumbs.rs",
+    // This pin, which has to spell the needle to grep for it.
+    "services/tests/mod_tests.rs",
+];
+
+/// Linux keeps `TASK_COMM_LEN` bytes of a thread name and std truncates ahead of it rather than
+/// erroring, so an over-long name compiles, runs, and is wrong only in `htop`, `perf` and
+/// `/proc`: the three places the name exists for, and none of them a place review looks.
+///
+/// Checkable from the corpus and nowhere else. The truncation happens inside the OS and leaves no
+/// value behind, `Thread::name()` still handing back the full string.
+///
+/// Three seams. Two are shared with the pin above: `strip_line_comments` handles `//` and not
+/// `/* */`, and the needle is a substring rather than a parse, so an unrelated builder taking a
+/// short literal name would be measured too. That one is harmless while it fits the budget, and a
+/// fair prompt to narrow the needle if one ever doesn't. The third is this pin's own:
+/// [`RUNTIME_NAMED`] ledgers the computed form of `thread_name`, but `Builder::name` takes any
+/// `Into<String>`, so a `format!`ed std thread name matches neither needle and goes unmeasured.
+#[test]
+fn no_thread_name_outgrows_what_the_kernel_keeps() {
+    let mut names = Vec::new();
+    let mut computed = Vec::new();
+
+    for (path, src) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
+        for setter in NAME_SETTERS {
+            for start in src.match_indices(setter).map(|(at, _)| at + setter.len()) {
+                if let Some(len) = src[start..].find('"') {
+                    names.push((path.clone(), src[start..start + len].to_owned()));
+                }
+            }
+        }
+        if src.contains(RUNTIME_SETTER) {
+            computed.push(path);
+        }
+    }
+
+    let docked: Vec<_> = names.iter().filter(|(_, name)| name.len() > MAX_THREAD_NAME).collect();
+    assert!(
+        docked.is_empty(),
+        "{docked:?} run past the {MAX_THREAD_NAME} bytes Linux keeps, so each arrives docked in \
+         every tool that reads it. Shorten them"
+    );
+    assert!(
+        names.len() >= MIN_THREAD_NAMES,
+        "only {} thread names found; a renamed setter empties this walk with nothing to see",
+        names.len()
+    );
+
+    computed.sort();
+    assert_eq!(
+        computed, RUNTIME_NAMED,
+        "the set of files computing a thread name has moved; each one owes its own argument for \
+         why the widest name it can produce still fits in {MAX_THREAD_NAME} bytes"
+    );
+}
+
 /// The two `Display` shapes in this tree, which is what makes `describe` reachable without knowing
 /// which one is in hand. `Network` names an operation and leaves the cause on `.source()`, so the
 /// walk is the whole point; `Io` is `#[error("IO error: {0}")]` over the field `#[from]` also
@@ -232,7 +308,7 @@ fn every_bundled_font_is_named_in_the_attribution() {
     assert!(unreadable.is_empty(), "unreadable font directories: {unreadable:?}");
     assert!(
         fonts.len() >= MIN_FONTS,
-        "only {} .ttf files found under the font tree — a dropped subdirectory \
+        "only {} faces found under the font tree — a dropped subdirectory \
          silently narrows this pin to whatever is left",
         fonts.len()
     );

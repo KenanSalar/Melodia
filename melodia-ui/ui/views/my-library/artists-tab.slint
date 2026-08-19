@@ -21,7 +21,8 @@ export component MyLibraryArtistsTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         open-artist(id) => { Artists.open-artist(id); }
-        request-cover(p) => { Artists.request-cover(p) }
+        covers-generation: Artists.covers-generation;
+        request-cover(p, g) => { Artists.request-cover(p, g) }
     }
 
     if Artists.total-count == 0: GridEmptyState {

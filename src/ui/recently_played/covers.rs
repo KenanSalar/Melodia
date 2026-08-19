@@ -111,9 +111,9 @@ impl RecentlyPlayedUi {
     }
 }
 
-/// Retune the Most Played cover cache to the real display resolution. Called
-/// once at startup after the winit window is live, alongside the entity grids'
-/// own tuning — the tab draws the same card at the same size, so it takes the
+/// Retune the Most Played cover cache to the real display resolution. Called after
+/// `app.show()` and again on every resize, alongside the entity grids' own
+/// tuning — the tab draws the same card at the same size, so it takes the
 /// same band.
 pub fn tune_cache_for_display(app: &AppWindow, rp_ui: &RecentlyPlayedUi) {
     let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, GRID_THUMB_CAP);

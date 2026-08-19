@@ -48,7 +48,7 @@ use crate::{
     Playlists, TrackListRow as UiTrackListRow,
 };
 
-use crate::ui::grid_prewarm::GRID_COVER_SIZE;
+use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
 use state::{DEFAULT_GRID_COVER_CAP, GridData, PlaylistDetailState, PlaylistGridState};
 
 #[cfg(test)]
@@ -100,7 +100,7 @@ pub struct PlaylistsUi {
     /// Row-tier cache — shared with Tracks / Browse — backs the
     /// detail track-list's artwork column.
     cover_thumbs: Arc<CoverThumbs>,
-    /// Grid-tier (`GRID_COVER_SIZE`) cache for the Playlists grid cards.
+    /// Grid-tier (`GRID_COVER_FALLBACK`) cache for the Playlists grid cards.
     /// Released when the user opens a detail (the grid is unmounted) and
     /// when leaving the section. Re-warmed on return.
     grid_covers: Arc<CoverThumbs>,
@@ -129,7 +129,7 @@ impl PlaylistsUi {
             },
             cover_thumbs,
             grid_covers: Arc::new(CoverThumbs::with_config(
-                GRID_COVER_SIZE,
+                GRID_COVER_FALLBACK,
                 DEFAULT_GRID_COVER_CAP,
             )),
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
@@ -269,7 +269,21 @@ impl PlaylistsUi {
     /// Lazy cover lookup for a Playlists **grid card** — backs
     /// `Playlists.request-cover`. Resolves against the grid-tier cache.
     pub fn grid_cover(&self, artwork_path: &str) -> slint::Image {
-        self.grid_covers.get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+        self.grid_covers
+            .get_or_schedule_opt(crate::ui::grid_prewarm::nonempty_artwork_path(artwork_path))
+    }
+
+    /// The grid tier itself, for the wiring that has to reach past a lookup — the
+    /// `Albums::grid_thumbs` contract.
+    pub fn grid_thumbs(&self) -> Arc<CoverThumbs> {
+        self.grid_covers.clone()
+    }
+
+    /// The inline sibling, for the Edit Artwork dialog's current-cover slot: it is written once as
+    /// a property rather than read from a binding, so a scheduled decode has nothing to re-run and
+    /// the placeholder would stand for the life of the dialog.
+    pub fn grid_cover_blocking(&self, artwork_path: &str) -> slint::Image {
+        crate::ui::grid_prewarm::grid_cover_blocking(&self.grid_covers, artwork_path)
     }
 
     /// Lookup of a playlist's canonical stats by id, against the cached

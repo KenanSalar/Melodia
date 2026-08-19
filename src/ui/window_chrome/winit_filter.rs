@@ -1,6 +1,6 @@
 //! Winit `WindowEvent` filter installed by `window_chrome::install`.
 //!
-//! Six reasons to subscribe:
+//! Seven reasons to subscribe:
 //!
 //! 1. **`MouseInput { Pressed, Left }`** over the titlebar drag area — an OS-level window
 //!    move plus `PreventDefault`, bypassing the TouchArea-grab issue the parent module's
@@ -17,6 +17,8 @@
 //!    cross-app `DnD` API, so this is the only path a file drop arrives through.
 //! 6. **`MouseWheel`**, for two unrelated `Flickable` defects — see [`route_wheel`].
 //!    `CursorMoved` is mirrored for the same arm, a wheel event carrying no position.
+//! 7. **`RedrawRequested`** and **`Moved`** — the Slint tick Win32's modal resize-and-move
+//!    loop parks winit out of; see [`pump_parked_loop`].
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -58,6 +60,27 @@ fn schedule_minimize_probe(weak: slint::Weak<AppWindow>) {
         }
     });
 }
+
+/// Run the Slint tick winit's own loop is parked out of.
+///
+/// Win32 pumps its own message loop for the whole of a resize or move drag, so winit sits inside
+/// `DefWindowProcW` and never reaches the wait point that emits `NewEvents` — the one place the
+/// backend calls `update_timers_and_animations`. Sizes and paints keep arriving, so the layout
+/// tracks the pointer and only the *decisions* stall: every `Timer` and every `changed` handler
+/// is frozen until the button comes up, which is the whole responsive layer — the miniplayer
+/// swap, `GridColumnsSync`'s column count, each `changed width` mirror.
+///
+/// One call keeps the drag turning, because the Windows frame throttle is itself a Slint `Timer`:
+/// pumping it asks winit for a redraw, whose `WM_PAINT` the modal loop delivers straight back
+/// here. It retires on its own once nothing is dirty and the throttle stops itself.
+#[cfg(target_os = "windows")]
+fn pump_parked_loop() {
+    slint::platform::update_timers_and_animations();
+}
+
+/// No modal loop off Win32 — every other platform ticks Slint from its own loop iteration.
+#[cfg(not(target_os = "windows"))]
+fn pump_parked_loop() {}
 
 /// What the `MouseWheel` arm does with one event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,7 +200,11 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     })
                     .unwrap_or(false);
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    ui.global::<crate::WindowChrome>().set_is_maximized(maximized);
+                    let chrome = ui.global::<crate::WindowChrome>();
+                    chrome.set_is_maximized(maximized);
+                    // The cover tiers size themselves against the window, so this is the edge
+                    // that re-derives them — see the handler in `boot::ui_setup`.
+                    chrome.invoke_display_changed();
                 });
                 slint::winit_030::EventResult::Propagate
             }
@@ -186,6 +213,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
             // no-op on Wayland anyway.
             WindowEvent::Moved(_) => {
                 let _ = w.with_winit_window(geometry::record);
+                // A move drag resizes nothing, so the client area is never invalidated and no
+                // `WM_PAINT` starts the redraw chain the arm below rides.
+                pump_parked_loop();
                 slint::winit_030::EventResult::Propagate
             }
             WindowEvent::Focused(focused) => {
@@ -313,6 +343,13 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     }
                     WheelRoute::Native => slint::winit_030::EventResult::Propagate,
                 }
+            }
+            // The filter runs ahead of Slint's own dispatch, so the last `Resized` has already
+            // landed its size and `draw()` has not run yet: a handler firing here sees the frame
+            // it is about to be painted into.
+            WindowEvent::RedrawRequested => {
+                pump_parked_loop();
+                slint::winit_030::EventResult::Propagate
             }
             _ => slint::winit_030::EventResult::Propagate,
         }

@@ -29,7 +29,7 @@ fn build_fts_query_empty_input() {
 
 #[tokio::test]
 async fn search_all_empty_query_returns_empty() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let results = queries::search::search_all(&db, "   ").await?;
     assert!(results.tracks.is_empty());
     assert!(results.albums.is_empty());
@@ -158,7 +158,7 @@ async fn matching_by_name_still_works_alongside_the_track_arm() -> Result<(), Ap
 /// track title, so plain `ORDER BY name` would put it on top.
 #[tokio::test]
 async fn a_name_match_outranks_one_found_through_its_tracks() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/a.mp3", "Zebra Dance", "Kite", "Alpha Records", "Rock").await?;
     insert_test_track(&db, "/music/b.mp3", "Quiet Hours", "Wren", "Zebra Sessions", "Rock").await?;
@@ -182,7 +182,7 @@ async fn a_name_match_outranks_one_found_through_its_tracks() -> Result<(), AppE
 #[tokio::test]
 async fn an_artist_named_for_the_query_outranks_ones_found_through_tracks() -> Result<(), AppError>
 {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/a.mp3", "Zebra Dance", "Kite", "Alpha Records", "Rock").await?;
     insert_test_track(&db, "/music/b.mp3", "Quiet Hours", "Wren", "Zebra Sessions", "Rock").await?;
@@ -251,7 +251,7 @@ async fn bm25_weights_cover_every_indexed_column() -> Result<(), AppError> {
         "file_name",
     ];
 
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
 
     let columns: Vec<String> =
         sqlx::query_scalar("SELECT name FROM pragma_table_info('tracks_fts')")
@@ -310,7 +310,7 @@ async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result
     // instead of the text list.
     const NOT_TEXT_SEARCHED: [&str; 3] = ["composer", "file_name", "year"];
 
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     let indexed: Vec<String> =
         sqlx::query_scalar("SELECT name FROM pragma_table_info('tracks_fts')")
             .fetch_all(db.read())
@@ -361,7 +361,7 @@ async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result
 /// this decides which rows come back, not only their order.
 #[tokio::test]
 async fn a_title_match_outranks_a_filename_only_match() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(
         &db,
@@ -387,7 +387,7 @@ async fn a_title_match_outranks_a_filename_only_match() -> Result<(), AppError> 
 /// case; under the default this finds nothing.
 #[tokio::test]
 async fn a_plain_ascii_query_matches_a_multi_mark_title() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/a.mp3", "Bế Tắc", "Ngoc", "Xuan", "Pop").await?;
 

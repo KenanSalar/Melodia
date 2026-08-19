@@ -7,7 +7,7 @@ use super::{
     suggested_file_name, tail_of,
 };
 use crate::error::AppError;
-use crate::test_support::{paths_in, reading_env, with_env_var};
+use crate::test_support::{paths_in, reading_env, resolved_home};
 
 /// A file of `lines` numbered lines, each padded to a known width so a byte
 /// budget maps onto a predictable number of them.
@@ -68,14 +68,16 @@ fn a_short_file_keeps_its_first_line() -> Result<(), AppError> {
 /// name, so it may not survive the trip — in the log body or the file header.
 #[test]
 fn the_tail_redacts_the_home_directory() -> Result<(), AppError> {
+    let Some(home) = resolved_home() else {
+        return Ok(());
+    };
     let tmp = tempfile::tempdir()?;
     let path = tmp.path().join("melodia_rCURRENT.log");
-    std::fs::write(&path, b"WARN scan failed for /home/testuser/Music/x.flac\n")?;
+    std::fs::write(&path, format!("WARN scan failed for {home}/Music/x.flac\n"))?;
 
-    let tail = with_env_var("HOME", Some("/home/testuser"), || tail_of(&path, 64 * 1024))
-        .unwrap_or_default();
+    let tail = reading_env(|| tail_of(&path, 64 * 1024)).unwrap_or_default();
 
-    assert!(!tail.contains("/home/testuser"), "home leaked: {tail}");
+    assert!(!tail.contains(&home), "home leaked: {tail}");
     assert!(tail.contains("~/Music/x.flac"));
     Ok(())
 }
@@ -220,11 +222,14 @@ fn the_two_kinds_of_empty_logs_read_differently() {
 /// the one string here that could grow a path without anyone editing this file.
 #[test]
 fn the_unavailable_reason_is_redacted_like_everything_else() {
-    let block = with_env_var("HOME", Some("/home/testuser"), || {
-        log_section(Some("cannot open /home/testuser/.local/share/Melodia/logs"), Vec::new())
+    let Some(home) = resolved_home() else {
+        return;
+    };
+    let block = reading_env(|| {
+        log_section(Some(&format!("cannot open {home}/.local/share/Melodia/logs")), Vec::new())
     });
 
-    assert!(!block.contains("/home/testuser"), "home leaked: {block}");
+    assert!(!block.contains(&home), "home leaked: {block}");
     assert!(block.contains("~/.local/share/Melodia/logs"));
 }
 

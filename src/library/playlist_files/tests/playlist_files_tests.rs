@@ -20,7 +20,7 @@ fn entry(path: &str, hash: Option<&str>) -> m3u::ParsedEntry {
 /// `make_test_metadata` sets `file_hash = blake3(title)`, so each track's
 /// hash is deterministic from its title.
 async fn seed() -> Result<(DbPool, i64, i64, i64), AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     let a =
         insert_test_track(&db, "/music/a.mp3", "Alpha Song", "Artist A", "Album", "Rock").await?;
@@ -106,8 +106,16 @@ async fn match_entries_does_not_dedup_repeated_tracks() -> Result<(), AppError> 
 
 #[tokio::test]
 async fn match_entries_resolves_relative_paths_against_base() -> Result<(), AppError> {
-    let (db, a, ..) = seed().await?;
+    let db = DbPool::test_pool().await?;
     let base = std::path::Path::new("/music");
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    // Seeded through the same `join` the resolver runs, rather than the shared `seed()`'s
+    // POSIX literal: `join` appends the native separator without touching the one already
+    // there, so on Windows it yields `/music\a.mp3` and a hand-spelled `/music/a.mp3` is a
+    // row the lookup can never reach.
+    let seeded = base.join("a.mp3").to_string_lossy().into_owned();
+    let a = insert_test_track(&db, &seeded, "Alpha Song", "Artist A", "Album", "Rock").await?;
+
     let entries = [entry("a.mp3", None)];
     let out = match_entries(&db, &entries, Some(base)).await?;
     assert_eq!(out.matched_by_path, 1);

@@ -153,5 +153,10 @@ export global Browse {
 // shared row-tier LRU. Rows carry only `artwork_path` and the decode happens here, per
 // *instantiated* row, so no model row pins a buffer the LRU has already evicted.
 export global RowCovers {
-    pure callback request(string /*artwork_path*/) -> image;
+    // The lookup is cache-only and hands a miss to the decode pool, so reading `generation` is
+    // what brings the row back: it is bumped once per landed batch and re-evaluates every `pure`
+    // binding over it. Unlike `Queue.covers-generation` its *value* means nothing — a row that
+    // misses at any generation paints the placeholder and repaints at the next.
+    in property <int> generation: 0;
+    pure callback request(string /*artwork_path*/, int /*generation*/) -> image;
 }

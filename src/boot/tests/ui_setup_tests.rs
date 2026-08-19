@@ -98,3 +98,27 @@ fn the_persisted_my_library_tab_is_seeded_before_any_view_is_wired() {
          that page's sections seed `section_active` from it"
     );
 }
+
+/// The retune has to be **registered as well as scheduled**, and the two are one closure so
+/// nothing warns when only half of it survives.
+///
+/// The post-show call answers the tiers' first read, at which point the window is on a monitor
+/// and its scale factor is real. Every later answer comes off `WindowChrome.display-changed`,
+/// fired by the winit `Resized` filter — without that registration a cap sized for the launch
+/// window stands for the session, and a maximize afterwards mounts more cards than the tier
+/// holds. The failure is silent: the overflow paints placeholders and everything else works.
+#[test]
+fn the_cover_retune_is_wired_to_resizes_as_well_as_to_the_first_show() {
+    assert_eq!(
+        UI_SETUP.matches("on_display_changed(").count(),
+        1,
+        "`install_views` must register the cover retune against `WindowChrome.display-changed`, \
+         or the caps stay sized for whatever the window was at launch"
+    );
+    assert_eq!(
+        UI_SETUP.matches("invoke_from_event_loop(retune)").count(),
+        1,
+        "the same closure owes the deferred first call: read inline it finds no window, and \
+         every tier silently takes its construction fallback"
+    );
+}

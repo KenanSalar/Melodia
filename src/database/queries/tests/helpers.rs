@@ -98,7 +98,7 @@ pub async fn insert_test_track(
 
 /// Create a test pool pre-seeded with a folder and 3 tracks.
 pub async fn setup_seeded_db() -> Result<DbPool, AppError> {
-    let db = DbPool::test_pool().await;
+    let db = DbPool::test_pool().await?;
 
     // Insert a folder
     queries::folder::insert_folder(&db, "/music", true).await?;

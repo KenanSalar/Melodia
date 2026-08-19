@@ -152,8 +152,8 @@ pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
 
 // --- Cap tuning -----------------------------------------------------------
 
-/// Retune the grid-tier cover cache to the real display resolution. Called
-/// once at startup after the winit window is live (`main.rs`); the cache is
+/// Retune the grid-tier cover cache to the real display resolution. Called after
+/// `app.show()` and again on every resize, off `WindowChrome.display-changed`; the cache is
 /// constructed with `DEFAULT_GRID_COVER_CAP` and resized here. The
 /// detail-tier `(cover, blur)` pair cache keeps its small fixed cap (see
 /// [`crate::ui::detail_artwork`]).

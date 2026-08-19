@@ -478,10 +478,47 @@ silently miss the other.
 ## Covers
 
 - **No row struct carries a decoded cover; every one asks for it.** `TrackListRow` has no `image`
-  field — `TrackListRowItem` resolves per *instantiated* row through `RowCovers.request(path)`,
-  wired once in `boot/ui_setup.rs`. New TrackList consumers need zero cover plumbing.
-  `CoverThumbs::prewarm` dedupes and caps at LRU capacity — pass paths in **display order** so the
-  kept prefix paints first.
+  field — `TrackListRowItem` resolves per *instantiated* row through
+  `RowCovers.request(path, generation)`, wired once in `boot/ui_setup.rs`. New TrackList consumers
+  need zero cover plumbing. `CoverThumbs::prewarm` dedupes and caps at LRU capacity — pass paths in
+  **display order** so the kept prefix paints first.
+
+- **No *uncapped* cover lookup decodes on the thread that asks.** `get_or_schedule_opt` answers
+  from the tier and hands a miss to the decode pool, so the caller — a Slint model getter, so the
+  event loop — gets the placeholder on that frame. What makes the placeholder temporary is a
+  generation the same binding reads: the tier fires one notifier per landed *batch* and
+  `ui::cover_generation::notify_on_decode` bumps the counter on the UI thread. Prewarm still covers
+  the common case; this is for the misses it structurally can't reach. A prewarm is capped at the
+  tier's own `CACHE_CAP` and walks **in display order**, so a library with more unique covers than
+  that keeps its visible prefix and nothing else — and every row scrolled to past it used to decode
+  inline, one at a time, on the event loop.
+  - **Per batch, not per cover.** A screenful of misses coalesces into one pass over the mounted
+    bindings, and a miss arriving mid-drain joins it rather than spawning a second.
+  - **A cached failure is a hit**, so a broken cover re-queues nothing and can't spin against its
+    own notifier.
+  - **The notifier is a feedback loop, and two things stop it running away.** The queue is capped
+    at the tier's own capacity, newest-wins, so a scroll can't queue more than the cache holds and
+    then evict the visible prefix with the tail of its own batch. And a path the burst already
+    handed to the pool is refused — a grid drawing more cards than its tier holds would otherwise
+    re-queue whatever the last batch evicted, forever, at frame rate. A miss the burst hasn't seen
+    clears that state, which is what tells a moved visible set apart from a thrashing one.
+  - **A reset invalidates whatever is mid-decode.** `clear` and a genuine `set_thumb_size` bump a
+    tier epoch, and a batch that captured the old one drops its buffers rather than landing behind
+    the section leave that released them, or at a size nobody asked for. **The bump belongs under
+    the *cache* lock**, that being the one a finished batch takes to insert: emptying the tier and
+    invalidating the batch have to be one step, or a batch reading the epoch between them lands in
+    the tier the reset just emptied.
+  - **A surface with no generation to come back on takes `grid_prewarm::grid_cover_blocking`
+    instead** — Artist Detail's Albums strip, whose callback carries no counter, and the Edit
+    Artwork dialog's cover slot, which is a one-shot property write with no binding to re-run.
+    Both are bounded and prewarmed, so the inline decode is a single sub-frame cost; scheduling
+    there instead leaves a placeholder nothing ever replaces. `ui::cover_generation::tests` walks
+    for both halves — the mismatch is invisible in review and only shows up on a library big
+    enough to miss.
+  - **The bounded strips and one-shot slots were never on this path and stay inline** — Search's
+    two card strips, Now Playing's up-next list, and `Playlists.request-row-cover` behind the three
+    picker dialogs. Each draws a capped set against a tier its own fetch warmed, so "never on the
+    calling thread" is a rule about the *uncapped* surfaces: grids, and the shared row tier.
 
 - **`QueueRow` goes through two globals rather than `RowCovers`**, each wanting a different tier:
   the queue sheet's *private* `CoverThumbs` (so closing it drops every buffer without yanking
@@ -495,10 +532,17 @@ silently miss the other.
   writes `selected-index` before it emits `selected`), and `BrowseCardGrid`'s **mode toggle**.
   - The argument does two jobs — reading it makes the binding depend on the counter, and its value
     is the "is this tier warm" flag. **At 0 the Rust side answers cache-only**, so rows mounted on
-    that frame paint placeholders instead of each dragging a decode onto the UI thread; the surface
-    warms off-thread and bumps, switching later rows to the loading lookup. Teardown rewinds to 0
-    beside the tier clear, so 0 keeps meaning "cold". Wire the decoding lookup unconditionally and
-    the counter is dead weight.
+    that frame don't even queue work for a tier a leave is about to clear; past 0 they take the
+    scheduling lookup. Teardown rewinds to 0 beside the tier clear, so 0 keeps meaning "cold".
+    Answer unconditionally and the flag half is dead weight.
+  - **The bump has two callers and they mean different things.** `mark_covers_warm` is the
+    prewarm's, and moves the counter off 0; **`repaint_covers` is the decode notifier's, and never
+    does** — a batch landing after a tab-leave cleared the tier would otherwise read as warm and
+    cost the next mount the cache-only frame the gate exists for.
+  - **The three My Library grids carry the property without the gate.** Albums, Artists and
+    Playlists never answer cache-only, so their counter is only ever the repaint token; 0 is a
+    starting value there, not a state. Same for `RowCovers.generation`. Don't read a
+    `covers-generation` as cold-gated without checking the Rust side.
   - **The bump is gated on the prewarm's verdict *and* a re-check on the UI thread**, because they
     fail separately: a pick made while decodes ran already rewound the counter, while a section
     leave landing mid-decode makes the prewarm hand its buffers back. **A prewarm that may release
@@ -512,22 +556,59 @@ silently miss the other.
     obliges a `mark_dirty()` on leave and the same wire-time seed, having no enter-time fetch.
   - **The Rust half is `grid_prewarm::grid_cover(thumbs, path, generation)`** — the tier and
     counter differ per page, the branch doesn't. Reach for it at a fourth surface: a copy that grew
-    a decoding `else` arm reads correctly and quietly retires the mechanism. The hero's
-    `CoverMosaic` keeps the one-argument form, its tier being warmed by a fetch.
+    a **decoding** `else` arm reads correctly and puts the UI-thread decode straight back, which is
+    the one thing neither arm does any more. The hero's `CoverMosaic` keeps the one-argument form,
+    its tier being warmed by a fetch.
 
 - **Cache cap via `grid_prewarm::cover_cap_for_window(app, fallback)`** — one band for every grid,
-  they all draw the same card. Derives its cap from the monitor's *logical* resolution against the
-  card footprint; resized from `install_views` once the winit window is live, the fallback passed
-  in so a module keeps its own default and a monitor reporting `None` lands there.
+  they all draw the same card. Derives its cap from the **window's** own logical size against
+  `GridGeometry`'s pitches, deliberately not the monitor's: the monitor caps against a screen the
+  window may occupy a corner of, and asking costs a `with_winit_window` round trip that answers
+  `None` for the whole window-less boot. The fallback is passed in so a module keeps its own
+  default and a zero extent lands there.
+  - **The pitches have to be the grid's, not a footprint estimate**: the cap has to come out at or
+    above the cards actually mounted, or the scheduling lookup leaves the overflow on placeholders
+    until a scroll. Margin comes from measuring the window rather than the grid's own box;
+    `grid_prewarm_tests` pins the two against each other.
+  - **The ceiling is bytes, not entries.** A decoded buffer costs the square of the tier size, so
+    one entry count is two different budgets — and it was wrong the expensive way round, a large
+    logical desktop being by construction a 1× one, where the buffers are a fifth the size and the
+    same bytes buy several times the entries.
+  - **Read after `app.show()` and again on every resize**, through `WindowChrome.display-changed`
+    off the winit `Resized` filter. Read once, a cap sized for the launch window is one a later
+    maximize overruns. It sets the cap exactly rather than growing it: a smaller window really
+    does draw fewer cards.
 
-- **Decode size via `grid_prewarm::cover_size_for_window(app)`, in the same `tune_cache_for_display`
-  call** — the cap and the size are two halves of one budget, and both are answers about the
-  display. `GRID_COVER_SIZE` replaced a `448` copied into five files, each justifying it in its own
+- **Decode size via `grid_prewarm::cover_size_for_window(app)`, and it is derived from the card,
+  not stepped off the scale factor.** `GridGeometry` packs toward `min-card-w`, so a card is
+  *smallest* on the panels mounting the most of them: the two constants this replaced sized the
+  wide case generously and doubled it for `HiDPI`, which made the displays paying for the most
+  buffers hold each one at roughly twice the pixels it drew. `widest_card × scale` is the whole
+  question, clamped to `STORE_MAX_DIM`, which is what caps a single-column panel's sharpness.
+  - **The bound, never the card itself.** `card-w` sweeps `min-card-w` up to
+    `min-card-w + pitch/cols` inside *every* column band, so a tier tracking it crosses a step
+    boundary twice a band — and `display-changed` re-derives on every winit `Resized` while a
+    genuine `set_thumb_size` clears the whole tier, so each crossing wipes every grid's covers
+    mid-drag. Sizing to the band's upper bound is what makes the answer flat across a drag rather
+    than merely close, and the step is what collapses the column counts a desktop passes through
+    into a handful of tiers.
+  - **The window is not the body, and `BODY_CHROME_W` is the gap.** The sidebar between them is
+    the user's to drag from `sidebar-collapsed-w` to `sidebar-max-w`, a range no window
+    measurement sees, so the estimate assumes the *widest* one: over-subtracting costs a tier one
+    step too large, under-subtracting puts every card on an upscale, and `FemtoVG` minifies
+    bilinear with no mipmaps.
+  - `GRID_COVER_FALLBACK` is what a tier is *built* at, before any geometry exists. A fallback,
+    not a tier size, but sized for the run where the deferred retune never schedules and it stays
+    the live tier.
+
+- **The cap and the size are read together**, in the same `tune_cache_for_display`
+  call — two halves of one budget, and both are answers about the
+  display. The derived size replaced a `448` copied into five files, each justifying it in its own
   doc comment off the same claim that flex-filled cards "run well past 260 px". They don't:
   `GridGeometry` packs toward `min-card-w`, so a card is **largest in a narrow panel** and lands
   near 190 px on a wide one. A tier spelling its own size is the thing to reach for this instead
-  of. Needs no winit round trip and has no failure arm, unlike the cap — the scale factor is
-  Slint's own. `cover_thumbs::row_cover_size` is the row tier's twin, wired at each of its two
+  of. Needs no winit round trip, the scale factor being Slint's own, and shares the cap's
+  zero-extent bail. `cover_thumbs::row_cover_size` is the row tier's twin, wired at each of its two
   construction sites rather than through a tune hook, neither having one.
 
 - **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered
