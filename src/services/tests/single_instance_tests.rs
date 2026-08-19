@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
 
+use interprocess::local_socket::{Stream, prelude::*};
 use tempfile::tempdir;
 
 use super::{
@@ -175,6 +176,50 @@ fn a_second_launch_hands_its_paths_to_the_first_and_stands_down() {
             delivered,
             Some(vec![opened.to_string_lossy().into_owned()]),
             "the primary never saw the forwarded launch — `None` is the timeout, i.e. a deadlock"
+        );
+    });
+}
+
+/// What `spawn_reader` exists for. A peer that connects and then says nothing is a read that
+/// only one transport will ever cut short — a Windows named pipe takes no deadline at all — so
+/// read on the accept thread it costs every launch behind it, not just itself.
+///
+/// The silent peer connects first so it is mid-read when the real launch arrives, and the
+/// assertion window is inside `IO_TIMEOUT`: this fails on a Linux runner too, where the read
+/// does eventually give up, because "eventually" is the whole complaint.
+#[test]
+fn a_silent_peer_does_not_cost_the_launch_behind_it() {
+    let Ok(data_dir) = tempdir() else {
+        unreachable!("no writable temp directory")
+    };
+    let (tx, rx) = mpsc::channel();
+
+    reading_env(|| {
+        let Claim::Primary(listener) = claim(data_dir.path(), &[]) else {
+            unreachable!("an unused data directory must be claimable")
+        };
+        serve(listener, move |paths| {
+            let _ = tx.send(paths);
+        });
+
+        let Ok(name) = socket_name(data_dir.path()) else {
+            unreachable!("the name just claimed must still spell")
+        };
+        let Ok(_silent) = Stream::connect(name) else {
+            unreachable!("the primary is listening")
+        };
+
+        let opened = PathBuf::from("/music/Album/02 - Track.flac");
+        assert!(
+            matches!(claim(data_dir.path(), std::slice::from_ref(&opened)), Claim::Secondary),
+            "a claim against a held name must forward rather than bind"
+        );
+
+        let delivered = rx.recv_timeout(Duration::from_secs(1)).ok();
+        assert_eq!(
+            delivered,
+            Some(vec![opened.to_string_lossy().into_owned()]),
+            "a peer that said nothing parked the accept loop and the launch behind it was lost"
         );
     });
 }

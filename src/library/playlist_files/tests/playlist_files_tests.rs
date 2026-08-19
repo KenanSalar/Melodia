@@ -110,8 +110,9 @@ async fn match_entries_resolves_relative_paths_against_base() -> Result<(), AppE
     let base = std::path::Path::new("/music");
     queries::folder::insert_folder(&db, "/music", true).await?;
     // Seeded through the same `join` the resolver runs, rather than the shared `seed()`'s
-    // POSIX literal: on Windows that join yields `\music\a.mp3`, so a hand-spelled
-    // `/music/a.mp3` is a row the lookup can never reach.
+    // POSIX literal: `join` appends the native separator without touching the one already
+    // there, so on Windows it yields `/music\a.mp3` and a hand-spelled `/music/a.mp3` is a
+    // row the lookup can never reach.
     let seeded = base.join("a.mp3").to_string_lossy().into_owned();
     let a = insert_test_track(&db, &seeded, "Alpha Song", "Artist A", "Album", "Rock").await?;
 

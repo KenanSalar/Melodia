@@ -491,10 +491,14 @@ pub(crate) fn reading_env<F: FnOnce() -> R, R>(body: F) -> R {
 /// faked `$HOME`: `dirs::home_dir()` asks Win32 for the profile folder and never reads the
 /// environment, so the faked form is a fixture only Linux can honour and every such test was
 /// red on Windows. `None` leaves the caller nothing to assert against.
+///
+/// Deliberately the production resolver rather than a second copy of it. A test that resolved
+/// home its own way would agree with `redact_home` only by coincidence, and the coincidence
+/// breaks on whichever platform the two happen to disagree about — which is the entire class
+/// of bug this helper exists because of. The Unix `$HOME` arm is pinned separately, by
+/// `services::tests::mod_tests`, which is where a faked variable still belongs.
 pub(crate) fn resolved_home() -> Option<String> {
-    let home = dirs::home_dir()?;
-    let home = home.to_str()?;
-    (!home.is_empty()).then(|| home.to_owned())
+    crate::services::home_dir_string()
 }
 
 #[cfg(test)]

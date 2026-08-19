@@ -6,10 +6,16 @@
 * text=auto eol=lf
 
 # Signed payloads and their signatures — byte-exact or the verification tests
-# are testing nothing.
-*.bin    binary
+# are testing nothing. The path rule is for `test-manifest.json`, signed like the
+# rest but carrying an extension that is text everywhere else in the tree:
+# regenerate it on a host that writes CRLF, sign those bytes, and `text=auto`
+# would normalise the payload out from under its own signature on the way into
+# the index. Scoped to the payloads — the `regen-*.sh` beside them are scripts
+# and want the normalising.
+src/services/updater/tests/fixtures/*.json -text
+*.bin     binary
 *.minisig binary
-*.b64    binary
+*.b64     binary
 
 # Media, fonts and images. Git's own heuristic already catches most of these;
 # spelling them out is what keeps a new fixture from depending on it.
@@ -24,3 +30,4 @@
 *.jpg  binary
 *.webp binary
 *.ico  binary
+*.dat  binary

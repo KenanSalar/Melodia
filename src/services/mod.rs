@@ -176,7 +176,10 @@ pub fn redact_home(text: &str) -> Cow<'_, str> {
 }
 
 /// The home directory as a string, or `None` when there isn't one to redact.
-fn home_dir_string() -> Option<String> {
+///
+/// Reachable from `test_support::resolved_home` so a redaction fixture is built from the same
+/// answer the redaction reads, rather than from a second guess at it.
+pub(crate) fn home_dir_string() -> Option<String> {
     let home = dirs::home_dir()?;
     let home = home.to_str()?;
     (!home.is_empty()).then(|| home.to_owned())

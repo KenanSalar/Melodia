@@ -125,7 +125,11 @@ The other way paths arrive from outside, and the one that can arrive before ther
   **Recognising the name is only half of it — the forward has to survive the transport too.** A
   named pipe has no settable I/O timeout, so `forward`'s deadline came back `Unsupported` and
   propagated, landing on the same `Unenforced` arm and the same second window; `allow_missing_timeout`
-  carries that argument and is called at all three deadline sites.
+  carries that argument and is called at all three deadline sites. **What the deadline was *for*
+  doesn't go away with it, and neither site may hold a blocking read on a thread something else
+  needs**: `spawn_reader` takes each connection off the accept loop under a cap, `wait_for_close`
+  bounds the forwarder's ack the same way. Reach for a thread there, never a timeout — one
+  transport won't take one.
 
 - **The accept loop is a detached `std::thread`, not `spawn_blocking`**, as `discord/ipc.rs` runs
   its transport: a parked blocking-pool tenant is what the 32-slot cap exists to prevent. Its

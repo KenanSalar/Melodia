@@ -28,6 +28,13 @@ pub async fn track_exists_by_path(
 /// file, and the watcher drops a create, rename or modify on the floor. `/` stays in the
 /// comparison unconditionally rather than being swapped out, Win32 accepting it as a
 /// separator too and a path that arrived through a playlist or a URI carrying it.
+///
+/// Only the separator at the *boundary* is answered, that being the only character the
+/// prefix comparison reaches. Three shapes still miss, none of them new: a path spelled
+/// with `/` throughout (`C:/Music/a.mp3` against a folder picked as `C:\Music` —
+/// `std::path::absolute` doesn't normalise those), a folder that is a drive or filesystem
+/// root and so already ends in a separator, and a case difference on a filesystem that
+/// doesn't care about one, `SQLite` comparing bytes.
 pub async fn find_folder_for_path(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,

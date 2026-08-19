@@ -11,10 +11,15 @@
 //!
 //! Blocking `std` sockets on a dedicated thread, as `services::discord::ipc`
 //! runs its transport: the claim predates the runtime, and a parked
-//! `spawn_blocking` task would hold one of the 32 slots `main()` caps at.
+//! `spawn_blocking` task would hold one of the 32 slots `main()` caps at. The
+//! accept thread only accepts — reading a connection is [`spawn_reader`]'s, for
+//! the same reason.
 
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Name, Stream, prelude::*};
@@ -32,7 +37,18 @@ const MAX_PAYLOAD_LEN: u64 = 64 * 1024;
 const LENGTH_PREFIX_LEN: usize = size_of::<u32>();
 
 /// A peer that connects and then says nothing must not park the accept thread.
+///
+/// Only half the guarantee, and the half one transport doesn't have — a Windows named pipe
+/// takes no deadline at all ([`allow_missing_timeout`]). The portable half is that the read
+/// runs off the accept loop entirely; see [`spawn_reader`].
 const IO_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Reads in flight, past which a connection is answered without being read.
+///
+/// One stalled peer costs a parked thread rather than every launch after it, and a flood of
+/// them costs a bounded number — the socket is reachable by any local process, and this is a
+/// memory-disciplined app to hand an unbounded thread count.
+const MAX_CONCURRENT_READS: usize = 8;
 
 /// A listener that has stopped working errors as fast as the loop can ask, so
 /// give up rather than spin.
@@ -138,7 +154,8 @@ fn name_is_taken_on(e: &io::Error, windows: bool) -> bool {
 /// Accept forwarded launches for the rest of the process's life. `on_launch`
 /// gets each one's paths — empty when someone simply started Melodia again,
 /// which still wants the window raised.
-pub fn serve(listener: Listener, on_launch: impl Fn(Vec<String>) + Send + 'static) {
+/// `Sync` because each connection is read on its own thread — see [`spawn_reader`].
+pub fn serve(listener: Listener, on_launch: impl Fn(Vec<String>) + Send + Sync + 'static) {
     let spawned = std::thread::Builder::new()
         .name("melodia-open".to_owned())
         .spawn(move || accept_loop(&listener, on_launch));
@@ -148,8 +165,10 @@ pub fn serve(listener: Listener, on_launch: impl Fn(Vec<String>) + Send + 'stati
     }
 }
 
-fn accept_loop(listener: &Listener, on_launch: impl Fn(Vec<String>)) {
+fn accept_loop(listener: &Listener, on_launch: impl Fn(Vec<String>) + Send + Sync + 'static) {
     let mut consecutive_failures = 0_u32;
+    let on_launch = Arc::new(on_launch);
+    let reads_in_flight = Arc::new(AtomicUsize::new(0));
 
     for incoming in listener.incoming() {
         let stream = match incoming {
@@ -170,17 +189,50 @@ fn accept_loop(listener: &Listener, on_launch: impl Fn(Vec<String>)) {
             }
         };
 
-        match read_payload(stream) {
-            Ok(paths) => on_launch(paths),
-            Err(e) => {
-                // The connection is itself proof of a launch, so raise anyway:
-                // a selection past `MAX_PAYLOAD_LEN` or a peer that stalled past
-                // `IO_TIMEOUT` should still land the user in a window rather
-                // than in nothing at all.
-                log::warn!("single_instance: forwarded launch unreadable: {e}");
-                on_launch(Vec::new());
+        spawn_reader(stream, &on_launch, &reads_in_flight);
+    }
+}
+
+/// Read one forwarded launch, off the accept loop.
+///
+/// The read has no portable deadline — a Windows named pipe takes none — so the peer that
+/// connects and then says nothing is held off a thread of its own rather than a timeout.
+/// Parking one costs a thread; parking [`MAX_CONCURRENT_READS`] of them costs the paths, never
+/// the accept loop.
+///
+/// **Every arm still calls `on_launch`.** The connection is itself proof of a launch, so a
+/// selection past [`MAX_PAYLOAD_LEN`], a peer that stalled past [`IO_TIMEOUT`], and a read we
+/// declined to start should all land the user in a window rather than in nothing at all.
+fn spawn_reader<F>(stream: Stream, on_launch: &Arc<F>, reads_in_flight: &Arc<AtomicUsize>)
+where
+    F: Fn(Vec<String>) + Send + Sync + 'static,
+{
+    if reads_in_flight.fetch_add(1, Ordering::Relaxed) >= MAX_CONCURRENT_READS {
+        reads_in_flight.fetch_sub(1, Ordering::Relaxed);
+        log::warn!("single_instance: {MAX_CONCURRENT_READS} launches unread; raising bare");
+        on_launch(Vec::new());
+        return;
+    }
+
+    let reader = {
+        let on_launch = Arc::clone(on_launch);
+        let reads_in_flight = Arc::clone(reads_in_flight);
+        std::thread::Builder::new().name("melodia-open-read".to_owned()).spawn(move || {
+            match read_payload(stream) {
+                Ok(paths) => on_launch(paths),
+                Err(e) => {
+                    log::warn!("single_instance: forwarded launch unreadable: {e}");
+                    on_launch(Vec::new());
+                }
             }
-        }
+            reads_in_flight.fetch_sub(1, Ordering::Relaxed);
+        })
+    };
+
+    if let Err(e) = reader {
+        reads_in_flight.fetch_sub(1, Ordering::Relaxed);
+        log::warn!("single_instance: no reader thread: {e}");
+        on_launch(Vec::new());
     }
 }
 
@@ -203,6 +255,9 @@ fn socket_name(data_dir: &Path) -> io::Result<Name<'static>> {
 /// the launch that should have handed its files over opens a second window and a second
 /// writer onto one database, on the platform whose installer registers the file
 /// associations. Every other failure still propagates.
+///
+/// What the deadline was *for* doesn't go away with it — [`spawn_reader`] and
+/// [`wait_for_close`] hold that end, and hold it on every transport.
 fn allow_missing_timeout(applied: io::Result<()>) -> io::Result<()> {
     match applied {
         Err(e) if e.kind() == io::ErrorKind::Unsupported => Ok(()),
@@ -216,13 +271,34 @@ fn forward(name: Name<'_>, files: &[PathBuf]) -> io::Result<()> {
     allow_missing_timeout(stream.set_recv_timeout(Some(IO_TIMEOUT)))?;
     stream.write_all(&encode_frame(files))?;
 
-    // Block until the primary closes, which it does the moment it has the whole
-    // frame. Exiting straight after the write would leave the payload in a pipe
-    // buffer with this process's handle the last one open — harmless on a unix
-    // socket, and the platform where it isn't is the one no Linux runner covers.
-    let mut ack = [0_u8; 1];
-    let _ = stream.read(&mut ack);
+    wait_for_close(stream);
     Ok(())
+}
+
+/// Block until the primary closes, which it does the moment it has the whole frame.
+///
+/// Returning straight after the write would leave the payload in a pipe buffer with this
+/// process's handle the last one open — harmless on a unix socket, and the platform where it
+/// isn't is the one no Linux runner covers.
+///
+/// Bounded off a thread rather than by [`IO_TIMEOUT`], which the same named pipe won't take:
+/// unbounded, a primary that is merely wedged holds the launch that should have handed it a
+/// file *before* the fallback window can open, which reads as a launch that did nothing at
+/// all. Giving up early is safe — the frame is already written, and the wait only buys the
+/// primary the time to drain it.
+fn wait_for_close(mut stream: Stream) {
+    let (closed_tx, closed_rx) = mpsc::channel();
+    let waiter = std::thread::Builder::new().name("melodia-forward".to_owned()).spawn(move || {
+        let mut ack = [0_u8; 1];
+        let _ = stream.read(&mut ack);
+        let _ = closed_tx.send(());
+    });
+
+    // A thread we couldn't start is the one case worth *not* waiting for: nothing will ever
+    // send, and the write has already landed.
+    if waiter.is_ok() {
+        let _ = closed_rx.recv_timeout(IO_TIMEOUT);
+    }
 }
 
 fn read_payload(mut stream: Stream) -> io::Result<Vec<String>> {

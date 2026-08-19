@@ -39,6 +39,20 @@ fn a_horizontal_wheel_is_not_composite() {
     assert_eq!(route_wheel(true, false, TouchPhase::Moved, -60.0, 20.0), WheelRoute::Native);
 }
 
+/// The filter's own source, comments stripped — what the arm walks below read.
+fn filter_source() -> String {
+    strip_line_comments(include_str!("../winit_filter.rs"))
+}
+
+/// The body of one `WindowEvent` arm, or empty when the walk found no such arm — which is a
+/// broken walk rather than a broken arm, and every caller asserts that apart.
+fn arm_body<'a>(code: &'a str, arm: &str) -> &'a str {
+    code.find(arm)
+        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
+        .and_then(|open| block_body(code, open))
+        .unwrap_or_default()
+}
+
 /// Every cover tier sizes its capacity and its decode size against the window, and both are read
 /// once after `app.show()`. This arm is the only thing that re-derives them, so without the
 /// signal a window maximized after launch mounts more cards than its tier can hold and the
@@ -47,12 +61,8 @@ fn a_horizontal_wheel_is_not_composite() {
 #[test]
 fn the_resize_arm_retunes_the_cover_tiers() {
     const ARM: &str = "WindowEvent::Resized(_) =>";
-    let code = strip_line_comments(include_str!("../winit_filter.rs"));
-    let arm = code
-        .find(ARM)
-        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| block_body(&code, open))
-        .unwrap_or_default();
+    let code = filter_source();
+    let arm = arm_body(&code, ARM);
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(
@@ -70,12 +80,8 @@ fn the_resize_arm_retunes_the_cover_tiers() {
 #[test]
 fn the_redraw_arm_ticks_the_loop_win32_parked() {
     const ARM: &str = "WindowEvent::RedrawRequested =>";
-    let code = strip_line_comments(include_str!("../winit_filter.rs"));
-    let arm = code
-        .find(ARM)
-        .and_then(|at| code[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| block_body(&code, open))
-        .unwrap_or_default();
+    let code = filter_source();
+    let arm = arm_body(&code, ARM);
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(
@@ -84,6 +90,24 @@ fn the_redraw_arm_ticks_the_loop_win32_parked() {
          parked winit out of gets run:\n{arm}"
     );
     assert!(code.contains("fn pump_parked_loop"), "the arm calls a pump that no longer exists");
+}
+
+/// The redraw arm's sibling, and not redundant with it: a **move** drag resizes nothing, so the
+/// client area is never invalidated and no `WM_PAINT` ever starts the chain the other arm rides.
+/// `Moved` is the only thing the modal loop delivers for the whole of one, which makes this the
+/// only tick a window dragged across a monitor edge gets. Pinned separately because deleting it
+/// costs nothing the redraw walk can see.
+#[test]
+fn the_move_arm_ticks_the_loop_win32_parked() {
+    const ARM: &str = "WindowEvent::Moved(_) =>";
+    let code = filter_source();
+    let arm = arm_body(&code, ARM);
+
+    assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
+    assert!(
+        arm.contains("pump_parked_loop()"),
+        "a move drag invalidates nothing, so this arm is the only tick it gets:\n{arm}"
+    );
 }
 
 /// Nothing paints the two properties the arm writes, so without the request no frame is
