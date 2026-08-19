@@ -1,11 +1,12 @@
 use std::fs::File;
 use std::io::BufReader;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use rodio::mixer::Mixer;
-use rodio::{Decoder, Player};
+use rodio::{Decoder, Player, Source};
 
 use crate::config::Paths;
 use crate::error::AppError;
@@ -779,12 +780,24 @@ impl RodioPlayer {
     }
 }
 
+/// How long the file plays for, as the container reports it, or `None` when it carries
+/// no frame count or no decoder is registered for its codec.
+///
+/// The scan path's answer of last resort. Lofty reads duration off the same parse that
+/// reads the tags, so a file it can't identify (a Matroska or CAF one, say) reaches the
+/// database with no length at all unless someone asks the decoder instead
+/// (`media::metadata`). It costs a probe plus one decoded packet, which is why it stays
+/// on that failure path rather than running for every file scanned.
+pub fn probe_duration(path: &Path) -> Option<Duration> {
+    decode_file(path.to_str()?).ok()?.total_duration()
+}
+
 fn decode_file(path: &str) -> Result<Decoder<BufReader<File>>, AppError> {
     let file =
         File::open(path).map_err(|e| AppError::Player(format!("Cannot open {path}: {e}")))?;
     let file_len = file.metadata().map(|m| m.len()).ok();
 
-    let ext = std::path::Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
+    let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
 
     // Symphonia pulls frames in chunks well above the std 8 KB default for most
     // formats, so a small buffer costs a refill per frame. 64 KB covers typical

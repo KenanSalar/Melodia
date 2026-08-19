@@ -14,9 +14,10 @@ use crate::database::queries::tests::helpers::insert_test_track;
 use crate::error::AppError;
 use crate::media::artwork;
 use crate::media::self_writes::SelfWrites;
+use crate::test_support::ASSETS_DIR;
 
 fn assets_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets")
+    PathBuf::from(ASSETS_DIR)
 }
 
 fn stage(tmp: &TempDir, name: &str) -> Result<PathBuf, AppError> {

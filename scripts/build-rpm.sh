@@ -104,7 +104,7 @@ Categories=AudioVideo;Audio;Player;Music;
 Keywords=music;audio;player;library;sound;songs;tracks;mp3;flac;ogg;
 Terminal=false
 StartupWMClass=Melodia
-MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/mp4;audio/x-m4a;audio/ogg;audio/x-vorbis+ogg;audio/wav;audio/x-wav;audio/aac;audio/x-aac;audio/aiff;audio/x-aiff;
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/mp4;audio/x-m4a;audio/x-m4b;audio/ogg;audio/x-vorbis+ogg;audio/x-flac+ogg;audio/wav;audio/x-wav;audio/aac;audio/x-aac;audio/aiff;audio/x-aiff;audio/x-aifc;audio/x-matroska;
 EOF
 
 # AppStream MetaInfo — KDE Discover / GNOME Software read this for the
@@ -149,10 +149,11 @@ Melodia is a modern, local-first desktop music player with a Material
 machine, with no accounts, streaming or cloud.
 
 It pairs a Slint user interface with a pure-Rust backend: gapless
-playback via Rodio and Symphonia (MP3, FLAC, M4A/AAC, OGG, WAV, ALAC and
-AIFF), a fast local SQLite library with full-text search, browsing by
-album, artist, genre and playlist, OS media controls (MPRIS), and
-pluggable themes including system light/dark and Material You.
+playback via Rodio and Symphonia (MP3, FLAC, M4A/M4B with AAC and ALAC,
+Ogg Vorbis, WAV, AIFF/AIFF-C, Matroska and CAF), a fast local SQLite
+library with full-text search, browsing by album, artist, genre and
+playlist, OS media controls (MPRIS), and pluggable themes including
+system light/dark and Material You.
 
 %prep
 %setup -q

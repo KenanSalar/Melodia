@@ -240,3 +240,20 @@ fn rescan_flag_round_trips_through_notify_event() {
     let normal = Event::new(EventKind::Create(CreateKind::File));
     assert!(!normal.need_rescan());
 }
+
+/// Every extension the library walk collects must also reach the watcher, or a format
+/// scans on startup and then goes stale for the rest of the session.
+#[test]
+fn audio_file_covers_every_scanned_extension() {
+    for ext in crate::media::AUDIO_EXTENSIONS {
+        let path = PathBuf::from("music").join(format!("song.{ext}"));
+        assert!(super::is_audio_file(&path), "the watcher ignores .{ext}");
+    }
+}
+
+/// ALAC ships inside `.m4a`; nothing writes a bare `.alac`. Listing it cost the walk a
+/// lookup per file and could only ever have produced a row lofty refuses to read.
+#[test]
+fn alac_is_not_an_audio_extension() {
+    assert!(!super::is_audio_file(&PathBuf::from("music").join("song.alac")));
+}

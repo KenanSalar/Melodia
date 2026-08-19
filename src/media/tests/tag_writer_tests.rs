@@ -17,12 +17,13 @@ use tempfile::TempDir;
 use super::*;
 use crate::error::AppError;
 use crate::media::artwork;
-use crate::media::metadata::extract_metadata;
+use crate::media::metadata::{extract_metadata, read_tags};
+use crate::test_support::ASSETS_DIR;
 
 // ---------------------------------------------------------------- helpers
 
 fn assets_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets")
+    PathBuf::from(ASSETS_DIR)
 }
 
 /// Copy a checked-in fixture into `tmp` and hand back the working copy.
@@ -37,10 +38,10 @@ fn missing(what: &str) -> AppError {
     AppError::Validation(format!("missing {what}"))
 }
 
-/// Re-read a file's **primary** tag — the same tag the writer targets.
+/// Re-read a file's **primary** tag through the reader the writer now shares, so a fixture
+/// whose extension lofty's own map misses re-reads here too.
 fn read_primary(path: &Path) -> Result<Tag, AppError> {
-    let tagged = lofty::probe::read_from_path(path)
-        .map_err(|e| AppError::metadata(format!("read {}", path.display()), e))?;
+    let tagged = read_tags(path, false)?;
     let tag = tagged.primary_tag().ok_or_else(|| missing("primary tag"))?.clone();
     Ok(tag)
 }
@@ -642,8 +643,7 @@ fn an_id3v1_only_mp3_gains_a_fresh_id3v2_tag_and_loses_nothing() -> Result<(), A
 
     // Precondition: the fixture really has ID3v1 and no ID3v2, else this proves
     // nothing.
-    let tagged =
-        lofty::probe::read_from_path(&audio).map_err(|e| AppError::metadata("read fixture", e))?;
+    let tagged = read_tags(&audio, false)?;
     assert!(tagged.tag(TagType::Id3v2).is_none(), "fixture must not already carry an ID3v2 tag");
     assert!(tagged.tag(TagType::Id3v1).is_some(), "fixture must carry an ID3v1 tag");
 
@@ -718,25 +718,50 @@ fn ogg_round_trips_a_full_edit() -> Result<(), AppError> {
     Ok(())
 }
 
+/// `.oga` is the one extension we scan whose format lofty parses while its own map has no entry
+/// for it, so every open of one resolves through the reader's header sniff. The scan already
+/// read these; until the writer shared that opener, saving an edit to one failed as an unknown
+/// format and so did the Lyrics tab.
 #[test]
-fn aiff_round_trips_a_full_edit_through_id3v2() -> Result<(), AppError> {
+fn an_oga_round_trips_a_full_edit_despite_its_extension() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
-    let audio = stage(&tmp, "silence.aiff")?;
+    let audio = tmp.path().join("quiet.oga");
+    std::fs::copy(assets_dir().join("silence.ogg"), &audio)?;
 
     let unsupported = apply_to_file(&audio, &full_edit(), None)?;
-    assert!(
-        unsupported.is_empty(),
-        "AIFF's primary tag is ID3v2, which maps every field: {:?}",
-        unsupported.0
-    );
+    assert!(unsupported.is_empty(), "VorbisComments maps every field: {:?}", unsupported.0);
 
     let tag = read_primary(&audio)?;
-    assert_eq!(
-        tag.tag_type(),
-        TagType::Id3v2,
-        "not the sparse `AiffText` tag — the writer targets the primary type"
-    );
+    assert_eq!(tag.tag_type(), TagType::VorbisComments);
     assert_full_edit_landed(&tag)?;
-    assert_eq!(text(&tag, ItemKey::IntegerBpm).as_deref(), Some("128"));
+    assert_eq!(read_lyrics(&audio)?.as_deref(), Some("la la la"));
+    Ok(())
+}
+
+/// `.aifc` rides along because it is a different FORM type reached through the same reader, and
+/// a save that lost that distinction leaves a file the scan's strict re-read then rejects — the
+/// shape the `.oga` bug had from the outside.
+#[test]
+fn aiff_and_aifc_round_trip_a_full_edit_through_id3v2() -> Result<(), AppError> {
+    for fixture in ["silence.aiff", "silence.aifc"] {
+        let tmp = TempDir::new()?;
+        let audio = stage(&tmp, fixture)?;
+
+        let unsupported = apply_to_file(&audio, &full_edit(), None)?;
+        assert!(
+            unsupported.is_empty(),
+            "{fixture}: AIFF's primary tag is ID3v2, which maps every field: {:?}",
+            unsupported.0
+        );
+
+        let tag = read_primary(&audio)?;
+        assert_eq!(
+            tag.tag_type(),
+            TagType::Id3v2,
+            "{fixture}: not the sparse `AiffText` tag — the writer targets the primary type"
+        );
+        assert_full_edit_landed(&tag)?;
+        assert_eq!(text(&tag, ItemKey::IntegerBpm).as_deref(), Some("128"), "{fixture}");
+    }
     Ok(())
 }

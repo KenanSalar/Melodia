@@ -31,6 +31,10 @@ pub(crate) const FONTS_DIR: &str =
 /// The repo root, for the pins that reach packaging — it lives beside `src/`, not under it.
 pub(crate) const REPO_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
+/// The checked-in fixtures, for the tests that need a real file rather than a synthesized one.
+/// Anchored on the manifest dir for the reason [`UI_SRC_DIR`] gives.
+pub(crate) const ASSETS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/assets");
+
 /// The Rust UI tree, for the pins asking the same question of every slice's wiring. Anchored
 /// on the manifest dir like its siblings: a bare `"src/ui"` resolves against the harness's
 /// working directory, which is the package root only because that is what `cargo test` sets.

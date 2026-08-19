@@ -9,7 +9,23 @@ pub mod self_writes;
 pub mod tag_writer;
 pub mod watcher;
 
-pub const AUDIO_EXTENSIONS: &[&str] = &["mp3", "flac", "m4a", "aac", "ogg", "wav", "alac", "aiff"];
+// A walking pin rather than a module's own tests: what it asks is where in `src/` a lofty parse
+// may start, which no one file in here is positioned to answer.
+#[cfg(test)]
+#[path = "tests/lofty_open_tests.rs"]
+mod lofty_open_tests;
+
+/// The extensions the library scans, and the sole gate on what Melodia will ingest:
+/// every decoder we compile is reachable only through an entry here.
+///
+/// Each is a container an encoder actually emits. That is why there is no `alac`: Apple
+/// Lossless lives inside `.m4a`, so the entry would match nothing on disk while still
+/// costing the walk a lookup for anything named that way. Adding one owes two
+/// `wix/main.wxs` rows (`services::tests::the_msi_offers_every_audio_extension`) and,
+/// where freedesktop defines a type for it, a MIME entry in the four `.desktop` sources.
+pub const AUDIO_EXTENSIONS: &[&str] = &[
+    "mp3", "flac", "m4a", "m4b", "aac", "ogg", "oga", "wav", "aiff", "aif", "aifc", "mka", "caf",
+];
 
 /// True when `ext` — a file extension without the dot, in any case — is one we
 /// scan. The single spelling of that question; every call site (library walk,

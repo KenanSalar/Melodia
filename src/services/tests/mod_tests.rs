@@ -449,8 +449,17 @@ fn the_msi_names_every_licence_file() {
     );
 }
 
+/// The two keys an extension has to appear under, and the reason the pin asks for both rather
+/// than for the name anywhere in the file: they feed different lists. `SupportedTypes` is the
+/// "Open with" menu, `FileAssociations` is what the Default apps page reads, and an extension
+/// written to one of them is offered in exactly half the places a user goes looking.
+const MSI_EXTENSION_KEYS: [&str; 2] = [
+    r"Software\Classes\Applications\Melodia.exe\SupportedTypes",
+    r"Software\Melodia\Capabilities\FileAssociations",
+];
+
 /// Windows offers a file type only where `main.wxs` writes the rows for it, and there is no glob
-/// there any more than for the licences — so a ninth entry in [`crate::media::AUDIO_EXTENSIONS`]
+/// there any more than for the licences — so a new entry in [`crate::media::AUDIO_EXTENSIONS`]
 /// is one the app imports happily and Explorer never offers.
 ///
 /// A walk rather than a list, and comment-stripped first, both for
@@ -462,15 +471,22 @@ fn the_msi_offers_every_audio_extension() {
     assert!(!raw.is_empty(), "wix/main.wxs won't read — did the MSI source move?");
     let wxs = strip_xml_comments(&raw);
 
-    let unoffered: Vec<_> = crate::media::AUDIO_EXTENSIONS
-        .iter()
-        .filter(|ext| !wxs.contains(&format!("Name=\".{ext}\"")))
-        .collect();
+    let mut unoffered = Vec::new();
+    for ext in crate::media::AUDIO_EXTENSIONS {
+        for key in MSI_EXTENSION_KEYS {
+            if !wxs.contains(&format!("Key=\"{key}\" Name=\".{ext}\"")) {
+                unoffered.push(format!(".{ext} under {key}"));
+            }
+        }
+    }
     assert!(
         unoffered.is_empty(),
-        "{unoffered:?} are scanned into the library but named nowhere in wix/main.wxs, so \
-         Windows never lists Melodia for them in Open with or Default apps. Each needs a row \
-         under both `Applications\\Melodia.exe\\SupportedTypes` and `Capabilities\\FileAssociations`."
+        "{} are scanned into the library and written nowhere in wix/main.wxs, so Windows \
+         leaves Melodia out of Open with, out of Default apps, or out of both. Each extension \
+         owes a `<RegistryValue>` under each of the two keys. The needle is one literal, \
+         `Key=\"…\" Name=\".ext\"`, so every row failing at once means the attributes were \
+         reordered, not deleted.",
+        unoffered.join(", ")
     );
 }
 
