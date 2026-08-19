@@ -7,7 +7,7 @@ use walkdir::WalkDir;
 
 use super::is_audio_extension;
 use crate::database::queries::scan::ExistingTrackSummary;
-use crate::media::metadata::{ExtractedMetadata, extract_metadata};
+use crate::media::metadata::{ExtractedMetadata, extract_or_filename_row};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ScanProgress {
@@ -70,13 +70,15 @@ pub fn scan_files_parallel(
             // incremental filter (`track_is_current`) as new or changed, so
             // a full extract — embedded artwork included — is always
             // warranted. Unchanged files never get here.
-            match extract_metadata(path, artwork_dir, cover_cache, false) {
+            match extract_or_filename_row(path, artwork_dir, cover_cache, false) {
                 Ok(metadata) => Some(ScannedFile {
                     path: path.clone(),
                     metadata,
                 }),
+                // Only an unreadable file gets this far now; unparseable tags come back
+                // as a filename-derived row rather than a `None`.
                 Err(e) => {
-                    log::warn!("Failed to extract metadata from {}: {}", path.display(), e);
+                    log::warn!("Skipping {}: {}", path.display(), crate::services::describe(&e));
                     None
                 }
             }

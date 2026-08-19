@@ -203,3 +203,117 @@ fn extract_metadata_file_size_recorded() -> Result<(), AppError> {
     assert_eq!(meta.file_size, actual_size);
     Ok(())
 }
+
+// ── the containers the extension list gained ──
+
+fn assets_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets")
+}
+
+/// Copy a checked-in fixture into `tmp` under `name`, so a rename is free and the
+/// artwork lookup can't see `tests/assets/cover.jpg` sitting beside the original.
+fn stage_as(tmp: &TempDir, fixture: &str, name: &str) -> Result<std::path::PathBuf, AppError> {
+    let dst = tmp.path().join(name);
+    std::fs::copy(assets_dir().join(fixture), &dst)?;
+    Ok(dst)
+}
+
+/// `.oga` is the reason `read_tags` consults the header at all: lofty's extension map
+/// stops at `.ogg`, so this file is anonymous by name and fully readable by content.
+#[test]
+fn extract_metadata_reads_an_oga_by_its_header() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let oga = stage_as(&tmp, "silence.ogg", "quiet.oga")?;
+
+    let meta = extract_metadata(&oga, &artwork_dir, &test_cover_cache(), false)?;
+
+    assert_eq!(meta.codec.as_deref(), Some("Vorbis"));
+    assert_eq!(meta.sample_rate, Some(44_100));
+    assert!(meta.duration_ms > 0, "an identified Ogg should carry a duration");
+    Ok(())
+}
+
+/// `.aif` and `.m4b` are the containers lofty already reads under their longer names.
+/// Only the extension list stood between them and the library.
+#[test]
+fn extract_metadata_reads_the_alias_extensions() -> Result<(), AppError> {
+    for (fixture, alias, codec) in [
+        ("silence.aiff", "quiet.aif", "Aiff"),
+        ("silence.m4a", "quiet.m4b", "Mp4"),
+    ] {
+        let tmp = TempDir::new()?;
+        let artwork_dir = tmp.path().join("artwork");
+        std::fs::create_dir(&artwork_dir)?;
+        let path = stage_as(&tmp, fixture, alias)?;
+
+        let meta = extract_metadata(&path, &artwork_dir, &test_cover_cache(), false)?;
+
+        assert_eq!(meta.codec.as_deref(), Some(codec), "{alias} read as the wrong container");
+        assert!(meta.duration_ms > 0, "{alias} carries no duration");
+    }
+    Ok(())
+}
+
+/// AIFF-C is a distinct RIFF form from AIFF, and symphonia parses only a fixed set of
+/// its compression types, so this needs a real `AIFC` fixture rather than a renamed one.
+#[test]
+fn extract_metadata_reads_an_aifc() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let aifc = stage_as(&tmp, "silence.aifc", "quiet.aifc")?;
+
+    let meta = extract_metadata(&aifc, &artwork_dir, &test_cover_cache(), false)?;
+
+    assert_eq!(meta.codec.as_deref(), Some("Aiff"));
+    assert_eq!(meta.sample_rate, Some(44_100));
+    assert!(meta.duration_ms > 0);
+    Ok(())
+}
+
+/// Matroska and CAF decode but have no lofty reader, so they exist in the library only
+/// through the fallback. The duration is the decoder's answer, not lofty's.
+#[test]
+fn containers_with_no_tag_reader_become_filename_rows() -> Result<(), AppError> {
+    for (fixture, name) in [("silence.mka", "quiet.mka"), ("silence.caf", "quiet.caf")] {
+        let tmp = TempDir::new()?;
+        let artwork_dir = tmp.path().join("artwork");
+        std::fs::create_dir(&artwork_dir)?;
+        let path = stage_as(&tmp, fixture, name)?;
+
+        assert!(
+            extract_metadata(&path, &artwork_dir, &test_cover_cache(), false).is_err(),
+            "{fixture} has no lofty reader, so the strict path must report that"
+        );
+
+        let meta = extract_or_filename_row(&path, &artwork_dir, &test_cover_cache(), false)?;
+        assert_eq!(meta.title, "quiet");
+        assert_eq!(meta.codec, None);
+        assert!(meta.duration_ms > 0, "{fixture} should get a duration from the decoder");
+    }
+    Ok(())
+}
+
+/// Pins `sniff_file_type` to `FileType::from_buffer` over `Probe::guess_file_type`.
+///
+/// The latter falls through to scanning the first kilobyte for an MPEG frame sync, and
+/// Matroska's payload contains that byte pair: this fixture came back labelled AAC at
+/// 24 kHz lasting two seconds, none of which is true of a one-second 44.1 kHz FLAC.
+/// Wrong metadata is worse than none, because nothing downstream can tell.
+#[test]
+fn an_unreadable_container_is_never_guessed_from_its_payload() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let mka = stage_as(&tmp, "silence.mka", "quiet.mka")?;
+
+    let meta = extract_or_filename_row(&mka, &artwork_dir, &test_cover_cache(), false)?;
+
+    assert_eq!(meta.codec, None, "a container lofty can't read must not acquire a codec");
+    assert_eq!(meta.sample_rate, None);
+    assert_eq!(meta.channels, None);
+    assert_eq!(meta.bitrate, None);
+    Ok(())
+}

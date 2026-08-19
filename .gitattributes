@@ -46,6 +46,9 @@ src/services/updater/tests/fixtures/*.json -text -merge
 *.ogg  binary
 *.wav  binary
 *.aiff binary
+*.aifc binary
+*.mka  binary
+*.caf  binary
 *.ttf  binary
 *.otf  binary
 *.ttc  binary

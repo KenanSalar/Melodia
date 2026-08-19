@@ -226,20 +226,28 @@ fn all_desktop_sources_agree_on_mime_and_wmclass() {
     const SCRIPTS_DESKTOP: &str = include_str!("../../../scripts/Melodia.desktop");
     // The full set the production template carries; every format declares it or
     // the associations diverge.
+    //
+    // Hand-maintained rather than derived from `media::AUDIO_EXTENSIONS`, because the
+    // two don't correspond: freedesktop maps `.oga` to four types and `.caf` to none,
+    // so a derived assertion would be wrong in both directions.
     const CANONICAL_MIME_TYPES: &[&str] = &[
         "audio/mpeg",
         "audio/flac",
         "audio/x-flac",
         "audio/mp4",
         "audio/x-m4a",
+        "audio/x-m4b",
         "audio/ogg",
         "audio/x-vorbis+ogg",
+        "audio/x-flac+ogg",
         "audio/wav",
         "audio/x-wav",
         "audio/aac",
         "audio/x-aac",
         "audio/aiff",
         "audio/x-aiff",
+        "audio/x-aifc",
+        "audio/x-matroska",
     ];
 
     let sources = [

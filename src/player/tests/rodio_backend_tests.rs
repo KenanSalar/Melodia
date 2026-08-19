@@ -118,3 +118,23 @@ fn seek_round_trips_through_compute_position() {
         );
     }
 }
+
+// --- probe_duration ---
+
+/// The function exists for the containers lofty can't identify, so Matroska is the case
+/// worth pinning: without this answer their rows reach the library reading 0:00.
+#[test]
+fn probe_duration_reads_a_container_lofty_cannot() {
+    let mka = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/assets/silence.mka");
+    let probed = super::probe_duration(&mka);
+    assert_eq!(probed.map(|d| d.as_secs()), Some(1));
+}
+
+#[test]
+fn probe_duration_is_none_when_nothing_decodes() -> Result<(), crate::error::AppError> {
+    let tmp = tempfile::TempDir::new()?;
+    let junk = tmp.path().join("not-audio.mka");
+    std::fs::write(&junk, b"not valid audio")?;
+    assert_eq!(super::probe_duration(&junk), None);
+    Ok(())
+}

@@ -10,7 +10,7 @@ use crate::database::DbPool;
 use crate::database::queries;
 use crate::error::AppResult;
 use crate::media::artwork::CoverCache;
-use crate::media::metadata::{ExtractedMetadata, extract_date_modified, extract_metadata};
+use crate::media::metadata::{ExtractedMetadata, extract_date_modified, extract_or_filename_row};
 use crate::media::watcher::FileEvent;
 
 /// Batch size threshold above which stats triggers are disabled for bulk processing.
@@ -60,11 +60,19 @@ async fn extract_metadata_batch(
         use rayon::prelude::*;
         paths_to_extract
             .into_par_iter()
-            .filter_map(|path| match extract_metadata(&path, &artwork_dir, &cover_cache, false) {
-                Ok(meta) => Some((path, meta)),
-                Err(e) => {
-                    log::warn!("Failed to extract metadata for {}: {}", path.display(), e);
-                    None
+            .filter_map(|path| {
+                match extract_or_filename_row(&path, &artwork_dir, &cover_cache, false) {
+                    Ok(meta) => Some((path, meta)),
+                    // Only an unreadable file gets this far; unparseable tags come back
+                    // as a filename-derived row rather than a `None`.
+                    Err(e) => {
+                        log::warn!(
+                            "Skipping {}: {}",
+                            path.display(),
+                            crate::services::describe(&e)
+                        );
+                        None
+                    }
                 }
             })
             .collect::<HashMap<_, _>>()

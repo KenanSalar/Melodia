@@ -104,7 +104,7 @@ Categories=AudioVideo;Audio;Player;Music;
 Keywords=music;audio;player;library;sound;songs;tracks;mp3;flac;ogg;
 Terminal=false
 StartupWMClass=Melodia
-MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/mp4;audio/x-m4a;audio/ogg;audio/x-vorbis+ogg;audio/wav;audio/x-wav;audio/aac;audio/x-aac;audio/aiff;audio/x-aiff;
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/mp4;audio/x-m4a;audio/x-m4b;audio/ogg;audio/x-vorbis+ogg;audio/x-flac+ogg;audio/wav;audio/x-wav;audio/aac;audio/x-aac;audio/aiff;audio/x-aiff;audio/x-aifc;audio/x-matroska;
 EOF
 
 # AppStream MetaInfo — KDE Discover / GNOME Software read this for the

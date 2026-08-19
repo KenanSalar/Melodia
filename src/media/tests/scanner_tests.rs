@@ -148,17 +148,41 @@ fn scan_files_parallel_empty_returns_empty() -> Result<(), AppError> {
     Ok(())
 }
 
+/// A file nothing can parse still reaches the library, titled from its filename. The
+/// formats with no tag reader at all (Matroska, CAF) arrive the same way, and a scan
+/// that dropped them would leave a file sitting in a watched folder that the library
+/// never mentions.
 #[test]
-fn scan_files_parallel_skips_unreadable_files() -> Result<(), AppError> {
+fn scan_files_parallel_keeps_a_filename_row_for_unparseable_tags() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let artwork_dir = tmp.path().join("artwork");
     fs::create_dir(&artwork_dir)?;
 
-    // Create a file with invalid audio content
     let bad_file = tmp.path().join("bad.mp3");
     fs::write(&bad_file, b"not valid audio")?;
 
     let files = vec![bad_file];
+    let result = scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &|_, _| {});
+
+    let [scanned] = result.as_slice() else {
+        return Err(AppError::Validation("the unparseable file produced no row".into()));
+    };
+    assert_eq!(scanned.metadata.title, "bad");
+    assert_eq!(scanned.metadata.duration_ms, 0);
+    assert_eq!(scanned.metadata.codec, None);
+    assert_eq!(scanned.metadata.artist, None);
+    Ok(())
+}
+
+/// The hash above the parse is what makes the fallback safe, so a file that can't be
+/// read at all must still drop rather than arrive as an empty row.
+#[test]
+fn scan_files_parallel_drops_files_it_cannot_read() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let artwork_dir = tmp.path().join("artwork");
+    fs::create_dir(&artwork_dir)?;
+
+    let files = vec![tmp.path().join("gone.mp3")];
     let result = scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &|_, _| {});
     assert!(result.is_empty());
     Ok(())

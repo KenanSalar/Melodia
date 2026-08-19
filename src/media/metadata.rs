@@ -1,8 +1,10 @@
+use std::io::Read;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
-use lofty::file::TaggedFileExt;
+use lofty::file::{FileType, TaggedFile, TaggedFileExt};
 use lofty::prelude::*;
+use lofty::properties::FileProperties;
 
 use super::artwork;
 use crate::error::AppError;
@@ -77,6 +79,49 @@ pub fn extract_date_modified(path: &Path) -> Option<String> {
     std::fs::metadata(path).ok().as_ref().and_then(date_modified_from_metadata)
 }
 
+/// The container `path` holds, named by its header alone.
+///
+/// `FileType::from_buffer` is the strict half of lofty's sniffing, and the strictness is
+/// the point. `Probe::guess_file_type` falls through to scanning the first kilobyte for
+/// an MPEG frame sync, which arbitrary binary contains. A Matroska file comes back
+/// confidently labelled AAC, carrying a sample rate and duration read out of the middle
+/// of somebody's audio. A header matching nothing has to stay unidentified.
+///
+/// Reads what lofty's own sniffer reads: its longest check reaches byte 36.
+fn sniff_file_type(path: &Path) -> Option<FileType> {
+    const SNIFF_BYTES: usize = 36;
+
+    let mut head = Vec::with_capacity(SNIFF_BYTES);
+    std::fs::File::open(path).ok()?.take(SNIFF_BYTES as u64).read_to_end(&mut head).ok()?;
+    FileType::from_buffer(&head)
+}
+
+/// Probe `path` for tags.
+///
+/// lofty keys `Probe::open` on the extension, and its map of those is narrower than what
+/// its parsers cover: `.oga` resolves to nothing there, so an Ogg Vorbis file named that
+/// way reads as an unknown format. Asking the header covers it. Only asked when the
+/// extension resolved to nothing, so every file that parses today still parses the same
+/// way, and the extra open stays off the scan's hot path.
+fn read_tags(path: &Path, skip_artwork: bool) -> Result<TaggedFile, AppError> {
+    // Embedded pictures are the expensive half of a parse, and a rescan already has them.
+    let parse_opts = lofty::config::ParseOptions::new().read_cover_art(!skip_artwork);
+
+    let mut probe = lofty::probe::Probe::open(path)
+        .map_err(|e| AppError::metadata(format!("Failed to open {}", path.display()), e))?
+        .options(parse_opts);
+
+    if probe.file_type().is_none()
+        && let Some(sniffed) = sniff_file_type(path)
+    {
+        probe = probe.set_file_type(sniffed);
+    }
+
+    probe
+        .read()
+        .map_err(|e| AppError::metadata(format!("Failed to read tags from {}", path.display()), e))
+}
+
 /// Parse a `ReplayGain` gain string like "-6.50 dB" to f64. Rejects non-finite
 /// values (`"nan"`, `"inf"` parse successfully as floats in Rust) so a malformed
 /// tag can't poison the playback DSP — the value is baked into the audio source
@@ -91,11 +136,52 @@ fn parse_replaygain_peak(s: &str) -> Option<f64> {
     s.trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
+/// What [`extract`] does with a file it can hash but whose tags won't parse.
+#[derive(Clone, Copy)]
+enum OnUnreadableTags {
+    Fail,
+    FilenameRow,
+}
+
+/// Read a file's tags, properties and artwork into a row.
+///
+/// Fails if the tags won't parse. Callers that write a file and re-read it to refresh
+/// its row want exactly that: a row built from a parse that didn't happen would blank
+/// the track instead of reporting the failure.
 pub fn extract_metadata(
     path: &Path,
     artwork_dir: &Path,
     cover_cache: &artwork::CoverCache,
     skip_artwork: bool,
+) -> Result<ExtractedMetadata, AppError> {
+    extract(path, artwork_dir, cover_cache, skip_artwork, OnUnreadableTags::Fail)
+}
+
+/// As [`extract_metadata`], but a file whose tags won't parse still yields a row, titled
+/// from its filename, with external artwork and a decoder-probed duration if either is
+/// there to be had.
+///
+/// For the scan paths, where the alternative is the file disappearing: a container with
+/// no tag reader (Matroska, CAF) and one with tags too broken to parse both arrive here,
+/// and dropping either leaves a file sitting in a watched folder that the library never
+/// mentions. The hash above the parse is what makes this safe to do blind. It reads the
+/// whole file, so anything that gets past it is readable and the parse failure is the
+/// format's, not the disk's.
+pub fn extract_or_filename_row(
+    path: &Path,
+    artwork_dir: &Path,
+    cover_cache: &artwork::CoverCache,
+    skip_artwork: bool,
+) -> Result<ExtractedMetadata, AppError> {
+    extract(path, artwork_dir, cover_cache, skip_artwork, OnUnreadableTags::FilenameRow)
+}
+
+fn extract(
+    path: &Path,
+    artwork_dir: &Path,
+    cover_cache: &artwork::CoverCache,
+    skip_artwork: bool,
+    on_unreadable: OnUnreadableTags,
 ) -> Result<ExtractedMetadata, AppError> {
     // Only allocate the fallback name if a tag title is actually missing — for
     // a tagged music library this avoids ~1 String allocation per scanned file
@@ -113,38 +199,42 @@ pub fn extract_metadata(
 
     let file_hash = compute_file_hash(path)?;
 
-    let tagged_file = if skip_artwork {
-        // Skip reading embedded pictures — significant speedup for rescans
-        let parse_opts = lofty::config::ParseOptions::new().read_cover_art(false);
-        lofty::probe::Probe::open(path)
-            .map_err(|e| AppError::metadata(format!("Failed to open {}", path.display()), e))?
-            .options(parse_opts)
-            .read()
-            .map_err(|e| {
-                AppError::metadata(format!("Failed to read tags from {}", path.display()), e)
-            })?
-    } else {
-        lofty::probe::read_from_path(path).map_err(|e| {
-            AppError::metadata(format!("Failed to read tags from {}", path.display()), e)
-        })?
+    let tagged_file = match read_tags(path, skip_artwork) {
+        Ok(tagged) => Some(tagged),
+        Err(e) => match on_unreadable {
+            OnUnreadableTags::Fail => return Err(e),
+            OnUnreadableTags::FilenameRow => {
+                log::debug!("{}; keeping a filename-derived row", crate::services::describe(&e));
+                None
+            }
+        },
     };
 
-    let properties = tagged_file.properties();
-    let duration_ms = i64::try_from(properties.duration().as_millis()).unwrap_or(i64::MAX);
+    let properties = tagged_file.as_ref().map(TaggedFile::properties);
 
-    let bitrate = {
-        let br = properties.overall_bitrate().or(properties.audio_bitrate());
-        br.map(|b| i32::try_from(b).unwrap_or(i32::MAX))
+    let duration_ms = match properties {
+        Some(props) => i64::try_from(props.duration().as_millis()).unwrap_or(i64::MAX),
+        // Lofty reports duration off the parse that just failed, so the decoder is the
+        // only thing left that knows. Still `0` where it can't say either.
+        None => crate::player::rodio_backend::probe_duration(path)
+            .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)),
     };
-    let channels = properties.channels().map(i32::from);
-    let sample_rate = properties.sample_rate().map(|s| i32::try_from(s).unwrap_or(i32::MAX));
-    let bit_depth = properties.bit_depth().map(i32::from);
+
+    let bitrate = properties
+        .and_then(|props| props.overall_bitrate().or(props.audio_bitrate()))
+        .map(|br| i32::try_from(br).unwrap_or(i32::MAX));
+    let channels = properties.and_then(FileProperties::channels).map(i32::from);
+    let sample_rate = properties
+        .and_then(FileProperties::sample_rate)
+        .map(|rate| i32::try_from(rate).unwrap_or(i32::MAX));
+    let bit_depth = properties.and_then(FileProperties::bit_depth).map(i32::from);
 
     // Determine codec from file type
-    let codec = Some(format!("{:?}", tagged_file.file_type()));
+    let codec = tagged_file.as_ref().map(|tagged| format!("{:?}", tagged.file_type()));
 
     // Try to read tags - check all tag types and pick the first one with data
-    let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
+    let tag =
+        tagged_file.as_ref().and_then(|tagged| tagged.primary_tag().or_else(|| tagged.first_tag()));
 
     // Extract artwork: check external cover files first, then embedded tag
     let artwork_path = if skip_artwork {

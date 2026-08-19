@@ -49,7 +49,7 @@
     </p>
     <p>Features:</p>
     <ul>
-      <li>Gapless playback via Rodio and Symphonia — MP3, FLAC, M4A/AAC, OGG/Vorbis, WAV, ALAC and AIFF</li>
+      <li>Gapless playback via Rodio and Symphonia — MP3, FLAC, M4A/M4B (AAC and ALAC), Ogg Vorbis, WAV, AIFF/AIFF-C, Matroska and CAF</li>
       <li>Fast local SQLite library with full-text search</li>
       <li>Browse by album, artist, genre and playlist, with file drag-and-drop</li>
       <li>Pluggable themes, including system light/dark and Material You dynamic colour</li>

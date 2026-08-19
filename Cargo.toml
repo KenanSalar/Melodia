@@ -115,7 +115,7 @@ Melodia is a modern, local-first desktop music player with a Material
 3-inspired interface. Your music collection stays entirely on your own
 machine, with no accounts, streaming or cloud. It pairs a Slint user
 interface with a pure-Rust backend: gapless playback via Rodio and
-Symphonia (MP3, FLAC, M4A/AAC, OGG, WAV, ALAC and AIFF), a fast local
+Symphonia (MP3, FLAC, M4A/M4B, Ogg Vorbis, WAV, AIFF, Matroska and CAF), a fast local
 SQLite library with full-text search, browsing by album, artist, genre
 and playlist, OS media controls (MPRIS), and pluggable themes including
 system light/dark and Material You."""
@@ -162,7 +162,10 @@ sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio
 # Audio
 rodio = { version = "0.22.2", default-features = false, features = [
     "playback",
-    "symphonia-mp3",
+    # `mpa` over `mp3`: both are `symphonia-bundle-mp3`, already compiled either way, and
+    # the wider one adds the Layer I and II decoders alongside Layer III's. Those layers
+    # arrive inside MKV and ADTS as well as under their own extensions.
+    "symphonia-mpa",
     "symphonia-flac",
     "symphonia-isomp4",
     "symphonia-aac",
@@ -170,6 +173,17 @@ rodio = { version = "0.22.2", default-features = false, features = [
     "symphonia-vorbis",
     "symphonia-wav",
     "symphonia-pcm",
+    # Two containers rather than two codecs: whatever they carry is decoded by the
+    # entries around them, so an `.mka` holding Opus demuxes and then finds no decoder
+    # until #35 lands. Lofty reads neither, so both scan through the filename-row
+    # fallback in `media::metadata`.
+    "symphonia-mkv",
+    "symphonia-caf",
+    # The RIFF demuxer already resolves the two ADPCM wave formats to their codec types
+    # and then finds no decoder registered for either, so this is the missing half of a
+    # path that otherwise demuxes and dies. It does *not* reach `.aifc` ADPCM, which the
+    # AIFC common chunk rejects before any codec is looked up.
+    "symphonia-adpcm",
     "symphonia-alac",
     "symphonia-aiff",
 ] }

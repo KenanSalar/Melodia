@@ -57,6 +57,17 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   validation and Browse all route through it; don't re-roll `ext.to_lowercase()` +
   `AUDIO_EXTENSIONS.contains(...)` at a new call site.
 
+- **Two entry points into extraction, and the scan paths take the lenient one.**
+  `metadata::extract_or_filename_row` keeps a filename-derived row for a file whose tags won't
+  parse, which is the only way Matroska and CAF reach the library at all; both scan sites use it
+  (`scanner::scan_files_parallel`, `file_event_processor::reconcile`), so an `Err` there now means
+  a file that can't be *read*. `extract_metadata` stays strict, and the tag-write and MBID
+  re-reads depend on that: a row built from a parse that didn't happen would blank the track
+  instead of reporting the failure. Duration on a fallback row comes from
+  `player::rodio_backend::probe_duration`, the one edge `media/` has into `player/`. Each half is
+  argued at its own definition, including why identification is `FileType::from_buffer` and never
+  lofty's junk-tolerant `Probe::guess_file_type`.
+
 - **Derive `date_modified` from a `Metadata` you already hold.**
   `metadata::date_modified_from_metadata(&meta)` is the single source of the stored RFC-3339 mtime
   string and `scanner::track_is_current` compares against it byte-for-byte, so a second
