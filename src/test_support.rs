@@ -115,7 +115,14 @@ pub(crate) fn callback_sources() -> Vec<(String, String)> {
 /// a caller counts and its pin goes quiet, the floors being far too loose to notice one
 /// missing folder. Every caller asserts the second list is empty.
 fn sources_under(root: &str, ext: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
-    fn walk(dir: &Path, ext: &str, out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
+    sources_under_any(root, &[ext])
+}
+
+/// [`sources_under`] over a set of extensions, in one pass. A walk apiece would report an
+/// unlistable directory once per extension and hand back sorted halves whose concatenation
+/// isn't sorted.
+fn sources_under_any(root: &str, exts: &[&str]) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    fn walk(dir: &Path, exts: &[&str], out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(dir) else {
             unreadable.push(dir.to_path_buf());
             return;
@@ -123,15 +130,15 @@ fn sources_under(root: &str, ext: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                walk(&path, ext, out, unreadable);
-            } else if path.extension().is_some_and(|found| found == ext) {
+                walk(&path, exts, out, unreadable);
+            } else if path.extension().is_some_and(|found| exts.iter().any(|ext| found == *ext)) {
                 out.push(path);
             }
         }
     }
 
     let (mut sources, mut unreadable) = (Vec::new(), Vec::new());
-    walk(Path::new(root), ext, &mut sources, &mut unreadable);
+    walk(Path::new(root), exts, &mut sources, &mut unreadable);
     sources.sort();
     (sources, unreadable)
 }
@@ -142,27 +149,26 @@ pub(crate) fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
     sources_under(UI_DIR, "slint")
 }
 
+/// What a `.slint` `import` embeds a face from, taken from the compiler's own check
+/// (`i-slint-compiler`'s `object_tree.rs`) rather than from what is committed today: the format
+/// nothing uses yet is the one that arrives unlicensed.
+const FONT_EXTENSIONS: [&str; 3] = ["ttc", "ttf", "otf"];
+
 /// Every shipped face under [`FONTS_DIR`], as paths. The walk recurses, so a face added
 /// under a new subdirectory is found with no edit here.
 ///
-/// Both container formats, because the compiler gates on neither: an embedded font is whatever
-/// a `.slint` `import` names, and the CFF outlines an `.otf` carries are read at runtime by the
-/// same `ttf-parser` the `.ttf`s go through. An extension filter of one is a list wearing a
-/// walk's clothes.
+/// Every container format the compiler takes, not just the one committed today: an `.otf`'s CFF
+/// outlines and a `.ttc`'s several faces reach the same `ttf-parser` a `.ttf` does, and nothing
+/// past the `import` cares which arrived. A filter narrower than [`FONT_EXTENSIONS`] is a list
+/// wearing a walk's clothes.
 ///
 /// `originals/` is held back, and it is the counterexample to the walk's own premise: Slint
 /// embeds a face because a `.slint` file `import`s it, not because it sits under this root,
 /// and that directory is gitignored scratch space for the pristine upstream Vazirmatn
 /// `scripts/patch_vazirmatn.py` reads.
 pub(crate) fn font_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
-    let (mut fonts, mut unreadable) = sources_under(FONTS_DIR, "ttf");
-    let (opentype, opentype_unreadable) = sources_under(FONTS_DIR, "otf");
-    fonts.extend(opentype);
-    unreadable.extend(opentype_unreadable);
-
+    let (mut fonts, unreadable) = sources_under_any(FONTS_DIR, &FONT_EXTENSIONS);
     fonts.retain(|path| !path.components().any(|part| part.as_os_str() == "originals"));
-    // Each walk sorted its own half; the concatenation of two sorted halves is not sorted.
-    fonts.sort();
     (fonts, unreadable)
 }
 

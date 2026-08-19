@@ -202,10 +202,12 @@ const RUNTIME_NAMED: [&str; 2] = [
 /// Checkable from the corpus and nowhere else. The truncation happens inside the OS and leaves no
 /// value behind, `Thread::name()` still handing back the full string.
 ///
-/// Two seams, both shared with the pin above: `strip_line_comments` handles `//` and not `/* */`,
-/// and the needle is a substring rather than a parse, so an unrelated builder taking a short
-/// literal name would be measured too. That one is harmless while it fits the budget, and a fair
-/// prompt to narrow the needle if one ever doesn't.
+/// Three seams. Two are shared with the pin above: `strip_line_comments` handles `//` and not
+/// `/* */`, and the needle is a substring rather than a parse, so an unrelated builder taking a
+/// short literal name would be measured too. That one is harmless while it fits the budget, and a
+/// fair prompt to narrow the needle if one ever doesn't. The third is this pin's own:
+/// [`RUNTIME_NAMED`] ledgers the computed form of `thread_name`, but `Builder::name` takes any
+/// `Into<String>`, so a `format!`ed std thread name matches neither needle and goes unmeasured.
 #[test]
 fn no_thread_name_outgrows_what_the_kernel_keeps() {
     let mut names = Vec::new();

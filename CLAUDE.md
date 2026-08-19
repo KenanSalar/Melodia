@@ -63,7 +63,7 @@ cargo llvm-cov --html                      # coverage → target/llvm-cov/html/
 - **UI → backend**: callbacks `runtime.spawn(...)`, push results back over channels.
 - **Backend → UI** (never `ui.set_*` from background): (1) `slint::spawn_local(async_compat::Compat::new(...))` UI-thread task that `.await`s tokio futures — **preferred** for reactive loops; (2) `slint::invoke_from_event_loop(...)` fire-and-forget; (3) `weak_handle.upgrade_in_event_loop(|ui| …)` auto-handles a dropped UI.
 - **Models from background**: `upgrade_in_event_loop` + `as_any().downcast_ref::<VecModel<T>>()`.
-- **A thread name fits in 15 bytes or Linux silently truncates it.** `pthread_setname_np` caps at `TASK_COMM_LEN`, and std truncates rather than erroring, so a longer name costs nothing at the spawn and shows up docked in `htop`, `perf` and `/proc`, the three places the name is for. Rust keeps the full string, so `crash_report`'s `thread.name()` is unaffected either way. Applies to the rayon pools too, where the budget is the prefix *plus* the widest index (`cover_thumbs`' `cover-decode-{i}`).
+- **A thread name fits in 15 bytes or Linux silently truncates it.** `pthread_setname_np` caps at `TASK_COMM_LEN`, and std truncates rather than erroring, so a longer name costs nothing at the spawn and shows up docked in `htop`, `perf` and `/proc`, the three places the name is for. Rust keeps the full string, so `crash_report`'s `thread.name()` is unaffected either way. Applies to `cover_thumbs`' decode pool too, the one rayon pool that names its threads, where the budget is the prefix *plus* the widest index (`cover-decode-{i}`). Held by `services::tests::no_thread_name_outgrows_what_the_kernel_keeps`, which walks `src/` rather than listing the spawns.
 
 ### Module Map
 
