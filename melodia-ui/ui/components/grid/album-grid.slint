@@ -19,9 +19,14 @@ export component AlbumGrid inherits Rectangle {
     in property <length> row-height: 246px;
     in property <length> gap: 20px;
 
+    // Bumped by the host once a scheduled decode batch lands. The card's binding *reads* it,
+    // which is the only thing making the bump re-run a `pure` callback whose result is otherwise
+    // cached until a dependency dirties.
+    in property <int> covers-generation: 0;
+
     callback open-album(int /*album_id*/);
     // Forwarded by the host to its own global. `pure` so a binding can call it.
-    pure callback request-cover(string /*artwork_path*/) -> image;
+    pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
     // Same sign convention as `TrackList` — a positive `v-offset` is N px
     // scrolled, where the inner `ListView` holds that as a non-positive
@@ -52,7 +57,7 @@ export component AlbumGrid inherits Rectangle {
                     card-width: root.card-width;
                     card-height: root.card-height;
                     artwork-path: album.artwork_path;
-                    cover: root.request-cover(album.artwork_path);
+                    cover: root.request-cover(album.artwork_path, root.covers-generation);
                     fallback-icon: "album";
                     // A pronounced zoom on the placeholder, as on the other
                     // grids; real artwork stays gentle so a cover doesn't

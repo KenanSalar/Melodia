@@ -12,6 +12,11 @@
 //! It needs the guessed [`image::ImageFormat`] back and reports which step failed,
 //! neither of which survives the `Option` [`decode_memory_capped`] returns.
 //!
+//! [`decode_capped_to`] is that same decode told what it is being drawn at, so it can
+//! take JPEG's own scale-on-decode where the format allows and fall back here where it
+//! doesn't. A variant rather than a third primitive: same bound, same contract, and the
+//! resize behind it is unchanged.
+//!
 //! [`resize_rgb8`] is shared for a different reason than the decode. Correctness is
 //! most of it — the store is resized through the same call that reads it back, so it
 //! cannot filter differently from its consumers — but the resampler is also the
@@ -25,7 +30,8 @@ use std::cell::RefCell;
 use std::path::Path;
 
 use fast_image_resize::{ResizeAlg, ResizeOptions, Resizer};
-use image::{DynamicImage, RgbImage};
+use image::{DynamicImage, GrayImage, RgbImage};
+use jpeg_decoder::PixelFormat;
 
 /// Re-exported so a call site picks a filter without naming the resampler crate, which is what
 /// keeps [`resize_rgb8`] the one place it is reachable from.
@@ -47,6 +53,59 @@ pub fn decode_capped(path: &Path, max_dim: u32) -> image::ImageResult<DynamicIma
     let mut reader = image::ImageReader::open(path)?.with_guessed_format()?;
     reader.limits(capped_limits(max_dim));
     reader.decode()
+}
+
+/// [`decode_capped`], decoding no larger than it has to for a `target`-square draw.
+///
+/// JPEG carries its own downscale: the IDCT runs at 1/8, 1/4 or 1/2 for a fraction of the full
+/// cost, and every tier draws a cover far smaller than the store holds, so most of what a full
+/// decode produces is pixels the resize behind it was always going to discard. The result still
+/// meets `target` on its long edge, so the caller's resize is unchanged and still never upscales.
+/// Entropy decoding is not skipped, only the transform, so this is a fraction rather than the
+/// scale factor.
+///
+/// Falls back to [`decode_capped`] for every other format, for the two colour spaces it does not
+/// convert, and for a source over `max_dim` — the bound stays [`capped_limits`]'s alone rather
+/// than being spelled a second time here.
+///
+/// **Blocking** — same contract as [`decode_capped`].
+pub fn decode_capped_to(
+    path: &Path,
+    max_dim: u32,
+    target: u32,
+) -> image::ImageResult<DynamicImage> {
+    match decode_jpeg_scaled(path, max_dim, target) {
+        Some(scaled) => Ok(scaled),
+        None => decode_capped(path, max_dim),
+    }
+}
+
+/// The JPEG half of [`decode_capped_to`]. `None` wherever the caller owes a fallback, which
+/// includes a source this refuses on size: erroring here would put the dimension bound in two
+/// places, where declining sends the same file through [`capped_limits`] for the same failure.
+fn decode_jpeg_scaled(path: &Path, max_dim: u32, target: u32) -> Option<DynamicImage> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut decoder = jpeg_decoder::Decoder::new(std::io::BufReader::new(file));
+    decoder.read_info().ok()?;
+    let info = decoder.info()?;
+    if u32::from(info.width) > max_dim || u32::from(info.height) > max_dim {
+        return None;
+    }
+
+    let requested = u16::try_from(target.max(1)).unwrap_or(u16::MAX);
+    let (width, height) = decoder.scale(requested, requested).ok()?;
+    let pixels = decoder.decode().ok()?;
+
+    let (width, height) = (u32::from(width), u32::from(height));
+    match info.pixel_format {
+        PixelFormat::RGB24 => {
+            RgbImage::from_raw(width, height, pixels).map(DynamicImage::ImageRgb8)
+        }
+        PixelFormat::L8 => GrayImage::from_raw(width, height, pixels).map(DynamicImage::ImageLuma8),
+        // A 16-bit grey needs a byte-order-aware widen and a CMYK an Adobe-inverted convert.
+        // `image` has both, and neither reaches a real cover often enough to copy here.
+        PixelFormat::L16 | PixelFormat::CMYK32 => None,
+    }
 }
 
 /// [`decode_capped`] for bytes already in hand, for the store's own normalizer.

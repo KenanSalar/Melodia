@@ -66,6 +66,11 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RecentlyPlayedUi> {
     let rp_ui =
         Arc::new(RecentlyPlayedUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, &rp_ui);
+    crate::ui::cover_generation::notify_on_decode(
+        &rp_ui.most_played_thumbs,
+        cx.app,
+        grid::repaint_covers,
+    );
     if let Some(vs) = cx.view_state {
         seed_tab(cx.app, &rp_ui, vs.recently_played_tab);
     }

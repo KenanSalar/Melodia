@@ -28,7 +28,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
     // grid-tier `CoverThumbs` LRU.
     {
         let au = artists_ui.clone();
-        artists.on_request_cover(move |path| au.grid_cover(path.as_str()));
+        // `generation` is read for its effect on the binding, never its value.
+        artists.on_request_cover(move |path, _generation| au.grid_cover(path.as_str()));
+        crate::ui::cover_generation::notify_on_decode(&artists_ui.grid_thumbs(), ui, |app| {
+            let artists = app.global::<Artists>();
+            artists.set_covers_generation(artists.get_covers_generation().wrapping_add(1));
+        });
     }
 
     {

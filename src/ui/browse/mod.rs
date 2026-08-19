@@ -75,6 +75,11 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<BrowseUi> {
     install_selection_model(cx.app);
     let browse_ui = Arc::new(BrowseUi::new(cx.cover_thumbs.clone()));
     callbacks::wire(cx.app, cx.state, &browse_ui);
+    crate::ui::cover_generation::notify_on_decode(
+        &browse_ui.grid_covers,
+        cx.app,
+        cards::repaint_covers,
+    );
     seed_from_settings(cx.app, cx.state, &browse_ui, cx.view_state);
     browse_ui
 }

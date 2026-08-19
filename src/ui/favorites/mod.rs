@@ -80,6 +80,12 @@ pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi>
     let favorites_ui =
         Arc::new(FavoritesUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, &favorites_ui, artists_ui);
+    for tier in [
+        &favorites_ui.most_played_thumbs,
+        &favorites_ui.artist_thumbs,
+    ] {
+        crate::ui::cover_generation::notify_on_decode(tier, cx.app, grids::repaint_covers);
+    }
     if let Some(vs) = cx.view_state {
         seed_tab(cx.app, &favorites_ui, vs.favorites_tab);
     }

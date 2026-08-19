@@ -22,7 +22,7 @@ mod fetch;
 mod sort;
 mod warm;
 
-pub use apply::{apply_filtered_grids_now, mark_covers_warm};
+pub use apply::{apply_filtered_grids_now, mark_covers_warm, repaint_covers};
 pub use fetch::refresh_grids;
 pub use sort::set_artist_sort;
 

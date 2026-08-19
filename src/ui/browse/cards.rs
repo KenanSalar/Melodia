@@ -153,6 +153,16 @@ pub fn first_screenful_paths(files: &[BrowseFile]) -> Vec<PathBuf> {
     )
 }
 
+/// Re-run the mounted card bindings once a scheduled decode has landed — the
+/// `favorites::grids::apply::repaint_covers` contract, never moving off 0.
+pub fn repaint_covers(ui: &AppWindow) {
+    let g = ui.global::<Browse>();
+    let generation = g.get_covers_generation();
+    if generation > 0 {
+        g.set_covers_generation(generation.saturating_add(1));
+    }
+}
+
 /// Size the card cover cache against the display it will be drawn on. Called once
 /// from `install_views`, after the winit window is live.
 pub fn tune_cache_for_display(app: &AppWindow, browse_ui: &BrowseUi) {

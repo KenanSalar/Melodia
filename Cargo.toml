@@ -197,7 +197,18 @@ natord = "1.0.9"
 # spellings `tracks_fts`'s `remove_diacritics 2` tokenizer does. Already in the
 # lock file transitively, so this line costs no extra build.
 unicode-normalization = "0.1.25"
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+# The format list is what a lofty picture's MIME type can name plus what the
+# cover pickers accept, so it has to be the superset `media::artwork`'s
+# `STORED_EXTENSIONS` is written against — a format the store may name but this
+# list omits is one written to disk and never drawable.
+image = { version = "0.25.10", default-features = false, features = [
+    "jpeg",
+    "png",
+    "webp",
+    "gif",
+    "bmp",
+    "tiff",
+] }
 # Every cover the app draws is resized, most of them more than once, and
 # `image`'s own resamplers go through `get_pixel` — bounds-checked per output
 # pixel, with the output size as their floor, so no store cap reaches them. This
@@ -211,6 +222,15 @@ image = { version = "0.25.10", default-features = false, features = ["jpeg", "pn
 # above, so it unifies rather than resolving a second copy, and it enables no
 # format features of its own.
 fast_image_resize = { version = "6.1.0", features = ["image"] }
+# Scale-on-decode, which `image`'s JPEG path cannot reach: it decodes through
+# `zune-jpeg`, whose reduced IDCTs are chosen by coefficient content and whose
+# `DecoderOptions` exposes only size *limits*. Every tier draws a cover far
+# smaller than the store holds, so decoding at 1/8 or 1/4 and resizing from
+# there is work the full decode was always going to throw away — and it is
+# nearly the whole store, JPEG being what the normalizer re-encodes to.
+# `media::image_decode::decode_capped_to` is the only place it is named, and it
+# falls back to `image` for every format and colour space this doesn't cover.
+jpeg-decoder = "0.3.2"
 lru = "0.18.2"
 
 # Material 3 dynamic colour (Material You). Its optional `image`/`serde`/`libm`

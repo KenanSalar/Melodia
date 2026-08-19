@@ -92,8 +92,15 @@ pub struct UiHandles {
 /// no slice's `install`, serving every view.
 fn install_row_covers(app: &AppWindow, cover_thumbs: &Arc<media::cover_thumbs::CoverThumbs>) {
     let ct = cover_thumbs.clone();
-    app.global::<melodia::RowCovers>()
-        .on_request(move |path| ct.get_or_load_opt(Some(path.as_str()).filter(|s| !s.is_empty())));
+    // `generation` is read for its effect on the binding, never its value — see `RowCovers`.
+    app.global::<melodia::RowCovers>().on_request(move |path, _generation| {
+        ct.get_or_schedule_opt(Some(path.as_str()).filter(|s| !s.is_empty()))
+    });
+
+    ui::cover_generation::notify_on_decode(cover_thumbs, app, |app| {
+        let covers = app.global::<melodia::RowCovers>();
+        covers.set_generation(covers.get_generation().wrapping_add(1));
+    });
 }
 
 /// Install every view slice and its callbacks. Seeds the persisted nav index

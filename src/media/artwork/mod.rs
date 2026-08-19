@@ -189,6 +189,10 @@ const HASH_HEX_LEN: usize = 16;
 /// Closed on purpose: [`is_stored_name`] can only be the exact inverse of the writers if the set
 /// is. It is the union of what the cover pickers accept, what a lofty picture's MIME maps to, and
 /// the JPEG the composites and artist images are encoded as.
+///
+/// **The `image` dependency's feature list has to cover it**, a format named here but absent there
+/// being one the store accepts and no tier can draw. Held by a test rather than by review, the
+/// build reporting nothing either way.
 const STORED_EXTENSIONS: [&str; 7] = ["jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff"];
 
 /// `raw` folded onto [`STORED_EXTENSIONS`], falling back to JPEG for anything unrecognised.

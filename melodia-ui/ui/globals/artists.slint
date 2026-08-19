@@ -15,7 +15,9 @@ export global Artists {
     callback apply-filter(string);
     callback request-sort(string /*field*/);
     callback open-artist(int /*artist_id*/);
-    pure callback request-cover(string /*image_path*/) -> image;
+    // The `Albums.request-cover` contract: cache-only, a miss schedules and repaints on the bump.
+    pure callback request-cover(string /*image_path*/, int /*generation*/) -> image;
+    in property <int> covers-generation: 0;
     callback section-active-changed(bool);
 }
 

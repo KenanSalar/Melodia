@@ -22,15 +22,17 @@
 
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use lru::LruCache;
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 
-use super::image_decode::{FilterType, MAX_SOURCE_DIM, decode_capped, resize_rgb8, source_pixels};
+use super::image_decode::{
+    FilterType, MAX_SOURCE_DIM, decode_capped_to, resize_rgb8, source_pixels,
+};
 
 /// Row-tier thumbnail size at a 1× display — just over the now-playing bar's tile, the larger of
 /// the tier's two consumers.
@@ -96,11 +98,27 @@ fn decode_pool() -> Option<&'static rayon::ThreadPool> {
         .as_ref()
 }
 
+/// Misses [`CoverThumbs::get_or_schedule_opt`] has handed to the decode pool.
+///
+/// `draining` is what coalesces a screenful of them into one batch: the first miss spawns the
+/// drain and every miss behind it only adds to the set. It is cleared under the same lock that
+/// finds the set empty, so a miss arriving as a drain finishes cannot be left with nothing
+/// scheduled to pick it up.
+#[derive(Default)]
+struct Pending {
+    queued: std::collections::HashSet<PathBuf>,
+    draining: bool,
+}
+
 pub struct CoverThumbs {
     cache: Mutex<LruCache<PathBuf, CachedBuf>>,
     /// Side length every cover in this cache is downscaled to. Atomic because the tiers are held
     /// behind `Arc` and [`Self::set_thumb_size`] retunes them once the scale factor is known.
     thumb_size: AtomicU32,
+    pending: Mutex<Pending>,
+    /// Fired once per landed batch, for the UI to invalidate the bindings that missed. Set at
+    /// wire time and never replaced, a tier having exactly one surface to tell.
+    on_decoded: OnceLock<Box<dyn Fn() + Send + Sync>>,
 }
 
 impl Default for CoverThumbs {
@@ -108,6 +126,8 @@ impl Default for CoverThumbs {
         Self {
             cache: Mutex::new(LruCache::new(CACHE_CAP)),
             thumb_size: AtomicU32::new(ROW_THUMB_SIZE),
+            pending: Mutex::new(Pending::default()),
+            on_decoded: OnceLock::new(),
         }
     }
 }
@@ -125,6 +145,7 @@ impl CoverThumbs {
         Self {
             cache: Mutex::new(LruCache::new(cache_cap)),
             thumb_size: AtomicU32::new(thumb_size),
+            ..Self::default()
         }
     }
 
@@ -132,6 +153,9 @@ impl CoverThumbs {
     /// with `heap_trim::trim()` so glibc hands the freed pages back to the OS.
     pub fn clear(&self) {
         self.cache.lock().clear();
+        // A drain already on the pool finds the set empty and exits; what it holds mid-batch
+        // lands in a cleared cache, which is a stale entry the next miss re-queues.
+        self.pending.lock().queued.clear();
     }
 
     /// Retune the LRU capacity in place, once the real display size is known. Shrinking evicts
@@ -149,6 +173,7 @@ impl CoverThumbs {
             return;
         }
         self.cache.lock().clear();
+        self.pending.lock().queued.clear();
     }
 
     /// Current LRU capacity. A `prewarm` caller building a display-ordered path list can
@@ -193,6 +218,104 @@ impl CoverThumbs {
             return Image::default();
         };
         self.cache.lock().get(Path::new(p)).map_or_else(Image::default, buf_to_image)
+    }
+
+    /// Register what to call when a scheduled batch lands. First caller wins.
+    ///
+    /// Takes a plain closure rather than anything UI-shaped so this module stays unaware of Slint
+    /// globals; the caller is what knows which binding to invalidate.
+    pub fn set_decoded_notifier(&self, notify: impl Fn() + Send + Sync + 'static) {
+        let _ = self.on_decoded.set(Box::new(notify));
+    }
+
+    /// [`Self::get_or_load_opt`] with the miss moved off the calling thread.
+    ///
+    /// **For the Slint model getters, which run on the UI thread.** `get_or_load_opt` decodes
+    /// inline, which is bounded and invisible while `prewarm` has covered the surface — and
+    /// stops being either once a library holds more unique covers than the tier's cap, where
+    /// scrolling past the prewarmed prefix turns every row into a decode on the event loop.
+    /// This serves the placeholder instead, hands the path to the decode pool, and leaves the
+    /// notifier to bring the row back.
+    pub fn get_or_schedule_opt(self: &Arc<Self>, path: Option<&str>) -> Image {
+        let Some(path) = path.filter(|p| !p.is_empty()) else {
+            return Image::default();
+        };
+        let path = Path::new(path);
+        if let Some(maybe_buf) = self.cache.lock().get(path) {
+            return buf_to_image(maybe_buf);
+        }
+        self.schedule(path.to_path_buf());
+        Image::default()
+    }
+
+    /// Queue one miss, spawning the drain if nothing is already draining.
+    fn schedule(self: &Arc<Self>, path: PathBuf) {
+        {
+            let mut pending = self.pending.lock();
+            if !pending.queued.insert(path) || pending.draining {
+                return;
+            }
+            pending.draining = true;
+        }
+        let this = Arc::clone(self);
+        let drain = move || this.drain_pending();
+        match decode_pool() {
+            Some(pool) => pool.spawn(drain),
+            None => rayon::spawn(drain),
+        }
+    }
+
+    /// Decode everything queued, then everything queued while that ran, until the set is empty.
+    ///
+    /// Looping rather than one batch per spawn because the misses arrive as fast as rows mount:
+    /// a scroll would otherwise spawn a drain per frame, each contending for the same pool.
+    fn drain_pending(&self) {
+        loop {
+            let batch: Vec<PathBuf> = {
+                let mut pending = self.pending.lock();
+                if pending.queued.is_empty() {
+                    pending.draining = false;
+                    return;
+                }
+                pending.queued.drain().collect()
+            };
+
+            // Non-promoting, so this can't reorder a prefix `prewarm` warmed. A tab pick mounts
+            // rows *before* its prewarm runs, so the two routinely ask for the same covers and
+            // without this every one of them is decoded twice.
+            let batch: Vec<PathBuf> = {
+                let cache = self.cache.lock();
+                batch.into_iter().filter(|path| !cache.contains(path)).collect()
+            };
+            if batch.is_empty() {
+                continue;
+            }
+
+            let thumb_size = self.thumb_size.load(Ordering::Relaxed);
+            let decoded: Vec<(PathBuf, CachedBuf)> = batch
+                .into_par_iter()
+                .map(|path| {
+                    let buf = decode_thumb_buffer(&path, thumb_size);
+                    (path, buf)
+                })
+                .collect();
+
+            {
+                let mut cache = self.cache.lock();
+                for (path, buf) in decoded {
+                    // A `prewarm` or a `get_or_load` could have inserted the same key while this
+                    // batch was decoding; theirs is no staler than ours and keeping it spares the
+                    // LRU a promotion.
+                    if !cache.contains(&path) {
+                        cache.put(path, buf);
+                    }
+                }
+            }
+
+            if let Some(notify) = self.on_decoded.get() {
+                notify();
+            }
+        }
     }
 
     /// [`Self::get_or_load`]'s contract over the raw buffer rather than a [`slint::Image`].
@@ -270,7 +393,7 @@ fn decode_thumb_buffer(path: &Path, thumb_size: u32) -> CachedBuf {
         .is_some_and(|pixels| pixels > LARGE_SOURCE_PIXELS)
         .then(|| LARGE_DECODE_GATE.lock());
 
-    let dyn_img = decode_capped(path, MAX_SOURCE_DIM).ok()?;
+    let dyn_img = decode_capped_to(path, MAX_SOURCE_DIM, thumb_size).ok()?;
 
     // Square and aspect-blind, which is moot for overwhelmingly square album art — and
     // `image-fit: cover` on the Slint side would have re-cropped a non-square one anyway.

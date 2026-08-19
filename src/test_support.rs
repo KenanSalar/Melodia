@@ -314,6 +314,24 @@ pub(crate) fn write_test_png(
     Ok((tmp, path))
 }
 
+/// [`write_test_png`]'s counterpart, for the decode paths that only fire on JPEG.
+///
+/// A gradient rather than a flat fill: a solid colour is one DC coefficient per block, so every
+/// scale factor reproduces it exactly and a scaled decode that ignored the size it was asked for
+/// would pass anyway.
+pub(crate) fn write_test_jpeg(
+    side: u32,
+) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("cover.jpg");
+    let channel = |value: u32| u8::try_from(value % 256).unwrap_or(0);
+    image::RgbImage::from_fn(side, side, |x, y| {
+        image::Rgb([channel(x), channel(y), channel(x + y)])
+    })
+    .save(&path)?;
+    Ok((tmp, path))
+}
+
 /// A [`Paths`] rooted in a throwaway directory, with the subdirectories [`Paths::resolve`]
 /// creates already in place. Creation is best-effort — a failure surfaces as a missing-file
 /// error in the test body.

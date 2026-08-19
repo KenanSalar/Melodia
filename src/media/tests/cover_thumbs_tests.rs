@@ -131,6 +131,91 @@ fn set_thumb_size_drops_stale_buffers_only_when_the_size_moves() -> TestResult {
     Ok(())
 }
 
+// ── the scheduling lookup ──
+
+/// How long a test waits on the decode pool. Generous rather than tight — the pool is two to four
+/// threads shared with every other test in the binary, and the failure this guards is "never",
+/// not "slowly".
+const DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// The whole point of the lookup, and the thing its callers cannot check for themselves: a miss
+/// answers immediately, because for every caller the calling thread is the event loop.
+#[test]
+fn a_scheduled_miss_answers_with_the_placeholder() -> TestResult {
+    let thumbs = Arc::new(CoverThumbs::new());
+    let (_tmp, path) = write_test_png(600)?;
+    let path = path.to_str().ok_or("temp path is not UTF-8")?;
+
+    assert_eq!(
+        thumbs.get_or_schedule_opt(Some(path)).size().width,
+        0,
+        "a miss must hand back the placeholder rather than decode on the calling thread"
+    );
+    Ok(())
+}
+
+/// The other half of the contract. A placeholder is only temporary because the batch lands *and*
+/// the notifier fires — without the second the card never comes back, which is exactly what a
+/// caller with no generation to bump would produce.
+#[test]
+fn a_scheduled_miss_lands_and_notifies() -> TestResult {
+    let thumbs = Arc::new(CoverThumbs::new());
+    let (_tmp, path) = write_test_png(600)?;
+    let path = path.to_str().ok_or("temp path is not UTF-8")?;
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    thumbs.set_decoded_notifier(move || {
+        let _ = tx.send(());
+    });
+
+    assert_eq!(thumbs.get_or_schedule_opt(Some(path)).size().width, 0);
+    rx.recv_timeout(DRAIN_TIMEOUT).map_err(|_| "the scheduled decode never announced itself")?;
+
+    assert_eq!(
+        thumbs.get_or_schedule_opt(Some(path)).size().width,
+        ROW_THUMB_SIZE,
+        "the lookup after the announcement must answer with what the batch decoded"
+    );
+    Ok(())
+}
+
+/// A remembered failure is a cache *hit*, so it re-queues nothing. Were it a miss, every bump
+/// would re-queue it and its own drain would bump again — a broken cover would spin the decode
+/// pool for the life of the session.
+#[test]
+fn a_remembered_failure_never_re_queues() -> TestResult {
+    let thumbs = Arc::new(CoverThumbs::new());
+    let missing = "/nonexistent/melodia/cover-missing.png";
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    thumbs.set_decoded_notifier(move || {
+        let _ = tx.send(());
+    });
+
+    let _ = thumbs.get_or_schedule_opt(Some(missing));
+    rx.recv_timeout(DRAIN_TIMEOUT).map_err(|_| "the failed decode never announced itself")?;
+    assert!(thumbs.cache.lock().contains(Path::new(missing)), "a failure must be remembered");
+
+    let _ = thumbs.get_or_schedule_opt(Some(missing));
+    assert!(
+        thumbs.pending.lock().queued.is_empty(),
+        "a remembered failure must not re-enter the queue it just came out of"
+    );
+    Ok(())
+}
+
+/// An empty path is the "this row has no artwork" case and reaches neither the cache nor the
+/// pool — every model row carries one, so a queued entry per artless track is the cost.
+#[test]
+fn an_empty_path_schedules_nothing() {
+    let thumbs = Arc::new(CoverThumbs::new());
+    for path in [None, Some("")] {
+        assert_eq!(thumbs.get_or_schedule_opt(path).size().width, 0);
+    }
+    assert!(thumbs.pending.lock().queued.is_empty());
+    assert_eq!(thumbs.cache.lock().len(), 0);
+}
+
 #[test]
 fn resize_shrinks_cap_and_evicts() -> TestResult {
     let cap = NonZeroUsize::new(4).ok_or("cap must be > 0")?;

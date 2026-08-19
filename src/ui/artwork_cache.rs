@@ -23,7 +23,7 @@ use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::media::image_decode::{
-    FilterType, MAX_SOURCE_DIM, decode_capped, fit_within, resize_rgb8,
+    FilterType, MAX_SOURCE_DIM, decode_capped_to, fit_within, resize_rgb8,
 };
 use crate::ui::backdrop::BackdropSample;
 use crate::ui::util::{BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
@@ -111,7 +111,9 @@ impl ArtworkCache {
 
 /// Decode `path` **once**, then derive both halves from that single `DynamicImage`.
 fn decode_artwork(path: &Path, blur_spec: Option<BlurSpec>) -> CachedArtwork {
-    pair_from_image(&decode_capped(path, MAX_SOURCE_DIM).ok()?, blur_spec)
+    // `COVER_SIZE` rather than the blur band's target: both halves come off this one decode and
+    // the tile is the larger of them, so it is what the source has to still cover.
+    pair_from_image(&decode_capped_to(path, MAX_SOURCE_DIM, COVER_SIZE).ok()?, blur_spec)
 }
 
 /// Both halves plus the measurement, from an image already in hand.

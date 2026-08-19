@@ -2,6 +2,23 @@ use crate::error::AppError;
 
 use super::*;
 
+/// [`STORED_EXTENSIONS`] and the `image` dependency's feature list are one decision spelled in two
+/// files, and it fails silently in both directions. A format the store may name but this build
+/// cannot decode is a cover written to disk that nothing can draw — while [`is_stored_name`] still
+/// claims it, so the sweep is on the hook for a file no reader will ever open.
+#[test]
+fn every_stored_extension_is_one_this_build_can_read() {
+    for ext in STORED_EXTENSIONS {
+        let readable =
+            image::ImageFormat::from_extension(ext).is_some_and(|format| format.reading_enabled());
+        assert!(
+            readable,
+            "the store may write `.{ext}` but this build cannot decode it — add the feature to \
+             the `image` dependency in Cargo.toml, or take the extension out of STORED_EXTENSIONS"
+        );
+    }
+}
+
 /// A solid-colour square, encoded by the extension in `name`, so a sampled pixel names the source
 /// it came from. Real bytes rather than a placeholder string: `store_image` reads every source's
 /// header and refuses anything it could not draw, so a fixture has to be a decodable image.

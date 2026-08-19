@@ -249,7 +249,13 @@ impl ArtistsUi {
     /// Lazy cover lookup for an Artists **grid card** — backs `Artists.request-cover`, resolving
     /// against the grid-tier cache.
     pub fn grid_cover(&self, image_path: &str) -> slint::Image {
-        self.grid_covers.get_or_load_opt(Some(image_path).filter(|s| !s.is_empty()))
+        self.grid_covers.get_or_schedule_opt(Some(image_path).filter(|s| !s.is_empty()))
+    }
+
+    /// The grid tier itself, for the wiring that has to reach past a lookup — the
+    /// `AlbumsUi::grid_thumbs` contract.
+    pub fn grid_thumbs(&self) -> Arc<CoverThumbs> {
+        self.grid_covers.clone()
     }
 }
 

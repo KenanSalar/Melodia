@@ -478,10 +478,30 @@ silently miss the other.
 ## Covers
 
 - **No row struct carries a decoded cover; every one asks for it.** `TrackListRow` has no `image`
-  field — `TrackListRowItem` resolves per *instantiated* row through `RowCovers.request(path)`,
-  wired once in `boot/ui_setup.rs`. New TrackList consumers need zero cover plumbing.
-  `CoverThumbs::prewarm` dedupes and caps at LRU capacity — pass paths in **display order** so the
-  kept prefix paints first.
+  field — `TrackListRowItem` resolves per *instantiated* row through
+  `RowCovers.request(path, generation)`, wired once in `boot/ui_setup.rs`. New TrackList consumers
+  need zero cover plumbing. `CoverThumbs::prewarm` dedupes and caps at LRU capacity — pass paths in
+  **display order** so the kept prefix paints first.
+
+- **A lazy cover lookup never decodes on the thread that asks.** `get_or_schedule_opt` answers
+  from the tier and hands a miss to the decode pool, so the caller — a Slint model getter, so the
+  event loop — gets the placeholder on that frame. What makes the placeholder temporary is a
+  generation the same binding reads: the tier fires one notifier per landed *batch* and
+  `ui::cover_generation::notify_on_decode` bumps the counter on the UI thread. Prewarm still covers
+  the common case; this is for the misses it structurally can't reach. A prewarm is capped at the
+  tier's own `CACHE_CAP` and walks **in display order**, so a library with more unique covers than
+  that keeps its visible prefix and nothing else — and every row scrolled to past it used to decode
+  inline, one at a time, on the event loop.
+  - **Per batch, not per cover.** A screenful of misses coalesces into one pass over the mounted
+    bindings, and a miss arriving mid-drain joins it rather than spawning a second.
+  - **A cached failure is a hit**, so a broken cover re-queues nothing and can't spin against its
+    own notifier.
+  - **A surface with no generation to come back on takes `grid_cover_blocking` instead** — Artist
+    Detail's Albums strip, whose callback carries no counter, and the Edit Artwork dialog's cover
+    slot, which is a one-shot property write with no binding to re-run. Both are bounded and
+    prewarmed, so the inline decode is a single sub-frame cost; scheduling there instead leaves a
+    placeholder nothing ever replaces. `ui::cover_generation::tests` walks for both halves — the
+    mismatch is invisible in review and only shows up on a library big enough to miss.
 
 - **`QueueRow` goes through two globals rather than `RowCovers`**, each wanting a different tier:
   the queue sheet's *private* `CoverThumbs` (so closing it drops every buffer without yanking
@@ -495,10 +515,17 @@ silently miss the other.
   writes `selected-index` before it emits `selected`), and `BrowseCardGrid`'s **mode toggle**.
   - The argument does two jobs — reading it makes the binding depend on the counter, and its value
     is the "is this tier warm" flag. **At 0 the Rust side answers cache-only**, so rows mounted on
-    that frame paint placeholders instead of each dragging a decode onto the UI thread; the surface
-    warms off-thread and bumps, switching later rows to the loading lookup. Teardown rewinds to 0
-    beside the tier clear, so 0 keeps meaning "cold". Wire the decoding lookup unconditionally and
-    the counter is dead weight.
+    that frame don't even queue work for a tier a leave is about to clear; past 0 they take the
+    scheduling lookup. Teardown rewinds to 0 beside the tier clear, so 0 keeps meaning "cold".
+    Answer unconditionally and the flag half is dead weight.
+  - **The bump has two callers and they mean different things.** `mark_covers_warm` is the
+    prewarm's, and moves the counter off 0; **`repaint_covers` is the decode notifier's, and never
+    does** — a batch landing after a tab-leave cleared the tier would otherwise read as warm and
+    cost the next mount the cache-only frame the gate exists for.
+  - **The three My Library grids carry the property without the gate.** Albums, Artists and
+    Playlists never answer cache-only, so their counter is only ever the repaint token; 0 is a
+    starting value there, not a state. Same for `RowCovers.generation`. Don't read a
+    `covers-generation` as cold-gated without checking the Rust side.
   - **The bump is gated on the prewarm's verdict *and* a re-check on the UI thread**, because they
     fail separately: a pick made while decodes ran already rewound the counter, while a section
     leave landing mid-decode makes the prewarm hand its buffers back. **A prewarm that may release
@@ -512,8 +539,9 @@ silently miss the other.
     obliges a `mark_dirty()` on leave and the same wire-time seed, having no enter-time fetch.
   - **The Rust half is `grid_prewarm::grid_cover(thumbs, path, generation)`** — the tier and
     counter differ per page, the branch doesn't. Reach for it at a fourth surface: a copy that grew
-    a decoding `else` arm reads correctly and quietly retires the mechanism. The hero's
-    `CoverMosaic` keeps the one-argument form, its tier being warmed by a fetch.
+    a **decoding** `else` arm reads correctly and puts the UI-thread decode straight back, which is
+    the one thing neither arm does any more. The hero's `CoverMosaic` keeps the one-argument form,
+    its tier being warmed by a fetch.
 
 - **Cache cap via `grid_prewarm::cover_cap_for_window(app, fallback)`** — one band for every grid,
   they all draw the same card. Derives its cap from the monitor's *logical* resolution against the

@@ -9,6 +9,7 @@
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use slint::{ComponentHandle, Image};
 
@@ -132,24 +133,25 @@ pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroU
     cover_cap(logical_dim(physical.width, scale), logical_dim(physical.height, scale), fallback)
 }
 
-/// Resolve one grid card's cover, decoding only once the tier is known warm.
+/// Resolve one grid card's cover without ever decoding on the calling thread.
 ///
 /// `generation` is the page's `covers-generation`: 0 means the tab was just entered and
 /// its tier cleared on the previous leave, so answer from the cache alone and let the card
-/// paint its placeholder — decoding there instead puts one grid-tier decode per visible
-/// card on the UI thread, in the frame that mounts the grid. The off-thread prewarm bumps
-/// the counter when it lands, re-running these bindings. Full contract in the "Covers"
-/// section of `.claude/rules/ui-patterns.md`.
+/// paint its placeholder — the off-thread prewarm bumps the counter when it lands, re-running
+/// these bindings. Past 0 a miss is scheduled rather than served, which covers the case the
+/// prewarm can't: a library with more unique covers than the tier holds, where scrolling past
+/// the warmed prefix used to decode under the event loop one card at a time. Full contract in
+/// the "Covers" section of `.claude/rules/ui-patterns.md`.
 ///
 /// Shared by the three grid tabs rather than spelled per page: the tier and the counter
 /// differ, the rule doesn't, and a copy that grew a decoding `else` arm would look right
 /// and quietly retire the mechanism.
-pub fn grid_cover(thumbs: &CoverThumbs, artwork_path: &str, generation: i32) -> Image {
+pub fn grid_cover(thumbs: &Arc<CoverThumbs>, artwork_path: &str, generation: i32) -> Image {
     let path = nonempty_artwork_path(artwork_path);
     if generation == 0 {
         thumbs.get_cached_opt(path)
     } else {
-        thumbs.get_or_load_opt(path)
+        thumbs.get_or_schedule_opt(path)
     }
 }
 

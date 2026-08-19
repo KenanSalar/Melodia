@@ -80,15 +80,15 @@ fn cover_size_steps_up_for_hidpi_and_never_below_a_card() {
     assert!(super::cover_size(2.0) > MIN_CARD_W * 2);
 }
 
-/// Generation 0 means "this tier was cleared when its tab was left", and the
-/// lookup must answer from the cache alone — a decode here lands on the UI
-/// thread, in the frame that mounts the grid, once per visible card. It is not
-/// "return nothing": an entry that survives still comes back, which is what
-/// makes a re-entered warm tab paint instantly.
+/// **Neither generation may decode on the calling thread.** 0 means the tier was cleared when
+/// its tab was left and the lookup answers from the cache alone; past 0 a miss is handed to the
+/// decode pool and still answers with the placeholder, the card coming back on the bump that
+/// follows. Neither is "return nothing" — an entry already in the tier resolves at any
+/// generation, which is what makes a re-entered warm tab paint instantly.
 #[test]
-fn a_cold_generation_serves_the_cache_without_decoding() -> Result<(), Box<dyn std::error::Error>> {
+fn no_generation_decodes_on_the_calling_thread() -> Result<(), Box<dyn std::error::Error>> {
     let cap = NonZeroUsize::new(4).ok_or("cap must be > 0")?;
-    let thumbs = CoverThumbs::with_config(64, cap);
+    let thumbs = Arc::new(CoverThumbs::with_config(64, cap));
     let (_tmp, path) = write_test_png(512)?;
     let path = path.to_str().ok_or("temp path is not UTF-8")?;
 
@@ -99,13 +99,19 @@ fn a_cold_generation_serves_the_cache_without_decoding() -> Result<(), Box<dyn s
     );
     assert_eq!(
         super::grid_cover(&thumbs, path, 1).size().width,
-        64,
-        "a warmed tier must decode on miss, so rows scrolled to later still get covers"
+        0,
+        "past 0 a miss schedules and still answers with the placeholder — decoding here is the \
+         regression, one grid-tier decode per visible card in the frame that mounts the grid"
     );
-    assert_eq!(
-        super::grid_cover(&thumbs, path, 0).size().width,
-        64,
-        "generation 0 gates the *decode*, not the lookup — a cached cover still resolves"
-    );
+
+    // What the scheduled decode will have done, without racing the pool for it.
+    thumbs.prewarm(&[PathBuf::from(path)]);
+    for generation in [0, 1] {
+        assert_eq!(
+            super::grid_cover(&thumbs, path, generation).size().width,
+            64,
+            "a cover already in the tier resolves at every generation"
+        );
+    }
     Ok(())
 }

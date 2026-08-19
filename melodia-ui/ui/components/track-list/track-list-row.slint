@@ -399,8 +399,10 @@ export component TrackListRowItem inherits Rectangle {
                         ArtworkImage {
                             artwork-path: root.row-data.artwork_path;
                             // Lazy per-instantiated-row lookup, so only the visible rows of a
-                            // virtualized list reach the shared row-tier LRU, decoding on a miss.
-                            cover: RowCovers.request(root.row-data.artwork_path);
+                            // virtualized list reach the shared row-tier LRU. A miss paints the
+                            // placeholder and schedules; `generation` is what repaints it.
+                            cover: RowCovers.request(root.row-data.artwork_path,
+                                RowCovers.generation);
                             tile-size: 36px;
                             tile-radius: Theme.radius-sm;
                         }

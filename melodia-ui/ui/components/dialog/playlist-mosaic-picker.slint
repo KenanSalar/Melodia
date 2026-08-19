@@ -99,7 +99,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
                     artwork-paths: Dialog.mosaic-selection;
                     gutter-size: root.mosaic-gap;
                     request-cover(p) => {
-                        return Playlists.request-cover(p);
+                        return Playlists.request-cover(p, Playlists.covers-generation);
                     }
                 }
             }

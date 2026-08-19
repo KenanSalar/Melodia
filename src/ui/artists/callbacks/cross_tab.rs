@@ -22,7 +22,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     // one grid-tier decode serves both surfaces.
     {
         let albums_ui_cb = albums_ui.clone();
-        detail.on_request_album_cover(move |path| albums_ui_cb.grid_cover(path.as_str()));
+        // Blocking, unlike the Albums tab's own lookup: this callback carries no generation, so
+        // a scheduled decode would have nothing to bring the card back.
+        detail.on_request_album_cover(move |path| albums_ui_cb.grid_cover_blocking(path.as_str()));
     }
 
     // open-album: the shared cross-tab hand-off, which owns all of it — stamp the

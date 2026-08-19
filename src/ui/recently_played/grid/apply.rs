@@ -203,3 +203,13 @@ pub fn mark_covers_warm(ui: &AppWindow) {
     let g = ui.global::<RecentlyPlayed>();
     g.set_covers_generation(g.get_covers_generation().saturating_add(1));
 }
+
+/// Re-run the mounted card bindings once a scheduled decode has landed — the
+/// `favorites::grids::apply::repaint_covers` contract, never moving off 0.
+pub fn repaint_covers(ui: &AppWindow) {
+    let g = ui.global::<RecentlyPlayed>();
+    let generation = g.get_covers_generation();
+    if generation > 0 {
+        g.set_covers_generation(generation.saturating_add(1));
+    }
+}

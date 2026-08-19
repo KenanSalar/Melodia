@@ -36,7 +36,8 @@ export component MyLibraryPlaylistsTab inherits Rectangle {
             // `PlaylistStats` list through Rust — no DB hop.
             Dialog.open-rename-playlist(id, Playlists.row-name(id), Playlists.row-description(id));
         }
-        request-cover(p) => { Playlists.request-cover(p) }
+        covers-generation: Playlists.covers-generation;
+        request-cover(p, g) => { Playlists.request-cover(p, g) }
     }
 
     // Its copy points at the action pill in the band above.

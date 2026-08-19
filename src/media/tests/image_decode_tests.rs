@@ -3,7 +3,9 @@
 use std::collections::BTreeSet;
 
 use super::*;
-use crate::test_support::{SRC_DIR, stripped_sources};
+use crate::test_support::{SRC_DIR, stripped_sources, write_test_jpeg, write_test_png};
+
+type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 /// A floor, so a walk that silently found nothing can't pass vacuously.
 const MIN_SOURCES: usize = 200;
@@ -62,6 +64,63 @@ fn resize_rgb8_is_the_only_resampler_outside_the_palette_seed() {
          site that should go through `image_decode::resize_rgb8`; a *missing* one means the \
          exemption was removed or renamed and this pin is no longer checking anything."
     );
+}
+
+// ── decode_capped_to ──
+
+/// The contract every tier leans on, and the one a scale factor could quietly break: whatever
+/// the decoder picks, the result still covers the target on its long edge, so the resize behind
+/// it is unchanged and still never upscales.
+#[test]
+fn a_scaled_decode_still_covers_its_target() -> TestResult {
+    const SOURCE: u32 = 512;
+    let (_tmp, path) = write_test_jpeg(SOURCE)?;
+
+    // Every live tier size, the two row tiers through the grid and detail ones.
+    for target in [48, 72, 180, 200, 256, 384, 448] {
+        let decoded = decode_capped_to(&path, MAX_SOURCE_DIM, target)?;
+        let long_edge = decoded.width().max(decoded.height());
+        assert!(long_edge >= target, "target {target} came back at {long_edge}px");
+        assert!(long_edge <= SOURCE, "a decode may never enlarge: {target} gave {long_edge}px");
+    }
+    Ok(())
+}
+
+/// The point of the call. A row tile asks for a fraction of the source, and getting the whole
+/// thing back means the fast path silently stopped applying — which costs only time, so nothing
+/// else in the tree would notice.
+#[test]
+fn a_small_target_decodes_below_the_source() -> TestResult {
+    let (_tmp, path) = write_test_jpeg(512)?;
+    let decoded = decode_capped_to(&path, MAX_SOURCE_DIM, 48)?;
+    assert!(
+        decoded.width() < 512,
+        "a 48px tile decoded the full 512px source; scale-on-decode is not being reached"
+    );
+    Ok(())
+}
+
+/// The dimension bound stays [`capped_limits`]' alone: the fast path *declines* an oversized
+/// source rather than reporting it, and the fallback runs the same file through the guard. What
+/// must not happen is the fast path answering where the fallback would refuse.
+#[test]
+fn a_source_over_the_cap_is_refused() -> TestResult {
+    let (_tmp, path) = write_test_jpeg(64)?;
+    assert!(
+        decode_capped_to(&path, 32, 16).is_err(),
+        "a source past `max_dim` must be refused however small the target"
+    );
+    Ok(())
+}
+
+/// A container with no scale-on-decode still decodes, at its own size — the fallback is most of
+/// what makes the call safe to use everywhere.
+#[test]
+fn a_container_without_scale_on_decode_falls_back() -> TestResult {
+    let (_tmp, path) = write_test_png(200)?;
+    let decoded = decode_capped_to(&path, MAX_SOURCE_DIM, 48)?;
+    assert_eq!((decoded.width(), decoded.height()), (200, 200));
+    Ok(())
 }
 
 // ── fit_within ──
