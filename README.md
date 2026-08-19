@@ -9,13 +9,13 @@ Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the
 | Idle (Fedora) | 157 MB | 86 MB | 34 MB | 122 MB | 0.3% |
 | Playing, list view (Fedora) | 157 MB | 87 MB | 35 MB | 122 MB | 0.6–0.7% |
 | Playing, visualizer live (Fedora) | 163 MB | 93 MB | 34 MB | 128 MB | 5.0% |
-| Idle (Windows) | — | n/a | — | — | — |
-| Playing, list view (Windows) | — | n/a | — | — | — |
-| Playing, visualizer live (Windows) | — | n/a | — | — | — |
+| Idle (Windows) | 119 MB | 60 MB | 56 MB | 63 MB | 0.2–0.4% |
+| Playing, list view (Windows) | 124 MB | 65 MB | 61 MB | 63 MB | 0.4–1.2% |
+| Playing, visualizer live (Windows) | 134 MB | 75 MB | 70 MB | 64 MB | 7.3–8.4% |
 
-Release build against a 512-track library, Fedora/Wayland on a 16-core machine, nothing else contending for the GPU. Memory from `smaps_rollup` and `/proc/self/status`, CPU as a share of **one** core averaged over paired 30-second windows. Windows figures to follow; it reports a working set rather than PSS, so that cell has no equivalent to fill.
+Release build against the same 512-track library on both platforms, each on a 16-core machine with the window on the same 144 Hz display and nothing else contending for the GPU. CPU as a share of **one** core over paired 30-second windows. Memory on Fedora/Wayland from `smaps_rollup` and `/proc/self/status`; on Windows 11 from the working set, split by page backing into **Heap** (`MEM_PRIVATE`) and **Mapped** (`MEM_IMAGE` and `MEM_MAPPED`), with **PSS** taken as the private working set.
 
-**Heap** is `RssAnon`, what the application itself allocates, and it is the number that stays flat: grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it, though a higher-resolution screen raises the totals. The visualizer costs none of it, reusing its buffers frame to frame. **Mapped** is `RssFile`, and the two together are essentially all of RSS: most of what the process appears to occupy is the binary and the shared graphics stack, not anything Melodia allocated. That is also why **PSS** is the fairer whole-process figure on a desktop already running other GL applications, since RSS charges those shared pages in full, around 80 MB of it here.
+**Heap** is what the application itself allocates, and it is the number that stays flat: grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it, though a higher-resolution screen raises the totals. The visualizer allocates nothing per frame, reusing its buffers. **Mapped** is the file-backed remainder, and the two together are essentially all of RSS: most of what the process appears to occupy is the binary and the shared graphics stack, not anything Melodia allocated. That is also why **PSS** is the fairer whole-process figure on a desktop already running other GL applications, since RSS charges those shared pages in full, around 80 MB of it here.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/github/v/release/KenanSalar/Melodia?label=version&color=blueviolet)](https://github.com/KenanSalar/Melodia/releases)
