@@ -20,8 +20,8 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 /// importing UI types and the consumer maps each kind to a translated string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToastKind {
-    /// A track failed to decode or open. The music stopping is otherwise invisible, so
-    /// this is always surfaced.
+    /// A track failed to decode or open, or a radio station could not be reached or stopped
+    /// broadcasting. The music stopping is otherwise invisible, so this is always surfaced.
     PlaybackFailed,
     /// A user-initiated backend operation failed — folder scan, file import, settings
     /// save.

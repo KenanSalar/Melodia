@@ -13,6 +13,8 @@ use std::sync::Arc;
 use crate::database::queries;
 use crate::entities::radio;
 use crate::error::AppError;
+use crate::library::playback;
+use crate::player::types::RadioNowPlaying;
 use crate::services::radio_browser;
 use crate::state::AppState;
 
@@ -59,6 +61,18 @@ pub async fn remove_station(state: &AppState, id: i64) -> Result<(), AppError> {
 /// Count a play against a station, which is what orders the recents list.
 pub async fn mark_played(state: &AppState, id: i64) -> Result<(), AppError> {
     queries::radio::mark_played(&state.db, id).await
+}
+
+/// Tune to a stored station, counting the play once it is connecting.
+///
+/// The count goes in even if the stream turns out to be unreachable: it records that the user
+/// chose the station, which is what orders the recents list, and a station that is down today is
+/// exactly the one they will want to find again.
+pub async fn play_station(state: &AppState, id: i64) -> Result<(), AppError> {
+    let station = get_station(state, id).await?;
+    let now_playing = RadioNowPlaying::from(&station);
+    playback::player_play_station(&state.playback_ctx(), &now_playing).await?;
+    mark_played(state, id).await
 }
 
 /// Point a station at its stored logo, or clear it with `None`.

@@ -11,12 +11,12 @@
 //!
 //! `PlaybackContext` owns its `Arc`s rather than borrowing from
 //! `AppState`. Each field is already `Arc`-backed under the hood, so a
-//! `playback_ctx()` call costs five `Arc::clone` increments — cheap
+//! `playback_ctx()` call costs six `Arc::clone` increments — cheap
 //! enough that callers don't need to think about reuse. Owned fields
 //! also dodge the "temporary doesn't live long enough" pattern when the
 //! ctx is built inline in an `async move` block.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use crate::config::Paths;
 use crate::database::DbPool;
@@ -35,6 +35,11 @@ pub struct PlaybackContext {
     pub rodio: Arc<RodioPlayer>,
     pub db: DbPool,
     pub paths: Arc<Paths>,
+    /// The same lazily-built client `AppState`, scrobbling and Discord presence share, so a
+    /// station opens on the one connection pool and carries the `Melodia/<version>` User-Agent
+    /// with it. Carried here rather than passed per call because resuming a paused station is a
+    /// transport command like any other, and `player_play` has only this.
+    pub http: Arc<OnceLock<reqwest::Client>>,
 }
 
 impl PlaybackContext {
@@ -57,7 +62,7 @@ impl PlaybackContext {
 }
 
 impl AppState {
-    /// Snapshot a [`PlaybackContext`] from the live state. Cheap — five
+    /// Snapshot a [`PlaybackContext`] from the live state. Cheap — six
     /// `Arc::clone` calls. Build once per UI callback rather than per
     /// `library::playback::*` invocation if you're firing several in a row.
     pub fn playback_ctx(&self) -> PlaybackContext {
@@ -67,6 +72,7 @@ impl AppState {
             rodio: self.rodio.clone(),
             db: self.db.clone(),
             paths: self.paths.clone(),
+            http: self.http_client_cell(),
         }
     }
 }

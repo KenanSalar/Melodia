@@ -97,6 +97,16 @@ pub fn execute_actions<B: PlayerBackend>(
                 // is harmless — the `None` path never builds an audio source.
                 rodio_player.preload_gapless(path.as_deref(), TrackReplayGain::default());
             }
+            PlayerAction::PlayStream { generation, volume } => {
+                // Deliberately not through `start_or_skip`: there is no file to pre-flight with
+                // `Path::exists`, and nothing to auto-skip onto — a station is one source, not a
+                // position in a queue.
+                if let Err(e) = rodio_player.play_stream(generation, volume) {
+                    log::error!("Failed to start the radio stream: {e}");
+                    rodio_player.stop();
+                    enqueue_station_failure(&mut pending, player_state, sinks, generation);
+                }
+            }
             PlayerAction::UpdatePlayCount(track_id) => {
                 use crate::tasks::play_count_flusher::{PlayCountEvent, try_send};
                 if !try_send(PlayCountEvent::Play(track_id)) {
@@ -245,6 +255,25 @@ fn toast_track_name(file_path: &str) -> String {
 /// On an empty queue this emits `Stop` only — the `with_state_emit` call
 /// took the lock to do that, so the state machine and `ViewModel` both reflect
 /// the end-of-queue state.
+/// Clear a station whose staged stream could not be started, so the transport doesn't sit on a
+/// `Loading` that will never resolve.
+///
+/// No toast: the only ways this fires are a stage that was never made and one made for a station
+/// the user has already moved off, neither of which is theirs to act on. A stream that failed to
+/// *open* is the user-visible case, and `library::radio` says so there.
+fn enqueue_station_failure(
+    pending: &mut VecDeque<PlayerAction>,
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    generation: u64,
+) {
+    let actions =
+        with_state_emit(player_state, sinks, |s| s.build_station_failed_actions(generation));
+    for (i, a) in actions.into_iter().enumerate() {
+        pending.insert(i, a);
+    }
+}
+
 fn enqueue_auto_skip(
     pending: &mut VecDeque<PlayerAction>,
     player_state: &PlayerStateHandle,

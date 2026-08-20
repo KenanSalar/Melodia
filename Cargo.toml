@@ -267,8 +267,29 @@ serde_json = "1.0.151"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 dirs = "6.0.0"
 
-# HTTP (Deezer artist images, scrobbling)
+# HTTP (Deezer artist images, scrobbling, the radio directory and its streams)
 reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "query", "rustls", "stream"] }
+
+# `Read` + `Seek` over an HTTP response, backed by a circular buffer an endless
+# stream can't outgrow — what lets a radio station reach Symphonia at all, since
+# `Decoder` wants a seekable reader and a live mount is neither finite nor
+# rewindable.
+#
+# `default-features = false` is the load-bearing half. The default set carries
+# `reqwest/default-tls`, which is OpenSSL on Linux: it would resolve a second TLS
+# stack beside the `rustls` above and land in `cargo-deb`'s `$auto` dependency
+# set. `reqwest-rustls` already implies `reqwest`, which implies `http`, so the
+# one entry is the whole list. Turning defaults off also drops
+# `reqwest/system-proxy`, so this path ignores `HTTP_PROXY` where the shared
+# client honours it; restore it explicitly if that gap ever matters.
+stream-download = { version = "0.24.3", default-features = false, features = ["reqwest-rustls"] }
+
+# Icecast/SHOUTcast in-band metadata: the `Icy-MetaData` request header, the
+# `icy-*` response headers, and the reader that strips the interleaved metadata
+# blocks back out so the decoder sees audio only. Same author as
+# `stream-download` and designed to compose with it; its default feature set is
+# already `["reqwest"]`.
+icy-metadata = "0.6.0"
 
 # MD5 for Last.fm `api_sig` request signing (scrobbling). Last.fm mandates MD5;
 # not used for anything security-sensitive.

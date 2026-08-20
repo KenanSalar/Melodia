@@ -299,6 +299,14 @@ impl AppState {
     pub fn http_client(&self) -> &reqwest::Client {
         self.http_client.get_or_init(crate::services::build_http_client)
     }
+
+    /// The still-unbuilt cell behind [`Self::http_client`], for the one consumer that has to carry
+    /// the client somewhere `AppState` doesn't reach: `PlaybackContext`, whose transport commands
+    /// re-open a paused radio station. Handing over the `OnceLock` rather than the client keeps
+    /// the construction lazy — a player that never tunes to a station still never loads rustls.
+    pub fn http_client_cell(&self) -> Arc<OnceLock<reqwest::Client>> {
+        self.http_client.clone()
+    }
 }
 
 /// Seed the Rodio backend's lock-free cells (graphic EQ, `ReplayGain`,

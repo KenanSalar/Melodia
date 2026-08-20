@@ -4,7 +4,8 @@ use crate::database::queries;
 use crate::entities::track::TrackSummary;
 use crate::error::AppError;
 use crate::player::state::{lock_state, play_track_inner, with_state_emit};
-use crate::player::types::PlaybackStatus;
+use crate::player::stream_source;
+use crate::player::types::{PlaybackStatus, RadioNowPlaying};
 use crate::state::PlaybackContext;
 
 /// Which slot of `summaries` playback should start on.
@@ -86,8 +87,91 @@ pub async fn player_play_tracks(
 }
 
 pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {
+    if resume_station(ctx) {
+        return Ok(());
+    }
     ctx.emit_and_execute(crate::player::state::PlayerState::build_play_actions);
     Ok(())
+}
+
+/// Whether a play command has to re-open a station instead of resuming the deck.
+///
+/// `Paused` is the only state that holds a station without a connection: `Playing` and `Loading`
+/// already have one, and a stop forgets the station outright. Pure, so the routing can be pinned
+/// without a runtime, a backend or a socket.
+pub(crate) fn needs_station_reopen(status: PlaybackStatus, has_station: bool) -> bool {
+    has_station && status == PlaybackStatus::Paused
+}
+
+/// Re-open the station the player is paused on, if it is paused on one. `true` means it took over.
+///
+/// Pausing a station drops its connection (see `PlayerState::build_pause_actions`), so resuming is
+/// a fresh open rather than a `Resume` — which is a network round trip, and so cannot happen under
+/// the state lock the ordinary transport path runs in. Every caller of the transport commands is
+/// already inside `runtime.spawn`, the same assumption `execute_actions` makes for its play-count
+/// writes.
+fn resume_station(ctx: &PlaybackContext) -> bool {
+    let station = {
+        let state = lock_state(&ctx.player_state);
+        if !needs_station_reopen(state.status, state.radio.is_some()) {
+            return false;
+        }
+        state.radio.clone()
+    };
+    let Some(station) = station else {
+        return false;
+    };
+
+    let ctx = ctx.clone();
+    tokio::spawn(async move {
+        if let Err(e) = player_play_station(&ctx, &station).await {
+            log::warn!("Could not resume {}: {}", station.name, crate::services::describe(&e));
+        }
+    });
+    true
+}
+
+/// Tune to `station`, stopping whatever was playing and leaving the queue untouched underneath.
+///
+/// Opening a stream is a network round trip, so this is split across two state transitions with an
+/// `.await` between them: the first clears the decks and shows the station as connecting, the
+/// second starts it. The generation returned by the first is what the second is checked against —
+/// a station the user has already moved off must not start playing seconds later.
+pub async fn player_play_station(
+    ctx: &PlaybackContext,
+    station: &RadioNowPlaying,
+) -> Result<(), AppError> {
+    // The session number has to come back out of the emit, since only the state machine can
+    // allocate one atomically with the transition that starts it.
+    let mut generation = 0;
+    ctx.emit_and_execute(|s| {
+        let (session, actions) = s.build_station_connecting_actions(station.clone());
+        generation = session;
+        actions
+    });
+
+    let client = ctx.http.get_or_init(crate::services::build_http_client).clone();
+    let opened = stream_source::open(&client, &station.stream_url).await;
+
+    match opened {
+        Ok(prepared) => {
+            ctx.rodio.stage_stream(generation, prepared);
+            ctx.emit_and_execute(|s| s.build_station_connected_actions(generation));
+            // The session can have ended while the open was in flight, in which case the emit
+            // above declined and nothing claimed the stage. Closing it here rather than leaving it
+            // for the next station is what stops an abandoned connection outliving its station.
+            ctx.rodio.discard_staged_stream(generation);
+            Ok(())
+        }
+        Err(e) => {
+            ctx.emit_and_execute(|s| s.build_station_failed_actions(generation));
+            crate::services::toast::notify(
+                crate::services::toast::ToastKind::PlaybackFailed,
+                station.name.clone(),
+            );
+            Err(e)
+        }
+    }
 }
 
 /// Fade length for a transport pause or stop, or `0` when the setting is off.
@@ -120,6 +204,9 @@ pub fn player_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
 /// the state lock so two near-simultaneous toggles (e.g. UI + media-key) can't
 /// race past each other.
 pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
+    if resume_station(ctx) {
+        return Ok(());
+    }
     let fade_ms = transport_fade_ms(ctx);
     ctx.emit_and_execute(move |s| match s.status {
         PlaybackStatus::Playing | PlaybackStatus::Loading => s.build_pause_actions(fade_ms),

@@ -11,7 +11,7 @@ use super::queue::QueueState;
 use super::replaygain::TrackReplayGain;
 use crate::entities::track::TrackSummary;
 
-use super::types::{PersistableQueue, PlaybackStatus, RepeatMode};
+use super::types::{PersistableQueue, PlaybackStatus, RadioNowPlaying, RepeatMode};
 
 /// Restart-from-beginning threshold for Previous command (ms).
 pub const RESTART_THRESHOLD_MS: u64 = 3000;
@@ -55,6 +55,15 @@ pub struct PlayerState {
     /// the UI as `sleep_at_track_end` on the light `ViewModel` so the overflow
     /// menu's sleep row auto-clears once the monitor fires and disarms it.
     pub pause_after_current_track: bool,
+    /// The station being played, or being connected to. `Some` is what makes this a *live* source,
+    /// and every transport builder branches on it: a stream has no next, no previous, no seek and
+    /// no speed. The queue underneath is left exactly as it was, so stopping the station resumes
+    /// the library where it left off.
+    pub radio: Option<RadioNowPlaying>,
+    /// Which station session is current. Bumped by every transition that starts or ends one, so a
+    /// connect that finishes after the user moved on is refused rather than played late. An open
+    /// takes seconds and a click takes none, which is why this is a counter rather than a flag.
+    pub radio_generation: u64,
     pub queue: QueueState,
 }
 
@@ -71,6 +80,8 @@ impl Default for PlayerState {
             playback_speed: 1.0,
             gapless_enabled: true,
             pause_after_current_track: false,
+            radio: None,
+            radio_generation: 0,
             queue: QueueState::default(),
         }
     }
@@ -148,6 +159,7 @@ pub struct PlayerViewModel {
     pub playback_speed: f64,
     pub gapless_enabled: bool,
     pub sleep_at_track_end: bool,
+    pub radio: Option<RadioNowPlaying>,
     pub queue_tracks: Vec<Arc<TrackSummary>>,
     pub queue_index: i32,
     pub shuffle_enabled: bool,
@@ -173,6 +185,10 @@ pub struct PlayerViewModelLight {
     pub playback_speed: f64,
     pub gapless_enabled: bool,
     pub sleep_at_track_end: bool,
+    /// The station playing, when the source is a live one. `current_track` is `None` throughout,
+    /// so a surface reads whichever of the two is `Some` rather than a flag saying which to trust.
+    /// Its `buffering` is where the spinner comes from.
+    pub radio: Option<RadioNowPlaying>,
     pub has_next: bool,
     pub has_previous: bool,
 }
@@ -230,6 +246,15 @@ pub enum PlayerAction {
     SetVolume(f64),
     SetSpeed(f64),
     PreloadGapless(Option<String>),
+    /// Start the live stream the backend already has staged for this station session.
+    ///
+    /// Carries neither a URL nor a reader: opening a stream is a network round trip and belongs on
+    /// the async task that started the station, not on the executor thread. `generation` is what
+    /// the backend checks the stage against, so an action that outlived its session plays nothing.
+    PlayStream {
+        generation: u64,
+        volume: f64,
+    },
     UpdatePlayCount(i64),
     UpdateSkipCount(i64),
 }
@@ -264,6 +289,9 @@ impl std::fmt::Display for PlayerAction {
             Self::SetSpeed(s) => write!(f, "speed {s:.2}"),
             Self::PreloadGapless(Some(path)) => write!(f, "preload gapless {path}"),
             Self::PreloadGapless(None) => f.write_str("clear gapless preload"),
+            // No URL: a station's stream URL can carry a session token, and this line goes into
+            // the log tail users attach to public issues.
+            Self::PlayStream { generation, .. } => write!(f, "play radio stream #{generation}"),
             Self::UpdatePlayCount(id) => write!(f, "play count +1 for track {id}"),
             Self::UpdateSkipCount(id) => write!(f, "skip count +1 for track {id}"),
         }
@@ -279,12 +307,22 @@ impl PlayerState {
         }
     }
 
+    /// Whether the source on the deck is a live stream, which is what every transport builder
+    /// below branches on. `Some` covers the connecting stretch too: the queue is already out of
+    /// the picture by then.
+    fn is_radio(&self) -> bool {
+        self.radio.is_some()
+    }
+
     fn has_next(&self) -> bool {
-        self.queue.peek_next().is_some()
+        // A station has nowhere to go: the queue is untouched underneath but skipping into it
+        // would be a silent change of source. Shortwave, Tuner and RadioDroid all disable both.
+        !self.is_radio() && self.queue.peek_next().is_some()
     }
 
     fn has_previous(&self) -> bool {
-        !self.queue.play_order.is_empty()
+        !self.is_radio()
+            && !self.queue.play_order.is_empty()
             && (self.queue.current_index.is_some_and(|ci| ci > 0) || self.queue.repeat_mode.wraps())
     }
 
@@ -305,6 +343,7 @@ impl PlayerState {
             playback_speed: self.playback_speed,
             gapless_enabled: self.gapless_enabled,
             sleep_at_track_end: self.pause_after_current_track,
+            radio: self.radio.clone(),
             queue_tracks: self.queue.tracks_in_play_order(),
             queue_index: super::queue::current_index_to_i32(self.queue.current_index),
             shuffle_enabled: self.queue.shuffle_enabled,
@@ -327,6 +366,7 @@ impl PlayerState {
             playback_speed: self.playback_speed,
             gapless_enabled: self.gapless_enabled,
             sleep_at_track_end: self.pause_after_current_track,
+            radio: self.radio.clone(),
             has_next: self.has_next(),
             has_previous: self.has_previous(),
         }
@@ -352,7 +392,14 @@ impl PlayerState {
     }
 
     /// Build actions for play/resume command.
+    ///
+    /// A paused station has no deck contents to resume — pausing dropped its connection — and
+    /// re-opening one is a network round trip that cannot happen under the state lock. So this
+    /// declines, and `library::playback::player_play` takes the station branch ahead of it.
     pub fn build_play_actions(&mut self) -> Vec<PlayerAction> {
+        if self.is_radio() {
+            return vec![];
+        }
         if self.status == PlaybackStatus::Paused {
             self.status = PlaybackStatus::Playing;
             vec![PlayerAction::Resume]
@@ -363,7 +410,17 @@ impl PlayerState {
 
     /// Build actions for pause command. `fade_ms` is the pause-fade length when
     /// that setting is on, else `0` — same contract as [`Self::build_stop_actions`].
+    ///
+    /// Pausing a station **drops its connection**: `stream-download` pauses its writer when the
+    /// reader falls behind, so a held-open socket would back-pressure the server and come back
+    /// playing audio that is seconds stale. The station stays on screen with a play button that
+    /// re-opens it, which is what Shortwave and `RadioDroid` do.
     pub fn build_pause_actions(&mut self, fade_ms: u64) -> Vec<PlayerAction> {
+        if self.is_radio() && self.status != PlaybackStatus::Stopped {
+            self.status = PlaybackStatus::Paused;
+            self.end_stream_session();
+            return vec![PlayerAction::Stop { fade_ms }];
+        }
         if self.status == PlaybackStatus::Playing {
             self.status = PlaybackStatus::Paused;
             vec![PlayerAction::Pause { fade_ms }]
@@ -374,19 +431,33 @@ impl PlayerState {
 
     /// Build actions for user-initiated stop (preserves position for resume).
     /// `fade_ms` is the pause-fade length when that setting is on, else `0`.
+    ///
+    /// A station is forgotten outright rather than paused, so the transport falls back to the
+    /// queue that was left untouched underneath it (D9).
     pub fn build_stop_actions(&mut self, fade_ms: u64) -> Vec<PlayerAction> {
         self.status = PlaybackStatus::Stopped;
+        if self.is_radio() {
+            self.end_stream_session();
+            self.radio = None;
+        }
         vec![PlayerAction::Stop { fade_ms }]
     }
 
     /// Build actions for seek command.
     pub fn build_seek_actions(&mut self, position_ms: u64) -> Vec<PlayerAction> {
+        // A live stream has no timeline to land on; the position is elapsed listening time.
+        if self.is_radio() {
+            return vec![];
+        }
         self.position_ms = position_ms;
         vec![PlayerAction::Seek { position_ms }]
     }
 
     /// Build actions for next-track command.
     pub fn build_next_actions(&mut self) -> Vec<PlayerAction> {
+        if self.is_radio() {
+            return vec![];
+        }
         let mut actions = vec![];
         let was_paused = self.status == PlaybackStatus::Paused;
 
@@ -423,6 +494,9 @@ impl PlayerState {
 
     /// Build actions for previous-track command.
     pub fn build_previous_actions(&mut self) -> Vec<PlayerAction> {
+        if self.is_radio() {
+            return vec![];
+        }
         let was_paused = self.status == PlaybackStatus::Paused;
 
         if self.position_ms > RESTART_THRESHOLD_MS {
@@ -473,6 +547,13 @@ impl PlayerState {
     /// leaving `current_track` at position 0 for replay-from-start. Always
     /// counts a play for the track that just ended.
     pub fn build_end_of_stream_actions(&mut self) -> Vec<PlayerAction> {
+        // A station's deck only drains once its feed thread has spent its reconnect budget, so
+        // there is nothing to advance to — the queue underneath belongs to the library, and
+        // wandering into it because a station went off air would be a silent change of source.
+        if self.is_radio() {
+            return self.build_stop_actions(0);
+        }
+
         let mut actions = Vec::with_capacity(4);
 
         if let Some(ref track) = self.current_track {
@@ -527,6 +608,10 @@ impl PlayerState {
     pub fn build_crossfade_actions(&mut self, decision: CrossfadeDecision) -> Vec<PlayerAction> {
         let mut actions = Vec::with_capacity(2);
 
+        if self.is_radio() {
+            return actions;
+        }
+
         let Some(outgoing_id) = self.current_track.as_ref().map(|t| t.id) else {
             return actions;
         };
@@ -565,9 +650,84 @@ impl PlayerState {
 
     /// Build actions for set-playback-speed command.
     pub fn build_set_speed_actions(&mut self, speed: f64) -> Vec<PlayerAction> {
+        // rodio implements speed by reporting a multiplied sample rate upward, which against a
+        // source arriving in real time drifts the prebuffer until it starves. Refused rather than
+        // clamped, so the transport keeps showing the 1.0 the deck is actually running at.
+        if self.is_radio() {
+            return vec![];
+        }
         let speed = speed.clamp(MIN_SPEED, MAX_SPEED);
         self.playback_speed = speed;
         vec![PlayerAction::SetSpeed(speed)]
+    }
+
+    /// Point the state at `station` and start connecting to it.
+    ///
+    /// Returns the session generation the caller must carry through to
+    /// [`Self::build_station_connected_actions`], and the actions that clear the decks: the queue
+    /// itself is deliberately untouched, so stopping the station later resumes the library exactly
+    /// where it was (D9).
+    ///
+    /// Speed is reset alongside, because [`Self::build_set_speed_actions`] refuses to move it
+    /// while a station plays and the transport would otherwise claim a rate the deck is not
+    /// running at. The `SetSpeed` follows the `Stop` so it lands on emptied decks and skips the
+    /// re-anchoring seek.
+    pub fn build_station_connecting_actions(
+        &mut self,
+        station: RadioNowPlaying,
+    ) -> (u64, Vec<PlayerAction>) {
+        self.end_stream_session();
+        self.status = PlaybackStatus::Loading;
+        self.radio = Some(station);
+        self.current_track = None;
+        self.duration_ms = 0;
+        self.position_ms = 0;
+        self.pause_after_current_track = false;
+
+        let mut actions = vec![PlayerAction::Stop { fade_ms: 0 }];
+        if (self.playback_speed - 1.0).abs() > f64::EPSILON {
+            self.playback_speed = 1.0;
+            actions.push(PlayerAction::SetSpeed(1.0));
+        }
+        (self.radio_generation, actions)
+    }
+
+    /// The stream opened: start it, unless the user moved on while it was connecting.
+    pub fn build_station_connected_actions(&mut self, generation: u64) -> Vec<PlayerAction> {
+        if !self.is_current_station_session(generation) {
+            return vec![];
+        }
+        self.status = PlaybackStatus::Playing;
+        vec![PlayerAction::PlayStream {
+            generation,
+            volume: self.effective_volume(),
+        }]
+    }
+
+    /// The stream could not be opened. Clears the station rather than leaving a play button that
+    /// would only fail the same way; the caller has already said so in a toast.
+    pub fn build_station_failed_actions(&mut self, generation: u64) -> Vec<PlayerAction> {
+        if !self.is_current_station_session(generation) {
+            return vec![];
+        }
+        self.radio = None;
+        self.status = PlaybackStatus::Stopped;
+        vec![PlayerAction::Stop { fade_ms: 0 }]
+    }
+
+    /// Whether `generation` is still the session the state is on. An open takes seconds and a
+    /// click takes none, so anything arriving from one has to ask.
+    fn is_current_station_session(&self, generation: u64) -> bool {
+        self.is_radio() && self.radio_generation == generation
+    }
+
+    /// Invalidate the current station session, so whatever is still connecting for it is refused
+    /// rather than played late. Called by every transition that starts or ends one.
+    fn end_stream_session(&mut self) {
+        self.radio_generation = self.radio_generation.wrapping_add(1);
+        if let Some(radio) = self.radio.as_mut() {
+            radio.buffering = false;
+        }
     }
 }
 
