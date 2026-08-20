@@ -699,7 +699,7 @@ deliverable is a toggle with nothing to toggle, which cannot be tested by hand.
 moved), full `cargo test` (1879 lib + 4 binary + 12 integration, green; **none added** —
 this phase's pins wait for the manual pass), and `scripts/check-icons.py` after re-subsetting
 for `radio` and `travel_explore`. `CALLBACK_HOMES` grew to 13, and the six catalogs gained
-five msgids — the two tab labels reuse the sidebar's existing `"Browse"` and `"Favorites"`.
+six msgids — the two tab labels reuse the sidebar's existing `"Browse"` and `"Favorites"`.
 
 ---
 

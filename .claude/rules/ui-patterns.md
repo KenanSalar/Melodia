@@ -738,18 +738,19 @@ silently miss the other.
 ## Settings and nav wiring
 
 - **Section-visibility hooks go through `SectionActiveGate`**, mounted in `app-window.slint` in
-  nav-index order — **once per section, plus one more per tab for a section built out of tabs**. It
-  owns the predicate (index selected *and* neither Now Playing nor the miniplayer covering it) and
-  fires `active-changed(bool)` into that section's Rust hook. **It must mount on the always-alive
-  `AppWindow` root, not inside the view**: the *leaving* transition is the edge that matters and a
-  view cannot observe its own. A new section adds one mount, not a tenth copy of the predicate;
-  pass `mini-active: mini-switch.active`, the live derivation, which leads the global by a beat.
-  - **A tab switch is a section switch, and the gate is where that becomes true rather than each
-    view.** `tab-index`/`current-tab` are an optional sub-predicate defaulting `-1`, so the tabless
-    mounts are untouched. My Library mounts five at `index: 3`, so a tab leave fires the departing
-    view's existing hook and **every lifecycle path works unchanged** — hence the page needs **no
-    `covers-generation` machinery**, the entering tab's own fetch prewarming before it writes rows.
-    A `0` default on either property silently deactivates all nine sections.
+  nav-index order — **once per section, and once more per tab only where a tab leave has to be a
+  section leave**. It owns the predicate (index selected *and* neither Now Playing nor the
+  miniplayer covering it) and fires `active-changed(bool)` into that section's Rust hook. **It must
+  mount on the always-alive `AppWindow` root, not inside the view**: the *leaving* transition is
+  the edge that matters and a view cannot observe its own. A new section adds one mount, not
+  another copy of the predicate; pass `mini-active: mini-switch.active`, the live derivation, which
+  leads the global by a beat.
+  - **A tab switch can be a section switch, and the gate is where that becomes true rather than
+    each view.** `tab-index`/`current-tab` are an optional sub-predicate defaulting `-1`, so the
+    tabless mounts are untouched. My Library mounts five at `index: 3`, so a tab leave fires the
+    departing view's existing hook and **every lifecycle path works unchanged** — hence the page
+    needs **no `covers-generation` machinery**, the entering tab's own fetch prewarming before it
+    writes rows. A `0` default on either property silently deactivates every section.
   - **What the five cannot answer is the page's own leave** — only the *mounted* tab's fires — and
     **the answer is not a sixth mount**, which is the obvious shape and compiles: a gate fires on
     transitions of *its own* predicate, that predicate is already false while Now Playing covers
@@ -769,6 +770,13 @@ silently miss the other.
     seeds by reading `Nav.selected-index`, so `install_views` writes the **persisted nav index
     before `wire_all`**, and `seed_tab` beside it: the five My Library seeds read `tab_is_mounted`,
     so a tab seeded after `wire_all` leaves all five answering for the declared `0`.
+  - **Everything above about "the five" is My Library's history, not what a tabbed page owes.** Its
+    tabs were five sidebar sections with five hooks, and five gates are what keeps those hooks
+    reachable. Favorites' three tabs, Recently Played's two and Radio's two each mount **one** gate
+    and share a handle, so their seed reads the nav index and never the tab. For Radio that is
+    load-bearing rather than economical: a per-tab gate makes a glance at the kept stations a
+    section leave, handing back a directory answer bought with a network round trip. **Ask what the
+    leave hands back before mounting a second gate.**
   - **What decides whether a wrongly-seeded gate ever corrects itself is the tracker's baseline.**
     `ChangeTracker::init` evaluates inside `AppWindow::new()` and adopts the result **silently** —
     it never calls the notify half, and `init_delayed` appears nowhere in the generated tree. So

@@ -36,7 +36,7 @@ pub struct RadioUi {
     /// **Seeded at wire time rather than left to the gate**, which fires on transitions only and
     /// whose `ChangeTracker` baselines silently inside `AppWindow::new()` — a section seeded
     /// wrong has no edge left to correct it.
-    pub section: SectionState,
+    section: SectionState,
 }
 
 impl RadioUi {

@@ -1,6 +1,6 @@
 //! Shared section-visibility state for the sidebar sections that cache.
 //!
-//! Six views track the same small state machine around "is this section on screen, and
+//! Nine views track the same small state machine around "is this section on screen, and
 //! is its cached data stale?". [`SectionState`] bundles the three fields it needs, so
 //! each `*Ui` carries one cohesive unit rather than three loose ones.
 

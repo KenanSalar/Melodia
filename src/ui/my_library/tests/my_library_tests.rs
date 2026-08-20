@@ -979,7 +979,7 @@ fn the_retired_indices_fold_onto_the_page_that_absorbed_them() {
     for retired in 4..=7 {
         assert_eq!(fold_retired_nav_index(retired), NAV_MY_LIBRARY);
     }
-    for kept in [0, 1, 2, 3, 8, 9] {
+    for kept in [0, 1, 2, 3, 8, 9, 10] {
         assert_eq!(fold_retired_nav_index(kept), kept, "{kept} is a live index");
     }
     // Out of range in either direction is the caller's problem, not the fold's.
