@@ -44,17 +44,30 @@ pub fn fold_disabled_nav_index(idx: i32, radio_enabled: bool) -> i32 {
 /// simply stop being mounted.
 ///
 /// Stated here rather than in the settings callback so the page owns its own teardown,
-/// and because two of the three are only findable from this side: a walk back onto a page
-/// that no longer routes, and a tooltip left naming a row that no longer exists.
+/// and because three of the four are only findable from this side: a walk back onto a page
+/// that no longer routes, a selected index the router no longer has a branch for, and a
+/// tooltip left naming a row that no longer exists.
 pub fn disable(ui: &AppWindow, state: &AppState) {
     if let Err(e) = crate::library::playback::player_stop_station(&state.playback_ctx()) {
         log::warn!("radio: stop station on disable: {e}");
     }
     state.nav_history.lock().forget_section(NAV_RADIO);
 
-    // `SidebarItem` publishes its identity into the rail's tooltip channel and there is no
-    // unmount hook to clear it, so a row dropped under the pointer would leave the pill up.
     let nav = ui.global::<Nav>();
+    // Through the boot path's own fold, so the two can't disagree about where 10 goes.
+    // Settings being the only way to the switch keeps this quiet today, but the placeholder
+    // fall-through excludes 10 deliberately: anything landing there with the switch down
+    // paints an empty panel, and `origin-nav-index` is one drill away from being able to.
+    let selected = nav.get_selected_index();
+    let landed = fold_disabled_nav_index(selected, false);
+    if landed != selected {
+        nav.set_selected_index(landed);
+        nav.invoke_persist_selected_index(landed);
+    }
+
+    // `SidebarItem` publishes its identity into the rail's tooltip channel and clears it on
+    // hover-exit, so a row unmounted under the pointer leaves the pill up with nothing left to
+    // retract it. Same backstop `changed watched-mini-render` already owes the rail.
     if nav.get_sidebar_tip_idx() == NAV_RADIO {
         nav.set_sidebar_tip_idx(-1);
     }

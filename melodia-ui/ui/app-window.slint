@@ -444,8 +444,8 @@ export component AppWindow inherits Window {
                         }
                         // Gated with the sidebar row, so the switch mounts and unmounts the
                         // section with no restart. The fall-through below keeps its plain
-                        // `!= 10`: with the row gone and `ui::radio::disable` clearing the nav
-                        // history, nothing can select 10 while the switch is off.
+                        // `!= 10`: the row goes, and `ui::radio::disable` sweeps the nav history
+                        // and folds the live index, so nothing selects 10 with the switch off.
                         if !Nav.now-playing-open && Settings.radio-enabled
                             && Nav.selected-index == 10: ViewTransition {
                             width: parent.width;

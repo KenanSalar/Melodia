@@ -225,14 +225,16 @@ cosmetic on top of that, and both are needed anyway so that nothing mounts and f
 shipped to every distro says the collection stays on your own machine "with no accounts,
 streaming or cloud", and `discord_rpc_enabled`, the nearest analogue in the tree, defaults
 off for the same reason. The upgrade path is then silent, and the toggle is what turns it
-on. That description text needs a pass either way (Phase 10).
+on. That description text needed a pass either way, and took it in Phase 5 rather than 10:
+a doc comment resting on a blurb the feature falsifies is worse than either alone.
 
 **No restart.** Enabling mounts the row and the section immediately, so the slice installs
-unconditionally at boot and only the network is gated. Disabling has three consequences
-beyond the row disappearing, and all three are the phase's real work: a station currently
-playing is stopped, `Nav.selected-index` is moved off 10 if that is where the user is
-standing, and a persisted `last_nav_index` of 10 is folded on read at the next boot, the
-way `fold_retired_nav_index` already folds 4 through 7.
+unconditionally at boot and only the network is gated. Disabling has four consequences
+beyond the row disappearing, and all four are the phase's real work: a station currently
+playing is stopped, the nav history forgets section 10 so no Mouse-4 walk can land back on
+it, `Nav.selected-index` is moved off 10 if that is where the user is standing, and a
+persisted `last_nav_index` of 10 is folded on read at the next boot, the way
+`fold_retired_nav_index` already folds 4 through 7.
 
 ---
 
@@ -703,10 +705,17 @@ six msgids — the two tab labels reuse the sidebar's existing `"Browse"` and `"
 
 ---
 
-## Phase 5: The kill switch
+## Phase 5: The kill switch ✅ landed
 
 **Goal.** Radio can be turned off completely, and off means no network, not a hidden row.
 Scoped to this feature: nothing else in Settings is touched.
+
+Shipped: `RadioFlags` in `settings.json`, the `AppState` shadow behind it,
+`library::radio`'s `ensure_enabled` / `directory_client` seam, both UI gates,
+`ui::radio::{fold_disabled_nav_index, disable}`, `NavHistory::forget_section`,
+`library::playback::player_stop_station`, `ui::settings::radio_settings`,
+`library::settings::radio` and `views/settings/radio-section.slint`. Steps 5 and 7 landed
+differently from the text below; both departures are recorded under it.
 
 1. `RadioFlags { radio_enabled: bool }` in `src/services/settings/data.rs`, flattened into
    `SettingsData` with the struct-level `#[serde(default)]` the neighbouring flag structs
@@ -732,6 +741,19 @@ Scoped to this feature: nothing else in Settings is touched.
 5. Turning it off, three consequences beyond the row: stop a station that is playing, move
    `Nav.selected-index` to My Library if the user is standing on 10, and persist that move
    through the usual `Nav.persist-selected-index` path.
+   - **A fourth landed, and it is the one the plan missed.** The nav *history* holds section
+     10 entries too, so a Mouse-4 walk lands on a page that no longer routes and paints the
+     empty panel step 4 warns about. `NavHistory::forget_section` drops them and pulls the
+     cursor back past the ones that fell before it, which is cheaper than teaching every
+     replay to re-check that its destination still exists.
+   - **The move goes through `fold_disabled_nav_index`, not a second `NAV_MY_LIBRARY`**, so
+     the boot fold and the live move cannot disagree about where 10 goes. It runs after the
+     sweep, `Nav.persist-selected-index` recording the arrival through `record_current`.
+   - **It is quiet today and stays in anyway.** Settings is the only way to the switch, so
+     nothing can be standing on 10 when it flips. What makes that an audit rather than an
+     invariant is `cross_tab_nav::origin_stamp`, which returns the index verbatim for
+     anything but 3: the moment Phase 8's station detail wires a go-to-artist, closing it
+     restores nav 10.
 
 6. Booting with it off: fold a persisted `last_nav_index` of 10 onto My Library, a sibling
    of `fold_retired_nav_index` rather than an extension of it. The two answer different
@@ -747,14 +769,31 @@ Scoped to this feature: nothing else in Settings is touched.
    - Sub-rows under `if Settings.radio-enabled`, never `visible: false` (slint#7377):
      hide HLS stations (D13), and whether to send the directory a click on play. The click
      is what keeps popularity ordering meaningful for everyone, so it defaults on and is
-     opt-out rather than opt-in.
+     opt-out rather than opt-in. **Moved to Phase 6**, which is where both of them acquire
+     something to configure: the HLS filter has no station list to hide from and the click
+     has no play to ride on until Browse exists, and a row that changes nothing cannot be
+     hand-tested. Each brings its own `RadioFlags` field and msgids with it.
    - Every row registers its haystack, or Settings search cannot find it.
 
 8. Turning it off leaves `radio_stations` alone. Hiding a feature is not deleting the
    user's favorites, and re-enabling restores them. A "clear station data" action beside
    the toggle is a reasonable later addition, not a requirement here.
 
-**Gates.** Same three.
+**Gates run:** fmt, `clippy --all-targets --locked -- -D warnings` at the root (both crates
+moved) and full `cargo test` (1879 lib + 4 binary + 12 integration, green). **None added**:
+this phase's pins wait for the manual pass, and it owes two. One is a source walk holding
+every `radio_browser::` call site in `library/radio.rs` to `directory_client`, which is what
+turns D14's "provable by grep" into a build failure rather than a review item; the other is
+`forget_section`'s cursor arithmetic. The six catalogs gained two msgids and reworded one:
+the Discord artwork row had still promised Deezer alone since `services::discord::artwork`
+grew its iTunes fallback.
+
+**The AppStream description was pulled forward from Phase 10.** D15 defaults the toggle off
+*because* the shipped blurb promised no streaming, so leaving that text standing while a doc
+comment cited it is the two-copies failure in its purest form (it already disagreed with
+scrobbling and Discord, and radio is what made it visible). It now says every online
+feature is a setting you control and names the three that ship off, which keeps it true
+without claiming the update check is one of them.
 
 **Done when.** The toggle appears in Settings and in Settings search, flipping it adds and
 removes the sidebar row with no restart, disabling while a station plays stops it and

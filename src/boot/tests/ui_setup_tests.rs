@@ -9,7 +9,7 @@ const MAIN: &str = include_str!("../../main.rs");
 /// The persisted nav index has to reach `Nav.selected-index` before any
 /// `wire_*` runs.
 ///
-/// Each of the nine section handles seeds its synchronous `section_active`
+/// Each of the ten section handles seeds its synchronous `section_active`
 /// shadow by reading that property at wire time, and `SectionActiveGate` only
 /// fires `active-changed` on a real *transition*. Its `ChangeTracker` is
 /// evaluated inside `AppWindow::new()` and adopts that first value **silently**

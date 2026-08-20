@@ -359,9 +359,10 @@ impl Default for DiscordFlags {
     }
 }
 
-/// The Radio section's master switch. Off by default: the shipped package
-/// description promises a collection that stays on your own machine, so an
-/// upgrade has to be silent and the toggle is what turns the feature on.
+/// The Radio section's master switch, off by default. An upgrade has to be silent
+/// for an install that never asked for a network feature, which is the reason
+/// `discord_rpc_enabled` ships off and what the shipped package description
+/// promises of every online feature.
 ///
 /// The live answer is [`crate::state::AppState::radio_enabled`], a shadow this
 /// seeds at boot — every reader of it is either on a tokio worker or in the boot

@@ -101,11 +101,10 @@ pub struct AppState {
     /// state); the detector task in `tasks::discord_presence` drives it.
     pub discord: Arc<DiscordPresenceService>,
     /// The Radio master switch, mirrored off `settings.json` at boot. A shadow
-    /// rather than a read at the decision point because both readers are on a
+    /// rather than a read at the decision point because every reader is on a
     /// path a file read has no business being on: `library::radio`'s guard runs
     /// on a tokio worker per directory call, and `boot::ui_setup` asks before
-    /// the window is shown. Refreshed by the settings callback once the write
-    /// commits, as the scrobble and Discord service shadows are.
+    /// the window is shown. [`AppState::set_radio_enabled`] owns when it moves.
     radio_enabled: Arc<AtomicBool>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Shared `reqwest::Client`, built lazily on first use via

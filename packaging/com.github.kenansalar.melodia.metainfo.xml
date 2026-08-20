@@ -37,10 +37,11 @@
   <description>
     <p>
       Melodia is a modern, local-first desktop music player with a
-      Material 3-inspired interface. Your music collection stays entirely
-      on your own machine — no accounts, no streaming, no cloud — and the
-      app is built around a fast, fluid and low-memory listening
-      experience.
+      Material 3-inspired interface. Your music collection lives entirely
+      on your own machine, and every online feature is a setting you
+      control: scrobbling, Discord presence and internet radio all ship
+      switched off. The app is built around a fast, fluid and low-memory
+      listening experience.
     </p>
     <p>
       A Slint user interface sits on a pure-Rust backend, with a local
