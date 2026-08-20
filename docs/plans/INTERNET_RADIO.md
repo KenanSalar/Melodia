@@ -242,8 +242,8 @@ way `fold_retired_nav_index` already folds 4 through 7.
 
 | Path | Owns |
 |---|---|
-| `migrations/2026XXXX_radio_stations.sql` | The one table. Branch-local until merge, so fold changes into it rather than adding a second |
-| `src/entities/radio.rs` | `RadioStation`, `RadioStationRow`, `DirectoryStation`, the boundary DTOs |
+| `migrations/20260820000000_radio_stations.sql` | The one table. Branch-local until merge, so fold changes into it rather than adding a second |
+| `src/entities/radio.rs` | `RadioStation` (the row) and `NewRadioStation` (the save input). No Slint-shaped DTO: that is `models.slint`'s, per Phase 1's note |
 | `src/database/queries/radio.rs` | Every SQL statement touching `radio_stations` |
 | `src/library/radio.rs` | The facade: favorites, custom stations, history, and the directory calls the UI needs |
 | `src/services/radio_browser/mod.rs` | Mirror discovery, the shared client's request builder, error mapping |
@@ -313,8 +313,11 @@ way `fold_retired_nav_index` already folds 4 through 7.
 
 The things that are silent when missed. Each is checked off in the phase that owns it.
 
-- [ ] `radio_stations.artwork_path` in **both** `ARTWORK_COLUMNS` and `REFERENCED_PATHS`
+- [x] `radio_stations.artwork_path` in **both** `ARTWORK_COLUMNS` and `REFERENCED_PATHS`
       in `src/database/queries/artwork.rs`, and the array widened to `; 5]` (D12).
+- [ ] The logo fetch compares `favicon_url` before trusting `artwork_path`. A re-import
+      refreshes the URL and deliberately keeps the stored file, so a station whose logo
+      moved otherwise shows the old one forever (Phase 3).
 - [ ] Two `SectionActiveGate` mounts at `index: 10`, one per tab, with `tab-index` and
       `current-tab`. A tab leave has to be the same event as a section leave.
 - [ ] The persisted nav index is written **before** `wire_all`, so the slice's
@@ -358,63 +361,49 @@ The things that are silent when missed. Each is checked off in the phase that ow
 
 ---
 
-## Phase 1: The table and the facade
+## Phase 1: The table and the facade ✅ landed
 
-**Goal.** Stations exist in the database and `library::radio` answers questions about
-them. No UI, no network, no audio.
+Stations exist in the database and `library::radio` answers questions about them. No UI,
+no network, no audio. The schema lives in `migrations/20260820000000_radio_stations.sql`
+and is not restated here, a second copy being the drift this repo pays for most.
 
-1. Write `migrations/2026XXXX_radio_stations.sql`:
+Shipped: the migration, `src/entities/radio.rs` (`RadioStation` + `NewRadioStation`),
+`src/database/queries/radio.rs` (eight functions and its tests), `src/library/radio.rs`,
+and the fifth artwork reference column in both halves of the ledger.
 
-   ```sql
-   CREATE TABLE radio_stations (
-       id             INTEGER PRIMARY KEY AUTOINCREMENT,
-       -- NULL for a user-added URL; the directory's uuid otherwise, so a
-       -- re-import updates rather than duplicates.
-       station_uuid   TEXT UNIQUE,
-       name           TEXT    NOT NULL,
-       stream_url     TEXT    NOT NULL,
-       homepage       TEXT,
-       favicon_url    TEXT,
-       artwork_path   TEXT,
-       tags           TEXT    NOT NULL DEFAULT '',
-       country_code   TEXT    NOT NULL DEFAULT '',
-       language       TEXT    NOT NULL DEFAULT '',
-       codec          TEXT    NOT NULL DEFAULT '',
-       bitrate        INTEGER NOT NULL DEFAULT 0,
-       is_favorite    INTEGER NOT NULL DEFAULT 0,
-       sort_key       TEXT    NOT NULL DEFAULT '',
-       date_added     TEXT    NOT NULL,
-       last_played    TEXT,
-       play_count     INTEGER NOT NULL DEFAULT 0
-   );
-   CREATE INDEX idx_radio_stations_last_played
-       ON radio_stations(last_played DESC) WHERE last_played IS NOT NULL;
-   CREATE INDEX idx_radio_stations_favorite
-       ON radio_stations(is_favorite) WHERE is_favorite = 1;
-   ```
+**Five deviations from this section as first drafted**, each argued at its anchor:
 
-   `sort_key` is the `natord` column the tracks table already carries, so favorites sort
-   the way every other name column in the app sorts.
+- **No `AUTOINCREMENT`.** There are zero in the tree; plain `INTEGER PRIMARY KEY` is the
+  convention, and `AUTOINCREMENT` buys a `sqlite_sequence` write per insert that nothing
+  here needs. It does mean a deleted station's id can be reused, so **`last_detail_ids`
+  can land on a different station across a restart** (D6) exactly as it can for a
+  playlist.
+- **No secondary indexes.** `station_uuid TEXT UNIQUE` is index-backed and is what the
+  upsert conflicts on. Favorites and recents scan a table the user fills by hand, where a
+  scan beats a seek. `tracks` is the opposite shape and its history runs both ways:
+  `idx_tracks_last_played` was dropped there as write-only and had to come back once
+  Recently Played existed. Adding one here is additive, so it waits for the surface that
+  wants it.
+- **One `save_station`, not an upsert plus an insert.** The `station_uuid` already says
+  which is wanted, so the conflict clause is chosen from it rather than by the caller
+  picking between two functions with identical signatures, one of which fails a UNIQUE
+  constraint when handed a directory row.
+- **`hls BOOLEAN` added.** D13 promises an "unplayable" badge and Phase 7 favorites a
+  directory row into this table, so without the column a kept HLS station is stored
+  indistinguishable from a playable one.
+- **No `RadioStationRow` yet.** Nothing in `src/entities/` references Slint; the `*Row`
+  structs are the generated ones from `models.slint` and all 16 `to_slint_*` converters
+  live in `src/ui/<view>/mod.rs`. **Phase 4 owes both halves**: the struct in
+  `models.slint` and `to_slint_radio_station_row` in `src/ui/radio/mod.rs`.
 
-2. `src/entities/radio.rs`: `RadioStation` (the row), `RadioStationRow` (the boundary DTO
-   mirroring the Slint struct exactly), and a `From` between them.
+**Two things Phase 5 inherits.** `library::radio` is already the single door D15's guard
+needs, and it deliberately does not bump `library_changed_tx`, no library view showing a
+station.
 
-3. `src/database/queries/radio.rs`: upsert by `station_uuid`, insert custom, list
-   favorites, list recent, set favorite, delete, bump play count and stamp `last_played`,
-   set `artwork_path`.
-
-4. `src/library/radio.rs`: the async facade over the above. Directory functions land in
-   Phase 2 and share this module, so the UI has one import either way.
-
-5. Add the fifth artwork reference column (D12) with its test.
-
-**Gates.** `cargo clippy --all-targets --locked -p Melodia -- -D warnings`,
-`cargo fmt --all --check`, `cargo test`. A migration dry run through
-`/usr/bin/sqlite3` before the compile cycle is the cheap way to catch a typo.
-
-**Done when.** Unit tests over `DbPool::test_pool()` cover the upsert-by-uuid path
-(re-adding a directory station updates rather than duplicates), the favorite toggle, and
-the artwork reference set including the new column.
+**Gates run:** clippy, fmt, full `cargo test` (1792 unit + 16 integration, green). The
+ledger pin was mutation-checked: dropping the radio arm from `REFERENCED_PATHS` fails both
+`the_reference_query_names_every_artwork_column` and
+`a_logo_referenced_only_by_a_station_is_still_referenced`.
 
 ---
 

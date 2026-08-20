@@ -5,6 +5,7 @@ pub mod folder;
 pub mod genre;
 pub mod playlist;
 pub mod playlist_item;
+pub mod radio;
 pub mod search;
 pub mod smart_criteria;
 pub mod track;
