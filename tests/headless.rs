@@ -28,10 +28,7 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
     let (state, _channels) = AppState::init(paths, runtime).await?;
 
     let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    assert!(
-        fixtures.join("silence-1s.flac").exists(),
-        "fixture missing — regenerate with ffmpeg"
-    );
+    assert!(fixtures.join("silence-1s.flac").exists(), "fixture missing — regenerate with ffmpeg");
 
     let folder =
         library::settings::add_folder(&state, fixtures.to_string_lossy().into_owned()).await?;

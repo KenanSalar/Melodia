@@ -45,6 +45,10 @@ pub(crate) const UI_SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/ui
 /// it governs and nothing in the build, the lint gate or the test suite is looking.
 pub(crate) const RULES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.claude/rules");
 
+/// The unbounded float fed to the guards that reject nonsense input. `f64::from` widens it
+/// where the guard under test takes an `f64`.
+pub(crate) const UNBOUNDED: f32 = f32::MAX * 2.0;
+
 /// Every module that owns callback wiring: the cross-cutting root plus the eleven view
 /// slices that keep their own.
 ///

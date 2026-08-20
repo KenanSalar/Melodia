@@ -485,7 +485,7 @@ The load-bearing phase. Everything here is argued once and then stays put.
 1. **Dependencies.** ⚠️ **re-verify** versions with `cargo search` on the day:
 
    ```toml
-   # Read+Seek over an HTTP stream, with a circular buffer for infinite ones. Same
+   # Read+Seek over an HTTP stream, with a circular buffer for unbounded ones. Same
    # author as icy-metadata below and designed to compose with it.
    stream-download = { version = "0.24.3", default-features = false, features = [
        "http", "reqwest", "reqwest-rustls",
@@ -544,7 +544,7 @@ The load-bearing phase. Everything here is argued once and then stays put.
      care about.
 
    - Storage is `BoundedStorageProvider` over `MemoryStorageProvider`: the bounded circular
-     buffer an infinite stream needs. `temp-storage` is off, so nothing spills to disk.
+     buffer an unbounded stream needs. `temp-storage` is off, so nothing spills to disk.
      Prefetch is sized from `IcyHeaders::bitrate()` where the server states one, falling
      back to a fixed default; the directory's `bitrate` is `0` too often to lead with.
 
