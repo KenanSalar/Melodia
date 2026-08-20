@@ -210,8 +210,6 @@ fn reconcile_live_stream(
     if !title_moved && !buffering_moved {
         return;
     }
-    // A station change hands over a fresh cell whose counter restarts, so a generation that moved
-    // *backwards* is a new station and equally worth reading.
     *last_title_generation = title_generation;
     let title = title_moved.then(|| stream.title());
 
@@ -276,8 +274,8 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
         // sample of a freshly-started track).
         let mut last_published_second: u64 = u64::MAX;
 
-        // Last ICY title generation reconciled into `PlayerState`. Every station brings a fresh
-        // counter, so any value other than the live one means there is a title worth reading.
+        // Last ICY title generation reconciled into `PlayerState`. Generations are process-wide
+        // tickets starting at 1, so this holds across stations and `0` means nothing seen yet.
         let mut last_title_generation: u64 = 0;
 
         loop {

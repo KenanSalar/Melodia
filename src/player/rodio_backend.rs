@@ -466,12 +466,17 @@ impl RodioPlayer {
     /// `build_source` is unity for the same reason the plan gives — a live stream carries no
     /// per-track tags to bake.
     pub fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError> {
-        let Some((staged_generation, prepared)) = self.staged_stream.lock().take() else {
-            return Err(AppError::Player("No radio stream was staged to play".to_owned()));
+        // Matched before it is taken: a stage belonging to some other session belongs to a *newer*
+        // one, and taking it to refuse it would close the connection that session is waiting on.
+        let mut staged = self.staged_stream.lock();
+        let claimed = staged
+            .take_if(|(staged_generation, _)| *staged_generation == generation)
+            .map(|(_, prepared)| prepared);
+        drop(staged);
+
+        let Some(prepared) = claimed else {
+            return Err(AppError::Player("No radio stream is staged for this station".to_owned()));
         };
-        if staged_generation != generation {
-            return Err(AppError::Player("Radio stream was staged for another station".to_owned()));
-        }
         let (source, shared) = prepared.into_parts();
 
         // Published before the deck work rather than after, so the monitor can never see a station

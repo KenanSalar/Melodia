@@ -441,14 +441,12 @@ struct FeedContext {
     runtime: tokio::runtime::Handle,
 }
 
-/// Twelve bytes, inside the kernel's fifteen-byte thread-name limit; the corpus walk in
-/// `services::tests` holds every spawn in the tree to that.
-const FEED_THREAD_NAME: &str = "radio-buffer";
-
 fn spawn_feed(ctx: FeedContext) {
     let shared = ctx.shared.clone();
+    // Spelled inline rather than lifted to a const: `services::tests`' thread-name walk matches a
+    // literal after `.name(`, so a named constant here would be silently unmeasured.
     if let Err(e) =
-        std::thread::Builder::new().name(FEED_THREAD_NAME.to_owned()).spawn(move || feed_loop(ctx))
+        std::thread::Builder::new().name("radio-buffer".to_owned()).spawn(move || feed_loop(ctx))
     {
         log::error!("Could not start the radio buffer thread: {e}");
         // Nothing will ever fill the ring, so let the source end rather than play silence forever.

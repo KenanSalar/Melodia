@@ -250,11 +250,6 @@ fn toast_track_name(file_path: &str) -> String {
         .map_or_else(|| file_path.to_owned(), |n| n.to_string_lossy().into_owned())
 }
 
-/// Advance past a track that turned out to be unplayable (file missing or
-/// decode error) and append the resulting actions to the pending set.
-/// On an empty queue this emits `Stop` only — the `with_state_emit` call
-/// took the lock to do that, so the state machine and `ViewModel` both reflect
-/// the end-of-queue state.
 /// Clear a station whose staged stream could not be started, so the transport doesn't sit on a
 /// `Loading` that will never resolve.
 ///
@@ -274,6 +269,11 @@ fn enqueue_station_failure(
     }
 }
 
+/// Advance past a track that turned out to be unplayable (file missing or
+/// decode error) and append the resulting actions to the pending set.
+/// On an empty queue this emits `Stop` only — the `with_state_emit` call
+/// took the lock to do that, so the state machine and `ViewModel` both reflect
+/// the end-of-queue state.
 fn enqueue_auto_skip(
     pending: &mut VecDeque<PlayerAction>,
     player_state: &PlayerStateHandle,

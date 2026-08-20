@@ -110,21 +110,31 @@ pub(crate) fn needs_station_reopen(status: PlaybackStatus, has_station: bool) ->
 /// the state lock the ordinary transport path runs in. Every caller of the transport commands is
 /// already inside `runtime.spawn`, the same assumption `execute_actions` makes for its play-count
 /// writes.
+///
+/// The predicate and the transition it authorises run in **one** emit: read apart from the
+/// transition, a `Stop` landing in the gap would be undone by the connect it had already decided
+/// to start, and the session guard past this point cannot see a station it put back itself.
 fn resume_station(ctx: &PlaybackContext) -> bool {
-    let station = {
-        let state = lock_state(&ctx.player_state);
-        if !needs_station_reopen(state.status, state.radio.is_some()) {
-            return false;
+    let mut resuming = None;
+    ctx.emit_and_execute(|s| {
+        if !needs_station_reopen(s.status, s.radio.is_some()) {
+            return vec![];
         }
-        state.radio.clone()
-    };
-    let Some(station) = station else {
+        let Some(station) = s.radio.clone() else {
+            return vec![];
+        };
+        let (generation, actions) = s.build_station_connecting_actions(station.clone());
+        resuming = Some((generation, station));
+        actions
+    });
+
+    let Some((generation, station)) = resuming else {
         return false;
     };
 
     let ctx = ctx.clone();
     tokio::spawn(async move {
-        if let Err(e) = player_play_station(&ctx, &station).await {
+        if let Err(e) = open_and_start_station(&ctx, &station, generation).await {
             log::warn!("Could not resume {}: {}", station.name, crate::services::describe(&e));
         }
     });
@@ -150,6 +160,18 @@ pub async fn player_play_station(
         actions
     });
 
+    open_and_start_station(ctx, station, generation).await
+}
+
+/// The network half of a tune, for a state machine already moved onto `generation`.
+///
+/// Split out so [`resume_station`] can take the connecting transition under the same emit as the
+/// predicate that authorised it, and still share everything past the `.await`.
+async fn open_and_start_station(
+    ctx: &PlaybackContext,
+    station: &RadioNowPlaying,
+    generation: u64,
+) -> Result<(), AppError> {
     let client = ctx.http.get_or_init(crate::services::build_http_client).clone();
     let opened = stream_source::open(&client, &station.stream_url).await;
 

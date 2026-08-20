@@ -752,6 +752,14 @@ fn begin_track(
     track: Arc<TrackSummary>,
     start_position_ms: Option<u64>,
 ) -> TrackStart {
+    // A track and a station are mutually exclusive sources, and ending the session is the half
+    // that matters: a connect still in flight would otherwise pass its generation check and start
+    // the station over the track that replaced it.
+    if state.radio.is_some() {
+        state.end_stream_session();
+        state.radio = None;
+    }
+
     state.status = PlaybackStatus::Playing;
     state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
     // Clamp to 500ms before end to avoid immediate EOS detection by the playback monitor.

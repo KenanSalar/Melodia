@@ -43,7 +43,7 @@ const FEED_PARK: Duration = Duration::from_millis(20);
 /// Three of the four fields are one-way latches or plain flags read from the audio callback, so
 /// they are atomics; the title is the one value with a payload, and its generation counter is what
 /// lets the playback monitor ask "did it change?" without taking the lock on every tick.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct StreamShared {
     buffering: AtomicBool,
     finished: AtomicBool,
@@ -52,9 +52,25 @@ pub struct StreamShared {
     title_generation: AtomicU64,
 }
 
+/// Tickets for [`StreamShared::title_generation`], drawn process-wide rather than counted per
+/// cell. The monitor carries **one** last-seen value across stations, so a per-cell counter lets a
+/// new station coincide with the number the previous one left behind — and a coincidence there
+/// swallows that station's first title for a whole song. A ticket no cell has held cannot.
+static NEXT_TITLE_GENERATION: AtomicU64 = AtomicU64::new(1);
+
+fn next_title_generation() -> u64 {
+    NEXT_TITLE_GENERATION.fetch_add(1, Ordering::Relaxed)
+}
+
 impl StreamShared {
     pub fn new() -> Arc<Self> {
-        Arc::new(Self::default())
+        Arc::new(Self {
+            buffering: AtomicBool::new(false),
+            finished: AtomicBool::new(false),
+            abandoned: AtomicBool::new(false),
+            title: parking_lot::Mutex::new(None),
+            title_generation: AtomicU64::new(next_title_generation()),
+        })
     }
 
     /// Whether the source is currently emitting silence because the ring ran dry. Drives the UI's
@@ -92,12 +108,12 @@ impl StreamShared {
     /// handler.
     pub fn set_title(&self, title: Option<String>) {
         *self.title.lock() = title;
-        self.title_generation.fetch_add(1, Ordering::Release);
+        self.title_generation.store(next_title_generation(), Ordering::Release);
     }
 
-    /// Bumped on every [`Self::set_title`]. The monitor keeps the last value it saw and only takes
-    /// the lock when this moved, so a station that changes track once a song costs one relaxed
-    /// load per tick.
+    /// Moves on every [`Self::set_title`], and never back onto a value any cell has published. The
+    /// monitor keeps the last value it saw and only takes the lock when this moved, so a station
+    /// that changes track once a song costs one relaxed load per tick.
     pub fn title_generation(&self) -> u64 {
         self.title_generation.load(Ordering::Acquire)
     }

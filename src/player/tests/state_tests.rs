@@ -1425,3 +1425,43 @@ fn the_play_stream_action_never_renders_a_url() {
     assert!(rendered.contains('7'), "{rendered:?} should name the session it belongs to");
     assert!(!rendered.contains("http"), "{rendered:?} must not carry the stream URL");
 }
+
+/// A track and a station are one deck's worth of source, so starting one has to end the other.
+/// Left standing, `radio` makes every transport builder below read the *track* as a live source,
+/// and the session guard still passes for a connect the pick was supposed to have cancelled.
+#[test]
+fn starting_a_track_ends_the_station_it_replaces() {
+    let (mut state, connecting) = tuned_in();
+
+    let _actions = play_track_inner(&mut state, make_summary(2, "Two", 180_000), None);
+
+    assert!(state.radio.is_none(), "a track and a station cannot both be the source");
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(2));
+    assert_eq!(
+        state.build_station_connected_actions(connecting),
+        vec![],
+        "the connect still in flight must not start over the track that replaced it"
+    );
+}
+
+/// The other half: every builder the radio arm refuses has to answer normally again.
+#[test]
+fn the_transport_is_a_tracks_again_once_one_replaces_the_station() {
+    let (mut state, generation) = tuned_in();
+    let _started = state.build_station_connected_actions(generation);
+
+    let _actions = play_track_inner(&mut state, make_summary(1, "One", 180_000), None);
+
+    let vm = state.to_view_model_light();
+    assert!(vm.radio.is_none());
+    assert!(vm.has_next, "the queue underneath is reachable again");
+
+    assert_eq!(
+        state.build_seek_actions(30_000),
+        vec![PlayerAction::Seek {
+            position_ms: 30_000
+        }]
+    );
+    assert_eq!(state.build_pause_actions(250), vec![PlayerAction::Pause { fade_ms: 250 }]);
+    assert_eq!(state.status, PlaybackStatus::Paused, "pausing a track is not a stop");
+}
