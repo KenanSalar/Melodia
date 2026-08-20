@@ -245,12 +245,18 @@ export component Sidebar inherits Rectangle {
                 // **Recently Played keeps routing index 8 but renders here**, under
                 // Favorites: visual order follows source order rather than the index
                 // value, so placing it here avoids renumbering every tab below.
-                SidebarItem { index: 2; label: @tr("Favorites");       icon: "favorite";       }
-                SidebarItem { index: 8; label: @tr("Recently Played"); icon: "history";        }
+                SidebarItem { index: 2;  label: @tr("Favorites");       icon: "favorite";       }
+                SidebarItem { index: 8;  label: @tr("Recently Played"); icon: "history";        }
                 // Songs / Albums / Artists / Genres / Playlists are tabs of this one row
                 // now, and each kept the glyph it wore here — the page takes the library
                 // one Tracks used to have.
-                SidebarItem { index: 3; label: @tr("My Library");      icon: "library_music";  }
+                SidebarItem { index: 3;  label: @tr("My Library");      icon: "library_music";  }
+
+                Divider {}
+
+                // On its own past the divider: everything above it is the local library, and this
+                // is the one row that reaches the network.
+                SidebarItem { index: 10; label: @tr("Radio");           icon: "radio";          }
             }
         }
 

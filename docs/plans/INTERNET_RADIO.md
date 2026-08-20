@@ -251,11 +251,12 @@ way `fold_retired_nav_index` already folds 4 through 7.
 | `src/services/radio_browser/query.rs` | Search and facet-list request construction, paging |
 | `src/player/stream_source.rs` | Opening a URL into a decodable reader: stream-download, ICY, playlist resolution |
 | `src/player/prebuffer.rs` | The ring buffer and its feed thread (D8) |
-| `src/ui/radio/mod.rs` | Slice install, section-active hook, row and cover plumbing |
+| `src/ui/radio/mod.rs` | Slice install, the `RadioUi` handle, row and cover plumbing |
+| `src/ui/radio/tabs.rs` | `RadioTab`, the tab resolve, the persisted-tab seed |
 | `src/ui/radio/detail.rs` | The station detail: open, close, hero artwork, the restart seed |
-| `src/ui/radio/callbacks/*.rs` | Browse, Favorites, detail and playback wiring |
+| `src/ui/radio/callbacks.rs` | Browse, Favorites, detail and playback wiring. A directory once it outgrows one file, as Favorites' and Recently Played's did |
 | `melodia-ui/ui/globals/radio.slint` | The `Radio` global |
-| `melodia-ui/ui/views/radio-view.slint` | Page chrome only: the band, tab routing, scroll body, overlay scrollbar |
+| `melodia-ui/ui/views/radio-view.slint` | Page chrome only: the band and tab routing. **No page-level scroller** — every tabbed page in the tree puts it in the tab body, and Browse's grid is a virtualized `ListView` a page `ScrollView` above it would fight |
 | `melodia-ui/ui/views/radio/browse-tab.slint` | Browse tab body |
 | `melodia-ui/ui/views/radio/favorites-tab.slint` | Favorites tab body |
 | `melodia-ui/ui/views/radio/station-detail.slint` | The detail body under the morphed band |
@@ -269,14 +270,17 @@ way `fold_retired_nav_index` already folds 4 through 7.
 | Path | Edit |
 |---|---|
 | `Cargo.toml` | Two dependencies, both feature-pinned (see Phase 3), and possibly `image`'s `ico` (D7) |
-| `melodia-ui/ui/layout/sidebar.slint` | One `SidebarItem`, after My Library |
-| `melodia-ui/ui/app-window.slint` | The `export { }` name list, one `ViewTransition` branch, two `SectionActiveGate` mounts |
+| `melodia-ui/ui/layout/sidebar.slint` | One `SidebarItem` after My Library, behind a `Divider` — everything above it is the local library and this is the one row that reaches the network |
+| `melodia-ui/ui/globals/nav.slint` | The index map, which is authoritative and now runs to 10 |
+| `melodia-ui/ui/app-window.slint` | The `export { }` name list, one `ViewTransition` branch, the `!= 10` term on the placeholder fall-through, one `SectionActiveGate` mount, one `view-title` arm |
 | `melodia-ui/ui/models.slint` | `RadioStationRow`, plus the live fields on `PlayerVm` |
 | `melodia-ui/ui/settings.slint` | `radio-enabled` and its changed callback on the `Settings` global |
 | `melodia-ui/ui/views/settings/pages/services-page.slint` | A third card, and one more term in `has-matches` |
 | `src/services/settings/data.rs` | `RadioFlags`, flattened into `SettingsData`, defaulting off |
-| `src/boot/ui_setup.rs` | Folding a persisted nav index of 10 when radio is off |
-| `src/services/view_state.rs` | `radio_tab: i32` |
+| `src/boot/ui_setup.rs` | The nav-index guard, the tab seed, the slice install; later, folding a persisted 10 when radio is off |
+| `src/services/view_state.rs` | `radio_tab: i32`, and `MAX_NAV_INDEX` — the bound the persisted nav index's write clamp and read guard now share |
+| `src/library/settings/view.rs` | `set_radio_tab`, and `set_last_nav_index`'s clamp off that const |
+| `src/ui/view_tag.rs` | The nav-10 arm, naming the tab like the other three tabbed pages |
 | `src/test_support.rs` | `CALLBACK_HOMES` grows to 13 |
 | `src/database/queries/artwork.rs` | The fifth reference column (D12) |
 | `src/player/state.rs` | The radio arm of the state machine |
@@ -324,12 +328,18 @@ The things that are silent when missed. Each is checked off in the phase that ow
 - [ ] The logo fetch compares `favicon_url` before trusting `artwork_path`. A re-import
       refreshes the URL and deliberately keeps the stored file, so a station whose logo
       moved otherwise shows the old one forever (Phase 3).
-- [ ] Two `SectionActiveGate` mounts at `index: 10`, one per tab, with `tab-index` and
-      `current-tab`. A tab leave has to be the same event as a section leave.
-- [ ] The persisted nav index is written **before** `wire_all`, so the slice's
-      `section_active` shadow seeds correctly. Same for `seed_tab`.
-- [ ] `radio_tab` clamped on read through `ui::tab_bar::clamp_tab` against
-      `Radio.tab-count`, never a Rust const.
+- [x] **One** `SectionActiveGate` at `index: 10`, not one per tab. Amended in Phase 4 and
+      argued there: the two tabs share a handle, as Favorites' three and Recently Played's
+      two do, and a per-tab gate would make a tab flip a section leave — handing back a
+      directory answer the session paid a network round trip for.
+- [x] The persisted nav index is written **before** `wire_all`, so the slice's
+      `section_active` shadow seeds correctly. Same for `seed_tab` (Phase 4).
+- [x] `radio_tab` clamped on read through `ui::tab_bar::clamp_tab` against
+      `Radio.tab-count`, never a Rust const (Phase 4).
+- [x] The persisted nav index survives a round trip. `set_last_nav_index` clamped writes to
+      `0..=9` and `install_views` guarded reads with the same literal, so a Radio index was
+      rewritten on the way out *and* dropped on the way in. Both read
+      `services::view_state::MAX_NAV_INDEX` now (Phase 4).
 - [ ] Counts hold `UNFETCHED_COUNT` until fetched, and the section leave puts them back.
 - [ ] The band's `hero-t` is **written** from `changed detail-open` and only seeded by its
       binding, so a page entered with a detail already open lands at hero height.
@@ -342,8 +352,8 @@ The things that are silent when missed. Each is checked off in the phase that ow
       Radio Browser client outside that facade returns nothing (D15).
 - [ ] Disabling stops a playing station, moves `Nav.selected-index` off 10, and folds a
       persisted 10 on the next boot.
-- [ ] The two `SectionActiveGate` mounts stay mounted when radio is disabled. They carry
-      `changed` trackers, and dropping a tracker-bearing branch panics.
+- [ ] The `SectionActiveGate` mount stays mounted when radio is disabled. It carries a
+      `changed` tracker, and dropping a tracker-bearing branch panics.
 - [ ] The Settings sub-rows sit under `if Settings.radio-enabled`, never `visible: false`
       (slint#7377), matching the crossfade rows.
 - [ ] The new Settings rows register their haystacks, or the page's search cannot find them.
@@ -612,58 +622,84 @@ and fails `a_station_going_off_air_stops_rather_than_advancing_the_queue`; and a
 
 ---
 
-## Phase 4: The section shell
+## Phase 4: The section shell ✅ landed
 
-**Goal.** The sidebar row, the page, the two tabs and the persistence. Empty tabs are
-fine; they fill in Phases 6 and 7, and the band's hero half stays idle until Phase 8.
+The sidebar row, the page, its two tabs and the persistence. The tabs are empty — Browse
+fills in Phase 6, Favorites in Phase 7, the band's hero half in Phase 8 — so what landed is
+the shell and the boot ordering under it, which is the half that cannot be retrofitted.
 
-1. `melodia-ui/ui/globals/radio.slint`: the `Radio` global. `tab-browse: 0`,
-   `tab-favorites: 1`, `tab-count: 2` as the sole definition, `tab-idx`, `tab-changed`,
-   the two row models, the two counts, the section hook, `request-cover`, and the action
-   callbacks. Imports nothing from siblings, so the global DAG stays shallow.
+Shipped: `melodia-ui/ui/globals/radio.slint`, `views/radio-view.slint` and its two tab
+bodies, the sidebar row, the router branch and its `!= 10` term on the placeholder
+fall-through, one `SectionActiveGate`, `src/ui/radio/` (`mod`, `tabs`, `callbacks`),
+`radio_tab` in `views.json` with its setter, and the nav-index bound both halves of that
+round trip now share.
 
-2. `melodia-ui/ui/models.slint`: `RadioStationRow`. No `cover_img` field; the thumbnail
-   resolves per instantiated row through `request-cover(artwork_path, generation)` like
-   every other grid row.
+**Two things silently defeated a nav index of 10, and fixing them was the first work item.**
+`library::settings::set_last_nav_index` clamped a write to `0..=9` and
+`boot::ui_setup::install_views` guarded the read with the same literal, so Radio persisted
+as Settings and booted onto My Library. Both read `services::view_state::MAX_NAV_INDEX` now,
+which lives beside `last_nav_index` and its default because a clamp and its guard
+disagreeing is precisely the failure neither site can see on its own.
 
-3. `melodia-ui/ui/views/radio-view.slint`: page chrome only, modelled on
-   `my-library-view.slint`. `LibraryTabBand` with two labels and two icons, the inline
-   `@tr` array in tab order, the `page-w` mirror written from `changed width`, the 1 ms
-   mount `Timer` that re-runs it, the seed at the row's own floor, and a `ScrollView` with
-   both policies off under a root `OverlayScrollbar`. The band's hero inputs are wired but
-   idle: `detail-open: false` and nothing else populated.
+What later phases reach for:
 
-4. `app-window.slint`: the export list, one `ViewTransition` branch at index 10, and two
-   `SectionActiveGate` mounts at `index: 10` differing only by `tab-index`. A drill-in does
-   not move `tab-idx`, so the detail needs no third gate.
+- **`RadioUi.section` is the page's one `SectionState`**, seeded at wire time from
+  `tabs::section_is_up` rather than left to the gate — that fires on transitions only and its
+  `ChangeTracker` baselines silently inside `AppWindow::new()`, so a section seeded wrong has
+  no edge left to correct it. The hook mirrors the flag and **nothing else**: a leave owes
+  `mark_dirty` for exactly what it hands back, and this page holds nothing yet. Phase 6 adds
+  the release and its `mark_dirty` together.
+- **`Radio.tab-count` is the sole definition of how many tabs there are**, and `seed_tab`
+  clamps the persisted index against it through `ui::tab_bar::clamp_tab`.
+- **`tab_from_index` ends in a default arm**, so a third tab added to the global without one
+  here resolves to Browse and `ui::view_tag` logs that.
+- **The band's box is bound but has no Rust destination.** Typing filters nothing; a tab pick
+  clears both sides Slint-side, the `recently-played-view.slint` shape. Phase 6 brings the
+  `FilterThrottle`, `filter-changed` and the dispatch together.
 
-5. `sidebar.slint`: `SidebarItem { index: 10; label: @tr("Radio"); icon: "radio"; }`
-   directly after My Library.
+**Five deviations from this section as first drafted**, each argued at its anchor:
 
-6. `src/ui/radio/`: the slice, its `install` taking `ViewCtx`, the section hook, and the
-   tab persistence through `radio_tab` in `views.json`, clamped on read.
+- **One `SectionActiveGate`, not one per tab.** My Library mounts five because its five tabs
+  *were* five sidebar sections with five hooks; Favorites' three tabs and Recently Played's
+  two mount one each, sharing a handle, which is this page's shape. It also has to be one: a
+  per-tab gate makes a tab flip a section leave, so glancing at Favorites would hand back a
+  directory answer the session paid a network round trip for (D3). The cost is the
+  `covers-generation` cold-tier gate on a tab pick, which Phase 6's logo tier owes anyway.
+- **No page-level scroller.** Step 3's `ScrollView` under a root `OverlayScrollbar` would sit
+  above Phase 6's virtualized station grid, which is the nested-scroller pitfall; every
+  tabbed page in the tree puts the scroller in the *tab body* instead
+  (`my-library/albums-tab.slint` is the 49-line model). The `page-w` mirror, the 1 ms mount
+  `Timer` and the seed at the row's floor were never the page's either — they are
+  `library-tab-band.slint`'s, and the mount inherits them.
+- **No row models, no `RadioStationRow`, no `to_slint_radio_station_row`.** Step 1 and Phase
+  1's closing note both put them here, and a converter with no caller is dead code this tree
+  forbids. Each half lands with the surface that fills it: Browse's in Phase 6, Favorites' in
+  Phase 7. The global carries only what this phase wires.
+- **No count latch.** My Library holds its count line across a drill because the band eases it
+  out over the morph's first half and a live binding re-reads the arriving tab mid-fade. With
+  `detail-open` a literal `false` there is no morph to protect, so `count-text` binds the
+  guarded ternary directly. Phase 8 owes the latch alongside the hero.
+- **No `watched-tab-idx` mirror.** My Library's exists for arrivals that aren't picks — a
+  cross-tab drill, a Mouse-4/5 walk — and for the filter reseat. This page has neither yet, so
+  the bodies take `band.tab-anim-armed` directly, as Recently Played's do.
 
-7. `CALLBACK_HOMES` grows to 13. `scripts/icons.txt` gains `radio`. Six catalogs gain the
-   new msgids.
+**Filter box routing, deferred to Phase 6 with its first destination.** The band carries a
+single box and the two tabs want different things from it: on Browse a directory query,
+debounced and sent over the network; on Favorites a local `row_match` filter. One dispatch
+site in Rust routes a settled keystroke by the live tab, the way
+`my_library/filter.rs::dispatch` routes its nine surfaces. Phase 8 adds a third destination,
+which is why it is a function from the outset rather than an `if` that grows. What landed
+here is the box, its per-tab placeholder, and the tab pick that clears it.
 
-**Filter box routing, stated once here because it is the one thing this page does that the
-other tabbed pages do not.** The band carries a single box, and the two tabs want
-different things from it: on Browse it is a directory query, debounced and sent over the
-network; on Favorites it is a local `row_match` filter. One dispatch site in Rust routes a
-settled keystroke by the live tab, the way `my_library/filter.rs::dispatch` routes its
-nine surfaces. The placeholder text changes with the tab so the difference is visible.
-Phase 8 adds a third destination for the same box, which is why the dispatch is a function
-from the outset rather than an `if` that grows.
+**The sidebar row and the router branch landed ungated**, and Phase 5 adds the `if` term to
+each. Two one-line edits of churn, taken deliberately: the alternative is a phase whose only
+deliverable is a toggle with nothing to toggle, which cannot be tested by hand.
 
-**Gates.** Same three. `scripts/check-icons.py` after re-subsetting.
-
-**Done when.** The row appears under My Library, both tabs mount, the tab survives a
-restart, and the section gates fire on tab and nav moves.
-
-The sidebar row and the router branch land here **ungated**, and Phase 5 adds the `if`
-term to each. That is three one-line edits of churn, taken deliberately: the alternative
-is a phase whose only deliverable is a toggle with nothing yet to toggle, which cannot be
-tested by hand.
+**Gates run:** fmt, `clippy --all-targets --locked -- -D warnings` at the root (both crates
+moved), full `cargo test` (1879 lib + 4 binary + 12 integration, green; **none added** —
+this phase's pins wait for the manual pass), and `scripts/check-icons.py` after re-subsetting
+for `radio` and `travel_explore`. `CALLBACK_HOMES` grew to 13, and the six catalogs gained
+five msgids — the two tab labels reuse the sidebar's existing `"Browse"` and `"Favorites"`.
 
 ---
 
@@ -685,11 +721,13 @@ Scoped to this feature: nothing else in Settings is touched.
    directory call and every logo download. Nothing outside that facade may name the Radio
    Browser client (D14), which is what makes the guard one place and provable by grep.
 
-4. The three UI gates: `if Settings.radio-enabled` around the `SidebarItem`, the same term
-   on the index-10 `ViewTransition` branch, and nothing around the two
-   `SectionActiveGate` mounts. Those carry `changed` trackers and a dropped
-   tracker-bearing branch panics; with the row gone the index is unreachable, so they
-   simply never fire true.
+4. The two UI gates: `if Settings.radio-enabled` around the `SidebarItem` and the same term
+   on the index-10 `ViewTransition` branch — and **nothing** around the `SectionActiveGate`
+   mount. It carries a `changed` tracker and a dropped tracker-bearing branch panics; with
+   the row gone the index is unreachable, so it simply never fires true. The placeholder
+   fall-through keeps its plain `!= 10` term, which means a disabled build standing on 10
+   would paint **nothing** rather than a placeholder — steps 5 and 6 are what close both
+   ways of being there, and that is the reason they are not optional.
 
 5. Turning it off, three consequences beyond the row: stop a station that is playing, move
    `Nav.selected-index` to My Library if the user is standing on 10, and persist that move
@@ -869,7 +907,10 @@ and nothing in the transport lies about what it can do.
 
 1. Tests, for what the UI phases add: `radio_tab` clamping, the tab-count pin against the
    `.slint` source, the hero's source-size floor as a predicate, the `id != 0` persistence
-   guard, the nav fold with radio disabled, and the catalogue walk. The band's own
+   guard, the nav fold with radio disabled, and the catalogue walk. **Plus the nav index's
+   own round trip** — that `set_last_nav_index`'s clamp and `install_views`' guard both
+   admit 10, which is the one failure in this feature that is silent at both ends and was
+   the state of the tree until Phase 4. The band's own
    invariants are already pinned by `ui::library_tab_band_tests`; this page adds a mount,
    not a copy. Phases 2 and 3 carry their own (the directory model, the state machine's
    radio arm, the reconnect backoff, the prebuffer's starvation and frame alignment,

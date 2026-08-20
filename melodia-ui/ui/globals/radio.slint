@@ -1,0 +1,31 @@
+// The Radio page at nav index 10: two tabs over the radio-browser.info directory and the stations
+// the user kept. **One `SectionActiveGate`, not one per tab** — the two tabs share a Rust handle,
+// as Favorites' three and Recently Played's two do, and a tab leave here must not be a section
+// leave: Browse holds a directory answer this session paid a network round trip for.
+export global Radio {
+    // **`tab-count` is the sole definition of how many there are** — Rust clamps the persisted
+    // index against it, so a build with fewer tabs can't restore onto an unmounted branch.
+    out property <int> tab-browse: 0;
+    out property <int> tab-favorites: 1;
+    out property <int> tab-count: 2;
+
+    in-out property <int> tab-idx: 0;
+    // Fires after the bar has already moved `tab-idx`.
+    callback tab-changed(int);
+
+    // The band's `SearchBar` is the page's only box, and the two tabs want different things from
+    // it: a directory query on Browse, a local filter on Favorites. Rust routes a settled
+    // keystroke from the phase that gives it a first destination.
+    in-out property <string> filter;
+    // Bumped to make the filter input give up the keyboard; a global can't bind a callback inline,
+    // so the `SearchBar` watches this counter.
+    in-out property <int> blur-search-tick: 0;
+
+    // Pre-filter station counts, one per tab, feeding the band's count line. `-1` until fetched
+    // (`ui::tab_bar::UNFETCHED_COUNT`), which is what the `>= 0` guard at the mount rejects — a
+    // bare `-1` interpolates into the plural as "-1 stations".
+    in-out property <int> browse-count: -1;
+    in-out property <int> favorites-count: -1;
+
+    callback section-active-changed(bool);
+}

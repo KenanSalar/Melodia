@@ -76,7 +76,7 @@ pub fn set_browse_view_mode(state: &AppState, mode: i32) -> Result<(), AppError>
 /// `melodia-ui/ui/globals/nav.slint`. Out-of-range writes are clamped so a corrupt file can't pin
 /// the app to an unselectable tab.
 pub fn set_last_nav_index(state: &AppState, idx: i32) -> Result<(), AppError> {
-    let clamped = idx.clamp(0, 9);
+    let clamped = idx.clamp(0, services::view_state::MAX_NAV_INDEX);
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.last_nav_index = clamped;
     })
@@ -140,6 +140,14 @@ pub fn set_recently_played_tab(state: &AppState, tab: i32) -> Result<(), AppErro
 pub fn set_my_library_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.my_library_tab = tab;
+    })
+}
+
+/// Persist the Radio page's active tab. Same contract again — `Radio.tab-idx` is two-way bound
+/// to its tab bar.
+pub fn set_radio_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.radio_tab = tab;
     })
 }
 

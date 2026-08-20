@@ -15,7 +15,7 @@ use crate::state::AppState;
 /// `albums_ui` is bound, so "Albums before Artists" stops being a comment a later edit can
 /// reorder past.
 ///
-/// Nine, not ten — `ui::my_library::install` takes a bare `(&AppWindow, &AppState)`,
+/// Ten, not eleven — `ui::my_library::install` takes a bare `(&AppWindow, &AppState)`,
 /// needing neither the cover cache nor `views.json` and having to run *before* the five
 /// tab slices, above the point where the cache exists to build a `cx` from.
 #[derive(Clone, Copy)]

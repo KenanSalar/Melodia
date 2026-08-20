@@ -49,13 +49,13 @@ pub(crate) const RULES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.claude
 /// where the guard under test takes an `f64`.
 pub(crate) const UNBOUNDED: f32 = f32::MAX * 2.0;
 
-/// Every module that owns callback wiring: the cross-cutting root plus the eleven view
+/// Every module that owns callback wiring: the cross-cutting root plus the twelve view
 /// slices that keep their own.
 ///
 /// **Checked for equality, not containment.** What this guards is a subtree that stops
 /// existing, which a floor cannot see: every count-based pin over the corpus quietly loses
 /// that slice's coverage and all of them still pass.
-pub(crate) const CALLBACK_HOMES: [&str; 12] = [
+pub(crate) const CALLBACK_HOMES: [&str; 13] = [
     "albums",
     "artists",
     "browse",
@@ -66,6 +66,7 @@ pub(crate) const CALLBACK_HOMES: [&str; 12] = [
     "my_library",
     "playlists",
     "queue_sheet",
+    "radio",
     "recently_played",
     "search",
     "tracks",

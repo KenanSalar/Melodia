@@ -64,6 +64,7 @@ playlist_remove
 push_pin
 queue_music
 queue_play_next
+radio
 refresh
 remove
 repeat
@@ -85,6 +86,7 @@ theater_comedy
 title
 tonality
 translate
+travel_explore
 tune
 upload
 view_list

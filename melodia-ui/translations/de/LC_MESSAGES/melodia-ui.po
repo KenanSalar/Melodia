@@ -1702,3 +1702,26 @@ msgstr "Noch nicht bestätigt. Bestätige Melodia im Browser und klicke dann auf
 
 msgid "Couldn't save your credentials."
 msgstr "Deine Anmeldedaten konnten nicht gespeichert werden."
+
+# ---- Radio -------------------------------------------------------------------
+
+# The sidebar row and the window title. The two tabs reuse "Browse" and "Favorites".
+msgid "Radio"
+msgstr "Radio"
+
+msgid "Search stations…"
+msgstr "Sender suchen…"
+
+msgid "Filter stations…"
+msgstr "Sender filtern…"
+
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} Sender"
+msgstr[1] "{n} Sender"
+
+msgid "No favorite stations yet"
+msgstr "Noch keine Lieblingssender"
+
+msgid "Star a station in Browse to keep it here."
+msgstr "Markiere einen Sender unter Durchsuchen, um ihn hier zu behalten."

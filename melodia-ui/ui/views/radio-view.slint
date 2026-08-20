@@ -1,0 +1,96 @@
+import { Radio } from "../globals/radio.slint";
+import { LibraryTabBand } from "../components/hero/library-tab-band.slint";
+import { TooltipFrame } from "../components/tooltip-frame.slint";
+import { ViewTransition } from "../components/view-transition.slint";
+import { RadioBrowseTab } from "radio/browse-tab.slint";
+import { RadioFavoritesTab } from "radio/favorites-tab.slint";
+
+// Radio: two tabs over the directory and the stations the user kept, under the same
+// `LibraryTabBand` My Library wears. The mount sheet and nothing else — the band carries the tab
+// bar, the filter box and the count line; each tab body owns whatever scroller it grows.
+//
+// **The band's hero half is idle here**, `detail-open` a literal `false`, until the station detail
+// gives it something to morph into.
+export component RadioView inherits Rectangle {
+    // A click anywhere the band or a body doesn't claim gives the filter box up.
+    TouchArea {
+        clicked => { Radio.blur-search-tick += 1; }
+    }
+
+    // Both counts hold `ui::tab_bar::UNFETCHED_COUNT` until fetched, so each is `>= 0`-guarded: a
+    // bare `-1` interpolates into the plural as "-1 stations". **No latch over it**, unlike My
+    // Library's — that hold exists because a drill re-reads the arriving tab while the band eases
+    // the line out, and nothing here morphs yet.
+    property <string> count-line:
+        Radio.tab-idx == Radio.tab-browse
+            ? (Radio.browse-count >= 0
+                ? @tr("{n} station" | "{n} stations" % Radio.browse-count) : "")
+            : (Radio.favorites-count >= 0
+                ? @tr("{n} station" | "{n} stations" % Radio.favorites-count) : "");
+
+    VerticalLayout {
+        band := LibraryTabBand {
+            // Inline literals: `@tr` folds msgids at codegen, so a Rust-seeded `[string]`
+            // renders untranslated. Order matches `Radio.tab-*`.
+            tab-labels: [@tr("Browse"), @tr("Favorites")];
+            tab-icons: ["travel_explore", "favorite"];
+            tab-idx <=> Radio.tab-idx;
+            tab-selected(i) => {
+                // A directory query carried into the kept list would silently hide rows, and the
+                // reverse reads as an empty directory.
+                Radio.filter = "";
+                Radio.blur-search-tick += 1;
+                Radio.tab-changed(i);
+            }
+
+            filter <=> Radio.filter;
+            blur-tick: Radio.blur-search-tick;
+
+            count-text: root.count-line;
+
+            // The box means different things per tab — a search sent to the directory against a
+            // filter over rows already here — so the placeholder says which.
+            filter-placeholder: Radio.tab-idx == Radio.tab-browse
+                ? @tr("Search stations…")
+                : @tr("Filter stations…");
+
+            detail-open: false;
+        }
+
+        body := Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            // `slide` is bound now, though the band cannot morph until it has a detail: it is what
+            // stops a body translating under a band that is itself moving, and the two curves
+            // disagree enough that the sum briefly runs backwards.
+            if Radio.tab-idx == Radio.tab-browse: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: band.tab-enter-from;
+                enabled: band.tab-anim-armed;
+                slide: !band.morphing;
+                RadioBrowseTab { width: 100%; height: 100%; }
+            }
+            if Radio.tab-idx == Radio.tab-favorites: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: band.tab-enter-from;
+                enabled: band.tab-anim-armed;
+                slide: !band.morphing;
+                RadioFavoritesTab { width: 100%; height: 100%; }
+            }
+        }
+    }
+
+    // On a layer of its own: the bar sits in the band, and Slint paints in declaration order, so
+    // anything the band owns is covered by the body underneath.
+    TooltipFrame {
+        x: band.absolute-position.x - root.absolute-position.x + band.tip-x;
+        y: band.absolute-position.y - root.absolute-position.y + band.tip-y;
+        width: band.tip-w;
+        height: band.tip-h;
+        label: band.tip-label;
+        shown: band.tip-visible;
+    }
+}

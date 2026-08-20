@@ -1700,3 +1700,26 @@ msgstr "Δεν έχει εγκριθεί ακόμη. Εγκρίνετε το Mel
 
 msgid "Couldn't save your credentials."
 msgstr "Δεν ήταν δυνατή η αποθήκευση των διαπιστευτηρίων σας."
+
+# ---- Radio -------------------------------------------------------------------
+
+# The sidebar row and the window title. The two tabs reuse "Browse" and "Favorites".
+msgid "Radio"
+msgstr "Ραδιόφωνο"
+
+msgid "Search stations…"
+msgstr "Αναζήτηση σταθμών…"
+
+msgid "Filter stations…"
+msgstr "Φιλτράρισμα σταθμών…"
+
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} σταθμός"
+msgstr[1] "{n} σταθμοί"
+
+msgid "No favorite stations yet"
+msgstr "Δεν υπάρχουν αγαπημένοι σταθμοί ακόμη"
+
+msgid "Star a station in Browse to keep it here."
+msgstr "Σημειώστε έναν σταθμό στην Περιήγηση για να τον κρατήσετε εδώ."

@@ -120,15 +120,16 @@ pub fn install_views(
     // `.claude/rules/ui-patterns.md` for what that costs.
     //
     // The Favorites *tab* seeds down beside the detail views instead, needing
-    // the `favorites_ui` handle; My Library's needs none.
+    // the `favorites_ui` handle; My Library's and Radio's need none.
     if let Some(vs) = startup_view_state {
         // 4–7 were Albums / Artists / Genres / Playlists — a `views.json`
         // written by a released build still holds them, and they route nowhere.
         let idx = ui::my_library::fold_retired_nav_index(vs.last_nav_index);
-        if (0..=9).contains(&idx) {
+        if (0..=services::view_state::MAX_NAV_INDEX).contains(&idx) {
             app.global::<Nav>().set_selected_index(idx);
         }
         ui::my_library::seed_tab(app, vs.my_library_tab);
+        ui::radio::seed_tab(app, vs.radio_tab);
     }
 
     ui::callbacks::wire_all(app, state);
@@ -159,6 +160,7 @@ pub fn install_views(
     let playlists_ui = ui::playlists::install(cx);
     let favorites_ui = ui::favorites::install(cx, &artists_ui);
     let recently_played_ui = ui::recently_played::install(cx);
+    ui::radio::install(cx);
     // Bound under an underscore rather than dropped at the semicolon, so the
     // keepalive note on `UiHandles` has something to attach to.
     let _search_ui = ui::search::install(cx, &albums_ui, &artists_ui);

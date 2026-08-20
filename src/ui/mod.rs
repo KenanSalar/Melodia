@@ -33,6 +33,7 @@ pub mod now_playing;
 pub mod now_playing_artwork;
 pub mod playlists;
 pub mod queue_sheet;
+pub mod radio;
 pub mod recently_played;
 pub mod replaygain;
 pub mod row_match;

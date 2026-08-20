@@ -1,0 +1,11 @@
+import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
+
+// The stations the user kept. The list itself arrives with the phase that fills it; what stands
+// here is the empty state it will be gated behind.
+export component RadioFavoritesTab inherits Rectangle {
+    GridEmptyState {
+        icon: "favorite";
+        title: @tr("No favorite stations yet");
+        body: @tr("Star a station in Browse to keep it here.");
+    }
+}

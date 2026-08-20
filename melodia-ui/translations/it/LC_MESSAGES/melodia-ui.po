@@ -1695,3 +1695,26 @@ msgstr "Non ancora autorizzato. Autorizza Melodia nel browser, poi fai clic su F
 
 msgid "Couldn't save your credentials."
 msgstr "Impossibile salvare le credenziali."
+
+# ---- Radio -------------------------------------------------------------------
+
+# The sidebar row and the window title. The two tabs reuse "Browse" and "Favorites".
+msgid "Radio"
+msgstr "Radio"
+
+msgid "Search stations…"
+msgstr "Cerca stazioni…"
+
+msgid "Filter stations…"
+msgstr "Filtra stazioni…"
+
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} stazione"
+msgstr[1] "{n} stazioni"
+
+msgid "No favorite stations yet"
+msgstr "Nessuna stazione preferita"
+
+msgid "Star a station in Browse to keep it here."
+msgstr "Aggiungi una stazione ai preferiti da Esplora per tenerla qui."

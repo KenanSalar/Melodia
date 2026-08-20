@@ -1700,3 +1700,28 @@ msgstr "Henüz onaylanmadı. Melodia'yı tarayıcında onayla, sonra Bitir düğ
 
 msgid "Couldn't save your credentials."
 msgstr "Kimlik bilgilerin kaydedilemedi."
+
+# ---- Radio -------------------------------------------------------------------
+
+# The sidebar row and the window title. The two tabs reuse "Browse" and "Favorites".
+msgid "Radio"
+msgstr "Radyo"
+
+msgid "Search stations…"
+msgstr "İstasyon ara…"
+
+msgid "Filter stations…"
+msgstr "İstasyonları filtrele…"
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are identical —
+# the layout is kept because gettext needs both.
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} istasyon"
+msgstr[1] "{n} istasyon"
+
+msgid "No favorite stations yet"
+msgstr "Henüz favori istasyon yok"
+
+msgid "Star a station in Browse to keep it here."
+msgstr "Bir istasyonu burada tutmak için Gözat'ta yıldızla."

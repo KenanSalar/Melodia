@@ -7,8 +7,8 @@
 //! do with `/proc`.
 //!
 //! Index mapping matches `melodia-ui/ui/globals/nav.slint::Nav` (`0=search
-//! 1=browse 2=favorites 3=my-library 8=recently-played 9=settings`; 4–7
-//! retired). A new section owes an arm; a missing one degrades to `Nav(n)`
+//! 1=browse 2=favorites 3=my-library 8=recently-played 9=settings 10=radio`;
+//! 4–7 retired). A new section owes an arm; a missing one degrades to `Nav(n)`
 //! rather than to a wrong name.
 //!
 //! **Every tabbed page names its tab** — a page that logs as one name is a page
@@ -20,11 +20,12 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::ui::favorites::tab_from_index as favorites_tab;
 use crate::ui::my_library::{MyLibraryTab, NAV_MY_LIBRARY, tab_from_index};
+use crate::ui::radio::{NAV_RADIO, tab_from_index as radio_tab};
 use crate::ui::recently_played::tab_from_index as recently_played_tab;
 use crate::ui::settings::settings_page::tab_from_index as settings_tab;
 use crate::{
     AlbumDetail, AppWindow, ArtistDetail, Favorites, GenreDetail, MyLibrary, Nav, PlaylistDetail,
-    RecentlyPlayed, SettingsPage,
+    Radio, RecentlyPlayed, SettingsPage,
 };
 
 /// `Kind(id "Name")` for an open detail, or `None` when the tab shows its grid.
@@ -104,6 +105,10 @@ pub fn format_view(ui: &AppWindow) -> String {
         9 => {
             let g = ui.global::<SettingsPage>();
             format!("Settings/{:?}", settings_tab(&g, g.get_tab_idx()))
+        }
+        NAV_RADIO => {
+            let g = ui.global::<Radio>();
+            format!("Radio/{:?}", radio_tab(&g, g.get_tab_idx()))
         }
         n => format!("Nav({n})"),
     };
