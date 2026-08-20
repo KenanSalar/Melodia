@@ -349,11 +349,12 @@ The things that are silent when missed. Each is checked off in the phase that ow
       dependency add, and `cargo tree -i reqwest` shows one version. `stream-download`'s
       default features pull `reqwest/default-tls`, which is OpenSSL on Linux and changes
       what `cargo-deb`'s `$auto` resolves to.
-- [x] Every directory filter's parameter **name** is pinned by a test. An unknown query
-      parameter is dropped silently, so a misspelled filter reads as a working one.
-      Asserting that an excluded *value* is absent would take a live call and the tree has
-      no network tests, so the observed evidence for `bitrateMin` lives in that test's doc
-      comment instead (Phase 2).
+- [x] Every directory filter's parameter **name** is pinned by a test asserting a *set*
+      value lands under that exact key. An unknown query parameter is dropped silently, so
+      a misspelled filter reads as a working one, and an absent-when-blank assertion is
+      satisfied by the misspelling too. Asserting that an excluded *value* is absent would
+      take a live call and the tree has no network tests, so the observed evidence for
+      `bitrateMin` lives in that test's doc comment instead (Phase 2).
 - [ ] Nothing calls `StreamDownload::new_http`; the stream goes through `HttpStream::new`
       with the shared-client newtype, or the ICY header and the User-Agent are both lost.
 - [ ] A rebuffer does not flip MPRIS to Stopped or clear Discord presence (Phase 3, step 5).
@@ -425,9 +426,21 @@ What later phases reach for:
 - **`DEFAULT_PAGE_LIMIT`, `TAG_FACET_LIMIT` and `FACET_LIMIT`** in `query.rs`, each argued
   at its definition. Paging is `StationSearch::offset` plus `limit`.
 - **`DirectoryStation::to_new_station()`**, Phase 7's bridge from a browsed station to a
-  kept one.
+  kept one. It passes the uuid across as a plain `Some`, which is only sound because
+  `search` drops anything failing `DirectoryStation::is_usable` first: an empty uuid is a
+  value rather than a gap to `station_uuid TEXT UNIQUE`, so uuid-less stations would upsert
+  onto one row. The same predicate keeps a station with no stream URL off the grid, which
+  is what an upstream rename of `url`/`url_resolved` would otherwise produce silently. A
+  client-side drop shortens a page, the same as D13's `hls` filter below.
 - **Facet lists cached per session** in four `tokio::sync::OnceCell`s and handed out as
   `Arc<[Facet]>`, so re-entering the section costs nothing.
+- **`Facet::code` filters only for countries.** `countrycode` is the search endpoint's one
+  code-keyed parameter; languages carry an `iso_639` and still filter by `name`, as tags
+  and codecs do with no code at all. Phase 6's chips have to split on that, or a language
+  chip sends `language=en` and substring-matches english, armenian and slovenian alike.
+- **A directory call is bounded by `REQUEST_TIMEOUT`**, per request rather than on the
+  shared client, whose per-read deadline is what the updater's downloads want and no bound
+  at all on a fetch somebody is waiting on.
 - **`bitrate` is `0` on a large share of live stations**, the most-clicked station in the
   world included, so it is a display hint and never an input to a calculation without a
   fallback. Phase 3's prefetch sizing is the caller that would otherwise divide by it, and
@@ -436,8 +449,11 @@ What later phases reach for:
 **Four things the live API does that this section did not say.** Each was verified against
 `de1.api.radio-browser.info` and each is now pinned by a test:
 
-- **`/json/tags` caps at 1000 by default** against 11,943 tags, and orders alphabetically,
-  so the first entry it returns is `"bob"`. "`limit` is not optional in practice" is
+- **`/json/tags` returned 1000 entries with no `limit`** against 11,943 tags, and orders
+  alphabetically, so the first entry it returns is `"bob"`. The published default for the
+  list endpoints is 100,000, so that ceiling is the live server's rather than the
+  documented one, which is reason to send a limit rather than to trust either. "`limit` is
+  not optional in practice" is
   therefore true of the facet endpoints too, and a usable tag list needs
   `order=stationcount&reverse=true`. Countries (241), languages (649) and codecs (11) fit
   whole; tags take the popular head.
@@ -473,18 +489,27 @@ What later phases reach for:
   is not an error to report.
 
 **What Phase 5 inherits.** Every directory call and the facet cache sit behind the two
-facade functions and `services::radio_browser` is named nowhere else, so D15's guard is
-one early return per function. There is deliberately no `directory_client` seam yet: a
-helper that can only return `Ok` trips `clippy::unnecessary_wraps`, so it arrives with the
-guard that gives it a reason to be fallible.
+facade functions, and `only_the_radio_facade_reaches_the_directory_client` walks `src/`
+to hold that, so D15's guard is one early return per function. There is deliberately no
+`directory_client` seam yet: a helper that can only return `Ok` trips
+`clippy::unnecessary_wraps`, so it arrives with the guard that gives it a reason to be
+fallible.
+
+**One thing left open.** A mirror that dies *after* discovery is pinned for the session,
+`MIRROR` being a `OnceCell` with no re-derivation on repeated failure. `mirror()`'s doc
+argues the no-retry case for a failed *discovery* and not this one; whether it is worth a
+re-pick belongs with the phase that first has a user watching a spinner.
 
 **Gates run:** fmt, `clippy -p Melodia --all-targets --locked -- -D warnings`, full
-`cargo test` (1822 unit + 16 integration, green; 30 new). `cargo tree -i native-tls` and
+`cargo test` (1830 unit + 16 integration, green; 38 new). `cargo tree -i native-tls` and
 `-i openssl-sys` are both empty and `reqwest` resolves to a single copy, which is the
-baseline Phase 3's dependency add has to preserve. Two pins were mutation-checked:
-spelling `bitrateMin` lowercase fails `the_minimum_bitrate_filter_is_camel_case`, and
-dropping the dedupe in `model::hosts` fails both
-`both_address_families_of_one_mirror_collapse_to_one_host` and
+baseline Phase 3's dependency add has to preserve. Five pins were mutation-checked:
+spelling `bitrateMin` lowercase fails `the_minimum_bitrate_filter_is_camel_case`; spelling
+`countrycode` camelCase fails `every_set_filter_lands_under_its_own_wire_key` and nothing
+else, which is the whole reason that test exists beside the blank-filter one; a constantly
+`true` `is_usable` fails both station-drop tests; a `radio_browser` mention planted in
+`library/playback.rs` fails the reach walk; and dropping the dedupe in `model::hosts`
+fails both `both_address_families_of_one_mirror_collapse_to_one_host` and
 `distinct_mirrors_all_survive`.
 
 ---

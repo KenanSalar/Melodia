@@ -17,6 +17,7 @@ mod query;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use rand::RngExt;
 use tokio::sync::OnceCell;
@@ -38,7 +39,19 @@ const FALLBACK_HOST: &str = "de1.api.radio-browser.info";
 /// The mirror this session talks to.
 static MIRROR: OnceCell<String> = OnceCell::const_new();
 
+/// Whole-request ceiling for one directory call, connect included.
+///
+/// The shared client bounds a *read* and not a request, which is what the
+/// updater's multi-minute downloads want and the opposite of what a fetch
+/// somebody is waiting on wants: a mirror trickling a byte at a time never
+/// trips a per-read deadline. Wide enough to clear the client's own
+/// ten-second connect timeout and still transfer a facet list behind it.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
+
 /// Search the directory.
+///
+/// Rows failing [`DirectoryStation::is_usable`] are dropped here rather than at
+/// the surface, so a page can come back shorter than the limit it asked for.
 pub async fn search(
     client: &reqwest::Client,
     search: &StationSearch,
@@ -46,7 +59,11 @@ pub async fn search(
     let url = endpoint(client, "stations/search").await;
     let stations: Vec<ApiStation> =
         get_json(client, &url, &query::search_params(search), "search").await?;
-    Ok(stations.into_iter().map(ApiStation::into_directory_station).collect())
+    Ok(stations
+        .into_iter()
+        .map(ApiStation::into_directory_station)
+        .filter(DirectoryStation::is_usable)
+        .collect())
 }
 
 /// One of the directory's facet lists, fetched once per session.
@@ -147,6 +164,7 @@ async fn get_json<T: serde::de::DeserializeOwned>(
     let response = client
         .get(url)
         .query(params)
+        .timeout(REQUEST_TIMEOUT)
         .send()
         .await
         .map_err(|e| AppError::network(format!("Radio directory {what} request failed"), e))?;

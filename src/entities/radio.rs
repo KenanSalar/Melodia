@@ -89,6 +89,7 @@ pub struct DirectoryStation {
     /// what filters; this is what a card shows.
     pub country: String,
     pub country_code: String,
+    /// The country subdivision, in the directory's own spelling.
     pub state: String,
     pub language: String,
     pub codec: String,
@@ -104,8 +105,23 @@ pub struct DirectoryStation {
 }
 
 impl DirectoryStation {
+    /// Whether the station is worth handing on: it can be played, and it can be
+    /// told apart from every other row once it is one.
+    ///
+    /// Both fields default to empty under the wire structs' `#[serde(default)]`,
+    /// and the uuid is the worse half. [`Self::to_new_station`] passes it as
+    /// `Some("")`, which the `UNIQUE` column reads as a value rather than a
+    /// gap, so every station missing one would upsert onto a single row.
+    pub fn is_usable(&self) -> bool {
+        !self.station_uuid.is_empty() && !self.stream_url.is_empty()
+    }
+
     /// Project onto the save input, dropping the popularity figures the table
     /// does not keep.
+    ///
+    /// The uuid crosses unconditionally because anything reaching a caller
+    /// passed [`Self::is_usable`]; the `None` case is a hand-typed station,
+    /// which never comes through here.
     pub fn to_new_station(&self) -> NewRadioStation {
         NewRadioStation {
             station_uuid: Some(self.station_uuid.clone()),
@@ -127,8 +143,10 @@ impl DirectoryStation {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Facet {
     pub name: String,
-    /// The ISO code where the list has one. Tags and codecs are their own key,
-    /// so it is `None` and `name` is what filters.
+    /// The ISO code where the list has one, which only the countries list can
+    /// actually filter by: `countrycode` is the search endpoint's sole
+    /// code-keyed parameter. Languages carry an `iso_639` and still filter by
+    /// `name`, the way tags and codecs do with no code at all.
     pub code: Option<String>,
     pub station_count: i64,
 }
@@ -165,6 +183,9 @@ pub struct StationSearch {
     /// Substring match on the station name. Empty is no name filter.
     pub name: String,
     pub country_code: String,
+    /// The language's *name*, not its code, which is where this parts company
+    /// with `country_code` above: the search endpoint has no code-keyed
+    /// language parameter to pair a [`Facet::code`] with.
     pub language: String,
     /// Every tag has to match, not any.
     pub tags: Vec<String>,

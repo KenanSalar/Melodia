@@ -143,6 +143,37 @@ fn a_blank_favicon_or_homepage_is_absent_rather_than_empty() -> TestResult {
     Ok(())
 }
 
+/// Both URL fields default to empty, so an upstream rename would otherwise fill
+/// a grid with cards that cannot be played and report nothing anywhere.
+#[test]
+fn a_station_with_neither_url_is_not_usable() -> TestResult {
+    let body = r#"{"stationuuid":"c76686ca-a8b9-4db9-9839-1470c9599623","name":"Nowhere"}"#;
+    let station = serde_json::from_str::<ApiStation>(body)?.into_directory_station();
+
+    assert!(!station.is_usable());
+    Ok(())
+}
+
+/// An empty uuid is the worse half of the same default: `to_new_station` passes
+/// it as `Some("")`, which the UNIQUE column takes as a value, so every station
+/// missing one would upsert onto a single row.
+#[test]
+fn a_station_with_no_uuid_is_not_usable() -> TestResult {
+    let body = r#"{"url":"http://example.invalid/stream","name":"Nowhere"}"#;
+    let station = serde_json::from_str::<ApiStation>(body)?.into_directory_station();
+
+    assert!(!station.is_usable());
+    Ok(())
+}
+
+#[test]
+fn a_live_directory_row_is_usable() -> TestResult {
+    let station = serde_json::from_str::<ApiStation>(STATION_BODY)?.into_directory_station();
+
+    assert!(station.is_usable());
+    Ok(())
+}
+
 /// Undeduplicated, a "random" pick over this list is a coin flip between two
 /// spellings of one host — which looks like it works until a second mirror
 /// exists.
@@ -174,6 +205,21 @@ fn a_mirror_entry_without_a_name_is_dropped() -> TestResult {
     let servers: Vec<ApiServer> = serde_json::from_str(r#"[{"ip":"1.2.3.4","name":""}]"#)?;
 
     assert!(hosts(&servers).is_empty());
+    Ok(())
+}
+
+/// The name is interpolated straight into a URL, so one carrying a scheme or a
+/// path of its own rewrites the request rather than picking a mirror.
+#[test]
+fn a_mirror_entry_that_is_not_a_bare_host_is_dropped() -> TestResult {
+    let body = r#"[
+        {"ip":"1.2.3.4","name":"https://de1.api.radio-browser.info"},
+        {"ip":"1.2.3.5","name":"de1.api.radio-browser.info/json"},
+        {"ip":"1.2.3.6","name":"de1.api.radio-browser.info"}
+    ]"#;
+    let servers: Vec<ApiServer> = serde_json::from_str(body)?;
+
+    assert_eq!(hosts(&servers), vec!["de1.api.radio-browser.info".to_owned()]);
     Ok(())
 }
 

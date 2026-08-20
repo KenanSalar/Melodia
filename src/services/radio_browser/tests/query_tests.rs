@@ -83,6 +83,56 @@ fn a_single_tag_uses_the_same_parameter_as_several() {
     assert_eq!(get(&search_params(&search), "tagList"), Some("jazz"));
 }
 
+/// The spelling half. `blank_filters_are_omitted_rather_than_sent_empty` below
+/// names the same keys and asserts only that they are *absent* from an empty
+/// search, which a misspelling satisfies exactly as well.
+///
+/// Exhaustive rather than `..StationSearch::default()`, so a filter added to the
+/// struct has to be pinned here before the test compiles.
+#[test]
+fn every_set_filter_lands_under_its_own_wire_key() {
+    let search = StationSearch {
+        name: "jazz fm".to_owned(),
+        country_code: "NL".to_owned(),
+        language: "dutch".to_owned(),
+        tags: vec!["jazz".to_owned()],
+        codec: "MP3".to_owned(),
+        bitrate_min: 128,
+        order: SearchOrder::Votes,
+        offset: 100,
+        limit: 25,
+    };
+    let params = search_params(&search);
+
+    assert_eq!(get(&params, "name"), Some("jazz fm"));
+    assert_eq!(get(&params, "countrycode"), Some("NL"));
+    assert_eq!(get(&params, "language"), Some("dutch"));
+    assert_eq!(get(&params, "codec"), Some("MP3"));
+    assert_eq!(get(&params, "tagList"), Some("jazz"));
+    assert_eq!(get(&params, "bitrateMin"), Some("128"));
+    assert_eq!(get(&params, "offset"), Some("100"));
+    assert_eq!(get(&params, "limit"), Some("25"));
+    assert_eq!(get(&params, "order"), Some("votes"));
+    assert_eq!(get(&params, "reverse"), Some("true"));
+    assert_eq!(get(&params, "hidebroken"), Some("true"));
+}
+
+/// `language` takes the language's name where `countrycode` takes a code, so a
+/// filter chip wired off `Facet::code` for both would send `language=en` and
+/// substring-match english, armenian and slovenian alike.
+#[test]
+fn the_language_filter_is_keyed_by_name_and_the_country_one_by_code() {
+    let search = StationSearch {
+        country_code: "NL".to_owned(),
+        language: "dutch".to_owned(),
+        ..StationSearch::default()
+    };
+    let params = search_params(&search);
+
+    assert!(!params.contains_key("languagecode"));
+    assert!(!params.contains_key("country"));
+}
+
 /// An empty filter is no filter, not a filter for the empty string.
 #[test]
 fn blank_filters_are_omitted_rather_than_sent_empty() {
@@ -107,6 +157,13 @@ fn popularity_orders_read_downwards_and_the_alphabetical_one_does_not() {
     assert_eq!(order_params(SearchOrder::Votes), ("votes", true));
     assert_eq!(order_params(SearchOrder::Bitrate), ("bitrate", true));
     assert_eq!(order_params(SearchOrder::Name), ("name", false));
+}
+
+/// The remaining arm, so the whole match is pinned rather than four fifths of
+/// it. A shuffle has no direction to reverse.
+#[test]
+fn a_random_order_asks_for_no_direction() {
+    assert_eq!(order_params(SearchOrder::Random), ("random", false));
 }
 
 /// The empty-query first screen is the directory's own most-played list, which

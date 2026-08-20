@@ -119,12 +119,19 @@ pub fn hosts(servers: &[ApiServer]) -> Vec<String> {
     let mut names: Vec<String> = servers
         .iter()
         .map(|server| server.name.trim())
-        .filter(|name| !name.is_empty())
+        .filter(|name| is_bare_host(name))
         .map(str::to_owned)
         .collect();
     names.sort_unstable();
     names.dedup();
     names
+}
+
+/// A hostname and nothing else, which is the shape `url_for` spells the scheme
+/// and the separators around. One carrying either of its own would rewrite the
+/// path rather than name a mirror.
+fn is_bare_host(name: &str) -> bool {
+    !name.is_empty() && !name.contains(['/', ':', '?', '#']) && !name.contains(char::is_whitespace)
 }
 
 /// `None` for a field the directory left blank, which it does far more often
