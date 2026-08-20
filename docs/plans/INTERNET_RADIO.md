@@ -2,8 +2,9 @@
 
 Working doc for [#29](https://github.com/KenanSalar/Melodia/issues/29). Delete when the feature ships.
 
-Upstream facts verified **2026-08-20**. Anything marked ⚠️ **re-verify** is expected to
-drift; check it on the day rather than trusting this doc.
+Upstream facts verified **2026-08-20** against crate sources, the live API and this tree.
+Anything marked ⚠️ **re-verify** is expected to drift; check it on the day rather than
+trusting this doc.
 
 ---
 
@@ -75,7 +76,8 @@ The alternatives were considered and lost:
   yellow pages, a small fraction, heavily skewed to hobby streams.
 - **URL entry only.** What Audacious and foobar do. Cheapest to build, and it makes the
   feature useless to anyone who does not already know a URL.
-- **radio-browser.info.** Roughly 50,000 stations, community-maintained, no API key, no
+- **radio-browser.info.** Over 60,000 stations (`/json/stats` reported 62,689 on
+  2026-08-20), community-maintained, no API key, no
   account, CC0 data, a documented mirror list, and it is what Shortwave, RadioDroid,
   Tuner and Strawberry all standardised on. It also serves `url_resolved`, so its own
   stations arrive already resolved past `.pls`/`.m3u` indirection.
@@ -93,9 +95,23 @@ Each of these closes a fork that would otherwise be re-argued mid-phase.
 **D1. The directory is radio-browser.info, reached through a session-pinned mirror.**
 Server discovery is documented as a DNS SRV lookup of `_api._tcp.radio-browser.info`,
 which would mean a resolver crate. `GET https://all.api.radio-browser.info/json/servers`
-returns the same mirror list over HTTPS, so the client picks one at random per session
-and falls back to a hard-coded mirror if that call fails. No new dependency, and the
-random pick is what spreads load across mirrors the way SRV is meant to.
+returns the same list over HTTPS, so the client picks one at random per session and falls
+back to a hard-coded host if that call fails. No new dependency.
+
+⚠️ **re-verify.** The multi-mirror era this design assumes is over: on 2026-08-20 both SRV
+and `/json/servers` return exactly one target, `de1.api.radio-browser.info`, and
+`all.api.radio-browser.info` resolves to that same machine. So the random pick buys
+nothing today and the design is kept only because the set can grow back. Two things it
+must get right regardless, and both are invisible while the list has one entry:
+
+- **Entries are `{"ip", "name"}` and the list carries one entry per address family.** Today
+  that is `de1` twice, IPv4 and IPv6. Dedupe by `name` before picking, or a "random" pick
+  is a coin flip between two spellings of one host.
+- **Dial the `name`, never the `ip`.** The certificate is issued for the hostname, so an
+  IP-keyed request fails TLS verification. The `ip` field is there for clients doing their
+  own resolution, which is exactly what this design avoids.
+
+Hard-coded fallback: `de1.api.radio-browser.info`.
 
 **D2. Stations live in SQLite, in one table.** Favorites, user-added URLs and play
 history are the same row at different stages of its life, so one `radio_stations` table
@@ -172,10 +188,17 @@ reporting a multiplied sample rate upward, which against a fixed-rate live sourc
 the buffer until it starves. The control is disabled rather than silently ignored.
 
 **D12. Station logos go through the shared artwork store, and the sweep's reference set
-grows to five columns.** `queries::artwork::REFERENCE_COLUMNS` is four today and
-`tasks::artwork_sweep` deletes any stored file no column names. Adding
-`radio_stations.artwork_path` to that ledger is not optional; miss it and every station
-logo is deleted on the next sweep.
+grows to five columns.** `tasks::artwork_sweep` deletes any stored file no column names,
+so adding `radio_stations.artwork_path` to that ledger is not optional; miss it and every
+station logo is deleted on the next sweep.
+
+**The ledger is two consts in `src/database/queries/artwork.rs`, and both are edited.**
+`ARTWORK_COLUMNS` (`pub(super)`, `[(&str, &str); 4]`) is the `(table, column)` list
+`repoint_all` builds its statements from; `REFERENCED_PATHS` is the `UNION` the sweep
+reads through, spelling the same four out by hand. That is deliberate rather than drift,
+argued in the doc comment on `ARTWORK_COLUMNS` and pinned by a test, so the fifth column
+lands in both and the pin is what catches a half-edit. Both names are `artwork.rs`-local,
+so grep the file rather than the crate.
 
 **D13. HLS stations are surfaced as unplayable, not hidden.** Symphonia has no MPEG-TS
 demuxer, so an HLS station cannot play today. The directory row carries `hls: 0|1`, so
@@ -269,14 +292,20 @@ way `fold_retired_nav_index` already folds 4 through 7.
 - **No second `decode_file`.** `build_source` becomes generic over `R: Read + Seek + Send + Sync`
   and both callers hand it what they have. A parallel `build_stream_source` is the
   duplication this note exists to prevent.
-- **No second reference-column ledger.** D12 is one array, not a query that also lists them.
+- **No *third* reference-column ledger.** D12 is the existing pair, `ARTWORK_COLUMNS` and
+  `REFERENCED_PATHS`, both grown by one. Not a new list, and not a query that re-derives
+  them somewhere else.
 - **No second "does this row match" predicate.** The Favorites filter goes through
   `src/ui/row_match.rs` like the other sixteen surfaces.
 - **No second tab bar, and no third band.** `LibraryTabBand` is mounted, not copied, and
   not parameterised into a shared ancestor with `MosaicTabHero`. The two are siblings for
   reasons `ui-patterns.md` argues, and `ui::library_tab_band_tests` holds them to it.
 - **No second HTTP client.** `services::build_http_client`'s pool is process-wide and its
-  User-Agent is what the directory asks for.
+  User-Agent is what the directory asks for. The stream path needs an `Icy-MetaData: 1`
+  default header that the directory and favicon paths should not send, and that is a
+  newtype implementing stream-download's `Client` trait over the shared client (Phase 3),
+  not a second `reqwest::Client`. A bare `StreamDownload::new_http` is the regression this
+  note exists to prevent: it constructs its own unconfigured client behind your back.
 
 ---
 
@@ -284,8 +313,8 @@ way `fold_retired_nav_index` already folds 4 through 7.
 
 The things that are silent when missed. Each is checked off in the phase that owns it.
 
-- [ ] `radio_stations.artwork_path` in `queries::artwork::REFERENCE_COLUMNS` **and** its
-      union query (D12).
+- [ ] `radio_stations.artwork_path` in **both** `ARTWORK_COLUMNS` and `REFERENCED_PATHS`
+      in `src/database/queries/artwork.rs`, and the array widened to `; 5]` (D12).
 - [ ] Two `SectionActiveGate` mounts at `index: 10`, one per tab, with `tab-index` and
       `current-tab`. A tab leave has to be the same event as a section leave.
 - [ ] The persisted nav index is written **before** `wire_all`, so the slice's
@@ -313,9 +342,16 @@ The things that are silent when missed. Each is checked off in the phase that ow
       otherwise, and a miss ships silently as the English msgid.
 - [ ] Every new icon name is in `scripts/icons.txt`, the fonts are re-subset, and
       `scripts/check-icons.py` passes. A missing name renders as tofu.
-- [ ] `cargo tree -i native-tls` is empty after the dependency add. `stream-download`'s
+- [ ] `cargo tree -i native-tls` and `cargo tree -i openssl-sys` are both empty after the
+      dependency add, and `cargo tree -i reqwest` shows one version. `stream-download`'s
       default features pull `reqwest/default-tls`, which is OpenSSL on Linux and changes
       what `cargo-deb`'s `$auto` resolves to.
+- [ ] Every directory filter has a test asserting an excluded value is **absent**, not just
+      that rows came back. An unknown query parameter is dropped silently, so a
+      misspelled filter reads as a working one (`bitrateMin`, Phase 2).
+- [ ] Nothing calls `StreamDownload::new_http`; the stream goes through `HttpStream::new`
+      with the shared-client newtype, or the ICY header and the User-Agent are both lost.
+- [ ] A rebuffer does not flip MPRIS to Stopped or clear Discord presence (Phase 3, step 5).
 - [ ] No `unwrap()`, no `#[allow(dead_code)]`, no `sed`-driven edits.
 - [ ] Thread names stay under 15 bytes.
 - [ ] Nothing logs a stream URL that carries a token in its query string.
@@ -398,17 +434,37 @@ UI and no audio.
 2. `model.rs`: the station JSON, deserialized with `#[serde(default)]` throughout. The API
    sends `null` for several fields and adds new ones without notice. Fields worth
    carrying: `stationuuid`, `name`, `url_resolved` (prefer over `url`), `homepage`,
-   `favicon`, `tags`, `country`, `countrycode`, `language`, `codec`, `bitrate`, `hls`,
-   `votes`, `clickcount`, `lastcheckok`.
+   `favicon`, `tags`, `country`, `countrycode`, `state`, `language`, `codec`, `bitrate`,
+   `hls`, `votes`, `clickcount`, `lastcheckok`, `ssl_error`.
 
-3. `query.rs`: `/json/stations/search` with `name`, `country`, `countrycode`, `language`,
-   `tag`, `codec`, `bitratemin`, `order`, `reverse`, `offset`, `limit`, `hidebroken=true`.
-   Plus `/json/stations/topvote` and `/json/stations/topclick` for the empty-query
-   default, and `/json/countries`, `/json/languages`, `/json/tags` for the facet lists.
+   **`bitrate` is `0` on a large share of live stations**, including well-ranked ones, so
+   it is a display hint and never an input to a calculation without a fallback. Phase 3's
+   prefetch sizing is the caller that would otherwise divide by it. `ssl_error` is the
+   directory's own record of a station whose TLS is broken, which is cheaper to filter on
+   than to discover at play time.
+
+3. `query.rs`: `/json/stations/search` with `name`, `country`, `countrycode`, `state`,
+   `language`, `tag`, `codec`, `bitrateMin`, `bitrateMax`, `order`, `reverse`, `offset`,
+   `limit`, `hidebroken=true`. Plus `/json/stations/topvote` and `/json/stations/topclick`
+   for the empty-query default, and `/json/countries`, `/json/languages`, `/json/tags` for
+   the facet lists (all four facet endpoints answer 200, `/json/codecs` included).
+
+   **`bitrateMin` is camelCase and the API does not tell you when you get it wrong.** An
+   unrecognised parameter is dropped, not rejected, so `bitratemin=320` returns a full page
+   of 128 kbps stations and the filter looks like it works. Verified against the live API
+   on 2026-08-20: `bitrateMin=320` returned 320 and above, `bitratemin=320` returned 32,
+   128 and 192. Every filter this feature ships needs one assertion that a value it
+   excludes is actually absent, not merely that results came back. Same shape for
+   `bitrateMax`.
+
+   **`limit` is not optional in practice.** Its documented default is 100,000, so a search
+   that forgets it asks for the whole directory. Send it on every call, paging included.
 
 4. Click and vote: `/json/url/{uuid}` is what the API asks be called on every play, and it
    is what keeps the popularity ordering meaningful for everyone. `/json/vote/{uuid}`
-   backs an explicit user action only.
+   backs an explicit user action only. **Both are deduplicated server-side**, a click once
+   per IP per station per day and a vote once per IP per station per ten minutes, so
+   neither needs a client-side debounce and a repeated call is not an error to report.
 
 5. Facet lists are cached in memory for the session. They are large and near-static.
 
@@ -439,26 +495,67 @@ The load-bearing phase. Everything here is argued once and then stays put.
    icy-metadata = { version = "0.6.0", features = ["reqwest"] }
    ```
 
-   `default-features = false` is the load-bearing half. The defaults enable
-   `reqwest`'s own defaults, which means `default-tls`, which is OpenSSL on Linux and
-   would land in `cargo-deb`'s `$auto` dependency set and in every CI toolchain.
-   `stream-download` requires `reqwest ^0.13.4`, which unifies with the pinned 0.13.4
-   rather than resolving a second copy.
+   `default-features = false` is the load-bearing half. `stream-download`'s default set is
+   `[reqwest, temp-storage, reqwest/default-tls, reqwest/charset, reqwest/http2,
+   reqwest/system-proxy]`, and `default-tls` is OpenSSL on Linux, which would land in
+   `cargo-deb`'s `$auto` dependency set and in every CI toolchain.
+
+   **Verified by resolution, not by reading:** both crates unify onto the pinned
+   `reqwest 0.13.4` with a single copy, and `cargo tree -i native-tls` and
+   `-i openssl-sys` both come back empty with the features above. Two notes on the list
+   itself: `reqwest-rustls` already implies `reqwest`, which implies `http`, so the three
+   entries are one entry spelled three times and only the first is needed. And turning
+   defaults off also drops `reqwest/system-proxy`, so this client ignores `HTTP_PROXY`
+   where the shared one honours it. Restore it explicitly if that gap matters; it is a
+   choice here rather than an oversight. `icy-metadata`'s default feature set is already
+   `["reqwest"]`, so naming it changes nothing.
 
 2. **`src/player/stream_source.rs`.** Opening a URL, in order:
    - Resolve playlist indirection. A user-typed URL may point at `.pls`, `.m3u`,
      `.m3u8` or `.asx` rather than at audio. Directory stations arrive pre-resolved in
      `url_resolved`, so this runs for custom stations and as a fallback. Cap the follow
      depth at one and the body size, then take the first entry.
-   - `RequestIcyMetadata` sets the `Icy-MetaData: 1` request header.
-   - `StreamDownload::new_http` over a bounded circular buffer, prefetch sized from the
-     advertised bitrate.
-   - `IcyMetadataReader` wraps that, its callback publishing `StreamTitle` on a
-     `tokio::sync::watch`. The callback runs on the feed thread, so it must not block:
-     a `watch` send is the whole handler.
-   - `Decoder::builder().with_data(reader).with_seekable(false)`, hint from the codec the
-     directory reported. Note `with_byte_len` also sets `is_seekable`, so it must not be
-     called here.
+   - **Not `StreamDownload::new_http`.** Its signature is
+     `(url, storage_provider, settings)` with no client parameter: it calls
+     `Client::create()`, which hands back a `LazyLock` default `reqwest::Client` carrying
+     no User-Agent and no `Icy-MetaData` header. It also swallows the response, and the
+     response headers are where `icy-metaint` lives. Both halves of this step need what it
+     discards, so the explicit path is the only one that composes:
+
+     ```rust
+     let stream = HttpStream::<C>::new(client, url).await?;      // C: our newtype, below
+     let icy = IcyHeaders::parse_from_headers(stream.headers()); // &HeaderMap
+     let reader = StreamDownload::from_stream(stream, storage, settings).await?;
+     let reader = IcyMetadataReader::new(reader, icy.metadata_interval(), on_title);
+     ```
+
+     `HttpStream::headers()` returns `&HeaderMap` for the reqwest client, which is exactly
+     what `IcyHeaders::parse_from_headers` takes, so the two crates meet without an adapter.
+
+   - **The `Icy-MetaData: 1` header has to be a client default, which is why the client is
+     a newtype.** `RequestIcyMetadata` is implemented on `reqwest::ClientBuilder` and
+     `reqwest::RequestBuilder` only, and stream-download's `Client::get` is
+     `self.get(url).send()` with no place to hand a `RequestBuilder` in. Rather than build
+     a second `reqwest::Client` and split the connection pool, implement stream-download's
+     `Client` trait on a newtype wrapping the shared client and add the header in `get`
+     **and `get_range`**, the second being the one that reconnects. That keeps
+     `build_http_client` the single client (see "What must not grow") and keeps the
+     `Melodia/<version>` User-Agent on the stream request too, which some Icecast servers
+     care about.
+
+   - Storage is `BoundedStorageProvider` over `MemoryStorageProvider`: the bounded circular
+     buffer an infinite stream needs. `temp-storage` is off, so nothing spills to disk.
+     Prefetch is sized from `IcyHeaders::bitrate()` where the server states one, falling
+     back to a fixed default; the directory's `bitrate` is `0` too often to lead with.
+
+   - `IcyMetadataReader`'s callback publishes `StreamTitle` on a `tokio::sync::watch`. It
+     is `Fn(...) + Send + Sync` and runs on the feed thread, so it must not block: a
+     `watch` send is the whole handler.
+
+   - `Decoder::builder().with_data(reader).with_seekable(false)`. Note `with_byte_len` also
+     sets `is_seekable`, so it must not be called here. Prefer `with_mime_type` off
+     `HttpStream::content_type()` over `with_hint` off the directory's `codec` string: the
+     former is what the server actually sent, the latter is community-entered and free-form.
 
 3. **`src/player/prebuffer.rs`.** D8's ring:
    - A feed thread pulls the decoder into a bounded SPSC ring of `f32`.
@@ -480,10 +577,27 @@ The load-bearing phase. Everything here is argued once and then stays put.
    and must stay plain data, which is why the reader does not ride on it.
 
 5. **State machine.** A `radio: Option<RadioNowPlaying>` arm on `PlayerState` carrying
-   station id, name, artwork path and the live title. `PlaybackStatus::Loading` already
-   exists and is currently unused; it becomes the connecting and buffering state.
-   `has_next`/`has_previous` are false while it is `Some` (D9), duration is 0, position is
-   elapsed listening time.
+   station id, name, artwork path and the live title. `has_next`/`has_previous` are false
+   while it is `Some` (D9), duration is 0, position is elapsed listening time.
+
+   **`PlaybackStatus::Loading` exists but is not unused, and reusing it is a decision with
+   three existing consumers.** Each already answers the question "what does Loading mean"
+   in a way tuned to a track that is being opened, and a buffering stream is a different
+   thing wearing the same name:
+
+   | Site | Today | With buffering folded in |
+   |---|---|---|
+   | `library/playback.rs:125` | Loading pauses like Playing | Correct as-is |
+   | `services/media_controls/mod.rs:275` | Loading maps to `MediaPlayback::Stopped` | OS popup and tray flip to Stopped on every rebuffer |
+   | `services/discord/model.rs:177` | `"loading" => None` | Presence clears and re-announces on every rebuffer |
+
+   The scrobble detector already handles it and is fine either way. So either the two
+   reporting sites learn that a buffering station is still `Playing`, or buffering gets its
+   own flag and leaves `Loading` to mean connecting. **Prefer the second**: Phase 3 already
+   publishes starvation as an atomic for the UI, so the view model can carry a `buffering`
+   bool beside a `Playing` status and no existing match arm changes meaning. `Loading` then
+   covers the initial connect only, where mapping to Stopped is honest. Settle it here, not
+   in Phase 9, because Phase 9 is where the symptom shows up and the cause is this line.
 
 6. **Monitor.** `player/handlers.rs` gets a live-source arm ahead of the gapless and
    crossfade gates, both of which are meaningless without a track end. End of stream means
@@ -655,6 +769,11 @@ leaving and re-entering the section does not refetch what is already on screen.
 2. Add by URL: a `Dialog` body with URL and optional name, validated (scheme, reachable,
    resolves to audio) before the row is written. The dialog routes through the existing
    `kind` + `target-id` dispatcher, so it is one branch and one opener.
+
+   That validation probe already parses the ICY response headers, so **let the station name
+   itself when the user leaves the name blank**: `IcyHeaders` carries `name`, `genre`,
+   `description` and `logo_url`, which is most of a directory row for free and is the one
+   place a custom station can be as complete as a browsed one.
 3. Edit and remove, with the destructive confirm the tree already uses.
 4. Local filter through `row_match`, sharing the header box per Phase 4's routing.
 5. Sort: name, recently added, most played, last played.
@@ -727,9 +846,11 @@ already shows one.
    state from Phase 3's atomic.
 2. Seek disabled, speed disabled and pinned to 1.0 (D11), next and previous disabled (D9).
 3. MPRIS, tray and media keys: `souvlaki`'s `MediaMetadata` with `duration: None` and the
-   live title as the track title. Play, pause and stop only.
+   live title as the track title. Play, pause and stop only. A buffering station keeps
+   reporting `MediaPlayback::Playing`, per the Phase 3 decision on `Loading`, or the OS
+   popup flickers to Stopped every time the buffer dips.
 4. Discord presence: station name and live title, with the small-image asset the tree
-   already ships.
+   already ships. Same constraint: presence must not clear and re-announce on a rebuffer.
 5. Sleep timer: the timed modes work unchanged; the end-of-track mode is disabled while a
    stream plays, since a stream has no track end.
 6. Session song history: the titles seen on this station this session. **Owned here, shown
@@ -825,7 +946,12 @@ Answer before Phase 6, not before Phase 1.
 ## References
 
 - [Radio Browser API docs](https://docs.radio-browser.info/)
-- [Radio Browser mirror list](https://all.api.radio-browser.info/json/servers)
-- [stream-download](https://docs.rs/stream-download/) and [icy-metadata](https://docs.rs/icy-metadata/)
+- [Radio Browser mirror list](https://all.api.radio-browser.info/json/servers) (one entry
+  as of 2026-08-20, listed twice for IPv4 and IPv6)
+- [stream-download](https://docs.rs/stream-download/) and [icy-metadata](https://docs.rs/icy-metadata/),
+  same author. The composition in Phase 3 was read off the crate sources
+  (`stream-download-0.24.3/src/{lib.rs,http/mod.rs,http/reqwest_client.rs}`,
+  `icy-metadata-0.6.0/src/{headers.rs,reader.rs}`), not off the docs pages.
+- `with_byte_len` setting `is_seekable`: `rodio-0.22.2/src/decoder/builder.rs:194`
 - [Shortwave](https://apps.gnome.org/Shortwave/), [RadioDroid](https://f-droid.org/en/packages/net.programmierecke.radiodroid2/), [Strawberry](https://www.strawberrymusicplayer.org/)
 - rodio's pull model: `rodio-0.22.2/src/stream.rs`, `init_stream`
