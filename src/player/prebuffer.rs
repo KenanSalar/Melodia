@@ -31,6 +31,25 @@ use rodio::{ChannelCount, Sample, SampleRate, Source};
 /// something the layer above already tolerates better.
 pub const PREBUFFER_MS: u64 = 1_500;
 
+/// How many samples the mixer resamples before re-reading the source's format.
+///
+/// It buys two things against each other. The converter is rebuilt at every span boundary, so a
+/// short span costs the rebuild often and resets the interpolation window with it; but a station
+/// change is only *noticed* at one, so a long span plays that many samples of the incoming station
+/// at the outgoing one's rate. Rodio's own worst-case span (`queue::threshold`) balances them here,
+/// and matching it is what keeps a station on the same footing as a file.
+const SPAN_SAMPLES: usize = 512;
+
+/// [`SPAN_SAMPLES`] rounded up to a whole frame.
+///
+/// A boundary landing mid-frame would shear the channel converter, and it would leave the deck's
+/// parity flipped for whatever plays next — the same reason the starvation decision is taken per
+/// frame rather than per sample.
+fn span_samples(channels: ChannelCount) -> usize {
+    let channels = usize::from(channels.get());
+    SPAN_SAMPLES.div_ceil(channels) * channels
+}
+
 /// How long the feed thread sleeps when it finds the ring full.
 ///
 /// The steady state of a healthy stream is a full ring, so this is the thread's wakeup rate rather
@@ -309,9 +328,14 @@ impl Iterator for PrebufferSource {
 impl Source for PrebufferSource {
     #[inline]
     fn current_span_len(&self) -> Option<usize> {
-        // rodio reads `None` as "infinite, or until the sound ends", which is exactly a live
-        // stream: the format never changes under it, so there is no span boundary to announce.
-        None
+        // **Never `None`, however well that describes a live stream.** `None` reaches
+        // `UniformSourceIterator::bootstrap` as an unbounded `Take`, so the mixer builds one
+        // `SampleRateConverter` out of whichever source is on the deck first and never gets a
+        // boundary to rebuild it at. Every station after that is resampled at the first one's
+        // rate: 44.1 kHz after 24 kHz plays fast, the other way round plays slow, and it lasts
+        // until the process restarts. Rodio's decoders are handed a boundary for free, a packet
+        // at a time; a ring that never ends has to name one.
+        Some(span_samples(self.channels))
     }
 
     #[inline]

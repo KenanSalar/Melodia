@@ -1,0 +1,83 @@
+import { ListView } from "std-widgets.slint";
+import { RadioStationGridRow, RadioStationRow } from "../../models.slint";
+import { StationCard } from "station-card.slint";
+
+// Virtualized station grid, `EntityCardGrid`'s contract over `RadioStationGridRow`: Rust chunks the
+// flat list into rows of `columns` cards, so the inner `ListView` virtualizes by row, and the host
+// mounts the scrollbar so it can sit flush with the content-panel edge.
+//
+// Its own component rather than a mount of `EntityCardGrid`, because a station card is not an
+// entity card: it carries three text lines and a play / star / homepage trio. Both Radio tabs mount
+// this one, which is what keeps that from becoming two.
+export component StationGrid inherits Rectangle {
+    in property <[RadioStationGridRow]> rows;
+    in property <length> card-width: 180px;
+    in property <length> card-height: 226px;
+    // The gap is baked into the slot height because a `ListView` lays its delegates back-to-back
+    // and has no `spacing`.
+    in property <length> row-height: 246px;
+    in property <length> gap: 20px;
+
+    // Read by the card's binding, which is the only thing that makes a landed decode repaint: a
+    // `pure` callback's result is cached until a dependency dirties, and at `0` the Rust side
+    // answers cache-only so a mount on a released tier queues nothing.
+    in property <int> covers-generation: 0;
+    pure callback request-logo(string /*artwork_path*/, int /*generation*/) -> image;
+
+    callback station-clicked(RadioStationRow);
+    callback play-clicked(RadioStationRow);
+    callback favorite-clicked(RadioStationRow);
+    callback homepage-clicked(RadioStationRow);
+
+    // Same sign convention as `TrackList` and the entity grids — a positive `v-offset` is N px
+    // scrolled, where the inner `ListView` holds that as a non-positive `viewport-y`.
+    out property <length> v-visible-height: list.visible-height;
+    out property <length> v-viewport-height: list.viewport-height;
+    out property <length> v-offset: -list.viewport-y;
+    callback set-v-offset(length);
+    set-v-offset(o) => { list.viewport-y = -o; }
+
+    list := ListView {
+        vertical-scrollbar-policy: always-off;
+        horizontal-scrollbar-policy: always-off;
+
+        for grid-row in root.rows: Rectangle {
+            // A `ListView` delegate needs a fixed height or the virtualization math breaks.
+            min-height: root.row-height;
+            max-height: root.row-height;
+
+            HorizontalLayout {
+                padding-left: root.gap;
+                padding-right: root.gap;
+                spacing: root.gap;
+                alignment: start;
+
+                for station in grid-row.stations: StationCard {
+                    card-width: root.card-width;
+                    card-height: root.card-height;
+                    artwork-path: station.artwork_path;
+                    cover: root.request-logo(station.artwork_path, root.covers-generation);
+                    name: station.name;
+                    // Each separator hangs off what precedes it, so a station missing any of the
+                    // three does not lead with a middot. The directory is missing one often:
+                    // `bitrate` is `0` on a large share of live stations, the most-clicked in the
+                    // world included.
+                    meta: station.country
+                        + (station.country != "" && station.codec != "" ? " · " : "")
+                        + station.codec
+                        + ((station.country != "" || station.codec != "") && station.bitrate > 0
+                            ? " · " : "")
+                        + (station.bitrate > 0 ? @tr("{} kbps", station.bitrate) : "");
+                    tags: station.tags;
+                    is-favorite: station.is_favorite;
+                    homepage-known: station.homepage != "";
+                    unplayable: station.hls;
+                    clicked => { root.station-clicked(station); }
+                    play-clicked => { root.play-clicked(station); }
+                    favorite-clicked => { root.favorite-clicked(station); }
+                    homepage-clicked => { root.homepage-clicked(station); }
+                }
+            }
+        }
+    }
+}

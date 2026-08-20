@@ -165,7 +165,7 @@ pub fn install_views(
     let playlists_ui = ui::playlists::install(cx);
     let favorites_ui = ui::favorites::install(cx, &artists_ui);
     let recently_played_ui = ui::recently_played::install(cx);
-    ui::radio::install(cx);
+    let radio_ui = ui::radio::install(cx);
     // Bound under an underscore rather than dropped at the semicolon, so the
     // keepalive note on `UiHandles` has something to attach to.
     let _search_ui = ui::search::install(cx, &albums_ui, &artists_ui);
@@ -228,6 +228,7 @@ pub fn install_views(
     let (tune_albums, tune_artists) = (albums_ui.clone(), artists_ui.clone());
     let (tune_playlists, tune_favorites) = (playlists_ui.clone(), favorites_ui.clone());
     let (tune_recent, tune_browse) = (recently_played_ui.clone(), browse_ui.clone());
+    let tune_radio = radio_ui.clone();
     let tune_rows = cover_thumbs.clone();
     let weak = app.as_weak();
     let retune = move || {
@@ -238,6 +239,7 @@ pub fn install_views(
         ui::favorites::tune_cache_for_display(&app, &tune_favorites);
         ui::recently_played::tune_cache_for_display(&app, &tune_recent);
         ui::browse::tune_cache_for_display(&app, &tune_browse);
+        ui::radio::tune_cache_for_display(&app, &tune_radio);
         // The row tier belongs to no view, so it has no
         // `tune_cache_for_display` — but it owes the same post-show read.
         tune_rows.set_thumb_size(media::cover_thumbs::row_cover_size(f64::from(

@@ -1,3 +1,5 @@
+import { RadioFacetRow, RadioStationGridRow, RadioStationRow } from "../models.slint";
+
 // The Radio page at nav index 10: two tabs over the radio-browser.info directory and the stations
 // the user kept. **One `SectionActiveGate`, not one per tab** — the two tabs share a Rust handle,
 // as Favorites' three and Recently Played's two do, and a tab leave here must not be a section
@@ -14,12 +16,14 @@ export global Radio {
     callback tab-changed(int);
 
     // The band's `SearchBar` is the page's only box, and the two tabs want different things from
-    // it: a directory query on Browse, a local filter on Favorites. Rust routes a settled
-    // keystroke from the phase that gives it a first destination.
+    // it: a directory query on Browse, a local filter on Favorites. `ui::radio::filter::dispatch`
+    // routes a settled keystroke by the live tab.
     in-out property <string> filter;
     // Bumped to make the filter input give up the keyboard; a global can't bind a callback inline,
     // so the `SearchBar` watches this counter.
     in-out property <int> blur-search-tick: 0;
+    // Fired by the view's `FilterThrottle` once a burst settles, never per keystroke.
+    callback filter-changed(string);
 
     // Pre-filter station counts, one per tab, feeding the band's count line. `-1` until fetched
     // (`ui::tab_bar::UNFETCHED_COUNT`), which is what the `>= 0` guard at the mount rejects — a
@@ -28,4 +32,76 @@ export global Radio {
     in-out property <int> favorites-count: -1;
 
     callback section-active-changed(bool);
+
+    // --- Browse -------------------------------------------------------------------------------
+    //
+    // Rust owns the model and re-chunks it into rows of `browse-columns` cards, so the `ListView`
+    // virtualizes by row. Unlike the library grids there is no unfiltered list to filter against:
+    // the filter *is* the query, and every change of it is a fresh page off the network.
+    in-out property <[RadioStationGridRow]> browse-rows;
+    in-out property <int> browse-columns: 1;
+    callback columns-changed(int);
+
+    // A request is in flight. The body splits on it against `browse-rows.length`: with nothing
+    // loaded it is the first-paint state, with rows on screen it is the load-more pill's spinner.
+    in-out property <bool> browse-loading: false;
+    // Whether the directory said there was another page. Read off the raw response length rather
+    // than the rows kept, so a page thinned by the HLS filter still pages on.
+    in-out property <bool> browse-has-more: false;
+    // Whether the last request failed. A flag rather than a message, so the copy stays an
+    // `@tr` literal at the mount: `@tr` folds msgids at codegen, so a sentence Rust pushed would
+    // render untranslated, and there is nothing in a transport failure the reader can act on
+    // that a stream URL in the panel would add.
+    in-out property <bool> browse-failed: false;
+    callback load-more();
+    callback retry();
+
+    // Bumped once the logo tier is warm and again per landed decode batch. The card's binding
+    // *reads* it, which is what makes a bump re-run a `pure` callback Slint would otherwise keep
+    // cached; at `0` the Rust side answers cache-only, so a mount on a released tier queues
+    // nothing.
+    in-out property <int> covers-generation: 0;
+    pure callback request-logo(string /*artwork_path*/, int /*generation*/) -> image;
+
+    // Both take the whole row: a directory station has no database id (`id == 0`) and a kept one
+    // has no place in the browse cache, so the row is the only thing that identifies either. One
+    // door for both tabs, which is what Phase 7's list mounts against.
+    callback play-station(RadioStationRow);
+    callback toggle-favorite(RadioStationRow);
+    callback open-homepage(string);
+
+    // --- Filter chips -------------------------------------------------------------------------
+    //
+    // The four directory facets are fetched lazily, on first open of their chip, and cached for
+    // the session by `services::radio_browser`. Minimum bitrate is not a facet at all: its options
+    // are a fixed list the chip carries itself, and it never asks for one.
+    out property <int> facet-country: 0;
+    out property <int> facet-language: 1;
+    out property <int> facet-tag: 2;
+    out property <int> facet-codec: 3;
+    out property <int> facet-bitrate: 4;
+
+    // The picked value per chip, which is also what each chip displays. The country's code is
+    // carried beside its name because that is the one the search endpoint takes.
+    in-out property <string> pick-country;
+    in-out property <string> pick-country-code;
+    in-out property <string> pick-language;
+    in-out property <string> pick-tag;
+    in-out property <string> pick-codec;
+    in-out property <int> pick-bitrate-min: 0;
+
+    // One model, swapped per open, because only one picker can be up at a time. `facet-shown` is
+    // the kind it currently holds, so a list landing for a chip the user already moved off is
+    // dropped rather than painted under the wrong label.
+    in-out property <[RadioFacetRow]> facet-options;
+    in-out property <int> facet-shown: -1;
+    in-out property <bool> facet-loading: false;
+    // The picker's own search box. Slint rejects an inline `for … : if …`, so narrowing a list of
+    // several hundred countries has to happen in Rust: this is the needle, and `facet-options` is
+    // rewritten from the fetched list on every settled keystroke.
+    in-out property <string> facet-filter;
+    callback facet-filter-changed(string);
+    callback request-facet(int /*kind*/);
+    callback facet-picked(int /*kind*/, string /*name*/, string /*code*/);
+    callback clear-facet(int /*kind*/);
 }

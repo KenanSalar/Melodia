@@ -106,6 +106,13 @@ pub struct AppState {
     /// on a tokio worker per directory call, and `boot::ui_setup` asks before
     /// the window is shown. [`AppState::set_radio_enabled`] owns when it moves.
     radio_enabled: Arc<AtomicBool>,
+    /// Whether directory results drop segmented stations, on the same terms as
+    /// [`Self::radio_enabled`]: `library::radio::search` reads it per page, on a
+    /// worker.
+    radio_hide_hls: Arc<AtomicBool>,
+    /// Whether playing a station reports a click back to the directory. Read on
+    /// the play path, which is already on a worker.
+    radio_send_clicks: Arc<AtomicBool>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Shared `reqwest::Client`, built lazily on first use via
     /// [`AppState::http_client`]. Only the updater and the post-scan Deezer
@@ -255,6 +262,8 @@ impl AppState {
             scrobble,
             discord,
             radio_enabled: Arc::new(AtomicBool::new(settings.radio.radio_enabled)),
+            radio_hide_hls: Arc::new(AtomicBool::new(settings.radio.radio_hide_hls)),
+            radio_send_clicks: Arc::new(AtomicBool::new(settings.radio.radio_send_clicks)),
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),
@@ -328,6 +337,25 @@ impl AppState {
     /// still on disk.
     pub fn set_radio_enabled(&self, enabled: bool) {
         self.radio_enabled.store(enabled, Ordering::Relaxed);
+    }
+
+    /// Whether a directory page drops its segmented stations before the grid
+    /// sees it.
+    pub fn radio_hide_hls(&self) -> bool {
+        self.radio_hide_hls.load(Ordering::Relaxed)
+    }
+
+    pub fn set_radio_hide_hls(&self, hide: bool) {
+        self.radio_hide_hls.store(hide, Ordering::Relaxed);
+    }
+
+    /// Whether tuning in tells the directory so.
+    pub fn radio_send_clicks(&self) -> bool {
+        self.radio_send_clicks.load(Ordering::Relaxed)
+    }
+
+    pub fn set_radio_send_clicks(&self, send: bool) {
+        self.radio_send_clicks.store(send, Ordering::Relaxed);
     }
 }
 

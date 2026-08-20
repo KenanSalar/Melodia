@@ -1,4 +1,7 @@
 import { Radio } from "../globals/radio.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+import { GridColumnsSync } from "../components/grid-columns-sync.slint";
+import { GridGeometry } from "../components/grid-geometry.slint";
 import { LibraryTabBand } from "../components/hero/library-tab-band.slint";
 import { TooltipFrame } from "../components/tooltip-frame.slint";
 import { ViewTransition } from "../components/view-transition.slint";
@@ -12,9 +15,19 @@ import { RadioFavoritesTab } from "radio/favorites-tab.slint";
 // **The band's hero half is idle here**, `detail-open` a literal `false`, until the station detail
 // gives it something to morph into.
 export component RadioView inherits Rectangle {
+    property <int> filter-tick-pending: 0;
+
     // A click anywhere the band or a body doesn't claim gives the filter box up.
     TouchArea {
         clicked => { Radio.blur-search-tick += 1; }
+    }
+
+    // **The one place in the tree where the debounce is load-bearing rather than an
+    // optimization**: on Browse a settled burst is a directory request, not a walk over rows
+    // already in hand.
+    FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Radio.filter-changed(Radio.filter); }
     }
 
     // Both counts hold `ui::tab_bar::UNFETCHED_COUNT` until fetched, so each is `>= 0`-guarded: a
@@ -28,6 +41,29 @@ export component RadioView inherits Rectangle {
             : (Radio.favorites-count >= 0
                 ? @tr("{n} station" | "{n} stations" % Radio.favorites-count) : "");
 
+    // One derivation for both tabs — they draw the same card, and Phase 7's list mounts the same
+    // grid. Measured off the body, whose width the layout fixes independently of the cards inside
+    // it, so a card sizing itself from it is a derivation and not a cycle. The extra text height
+    // is the station card's third line.
+    property <length> grid-gap: 20px;
+
+    geom := GridGeometry {
+        avail-width: body.width;
+        gap: root.grid-gap;
+        min-card-w: 200px;
+        card-text-h: 66px;
+    }
+
+    // The count goes out whether or not Browse is mounted — the fetch reads the property, not the
+    // callback — and only the mounted tab is asked to re-chunk.
+    GridColumnsSync {
+        computed-cols: geom.cols;
+        seed(c) => {
+            Radio.browse-columns = c;
+            if (Radio.tab-idx == Radio.tab-browse) { Radio.columns-changed(c); }
+        }
+    }
+
     VerticalLayout {
         band := LibraryTabBand {
             // Inline literals: `@tr` folds msgids at codegen, so a Rust-seeded `[string]`
@@ -36,15 +72,18 @@ export component RadioView inherits Rectangle {
             tab-icons: ["travel_explore", "favorite"];
             tab-idx <=> Radio.tab-idx;
             tab-selected(i) => {
-                // A directory query carried into the kept list would silently hide rows, and the
-                // reverse reads as an empty directory.
-                Radio.filter = "";
+                // **The box is reseated, not cleared**, and Rust does it inside `tab-changed`.
+                // A directory query carried into the kept list would silently hide rows, but
+                // blanking the box here would leave Browse's own query standing in Rust with
+                // nothing on screen saying what the grid is filtered by. Each tab's needle is
+                // its own, and the box says whichever one is mounted.
                 Radio.blur-search-tick += 1;
                 Radio.tab-changed(i);
             }
 
             filter <=> Radio.filter;
             blur-tick: Radio.blur-search-tick;
+            search-edited(t) => { root.filter-tick-pending += 1; }
 
             count-text: root.count-line;
 
@@ -57,7 +96,7 @@ export component RadioView inherits Rectangle {
             detail-open: false;
         }
 
-        Rectangle {
+        body := Rectangle {
             vertical-stretch: 1;
             clip: true;
 
@@ -70,7 +109,14 @@ export component RadioView inherits Rectangle {
                 enter-from: band.tab-enter-from;
                 enabled: band.tab-anim-armed;
                 slide: !band.morphing;
-                RadioBrowseTab { width: 100%; height: 100%; }
+                RadioBrowseTab {
+                    width: 100%;
+                    height: 100%;
+                    card-w: geom.card-w;
+                    card-h: geom.card-h;
+                    row-h: geom.row-h;
+                    gap: root.grid-gap;
+                }
             }
             if Radio.tab-idx == Radio.tab-favorites: ViewTransition {
                 width: parent.width;

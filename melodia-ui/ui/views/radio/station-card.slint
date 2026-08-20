@@ -1,0 +1,186 @@
+import { Theme } from "../../theme.slint";
+import { ArtworkImage } from "../../components/artwork-image.slint";
+import { IconButton } from "../../components/icon-button.slint";
+import { MaterialIcon } from "../../components/material-icon.slint";
+
+// One station, as both Radio tabs draw it. `EntityCard`'s shape rather than `EntityCard` itself:
+// what a station card carries under the tile is three lines rather than two, and its hover trio is
+// play / star / homepage where that one's is the Playlists grid's CRUD. Composed from the same
+// leaves, so nothing about the tile, the glyph fallback or the hover zoom is restated here.
+//
+// **The tags line is a string, not a chip strip.** `MetaChipStrip` carries a `changed` tracker over
+// a layout property, and a tracker inside a `ListView` delegate outlives the delegate the
+// virtualization destroys. Rust hands the line over already trimmed and joined.
+export component StationCard inherits Rectangle {
+    in property <string> artwork-path;
+    in property <image> cover;
+    in property <string> name;
+    in property <string> meta;
+    in property <string> tags;
+    in property <bool> is-favorite;
+    in property <bool> homepage-known;
+    // Segmented stream: listed rather than hidden (the directory row says so), and inert. The
+    // badge is what stops the refusal arriving at the moment of a click.
+    in property <bool> unplayable;
+
+    in property <length> card-width: 180px;
+    in property <length> card-height: 226px;
+
+    callback clicked();
+    callback play-clicked();
+    callback favorite-clicked();
+    callback homepage-clicked();
+
+    // **Every hover-driven binding reads this, not `touch.has-hover`.** A higher-z `TouchArea`
+    // captures the pointer, so hovering any nested button flips that false and the fill, the zoom
+    // and the overlay would all drop out while the user is aiming at one.
+    property <bool> card-hovered: touch.has-hover
+        || play_btn.has-hover
+        || fav_btn.has-hover
+        || home_btn.has-hover;
+
+    property <length> tile-size: root.card-width - 2 * Theme.pad-sm;
+
+    width: card-width;
+    height: card-height;
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: Theme.radius-md;
+        background: root.card-hovered ? Theme.surface0 : transparent;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        VerticalLayout {
+            padding: Theme.pad-sm;
+            spacing: Theme.pad-sm;
+
+            ArtworkImage {
+                artwork-path: root.artwork-path;
+                cover: root.cover;
+                tile-size: root.tile-size;
+                tile-radius: Theme.radius-md;
+                cover-scale: root.card-hovered ? 1.04 : 1.0;
+                // A station whose logo is missing, dead, or too small to draw takes the glyph —
+                // which on this directory is most of them, so it has to look deliberate.
+                fallback-icon: "radio";
+            }
+
+            VerticalLayout {
+                spacing: 2px;
+                // The LRM keeps mixed-script names from drifting, as in the rows.
+                Text {
+                    text: "‎" + root.name;
+                    color: Theme.text;
+                    font-size: Theme.font-size-md;
+                    font-weight: 600;
+                    overflow: elide;
+                }
+                Text {
+                    text: "‎" + root.meta;
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                    visible: root.meta != "";
+                }
+                Text {
+                    text: "‎" + root.tags;
+                    color: Theme.overlay1;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                    visible: root.tags != "";
+                }
+            }
+
+            Rectangle { vertical-stretch: 1; }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        // The body's click is the play, so an unplayable station swallows it here rather than
+        // letting the facade refuse one nothing on screen said would fail. The star and the
+        // homepage stay live, which is why this is not a disabled `TouchArea`: the card is
+        // inert to play and useful for everything else.
+        clicked => { if (!root.unplayable) { root.clicked(); } }
+    }
+
+    // **After `touch`**, so the nested buttons consume their own clicks before the card's own
+    // action fires, and matched to the artwork square so the icons frame the tile.
+    //
+    // **Always mounted rather than behind an `if`**, so the root can read each button's
+    // `has-hover`. `visible` propagates to children, so a hidden one is not hit-tested either.
+    Rectangle {
+        x: Theme.pad-sm;
+        y: Theme.pad-sm;
+        width: root.tile-size;
+        height: root.tile-size;
+
+        play_btn := IconButton {
+            visible: !root.unplayable;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            icon: "play_arrow";
+            icon-size: 26px;
+            diameter: 48px;
+            filled: true;
+            force-bg: true;
+            idle-bg: Theme.floating-chrome-bg;
+            opacity: root.card-hovered ? 1.0 : 0.0;
+            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            clicked => { root.play-clicked(); }
+        }
+
+        // **Stays up when the station is starred**, unlike the rest of the overlay: the star is a
+        // fact about the row and not an affordance, so a grid of results has to show which of them
+        // are already kept without being hovered one at a time.
+        fav_btn := IconButton {
+            x: parent.width - self.width - Theme.pad-sm;
+            y: Theme.pad-sm;
+            icon: root.is-favorite ? "favorite" : "favorite_border";
+            icon-size: 18px;
+            diameter: 30px;
+            filled: root.is-favorite;
+            force-bg: true;
+            idle-bg: Theme.floating-chrome-bg;
+            idle-fg: root.is-favorite ? Theme.red : Theme.text;
+            hover-fg: Theme.red;
+            opacity: root.card-hovered || root.is-favorite ? 1.0 : 0.0;
+            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            clicked => { root.favorite-clicked(); }
+        }
+
+        home_btn := IconButton {
+            visible: root.homepage-known;
+            x: parent.width - self.width - Theme.pad-sm;
+            y: parent.height - self.height - Theme.pad-sm;
+            icon: "link";
+            icon-size: 18px;
+            diameter: 30px;
+            force-bg: true;
+            idle-bg: Theme.floating-chrome-bg;
+            opacity: root.card-hovered ? 1.0 : 0.0;
+            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            clicked => { root.homepage-clicked(); }
+        }
+    }
+
+    // Top-left of the tile, clear of the hover trio. Non-interactive, so card clicks pass through.
+    Rectangle {
+        visible: root.unplayable;
+        x: 2 * Theme.pad-sm;
+        y: 2 * Theme.pad-sm;
+        width: 28px;
+        height: 28px;
+        border-radius: self.height / 2;
+        background: Theme.crust.with-alpha(0.85);
+        MaterialIcon {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            name: "error";
+            icon-size: 18px;
+            icon-color: Theme.yellow;
+            filled: true;
+        }
+    }
+}

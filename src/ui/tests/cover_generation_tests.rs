@@ -28,13 +28,14 @@ const EXEMPT: &str = "ui/tests/grid_prewarm_tests.rs";
 /// schedules and still decodes — it simply never tells anyone, so its cards sit on the
 /// placeholder until something unrelated dirties the binding. There is nothing to see in review
 /// and nothing to catch at runtime.
-const NOTIFIER_HOMES: [&str; 7] = [
+const NOTIFIER_HOMES: [&str; 8] = [
     "boot/ui_setup.rs",
     "ui/albums/callbacks/grid.rs",
     "ui/artists/callbacks/grid.rs",
     "ui/browse/mod.rs",
     "ui/favorites/mod.rs",
     "ui/playlists/callbacks/grid.rs",
+    "ui/radio/mod.rs",
     "ui/recently_played/mod.rs",
 ];
 

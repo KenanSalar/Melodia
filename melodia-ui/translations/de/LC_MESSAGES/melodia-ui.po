@@ -1732,3 +1732,66 @@ msgstr "Internetradio"
 
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "Livesender von radio-browser.info durchsuchen und abspielen"
+
+# The Settings sub-rows, shown only while the master switch is on.
+msgid "Hide unplayable stations"
+msgstr "Nicht abspielbare Sender ausblenden"
+
+msgid "Segmented (HLS) streams are listed but cannot play yet"
+msgstr "Segmentierte (HLS-)Streams werden aufgeführt, lassen sich aber noch nicht abspielen"
+
+msgid "Report plays to the directory"
+msgstr "Wiedergaben an das Verzeichnis melden"
+
+msgid "An anonymous count is what orders stations by popularity"
+msgstr "Eine anonyme Zählung ist es, die Sender nach Beliebtheit sortiert"
+
+# ---- Radio: Browse -----------------------------------------------------------
+# The filter chips. "Genre" and "Language" reuse the labels above.
+msgid "Country"
+msgstr "Land"
+
+msgid "Format"
+msgstr "Format"
+
+msgid "{} kbps and up"
+msgstr "Ab {} kbps"
+
+# The chip pickers.
+msgid "Filter…"
+msgstr "Filtern…"
+
+msgid "Loading…"
+msgstr "Wird geladen…"
+
+msgid "Nothing to pick from"
+msgstr "Nichts zur Auswahl"
+
+msgid "Load more stations"
+msgstr "Weitere Sender laden"
+
+# The three states of the station grid.
+msgid "Searching the directory…"
+msgstr "Verzeichnis wird durchsucht…"
+
+msgid "Stations are coming from radio-browser.info."
+msgstr "Die Sender stammen von radio-browser.info."
+
+msgid "The station directory is unreachable"
+msgstr "Das Senderverzeichnis ist nicht erreichbar"
+
+msgid "Check your connection and try again."
+msgstr "Prüfe deine Verbindung und versuche es erneut."
+
+msgid "Try again"
+msgstr "Erneut versuchen"
+
+msgid "No stations matched"
+msgstr "Keine Sender gefunden"
+
+msgid "Try a different name, or clear a filter."
+msgstr "Versuche einen anderen Namen oder entferne einen Filter."
+
+# The station card's meta line, beside country and codec.
+msgid "{} kbps"
+msgstr "{} kbps"

@@ -364,13 +364,38 @@ impl Default for DiscordFlags {
 /// `discord_rpc_enabled` ships off and what the shipped package description
 /// promises of every online feature.
 ///
-/// The live answer is [`crate::state::AppState::radio_enabled`], a shadow this
-/// seeds at boot — every reader of it is either on a tokio worker or in the boot
+/// The live answers are the shadows on [`crate::state::AppState`] this seeds at
+/// boot — every reader of all three is either on a tokio worker or in the boot
 /// path, where a settings read is disk I/O for one bool.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+///
+/// Only the master switch is off by default, so this cannot take the derive: the
+/// two sub-toggles configure a feature the user has already turned on, and both
+/// describe what it does rather than whether it runs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RadioFlags {
     pub radio_enabled: bool,
+    /// Whether to drop segmented stations from directory results. On by
+    /// default because nothing can play one until Symphonia grows an MPEG-TS
+    /// demuxer, and a grid of stations that fail at the click is worse than a
+    /// shorter grid.
+    pub radio_hide_hls: bool,
+    /// Whether playing a station tells the directory so.
+    ///
+    /// Opt-out rather than opt-in: the click is what popularity ordering is
+    /// built from, so a user who leaves it on is paying for the ordering every
+    /// other user browses by. It carries no identity beyond the request itself.
+    pub radio_send_clicks: bool,
+}
+
+impl Default for RadioFlags {
+    fn default() -> Self {
+        Self {
+            radio_enabled: false,
+            radio_hide_hls: true,
+            radio_send_clicks: true,
+        }
+    }
 }
 
 /// Library-management toggles.

@@ -1730,3 +1730,66 @@ msgstr "Διαδικτυακό ραδιόφωνο"
 
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "Περιήγηση και αναπαραγωγή ζωντανών σταθμών από το radio-browser.info"
+
+# The Settings sub-rows, shown only while the master switch is on.
+msgid "Hide unplayable stations"
+msgstr "Απόκρυψη μη αναπαραγώγιμων σταθμών"
+
+msgid "Segmented (HLS) streams are listed but cannot play yet"
+msgstr "Οι τμηματοποιημένες ροές (HLS) εμφανίζονται αλλά δεν αναπαράγονται ακόμη"
+
+msgid "Report plays to the directory"
+msgstr "Αναφορά αναπαραγωγών στον κατάλογο"
+
+msgid "An anonymous count is what orders stations by popularity"
+msgstr "Μια ανώνυμη καταμέτρηση είναι αυτή που κατατάσσει τους σταθμούς κατά δημοτικότητα"
+
+# ---- Radio: Browse -----------------------------------------------------------
+# The filter chips. "Genre" and "Language" reuse the labels above.
+msgid "Country"
+msgstr "Χώρα"
+
+msgid "Format"
+msgstr "Μορφή"
+
+msgid "{} kbps and up"
+msgstr "{} kbps και άνω"
+
+# The chip pickers.
+msgid "Filter…"
+msgstr "Φιλτράρισμα…"
+
+msgid "Loading…"
+msgstr "Φόρτωση…"
+
+msgid "Nothing to pick from"
+msgstr "Δεν υπάρχει τίποτα προς επιλογή"
+
+msgid "Load more stations"
+msgstr "Φόρτωση περισσότερων σταθμών"
+
+# The three states of the station grid.
+msgid "Searching the directory…"
+msgstr "Αναζήτηση στον κατάλογο…"
+
+msgid "Stations are coming from radio-browser.info."
+msgstr "Οι σταθμοί προέρχονται από το radio-browser.info."
+
+msgid "The station directory is unreachable"
+msgstr "Ο κατάλογος σταθμών δεν είναι προσβάσιμος"
+
+msgid "Check your connection and try again."
+msgstr "Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά."
+
+msgid "Try again"
+msgstr "Δοκιμή ξανά"
+
+msgid "No stations matched"
+msgstr "Δεν βρέθηκαν σταθμοί"
+
+msgid "Try a different name, or clear a filter."
+msgstr "Δοκιμάστε άλλο όνομα ή καθαρίστε ένα φίλτρο."
+
+# The station card's meta line, beside country and codec.
+msgid "{} kbps"
+msgstr "{} kbps"

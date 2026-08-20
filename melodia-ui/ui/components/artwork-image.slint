@@ -34,8 +34,8 @@ export component ArtworkImage inherits Rectangle {
     // caches per item as its own texture, so a brush moving per frame re-renders it per frame.
     in property <float> fade: 1.0;
 
-    // The one question the tile asks, stated once — the six fallback branches each spelled its
-    // negation before.
+    // The one question the tile asks, stated once — every fallback branch spelled its negation
+    // before.
     property <bool> shows-cover: root.has-cover && root.cover.width > 0;
 
     width: tile-size;
@@ -101,6 +101,18 @@ export component ArtworkImage inherits Rectangle {
     }
     if !root.shows-cover && root.fallback-icon == "album": Image {
         source: @image-url("../assets/icons/album.svg");
+        colorize: root.tile-icon-color;
+        image-fit: ImageFit.contain;
+        width: parent.width * 0.55 * root.anim-scale;
+        height: parent.height * 0.55 * root.anim-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        opacity: root.fade;
+    }
+    // A station whose logo is absent, plain-http, or too small for the store to keep — see
+    // `media::station_logo` for why each of those is a glyph rather than a download.
+    if !root.shows-cover && root.fallback-icon == "radio": Image {
+        source: @image-url("../assets/icons/radio.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
         width: parent.width * 0.55 * root.anim-scale;

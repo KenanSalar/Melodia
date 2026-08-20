@@ -1,4 +1,11 @@
 //! Every `Radio.*` callback.
+//!
+//! Split by what each group answers to: the page itself here, the directory grid in [`browse`],
+//! the filter chips in [`facets`], and the section's own arrivals and departures in [`lifecycle`].
+
+mod browse;
+mod facets;
+mod lifecycle;
 
 use std::sync::Arc;
 
@@ -9,7 +16,7 @@ use crate::state::AppState;
 use crate::ui::view_tag;
 use crate::{AppWindow, Radio};
 
-use super::RadioUi;
+use super::{RadioUi, filter};
 
 /// Write the active tab to `views.json` on the blocking pool. The Slint property is already
 /// correct by the time any caller gets here, so this is pure catch-up.
@@ -27,6 +34,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
 
     {
         let s = state.clone();
+        let ru = radio_ui.clone();
         let weak = ui.as_weak();
         g.on_tab_changed(move |tab| {
             let Some(ui) = weak.upgrade() else { return };
@@ -34,14 +42,26 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             // it — the two curated pages log for the same reason. The bar has already written
             // `tab-idx`, so the tag reads the tab being entered.
             view_tag::log_current(&ui);
+            // The needle belongs to the tab, not to the page, so the box follows the mount.
+            filter::sync_box(&ui, &ru);
             persist_tab(&s, tab);
         });
     }
 
     {
+        // Behind the view's `FilterThrottle`, so once per settled burst rather than per
+        // keystroke — which matters more here than anywhere else in the tree, every burst
+        // costing a directory request.
+        let s = state.clone();
         let ru = radio_ui.clone();
-        // Mirrors the flag and nothing else: a leave owes `mark_dirty` for exactly what it hands
-        // back, and this page holds nothing to hand back yet.
-        g.on_section_active_changed(move |active| ru.section.set_active(active));
+        let weak = ui.as_weak();
+        g.on_filter_changed(move |text| {
+            let Some(ui) = weak.upgrade() else { return };
+            filter::dispatch(&ui, &s, &ru, &text);
+        });
     }
+
+    lifecycle::wire(ui, state, radio_ui);
+    browse::wire(ui, state, radio_ui);
+    facets::wire(ui, state, radio_ui);
 }

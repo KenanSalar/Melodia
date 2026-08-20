@@ -296,3 +296,42 @@ export struct NotificationRow {
     action-label: string,
     action-kind: string,
 }
+
+// One radio station, as either tab of the Radio page draws it. **`id` is `0` for a station that
+// exists only in the directory**: results are never persisted, so a browsed row has no database id
+// until the user keeps or plays it, and that zero is what tells the two apart at every call site
+// that takes a whole row.
+//
+// `stream_url` is deliberately absent. Rust resolves a row back to its own cache by `uuid` or by
+// `id`, so the URL never has to cross into the UI layer, where the one thing that must never
+// happen to it is being interpolated into a log line.
+//
+// `tags` arrives display-ready: the directory's raw field is a free-form comma-separated list that
+// runs to a dozen entries, so Rust trims and joins the first few rather than the card chunking a
+// string it cannot split.
+export struct RadioStationRow {
+    id: int,
+    uuid: string,
+    name: string,
+    homepage: string,
+    artwork_path: string,
+    tags: string,
+    country: string,
+    codec: string,
+    bitrate: int,          // 0 = the directory doesn't know
+    hls: bool,
+    is_favorite: bool,
+}
+
+export struct RadioStationGridRow {
+    stations: [RadioStationRow],
+}
+
+// One entry of a directory facet list behind a filter chip. `code` is only ever sent for
+// countries — `countrycode` is the search endpoint's sole code-keyed parameter, and a language,
+// tag or codec filters by `name`.
+export struct RadioFacetRow {
+    name: string,
+    code: string,
+    station_count: int,
+}

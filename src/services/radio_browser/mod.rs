@@ -22,9 +22,11 @@ use std::time::Duration;
 use rand::RngExt;
 use tokio::sync::OnceCell;
 
-use crate::entities::radio::{DirectoryStation, Facet, FacetKind, StationSearch};
+use crate::entities::radio::{DirectoryStation, Facet, FacetKind, StationPage, StationSearch};
 use crate::error::AppError;
 use model::{ApiFacet, ApiServer, ApiStation};
+
+pub use query::DEFAULT_PAGE_LIMIT;
 
 /// Where the mirror list lives. One name in front of every mirror, so it needs
 /// no discovery of its own.
@@ -52,18 +54,53 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 ///
 /// Rows failing [`DirectoryStation::is_usable`] are dropped here rather than at
 /// the surface, so a page can come back shorter than the limit it asked for.
+/// Hence [`StationPage::has_more`], taken off the response *before* that drop:
+/// read off the kept rows it would report the end of the directory every time a
+/// page happened to hold one uuid-less station.
 pub async fn search(
     client: &reqwest::Client,
     search: &StationSearch,
-) -> Result<Vec<DirectoryStation>, AppError> {
+) -> Result<StationPage, AppError> {
     let url = endpoint(client, "stations/search").await;
     let stations: Vec<ApiStation> =
         get_json(client, &url, &query::search_params(search), "search").await?;
-    Ok(stations
-        .into_iter()
-        .map(ApiStation::into_directory_station)
-        .filter(DirectoryStation::is_usable)
-        .collect())
+    let full_page = usize::try_from(query::page_limit(search.limit)).unwrap_or(usize::MAX);
+    let has_more = stations.len() >= full_page;
+    Ok(StationPage {
+        stations: stations
+            .into_iter()
+            .map(ApiStation::into_directory_station)
+            .filter(DirectoryStation::is_usable)
+            .collect(),
+        has_more,
+    })
+}
+
+/// Tell the directory a station was played, which is what its popularity
+/// ordering is built from.
+///
+/// Checked on **status and never parsed**: an unknown station comes back as a
+/// 404 with a zero-length body, so there is nothing to deserialize and asking
+/// for JSON turns a clean refusal into a parse error. (Its sibling
+/// `/json/vote/{uuid}` is the other way round, answering 200 with
+/// `{"ok":false}`, which is why neither can borrow the other's guard.)
+///
+/// Deduplicated server-side at one click per IP per station per day, so a
+/// repeated call is not an error and needs no client-side debounce.
+pub async fn count_click(client: &reqwest::Client, station_uuid: &str) -> Result<(), AppError> {
+    let url = endpoint(client, &format!("url/{station_uuid}")).await;
+    let response = client
+        .get(&url)
+        .timeout(REQUEST_TIMEOUT)
+        .send()
+        .await
+        .map_err(|e| AppError::network("Radio directory click request failed", e))?;
+
+    let status = response.status();
+    if status.is_success() {
+        return Ok(());
+    }
+    Err(AppError::network_msg(format!("Radio directory click returned HTTP {status}")))
 }
 
 /// One of the directory's facet lists, fetched once per session.

@@ -190,6 +190,29 @@ rodio = { version = "0.22.2", default-features = false, features = [
     "symphonia-alac",
     "symphonia-aiff",
 ] }
+# A live stream is decoded here rather than by `rodio::Decoder`, and **deliberately
+# against a newer Symphonia than the 0.5 rodio pins**. 0.5's probe picks a demuxer off
+# a two-byte marker with scoring still a TODO, and the only ADTS marker it knows is
+# `0xFFF1` — so a station sending MPEG-2 ADTS matches nothing, the search runs into the
+# payload, and a stray `0xFFFB` there hands an AAC stream to the MP3 demuxer, which then
+# never syncs. 0.6 scores candidates against the frames that follow and registers all
+# four ADTS sync words.
+#
+# The two majors coexist because they never meet: `player::prebuffer`'s ring is the seam,
+# and rodio is handed samples, not a decoder. Local files stay on rodio's own.
+symphonia = { version = "0.6.1", default-features = false, features = [
+    # What stations actually serve. Deliberately not `all-codecs`: every entry is another
+    # demuxer the probe has to consider, and a format nothing streams is only another way
+    # to guess wrong. `aac` is what carries the ADTS demuxer.
+    "aac",
+    "flac",
+    "mpa",
+    "ogg",
+    "vorbis",
+    # A mount that opens with an ID3v2 tag, which the probe chains past rather than
+    # mistaking for audio.
+    "id3v2",
+] }
 # Rodio 0.22 ships only low/high-pass BLT filters, so the graphic EQ cascades
 # this crate's `Type::PeakingEQ` `DirectForm1` filters instead. `DirectForm1`
 # keeps past inputs/outputs in its delay line, so a live coefficient swap (a
@@ -225,6 +248,9 @@ image = { version = "0.25.10", default-features = false, features = [
     "gif",
     "bmp",
     "tiff",
+    # The odd one out, and only `media::station_logo` produces it — a station's logo
+    # field is a favicon field. Argued at that module's `stored_extension`.
+    "ico",
 ] }
 # Every cover the app draws is resized, most of them more than once, and
 # `image`'s own resamplers go through `get_pixel` — bounds-checked per output

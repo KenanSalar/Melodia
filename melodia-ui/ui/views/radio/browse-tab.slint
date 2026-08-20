@@ -1,3 +1,192 @@
-// The worldwide directory. Empty until the phase that searches it — the page's chrome is the band
-// above, so there is nothing here to stand in for.
-export component RadioBrowseTab inherits Rectangle { }
+import { Theme } from "../../theme.slint";
+import { Radio } from "../../globals/radio.slint";
+import { ActionPill, PillButton } from "../../components/action-pill.slint";
+import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { FacetChip } from "facet-chip.slint";
+import { StationGrid } from "station-grid.slint";
+
+// The worldwide directory: a chip strip of filters over a virtualized station grid, with the
+// load-more pill under it.
+//
+// **The scroller is here, not on the page.** Every tabbed page in the tree puts it in the tab
+// body, and a page-level `ScrollView` above a virtualized `ListView` is the nested-scroller pitfall.
+//
+// **The load-more pill is a footer rather than a row at the end of the list.** Reaching the list's
+// end from inside the virtualization means a `changed` handler on a layout property inside the
+// scroller, which is the change-tracker hazard; a footer says the same thing and cannot panic.
+export component RadioBrowseTab inherits Rectangle {
+    in property <length> card-w;
+    in property <length> card-h;
+    in property <length> row-h;
+    in property <length> gap;
+
+    // Nothing loaded and nothing in flight and no failure: the query genuinely matched nothing.
+    property <bool> is-empty: !Radio.browse-loading
+        && !Radio.browse-failed
+        && Radio.browse-rows.length == 0;
+
+    VerticalLayout {
+        padding-top: Theme.pad-md;
+        spacing: Theme.pad-sm;
+
+        // The filters. Country carries a code because `countrycode` is the search endpoint's one
+        // code-keyed parameter; the rest filter by name, and the bitrate chip's `code` is its own
+        // floor in kbps.
+        HorizontalLayout {
+            padding-left: Theme.pad-md;
+            padding-right: Theme.pad-md;
+            spacing: Theme.pad-sm;
+            alignment: start;
+            vertical-stretch: 0;
+
+            FacetChip {
+                kind: Radio.facet-country;
+                label: @tr("Country");
+                value: Radio.pick-country;
+                options: Radio.facet-shown == Radio.facet-country ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-country && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            FacetChip {
+                kind: Radio.facet-language;
+                label: @tr("Language");
+                value: Radio.pick-language;
+                options: Radio.facet-shown == Radio.facet-language ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-language && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            FacetChip {
+                kind: Radio.facet-tag;
+                label: @tr("Genre");
+                value: Radio.pick-tag;
+                options: Radio.facet-shown == Radio.facet-tag ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-tag && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            FacetChip {
+                kind: Radio.facet-codec;
+                label: @tr("Format");
+                value: Radio.pick-codec;
+                options: Radio.facet-shown == Radio.facet-codec ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-codec && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            // Its options are a literal rather than a fetch: the floors are ours to choose, not
+            // the directory's to list. `code` is what the request carries, so it stays unlocalized
+            // while the label is not.
+            FacetChip {
+                kind: Radio.facet-bitrate;
+                label: @tr("Bitrate");
+                value: Radio.pick-bitrate-min > 0
+                    ? @tr("{} kbps and up", Radio.pick-bitrate-min)
+                    : "";
+                searchable: false;
+                options: [
+                    { name: @tr("{} kbps and up", 64), code: "64" },
+                    { name: @tr("{} kbps and up", 128), code: "128" },
+                    { name: @tr("{} kbps and up", 192), code: "192" },
+                    { name: @tr("{} kbps and up", 320), code: "320" },
+                ];
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+        }
+
+        body := Rectangle {
+            vertical-stretch: 1;
+
+            grid := StationGrid {
+                width: 100%;
+                height: 100%;
+                rows: Radio.browse-rows;
+                card-width: root.card-w;
+                card-height: root.card-h;
+                row-height: root.row-h;
+                gap: root.gap;
+                covers-generation: Radio.covers-generation;
+                request-logo(p, g) => { Radio.request-logo(p, g) }
+                station-clicked(s) => { Radio.play-station(s); }
+                play-clicked(s) => { Radio.play-station(s); }
+                favorite-clicked(s) => { Radio.toggle-favorite(s); }
+                homepage-clicked(s) => { Radio.open-homepage(s.homepage); }
+            }
+
+            // The first page, which is the one state with nothing on screen to keep company.
+            if Radio.browse-loading && Radio.browse-rows.length == 0: GridEmptyState {
+                icon: "travel_explore";
+                title: @tr("Searching the directory…");
+                body: @tr("Stations are coming from radio-browser.info.");
+            }
+
+            // A directory that cannot be reached is a normal condition rather than a bug, so it
+            // says so plainly and offers the retry rather than leaving an empty grid.
+            //
+            // **Only with nothing loaded.** A load-more that fails on page four has 150 stations
+            // on screen, and a panel over them would read as having lost them; there the pill is
+            // still up and clicking it again is the retry.
+            if Radio.browse-failed && Radio.browse-rows.length == 0: GridEmptyState {
+                icon: "error";
+                title: @tr("The station directory is unreachable");
+                body: @tr("Check your connection and try again.");
+                action-label: @tr("Try again");
+                action-icon: "refresh";
+                action-clicked => { Radio.retry(); }
+            }
+
+            if root.is-empty: GridEmptyState {
+                icon: "search_off";
+                title: @tr("No stations matched");
+                body: @tr("Try a different name, or clear a filter.");
+            }
+
+            OverlayScrollbar {
+                horizontal: false;
+                x: parent.width - self.width;
+                width: 10px;
+                height: 100%;
+                visible-size: grid.v-visible-height;
+                content-size: grid.v-viewport-height;
+                offset: grid.v-offset;
+                scroll-to(o) => { grid.set-v-offset(o); }
+            }
+        }
+
+        // Only where there is more to ask for, so the row costs nothing at the end of a result
+        // set. A second click while a request is out needs no guard here: `BrowseState::begin`
+        // refuses an append that is already in flight.
+        if Radio.browse-has-more && Radio.browse-rows.length > 0: HorizontalLayout {
+            padding: Theme.pad-md;
+            alignment: center;
+            vertical-stretch: 0;
+
+            ActionPill {
+                PillButton {
+                    text: Radio.browse-loading ? @tr("Loading…") : @tr("Load more stations");
+                    icon: Radio.browse-loading ? "" : "expand_more";
+                    clicked => { Radio.load-more(); }
+                }
+            }
+        }
+    }
+}

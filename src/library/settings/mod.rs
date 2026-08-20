@@ -9,7 +9,7 @@
 //! - [`view`]: locale, overflow buttons, and per-view UI state — column
 //!   visibility / widths, sort, browse path, nav index, detail ids,
 //!   section-collapse toggles — plus the `snap_to_preset` helper.
-//! - [`radio`]: the Radio section's master switch.
+//! - [`radio`]: the Radio section's master switch and its two sub-toggles.
 //! - [`folders`]: library folder CRUD, watcher toggle, and `scan_folder*`.
 //! - [`diagnostics`]: the Verbose Logging switch.
 //! - [`motion`]: the Skip Startup Animation switch.
@@ -59,7 +59,7 @@ pub use motion::set_skip_startup_animation;
 pub use playback::{
     set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
 };
-pub use radio::set_radio_enabled;
+pub use radio::{set_radio_enabled, set_radio_hide_hls, set_radio_send_clicks};
 pub use replaygain::{
     set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
     set_replaygain_prevent_clipping,

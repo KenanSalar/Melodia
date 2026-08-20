@@ -6,20 +6,37 @@
 //! each with a hook of its own — where here a tab flip has to stay inside the page: Browse holds a
 //! directory answer bought with a network round trip, and a per-tab gate would hand it back every
 //! time the user glanced at their favorites.
+//!
+//! **The section leave is narrower than every other grid page's**, for the same reason: it drops
+//! the logo tier and keeps the results. See [`browse`] and [`covers`].
 
+mod browse;
 mod callbacks;
+mod covers;
+mod facets;
+mod filter;
+mod logos;
+mod rows;
 mod tabs;
 
+use std::collections::HashSet;
+use std::rc::Rc;
 use std::sync::Arc;
 
-use slint::ComponentHandle;
+use parking_lot::Mutex;
+use slint::{ComponentHandle, ModelRc, VecModel};
 
+use crate::media::cover_thumbs::CoverThumbs;
 use crate::state::AppState;
 use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
-use crate::{AppWindow, Nav};
+use crate::{AppWindow, Nav, Radio, RadioFacetRow, RadioStationGridRow};
 
+use browse::BrowseState;
+use logos::LogoMemo;
 use tabs::section_is_up;
+
+pub use covers::tune_cache_for_display;
 pub use tabs::{RadioTab, seed_tab, tab_from_index};
 
 /// This page's `Nav.selected-index`, and the single definition of it.
@@ -73,28 +90,87 @@ pub fn disable(ui: &AppWindow, state: &AppState) {
     }
 }
 
-/// Wire every `Radio.*` callback.
+/// Wire every `Radio.*` callback and hand back the page's handle.
 ///
-/// Returns nothing: each wired closure clones its own strong `Arc`, so the handle built here is
-/// kept alive by the wiring rather than by a caller holding it.
-pub fn install(cx: ViewCtx<'_>) {
+/// Returned for the cover retune alone: every wired closure clones its own strong `Arc`, so the
+/// wiring is what keeps the handle alive.
+pub fn install(cx: ViewCtx<'_>) -> Arc<RadioUi> {
+    install_models(cx.app);
     let radio_ui = Arc::new(RadioUi::new(section_is_up(cx.app)));
+    // A scheduled logo decode landing has nothing the card binding read to change, so the tier
+    // signals and the generation is what re-runs it. Never off `0`: a batch landing after a
+    // leave cleared the tier would otherwise read as warm.
+    crate::ui::cover_generation::notify_on_decode(&radio_ui.covers, cx.app, covers::repaint);
     callbacks::wire(cx.app, cx.state, &radio_ui);
+    radio_ui
+}
+
+/// Hand the global its empty `VecModel`s. Every later write finds them by downcasting back, so a
+/// property left on the declared default is a silent no-op: an unbound array is a model of its own
+/// kind, `write_grid`'s downcast misses, and the grid stays empty with one warning per attempt.
+fn install_models(ui: &AppWindow) {
+    let g = ui.global::<Radio>();
+
+    let stations: Rc<VecModel<RadioStationGridRow>> = Rc::new(VecModel::default());
+    g.set_browse_rows(ModelRc::from(stations));
+
+    let facets: Rc<VecModel<RadioFacetRow>> = Rc::new(VecModel::default());
+    g.set_facet_options(ModelRc::from(facets));
 }
 
 /// Rust-side state for the Radio page.
 pub struct RadioUi {
-    /// Whether the page is on screen, and whether what it cached went stale while it wasn't.
-    /// **Seeded at wire time rather than left to the gate**, which fires on transitions only and
-    /// whose `ChangeTracker` baselines silently inside `AppWindow::new()` — a section seeded
-    /// wrong has no edge left to correct it.
+    /// Whether the page is on screen. **Seeded at wire time rather than left to the gate**, which
+    /// fires on transitions only and whose `ChangeTracker` baselines silently inside
+    /// `AppWindow::new()` — a section seeded wrong has no edge left to correct it.
+    ///
+    /// No dirty flag rides with it. What a leave hands back here is the logo tier and nothing
+    /// else, and the enter re-warms unconditionally, so there is no state for a flag to describe.
     section: SectionState,
+    /// The directory page on screen, and the query it answers.
+    browse: Mutex<BrowseState>,
+    /// The directory uuids this install has starred. Refreshed on section enter and flipped
+    /// optimistically by the toggle, which is what lets the star respond on the click's own frame.
+    favorites: Mutex<HashSet<String>>,
+    /// What this session knows about station logos, keyed on the URL they came from.
+    logos: LogoMemo,
+    /// The open picker's list, whole. Kept beside the Slint model because the picker's needle
+    /// narrows it and Slint cannot filter an array, so every keystroke rebuilds the model from
+    /// here rather than re-asking the facade across the runtime.
+    facet_list: Mutex<Option<Arc<[crate::entities::radio::Facet]>>>,
+    /// The grid tier the cards decode into. Released by the section leave.
+    covers: Arc<CoverThumbs>,
 }
 
 impl RadioUi {
     fn new(section_active: bool) -> Self {
         let section = SectionState::new();
         section.set_active(section_active);
-        Self { section }
+        Self {
+            section,
+            browse: Mutex::new(BrowseState::default()),
+            favorites: Mutex::new(HashSet::new()),
+            logos: LogoMemo::new(),
+            facet_list: Mutex::new(None),
+            covers: Arc::new(covers::new_tier()),
+        }
+    }
+
+    /// Whether the page is the section on screen.
+    pub fn section_active(&self) -> bool {
+        self.section.active()
+    }
+
+    /// Flip a station's star in the shadow the grid is built from.
+    ///
+    /// The optimistic half of the toggle, and its revert: the write is a round trip through
+    /// `SQLite` and the star has to answer on the click's own frame.
+    fn set_local_favorite(&self, station_uuid: &str, favorite: bool) {
+        let mut favorites = self.favorites.lock();
+        if favorite {
+            favorites.insert(station_uuid.to_owned());
+        } else {
+            favorites.remove(station_uuid);
+        }
     }
 }

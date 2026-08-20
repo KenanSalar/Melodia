@@ -151,6 +151,14 @@ export global Settings {
     // is what makes "off" mean no traffic rather than a hidden row.
     in-out property <bool> radio-enabled: false;
     callback radio-enabled-changed(bool);
+    // The two sub-toggles configure a feature already switched on, so both declare their live
+    // default here rather than the master's cautious `false`. Nothing in Slint reads either:
+    // the HLS filter runs in `library::radio::search` and the click on the play path, both off
+    // Rust shadows, so these are the control surface and not the answer.
+    in-out property <bool> radio-hide-hls: true;
+    callback radio-hide-hls-changed(bool);
+    in-out property <bool> radio-send-clicks: true;
+    callback radio-send-clicks-changed(bool);
 
     // Persists, then flips the `FolderWatcher` on the tokio runtime rather than the
     // blocking pool — the start needs an async DB query before it can take the

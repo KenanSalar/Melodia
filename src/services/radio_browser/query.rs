@@ -106,7 +106,10 @@ fn facet_limit(kind: FacetKind) -> u32 {
 }
 
 /// The caller's page size, or the default where they left it unset.
-fn page_limit(requested: u32) -> u32 {
+///
+/// Reachable from the sending half because it is also what a full page *is*:
+/// `search` reads its `has_more` off the raw response length against this.
+pub(super) fn page_limit(requested: u32) -> u32 {
     if requested == 0 {
         DEFAULT_PAGE_LIMIT
     } else {

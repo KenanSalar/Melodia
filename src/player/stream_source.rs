@@ -22,7 +22,7 @@ use std::time::Duration;
 use futures_util::StreamExt;
 use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
 use reqwest::Url;
-use rodio::{ChannelCount, Decoder, SampleRate, Source};
+use rodio::{ChannelCount, SampleRate};
 use stream_download::http::{Client as StreamClient, HttpStream, format_range_header_bytes};
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
@@ -32,6 +32,7 @@ use crate::error::AppError;
 use crate::services::describe;
 
 use super::prebuffer::{PrebufferSource, RingWriter, StreamShared};
+use super::stream_decode::{LiveSource, StreamDecoder};
 
 /// The circular buffer between the socket and the decoder, in compressed bytes.
 ///
@@ -140,7 +141,7 @@ impl StreamClient for IcyClient {
 
 /// An opened stream, before it has a ring or a thread.
 struct OpenedStream {
-    decoder: Decoder<StreamReader>,
+    decoder: StreamDecoder,
     channels: ChannelCount,
     sample_rate: SampleRate,
 }
@@ -265,23 +266,28 @@ async fn connect(
         .map_err(|e| AppError::network("Could not buffer the station's stream", e))?;
 
     let titles = shared.clone();
-    let reader = IcyMetadataReader::new(reader, icy.metadata_interval(), move |parsed| {
-        titles.set_title(parsed.ok().and_then(|m| {
-            m.stream_title().map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned)
-        }));
-    });
+    let reader: StreamReader =
+        IcyMetadataReader::new(reader, icy.metadata_interval(), move |parsed| {
+            titles.set_title(parsed.ok().and_then(|m| {
+                m.stream_title().map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned)
+            }));
+        });
 
-    let mut builder = Decoder::builder().with_data(reader);
-    // What the server actually sent, in preference to the directory's free-form `codec` string.
-    // Deliberately no `with_byte_len`: it sets `is_seekable` as a side effect, and a live mount
-    // has neither a length nor a way back.
-    if let Some(mime) = &mime {
-        builder = builder.with_mime_type(mime);
-    }
-    let decoder = builder
-        .with_seekable(false)
-        .build()
-        .map_err(|e| AppError::Player(format!("Cannot decode the station's stream: {e}")))?;
+    // **On the blocking pool, never on a worker.** Building the decoder probes the container by
+    // *reading*, and `StreamDownload`'s reader is blocking: it parks the calling thread until its
+    // downloader task delivers bytes. That task needs a worker to run on, and the runtime has two
+    // — so a probe on a worker takes half the runtime hostage and two stations take all of it,
+    // deadlocking the reads against the downloads that would satisfy them. The tell is not a
+    // crash: the connect simply never returns, so nothing is staged, nothing is logged, and
+    // shutdown's own `timeout` never fires either, no worker being left to park and own the timer.
+    //
+    // The mime handed over is what the server actually sent, in preference to the directory's
+    // free-form `codec` string.
+    let decoder = tokio::task::spawn_blocking(move || {
+        StreamDecoder::open(Box::new(LiveSource(reader)), mime.as_deref())
+    })
+    .await
+    .map_err(AppError::io_source)??;
 
     Ok(Opened::Audio(Box::new(OpenedStream {
         channels: decoder.channels(),
@@ -429,7 +435,7 @@ pub fn reconnect_delay(attempt: u32) -> Option<Duration> {
 
 /// Everything the feed thread owns for the life of a station.
 struct FeedContext {
-    decoder: Decoder<StreamReader>,
+    decoder: StreamDecoder,
     writer: RingWriter,
     shared: Arc<StreamShared>,
     client: reqwest::Client,

@@ -1732,3 +1732,66 @@ msgstr "İnternet radyosu"
 
 msgid "Browse and play live stations from radio-browser.info"
 msgstr "radio-browser.info üzerindeki canlı istasyonlara göz at ve dinle"
+
+# The Settings sub-rows, shown only while the master switch is on.
+msgid "Hide unplayable stations"
+msgstr "Çalınamayan istasyonları gizle"
+
+msgid "Segmented (HLS) streams are listed but cannot play yet"
+msgstr "Parçalı (HLS) yayınlar listelenir ama henüz çalınamaz"
+
+msgid "Report plays to the directory"
+msgstr "Çalmaları dizine bildir"
+
+msgid "An anonymous count is what orders stations by popularity"
+msgstr "İstasyonları popülerliğe göre sıralayan şey anonim bir sayımdır"
+
+# ---- Radio: Browse -----------------------------------------------------------
+# The filter chips. "Genre" and "Language" reuse the labels above.
+msgid "Country"
+msgstr "Ülke"
+
+msgid "Format"
+msgstr "Biçim"
+
+msgid "{} kbps and up"
+msgstr "{} kbps ve üzeri"
+
+# The chip pickers.
+msgid "Filter…"
+msgstr "Filtrele…"
+
+msgid "Loading…"
+msgstr "Yükleniyor…"
+
+msgid "Nothing to pick from"
+msgstr "Seçilecek bir şey yok"
+
+msgid "Load more stations"
+msgstr "Daha fazla istasyon yükle"
+
+# The three states of the station grid.
+msgid "Searching the directory…"
+msgstr "Dizin aranıyor…"
+
+msgid "Stations are coming from radio-browser.info."
+msgstr "İstasyonlar radio-browser.info adresinden geliyor."
+
+msgid "The station directory is unreachable"
+msgstr "İstasyon dizinine ulaşılamıyor"
+
+msgid "Check your connection and try again."
+msgstr "Bağlantını kontrol edip yeniden dene."
+
+msgid "Try again"
+msgstr "Yeniden dene"
+
+msgid "No stations matched"
+msgstr "Eşleşen istasyon yok"
+
+msgid "Try a different name, or clear a filter."
+msgstr "Farklı bir ad dene ya da bir filtreyi kaldır."
+
+# The station card's meta line, beside country and codec.
+msgid "{} kbps"
+msgstr "{} kbps"

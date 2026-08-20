@@ -139,6 +139,20 @@ impl DirectoryStation {
     }
 }
 
+/// One page of directory results, and whether asking again would return more.
+///
+/// The two travel together because `has_more` cannot be recovered from
+/// `stations` once the page has been filtered: rows are dropped on the way out
+/// of the client ([`DirectoryStation::is_usable`]) and again at the facade (the
+/// HLS setting), so a short page is as often a filtered full one as a genuine
+/// end. Read off the kept length, paging stops on the first page a filter
+/// thinned.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StationPage {
+    pub stations: Vec<DirectoryStation>,
+    pub has_more: bool,
+}
+
 /// One entry of a directory facet list, and how many stations carry it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Facet {
