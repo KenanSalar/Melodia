@@ -111,6 +111,23 @@ impl NavHistory {
         self.entries.get(self.cursor).copied()
     }
 
+    /// Drop every entry for a section the user can no longer reach, pulling the cursor
+    /// back past the ones that fell before it.
+    ///
+    /// Switching Radio off is the only caller, and it is what actually moves the user off
+    /// nav 10: the row and the router branch both go, but the walk would still land there
+    /// on a panel with nothing mounted in it. Cheaper than teaching every replay to
+    /// re-check whether its destination still exists.
+    pub fn forget_section(&mut self, section: i32) {
+        let dropped_before_cursor =
+            self.entries.iter().take(self.cursor + 1).filter(|e| e.section == section).count();
+        self.entries.retain(|e| e.section != section);
+        self.cursor = self
+            .cursor
+            .saturating_sub(dropped_before_cursor)
+            .min(self.entries.len().saturating_sub(1));
+    }
+
     pub fn set_suppress(&mut self, on: bool) {
         self.suppress = on;
     }

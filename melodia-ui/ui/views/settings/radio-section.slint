@@ -1,0 +1,44 @@
+import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+
+// One row: the switch that mounts or removes the whole Radio section. The description names
+// radio-browser.info because a user deciding to stay local is entitled to know who would be
+// contacted. Search visibility follows `discord-section.slint`.
+export component RadioSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> tab-name;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.tab-name, @tr("Radio"),
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    property <bool> show-radio: row-visible(
+        @tr("Internet radio"),
+        @tr("Browse and play live stations from radio-browser.info"));
+
+    out property <bool> has-matches: show-radio;
+
+    VerticalLayout {
+    if has-matches: SectionCard {
+        title: @tr("Radio");
+
+        if root.show-radio: SettingRow {
+            icon: "radio";
+            label: @tr("Internet radio");
+            description: @tr("Browse and play live stations from radio-browser.info");
+            ToggleSwitch {
+                checked <=> Settings.radio-enabled;
+                toggled(v) => { Settings.radio-enabled-changed(v); }
+            }
+        }
+    }
+    }
+}

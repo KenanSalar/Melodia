@@ -1574,8 +1574,8 @@ msgstr "Το Discord δεν εκτελείται"
 msgid "Show album artwork"
 msgstr "Εμφάνιση εξωφύλλου άλμπουμ"
 
-msgid "Look up cover art online (via Deezer) to show on the card"
-msgstr "Αναζήτηση εξωφύλλου στο διαδίκτυο (μέσω Deezer) για εμφάνιση στην κάρτα"
+msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
+msgstr "Αναζήτηση εξωφύλλου στο διαδίκτυο (μέσω Deezer ή iTunes) για εμφάνιση στην κάρτα"
 
 msgid "Hide while paused"
 msgstr "Απόκρυψη κατά την παύση"
@@ -1723,3 +1723,10 @@ msgstr "Δεν υπάρχουν αγαπημένοι σταθμοί ακόμη"
 
 msgid "Star a station in Browse to keep it here."
 msgstr "Σημειώστε έναν σταθμό στην Περιήγηση για να τον κρατήσετε εδώ."
+
+# The Settings card. The section title reuses "Radio" above.
+msgid "Internet radio"
+msgstr "Διαδικτυακό ραδιόφωνο"
+
+msgid "Browse and play live stations from radio-browser.info"
+msgstr "Περιήγηση και αναπαραγωγή ζωντανών σταθμών από το radio-browser.info"

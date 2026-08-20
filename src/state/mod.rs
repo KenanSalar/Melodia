@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use souvlaki::MediaControlEvent;
@@ -99,6 +100,13 @@ pub struct AppState {
     /// lazily spawning a blocking IPC worker thread. Stateless (no on-disk
     /// state); the detector task in `tasks::discord_presence` drives it.
     pub discord: Arc<DiscordPresenceService>,
+    /// The Radio master switch, mirrored off `settings.json` at boot. A shadow
+    /// rather than a read at the decision point because both readers are on a
+    /// path a file read has no business being on: `library::radio`'s guard runs
+    /// on a tokio worker per directory call, and `boot::ui_setup` asks before
+    /// the window is shown. Refreshed by the settings callback once the write
+    /// commits, as the scrobble and Discord service shadows are.
+    radio_enabled: Arc<AtomicBool>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Shared `reqwest::Client`, built lazily on first use via
     /// [`AppState::http_client`]. Only the updater and the post-scan Deezer
@@ -247,6 +255,7 @@ impl AppState {
             search_history,
             scrobble,
             discord,
+            radio_enabled: Arc::new(AtomicBool::new(settings.radio.radio_enabled)),
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),
@@ -306,6 +315,20 @@ impl AppState {
     /// the construction lazy — a player that never tunes to a station still never loads rustls.
     pub fn http_client_cell(&self) -> Arc<OnceLock<reqwest::Client>> {
         self.http_client.clone()
+    }
+
+    /// Whether the Radio section is switched on. The cheap synchronous gate
+    /// `library::radio` gives every outbound call, and what `boot::ui_setup`
+    /// folds a persisted nav index against.
+    pub fn radio_enabled(&self) -> bool {
+        self.radio_enabled.load(Ordering::Relaxed)
+    }
+
+    /// Mirror a flipped Radio toggle into the shadow, ahead of the disk write —
+    /// a directory call racing the persist must see the new answer, not the one
+    /// still on disk.
+    pub fn set_radio_enabled(&self, enabled: bool) {
+        self.radio_enabled.store(enabled, Ordering::Relaxed);
     }
 }
 

@@ -198,11 +198,11 @@ async fn open_and_start_station(
 
 /// Fade length for a transport pause or stop, or `0` when the setting is off.
 ///
-/// The three transport commands route through here — `player_pause`,
-/// `player_toggle_play_pause` and `player_stop` — so everything that reaches them
-/// fades: the UI buttons, the keyboard shortcuts, the OS media keys, the tray, and
-/// the sleep timer's expiry (which ends on `player_pause`, and where a fade-out is
-/// exactly what you want).
+/// The four transport commands route through here — `player_pause`,
+/// `player_toggle_play_pause`, `player_stop` and `player_stop_station` — so everything
+/// that reaches them fades: the UI buttons, the keyboard shortcuts, the OS media keys,
+/// the tray, the Radio switch, and the sleep timer's expiry (which ends on
+/// `player_pause`, and where a fade-out is exactly what you want).
 ///
 /// What must *not* fade is what the machine does for its own reasons, and those
 /// paths pass `0` directly rather than calling this: `stop_end_of_queue` (nothing
@@ -242,6 +242,25 @@ pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
 pub fn player_stop(ctx: &PlaybackContext) -> Result<(), AppError> {
     let fade_ms = transport_fade_ms(ctx);
     ctx.emit_and_execute(move |s| s.build_stop_actions(fade_ms));
+    Ok(())
+}
+
+/// Stop a live stream and nothing else — what the Radio switch owes when it goes off.
+///
+/// The check is inside the state lock for the reason `player_toggle_play_pause`'s is: a
+/// read-then-stop pair would let a track start in between and stop *that* instead.
+/// `build_stop_actions` forgets the station and ends its session, so a connect still in
+/// flight can't land afterwards and the untouched queue is what the transport falls back
+/// to (D9).
+pub fn player_stop_station(ctx: &PlaybackContext) -> Result<(), AppError> {
+    let fade_ms = transport_fade_ms(ctx);
+    ctx.emit_and_execute(move |s| {
+        if s.radio.is_some() {
+            s.build_stop_actions(fade_ms)
+        } else {
+            Vec::new()
+        }
+    });
     Ok(())
 }
 

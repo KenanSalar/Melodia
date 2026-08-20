@@ -124,7 +124,12 @@ pub fn install_views(
     if let Some(vs) = startup_view_state {
         // 4–7 were Albums / Artists / Genres / Playlists — a `views.json`
         // written by a released build still holds them, and they route nowhere.
-        let idx = ui::my_library::fold_retired_nav_index(vs.last_nav_index);
+        // 10 routes only while Radio is switched on, so the two folds compose:
+        // they answer different questions and neither belongs inside the other.
+        let idx = ui::radio::fold_disabled_nav_index(
+            ui::my_library::fold_retired_nav_index(vs.last_nav_index),
+            state.radio_enabled(),
+        );
         if (0..=services::view_state::MAX_NAV_INDEX).contains(&idx) {
             app.global::<Nav>().set_selected_index(idx);
         }
@@ -278,6 +283,7 @@ pub fn install_library_settings_and_friends(
     ui::sleep_timer::install_sleep_timer(app, state);
     ui::settings::scrobbling_settings::install_scrobbling(app, state);
     ui::settings::discord_settings::install_discord(app, state);
+    ui::settings::radio_settings::install_radio(app, state);
     let notifications = ui::shell::notifications::install(app);
     ui::settings::file_watching::install(app, state, &notifications);
     ui::settings::updater_settings::install(app, state);

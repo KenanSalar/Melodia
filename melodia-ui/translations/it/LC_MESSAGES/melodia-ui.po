@@ -1569,8 +1569,8 @@ msgstr "Discord non è in esecuzione"
 msgid "Show album artwork"
 msgstr "Mostra la copertina dell'album"
 
-msgid "Look up cover art online (via Deezer) to show on the card"
-msgstr "Cerca la copertina online (tramite Deezer) per mostrarla sulla scheda"
+msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
+msgstr "Cerca la copertina online (tramite Deezer o iTunes) per mostrarla sulla scheda"
 
 msgid "Hide while paused"
 msgstr "Nascondi in pausa"
@@ -1718,3 +1718,10 @@ msgstr "Nessuna stazione preferita"
 
 msgid "Star a station in Browse to keep it here."
 msgstr "Aggiungi una stazione ai preferiti da Esplora per tenerla qui."
+
+# The Settings card. The section title reuses "Radio" above.
+msgid "Internet radio"
+msgstr "Radio via internet"
+
+msgid "Browse and play live stations from radio-browser.info"
+msgstr "Esplora e riproduci stazioni in diretta da radio-browser.info"

@@ -252,11 +252,13 @@ export component Sidebar inherits Rectangle {
                 // one Tracks used to have.
                 SidebarItem { index: 3;  label: @tr("My Library");      icon: "library_music";  }
 
-                Divider {}
-
                 // On its own past the divider: everything above it is the local library, and this
-                // is the one row that reaches the network.
-                SidebarItem { index: 10; label: @tr("Radio");           icon: "radio";          }
+                // is the one row that reaches the network. **The divider is gated too** — left
+                // unconditional it doubles against the one above Settings the moment the row goes.
+                // Two `if`s rather than a wrapper: an `if` takes a single element, and a wrapper
+                // would still claim this column's spacing.
+                if Settings.radio-enabled: Divider {}
+                if Settings.radio-enabled: SidebarItem { index: 10; label: @tr("Radio"); icon: "radio"; }
             }
         }
 

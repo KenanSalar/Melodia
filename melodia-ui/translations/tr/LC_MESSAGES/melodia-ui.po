@@ -1574,8 +1574,8 @@ msgstr "Discord çalışmıyor"
 msgid "Show album artwork"
 msgstr "Albüm kapağını göster"
 
-msgid "Look up cover art online (via Deezer) to show on the card"
-msgstr "Kartta göstermek için kapağı çevrimiçi ara (Deezer üzerinden)"
+msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
+msgstr "Kartta göstermek için kapağı çevrimiçi ara (Deezer veya iTunes üzerinden)"
 
 msgid "Hide while paused"
 msgstr "Duraklatıldığında gizle"
@@ -1725,3 +1725,10 @@ msgstr "Henüz favori istasyon yok"
 
 msgid "Star a station in Browse to keep it here."
 msgstr "Bir istasyonu burada tutmak için Gözat'ta yıldızla."
+
+# The Settings card. The section title reuses "Radio" above.
+msgid "Internet radio"
+msgstr "İnternet radyosu"
+
+msgid "Browse and play live stations from radio-browser.info"
+msgstr "radio-browser.info üzerindeki canlı istasyonlara göz at ve dinle"

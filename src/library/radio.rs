@@ -26,6 +26,27 @@ use crate::state::AppState;
 /// played.
 pub const RECENT_STATIONS_LIMIT: i64 = 50;
 
+/// A refusal when the user has switched Radio off.
+///
+/// **This is where "off" means no traffic.** D14 already made this module the only door
+/// onto the directory, so the switch is enforced here rather than at the sidebar row,
+/// which a stale callback or an in-flight fetch is already past. Stored stations stay
+/// readable through the getters below: hiding a feature is not deleting what the user
+/// kept, and nothing but the section itself asks for them.
+fn ensure_enabled(state: &AppState) -> Result<(), AppError> {
+    if state.radio_enabled() {
+        return Ok(());
+    }
+    Err(AppError::Settings("Radio is switched off".to_owned()))
+}
+
+/// The shared client, reachable only past [`ensure_enabled`] — which is the point of
+/// spelling it as a seam rather than repeating the check beside each call.
+fn directory_client(state: &AppState) -> Result<&reqwest::Client, AppError> {
+    ensure_enabled(state)?;
+    Ok(state.http_client())
+}
+
 /// Every favorited station, naturally name-ordered.
 pub async fn get_favorites(state: &AppState) -> Result<Vec<radio::RadioStation>, AppError> {
     queries::radio::get_favorite_stations(&state.db).await
@@ -70,6 +91,7 @@ pub async fn mark_played(state: &AppState, id: i64) -> Result<(), AppError> {
 /// exactly the one they will want to find again. Hence the ordering — counting afterwards would
 /// make the row conditional on the server being up.
 pub async fn play_station(state: &AppState, id: i64) -> Result<(), AppError> {
+    ensure_enabled(state)?;
     let station = get_station(state, id).await?;
     let now_playing = RadioNowPlaying::from(&station);
     mark_played(state, id).await?;
@@ -91,7 +113,7 @@ pub async fn search(
     state: &AppState,
     search: &radio::StationSearch,
 ) -> Result<Vec<radio::DirectoryStation>, AppError> {
-    radio_browser::search(state.http_client(), search).await
+    radio_browser::search(directory_client(state)?, search).await
 }
 
 /// One of the directory's facet lists, for the filter chips. Large and
@@ -100,7 +122,7 @@ pub async fn facets(
     state: &AppState,
     kind: radio::FacetKind,
 ) -> Result<Arc<[radio::Facet]>, AppError> {
-    radio_browser::facets(state.http_client(), kind).await
+    radio_browser::facets(directory_client(state)?, kind).await
 }
 
 #[cfg(test)]

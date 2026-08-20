@@ -144,6 +144,14 @@ export global Settings {
     in-out property <bool> discord-rpc-hide-when-paused;
     callback discord-rpc-hide-when-paused-changed(bool);
 
+    // The Radio section's master switch: the sidebar row and the index-10 router branch both
+    // read it, so flipping it mounts and unmounts the whole feature with no restart. Declared
+    // false so a settings read that fails leaves a local-only install local-only. **The gate
+    // that matters isn't either of these** — `library::radio` refuses on the Rust shadow, which
+    // is what makes "off" mean no traffic rather than a hidden row.
+    in-out property <bool> radio-enabled: false;
+    callback radio-enabled-changed(bool);
+
     // Persists, then flips the `FolderWatcher` on the tokio runtime rather than the
     // blocking pool — the start needs an async DB query before it can take the
     // parking_lot lock. **On by default**: consumer players auto-watch with no toggle

@@ -359,6 +359,19 @@ impl Default for DiscordFlags {
     }
 }
 
+/// The Radio section's master switch. Off by default: the shipped package
+/// description promises a collection that stays on your own machine, so an
+/// upgrade has to be silent and the toggle is what turns the feature on.
+///
+/// The live answer is [`crate::state::AppState::radio_enabled`], a shadow this
+/// seeds at boot — every reader of it is either on a tokio worker or in the boot
+/// path, where a settings read is disk I/O for one bool.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RadioFlags {
+    pub radio_enabled: bool,
+}
+
 /// Library-management toggles.
 ///
 /// `folder_watching_enabled` is the one default-on switch: every consumer
@@ -587,6 +600,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub discord: DiscordFlags,
     #[serde(flatten)]
+    pub radio: RadioFlags,
+    #[serde(flatten)]
     pub library: LibraryFlags,
     #[serde(flatten)]
     pub layout: LayoutFlags,
@@ -632,6 +647,7 @@ impl Default for SettingsData {
             tray: TrayFlags::default(),
             scrobble: ScrobbleFlags::default(),
             discord: DiscordFlags::default(),
+            radio: RadioFlags::default(),
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
             motion: MotionFlags::default(),

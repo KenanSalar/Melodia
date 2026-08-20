@@ -442,7 +442,12 @@ export component AppWindow inherits Window {
                             enter-from: Nav.pending-enter-from;
                             SettingsView { width: 100%; height: 100%; }
                         }
-                        if !Nav.now-playing-open && Nav.selected-index == 10: ViewTransition {
+                        // Gated with the sidebar row, so the switch mounts and unmounts the
+                        // section with no restart. The fall-through below keeps its plain
+                        // `!= 10`: with the row gone and `ui::radio::disable` clearing the nav
+                        // history, nothing can select 10 while the switch is off.
+                        if !Nav.now-playing-open && Settings.radio-enabled
+                            && Nav.selected-index == 10: ViewTransition {
                             width: parent.width;
                             height: parent.height;
                             enter-from: Nav.pending-enter-from;
