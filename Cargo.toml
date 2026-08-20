@@ -249,7 +249,7 @@ image = { version = "0.25.10", default-features = false, features = [
     "bmp",
     "tiff",
     # The odd one out, and only `media::station_logo` produces it — a station's logo
-    # field is a favicon field. Argued at that module's `stored_extension`.
+    # field is a favicon field. Argued at that module's `extension_for`.
     "ico",
 ] }
 # Every cover the app draws is resized, most of them more than once, and

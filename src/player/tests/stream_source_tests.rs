@@ -196,3 +196,30 @@ fn nothing_reaches_the_convenience_constructors() {
         "open the stream with HttpStream::new and the shared client instead: {offenders:?}"
     );
 }
+
+/// Building the decoder probes the container by *reading*, and `StreamDownload`'s reader parks the
+/// calling thread until its downloader task delivers bytes. That task needs a worker, and the
+/// runtime has two, so a probe on one takes half the runtime hostage and two stations take all of
+/// it. Nothing reports it: the connect simply never returns, so it is pinned by reading the source
+/// rather than by a test that would have to hang to fail.
+#[test]
+fn the_decoder_probe_is_built_on_the_blocking_pool() {
+    const SOURCE: &str = include_str!("../stream_source.rs");
+    const OPEN: &str = "StreamDecoder::open";
+    const HANDOFF: &str = "spawn_blocking";
+
+    let sites: Vec<usize> = SOURCE.match_indices(OPEN).map(|(at, _)| at).collect();
+    assert!(!sites.is_empty(), "`{OPEN}` left stream_source.rs, so this pin reads nothing");
+
+    for at in sites {
+        let ahead = SOURCE.get(..at).unwrap_or_default();
+        // The nearest `spawn_blocking` behind it, with nothing between them that could have ended
+        // the statement it would have to be an argument of.
+        let handed_off = ahead.rfind(HANDOFF).is_some_and(|from| !ahead[from..].contains(';'));
+        assert!(
+            handed_off,
+            "the probe at byte {at} is not inside a `{HANDOFF}` closure, so it runs on a worker \
+             and deadlocks against the download that would satisfy it"
+        );
+    }
+}

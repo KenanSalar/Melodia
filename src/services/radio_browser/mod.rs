@@ -51,12 +51,6 @@ static MIRROR: OnceCell<String> = OnceCell::const_new();
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Search the directory.
-///
-/// Rows failing [`DirectoryStation::is_usable`] are dropped here rather than at
-/// the surface, so a page can come back shorter than the limit it asked for.
-/// Hence [`StationPage::has_more`], taken off the response *before* that drop:
-/// read off the kept rows it would report the end of the directory every time a
-/// page happened to hold one uuid-less station.
 pub async fn search(
     client: &reqwest::Client,
     search: &StationSearch,
@@ -64,16 +58,27 @@ pub async fn search(
     let url = endpoint(client, "stations/search").await;
     let stations: Vec<ApiStation> =
         get_json(client, &url, &query::search_params(search), "search").await?;
-    let full_page = usize::try_from(query::page_limit(search.limit)).unwrap_or(usize::MAX);
+    Ok(page_from(stations, search.limit))
+}
+
+/// Project one response onto a page, dropping the rows nothing can use.
+///
+/// Rows failing [`DirectoryStation::is_usable`] are dropped here rather than at
+/// the surface, so a page can come back shorter than the limit it asked for. Hence
+/// [`StationPage::has_more`] off the **raw** response length: read off what
+/// survived the drop, a full page holding one uuid-less station would report the
+/// end of the directory and paging would stop there.
+fn page_from(stations: Vec<ApiStation>, limit: u32) -> StationPage {
+    let full_page = usize::try_from(query::page_limit(limit)).unwrap_or(usize::MAX);
     let has_more = stations.len() >= full_page;
-    Ok(StationPage {
+    StationPage {
         stations: stations
             .into_iter()
             .map(ApiStation::into_directory_station)
             .filter(DirectoryStation::is_usable)
             .collect(),
         has_more,
-    })
+    }
 }
 
 /// Tell the directory a station was played, which is what its popularity

@@ -153,18 +153,33 @@ Upserting a row on every drill-in was the alternative. It makes persistence unif
 costs a growing table of stations the user merely glanced at, with "seen" and "kept"
 indistinguishable in the same rows. One conditional beats that.
 
-**D7. The hero gets a source-size floor, because station logos are the weak part.**
-radio-browser favicons are routinely 32 or 64 px, often `.ico`, and often dead links.
-`Theme.hero-artwork` is a large tile and `HeroBackdrop` derives its blur seeds and palette
-from that same image, so a tiny source gives both an upscaled tile and a poor quantization
-sample. Below a minimum stored dimension the image tier is skipped outright and the band
-takes its `fallback-icon` path with the `radio` glyph, which it already supports. This is a
-rule written down here rather than a surprise discovered on screen.
+**D7. There is a source-size floor, and it is set at favicon size rather than at what the
+surfaces would like.** ⚠️ **Rewritten in Phase 6 against measurements**; the paragraph this
+replaces argued the opposite and is kept nowhere, being wrong rather than superseded.
 
-`.ico` is a second half of the same problem: `image` is compiled with `jpeg`, `png`,
-`webp`, `gif`, `bmp` and `tiff` and no `ico`, and the feature list has to stay the superset
-of `media::artwork`'s `STORED_EXTENSIONS`. Either add the feature to both or skip `.ico`
-favicons; decide it in the phase that downloads them.
+The reasoning that produced it still holds: radio-browser favicons are routinely 32 or
+64 px and often dead links, `Theme.hero-artwork` is a large tile, `HeroBackdrop` derives
+its blur seeds and palette from that same image, and `FemtoVG` magnifies bilinear with no
+mipmaps, so a small source gives both a soft tile and a poor quantization sample. What it
+got wrong was the price. Holding out for something drawable bought the Material Symbols
+glyph instead, on stations that had a perfectly good small logo: on the default Browse page
+the guards as drafted covered **29 of 45** stations, and each of the three cost real ones.
+
+- **Plain `http` is allowed.** Refusing cleartext cost a 145x145 JPEG and a 120x120 PNG on
+  that one page. No credential is sent and what comes back is only ever bytes the store
+  decodes as an image, bounds and re-encodes, so the risk the scheme names is not the risk
+  this path runs. The check that stays is the *positive* one: `http` or `https` and nothing
+  else, a `file://` or `data:` URL not being a fetch to make on a directory row's say-so.
+- **`.ico` is admitted**, which widened `media::artwork`'s `STORED_EXTENSIONS` and the
+  `image` feature list behind it for a container only radio ever sees. It earns that
+  because a station's logo field *is* a favicon field.
+- **The floor is 32 px, not 64.** The smallest real logo measured was exactly 32x32 and the
+  only thing below it was a 1x1 tracking pixel, so 64 rejected images that draw acceptably
+  and 32 still keeps out the thing the floor is for.
+
+Together those take the same page to **34 of 45**. The floor is one gate at the writer
+(`media::station_logo::MIN_LOGO_DIM`) rather than one per surface, so nothing this small
+enters the store for a later tier to reject.
 
 **D8. The network never touches the audio callback thread.** rodio pulls `Source::next()`
 inside the cpal data callback (`rodio-0.22.2/src/stream.rs`, `init_stream`), so a blocking
@@ -342,7 +357,9 @@ The things that are silent when missed. Each is checked off in the phase that ow
       `0..=9` and `install_views` guarded reads with the same literal, so a Radio index was
       rewritten on the way out *and* dropped on the way in. Both read
       `services::view_state::MAX_NAV_INDEX` now (Phase 4).
-- [ ] Counts hold `UNFETCHED_COUNT` until fetched, and the section leave puts them back.
+- [x] Counts hold `UNFETCHED_COUNT` until fetched, and the section leave puts them back.
+      Amended in Phase 6 and argued there: the leave keeps the loaded page and hands back
+      only the logo tier, so there is nothing cleared for a rewind to describe.
 - [ ] The band's `hero-t` is **written** from `changed detail-open` and only seeded by its
       binding, so a page entered with a detail already open lands at hero height.
 - [ ] The hero's facts outlive the detail id: teardown rides `hero-collapsed()`, not the
@@ -350,18 +367,20 @@ The things that are silent when missed. Each is checked off in the phase that ow
 - [ ] A drill-in lands its navigation inside `open_*_with`'s `on_applied` hook, never up
       front, so the id and the navigation arrive in the same tick.
 - [ ] `last_detail_ids` is written only for a station with a row (D6).
-- [ ] The disabled guard is in `library::radio`, not only in the UI, and a grep for the
-      Radio Browser client outside that facade returns nothing (D15).
+- [x] The disabled guard is in `library::radio`, not only in the UI, and a grep for the
+      Radio Browser client outside that facade returns nothing (D15). A build failure
+      rather than a review item since Phase 6:
+      `radio_browser::tests::only_the_radio_facade_reaches_the_directory_client`.
 - [ ] Disabling stops a playing station, moves `Nav.selected-index` off 10, and folds a
       persisted 10 on the next boot.
 - [ ] The `SectionActiveGate` mount stays mounted when radio is disabled. It carries a
       `changed` tracker, and dropping a tracker-bearing branch panics.
-- [ ] The Settings sub-rows sit under `if Settings.radio-enabled`, never `visible: false`
+- [x] The Settings sub-rows sit under `if Settings.radio-enabled`, never `visible: false`
       (slint#7377), matching the crossfade rows.
-- [ ] The new Settings rows register their haystacks, or the page's search cannot find them.
-- [ ] Every new `@tr` msgid lands in all six catalogs. The catalogue walk test fails
+- [x] The new Settings rows register their haystacks, or the page's search cannot find them.
+- [x] Every new `@tr` msgid lands in all six catalogs. The catalogue walk test fails
       otherwise, and a miss ships silently as the English msgid.
-- [ ] Every new icon name is in `scripts/icons.txt`, the fonts are re-subset, and
+- [x] Every new icon name is in `scripts/icons.txt`, the fonts are re-subset, and
       `scripts/check-icons.py` passes. A missing name renders as tofu.
 - [x] `cargo tree -i native-tls` and `cargo tree -i openssl-sys` are both empty after the
       dependency add, and `cargo tree -i reqwest` shows one version. `stream-download`'s
@@ -380,7 +399,8 @@ The things that are silent when missed. Each is checked off in the phase that ow
 - [x] A rebuffer does not flip MPRIS to Stopped or clear Discord presence. Settled by
       leaving `Loading` to mean the initial connect and raising `radio.buffering` beside a
       `Playing` status, so neither reporting site needed an edit (Phase 3).
-- [ ] No `unwrap()`, no `#[allow(dead_code)]`, no `sed`-driven edits.
+- [x] No `unwrap()`, no `#[allow(dead_code)]`, no `sed`-driven edits. The first two are the
+      clippy gate's; the third is nobody's but yours.
 - [x] Thread names stay under 15 bytes. The stream's feed thread is `radio-buffer`, and
       `services::tests::no_thread_name_outgrows_what_the_kernel_keeps` walks `src/` for it.
 - [x] Nothing logs a stream URL that carries a token in its query string —
@@ -802,7 +822,7 @@ Library, and with it off nothing in the app makes a request to radio-browser.inf
 
 ---
 
-## Phase 6: Browse
+## Phase 6: Browse ✅ landed
 
 **Goal.** Find any station in the world.
 
@@ -825,10 +845,70 @@ Library, and with it off nothing in the app makes a request to radio-browser.inf
 8. Counts hold `UNFETCHED_COUNT` until fetched and are rewound by the section leave and by
    a tab pick, and are written above any signature guard.
 
-**Gates.** Same three.
+Shipped: `src/ui/radio/{browse,covers,facets,filter,logos,rows}.rs` and
+`src/ui/radio/callbacks/` split into `{browse,facets,lifecycle}`,
+`melodia-ui/ui/views/radio/{browse-tab,station-grid,station-card,facet-chip}.slint`, the
+three boundary structs in `models.slint`, `media::station_logo`, `player::stream_decode`
+with the Symphonia 0.6 dependency behind it, `image`'s `ico` feature and the widened
+`artwork::STORED_EXTENSIONS`, `RadioFlags`' two sub-toggles with their Settings rows, and
+`melodia-ui/ui/assets/icons/radio.svg`.
+
+**This is the phase the feature was first heard**, and the two things a listen found were
+invisible to every static gate. Both are written up in full in
+`docs/plans/SYMPHONIA_MIGRATION.md` and are summarised here only far enough to say what
+they cost:
+
+1. **Symphonia 0.5's probe handed an MPEG-2 ADTS stream to the MP3 demuxer**, which then
+   never returned. No error, no log line, no timeout: the station simply never started.
+   Fixed by decoding streams against 0.6 in the new `player::stream_decode`.
+2. **`PrebufferSource::current_span_len` answered `None`**, which pinned rodio's resampler
+   to the first station's sample rate. Only visible on the *second* station played, and
+   only as it playing fast or slow, for the rest of the process' life.
+
+**Six deviations from this section as first drafted**, each argued at its anchor:
+
+- **A card click plays the station**, which is the opposite of open question 4's
+  recommendation and of every other card in the tree. There is nothing behind the card yet,
+  so drilling into a detail that does not exist is not an option a phase can ship; Phase 8
+  re-points `clicked` at the station detail and the play control stays where it is.
+- **The section leave keeps the loaded page and hands back only the logo tier**, where every
+  other grid page drops its rows and re-queries on the way back in. That is free against
+  SQLite and a network round trip here. **So the count rewind is deliberately absent**:
+  nothing is cleared, so nothing is stale, and the tabbed-page contract's rule reads
+  precisely: rewind if and only if you clear. `ensure_loaded` and `rewarm` are each other's
+  guard, one fetching only when nothing is loaded and the other warming only when something
+  is, so the enter never asks which case it is in.
+- **No HLS filter chip.** D13 put the toggle on the chip strip beside the five facets; it is
+  a Settings row instead, because `radio_hide_hls` is one flag and two controls for it would
+  be two places to disagree. It also belongs with the master switch it qualifies rather than
+  with the filters, which are all query parameters where this one is a client-side drop.
+- **Load-more is a footer pill below the grid, not a row inside the list.** A sentinel row
+  inside a virtualized `ListView` is the natural shape and would put a `changed` handler on a
+  layout property inside a scroller, which is the tracker hazard `slint-pitfalls.md` warns
+  about. A pill outside the scroller has no such handler and states the same thing.
+- **The logo guards were loosened after measuring, and D7 is rewritten rather than ticked.**
+  As drafted it argues for skipping `.ico` and for a high floor, and both cost real stations.
+  The numbers are at D7.
+- **The artwork tile did not already support the radio glyph.** D7 says the band "takes its
+  `fallback-icon` path with the `radio` glyph, which it already supports"; it did not.
+  `melodia-ui/ui/assets/icons/radio.svg` and a seventh `ArtworkImage` branch were added for
+  it.
+
+**Gates run:** fmt, `clippy --all-targets --locked -- -D warnings` at the root (both crates
+moved), full `cargo test` (1897 lib + 4 binary + 13 integration, green) and
+`scripts/check-icons.py`. **Seventeen unit tests and one integration test were added after
+the manual pass**, which is what six of the cross-cutting boxes above are now ticked on:
+`has_more` off the raw response length, the HLS retain leaving it alone, `station_logo`'s
+three guards, the facet code-vs-name split, the `radio_hide_hls` / `radio_send_clicks` round
+trip, and a source walk holding the decoder probe inside `spawn_blocking`. The integration
+test is `tests/stream_rate.rs`, which plays two `PrebufferSource`s at different rates through
+one rodio `Player` on a device-free mixer and reads the rate back off a square wave. That is
+the one bug class no unit test on the source can see, the fault being in what the *mixer*
+built out of the answer. Mutation-checked: `current_span_len` back to `None` reads 96 output
+samples per half period where 48 is correct.
 
 **Done when.** A station in a country you have never visited is two interactions away, and
-leaving and re-entering the section does not refetch what is already on screen.
+leaving and re-entering the section does not refetch what is already on screen. ✅
 
 ---
 
@@ -1008,18 +1088,20 @@ and nothing in the transport lies about what it can do.
 
 Answer before Phase 6, not before Phase 1.
 
-1. **Does Browse default to global top stations, or to the user's country?** Country is a
-   better first screen and needs a locale-to-country guess that can be wrong. Global is
-   honest and less useful. Prior art splits: Shortwave defaults to a curated global list,
-   RadioDroid to local.
+1. **Does Browse default to global top stations, or to the user's country?** ✅ **Global**,
+   ordered by click count, with the country available as a chip. Country is a better first
+   screen and needs a locale-to-country guess that can be wrong; a wrong guess on the first
+   screen of a new section reads as the directory being small rather than as a filter being
+   set. Prior art splits: Shortwave defaults to a curated global list, RadioDroid to local.
 2. **Does the favorite toggle also vote?** The API separates the two and voting is a
    deliberate act. Recommendation: no, with an explicit vote action on the station detail.
 3. **Is the station history a sort of the Favorites tab or its own section within it?**
    D5 rules out a third tab; both remaining options fit.
-4. **Does a card click play the station or open its detail?** Every other card in the tree
-   drills in and plays from a hover control, so consistency says drill. Radio-first apps
-   split: Shortwave opens a detail, Tuner plays. Recommendation: drill on click, play on
-   the card's own play control, which is what the entity cards already do.
+4. **Does a card click play the station or open its detail?** ⚠️ **Plays, until Phase 8.**
+   Every other card in the tree drills in and plays from a hover control, so consistency
+   says drill, and there is nothing to drill into yet. Radio-first apps split anyway:
+   Shortwave opens a detail, Tuner plays. Phase 8 re-points `clicked` at the station detail
+   and leaves the play control where it is.
 
 ---
 

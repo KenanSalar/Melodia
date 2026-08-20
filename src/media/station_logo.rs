@@ -42,15 +42,7 @@ pub async fn fetch(
     favicon_url: &str,
     artwork_dir: &Path,
 ) -> Result<Option<String>, AppError> {
-    let parsed = reqwest::Url::parse(favicon_url)
-        .map_err(|e| AppError::network("Station logo URL could not be parsed", e))?;
-    // HTTP as well as HTTPS, and nothing else — a `file://` or `data:` URL is not a fetch to make
-    // on a directory row's say-so. Cleartext is admitted because refusing it cost real logos and
-    // bought little: no credential is sent, and what comes back is only ever bytes the store
-    // decodes as an image, bounds and re-encodes.
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(AppError::network_msg("Station logo URL must be HTTP"));
-    }
+    let parsed = fetchable_url(favicon_url)?;
 
     let response = client
         .get(parsed)
@@ -93,6 +85,21 @@ pub async fn fetch(
         .map_err(AppError::io_source)
 }
 
+/// The URL to fetch, or a refusal.
+///
+/// HTTP as well as HTTPS, and nothing else: a `file://` or `data:` URL is not a fetch to make on a
+/// directory row's say-so. Cleartext is admitted because refusing it cost real logos and bought
+/// little: no credential is sent, and what comes back is only ever bytes the store decodes as an
+/// image, bounds and re-encodes.
+fn fetchable_url(favicon_url: &str) -> Result<reqwest::Url, AppError> {
+    let parsed = reqwest::Url::parse(favicon_url)
+        .map_err(|e| AppError::network("Station logo URL could not be parsed", e))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(AppError::network_msg("Station logo URL must be HTTP"));
+    }
+    Ok(parsed)
+}
+
 /// The store's own bounds, plus the floor above, on the decode pool.
 ///
 /// `memory_dimensions` reads the header rather than decoding, so the floor costs nothing on the
@@ -106,6 +113,16 @@ fn store_if_big_enough(bytes: &[u8], ext: &'static str, dir: &Path) -> Option<St
     artwork::store_image(bytes, ext, dir)
 }
 
+/// What the response says it is, folded through [`extension_for`].
+fn stored_extension(response: &reqwest::Response) -> Option<&'static str> {
+    let header = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    extension_for(header)
+}
+
 /// The extension to file the bytes under, or `None` for a response the store cannot hold.
 ///
 /// **`.ico` is the one worth naming.** Admitting it widened `artwork::STORED_EXTENSIONS`, and the
@@ -116,12 +133,7 @@ fn store_if_big_enough(bytes: &[u8], ext: &'static str, dir: &Path) -> Option<St
 /// The extension only names the file: every reader in the tree sniffs content, and `store_image`
 /// re-encodes anything over its bounds to JPEG regardless. So an unrecognised image type is
 /// admitted as JPEG rather than refused, and it is the header parse there that has the last word.
-fn stored_extension(response: &reqwest::Response) -> Option<&'static str> {
-    let header = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default();
+fn extension_for(header: &str) -> Option<&'static str> {
     let content_type = header.split(';').next().unwrap_or(header).trim().to_ascii_lowercase();
 
     match content_type.as_str() {
@@ -135,3 +147,7 @@ fn stored_extension(response: &reqwest::Response) -> Option<&'static str> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "tests/station_logo_tests.rs"]
+mod tests;

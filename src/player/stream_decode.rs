@@ -17,10 +17,10 @@ use std::io::{Read, Seek, SeekFrom};
 
 use rodio::{ChannelCount, Sample, SampleRate};
 use symphonia::core::codecs::CodecParameters;
-use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
+use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions, CODEC_ID_NULL_AUDIO};
 use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::formats::probe::Hint;
-use symphonia::core::formats::{FormatOptions, FormatReader, TrackType};
+use symphonia::core::formats::{FormatOptions, FormatReader, Track, TrackType};
 use symphonia::core::io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
 
@@ -94,7 +94,8 @@ impl StreamDecoder {
 
         let track = format
             .default_track(TrackType::Audio)
-            .or_else(|| format.first_track(TrackType::Audio))
+            .filter(|track| names_a_codec(track))
+            .or_else(|| format.first_track_known_codec(TrackType::Audio))
             .ok_or_else(|| AppError::Player("The station's stream has no audio".to_owned()))?;
         let track_id = track.id;
         let params = track
@@ -147,6 +148,19 @@ impl Iterator for StreamDecoder {
         self.next += 1;
         Some(sample)
     }
+}
+
+/// Whether `track` names an audio codec, rather than declaring a track nothing can decode.
+///
+/// `default_track` matches the container's default flag before it looks at the codec
+/// ([symphonia#258](https://github.com/pdeljanov/Symphonia/issues/258)), so a null one wins the
+/// pick and the fallback that would have rejected it never runs.
+fn names_a_codec(track: &Track) -> bool {
+    track
+        .codec_params
+        .as_ref()
+        .and_then(CodecParameters::audio)
+        .is_some_and(|params| params.codec != CODEC_ID_NULL_AUDIO)
 }
 
 /// What one decoded packet says the audio is.

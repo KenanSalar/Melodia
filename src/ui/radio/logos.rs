@@ -38,7 +38,7 @@ const LOGO_BATCH: usize = 6;
 /// The session's answers, keyed on the URL they came from.
 ///
 /// `None` is "asked, nothing usable came back", and it is deliberately as durable as a hit: a
-/// station whose logo is a 32 px favicon or a dead link would otherwise be re-requested every
+/// station whose logo is under the floor or a dead link would otherwise be re-requested every
 /// time it appeared in a page.
 #[derive(Debug)]
 pub struct LogoMemo {

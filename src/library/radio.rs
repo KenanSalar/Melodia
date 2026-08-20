@@ -226,21 +226,25 @@ pub async fn set_artwork(
 
 /// Search the directory. Results are a network answer with a shelf life and are
 /// never written to the table; one becomes a row when the user keeps or plays it.
-///
-/// The HLS drop is here rather than in the request because the endpoint has no
-/// `hls` parameter to send. It thins the page without touching
-/// [`radio::StationPage::has_more`], which the client already read off the raw
-/// response: these rows were served and counted, and paging has to step over
-/// them rather than stop at them.
 pub async fn search(
     state: &AppState,
     search: &radio::StationSearch,
 ) -> Result<radio::StationPage, AppError> {
     let mut page = radio_browser::search(directory_client(state)?, search).await?;
-    if state.radio_hide_hls() {
+    hide_hls(&mut page, state.radio_hide_hls());
+    Ok(page)
+}
+
+/// Drop the segmented stations from a page, if the user has them hidden.
+///
+/// Here rather than in the request because the endpoint has no `hls` parameter to send. It thins
+/// the page without touching [`radio::StationPage::has_more`], which the client already read off
+/// the raw response: these rows were served and counted, and paging has to step over them rather
+/// than stop at them.
+fn hide_hls(page: &mut radio::StationPage, hide: bool) {
+    if hide {
         page.stations.retain(|station| !station.hls);
     }
-    Ok(page)
 }
 
 /// One of the directory's facet lists, for the filter chips. Large and

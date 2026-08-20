@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model};
 
-use crate::entities::radio::{Facet, FacetKind};
+use crate::entities::radio::{Facet, FacetKind, StationSearch};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::grid_rows::write_grid;
@@ -142,14 +142,6 @@ fn write_filtered(g: &Radio<'_>, facets: &[Facet], needle: &str) {
 }
 
 /// Set or clear one chip's filter, and re-query if that moved anything.
-///
-/// An empty `name` is the clear, which is also why clearing needs no separate path: "no country"
-/// and "this country" are the same edit with different values.
-///
-/// **`code` only ever reaches the request for a country.** `countrycode` is the search endpoint's
-/// sole code-keyed parameter, so a language filters by its name even though the directory hands
-/// one an `iso_639` beside it — sent as a code, `language=en` would substring-match english,
-/// armenian and slovenian alike.
 pub fn pick(
     ui: &AppWindow,
     state: &AppState,
@@ -167,36 +159,51 @@ pub fn pick(
         ChipFilter::Country => {
             g.set_pick_country(name.into());
             g.set_pick_country_code(code.into());
-            browse::edit_query(ui, state, radio_ui, |search| {
-                code.clone_into(&mut search.country_code);
-            });
         }
-        ChipFilter::Language => {
-            g.set_pick_language(name.into());
-            browse::edit_query(ui, state, radio_ui, |search| name.clone_into(&mut search.language));
-        }
-        ChipFilter::Tag => {
-            g.set_pick_tag(name.into());
-            browse::edit_query(ui, state, radio_ui, |search| {
-                // The parameter takes a list and means "all of these", where the chip offers one;
-                // an empty vector is no tag filter rather than a filter for the empty tag.
-                search.tags = if name.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![name.to_owned()]
-                };
-            });
-        }
-        ChipFilter::Codec => {
-            g.set_pick_codec(name.into());
-            browse::edit_query(ui, state, radio_ui, |search| name.clone_into(&mut search.codec));
-        }
+        ChipFilter::Language => g.set_pick_language(name.into()),
+        ChipFilter::Tag => g.set_pick_tag(name.into()),
+        ChipFilter::Codec => g.set_pick_codec(name.into()),
         ChipFilter::BitrateMin => {
-            // The chip's own options carry the floor in `code`; anything unparseable is no floor,
-            // which is also what the "Any bitrate" entry sends.
-            let floor: u32 = code.parse().unwrap_or(0);
-            g.set_pick_bitrate_min(i32::try_from(floor).unwrap_or(0));
-            browse::edit_query(ui, state, radio_ui, |search| search.bitrate_min = floor);
+            g.set_pick_bitrate_min(i32::try_from(bitrate_floor(code)).unwrap_or(0));
         }
     }
+
+    browse::edit_query(ui, state, radio_ui, |search| apply_pick(chip, name, code, search));
 }
+
+/// Fold one chip's pick into the query.
+///
+/// An empty `name` is the clear, which is also why clearing needs no separate path: "no country"
+/// and "this country" are the same edit with different values.
+///
+/// **`code` only ever reaches the request for a country.** `countrycode` is the search endpoint's
+/// sole code-keyed parameter, so a language filters by its name even though the directory hands
+/// one an `iso_639` beside it — sent as a code, `language=en` would substring-match english,
+/// armenian and slovenian alike.
+fn apply_pick(chip: ChipFilter, name: &str, code: &str, search: &mut StationSearch) {
+    match chip {
+        ChipFilter::Country => code.clone_into(&mut search.country_code),
+        ChipFilter::Language => name.clone_into(&mut search.language),
+        ChipFilter::Tag => {
+            // The parameter takes a list and means "all of these", where the chip offers one; an
+            // empty vector is no tag filter rather than a filter for the empty tag.
+            search.tags = if name.is_empty() {
+                Vec::new()
+            } else {
+                vec![name.to_owned()]
+            };
+        }
+        ChipFilter::Codec => name.clone_into(&mut search.codec),
+        ChipFilter::BitrateMin => search.bitrate_min = bitrate_floor(code),
+    }
+}
+
+/// The bitrate chip's own options carry the floor in `code`; anything unparseable is no floor,
+/// which is also what the "Any bitrate" entry sends.
+fn bitrate_floor(code: &str) -> u32 {
+    code.parse().unwrap_or(0)
+}
+
+#[cfg(test)]
+#[path = "tests/facets_tests.rs"]
+mod tests;

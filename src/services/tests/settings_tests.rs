@@ -413,3 +413,49 @@ fn test_replaygain_roundtrip() -> Result<(), AppError> {
     assert!(!deserialized.replaygain.rg_prevent_clipping);
     Ok(())
 }
+
+/// The master switch is off and both sub-toggles are on, which is why `RadioFlags` writes its
+/// `Default` by hand: a derive gives all three `false` and silently ships a Browse page that hides
+/// nothing and a directory nobody's plays are counted for.
+#[test]
+fn test_radio_defaults_when_absent() -> Result<(), AppError> {
+    let json = r#"{"theme_id": "catppuccin"}"#;
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert!(!settings.radio.radio_enabled);
+    assert!(settings.radio.radio_hide_hls);
+    assert!(settings.radio.radio_send_clicks);
+    Ok(())
+}
+
+#[test]
+fn test_radio_roundtrip() -> Result<(), AppError> {
+    let settings = SettingsData {
+        radio: RadioFlags {
+            radio_enabled: true,
+            radio_hide_hls: false,
+            radio_send_clicks: false,
+        },
+        ..reading_env(SettingsData::default)
+    };
+    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
+    let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+
+    assert!(deserialized.radio.radio_enabled);
+    assert!(!deserialized.radio.radio_hide_hls);
+    assert!(!deserialized.radio.radio_send_clicks);
+    Ok(())
+}
+
+/// The sub-toggles are opt-*out*, so an install that turned radio on before either existed has to
+/// come back with both still on rather than with whatever a missing key defaults to elsewhere.
+#[test]
+fn test_radio_sub_toggles_survive_an_older_settings_file() -> Result<(), AppError> {
+    let json = r#"{"theme_id": "catppuccin", "radio_enabled": true}"#;
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert!(settings.radio.radio_enabled);
+    assert!(settings.radio.radio_hide_hls);
+    assert!(settings.radio.radio_send_clicks);
+    Ok(())
+}
