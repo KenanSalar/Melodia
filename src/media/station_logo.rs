@@ -12,6 +12,8 @@
 
 use std::path::Path;
 
+use futures_util::StreamExt;
+
 use crate::error::AppError;
 use crate::media::{artwork, image_decode};
 
@@ -68,21 +70,34 @@ pub async fn fetch(
         )));
     }
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| AppError::network("Station logo body could not be read", e))?;
-    if bytes.len() as u64 > MAX_LOGO_BYTES {
-        return Err(AppError::network_msg(format!(
-            "Station logo too large: {} bytes (max {MAX_LOGO_BYTES})",
-            bytes.len()
-        )));
-    }
+    let bytes = read_capped(response).await?;
 
     let dir = artwork_dir.to_path_buf();
     tokio::task::spawn_blocking(move || store_if_big_enough(&bytes, ext, &dir))
         .await
         .map_err(AppError::io_source)
+}
+
+/// Read at most [`MAX_LOGO_BYTES`] of `response`.
+///
+/// Streamed rather than `bytes()`-ed, for the reason `player::stream_source::fetch_capped` is: the
+/// header check ahead of this is a courtesy, and a host that omits or lies about its content
+/// length owes it nothing. Unlike the artist path there is no allowlist behind the cap, the host
+/// being whoever the station's owner named.
+async fn read_capped(response: reqwest::Response) -> Result<Vec<u8>, AppError> {
+    let mut body = Vec::new();
+    let mut chunks = response.bytes_stream();
+    while let Some(chunk) = chunks.next().await {
+        let chunk =
+            chunk.map_err(|e| AppError::network("Station logo body could not be read", e))?;
+        if body.len().saturating_add(chunk.len()) as u64 > MAX_LOGO_BYTES {
+            return Err(AppError::network_msg(format!(
+                "Station logo is larger than {MAX_LOGO_BYTES} bytes"
+            )));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 /// The URL to fetch, or a refusal.

@@ -57,9 +57,9 @@ impl<R: Read + Seek + Send + Sync> MediaSource for LiveSource<R> {
 
 /// A live stream's demuxer and codec, handing out interleaved samples one at a time.
 ///
-/// The iterator ends when the mount does, which is what the feed thread reads as "try
-/// reconnecting". A packet that fails to decode is skipped rather than ending it: on a mount
-/// joined mid-frame the first few routinely do.
+/// The iterator ends when the mount does, or when it stops being the shape the deck was told
+/// about, both of which the feed thread reads as "try reconnecting". A packet that fails to decode
+/// is skipped rather than ending it: on a mount joined mid-frame the first few routinely do.
 pub struct StreamDecoder {
     format: Box<dyn FormatReader>,
     decoder: Box<dyn AudioDecoder>,
@@ -69,6 +69,9 @@ pub struct StreamDecoder {
     next: usize,
     channels: ChannelCount,
     sample_rate: SampleRate,
+    /// Set once there is nothing more to hand out, so a re-poll past the end cannot serve the
+    /// packet that ended it.
+    ended: bool,
 }
 
 impl StreamDecoder {
@@ -124,6 +127,7 @@ impl StreamDecoder {
             next: 0,
             channels: shape.channels,
             sample_rate: shape.sample_rate,
+            ended: false,
         })
     }
 
@@ -140,8 +144,23 @@ impl Iterator for StreamDecoder {
     type Item = Sample;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.ended {
+            return None;
+        }
         if self.next >= self.samples.len() {
-            fill(&mut *self.format, &mut *self.decoder, self.track, &mut self.samples)?;
+            let Some(shape) =
+                fill(&mut *self.format, &mut *self.decoder, self.track, &mut self.samples)
+            else {
+                self.ended = true;
+                return None;
+            };
+            // rodio cannot renegotiate the shape it was told at the append, so a mount that
+            // changes one mid-connection ends here rather than playing on at the wrong rate: the
+            // feed thread reads that as a reconnect, which refuses the new format and stops.
+            if shape.channels != self.channels || shape.sample_rate != self.sample_rate {
+                self.ended = true;
+                return None;
+            }
             self.next = 0;
         }
         let sample = *self.samples.get(self.next)?;

@@ -263,8 +263,7 @@ fn fetch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, append: bool
                 log::warn!("radio: directory search failed: {}", crate::services::describe(&e));
                 let current = ru.browse.lock().fail(generation, append);
                 if current {
-                    let weak_failed = weak.clone();
-                    let _ = weak_failed.upgrade_in_event_loop(|ui| {
+                    let _ = weak.upgrade_in_event_loop(|ui| {
                         let g = ui.global::<Radio>();
                         g.set_browse_loading(false);
                         g.set_browse_failed(true);
