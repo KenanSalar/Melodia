@@ -1718,11 +1718,11 @@ msgid_plural "{n} stations"
 msgstr[0] "{n} σταθμός"
 msgstr[1] "{n} σταθμοί"
 
-msgid "No favorite stations yet"
-msgstr "Δεν υπάρχουν αγαπημένοι σταθμοί ακόμη"
+msgid "No stations kept yet"
+msgstr "Δεν έχετε αποθηκεύσει σταθμούς ακόμη"
 
-msgid "Star a station in Browse to keep it here."
-msgstr "Σημειώστε έναν σταθμό στην Περιήγηση για να τον κρατήσετε εδώ."
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Σημειώστε έναν σταθμό στην Περιήγηση ή προσθέστε έναν με URL."
 
 # The Settings card. The section title reuses "Radio" above.
 msgid "Internet radio"
@@ -1793,3 +1793,77 @@ msgstr "Δοκιμάστε άλλο όνομα ή καθαρίστε ένα φί
 # The station card's meta line, beside country and codec.
 msgid "{} kbps"
 msgstr "{} kbps"
+
+# The Recently Played tab's empty state.
+msgid "Nothing played yet"
+msgstr "Δεν έχετε ακούσει τίποτα ακόμη"
+
+msgid "Stations you listen to show up here."
+msgstr "Οι σταθμοί που ακούτε εμφανίζονται εδώ."
+
+# The Favorites tab's sort pills. "Name" is shared with the library sorts.
+msgid "Added"
+msgstr "Προστέθηκε"
+
+msgid "Plays"
+msgstr "Αναπαραγωγές"
+
+msgid "Last played"
+msgstr "Τελευταία αναπαραγωγή"
+
+# The add / edit station dialog.
+msgid "Add Station"
+msgstr "Προσθήκη σταθμού"
+
+msgid "Edit Station"
+msgstr "Επεξεργασία σταθμού"
+
+msgid "Stream URL"
+msgstr "URL ροής"
+
+msgid "Name (optional)"
+msgstr "Όνομα (προαιρετικό)"
+
+msgid "Leave blank to use the station's own name"
+msgstr "Αφήστε το κενό για να χρησιμοποιηθεί το όνομα του σταθμού"
+
+msgid "Checking the stream…"
+msgstr "Έλεγχος της ροής…"
+
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "Η διεύθυνση δεν είναι προσβάσιμη. Ελέγξτε το URL και τη σύνδεσή σας."
+
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "Η διεύθυνση δεν δίνει ήχο που μπορεί να αποκωδικοποιήσει το Melodia."
+
+msgid "Couldn't save the station."
+msgstr "Δεν ήταν δυνατή η αποθήκευση του σταθμού."
+
+# The station card's destructive action.
+msgid "Remove station?"
+msgstr "Αφαίρεση σταθμού;"
+
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "Ο σταθμός «{}» θα αφαιρεθεί μαζί με το ιστορικό αναπαραγωγής του."
+
+# Station list import and export.
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "Προστέθηκε {n} σταθμός"
+msgstr[1] "Προστέθηκαν {n} σταθμοί"
+
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} υπήρχε ήδη στη λίστα σας."
+msgstr[1] "{n} υπήρχαν ήδη στη λίστα σας."
+
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "Δεν βρέθηκαν σταθμοί στα επιλεγμένα αρχεία."
+
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "Εξήχθη {n} σταθμός"
+msgstr[1] "Εξήχθησαν {n} σταθμοί"
+
+msgid "Couldn't write the station list."
+msgstr "Δεν ήταν δυνατή η εγγραφή της λίστας σταθμών."

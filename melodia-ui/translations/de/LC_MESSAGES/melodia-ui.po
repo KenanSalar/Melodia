@@ -1720,11 +1720,11 @@ msgid_plural "{n} stations"
 msgstr[0] "{n} Sender"
 msgstr[1] "{n} Sender"
 
-msgid "No favorite stations yet"
-msgstr "Noch keine Lieblingssender"
+msgid "No stations kept yet"
+msgstr "Noch keine Sender gespeichert"
 
-msgid "Star a station in Browse to keep it here."
-msgstr "Markiere einen Sender unter Durchsuchen, um ihn hier zu behalten."
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Markiere einen Sender unter Durchsuchen oder füge einen per URL hinzu."
 
 # The Settings card. The section title reuses "Radio" above.
 msgid "Internet radio"
@@ -1795,3 +1795,77 @@ msgstr "Versuche einen anderen Namen oder entferne einen Filter."
 # The station card's meta line, beside country and codec.
 msgid "{} kbps"
 msgstr "{} kbps"
+
+# The Recently Played tab's empty state.
+msgid "Nothing played yet"
+msgstr "Noch nichts gehört"
+
+msgid "Stations you listen to show up here."
+msgstr "Sender, die du hörst, erscheinen hier."
+
+# The Favorites tab's sort pills. "Name" is shared with the library sorts.
+msgid "Added"
+msgstr "Hinzugefügt"
+
+msgid "Plays"
+msgstr "Wiedergaben"
+
+msgid "Last played"
+msgstr "Zuletzt gehört"
+
+# The add / edit station dialog.
+msgid "Add Station"
+msgstr "Sender hinzufügen"
+
+msgid "Edit Station"
+msgstr "Sender bearbeiten"
+
+msgid "Stream URL"
+msgstr "Stream-URL"
+
+msgid "Name (optional)"
+msgstr "Name (optional)"
+
+msgid "Leave blank to use the station's own name"
+msgstr "Leer lassen, um den Namen des Senders zu übernehmen"
+
+msgid "Checking the stream…"
+msgstr "Stream wird geprüft …"
+
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "Diese Adresse ist nicht erreichbar. Prüfe die URL und deine Verbindung."
+
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "Diese Adresse liefert kein Audio, das Melodia dekodieren kann."
+
+msgid "Couldn't save the station."
+msgstr "Der Sender konnte nicht gespeichert werden."
+
+# The station card's destructive action.
+msgid "Remove station?"
+msgstr "Sender entfernen?"
+
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "„{}“ wird aus deinen Sendern entfernt, zusammen mit dem Wiedergabeverlauf."
+
+# Station list import and export.
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "{n} Sender hinzugefügt"
+msgstr[1] "{n} Sender hinzugefügt"
+
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} war bereits in deiner Liste."
+msgstr[1] "{n} waren bereits in deiner Liste."
+
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "Aus den ausgewählten Dateien konnten keine Sender gelesen werden."
+
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "{n} Sender exportiert"
+msgstr[1] "{n} Sender exportiert"
+
+msgid "Couldn't write the station list."
+msgstr "Die Senderliste konnte nicht geschrieben werden."

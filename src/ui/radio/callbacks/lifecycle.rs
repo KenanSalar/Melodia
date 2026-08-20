@@ -14,9 +14,8 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::library;
 use crate::state::AppState;
-use crate::ui::radio::{RadioUi, browse, covers};
+use crate::ui::radio::{RadioUi, browse, covers, kept};
 use crate::{AppWindow, Radio};
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
@@ -39,28 +38,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
 /// Bring the page up to date with whatever changed while it was away.
 ///
 /// The two `browse` calls are each other's guard — one fetches only when nothing is loaded, the
-/// other warms only when something is — so the enter never has to ask which case it is in.
+/// other warms only when something is — so the enter never has to ask which case it is in. The
+/// kept lists are re-read unconditionally beside them: they are `SQLite`, and the same fetch is
+/// what Browse fills its stars from.
 fn enter(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
-    refresh_favorites(ui, state, radio_ui);
+    kept::refresh(ui, state, radio_ui);
     browse::ensure_loaded(ui, state, radio_ui);
     browse::rewarm(ui, state, radio_ui);
-}
-
-/// Re-read which stations are starred, which Phase 7's tab and the station detail can both change
-/// from outside this page.
-fn refresh_favorites(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
-    let (s, ru, weak) = (state.clone(), radio_ui.clone(), ui.as_weak());
-    state.runtime.spawn(async move {
-        let uuids = match library::radio::favorite_uuids(&s).await {
-            Ok(uuids) => uuids,
-            Err(e) => {
-                log::warn!("radio: favorite uuids: {}", crate::services::describe(&e));
-                return;
-            }
-        };
-        // The grid is rebuilt rather than patched, so a star that moved elsewhere lands with
-        // whatever else the enter changed rather than needing a row to be found first.
-        *ru.favorites.lock() = uuids;
-        let _ = weak.upgrade_in_event_loop(move |ui| browse::apply(&ui, &ru));
-    });
 }

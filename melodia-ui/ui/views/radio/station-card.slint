@@ -3,10 +3,11 @@ import { ArtworkImage } from "../../components/artwork-image.slint";
 import { IconButton } from "../../components/icon-button.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 
-// One station, as both Radio tabs draw it. `EntityCard`'s shape rather than `EntityCard` itself:
-// what a station card carries under the tile is three lines rather than two, and its hover trio is
-// play / star / homepage where that one's is the Playlists grid's CRUD. Composed from the same
-// leaves, so nothing about the tile, the glyph fallback or the hover zoom is restated here.
+// One station, as all three Radio tabs draw it. `EntityCard`'s shape rather than `EntityCard`
+// itself: what a station card carries under the tile is three lines rather than two, and its hover
+// controls are play / star / homepage plus the two the kept tabs add, where that one's are the
+// Playlists grid's CRUD. Composed from the same leaves, so nothing about the tile, the glyph
+// fallback or the hover zoom is restated here.
 //
 // **The tags line is a string, not a chip strip.** `MetaChipStrip` carries a `changed` tracker over
 // a layout property, and a tracker inside a `ListView` delegate outlives the delegate the
@@ -18,6 +19,11 @@ export component StationCard inherits Rectangle {
     in property <string> meta;
     in property <string> tags;
     in property <bool> is-favorite;
+    // A station typed in by hand has no star: un-starring it would drop it from the only list
+    // that shows it, leaving a row nothing can reach. Remove is its affordance instead.
+    in property <bool> starrable: true;
+    in property <bool> editable;
+    in property <bool> removable;
     in property <bool> homepage-known;
     // Segmented stream: listed rather than hidden (the directory row says so), and inert. The
     // badge is what stops the refusal arriving at the moment of a click.
@@ -30,6 +36,8 @@ export component StationCard inherits Rectangle {
     callback play-clicked();
     callback favorite-clicked();
     callback homepage-clicked();
+    callback edit-clicked();
+    callback remove-clicked();
 
     // **Every hover-driven binding reads this, not `touch.has-hover`.** A higher-z `TouchArea`
     // captures the pointer, so hovering any nested button flips that false and the fill, the zoom
@@ -37,7 +45,9 @@ export component StationCard inherits Rectangle {
     property <bool> card-hovered: touch.has-hover
         || play_btn.has-hover
         || fav_btn.has-hover
-        || home_btn.has-hover;
+        || home_btn.has-hover
+        || edit_btn.has-hover
+        || remove_btn.has-hover;
 
     property <length> tile-size: root.card-width - 2 * Theme.pad-sm;
 
@@ -135,6 +145,7 @@ export component StationCard inherits Rectangle {
         // fact about the row and not an affordance, so a grid of results has to show which of them
         // are already kept without being hovered one at a time.
         fav_btn := IconButton {
+            visible: root.starrable;
             x: parent.width - self.width - Theme.pad-sm;
             y: Theme.pad-sm;
             icon: root.is-favorite ? "favorite" : "favorite_border";
@@ -162,6 +173,37 @@ export component StationCard inherits Rectangle {
             opacity: root.card-hovered ? 1.0 : 0.0;
             animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
             clicked => { root.homepage-clicked(); }
+        }
+
+        // Bottom-left, opposite the homepage link: the two that change the row rather than
+        // following it. Only the kept tabs mount them, so Browse looks exactly as it did.
+        remove_btn := IconButton {
+            visible: root.removable;
+            x: Theme.pad-sm;
+            y: parent.height - self.height - Theme.pad-sm;
+            icon: "delete";
+            icon-size: 18px;
+            diameter: 30px;
+            force-bg: true;
+            idle-bg: Theme.floating-chrome-bg;
+            hover-fg: Theme.danger;
+            opacity: root.card-hovered ? 1.0 : 0.0;
+            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            clicked => { root.remove-clicked(); }
+        }
+
+        edit_btn := IconButton {
+            visible: root.editable;
+            x: Theme.pad-sm + remove_btn.width + Theme.pad-xs;
+            y: parent.height - self.height - Theme.pad-sm;
+            icon: "edit";
+            icon-size: 18px;
+            diameter: 30px;
+            force-bg: true;
+            idle-bg: Theme.floating-chrome-bg;
+            opacity: root.card-hovered ? 1.0 : 0.0;
+            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            clicked => { root.edit-clicked(); }
         }
     }
 

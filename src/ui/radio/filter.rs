@@ -2,12 +2,11 @@
 //!
 //! A function from the outset rather than an `if` that grows, for the reason My Library's
 //! `dispatch` is one: the box means something different on each tab, and Phase 8's station detail
-//! adds a third destination. Today Browse is the only tab with anything to filter, so this is a
-//! guard clause rather than a match with an empty arm.
+//! adds a fourth destination.
 //!
-//! **What Browse does with it is not what any other surface does.** Every other filter box in the
-//! tree narrows rows already in hand; here the needle *is* the query, so a settled burst is a
-//! fresh request and the debounce in front of it is load-bearing rather than an optimization.
+//! **What Browse does with it is not what the other two do.** Every other filter box in the tree
+//! narrows rows already in hand; there the needle *is* the query, so a settled burst is a fresh
+//! request and the debounce in front of it is load-bearing rather than an optimization.
 
 use std::sync::Arc;
 
@@ -16,14 +15,14 @@ use slint::ComponentHandle;
 use crate::state::AppState;
 use crate::{AppWindow, Radio};
 
-use super::{RadioTab, RadioUi, browse, tab_from_index};
+use super::{RadioTab, RadioUi, browse, kept, tab_from_index};
 
 pub fn dispatch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, text: &str) {
     let g = ui.global::<Radio>();
-    if tab_from_index(&g, g.get_tab_idx()) != RadioTab::Browse {
-        return;
+    match tab_from_index(&g, g.get_tab_idx()) {
+        RadioTab::Browse => browse::set_query(ui, state, radio_ui, text),
+        tab => kept::set_filter(ui, radio_ui, tab, text),
     }
-    browse::set_query(ui, state, radio_ui, text);
 }
 
 /// Put the box back to whatever the tab under it is filtered by.
@@ -39,9 +38,7 @@ pub fn sync_box(ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
     let g = ui.global::<Radio>();
     let mounted = match tab_from_index(&g, g.get_tab_idx()) {
         RadioTab::Browse => browse::query_name(radio_ui),
-        // Phase 7 gives the kept list a needle of its own; until then it filters nothing and the
-        // box is empty on it.
-        RadioTab::Favorites => String::new(),
+        tab => kept::filter_text(radio_ui, tab),
     };
     if g.get_filter() == mounted.as_str() {
         return;

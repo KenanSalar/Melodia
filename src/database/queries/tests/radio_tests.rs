@@ -7,7 +7,7 @@ use crate::error::AppError;
 
 use super::{
     delete_station, get_favorite_stations, get_recent_stations, get_station_by_id, mark_played,
-    save_station, set_artwork, set_favorite,
+    save_station, set_artwork, set_favorite, station_exists_with_url, update_station,
 };
 
 fn directory_station(uuid: &str, name: &str) -> radio::NewRadioStation {
@@ -158,5 +158,98 @@ async fn a_station_that_was_deleted_between_render_and_click_is_not_found() -> R
         return Err(AppError::Validation("expected a deleted station to be NotFound".into()));
     };
     assert!(matches!(err, AppError::NotFound(_)), "got: {err}");
+    Ok(())
+}
+
+/// Every column the insert binds, in the order the statement lists them. A bind-order slip is
+/// invisible at compile time and lands a station's country in its language column — this is the
+/// only place the whole projection is compared at once, so it is spelled out rather than sampled.
+#[tokio::test]
+async fn every_column_a_save_binds_comes_back_where_it_was_put() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let station = radio::NewRadioStation {
+        station_uuid: Some("uuid-1".to_owned()),
+        name: "Radio Example".to_owned(),
+        stream_url: "http://example.invalid/stream".to_owned(),
+        homepage: Some("http://example.invalid/".to_owned()),
+        favicon_url: Some("http://example.invalid/favicon.ico".to_owned()),
+        tags: "jazz,blues".to_owned(),
+        country: "Germany".to_owned(),
+        country_code: "DE".to_owned(),
+        language: "german".to_owned(),
+        codec: "MP3".to_owned(),
+        bitrate: 128,
+        hls: true,
+    };
+
+    let saved = save_station(&db, &station).await?;
+
+    assert_eq!(saved.station_uuid.as_deref(), Some("uuid-1"));
+    assert_eq!(saved.name, "Radio Example");
+    assert_eq!(saved.stream_url, "http://example.invalid/stream");
+    assert_eq!(saved.homepage.as_deref(), Some("http://example.invalid/"));
+    assert_eq!(saved.favicon_url.as_deref(), Some("http://example.invalid/favicon.ico"));
+    assert_eq!(saved.tags, "jazz,blues");
+    assert_eq!(saved.country, "Germany", "the country name landed in the wrong column");
+    assert_eq!(saved.country_code, "DE");
+    assert_eq!(saved.language, "german");
+    assert_eq!(saved.codec, "MP3");
+    assert_eq!(saved.bitrate, 128);
+    assert!(saved.hls);
+    Ok(())
+}
+
+/// The editor rewrites four columns and re-derives a fifth. `sort_key` is the one worth pinning:
+/// it is the name's shadow and the list is ordered by it, so a rename that left it standing sorts
+/// the station under a name nothing on screen shows any more.
+#[tokio::test]
+async fn editing_a_station_moves_its_sort_key_with_its_name() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let saved = save_station(&db, &custom_station("Zed FM", "http://example.invalid/zed")).await?;
+    set_favorite(&db, saved.id, true).await?;
+    mark_played(&db, saved.id).await?;
+
+    update_station(&db, saved.id, "Alpha FM", "http://example.invalid/alpha", "AAC", 192).await?;
+
+    let edited = get_station_by_id(&db, saved.id).await?;
+    assert_eq!(edited.name, "Alpha FM");
+    assert_eq!(edited.stream_url, "http://example.invalid/alpha");
+    assert_eq!(edited.codec, "AAC");
+    assert_eq!(edited.bitrate, 192);
+    assert_eq!(edited.sort_key, "alpha fm", "the sort key did not follow the rename");
+
+    assert!(edited.is_favorite, "the edit un-favorited the station");
+    assert_eq!(edited.play_count, 1, "the edit reset the play count");
+    assert_eq!(edited.date_added, saved.date_added, "the edit re-dated the station");
+    Ok(())
+}
+
+/// The import's duplicate guard has to be a query rather than the `UNIQUE` constraint: a
+/// hand-typed station carries no `station_uuid`, and `SQLite` treats NULLs as distinct, so the
+/// constraint that stops a directory station arriving twice says nothing at all about this one.
+/// Without the guard, re-importing a list the user has grown duplicates everything already in it.
+#[tokio::test]
+async fn a_stream_url_already_kept_is_recognised_whether_or_not_it_has_a_uuid()
+-> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let url = "http://example.invalid/one";
+
+    assert!(!station_exists_with_url(&db, url).await?, "an empty table matches nothing");
+
+    save_station(&db, &custom_station("One", url)).await?;
+    assert!(station_exists_with_url(&db, url).await?);
+    assert!(
+        !station_exists_with_url(&db, "http://example.invalid/other").await?,
+        "the match is on the whole URL, not a prefix of it"
+    );
+
+    let mut browsed = directory_station("uuid-2", "Two");
+    browsed.stream_url = "http://example.invalid/two".to_owned();
+    save_station(&db, &browsed).await?;
+    assert!(
+        station_exists_with_url(&db, "http://example.invalid/two").await?,
+        "a browsed station occupies its URL too — importing a file naming it must skip, not \
+         add a second row nothing can tell apart"
+    );
     Ok(())
 }

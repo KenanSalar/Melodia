@@ -1,5 +1,6 @@
 import { PlaylistPickRow, PlaylistExportPickRow } from "../models.slint";
-import { SmartEditor, TagEditor, ScrobbleUi } from "dialog-forms.slint";
+import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "dialog-forms.slint";
+import { Radio } from "radio.slint";
 import { LibrarySettings } from "library-settings.slint";
 import { Playlists, PlaylistDetail } from "playlists.slint";
 import { Queue } from "queue.slint";
@@ -135,6 +136,11 @@ export global Dialog {
         } else if (root.kind == "edit-tags") {
             // Rust diffs the form against the populate-time snapshot; a no-op commit is dropped.
             TagEditor.commit();
+        } else if (root.kind == "add-station" || root.kind == "edit-station") {
+            // Stays open across the probe, like the two logins below; Rust closes it on success.
+            RadioForm.submit();
+        } else if (root.kind == "remove-station") {
+            Radio.remove-station(root.target-id);
         } else if (root.kind == "scrobble-listenbrainz-login") {
             // The dialog stays open — `dialog.slint` suppresses auto-close for this kind — until
             // Rust closes it on a valid token.
@@ -178,6 +184,12 @@ export global Dialog {
         root.add-select-all = false;
         root.add-selected-count = 0;
         root.pick-total-tracks = 0;
+        // Add / edit station form state.
+        RadioForm.edit-id = -1;
+        RadioForm.url = "";
+        RadioForm.name = "";
+        RadioForm.busy = false;
+        RadioForm.error = "";
         // Export picker state.
         root.export-pick-rows = [];
         root.export-select-all = false;

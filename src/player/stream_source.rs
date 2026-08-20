@@ -144,6 +144,25 @@ struct OpenedStream {
     decoder: StreamDecoder,
     channels: ChannelCount,
     sample_rate: SampleRate,
+    facts: StationFacts,
+}
+
+/// What a server said about itself while the stream was being opened.
+///
+/// Every field is already parsed on the way to playback and thrown away, so carrying them out
+/// costs nothing and is what lets [`probe`] describe a hand-typed URL. `logo_url` and `homepage`
+/// are the two Icecast fields a directory row would otherwise be the only source of.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StationFacts {
+    pub name: Option<String>,
+    pub genre: String,
+    pub homepage: Option<String>,
+    pub logo_url: Option<String>,
+    /// A short display token — `MP3`, `AAC` — off the response's content type, in the directory's
+    /// own spelling for its `codec` column. Empty where the server sent a type we have no name for.
+    pub codec: String,
+    /// Advertised kbps, `0` where the server does not say. Same display hint as the directory's.
+    pub bitrate: i32,
 }
 
 /// What was actually behind a URL. A mount with no extension can only be told apart from a pointer
@@ -194,6 +213,23 @@ pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream,
     });
 
     Ok(PreparedStream { source, shared })
+}
+
+/// Open `url` far enough to know it plays, then let it go.
+///
+/// The same path [`open`] takes minus the ring and the thread, which is what makes it a real
+/// answer rather than a reachability check: the playlist indirection is followed, the response is
+/// buffered, and Symphonia probes the container — so a mount that is a web page, a segmented HLS
+/// playlist or a codec with no decoder is refused **here**, when the user is looking at a dialog,
+/// rather than at the moment they click play. Dropping the returned stream closes the socket.
+///
+/// The station's own headers come back with it, so a hand-typed URL can name itself.
+pub async fn probe(client: &reqwest::Client, url: &str) -> Result<StationFacts, AppError> {
+    let url = Url::parse(url).map_err(|e| AppError::network("Invalid station URL", e))?;
+    // Throwaway: the title callback writes into it and nothing ever reads it back.
+    let shared = StreamShared::new();
+    let (opened, _resolved) = connect_following_playlist(client, url, &shared).await?;
+    Ok(opened.facts)
 }
 
 /// Open `url`, and if what came back is a playlist rather than audio, follow it once.
@@ -258,6 +294,15 @@ async fn connect(
     }
 
     let icy = IcyHeaders::parse_from_headers(stream.headers());
+    let facts = StationFacts {
+        name: non_blank(icy.name()),
+        genre: icy.genre().join(GENRE_SEPARATOR),
+        homepage: non_blank(icy.station_url()),
+        logo_url: non_blank(icy.logo_url()),
+        codec: codec_from_mime(mime.as_deref()).to_owned(),
+        bitrate: icy.bitrate().and_then(|kbps| i32::try_from(kbps).ok()).unwrap_or_default(),
+    };
+
     let storage = BoundedStorageProvider::new(MemoryStorageProvider, DOWNLOAD_BUFFER_BYTES);
     let settings = Settings::default().prefetch_bytes(prefetch_bytes(icy.bitrate()));
 
@@ -293,7 +338,37 @@ async fn connect(
         channels: decoder.channels(),
         sample_rate: decoder.sample_rate(),
         decoder,
+        facts,
     })))
+}
+
+/// A trimmed header value, or `None` where the server sent the field empty.
+///
+/// Icecast pads and blanks these freely, and an empty `name` handed on as `Some("")` would name a
+/// station after nothing at all.
+fn non_blank(value: Option<&str>) -> Option<String> {
+    value.map(str::trim).filter(|v| !v.is_empty()).map(str::to_owned)
+}
+
+/// Between the genre words Icecast lists separately. Matches the directory's own `tags` spelling,
+/// so a hand-typed station's tags line reads like a browsed one's.
+const GENRE_SEPARATOR: &str = ",";
+
+/// A response content type as the short codec token the directory would have used.
+///
+/// Deliberately not exhaustive and deliberately not fallible: an unrecognised type is a station
+/// whose codec line stays blank, which every surface already handles — `bitrate` is blank on a
+/// large share of live stations for the same reason.
+fn codec_from_mime(mime: Option<&str>) -> &'static str {
+    match mime {
+        Some("audio/mpeg" | "audio/mp3" | "audio/mpeg3" | "audio/x-mpeg") => "MP3",
+        Some("audio/aac" | "audio/aacp" | "audio/x-aac" | "audio/mp4" | "audio/x-m4a") => "AAC",
+        Some("audio/ogg" | "application/ogg" | "audio/vorbis") => "OGG",
+        Some("audio/opus") => "OPUS",
+        Some("audio/flac" | "audio/x-flac") => "FLAC",
+        Some("audio/wav" | "audio/x-wav" | "audio/wave") => "WAV",
+        _ => "",
+    }
 }
 
 /// How much to buffer before the first read, from the bitrate the server states.

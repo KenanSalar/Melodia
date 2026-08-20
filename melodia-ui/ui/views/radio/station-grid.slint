@@ -7,8 +7,8 @@ import { StationCard } from "station-card.slint";
 // mounts the scrollbar so it can sit flush with the content-panel edge.
 //
 // Its own component rather than a mount of `EntityCardGrid`, because a station card is not an
-// entity card: it carries three text lines and a play / star / homepage trio. Both Radio tabs mount
-// this one, which is what keeps that from becoming two.
+// entity card: it carries three text lines and its own set of hover controls. All three Radio tabs
+// mount this one, which is what keeps that from becoming three.
 export component StationGrid inherits Rectangle {
     in property <[RadioStationGridRow]> rows;
     in property <length> card-width: 180px;
@@ -24,10 +24,15 @@ export component StationGrid inherits Rectangle {
     in property <int> covers-generation: 0;
     pure callback request-logo(string /*artwork_path*/, int /*generation*/) -> image;
 
+    // The kept tabs only. Browse leaves it false, so a directory row draws exactly as before.
+    in property <bool> manageable;
+
     callback station-clicked(RadioStationRow);
     callback play-clicked(RadioStationRow);
     callback favorite-clicked(RadioStationRow);
     callback homepage-clicked(RadioStationRow);
+    callback edit-clicked(RadioStationRow);
+    callback remove-clicked(RadioStationRow);
 
     // Same sign convention as `TrackList` and the entity grids — a positive `v-offset` is N px
     // scrolled, where the inner `ListView` holds that as a non-positive `viewport-y`.
@@ -70,12 +75,19 @@ export component StationGrid inherits Rectangle {
                         + (station.bitrate > 0 ? @tr("{} kbps", station.bitrate) : "");
                     tags: station.tags;
                     is-favorite: station.is_favorite;
+                    // An empty uuid is a station the user typed in: there is nothing in the
+                    // directory to star it against, and Remove is what it has instead.
+                    starrable: station.uuid != "";
+                    editable: root.manageable && station.uuid == "";
+                    removable: root.manageable;
                     homepage-known: station.homepage != "";
                     unplayable: station.hls;
                     clicked => { root.station-clicked(station); }
                     play-clicked => { root.play-clicked(station); }
                     favorite-clicked => { root.favorite-clicked(station); }
                     homepage-clicked => { root.homepage-clicked(station); }
+                    edit-clicked => { root.edit-clicked(station); }
+                    remove-clicked => { root.remove-clicked(station); }
                 }
             }
         }

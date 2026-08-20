@@ -1,20 +1,25 @@
-//! The Radio page — two tabs (Browse, Favorites) over the radio-browser.info directory and the
-//! stations the user kept.
+//! The Radio page — three tabs over the radio-browser.info directory, the stations the user kept,
+//! and the ones they played.
 //!
-//! **One section handle for both tabs**, and one `SectionActiveGate` to match. My Library's
+//! **One section handle for all three**, and one `SectionActiveGate` to match. My Library's
 //! per-tab gates are what its history left it — five tabs that used to be five sidebar sections,
 //! each with a hook of its own — where here a tab flip has to stay inside the page: Browse holds a
 //! directory answer bought with a network round trip, and a per-tab gate would hand it back every
 //! time the user glanced at their favorites.
 //!
-//! **The section leave is narrower than every other grid page's**, for the same reason: it drops
-//! the logo tier and keeps the results. See [`browse`] and [`covers`].
+//! **Station history is a tab rather than a sort of the kept list**, and the reason is which rows
+//! it can reach: playing a station out of Browse keeps it without starring it, so a favorites-only
+//! list is the one place such a row could never be found, re-starred or deleted from.
+//!
+//! **The section leave is narrower than every other grid page's**: it drops the logo tier and
+//! keeps every list. See [`browse`], [`kept`] and [`covers`].
 
 mod browse;
 mod callbacks;
 mod covers;
 mod facets;
 mod filter;
+mod kept;
 mod logos;
 mod rows;
 mod tabs;
@@ -36,6 +41,7 @@ use browse::BrowseState;
 use logos::LogoMemo;
 use tabs::section_is_up;
 
+pub use callbacks::files::wire as wire_files;
 pub use covers::tune_cache_for_display;
 pub use tabs::{RadioTab, seed_tab, tab_from_index};
 
@@ -111,8 +117,15 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RadioUi> {
 fn install_models(ui: &AppWindow) {
     let g = ui.global::<Radio>();
 
-    let stations: Rc<VecModel<RadioStationGridRow>> = Rc::new(VecModel::default());
-    g.set_browse_rows(ModelRc::from(stations));
+    // One per grid — the three tabs draw the same card but each keeps its own rows.
+    let browsed: Rc<VecModel<RadioStationGridRow>> = Rc::new(VecModel::default());
+    g.set_browse_rows(ModelRc::from(browsed));
+
+    let favorites: Rc<VecModel<RadioStationGridRow>> = Rc::new(VecModel::default());
+    g.set_favorites_rows(ModelRc::from(favorites));
+
+    let recent: Rc<VecModel<RadioStationGridRow>> = Rc::new(VecModel::default());
+    g.set_recent_rows(ModelRc::from(recent));
 
     let facets: Rc<VecModel<RadioFacetRow>> = Rc::new(VecModel::default());
     g.set_facet_options(ModelRc::from(facets));
@@ -131,7 +144,14 @@ pub struct RadioUi {
     browse: Mutex<BrowseState>,
     /// The directory uuids this install has starred. Refreshed on section enter and flipped
     /// optimistically by the toggle, which is what lets the star respond on the click's own frame.
-    favorites: Mutex<HashSet<String>>,
+    ///
+    /// Derived from the same fetch that fills [`Self::kept`], since a starred station *is* a kept
+    /// one — a query of its own would be a second answer to keep true.
+    starred: Mutex<HashSet<String>>,
+    /// The Favorites tab: everything starred, plus every station typed in by hand.
+    kept: Mutex<kept::KeptState>,
+    /// The Recently Played tab: every station with a play behind it, starred or not.
+    recent: Mutex<kept::KeptState>,
     /// What this session knows about station logos, keyed on the URL they came from.
     logos: LogoMemo,
     /// The open picker's list, whole. Kept beside the Slint model because the picker's needle
@@ -149,7 +169,9 @@ impl RadioUi {
         Self {
             section,
             browse: Mutex::new(BrowseState::default()),
-            favorites: Mutex::new(HashSet::new()),
+            starred: Mutex::new(HashSet::new()),
+            kept: Mutex::new(kept::KeptState::default()),
+            recent: Mutex::new(kept::KeptState::default()),
             logos: LogoMemo::new(),
             facet_list: Mutex::new(None),
             covers: Arc::new(covers::new_tier()),
@@ -166,11 +188,15 @@ impl RadioUi {
     /// The optimistic half of the toggle, and its revert: the write is a round trip through
     /// `SQLite` and the star has to answer on the click's own frame.
     fn set_local_favorite(&self, station_uuid: &str, favorite: bool) {
-        let mut favorites = self.favorites.lock();
+        let mut starred = self.starred.lock();
         if favorite {
-            favorites.insert(station_uuid.to_owned());
+            starred.insert(station_uuid.to_owned());
         } else {
-            favorites.remove(station_uuid);
+            starred.remove(station_uuid);
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/radio_tests.rs"]
+mod tests;

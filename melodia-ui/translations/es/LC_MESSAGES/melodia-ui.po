@@ -1714,11 +1714,11 @@ msgid_plural "{n} stations"
 msgstr[0] "{n} emisora"
 msgstr[1] "{n} emisoras"
 
-msgid "No favorite stations yet"
-msgstr "Aún no hay emisoras favoritas"
+msgid "No stations kept yet"
+msgstr "Aún no has guardado emisoras"
 
-msgid "Star a station in Browse to keep it here."
-msgstr "Marca una emisora en Explorar para guardarla aquí."
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Marca una emisora en Explorar o añade una por URL."
 
 # The Settings card. The section title reuses "Radio" above.
 msgid "Internet radio"
@@ -1789,3 +1789,77 @@ msgstr "Prueba con otro nombre o quita un filtro."
 # The station card's meta line, beside country and codec.
 msgid "{} kbps"
 msgstr "{} kbps"
+
+# The Recently Played tab's empty state.
+msgid "Nothing played yet"
+msgstr "Aún no has escuchado nada"
+
+msgid "Stations you listen to show up here."
+msgstr "Las emisoras que escuches aparecerán aquí."
+
+# The Favorites tab's sort pills. "Name" is shared with the library sorts.
+msgid "Added"
+msgstr "Añadida"
+
+msgid "Plays"
+msgstr "Reproducciones"
+
+msgid "Last played"
+msgstr "Última reproducción"
+
+# The add / edit station dialog.
+msgid "Add Station"
+msgstr "Añadir emisora"
+
+msgid "Edit Station"
+msgstr "Editar emisora"
+
+msgid "Stream URL"
+msgstr "URL de la emisión"
+
+msgid "Name (optional)"
+msgstr "Nombre (opcional)"
+
+msgid "Leave blank to use the station's own name"
+msgstr "Déjalo vacío para usar el nombre de la propia emisora"
+
+msgid "Checking the stream…"
+msgstr "Comprobando la emisión…"
+
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "No se pudo acceder a esa dirección. Comprueba la URL y tu conexión."
+
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "Esa dirección no reproduce audio que Melodia pueda decodificar."
+
+msgid "Couldn't save the station."
+msgstr "No se pudo guardar la emisora."
+
+# The station card's destructive action.
+msgid "Remove station?"
+msgstr "¿Eliminar emisora?"
+
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "«{}» se eliminará de tus emisoras, junto con su historial de reproducción."
+
+# Station list import and export.
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "{n} emisora añadida"
+msgstr[1] "{n} emisoras añadidas"
+
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} ya estaba en tu lista."
+msgstr[1] "{n} ya estaban en tu lista."
+
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "No se pudo leer ninguna emisora de los archivos seleccionados."
+
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "{n} emisora exportada"
+msgstr[1] "{n} emisoras exportadas"
+
+msgid "Couldn't write the station list."
+msgstr "No se pudo escribir la lista de emisoras."

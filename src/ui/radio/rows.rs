@@ -1,14 +1,15 @@
-//! Directory answers projected onto the Slint boundary structs.
+//! Stations projected onto the Slint boundary structs.
 //!
 //! The tree's sixteen other `to_slint_*` converters live beside the view that fills the model,
-//! and these are no different — what is different is the third input. A card's star and its logo
-//! are not facts about the station, they are facts about *this install*, so both arrive as
-//! arguments rather than being looked up here: a converter that reached for either would need the
-//! handle, and the caller already holds both while it walks the page.
+//! and these are no different — what is different is the third input on the directory's side. A
+//! browsed card's star and its logo are not facts about the station, they are facts about *this
+//! install*, so both arrive as arguments rather than being looked up here: a converter that
+//! reached for either would need the handle, and the caller already holds both while it walks the
+//! page. A kept station carries them as columns and so needs neither.
 
 use slint::SharedString;
 
-use crate::entities::radio::{DirectoryStation, Facet};
+use crate::entities::radio::{DirectoryStation, Facet, RadioStation};
 use crate::{RadioFacetRow, RadioStationRow};
 
 /// How many of a station's tags a card shows.
@@ -43,6 +44,27 @@ pub fn to_slint_radio_station_row(
         bitrate: station.bitrate,
         hls: station.hls,
         is_favorite,
+    }
+}
+
+/// One kept station, as the two local tabs draw it.
+///
+/// Reads nothing but the row: the star and the logo are columns here, where a browsed station has
+/// to be told both. `uuid` stays empty for a station the user typed in, which is what the card
+/// splits its star and its Edit control on.
+pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
+    RadioStationRow {
+        id: crate::ui::util::clamp_i64_to_i32(station.id),
+        uuid: station.station_uuid.as_deref().map(SharedString::from).unwrap_or_default(),
+        name: SharedString::from(&station.name),
+        homepage: station.homepage.as_deref().map(SharedString::from).unwrap_or_default(),
+        artwork_path: station.artwork_path.as_deref().map(SharedString::from).unwrap_or_default(),
+        tags: SharedString::from(display_tags(&station.tags)),
+        country: SharedString::from(&station.country),
+        codec: SharedString::from(&station.codec),
+        bitrate: station.bitrate,
+        hls: station.hls,
+        is_favorite: station.is_favorite,
     }
 }
 

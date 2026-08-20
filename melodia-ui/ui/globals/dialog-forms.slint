@@ -139,3 +139,55 @@ export global ScrobbleUi {
         return @tr("Couldn't save your credentials.");
     }
 }
+
+// The add / edit station form, owned by `src/ui/radio/callbacks/kept.rs`. Both dialog kinds share
+// it, `edit-id` being the whole difference: `-1` adds, anything else rewrites that row.
+//
+// **The dialog stays open across `submit()`** — `components/dialog/dialog.slint` suppresses the
+// auto-close for both kinds — because the submit is a real connect: the URL is followed past any
+// playlist indirection and the container is probed, so a mount that cannot play is refused here
+// rather than at the first click. Rust closes the dialog once that succeeds.
+//
+// `error` carries a localized line, which Rust has to set through the `err-*` `@tr` callbacks —
+// Slint 1.16 exposes no Rust-callable `tr()`.
+export global RadioForm {
+    in-out property <int> edit-id: -1;
+    in-out property <string> url;
+    // Optional. Left blank, the station names itself off the stream's own headers.
+    in-out property <string> name;
+    in-out property <bool> busy;
+    in-out property <string> error;
+
+    callback submit();
+
+    // The edit dialog's chrome. Resolved here rather than written from Rust for the reason every
+    // string on this side is: `@tr` folds msgids at codegen, so a sentence Rust pushed would
+    // render untranslated. The *add* dialog opens from `views/radio/tab-pills.slint`, where the
+    // literals sit inline.
+    pure callback edit-title() -> string;
+    edit-title => {
+        return @tr("Edit Station");
+    }
+    pure callback save-label() -> string;
+    save-label => {
+        return @tr("Save");
+    }
+    pure callback cancel-label() -> string;
+    cancel-label => {
+        return @tr("Cancel");
+    }
+
+    // Resolved in the active locale at call time.
+    pure callback err-unreachable() -> string;
+    err-unreachable => {
+        return @tr("Couldn't reach that address. Check the URL and your connection.");
+    }
+    pure callback err-not-audio() -> string;
+    err-not-audio => {
+        return @tr("That address doesn't play as audio Melodia can decode.");
+    }
+    pure callback err-save-failed() -> string;
+    err-save-failed => {
+        return @tr("Couldn't save the station.");
+    }
+}

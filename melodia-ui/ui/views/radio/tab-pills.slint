@@ -1,0 +1,75 @@
+import { Radio } from "../../globals/radio.slint";
+import { RadioForm } from "../../globals/dialog-forms.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { ActionPill, PillButton, PillDivider } from "../../components/action-pill.slint";
+import { SortPillRow } from "../../components/sort-pill-row.slint";
+
+// The Favorites tab's action row, handed to `LibraryTabBand` as its whole `@children`.
+//
+// **Text labels rather than icon-and-tooltip.** The band paints its slot before the body, so a
+// tooltip drawn from in here would need the published-anchor treatment `MyLibraryTabPills` carries
+// for exactly one of its rows; a labelled pill says the same thing and needs none of it.
+//
+// Browse's own controls are its chip strip, inside the tab body, and Recently Played has none —
+// its order is the page.
+export component RadioTabPills inherits Rectangle {
+    HorizontalLayout {
+        alignment: end;
+        // The rows are mutually exclusive, so any spacing here would read as a permanent inset on
+        // the tabs that mount nothing.
+        spacing: 0px;
+
+        // `labels` stays an inline literal — `@tr` folds msgids at codegen, so a Rust-seeded array
+        // renders untranslated — and `fields` is the parallel list of tokens Rust's comparator
+        // matches on.
+        if Radio.tab-idx == Radio.tab-favorites: SortPillRow {
+            labels: [@tr("Name"), @tr("Added"), @tr("Plays"), @tr("Last played")];
+            fields: ["name", "added", "plays", "played"];
+            sort-field: Radio.sort-field;
+            sort-dir: Radio.sort-dir;
+            request-sort(f) => { Radio.request-sort(f); }
+        }
+
+        if Radio.tab-idx == Radio.tab-favorites: ActionPill {
+            // Fills the Dialog inline rather than hopping through Rust: a synchronous
+            // `set_open(true)` mid-click-handler trips Slint's recursion guard.
+            PillButton {
+                icon: "add";
+                text: @tr("Add Station");
+                clicked => {
+                    RadioForm.edit-id = -1;
+                    RadioForm.url = "";
+                    RadioForm.name = "";
+                    RadioForm.busy = false;
+                    RadioForm.error = "";
+                    Dialog.title = @tr("Add Station");
+                    Dialog.message = "";
+                    Dialog.confirm-label = @tr("Add");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.kind = "add-station";
+                    Dialog.target-id = -1;
+                    Dialog.open = true;
+                }
+            }
+
+            PillDivider { }
+
+            // Portable playlists, so a station list survives a database wipe and arrives from
+            // whatever the user was using before. Both are pure Rust flows over native pickers.
+            PillButton {
+                icon: "download";
+                text: @tr("Import");
+                clicked => { Radio.import-stations(); }
+            }
+
+            PillDivider { }
+
+            PillButton {
+                icon: "upload";
+                text: @tr("Export");
+                clicked => { Radio.export-stations(); }
+            }
+        }
+    }
+}

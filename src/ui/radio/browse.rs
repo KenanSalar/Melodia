@@ -151,7 +151,7 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
     let (station_rows, has_more) = {
         let browse = radio_ui.browse.lock();
-        let favorites = radio_ui.favorites.lock();
+        let starred = radio_ui.starred.lock();
         let station_rows: Vec<_> = browse
             .stations
             .iter()
@@ -160,7 +160,7 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
                     station.favicon_url.as_deref().and_then(|url| radio_ui.logos.path_for(url));
                 rows::to_slint_radio_station_row(
                     station,
-                    favorites.contains(&station.station_uuid),
+                    starred.contains(&station.station_uuid),
                     logo.as_deref(),
                 )
             })
@@ -174,7 +174,7 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
     g.set_browse_count(len_as_i32(station_rows.len()));
     g.set_browse_has_more(has_more);
 
-    let grid = chunk_built_rows(station_rows, g.get_browse_columns(), |stations| {
+    let grid = chunk_built_rows(station_rows, g.get_grid_columns(), |stations| {
         RadioStationGridRow { stations }
     });
     write_grid(&g.get_browse_rows(), grid, "radio::browse");

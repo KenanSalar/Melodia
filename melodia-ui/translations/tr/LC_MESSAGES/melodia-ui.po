@@ -1720,11 +1720,11 @@ msgid_plural "{n} stations"
 msgstr[0] "{n} istasyon"
 msgstr[1] "{n} istasyon"
 
-msgid "No favorite stations yet"
-msgstr "Henüz favori istasyon yok"
+msgid "No stations kept yet"
+msgstr "Henüz kayıtlı istasyon yok"
 
-msgid "Star a station in Browse to keep it here."
-msgstr "Bir istasyonu burada tutmak için Gözat'ta yıldızla."
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Gözat'ta bir istasyonu yıldızla ya da URL ile ekle."
 
 # The Settings card. The section title reuses "Radio" above.
 msgid "Internet radio"
@@ -1795,3 +1795,78 @@ msgstr "Farklı bir ad dene ya da bir filtreyi kaldır."
 # The station card's meta line, beside country and codec.
 msgid "{} kbps"
 msgstr "{} kbps"
+
+# The Recently Played tab's empty state.
+msgid "Nothing played yet"
+msgstr "Henüz bir şey dinlenmedi"
+
+msgid "Stations you listen to show up here."
+msgstr "Dinlediğin istasyonlar burada görünür."
+
+# The Favorites tab's sort pills. "Name" is shared with the library sorts.
+msgid "Added"
+msgstr "Eklenme"
+
+msgid "Plays"
+msgstr "Dinlenme"
+
+msgid "Last played"
+msgstr "Son dinlenme"
+
+# The add / edit station dialog.
+msgid "Add Station"
+msgstr "İstasyon Ekle"
+
+msgid "Edit Station"
+msgstr "İstasyonu Düzenle"
+
+msgid "Stream URL"
+msgstr "Yayın URL'si"
+
+msgid "Name (optional)"
+msgstr "Ad (isteğe bağlı)"
+
+msgid "Leave blank to use the station's own name"
+msgstr "İstasyonun kendi adını kullanmak için boş bırak"
+
+msgid "Checking the stream…"
+msgstr "Yayın denetleniyor…"
+
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "Bu adrese ulaşılamadı. URL'yi ve bağlantını denetle."
+
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "Bu adres, Melodia'nın çözebileceği bir ses yayını vermiyor."
+
+msgid "Couldn't save the station."
+msgstr "İstasyon kaydedilemedi."
+
+# The station card's destructive action.
+msgid "Remove station?"
+msgstr "İstasyon kaldırılsın mı?"
+
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "\"{}\" dinlenme geçmişiyle birlikte istasyonlarından kaldırılacak."
+
+# Station list import and export. Turkish doesn't pluralize after a numeral, so both
+# forms are the same sentence — the layout stays for msgid alignment.
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "{n} istasyon eklendi"
+msgstr[1] "{n} istasyon eklendi"
+
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} tanesi zaten listendeydi."
+msgstr[1] "{n} tanesi zaten listendeydi."
+
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "Seçilen dosyalardan hiçbir istasyon okunamadı."
+
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "{n} istasyon dışa aktarıldı"
+msgstr[1] "{n} istasyon dışa aktarıldı"
+
+msgid "Couldn't write the station list."
+msgstr "İstasyon listesi yazılamadı."

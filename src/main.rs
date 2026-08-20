@@ -247,9 +247,10 @@ fn main() -> AppResult<()> {
     let views = boot::ui_setup::install_views(&app, &state, startup_view_state.as_ref());
     let notifications = boot::ui_setup::install_library_settings_and_friends(&app, &state)?;
 
-    // These two wire here rather than inside their slices because their
+    // These three wire here rather than inside their slices because their
     // completion toasts need the `Rc<NotificationsUi>`.
     ui::playlists::wire_files(&app, &state, &views.playlists_ui, &notifications);
+    ui::radio::wire_files(&app, &state, &views.radio_ui, &notifications);
     ui::callbacks::wire_tags(&app, &state, &notifications);
 
     let appearance_handles = match ui::appearance::install(&app, &state) {

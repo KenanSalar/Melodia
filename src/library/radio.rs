@@ -8,13 +8,13 @@
 //! are the library views, none of which shows a station; the Radio section
 //! refreshes through its own global.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::database::queries;
 use crate::entities::radio;
 use crate::error::AppError;
 use crate::library::playback;
+use crate::player::stream_source::{self, StationFacts};
 use crate::player::types::RadioNowPlaying;
 use crate::services::radio_browser;
 use crate::state::AppState;
@@ -64,17 +64,6 @@ pub async fn get_favorites(state: &AppState) -> Result<Vec<radio::RadioStation>,
     queries::radio::get_favorite_stations(&state.db).await
 }
 
-/// The directory uuids of every favorited station, which is what a browsed row
-/// is matched against to decide whether its star is filled.
-///
-/// A projection of [`get_favorites`] rather than a query of its own: the table
-/// is one the user fills by hand, so the rows are few and a second statement
-/// would be a second thing to keep true. Hand-typed stations carry no uuid and
-/// drop out, correctly — nothing in the directory can match one.
-pub async fn favorite_uuids(state: &AppState) -> Result<HashSet<String>, AppError> {
-    Ok(get_favorites(state).await?.into_iter().filter_map(|s| s.station_uuid).collect())
-}
-
 /// The stations played most recently, newest first.
 pub async fn get_recent(state: &AppState) -> Result<Vec<radio::RadioStation>, AppError> {
     queries::radio::get_recent_stations(&state.db, RECENT_STATIONS_LIMIT).await
@@ -100,6 +89,136 @@ pub async fn set_favorite(state: &AppState, id: i64, favorite: bool) -> Result<(
 
 pub async fn remove_station(state: &AppState, id: i64) -> Result<(), AppError> {
     queries::radio::delete_station(&state.db, id).await
+}
+
+/// Open a URL far enough to know it plays, and report what the server said about itself.
+///
+/// Behind [`directory_client`] like every other outbound call here: a probe is traffic whoever
+/// is on the other end, and "off means no traffic" does not have an exception for a URL the user
+/// typed.
+async fn probe_station(state: &AppState, stream_url: &str) -> Result<StationFacts, AppError> {
+    stream_source::probe(directory_client(state)?, stream_url).await
+}
+
+/// What to call a station nobody named.
+///
+/// The user's own text wins, then whatever the server calls itself, and the host last — a row
+/// titled with a full stream URL is unreadable in a card and sorts under `https`.
+///
+/// Shared with [`super::radio_files`] so a station typed in and one imported from a nameless
+/// playlist entry end up called the same thing.
+pub(super) fn resolve_station_name(
+    typed: &str,
+    from_stream: Option<&str>,
+    stream_url: &str,
+) -> String {
+    let typed = typed.trim();
+    if !typed.is_empty() {
+        return typed.to_owned();
+    }
+    if let Some(name) = from_stream.map(str::trim).filter(|n| !n.is_empty()) {
+        return name.to_owned();
+    }
+    reqwest::Url::parse(stream_url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .unwrap_or_else(|| stream_url.to_owned())
+}
+
+/// Keep a station the user typed in, after proving it plays.
+///
+/// **The probe is the validation**, and it is deliberately the whole connect rather than a
+/// reachability check: a mount that is a web page, a segmented playlist or a codec with no
+/// decoder is refused here, with the dialog still open, instead of at the first click.
+///
+/// Starred on the way in, because a station is typed in for one reason. That is also what puts it
+/// in `get_favorite_stations`, which is why the kept list needs no query of its own.
+pub async fn add_custom_station(
+    state: &AppState,
+    stream_url: &str,
+    name: &str,
+) -> Result<i64, AppError> {
+    let facts = probe_station(state, stream_url).await?;
+    let station = radio::NewRadioStation {
+        station_uuid: None,
+        name: resolve_station_name(name, facts.name.as_deref(), stream_url),
+        stream_url: stream_url.to_owned(),
+        homepage: facts.homepage.clone(),
+        favicon_url: facts.logo_url.clone(),
+        tags: facts.genre.clone(),
+        // The three the directory would have filled. A stream announces no country and no
+        // language, and guessing one from the host would be wrong more often than blank is.
+        country: String::new(),
+        country_code: String::new(),
+        language: String::new(),
+        codec: facts.codec.clone(),
+        bitrate: facts.bitrate,
+        // Nothing segmented survives the probe, so this is a fact rather than an assumption.
+        hls: false,
+    };
+
+    let saved = save_station(state, &station).await?;
+    set_favorite(state, saved.id, true).await?;
+    if let Some(logo_url) = facts.logo_url.as_deref() {
+        adopt_logo(state, saved.id, logo_url).await;
+    }
+    Ok(saved.id)
+}
+
+/// Refuse to edit a station the directory owns.
+///
+/// **The refusal is the point rather than a nicety**: `save_station`'s conflict clause rewrites
+/// `name` and `stream_url` from the directory on the next favorite or play of the same uuid, so
+/// an edit to a browsed station would revert with nothing on screen to say why. The card only
+/// offers Edit on a custom station; this is what holds when something else asks.
+fn ensure_editable(station: &radio::RadioStation) -> Result<(), AppError> {
+    if station.station_uuid.is_none() {
+        return Ok(());
+    }
+    Err(AppError::Validation("Only a station you added by URL can be edited".to_owned()))
+}
+
+/// Rewrite a hand-typed station's name and URL.
+///
+/// The probe runs only when the URL actually moved, so renaming a station that happens to be off
+/// air today still works.
+pub async fn update_custom_station(
+    state: &AppState,
+    id: i64,
+    stream_url: &str,
+    name: &str,
+) -> Result<(), AppError> {
+    let existing = get_station(state, id).await?;
+    ensure_editable(&existing)?;
+
+    let (codec, bitrate) = if existing.stream_url == stream_url {
+        (existing.codec, existing.bitrate)
+    } else {
+        let facts = probe_station(state, stream_url).await?;
+        (facts.codec, facts.bitrate)
+    };
+
+    let name = resolve_station_name(name, Some(existing.name.as_str()), stream_url);
+    queries::radio::update_station(&state.db, id, &name, stream_url, &codec, bitrate).await
+}
+
+/// Download a station's logo and point the row at it, or leave the row alone.
+///
+/// Failures are silent by design: a station with no logo takes the Material Symbols glyph, which
+/// is what most of the directory takes anyway, and there is nothing a user could do about a dead
+/// favicon host.
+async fn adopt_logo(state: &AppState, id: i64, logo_url: &str) {
+    match fetch_logo(state, logo_url).await {
+        Ok(Some(path)) => {
+            if let Err(e) = set_artwork(state, id, Some(&path)).await {
+                log::debug!("radio: station logo not stored: {}", crate::services::describe(&e));
+            }
+        }
+        Ok(None) => {}
+        Err(e) => {
+            log::debug!("radio: station logo fetch failed: {}", crate::services::describe(&e));
+        }
+    }
 }
 
 /// Count a play against a station, which is what orders the recents list.

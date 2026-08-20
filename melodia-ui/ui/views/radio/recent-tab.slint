@@ -5,24 +5,21 @@ import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 import { StationGrid } from "station-grid.slint";
 
-// The stations the user kept: everything starred out of Browse, plus everything typed in by hand.
-// One list rather than two, because a custom station is starred on the way in — which is also what
-// lets the whole tab run off the one favorites query.
+// Every station with a play behind it, newest first — starred or not, which is the whole reason
+// this is a tab rather than a sort of the one beside it: a station played out of Browse is kept
+// but never starred, and this is the only place it can be reached, re-starred or removed from.
 //
-// **The scroller is here, not on the page**, as on Browse and for the same reason.
-export component RadioFavoritesTab inherits Rectangle {
+// **No sort row.** The order *is* the page, as on the Recently Played view for tracks.
+export component RadioRecentTab inherits Rectangle {
     in property <length> card-w;
     in property <length> card-h;
     in property <length> row-h;
     in property <length> gap;
 
-    // Only once the fetch has landed: `-1` is the unfetched sentinel, and an empty state over a
-    // list that has not been asked for yet claims something untrue for the length of the query.
-    //
-    // The count is pre-filter, which is what separates the two states below: nothing kept at all
-    // against a box that matched none of what is.
-    property <bool> is-empty: Radio.favorites-count == 0;
-    property <bool> no-matches: Radio.favorites-count > 0 && Radio.favorites-rows.length == 0;
+    // The count is pre-filter, which is what separates the two states below: nothing played at
+    // all against a box that matched none of what was.
+    property <bool> is-empty: Radio.recent-count == 0;
+    property <bool> no-matches: Radio.recent-count > 0 && Radio.recent-rows.length == 0;
 
     VerticalLayout {
         padding-top: Theme.pad-md;
@@ -33,7 +30,7 @@ export component RadioFavoritesTab inherits Rectangle {
             grid := StationGrid {
                 width: 100%;
                 height: 100%;
-                rows: Radio.favorites-rows;
+                rows: Radio.recent-rows;
                 card-width: root.card-w;
                 card-height: root.card-h;
                 row-height: root.row-h;
@@ -46,8 +43,6 @@ export component RadioFavoritesTab inherits Rectangle {
                 favorite-clicked(s) => { Radio.toggle-favorite(s); }
                 homepage-clicked(s) => { Radio.open-homepage(s.homepage); }
                 edit-clicked(s) => { Radio.edit-station(s); }
-                // Chrome inline so `@tr` applies and so the message can name the station; the
-                // dispatcher forwards the accept to `Radio.remove-station`.
                 remove-clicked(s) => {
                     Dialog.title = @tr("Remove station?");
                     Dialog.message = @tr("\"{}\" will be removed from your stations, along with its play history.", s.name);
@@ -61,13 +56,11 @@ export component RadioFavoritesTab inherits Rectangle {
             }
 
             if root.is-empty: GridEmptyState {
-                icon: "favorite";
-                title: @tr("No stations kept yet");
-                body: @tr("Star a station in Browse, or add one by URL.");
+                icon: "history";
+                title: @tr("Nothing played yet");
+                body: @tr("Stations you listen to show up here.");
             }
 
-            // Browse's own pair, reused verbatim: the box is a filter, so "clear a filter" is
-            // exactly the way out of this state here too.
             if root.no-matches: GridEmptyState {
                 icon: "search_off";
                 title: @tr("No stations matched");

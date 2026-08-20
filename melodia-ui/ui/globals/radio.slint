@@ -1,23 +1,28 @@
 import { RadioFacetRow, RadioStationGridRow, RadioStationRow } from "../models.slint";
 
-// The Radio page at nav index 10: two tabs over the radio-browser.info directory and the stations
-// the user kept. **One `SectionActiveGate`, not one per tab** — the two tabs share a Rust handle,
-// as Favorites' three and Recently Played's two do, and a tab leave here must not be a section
-// leave: Browse holds a directory answer this session paid a network round trip for.
+// The Radio page at nav index 10: three tabs over the radio-browser.info directory, the stations
+// the user kept and the ones they played. **One `SectionActiveGate`, not one per tab** — the three
+// share a Rust handle, as Favorites' three and Recently Played's two do, and a tab leave here must
+// not be a section leave: Browse holds a directory answer this session paid a network round trip
+// for.
 export global Radio {
     // **`tab-count` is the sole definition of how many there are** — Rust clamps the persisted
     // index against it, so a build with fewer tabs can't restore onto an unmounted branch.
     out property <int> tab-browse: 0;
     out property <int> tab-favorites: 1;
-    out property <int> tab-count: 2;
+    // Station history is a tab of its own rather than a sort of Favorites: a station played out
+    // of Browse is kept but not starred, so a favorites-only list is the one place it can never
+    // be reached from — and the app already gives tracks their own Recently Played page.
+    out property <int> tab-recent: 2;
+    out property <int> tab-count: 3;
 
     in-out property <int> tab-idx: 0;
     // Fires after the bar has already moved `tab-idx`.
     callback tab-changed(int);
 
-    // The band's `SearchBar` is the page's only box, and the two tabs want different things from
-    // it: a directory query on Browse, a local filter on Favorites. `ui::radio::filter::dispatch`
-    // routes a settled keystroke by the live tab.
+    // The band's `SearchBar` is the page's only box, and the tabs want different things from it: a
+    // directory query on Browse, a local filter on each of the other two — and each keeps its own
+    // needle. `ui::radio::filter::dispatch` routes a settled keystroke by the live tab.
     in-out property <string> filter;
     // Bumped to make the filter input give up the keyboard; a global can't bind a callback inline,
     // so the `SearchBar` watches this counter.
@@ -30,8 +35,15 @@ export global Radio {
     // bare `-1` interpolates into the plural as "-1 stations".
     in-out property <int> browse-count: -1;
     in-out property <int> favorites-count: -1;
+    in-out property <int> recent-count: -1;
 
     callback section-active-changed(bool);
+
+    // One column count for three grids: the page derives it once from the body width, and Rust
+    // re-chunks whichever tab is mounted. A per-tab property would be the copy this prevents,
+    // the geometry already being one `GridGeometry` for all three.
+    in-out property <int> grid-columns: 1;
+    callback columns-changed(int);
 
     // --- Browse -------------------------------------------------------------------------------
     //
@@ -39,8 +51,6 @@ export global Radio {
     // virtualizes by row. Unlike the library grids there is no unfiltered list to filter against:
     // the filter *is* the query, and every change of it is a fresh page off the network.
     in-out property <[RadioStationGridRow]> browse-rows;
-    in-out property <int> browse-columns: 1;
-    callback columns-changed(int);
 
     // A request is in flight. The body splits on it against `browse-rows.length`: with nothing
     // loaded it is the first-paint state, with rows on screen it is the load-more pill's spinner.
@@ -65,10 +75,34 @@ export global Radio {
 
     // Both take the whole row: a directory station has no database id (`id == 0`) and a kept one
     // has no place in the browse cache, so the row is the only thing that identifies either. One
-    // door for both tabs, which is what Phase 7's list mounts against.
+    // door for all three tabs, and `id == 0` is where it splits.
     callback play-station(RadioStationRow);
     callback toggle-favorite(RadioStationRow);
     callback open-homepage(string);
+
+    // --- The kept tabs ------------------------------------------------------------------------
+    //
+    // Favorites is favorites plus the stations typed in by hand — a custom station is starred on
+    // the way in, so one query answers both and `uuid == ""` is what tells them apart on a card.
+    // Recently Played is the wider set: anything with a play, starred or not.
+    in-out property <[RadioStationGridRow]> favorites-rows;
+    in-out property <[RadioStationGridRow]> recent-rows;
+
+    // Favorites only. Recently Played has none on purpose: the order *is* the page, as on the
+    // Recently Played view for tracks.
+    in-out property <string> sort-field: "name";
+    in-out property <string> sort-dir: "asc";
+    callback request-sort(string /*field*/);
+
+    // Editing is refused for a browsed station whatever the card offers — `save_station`'s
+    // conflict clause would revert it on the next play — so the card only shows it for a custom
+    // one and the facade checks again.
+    callback edit-station(RadioStationRow);
+    // By id: the confirm dialog carries `target-id` and the row is long gone by the time it
+    // is accepted.
+    callback remove-station(int /*id*/);
+    callback import-stations();
+    callback export-stations();
 
     // --- Filter chips -------------------------------------------------------------------------
     //

@@ -129,18 +129,30 @@ plays it.
 Sidebar order is source order, so the row mounts after My Library and before the Settings
 divider regardless of index value.
 
-**D5. Two tabs on one `LibraryTabBand`, which morphs into a station hero on drill-in.**
-Browse and Favorites, with a station detail behind both. The band already mounts
-`TabSearchHeader` internally, so the flat idle state is the same row the Settings page
-wears; what it adds is the morph into a hero when a detail opens. Its artwork square is a
-plain `ArtworkImage` taking `artwork-path`, `fallback-icon`, `tile-bg` and
+**D5. Three tabs on one `LibraryTabBand`, which morphs into a station hero on drill-in.**
+⚠️ **Amended in Phase 7**; as drafted this said two tabs, Browse and Favorites, and ruled
+out a third for station history — which open question 3 then inherited. Both are answered
+below.
+
+Browse, Favorites and Recently Played, with a station detail behind them. The band already
+mounts `TabSearchHeader` internally, so the flat idle state is the same row the Settings
+page wears; what it adds is the morph into a hero when a detail opens. Its artwork square
+is a plain `ArtworkImage` taking `artwork-path`, `fallback-icon`, `tile-bg` and
 `tile-icon-color`, which is exactly a single station logo's shape, unlike `MosaicTabHero`,
 whose `MosaicHeroTile` is built around a composed collage.
 
-Two tabs on one nav index, drilling into a detail that morphs the band rather than
-routing, **is My Library's shape exactly**, which also settles the back arrow: it means
-"close this detail" and stamps `origin-nav-index = -1`, for the same reason it does there.
-Restoring an origin would contradict the tab bar sitting beside it.
+**Why three rather than two-plus-a-sort**, which is what this decision and open question 3
+originally settled on: the sort was going to be over the *favorites*, and that is the one
+set a played-but-unstarred station is not in. Every play from Browse keeps its station
+(`play_directory_station` writes the row before it tunes), so those rows accumulate, and a
+favorites-only list is the one place they could never be found, re-starred or deleted from.
+A tab is also the shape the app already gives this exact data — Recently Played is its own
+sidebar page for tracks.
+
+Tabs on one nav index, drilling into a detail that morphs the band rather than routing,
+**is My Library's shape exactly**, which also settles the back arrow: it means "close this
+detail" and stamps `origin-nav-index = -1`, for the same reason it does there. Restoring an
+origin would contradict the tab bar sitting beside it.
 
 **D6. A station detail is opened from a row, not fetched by id, and only persists when it
 has one.** `views.json`'s `last_detail_ids` is a `HashMap<String, i64>` of database row
@@ -345,6 +357,11 @@ The things that are silent when missed. Each is checked off in the phase that ow
 - [ ] The logo fetch compares `favicon_url` before trusting `artwork_path`. A re-import
       refreshes the URL and deliberately keeps the stored file, so a station whose logo
       moved otherwise shows the old one forever (Phase 3).
+- [x] **Every `[RadioStationGridRow]` the global declares is handed a `VecModel` in
+      `install_models`.** Silent at both ends: an unbound Slint array is a model of its own
+      kind, so `write_grid`'s downcast misses and the grid paints empty with one log line per
+      write. It cost a round in Phase 7 — the two kept tabs shipped declared and uninstalled —
+      and is a walk now, `ui::radio::tests::every_station_grid_the_global_declares_is_handed_a_model`.
 - [x] **One** `SectionActiveGate` at `index: 10`, not one per tab. Amended in Phase 4 and
       argued there: the two tabs share a handle, as Favorites' three and Recently Played's
       two do, and a per-tab gate would make a tab flip a section leave — handing back a
@@ -371,10 +388,12 @@ The things that are silent when missed. Each is checked off in the phase that ow
       Radio Browser client outside that facade returns nothing (D15). A build failure
       rather than a review item since Phase 6:
       `radio_browser::tests::only_the_radio_facade_reaches_the_directory_client`.
-- [ ] Disabling stops a playing station, moves `Nav.selected-index` off 10, and folds a
-      persisted 10 on the next boot.
-- [ ] The `SectionActiveGate` mount stays mounted when radio is disabled. It carries a
-      `changed` tracker, and dropping a tracker-bearing branch panics.
+- [x] Disabling stops a playing station, moves `Nav.selected-index` off 10, and folds a
+      persisted 10 on the next boot. All four in `ui::radio::disable`, plus the nav-history
+      sweep the plan missed (Phase 5).
+- [x] The `SectionActiveGate` mount stays mounted when radio is disabled. It carries a
+      `changed` tracker, and dropping a tracker-bearing branch panics. The mount in
+      `app-window.slint` carries no `if`; with the row gone the index is simply unreachable.
 - [x] The Settings sub-rows sit under `if Settings.radio-enabled`, never `visible: false`
       (slint#7377), matching the crossfade rows.
 - [x] The new Settings rows register their haystacks, or the page's search cannot find them.
@@ -912,31 +931,83 @@ leaving and re-entering the section does not refetch what is already on screen. 
 
 ---
 
-## Phase 7: Favorites and custom stations
+## Phase 7: Favorites and custom stations ✅ landed
 
 **Goal.** The stations a user keeps.
 
-1. Favorite toggle from either tab, writing through `library::radio`.
-2. Add by URL: a `Dialog` body with URL and optional name, validated (scheme, reachable,
-   resolves to audio) before the row is written. The dialog routes through the existing
-   `kind` + `target-id` dispatcher, so it is one branch and one opener.
+Shipped: the third tab, both kept grids, add-by-URL with a real validation probe and ICY
+autofill, edit and remove, a per-tab `row_match` needle, the Favorites sort, and station
+list import/export. `src/ui/radio/kept.rs` and `callbacks/{kept,stations,files}.rs`,
+`src/library/radio_files.rs`, `views/radio/{recent-tab,tab-pills}.slint`,
+`components/dialog/add-station-body.slint`, and the `RadioForm` global.
 
-   That validation probe already parses the ICY response headers, so **let the station name
-   itself when the user leaves the name blank**: `IcyHeaders` carries `name`, `genre`,
-   `description` and `logo_url`, which is most of a directory row for free and is the one
-   place a custom station can be as complete as a browsed one.
-3. Edit and remove, with the destructive confirm the tree already uses.
-4. Local filter through `row_match`, sharing the header box per Phase 4's routing.
-5. Sort: name, recently added, most played, last played.
-6. Recently played stations, off `last_played`, as the Favorites tab's second section or
-   its own sort. Prefer a sort; a third tab contradicts D5.
-7. Import and export as M3U/PLS, reusing `library::playlist_files`. Cheap here and it is
-   how users move a station list between apps.
+What later phases reach for:
 
-**Gates.** Same three.
+- **`kept.rs` is one module for two tabs**, keyed on a `RadioTab` argument: they are one
+  list at two filters (`is_favorite` against `last_played`), drawn by the same grid through
+  the same converter. `kept::refresh` is the single re-read, and every action that moves a
+  row ends in it.
+- **`StationGrid` is mounted three times**, with `manageable` the only per-tab input. Phase
+  8's detail re-points the card's `clicked` and leaves the rest alone.
+- **`stream_source::probe`** opens a URL through the whole connect and drops it, handing back
+  a `StationFacts`. Phase 8's "copy stream URL" and any later re-validation reach for it.
+
+**Eight deviations from this section as first drafted**, each argued at its anchor:
+
+- **Station history is a third tab, not a sort** — D5 amended, open question 3 answered
+  there. It is the one shape that can reach a played-but-unstarred row.
+- **`library::playlist_files` is not reused, and could not be.** It is track-and-database
+  shaped end to end — file paths re-matched by BLAKE3, `#EXTINF` durations, a playlist row
+  created per import — supports no PLS at all, and its `m3u` submodule is private to
+  `library`. `library::radio_files` owns a parser of its own, and its header argues that
+  against `stream_source::first_stream_url` too: that one answers "which single URL is behind
+  this pointer" off a byte-capped live response and carries no names.
+- **The probe is the whole connect rather than a reachability check.** `connect` already
+  followed the playlist indirection, parsed `IcyHeaders` and built a Symphonia decoder, and
+  threw the headers away; it now carries a `StationFacts` out. So a mount that is a web page,
+  a segmented playlist or a codec with no decoder is refused at the dialog rather than at the
+  first click — and `hls` is a fact on a custom station rather than an assumption.
+- **The migration gained a `country` column**, folded into the branch-local file rather than
+  added as a second. `RadioStationRow.country` is a full country name on Browse and would
+  have been a bare two-letter code on the kept tabs, which is the same card rendering one
+  station two ways.
+- **A custom station has no star, it has a Remove**, and **Edit is offered only for a custom
+  station**. Un-starring the first would drop it from the only list showing it; editing the
+  second is silently reverted by `save_station`'s conflict clause on the next play, so
+  `library::radio::ensure_editable` refuses it whatever a card offers.
+- **The kept counts are pre-filter**, which is what the global already declared and what lets
+  each tab tell "nothing kept" from "the box matched nothing" — two different empty states,
+  and a filtered count reads as the first when it is the second.
+- **`browse-columns` became `grid-columns`** and `columns-changed` fires unconditionally, the
+  mounted tab re-chunking. One `GridGeometry` already served all three tabs; a second column
+  property was the copy this prevents.
+- **`library::radio::favorite_uuids` was deleted.** One `get_favorites` fetch answers the kept
+  list, the recents' companion query and the uuid set Browse fills its stars from; a second
+  statement for the last was a second answer to keep true.
+
+**Two bugs the manual pass found, both invisible to every static gate**, and both now pinned:
+
+1. **The two new grid models were declared and never installed.** An unbound Slint array is a
+   model of its own kind, so `write_grid`'s downcast missed and every write was a no-op with
+   one log line to show for it — both tabs painted their empty state while the database held
+   the rows. `every_station_grid_the_global_declares_is_handed_a_model` walks the global for
+   `[RadioStationGridRow]` properties and asserts each is set in `install_models`.
+2. **A play from Browse never re-read the caches.** `play_kept` refreshed and the browsed arm
+   did not, so a station played out of Browse stamped `last_played` in the table while the
+   recents cache stayed stale — and a tab pick paints from cache, so it appeared only after a
+   section leave and return. Both play arms and both star arms now end in one `refresh_lists`.
+
+**Gates run:** fmt, `clippy --all-targets --locked -- -D warnings` at the root (both crates
+moved), full `cargo test` (1919 lib + 4 binary + 13 integration, green; **22 new**), one
+`cargo build`, and `scripts/check-icons.py` — no glyph was added, every icon the phase uses
+was already in `scripts/icons.txt`. The six catalogs gained 20 msgids and had two rewritten,
+the Favorites empty state having changed wording. Three pins were mutation-checked: dropping
+one `set_*_rows` from `install_models` fails the model walk by name; dropping the `sort_key`
+tiebreak from the plays comparator swaps the two stations level on it; and pairing `.pls`
+titles by position instead of by index drops the first station's name.
 
 **Done when.** A user-typed URL survives a restart, plays, and can be exported and
-re-imported.
+re-imported. ✅
 
 ---
 
@@ -1024,8 +1095,10 @@ and nothing in the transport lies about what it can do.
 
 **Goal.** The feature stops being new.
 
-1. Tests, for what the UI phases add: `radio_tab` clamping, the tab-count pin against the
-   `.slint` source, the hero's source-size floor as a predicate, the `id != 0` persistence
+1. Tests, for what the UI phases add. **Phase 7 took its own half** — the tab-count pin, the
+   grid-model walk, the kept sort and needle, the edit gate, the import parser, and the two
+   new statements — so what is left here is the rest: `radio_tab` clamping, the hero's
+   source-size floor as a predicate, the `id != 0` persistence
    guard, the nav fold with radio disabled, and the catalogue walk. **Plus the nav index's
    own round trip** — that `set_last_nav_index`'s clamp and `install_views`' guard both
    admit 10, which is the one failure in this feature that is silent at both ends and was
@@ -1055,11 +1128,12 @@ and nothing in the transport lies about what it can do.
    listed but not playable.
 7. `src/player/CLAUDE.md`: the live-source arm, D8's ring and why it exists, and the
    reconnect contract.
-8. **The shipped product description**, which currently promises no streaming and is now
-   only true by default. `Cargo.toml`'s `[package.metadata.deb] extended-description` and
-   `packaging/com.github.kenansalar.melodia.metainfo.xml` both carry it, and both are
-   already published to distro repositories. The honest wording is local-first with an
-   optional radio section, not silence.
+8. **The shipped product description** — ✅ **done in Phase 5**, pulled forward because D15
+   defaults the toggle off *because* of that blurb, so leaving it standing while a doc comment
+   cited it was the two-copies failure in its purest form. `Cargo.toml`'s
+   `[package.metadata.deb] extended-description` and
+   `packaging/com.github.kenansalar.melodia.metainfo.xml` both carry it. What is left here is
+   re-reading it once the feature is whole.
 
 **Gates.** All three, plus a release build once.
 
@@ -1096,7 +1170,9 @@ Answer before Phase 6, not before Phase 1.
 2. **Does the favorite toggle also vote?** The API separates the two and voting is a
    deliberate act. Recommendation: no, with an explicit vote action on the station detail.
 3. **Is the station history a sort of the Favorites tab or its own section within it?**
-   D5 rules out a third tab; both remaining options fit.
+   ✅ **Neither — its own tab**, and D5 was amended to allow it. Both options this question
+   offered are over the favorites, which is the one set a played-but-unstarred station is not
+   in; the argument is at D5.
 4. **Does a card click play the station or open its detail?** ⚠️ **Plays, until Phase 8.**
    Every other card in the tree drills in and plays from a hover control, so consistency
    says drill, and there is nothing to drill into yet. Radio-first apps split anyway:

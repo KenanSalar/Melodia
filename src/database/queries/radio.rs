@@ -5,7 +5,7 @@ use crate::error::AppError;
 
 /// The columns [`save_station`] writes, in bind order.
 const INSERT_COLUMNS: &str = "station_uuid, name, stream_url, homepage, favicon_url, tags,
-    country_code, language, codec, bitrate, hls, sort_key, date_added";
+    country, country_code, language, codec, bitrate, hls, sort_key, date_added";
 
 /// What a re-import is allowed to touch: the directory's own fields and nothing
 /// else. `is_favorite`, `play_count`, `last_played` and `date_added` are the
@@ -19,6 +19,7 @@ const DIRECTORY_CONFLICT: &str = "\
         homepage = excluded.homepage,
         favicon_url = excluded.favicon_url,
         tags = excluded.tags,
+        country = excluded.country,
         country_code = excluded.country_code,
         language = excluded.language,
         codec = excluded.codec,
@@ -49,7 +50,7 @@ pub async fn save_station(
 
     let sql = format!(
         "INSERT INTO radio_stations ({INSERT_COLUMNS})
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          {conflict}
          RETURNING *"
     );
@@ -60,6 +61,7 @@ pub async fn save_station(
         .bind(&station.homepage)
         .bind(&station.favicon_url)
         .bind(&station.tags)
+        .bind(&station.country)
         .bind(&station.country_code)
         .bind(&station.language)
         .bind(&station.codec)
@@ -109,6 +111,51 @@ pub async fn get_recent_stations(
     .bind(limit)
     .fetch_all(db.read())
     .await?)
+}
+
+/// Rewrite the fields a hand-typed station's editor owns.
+///
+/// Narrower than [`save_station`] on purpose: that one is the directory's door
+/// and would need a `NewRadioStation` the caller has no uuid, tags, country or
+/// homepage for. `sort_key` is re-derived here because it is the name's shadow
+/// and a rename that left it standing would sort the station under its old one.
+pub async fn update_station(
+    db: &DbPool,
+    id: i64,
+    name: &str,
+    stream_url: &str,
+    codec: &str,
+    bitrate: i32,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "UPDATE radio_stations
+         SET name = ?, stream_url = ?, codec = ?, bitrate = ?, sort_key = ?
+         WHERE id = ?",
+    )
+    .bind(name)
+    .bind(stream_url)
+    .bind(codec)
+    .bind(bitrate)
+    .bind(to_natural_sort_key(name))
+    .bind(id)
+    .execute(db.write())
+    .await?;
+    Ok(())
+}
+
+/// Whether any station already streams from `stream_url`.
+///
+/// The import's duplicate guard, and it has to be a query: a hand-typed station
+/// carries no `station_uuid`, and `SQLite` treats NULLs as distinct under
+/// `UNIQUE`, so the constraint that stops a directory station arriving twice
+/// says nothing at all about this one.
+pub async fn station_exists_with_url(db: &DbPool, stream_url: &str) -> Result<bool, AppError> {
+    let found: Option<i64> =
+        sqlx::query_scalar("SELECT id FROM radio_stations WHERE stream_url = ? LIMIT 1")
+            .bind(stream_url)
+            .fetch_optional(db.read())
+            .await?;
+    Ok(found.is_some())
 }
 
 pub async fn set_favorite(db: &DbPool, id: i64, favorite: bool) -> Result<(), AppError> {

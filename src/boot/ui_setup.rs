@@ -69,8 +69,8 @@ pub fn install_backdrop_dither(app: &AppWindow) {
 }
 
 /// The per-view handles `install_views` hands back for the wiring `main()` still
-/// owns: the initial fetches, the playlist import/export pills (which need the
-/// notifications stack), and the `cover_thumbs` consumers.
+/// owns: the initial fetches, the playlist and station import/export pills
+/// (which need the notifications stack), and the `cover_thumbs` consumers.
 ///
 /// Only handles a *caller* reads live here. `BrowseUi` / `FavoritesUi` /
 /// `RecentlyPlayedUi` / `SearchUi` deliberately don't: every wired closure
@@ -84,6 +84,7 @@ pub struct UiHandles {
     pub artists_ui: Arc<ui::artists::ArtistsUi>,
     pub genres_ui: Arc<ui::genres::GenresUi>,
     pub playlists_ui: Arc<ui::playlists::PlaylistsUi>,
+    pub radio_ui: Arc<ui::radio::RadioUi>,
 }
 
 /// Resolve every `TrackListRowItem` thumbnail — all track tables, all views —
@@ -265,6 +266,7 @@ pub fn install_views(
         artists_ui,
         genres_ui,
         playlists_ui,
+        radio_ui,
     }
 }
 

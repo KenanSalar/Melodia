@@ -1,6 +1,7 @@
-use crate::entities::radio::{DirectoryStation, StationPage};
+use crate::entities::radio::{DirectoryStation, RadioStation, StationPage};
+use crate::error::AppError;
 
-use super::hide_hls;
+use super::{ensure_editable, hide_hls, resolve_station_name};
 
 /// One directory row, segmented or not. Spelled out rather than defaulted: `DirectoryStation` has
 /// no `Default`, a station with no uuid and no URL being one nothing may keep.
@@ -85,5 +86,67 @@ fn a_station_that_cannot_be_reached_is_still_counted_as_played() {
         ),
         "`play_station` must count the play before it opens the stream, or a station that is down \
          today never reaches the recents list that would let the user find it again"
+    );
+}
+
+/// A station carrying a `station_uuid` and one without, and nothing else that matters here.
+fn stored(station_uuid: Option<&str>) -> RadioStation {
+    RadioStation {
+        id: 1,
+        station_uuid: station_uuid.map(str::to_owned),
+        name: "Test Station".to_owned(),
+        stream_url: "https://example.test/stream".to_owned(),
+        homepage: None,
+        favicon_url: None,
+        artwork_path: None,
+        tags: String::new(),
+        country: String::new(),
+        country_code: String::new(),
+        language: String::new(),
+        codec: String::new(),
+        bitrate: 0,
+        hls: false,
+        is_favorite: true,
+        sort_key: "test station".to_owned(),
+        date_added: "2026-08-21T00:00:00.000+00:00".to_owned(),
+        last_played: None,
+        play_count: 0,
+    }
+}
+
+/// The gate exists because the *revert* it prevents is silent: the edit commits, the card shows
+/// the new name, and the next play of that station rewrites both fields from the directory with
+/// nothing on screen naming the cause. The card only offers Edit on a custom station, so this is
+/// the half that holds when a second surface asks.
+#[test]
+fn only_a_hand_typed_station_can_be_edited() {
+    assert!(ensure_editable(&stored(None)).is_ok(), "a station with no uuid is the user's own");
+    assert!(
+        matches!(ensure_editable(&stored(Some("uuid-1"))), Err(AppError::Validation(_))),
+        "a browsed station must be refused, and as a `Validation` — the form maps that arm onto \
+         the line that says why rather than onto the generic save failure"
+    );
+}
+
+/// Three ways a station ends up named, in the order they win. The host fallback is what stops a
+/// row being titled with a whole stream URL, which is unreadable in a card and sorts under
+/// `https`; the middle arm is the only reason a blank name field is worth offering at all.
+#[test]
+fn a_station_takes_the_best_name_on_offer() {
+    let url = "https://stream.example.test:8000/live?token=abc";
+
+    assert_eq!(resolve_station_name("  My Station  ", Some("Server Name"), url), "My Station");
+    assert_eq!(resolve_station_name("", Some("  Server Name "), url), "Server Name");
+    assert_eq!(resolve_station_name("   ", None, url), "stream.example.test");
+    assert_eq!(
+        resolve_station_name("", Some("   "), url),
+        "stream.example.test",
+        "a server that sends a blank name has not named itself"
+    );
+    assert_eq!(
+        resolve_station_name("", None, "not a url"),
+        "not a url",
+        "an unparseable URL has no host to fall back to, and losing the text entirely would \
+         leave the row with no name at all"
     );
 }

@@ -27,6 +27,10 @@ pub struct RadioStation {
     pub artwork_path: Option<String>,
     /// The directory's free-form comma-separated tags, stored verbatim.
     pub tags: String,
+    /// The country's full name, which is what a card shows. Stored beside
+    /// [`Self::country_code`] rather than derived from it: the directory hands
+    /// both over, and deriving would mean shipping an ISO table.
+    pub country: String,
     pub country_code: String,
     pub language: String,
     pub codec: String,
@@ -60,6 +64,7 @@ pub struct NewRadioStation {
     pub homepage: Option<String>,
     pub favicon_url: Option<String>,
     pub tags: String,
+    pub country: String,
     pub country_code: String,
     pub language: String,
     pub codec: String,
@@ -85,8 +90,8 @@ pub struct DirectoryStation {
     pub homepage: Option<String>,
     pub favicon_url: Option<String>,
     pub tags: String,
-    /// The country's full name, which the table has no column for. The code is
-    /// what filters; this is what a card shows.
+    /// The country's full name. The code is what filters; this is what a card
+    /// shows.
     pub country: String,
     pub country_code: String,
     /// The country subdivision, in the directory's own spelling.
@@ -130,6 +135,7 @@ impl DirectoryStation {
             homepage: self.homepage.clone(),
             favicon_url: self.favicon_url.clone(),
             tags: self.tags.clone(),
+            country: self.country.clone(),
             country_code: self.country_code.clone(),
             language: self.language.clone(),
             codec: self.codec.clone(),

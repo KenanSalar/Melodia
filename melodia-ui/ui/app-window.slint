@@ -13,7 +13,7 @@ import { Albums, AlbumDetail } from "globals/albums.slint";
 import { Artists, ArtistDetail } from "globals/artists.slint";
 import { Equalizer, ReplayGain, Visualizer } from "globals/audio.slint";
 import { Favorites, RecentlyPlayed } from "globals/curated.slint";
-import { SmartEditor, TagEditor, ScrobbleUi } from "globals/dialog-forms.slint";
+import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "globals/dialog-forms.slint";
 import { Dialog } from "globals/dialog.slint";
 import { Genres, GenreDetail } from "globals/genres.slint";
 import { HeroBackdrop } from "globals/hero-backdrop.slint";
@@ -60,7 +60,7 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers, Radio,
+    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers, Radio, RadioForm,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
@@ -309,10 +309,10 @@ export component AppWindow inherits Window {
         active-changed(active) => { RecentlyPlayed.section-active-changed(active); }
     }
 
-    // Radio. **One gate for both tabs**, the Favorites / Recently Played shape rather than My
+    // Radio. **One gate for all three tabs**, the Favorites / Recently Played shape rather than My
     // Library's per-tab set: those five were five sidebar sections with five hooks, where these
-    // two share a handle. It also has to be one — a per-tab gate makes a tab flip a section leave,
-    // and Browse holds a directory answer this session paid a network round trip for.
+    // three share a handle. It also has to be one — a per-tab gate makes a tab flip a section
+    // leave, and Browse holds a directory answer this session paid a network round trip for.
     SectionActiveGate {
         index: 10;
         mini-active: mini-switch.active;

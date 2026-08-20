@@ -11,6 +11,7 @@ use crate::{AppWindow, Nav, Radio};
 pub enum RadioTab {
     Browse,
     Favorites,
+    Recent,
 }
 
 /// Resolve a `Radio.tab-idx` value against the global's own `tab-*` constants. UI thread only —
@@ -21,6 +22,8 @@ pub enum RadioTab {
 pub fn tab_from_index(g: &Radio<'_>, idx: i32) -> RadioTab {
     if idx == g.get_tab_favorites() {
         RadioTab::Favorites
+    } else if idx == g.get_tab_recent() {
+        RadioTab::Recent
     } else {
         RadioTab::Browse
     }
@@ -40,7 +43,7 @@ pub fn section_is_up(ui: &AppWindow) -> bool {
 /// tab's model gets filled, so the tab has to be the restored one by then rather than the
 /// global's declared `0`.
 ///
-/// The five-gates ordering argument is My Library's, not this page's: one gate for both tabs
+/// The five-gates ordering argument is My Library's, not this page's: one gate for every tab
 /// means the section shadow reads the nav index and never the tab.
 ///
 /// Stateless, like My Library's: there is no handle to seed at that point.

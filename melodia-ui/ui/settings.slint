@@ -394,6 +394,42 @@ export global Settings {
         return @tr("Couldn't write the playlist files.");
     }
 
+    // The station list's own pair. Separate msgids rather than a shared "{n} items imported":
+    // a station is not a playlist, and the skipped line has no playlist equivalent.
+    pure callback station-import-title(int /*imported*/) -> string;
+    station-import-title(imported) => {
+        return @tr("{n} station added" | "{n} stations added" % imported);
+    }
+    pure callback station-import-message(int /*skipped*/) -> string;
+    station-import-message(skipped) => {
+        return @tr("{n} was already in your list." | "{n} were already in your list." % skipped);
+    }
+    pure callback station-import-failed-title() -> string;
+    station-import-failed-title => {
+        return @tr("Import failed");
+    }
+    pure callback station-import-failed-message() -> string;
+    station-import-failed-message => {
+        return @tr("Couldn't read any stations from the selected file(s).");
+    }
+
+    pure callback station-export-title(int /*exported*/) -> string;
+    station-export-title(exported) => {
+        return @tr("{n} station exported" | "{n} stations exported" % exported);
+    }
+    pure callback station-export-message(string /*path*/) -> string;
+    station-export-message(path) => {
+        return @tr("Saved to {}", path);
+    }
+    pure callback station-export-failed-title() -> string;
+    station-export-failed-title => {
+        return @tr("Export failed");
+    }
+    pure callback station-export-failed-message() -> string;
+    station-export-failed-message => {
+        return @tr("Couldn't write the station list.");
+    }
+
     // Titles for the generic backend-failure toasts coming through the
     // `services::toast` bridge, resolved by toast kind. The dynamic detail — a path or
     // an error message — rides on the body and is not translated.

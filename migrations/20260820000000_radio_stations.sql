@@ -24,6 +24,12 @@
 -- hls is stored rather than re-read from the directory because a favorited HLS
 -- station has left the directory behind. Symphonia has no MPEG-TS demuxer, so
 -- this column is the only thing left that can say the stream is unplayable.
+--
+-- country sits beside country_code because they answer different questions: the
+-- code is what the search endpoint filters on, the name is what a card shows.
+-- Deriving one from the other would mean shipping an ISO table for a string the
+-- directory already hands over, and a kept station rendering "DE" where the same
+-- card on Browse renders "Germany" reads as a bug.
 CREATE TABLE
     IF NOT EXISTS radio_stations (
         id INTEGER PRIMARY KEY,
@@ -34,6 +40,7 @@ CREATE TABLE
         favicon_url TEXT,
         artwork_path TEXT,
         tags TEXT NOT NULL DEFAULT '',
+        country TEXT NOT NULL DEFAULT '',
         country_code TEXT NOT NULL DEFAULT '',
         language TEXT NOT NULL DEFAULT '',
         codec TEXT NOT NULL DEFAULT '',

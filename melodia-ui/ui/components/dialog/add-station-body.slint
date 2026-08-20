@@ -1,0 +1,51 @@
+import { Theme } from "../../theme.slint";
+import { RadioForm } from "../../globals/dialog-forms.slint";
+import { LabeledInput } from "../labeled-input.slint";
+
+// Add or edit a station by URL. One body for both kinds — `RadioForm.edit-id` is the only
+// difference, and it belongs to the state rather than to the form.
+//
+// **No auto-focus on init**: calling `focus()` during the open re-enters Slint's property
+// evaluator and trips its recursion guard.
+export component AddStationBody inherits VerticalLayout {
+    spacing: Theme.pad-md;
+
+    LabeledInput {
+        label: @tr("Stream URL");
+        // Not translated: an example URL is the same in every locale, and a catalogue entry for
+        // one is an invitation to localize a hostname.
+        placeholder: "https://example.com/stream";
+        text <=> RadioForm.url;
+        accepted => {
+            if (RadioForm.url != "" && !RadioForm.busy) {
+                RadioForm.submit();
+            }
+        }
+    }
+
+    LabeledInput {
+        label: @tr("Name (optional)");
+        placeholder: @tr("Leave blank to use the station's own name");
+        text <=> RadioForm.name;
+        accepted => {
+            if (RadioForm.url != "" && !RadioForm.busy) {
+                RadioForm.submit();
+            }
+        }
+    }
+
+    // Says what the wait is for. The submit is a real connect, not a save, and a dialog that
+    // simply sat there for a few seconds would read as stuck.
+    if RadioForm.busy: Text {
+        text: @tr("Checking the stream…");
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+    }
+
+    if RadioForm.error != "": Text {
+        text: RadioForm.error;
+        color: Theme.danger;
+        font-size: Theme.font-size-sm;
+        wrap: word-wrap;
+    }
+}
