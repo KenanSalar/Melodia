@@ -66,3 +66,116 @@ pub struct NewRadioStation {
     pub bitrate: i32,
     pub hls: bool,
 }
+
+/// A station as the directory describes it, before it is anybody's row.
+///
+/// Separate from [`RadioStation`] rather than a half-filled one because the two
+/// know different things. The directory knows how popular a station is and
+/// whether its own last check reached it, none of which the table has a column
+/// for; the table's id, stored logo, sort key and play stats mean nothing until
+/// the user keeps the station. Keeping the wire shape out of `src/ui/` is the
+/// other half of it: a callback names this and never `services::radio_browser`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DirectoryStation {
+    pub station_uuid: String,
+    pub name: String,
+    /// Already followed past any `.pls`/`.m3u` indirection — the directory
+    /// resolves its own stations, so this is playable as it stands.
+    pub stream_url: String,
+    pub homepage: Option<String>,
+    pub favicon_url: Option<String>,
+    pub tags: String,
+    /// The country's full name, which the table has no column for. The code is
+    /// what filters; this is what a card shows.
+    pub country: String,
+    pub country_code: String,
+    pub state: String,
+    pub language: String,
+    pub codec: String,
+    /// Advertised kbps, `0` where the directory does not know. The same display
+    /// hint as [`RadioStation::bitrate`], and zero on enough live stations that
+    /// nothing may divide by it without a fallback.
+    pub bitrate: i32,
+    pub hls: bool,
+    pub votes: i64,
+    pub click_count: i64,
+    /// Whether the directory's own last reachability check passed.
+    pub last_check_ok: bool,
+}
+
+impl DirectoryStation {
+    /// Project onto the save input, dropping the popularity figures the table
+    /// does not keep.
+    pub fn to_new_station(&self) -> NewRadioStation {
+        NewRadioStation {
+            station_uuid: Some(self.station_uuid.clone()),
+            name: self.name.clone(),
+            stream_url: self.stream_url.clone(),
+            homepage: self.homepage.clone(),
+            favicon_url: self.favicon_url.clone(),
+            tags: self.tags.clone(),
+            country_code: self.country_code.clone(),
+            language: self.language.clone(),
+            codec: self.codec.clone(),
+            bitrate: self.bitrate,
+            hls: self.hls,
+        }
+    }
+}
+
+/// One entry of a directory facet list, and how many stations carry it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Facet {
+    pub name: String,
+    /// The ISO code where the list has one. Tags and codecs are their own key,
+    /// so it is `None` and `name` is what filters.
+    pub code: Option<String>,
+    pub station_count: i64,
+}
+
+/// Which facet list to fetch.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum FacetKind {
+    Countries,
+    Languages,
+    Tags,
+    Codecs,
+}
+
+/// How to order a directory search.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SearchOrder {
+    Name,
+    Votes,
+    /// The directory's own answer to what people actually listen to, and what an
+    /// empty query sorts by.
+    #[default]
+    ClickCount,
+    Bitrate,
+    Random,
+}
+
+/// A directory query, filled in by the caller and turned into request parameters
+/// by `services::radio_browser`.
+///
+/// `Default` is the first screen with nothing typed: most-clicked first, one
+/// page, no filters.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StationSearch {
+    /// Substring match on the station name. Empty is no name filter.
+    pub name: String,
+    pub country_code: String,
+    pub language: String,
+    /// Every tag has to match, not any.
+    pub tags: Vec<String>,
+    pub codec: String,
+    /// Advertised kbps floor. `0` is no floor, which is not the same as asking
+    /// for zero: a large share of live stations advertise exactly that.
+    pub bitrate_min: u32,
+    /// Direction is the order's own, so there is no flag for it here.
+    pub order: SearchOrder,
+    pub offset: u32,
+    /// `0` takes the client's page size. Never sent absent — the API's own
+    /// default is the entire directory.
+    pub limit: u32,
+}

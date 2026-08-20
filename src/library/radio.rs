@@ -1,17 +1,19 @@
 //! Radio library API, and the only door the UI has onto stations.
 //!
-//! Thin wrappers over `queries::radio` today. Phase 2's radio-browser.info
-//! searches land in this same module rather than beside it, so a callback never
-//! has to know whether the local table or the network answered, and so the
-//! toggle that turns radio off has one place to guard.
+//! The stored table and the radio-browser.info directory answer through the same
+//! module rather than side by side, so a callback never has to know which one
+//! did, and so the toggle that turns radio off has one place to guard.
 //!
 //! Writes here deliberately do not bump `library_changed_tx`. Its subscribers
 //! are the library views, none of which shows a station; the Radio section
 //! refreshes through its own global.
 
+use std::sync::Arc;
+
 use crate::database::queries;
 use crate::entities::radio;
 use crate::error::AppError;
+use crate::services::radio_browser;
 use crate::state::AppState;
 
 /// How far back the recently-played station list reaches.
@@ -66,4 +68,22 @@ pub async fn set_artwork(
     artwork_path: Option<&str>,
 ) -> Result<(), AppError> {
     queries::radio::set_artwork(&state.db, id, artwork_path).await
+}
+
+/// Search the directory. Results are a network answer with a shelf life and are
+/// never written to the table; one becomes a row when the user keeps or plays it.
+pub async fn search(
+    state: &AppState,
+    search: &radio::StationSearch,
+) -> Result<Vec<radio::DirectoryStation>, AppError> {
+    radio_browser::search(state.http_client(), search).await
+}
+
+/// One of the directory's facet lists, for the filter chips. Large and
+/// near-static, so it is fetched once per session and shared thereafter.
+pub async fn facets(
+    state: &AppState,
+    kind: radio::FacetKind,
+) -> Result<Arc<[radio::Facet]>, AppError> {
+    radio_browser::facets(state.http_client(), kind).await
 }

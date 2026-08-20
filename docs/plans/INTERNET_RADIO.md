@@ -243,7 +243,7 @@ way `fold_retired_nav_index` already folds 4 through 7.
 | Path | Owns |
 |---|---|
 | `migrations/20260820000000_radio_stations.sql` | The one table. Branch-local until merge, so fold changes into it rather than adding a second |
-| `src/entities/radio.rs` | `RadioStation` (the row) and `NewRadioStation` (the save input). No Slint-shaped DTO: that is `models.slint`'s, per Phase 1's note |
+| `src/entities/radio.rs` | `RadioStation` (the row), `NewRadioStation` (the save input), and the directory's boundary types: `DirectoryStation`, `Facet`, `FacetKind`, `StationSearch`, `SearchOrder`. No Slint-shaped DTO: that is `models.slint`'s, per Phase 1's note |
 | `src/database/queries/radio.rs` | Every SQL statement touching `radio_stations` |
 | `src/library/radio.rs` | The facade: favorites, custom stations, history, and the directory calls the UI needs |
 | `src/services/radio_browser/mod.rs` | Mirror discovery, the shared client's request builder, error mapping |
@@ -349,9 +349,11 @@ The things that are silent when missed. Each is checked off in the phase that ow
       dependency add, and `cargo tree -i reqwest` shows one version. `stream-download`'s
       default features pull `reqwest/default-tls`, which is OpenSSL on Linux and changes
       what `cargo-deb`'s `$auto` resolves to.
-- [ ] Every directory filter has a test asserting an excluded value is **absent**, not just
-      that rows came back. An unknown query parameter is dropped silently, so a
-      misspelled filter reads as a working one (`bitrateMin`, Phase 2).
+- [x] Every directory filter's parameter **name** is pinned by a test. An unknown query
+      parameter is dropped silently, so a misspelled filter reads as a working one.
+      Asserting that an excluded *value* is absent would take a live call and the tree has
+      no network tests, so the observed evidence for `bitrateMin` lives in that test's doc
+      comment instead (Phase 2).
 - [ ] Nothing calls `StreamDownload::new_http`; the stream goes through `HttpStream::new`
       with the shared-client newtype, or the ICY header and the User-Agent are both lost.
 - [ ] A rebuffer does not flip MPRIS to Stopped or clear Discord presence (Phase 3, step 5).
@@ -407,61 +409,83 @@ ledger pin was mutation-checked: dropping the radio arm from `REFERENCED_PATHS` 
 
 ---
 
-## Phase 2: The directory client
+## Phase 2: The directory client ✅ landed
 
-**Goal.** `library::radio::search(...)` returns stations from radio-browser.info. Still no
-UI and no audio.
+`library::radio::search(...)` returns stations from radio-browser.info and
+`library::radio::facets(...)` the four lists Phase 6's filter chips are built from. Still
+no UI and no audio.
 
-1. `src/services/radio_browser/mod.rs`:
-   - Mirror discovery per D1: one `GET /json/servers` against
-     `https://all.api.radio-browser.info`, random pick, cached in a `OnceLock` for the
-     session, hard-coded fallback on failure.
-   - All requests through `services::build_http_client`. Its ten-second connect timeout
-     and per-read deadline are already what this wants.
-   - Errors map to `AppError::network(msg, source)`, never a flattened `format!("{e}")`.
+Shipped: `src/services/radio_browser/{mod,model,query}.rs` with their three test files,
+the five boundary types in `src/entities/radio.rs`, and the two facade functions.
+**No new dependency** — `reqwest`'s `json` and `query` features, `serde_json`, `rand` and
+`tokio`'s `sync` were all already direct deps.
 
-2. `model.rs`: the station JSON, deserialized with `#[serde(default)]` throughout. The API
-   sends `null` for several fields and adds new ones without notice. Fields worth
-   carrying: `stationuuid`, `name`, `url_resolved` (prefer over `url`), `homepage`,
-   `favicon`, `tags`, `country`, `countrycode`, `state`, `language`, `codec`, `bitrate`,
-   `hls`, `votes`, `clickcount`, `lastcheckok`, `ssl_error`.
+What later phases reach for:
 
-   **`bitrate` is `0` on a large share of live stations**, including well-ranked ones, so
-   it is a display hint and never an input to a calculation without a fallback. Phase 3's
-   prefetch sizing is the caller that would otherwise divide by it. `ssl_error` is the
-   directory's own record of a station whose TLS is broken, which is cheaper to filter on
-   than to discover at play time.
+- **`DEFAULT_PAGE_LIMIT`, `TAG_FACET_LIMIT` and `FACET_LIMIT`** in `query.rs`, each argued
+  at its definition. Paging is `StationSearch::offset` plus `limit`.
+- **`DirectoryStation::to_new_station()`**, Phase 7's bridge from a browsed station to a
+  kept one.
+- **Facet lists cached per session** in four `tokio::sync::OnceCell`s and handed out as
+  `Arc<[Facet]>`, so re-entering the section costs nothing.
+- **`bitrate` is `0` on a large share of live stations**, the most-clicked station in the
+  world included, so it is a display hint and never an input to a calculation without a
+  fallback. Phase 3's prefetch sizing is the caller that would otherwise divide by it, and
+  it should lead with `IcyHeaders::bitrate()` rather than this field.
 
-3. `query.rs`: `/json/stations/search` with `name`, `country`, `countrycode`, `state`,
-   `language`, `tag`, `codec`, `bitrateMin`, `bitrateMax`, `order`, `reverse`, `offset`,
-   `limit`, `hidebroken=true`. Plus `/json/stations/topvote` and `/json/stations/topclick`
-   for the empty-query default, and `/json/countries`, `/json/languages`, `/json/tags` for
-   the facet lists (all four facet endpoints answer 200, `/json/codecs` included).
+**Four things the live API does that this section did not say.** Each was verified against
+`de1.api.radio-browser.info` and each is now pinned by a test:
 
-   **`bitrateMin` is camelCase and the API does not tell you when you get it wrong.** An
-   unrecognised parameter is dropped, not rejected, so `bitratemin=320` returns a full page
-   of 128 kbps stations and the filter looks like it works. Verified against the live API
-   on 2026-08-20: `bitrateMin=320` returned 320 and above, `bitratemin=320` returned 32,
-   128 and 192. Every filter this feature ships needs one assertion that a value it
-   excludes is actually absent, not merely that results came back. Same shape for
-   `bitrateMax`.
+- **`/json/tags` caps at 1000 by default** against 11,943 tags, and orders alphabetically,
+  so the first entry it returns is `"bob"`. "`limit` is not optional in practice" is
+  therefore true of the facet endpoints too, and a usable tag list needs
+  `order=stationcount&reverse=true`. Countries (241), languages (649) and codecs (11) fit
+  whole; tags take the popular head.
+- **`topvote` and `topclick` are `search` with an `order`.** `order=clickcount&reverse=true`
+  returns the identical head, so the two extra endpoints this section listed were dropped
+  rather than built: one request builder, one response path, one set of tests.
+- **Station names arrive padded** (`"\tArrow Classic Rock"`), and the directory holds
+  duplicate stations under distinct uuids. Trimming is in the wire-to-entity conversion.
+- **There is no `hls` search parameter**, so D13's filter is client-side. This phase
+  carries the field; Phase 6 owns the filter, and inherits that a client-side drop
+  shortens a page.
 
-   **`limit` is not optional in practice.** Its documented default is 100,000, so a search
-   that forgets it asks for the whole directory. Send it on every call, paging included.
+**Three deviations from this section as first drafted:**
 
-4. Click and vote: `/json/url/{uuid}` is what the API asks be called on every play, and it
-   is what keeps the popularity ordering meaningful for everyone. `/json/vote/{uuid}`
-   backs an explicit user action only. **Both are deduplicated server-side**, a click once
-   per IP per station per day and a vote once per IP per station per ten minutes, so
-   neither needs a client-side debounce and a repeated call is not an error to report.
+- **The directory answers with `entities::radio::DirectoryStation`, not the wire struct.**
+  It carries the facts the table has no column for (`votes`, `click_count`, `state`, the
+  country's full name, `last_check_ok`) and none of the six that mean nothing before a row
+  exists. `services::radio_browser::model` stays private, which is what keeps `src/ui/`
+  from ever naming it (D14). `ssl_error` is deliberately not carried: nothing filters on
+  it yet, and `hidebroken=true` already excludes most of what it would catch.
+- **Direction belongs to the order, so `StationSearch` has no `reverse`.** Every
+  popularity order wants the top of the list and alphabetical wants A, so a caller-set
+  flag could only ever go one way per order; and `Default` would have had to contradict
+  itself, claiming most-clicked-first while `bool::default()` said ascending.
+- **Click and vote are not here.** Nothing calls them until Phase 6 (play) and Phase 8
+  (the detail's vote action), and each wants its opt-out landing beside it. Their failure
+  shapes are verified and **asymmetric, which is the part worth carrying forward**:
+  `/json/url/{uuid}` reports an unknown station as **HTTP 404 with a zero-length body**,
+  so it is checked on status and never parsed, while `/json/vote/{uuid}` reports one as
+  **HTTP 200 with `{"ok":false,"message":…}`**, so it is checked on the body and never on
+  status. Both are deduplicated server-side, a click once per IP per station per day and a
+  vote once per ten minutes, so neither needs a client-side debounce and a repeated call
+  is not an error to report.
 
-5. Facet lists are cached in memory for the session. They are large and near-static.
+**What Phase 5 inherits.** Every directory call and the facet cache sit behind the two
+facade functions and `services::radio_browser` is named nowhere else, so D15's guard is
+one early return per function. There is deliberately no `directory_client` seam yet: a
+helper that can only return `Ok` trips `clippy::unnecessary_wraps`, so it arrives with the
+guard that gives it a reason to be fallible.
 
-**Gates.** Same three. Tests are offline: deserialization against captured fixtures,
-query-string construction, mirror fallback. No test hits the network.
-
-**Done when.** A throwaway `#[ignore]`d test or a scratch binary prints real search
-results, and `cargo tree -i native-tls` is still empty.
+**Gates run:** fmt, `clippy -p Melodia --all-targets --locked -- -D warnings`, full
+`cargo test` (1822 unit + 16 integration, green; 30 new). `cargo tree -i native-tls` and
+`-i openssl-sys` are both empty and `reqwest` resolves to a single copy, which is the
+baseline Phase 3's dependency add has to preserve. Two pins were mutation-checked:
+spelling `bitrateMin` lowercase fails `the_minimum_bitrate_filter_is_camel_case`, and
+dropping the dedupe in `model::hosts` fails both
+`both_address_families_of_one_mirror_collapse_to_one_host` and
+`distinct_mirrors_all_survive`.
 
 ---
 
