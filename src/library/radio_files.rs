@@ -73,7 +73,7 @@ pub async fn import_stations_from_file(
 
     let mut result = ImportStationsResult::default();
     for entry in parse(&body) {
-        if queries::radio::station_exists_with_url(&state.db, &entry.url).await? {
+        if queries::radio::station_id_with_url(&state.db, &entry.url).await?.is_some() {
             result.skipped = result.skipped.saturating_add(1);
             continue;
         }
@@ -185,6 +185,10 @@ fn parse(body: &str) -> Vec<StationEntry> {
 }
 
 /// The display title out of an `#EXTINF:` payload — everything past the first comma.
+///
+/// The *first*, so a title carrying commas survives round-tripping through [`serialize`]. It also
+/// means an HLS-style attribute list (`-1 tvg-name="A,B",Title`) truncates at the attribute's own
+/// comma — not worth a parser for, station lists being the one dialect that doesn't use them.
 fn extinf_title(payload: &str) -> Option<String> {
     let (_duration, title) = payload.split_once(',')?;
     let title = title.trim();

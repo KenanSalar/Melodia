@@ -7,7 +7,7 @@ use crate::error::AppError;
 
 use super::{
     delete_station, get_favorite_stations, get_recent_stations, get_station_by_id, mark_played,
-    save_station, set_artwork, set_favorite, station_exists_with_url, update_station,
+    save_station, set_artwork, set_favorite, station_id_with_url, update_station,
 };
 
 fn directory_station(uuid: &str, name: &str) -> radio::NewRadioStation {
@@ -199,9 +199,11 @@ async fn every_column_a_save_binds_comes_back_where_it_was_put() -> Result<(), A
     Ok(())
 }
 
-/// The editor rewrites four columns and re-derives a fifth. `sort_key` is the one worth pinning:
-/// it is the name's shadow and the list is ordered by it, so a rename that left it standing sorts
-/// the station under a name nothing on screen shows any more.
+/// The editor rewrites seven columns and re-derives an eighth. `sort_key` is the one worth
+/// pinning: it is the name's shadow and the list is ordered by it, so a rename that left it
+/// standing sorts the station under a name nothing on screen shows any more. The rest of the set
+/// is what a moved URL replaces — a station repointed at a new mount that kept the old one's
+/// homepage link or logo URL looks right and sends the user somewhere else.
 #[tokio::test]
 async fn editing_a_station_moves_its_sort_key_with_its_name() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
@@ -209,11 +211,23 @@ async fn editing_a_station_moves_its_sort_key_with_its_name() -> Result<(), AppE
     set_favorite(&db, saved.id, true).await?;
     mark_played(&db, saved.id).await?;
 
-    update_station(&db, saved.id, "Alpha FM", "http://example.invalid/alpha", "AAC", 192).await?;
+    let edit = radio::StationEdit {
+        name: "Alpha FM".to_owned(),
+        stream_url: "http://example.invalid/alpha".to_owned(),
+        homepage: Some("https://alpha.invalid".to_owned()),
+        favicon_url: Some("https://alpha.invalid/logo.png".to_owned()),
+        tags: "jazz,lounge".to_owned(),
+        codec: "AAC".to_owned(),
+        bitrate: 192,
+    };
+    update_station(&db, saved.id, &edit).await?;
 
     let edited = get_station_by_id(&db, saved.id).await?;
     assert_eq!(edited.name, "Alpha FM");
     assert_eq!(edited.stream_url, "http://example.invalid/alpha");
+    assert_eq!(edited.homepage.as_deref(), Some("https://alpha.invalid"));
+    assert_eq!(edited.favicon_url.as_deref(), Some("https://alpha.invalid/logo.png"));
+    assert_eq!(edited.tags, "jazz,lounge");
     assert_eq!(edited.codec, "AAC");
     assert_eq!(edited.bitrate, 192);
     assert_eq!(edited.sort_key, "alpha fm", "the sort key did not follow the rename");
@@ -221,25 +235,36 @@ async fn editing_a_station_moves_its_sort_key_with_its_name() -> Result<(), AppE
     assert!(edited.is_favorite, "the edit un-favorited the station");
     assert_eq!(edited.play_count, 1, "the edit reset the play count");
     assert_eq!(edited.date_added, saved.date_added, "the edit re-dated the station");
+    assert!(
+        edited.artwork_path.is_none(),
+        "the stored logo is `set_artwork`'s column — the editor must not blank it as a side effect"
+    );
     Ok(())
 }
 
-/// The import's duplicate guard has to be a query rather than the `UNIQUE` constraint: a
-/// hand-typed station carries no `station_uuid`, and `SQLite` treats NULLs as distinct, so the
-/// constraint that stops a directory station arriving twice says nothing at all about this one.
-/// Without the guard, re-importing a list the user has grown duplicates everything already in it.
+/// The duplicate guard has to be a query rather than the `UNIQUE` constraint: a hand-typed station
+/// carries no `station_uuid`, and `SQLite` treats NULLs as distinct, so the constraint that stops a
+/// directory station arriving twice says nothing at all about this one. Without the guard,
+/// re-importing a list the user has grown duplicates everything already in it, and a re-pasted URL
+/// adds a second card nothing can tell apart.
+///
+/// The id rather than a bool is what lets the add merge onto the row it finds instead of refusing.
 #[tokio::test]
 async fn a_stream_url_already_kept_is_recognised_whether_or_not_it_has_a_uuid()
 -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let url = "http://example.invalid/one";
 
-    assert!(!station_exists_with_url(&db, url).await?, "an empty table matches nothing");
+    assert!(station_id_with_url(&db, url).await?.is_none(), "an empty table matches nothing");
 
-    save_station(&db, &custom_station("One", url)).await?;
-    assert!(station_exists_with_url(&db, url).await?);
+    let kept = save_station(&db, &custom_station("One", url)).await?;
+    assert_eq!(
+        station_id_with_url(&db, url).await?,
+        Some(kept.id),
+        "the caller merges onto this row, so it has to be the row that holds the URL"
+    );
     assert!(
-        !station_exists_with_url(&db, "http://example.invalid/other").await?,
+        station_id_with_url(&db, "http://example.invalid/other").await?.is_none(),
         "the match is on the whole URL, not a prefix of it"
     );
 
@@ -247,7 +272,7 @@ async fn a_stream_url_already_kept_is_recognised_whether_or_not_it_has_a_uuid()
     browsed.stream_url = "http://example.invalid/two".to_owned();
     save_station(&db, &browsed).await?;
     assert!(
-        station_exists_with_url(&db, "http://example.invalid/two").await?,
+        station_id_with_url(&db, "http://example.invalid/two").await?.is_some(),
         "a browsed station occupies its URL too — importing a file naming it must skip, not \
          add a second row nothing can tell apart"
     );

@@ -54,6 +54,47 @@ fn station_matches(station: &RadioStation, needle: &Needle) -> bool {
         || needle.contains(&station.codec)
 }
 
+/// The Favorites tab's sort, lifted off the global by whoever holds the UI thread.
+///
+/// A snapshot rather than a live read because the two prewarm sites are on a worker by the time
+/// they need it, and `Radio` is a Slint global. `None` is Recently Played, whose order is the
+/// query's.
+struct KeptSort {
+    field: String,
+    dir: SortDir,
+}
+
+impl KeptSort {
+    fn of(g: &Radio<'_>, tab: RadioTab) -> Option<Self> {
+        (tab == RadioTab::Favorites).then(|| Self {
+            field: g.get_sort_field().to_string(),
+            dir: SortDir::from_token(g.get_sort_dir().as_str()),
+        })
+    }
+}
+
+/// What a tab shows, in the order it shows it. The one walk the grid and the prewarm share, so
+/// neither can end up describing a list the other isn't drawing.
+fn in_display_order<'a>(state: &'a KeptState, sort: Option<&KeptSort>) -> Vec<&'a RadioStation> {
+    let mut matched: Vec<&RadioStation> = state.matches().collect();
+    if let Some(sort) = sort {
+        sort_stations(&mut matched, &sort.field, sort.dir);
+    }
+    matched
+}
+
+/// The logos a tab's visible list points at, in display order.
+///
+/// Order is what a prewarm spends its capacity on — it keeps the prefix the tier can hold — and
+/// the tier is shared with Browse, so a long kept list is not guaranteed the whole of it.
+fn warm_targets(radio_ui: &RadioUi, tab: RadioTab, sort: Option<&KeptSort>) -> Vec<String> {
+    let state = cache(radio_ui, tab).lock();
+    in_display_order(&state, sort)
+        .into_iter()
+        .filter_map(|station| station.artwork_path.clone())
+        .collect()
+}
+
 /// The cache a tab draws from.
 fn cache(radio_ui: &RadioUi, tab: RadioTab) -> &parking_lot::Mutex<KeptState> {
     match tab {
@@ -103,18 +144,14 @@ pub fn resolve(radio_ui: &RadioUi, tab: RadioTab, id: i64) -> Option<RadioStatio
 /// UI thread only.
 pub fn apply(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
     let g = ui.global::<Radio>();
+    // `None` on Recently Played, which takes the query's own order: newest first *is* the page.
+    let sort = KeptSort::of(&g, tab);
     let (station_rows, held): (Vec<_>, usize) = {
         let state = cache(radio_ui, tab).lock();
-        let mut matched: Vec<&RadioStation> = state.matches().collect();
-        // Recently Played takes the query's own order: newest first *is* the page.
-        if tab == RadioTab::Favorites {
-            sort_stations(
-                &mut matched,
-                g.get_sort_field().as_str(),
-                SortDir::from_token(g.get_sort_dir().as_str()),
-            );
-        }
-        let rows = matched.into_iter().map(rows::to_slint_kept_station_row).collect();
+        let rows = in_display_order(&state, sort.as_ref())
+            .into_iter()
+            .map(rows::to_slint_kept_station_row)
+            .collect();
         (rows, state.stations.len())
     };
 
@@ -173,10 +210,14 @@ fn sort_stations(stations: &mut [&RadioStation], field: &str, dir: SortDir) {
 /// set Browse fills its stars from. A separate `favorite_uuids` query used to answer the last on
 /// its own and was a second statement to keep true.
 pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
-    // Read on the way out: the background task cannot reach a Slint global, and a tab picked
-    // mid-fetch only means the warm targets the one that was up — the pick warms its own, and
-    // both tabs share the tier anyway.
-    let mounted = local_tab(&ui.global::<Radio>());
+    // Read on the way out, the sort with it: the background task cannot reach a Slint global, and
+    // a tab picked mid-fetch only means the warm targets the one that was up — the pick warms its
+    // own, and both tabs share the tier anyway.
+    let (mounted, sort) = {
+        let g = ui.global::<Radio>();
+        let mounted = local_tab(&g);
+        (mounted, mounted.and_then(|tab| KeptSort::of(&g, tab)))
+    };
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), ui.as_weak());
     state.runtime.spawn(async move {
         let favorites = match library::radio::get_favorites(&s).await {
@@ -202,7 +243,7 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
 
         paint_mounted(&weak, &ru);
         if let Some(tab) = mounted {
-            warm(&ru, &weak, tab).await;
+            warm(&ru, &weak, warm_targets(&ru, tab, sort.as_ref())).await;
         }
     });
 }
@@ -224,13 +265,9 @@ fn paint_mounted(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
 ///
 /// Nothing is downloaded: a kept station's logo was stored when it was kept, so this only ever
 /// reads files already on disk. The `spawn_blocking` is the decode, which must not sit on a
-/// worker — the same rule every grid tier follows.
-async fn warm(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, tab: RadioTab) {
-    let paths: Vec<String> = {
-        let state = cache(radio_ui, tab).lock();
-        state.matches().filter_map(|station| station.artwork_path.clone()).collect()
-    };
-
+/// worker — the same rule every grid tier follows. Paths arrive already ordered, since only a
+/// caller on the UI thread can read the sort they are ordered by.
+async fn warm(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, paths: Vec<String>) {
     let ru_warm = radio_ui.clone();
     // `Some(())` only once the decode reports the tier is still its own: a leave landing inside
     // the burst hands the buffers back, and announcing anyway would bump the generation over an
@@ -253,9 +290,11 @@ async fn warm(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, tab: RadioTab) {
 /// this paints and warms and asks for nothing.
 pub fn on_tab_entered(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, tab: RadioTab) {
     apply(ui, radio_ui, tab);
+    let sort = KeptSort::of(&ui.global::<Radio>(), tab);
+    let paths = warm_targets(radio_ui, tab, sort.as_ref());
     let (ru, weak) = (radio_ui.clone(), ui.as_weak());
     state.runtime.spawn(async move {
-        warm(&ru, &weak, tab).await;
+        warm(&ru, &weak, paths).await;
     });
 }
 

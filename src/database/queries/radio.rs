@@ -116,46 +116,50 @@ pub async fn get_recent_stations(
 /// Rewrite the fields a hand-typed station's editor owns.
 ///
 /// Narrower than [`save_station`] on purpose: that one is the directory's door
-/// and would need a `NewRadioStation` the caller has no uuid, tags, country or
-/// homepage for. `sort_key` is re-derived here because it is the name's shadow
-/// and a rename that left it standing would sort the station under its old one.
+/// and would need a `NewRadioStation` the caller has no uuid, country or
+/// language for, and it would reset the play stats through `RETURNING *`.
+/// `artwork_path` stays out too — the logo is a file the caller fetches, so it
+/// is `set_artwork`'s to point at. `sort_key` is re-derived here because it is
+/// the name's shadow and a rename that left it standing would sort the station
+/// under its old one.
 pub async fn update_station(
     db: &DbPool,
     id: i64,
-    name: &str,
-    stream_url: &str,
-    codec: &str,
-    bitrate: i32,
+    edit: &radio::StationEdit,
 ) -> Result<(), AppError> {
     sqlx::query(
         "UPDATE radio_stations
-         SET name = ?, stream_url = ?, codec = ?, bitrate = ?, sort_key = ?
+         SET name = ?, stream_url = ?, homepage = ?, favicon_url = ?, tags = ?,
+             codec = ?, bitrate = ?, sort_key = ?
          WHERE id = ?",
     )
-    .bind(name)
-    .bind(stream_url)
-    .bind(codec)
-    .bind(bitrate)
-    .bind(to_natural_sort_key(name))
+    .bind(&edit.name)
+    .bind(&edit.stream_url)
+    .bind(&edit.homepage)
+    .bind(&edit.favicon_url)
+    .bind(&edit.tags)
+    .bind(&edit.codec)
+    .bind(edit.bitrate)
+    .bind(to_natural_sort_key(&edit.name))
     .bind(id)
     .execute(db.write())
     .await?;
     Ok(())
 }
 
-/// Whether any station already streams from `stream_url`.
+/// The station already streaming from `stream_url`, if there is one.
 ///
-/// The import's duplicate guard, and it has to be a query: a hand-typed station
-/// carries no `station_uuid`, and `SQLite` treats NULLs as distinct under
-/// `UNIQUE`, so the constraint that stops a directory station arriving twice
-/// says nothing at all about this one.
-pub async fn station_exists_with_url(db: &DbPool, stream_url: &str) -> Result<bool, AppError> {
-    let found: Option<i64> =
-        sqlx::query_scalar("SELECT id FROM radio_stations WHERE stream_url = ? LIMIT 1")
-            .bind(stream_url)
-            .fetch_optional(db.read())
-            .await?;
-    Ok(found.is_some())
+/// The duplicate guard both hand-typed doors take, and it has to be a query: a
+/// hand-typed station carries no `station_uuid`, and `SQLite` treats NULLs as
+/// distinct under `UNIQUE`, so the constraint that stops a directory station
+/// arriving twice says nothing at all about this one. The id comes back rather
+/// than a bool because the add merges onto the row it finds; the import only
+/// asks whether there was one.
+pub async fn station_id_with_url(db: &DbPool, stream_url: &str) -> Result<Option<i64>, AppError> {
+    Ok(sqlx::query_scalar("SELECT id FROM radio_stations WHERE stream_url = ? LIMIT 1")
+        .bind(stream_url)
+        .fetch_optional(db.read())
+        .await?)
 }
 
 pub async fn set_favorite(db: &DbPool, id: i64, favorite: bool) -> Result<(), AppError> {

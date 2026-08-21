@@ -153,13 +153,15 @@ fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak
 /// Which of the form's three localized lines an error deserves.
 ///
 /// Resolved through the `err-*` callbacks rather than built in Rust: `@tr` folds msgids at
-/// codegen, so a sentence Rust pushed would render untranslated. The split is by stage —
-/// the connection, the decode, or the write — and each variant belongs to exactly one.
+/// codegen, so a sentence Rust pushed would render untranslated. The split is by stage — the
+/// connection, the decode, or the write.
 fn form_error(form: &RadioForm<'_>, error: &AppError) -> SharedString {
     match error {
         AppError::Network { .. } => form.invoke_err_unreachable(),
         AppError::Database(_) | AppError::Io(_) => form.invoke_err_save_failed(),
-        // `Player` is what the stream decoder refuses with, `Validation` what the facade does.
+        // `Player` is the decoder's own refusal and is what this arm is for. It also catches
+        // `ensure_editable`'s `Validation`, where the line reads wrong — unreachable, the card
+        // offering Edit only on a custom station.
         _ => form.invoke_err_not_audio(),
     }
 }

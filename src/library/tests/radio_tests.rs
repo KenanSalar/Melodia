@@ -1,7 +1,7 @@
 use crate::entities::radio::{DirectoryStation, RadioStation, StationPage};
 use crate::error::AppError;
 
-use super::{ensure_editable, hide_hls, resolve_station_name};
+use super::{ensure_editable, ensure_playable, hide_hls, resolve_station_name};
 
 /// One directory row, segmented or not. Spelled out rather than defaulted: `DirectoryStation` has
 /// no `Default`, a station with no uuid and no URL being one nothing may keep.
@@ -126,6 +126,34 @@ fn only_a_hand_typed_station_can_be_edited() {
         "a browsed station must be refused, and as a `Validation` — the form maps that arm onto \
          the line that says why rather than onto the generic save failure"
     );
+}
+
+/// Both play doors take the same gate. A segmented station can be starred out of Browse, so it
+/// reaches the kept tabs and is playable there by id — where the browsed refusal, being on the
+/// other door, says nothing at all. The card hides its play button either way; this is the half
+/// that holds when something else asks.
+#[test]
+fn a_segmented_station_is_refused_at_either_play_door() {
+    assert!(ensure_playable(false).is_ok());
+    assert!(
+        matches!(ensure_playable(true), Err(AppError::Validation(_))),
+        "Symphonia has no MPEG-TS demuxer, so this is a refusal rather than a decode failure"
+    );
+
+    let source = include_str!("../radio.rs");
+    for door in [
+        "pub async fn play_station",
+        "pub async fn play_directory_station",
+    ] {
+        let body = source
+            .split_once(door)
+            .and_then(|(_, rest)| rest.split_once("\n}\n"))
+            .map_or("", |(body, _)| body);
+        assert!(
+            body.contains("ensure_playable("),
+            "`{door}` reaches the decoder and must go through the gate"
+        );
+    }
 }
 
 /// Three ways a station ends up named, in the order they win. The host fallback is what stops a

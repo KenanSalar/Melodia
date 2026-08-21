@@ -133,11 +133,22 @@ pub(super) fn resolve_station_name(
 ///
 /// Starred on the way in, because a station is typed in for one reason. That is also what puts it
 /// in `get_favorite_stations`, which is why the kept list needs no query of its own.
+///
+/// **A URL already here merges onto its row rather than adding a second one**, which is the answer
+/// the other two doors already give: a browsed station can't duplicate (`station_uuid` is UNIQUE)
+/// and the import skips what it already holds. Without it a re-pasted URL spends a whole probe to
+/// produce a second identical card. The merge stars what it finds, so re-adding a station that was
+/// only ever played promotes it into the kept list.
 pub async fn add_custom_station(
     state: &AppState,
     stream_url: &str,
     name: &str,
 ) -> Result<i64, AppError> {
+    if let Some(id) = queries::radio::station_id_with_url(&state.db, stream_url).await? {
+        set_favorite(state, id, true).await?;
+        return Ok(id);
+    }
+
     let facts = probe_station(state, stream_url).await?;
     let station = radio::NewRadioStation {
         station_uuid: None,
@@ -178,10 +189,26 @@ fn ensure_editable(station: &radio::RadioStation) -> Result<(), AppError> {
     Err(AppError::Validation("Only a station you added by URL can be edited".to_owned()))
 }
 
+/// Refuse a segmented stream, whichever surface asked.
+///
+/// Symphonia has no MPEG-TS demuxer, so the card's badge is the honest half and this is the other.
+/// Both play doors take it: Browse reaches the decoder by row, the kept tabs by id, and a refusal
+/// on one of them only is a refusal a stale row walks around.
+fn ensure_playable(hls: bool) -> Result<(), AppError> {
+    if !hls {
+        return Ok(());
+    }
+    Err(AppError::Validation(
+        "This station streams in a segmented format Melodia cannot play yet".to_owned(),
+    ))
+}
+
 /// Rewrite a hand-typed station's name and URL.
 ///
 /// The probe runs only when the URL actually moved, so renaming a station that happens to be off
-/// air today still works.
+/// air today still works — and when it did move, **everything the old mount said about itself
+/// goes with it**, logo included. A repointed station keeping the previous brand's icon and
+/// homepage link is the failure `keep_station` already argues against on the directory's side.
 pub async fn update_custom_station(
     state: &AppState,
     id: i64,
@@ -190,16 +217,34 @@ pub async fn update_custom_station(
 ) -> Result<(), AppError> {
     let existing = get_station(state, id).await?;
     ensure_editable(&existing)?;
+    let moved = existing.stream_url != stream_url;
 
-    let (codec, bitrate) = if existing.stream_url == stream_url {
-        (existing.codec, existing.bitrate)
-    } else {
-        let facts = probe_station(state, stream_url).await?;
-        (facts.codec, facts.bitrate)
+    let mut edit = radio::StationEdit {
+        name: resolve_station_name(name, Some(existing.name.as_str()), stream_url),
+        stream_url: stream_url.to_owned(),
+        homepage: existing.homepage,
+        favicon_url: existing.favicon_url,
+        tags: existing.tags,
+        codec: existing.codec,
+        bitrate: existing.bitrate,
     };
 
-    let name = resolve_station_name(name, Some(existing.name.as_str()), stream_url);
-    queries::radio::update_station(&state.db, id, &name, stream_url, &codec, bitrate).await
+    let mut logo_url = None;
+    if moved {
+        let facts = probe_station(state, stream_url).await?;
+        logo_url = facts.logo_url.clone();
+        edit.homepage = facts.homepage;
+        edit.favicon_url = facts.logo_url;
+        edit.tags = facts.genre;
+        edit.codec = facts.codec;
+        edit.bitrate = facts.bitrate;
+    }
+
+    queries::radio::update_station(&state.db, id, &edit).await?;
+    if let Some(logo_url) = logo_url.as_deref() {
+        adopt_logo(state, id, logo_url).await;
+    }
+    Ok(())
 }
 
 /// Download a station's logo and point the row at it, or leave the row alone.
@@ -235,6 +280,10 @@ pub async fn mark_played(state: &AppState, id: i64) -> Result<(), AppError> {
 pub async fn play_station(state: &AppState, id: i64) -> Result<(), AppError> {
     ensure_enabled(state)?;
     let station = get_station(state, id).await?;
+    // Ahead of the count, unlike an unreachable stream: a station that is down today is exactly
+    // the one to find again, where a segmented one can never play at all and does not belong in a
+    // list of what to go back to.
+    ensure_playable(station.hls)?;
     let now_playing = RadioNowPlaying::from(&station);
     mark_played(state, id).await?;
     // Every play passes through here, whichever surface started it, so the directory's own
@@ -282,21 +331,15 @@ pub async fn set_directory_favorite(
 
 /// Tune to a browsed station, keeping it first.
 ///
-/// The refusal is the honest half of D13: the card already says an HLS station cannot play, and
-/// this is what stops a stale row or a second surface reaching the decoder with a stream
-/// Symphonia has no demuxer for. Checked before the row is written, so a click that cannot
-/// succeed also does not leave a station behind.
+/// [`ensure_playable`] runs before the row is written rather than inside [`play_station`], so a
+/// click that cannot succeed also does not leave a station behind.
 pub async fn play_directory_station(
     state: &AppState,
     station: &radio::DirectoryStation,
     logo: Option<&str>,
 ) -> Result<(), AppError> {
     ensure_enabled(state)?;
-    if station.hls {
-        return Err(AppError::Validation(
-            "This station streams in a segmented format Melodia cannot play yet".to_owned(),
-        ));
-    }
+    ensure_playable(station.hls)?;
     let saved = keep_station(state, station, logo).await?;
     play_station(state, saved.id).await
 }

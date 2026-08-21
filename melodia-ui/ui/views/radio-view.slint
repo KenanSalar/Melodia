@@ -6,8 +6,7 @@ import { LibraryTabBand } from "../components/hero/library-tab-band.slint";
 import { TooltipFrame } from "../components/tooltip-frame.slint";
 import { ViewTransition } from "../components/view-transition.slint";
 import { RadioBrowseTab } from "radio/browse-tab.slint";
-import { RadioFavoritesTab } from "radio/favorites-tab.slint";
-import { RadioRecentTab } from "radio/recent-tab.slint";
+import { KeptStationsTab } from "radio/kept-stations-tab.slint";
 import { RadioTabPills } from "radio/tab-pills.slint";
 
 // Radio: three tabs over the directory, the stations the user kept and the ones they played,
@@ -131,13 +130,20 @@ export component RadioView inherits Rectangle {
                 enter-from: band.tab-enter-from;
                 enabled: band.tab-anim-armed;
                 slide: !band.morphing;
-                RadioFavoritesTab {
+                // Everything starred out of Browse, plus everything typed in by hand — a custom
+                // station is starred on the way in, which is what lets one query answer the tab.
+                KeptStationsTab {
                     width: 100%;
                     height: 100%;
                     card-w: geom.card-w;
                     card-h: geom.card-h;
                     row-h: geom.row-h;
                     gap: root.grid-gap;
+                    rows: Radio.favorites-rows;
+                    count: Radio.favorites-count;
+                    empty-icon: "favorite";
+                    empty-title: @tr("No stations kept yet");
+                    empty-body: @tr("Star a station in Browse, or add one by URL.");
                 }
             }
             if Radio.tab-idx == Radio.tab-recent: ViewTransition {
@@ -146,13 +152,20 @@ export component RadioView inherits Rectangle {
                 enter-from: band.tab-enter-from;
                 enabled: band.tab-anim-armed;
                 slide: !band.morphing;
-                RadioRecentTab {
+                // The wider set: anything with a play behind it, starred or not — which is the
+                // whole reason this is a tab rather than a sort of the one beside it.
+                KeptStationsTab {
                     width: 100%;
                     height: 100%;
                     card-w: geom.card-w;
                     card-h: geom.card-h;
                     row-h: geom.row-h;
                     gap: root.grid-gap;
+                    rows: Radio.recent-rows;
+                    count: Radio.recent-count;
+                    empty-icon: "history";
+                    empty-title: @tr("Nothing played yet");
+                    empty-body: @tr("Stations you listen to show up here.");
                 }
             }
         }

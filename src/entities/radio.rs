@@ -72,6 +72,23 @@ pub struct NewRadioStation {
     pub hls: bool,
 }
 
+/// What the station editor rewrites.
+///
+/// A struct rather than seven positional parameters for [`NewRadioStation`]'s reason. Everything
+/// but `name` is the stream's own account of itself, so a URL that moved replaces all of it at
+/// once: a station repointed at a new mount that kept the old one's logo, homepage or tags is the
+/// same wrong `keep_station` already refuses on the directory's side.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StationEdit {
+    pub name: String,
+    pub stream_url: String,
+    pub homepage: Option<String>,
+    pub favicon_url: Option<String>,
+    pub tags: String,
+    pub codec: String,
+    pub bitrate: i32,
+}
+
 /// A station as the directory describes it, before it is anybody's row.
 ///
 /// Separate from [`RadioStation`] rather than a half-filled one because the two

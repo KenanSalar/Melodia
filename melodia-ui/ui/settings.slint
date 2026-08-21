@@ -402,7 +402,11 @@ export global Settings {
     }
     pure callback station-import-message(int /*skipped*/) -> string;
     station-import-message(skipped) => {
-        return @tr("{n} was already in your list." | "{n} were already in your list." % skipped);
+        // Empty where nothing was skipped, which is the ordinary import — the card drops a blank
+        // body, where an unconditional line reports "0 were already in your list."
+        return skipped > 0
+            ? @tr("{n} was already in your list." | "{n} were already in your list." % skipped)
+            : "";
     }
     pure callback station-import-failed-title() -> string;
     station-import-failed-title => {

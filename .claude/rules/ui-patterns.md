@@ -772,8 +772,8 @@ silently miss the other.
     so a tab seeded after `wire_all` leaves all five answering for the declared `0`.
   - **Everything above about "the five" is My Library's history, not what a tabbed page owes.** Its
     tabs were five sidebar sections with five hooks, and five gates are what keeps those hooks
-    reachable. Favorites' three tabs, Recently Played's two and Radio's two each mount **one** gate
-    and share a handle, so their seed reads the nav index and never the tab. For Radio that is
+    reachable. Favorites' three tabs, Recently Played's two and Radio's three each mount **one**
+    gate and share a handle, so their seed reads the nav index and never the tab. For Radio that is
     load-bearing rather than economical: a per-tab gate makes a glance at the kept stations a
     section leave, handing back a directory answer bought with a network round trip. **Ask what the
     leave hands back before mounting a second gate.**

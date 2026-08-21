@@ -47,7 +47,7 @@ export global Radio {
 
     // --- Browse -------------------------------------------------------------------------------
     //
-    // Rust owns the model and re-chunks it into rows of `browse-columns` cards, so the `ListView`
+    // Rust owns the model and re-chunks it into rows of `grid-columns` cards, so the `ListView`
     // virtualizes by row. Unlike the library grids there is no unfiltered list to filter against:
     // the filter *is* the query, and every change of it is a fresh page off the network.
     in-out property <[RadioStationGridRow]> browse-rows;

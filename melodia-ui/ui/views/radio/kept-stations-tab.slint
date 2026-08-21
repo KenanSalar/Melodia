@@ -1,28 +1,37 @@
 import { Theme } from "../../theme.slint";
+import { RadioStationGridRow } from "../../models.slint";
 import { Radio } from "../../globals/radio.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 import { StationGrid } from "station-grid.slint";
 
-// The stations the user kept: everything starred out of Browse, plus everything typed in by hand.
-// One list rather than two, because a custom station is starred on the way in — which is also what
-// lets the whole tab run off the one favorites query.
+// Both local tabs: the stations the user kept, and the ones they played. One component for the
+// same reason `ui::radio::kept` is one module — they are one list at two filters, and what differs
+// is the model, the count and the copy on the empty state. The remove dialog in particular is what
+// a second file loses: eight lines of `Dialog` fields nothing would report having drifted.
 //
 // **The scroller is here, not on the page**, as on Browse and for the same reason.
-export component RadioFavoritesTab inherits Rectangle {
+export component KeptStationsTab inherits Rectangle {
     in property <length> card-w;
     in property <length> card-h;
     in property <length> row-h;
     in property <length> gap;
 
-    // Only once the fetch has landed: `-1` is the unfetched sentinel, and an empty state over a
-    // list that has not been asked for yet claims something untrue for the length of the query.
-    //
-    // The count is pre-filter, which is what separates the two states below: nothing kept at all
-    // against a box that matched none of what is.
-    property <bool> is-empty: Radio.favorites-count == 0;
-    property <bool> no-matches: Radio.favorites-count > 0 && Radio.favorites-rows.length == 0;
+    in property <[RadioStationGridRow]> rows;
+    // Pre-filter, which is what separates the two states below: nothing kept at all against a box
+    // that matched none of what is. `-1` until the fetch lands, and an empty state over a list
+    // nobody has asked for yet claims something untrue for the length of the query.
+    in property <int> count: -1;
+
+    // The tab's own half of the empty state. The no-matches state below is shared, the box being
+    // a filter on either tab.
+    in property <string> empty-icon;
+    in property <string> empty-title;
+    in property <string> empty-body;
+
+    property <bool> is-empty: root.count == 0;
+    property <bool> no-matches: root.count > 0 && root.rows.length == 0;
 
     VerticalLayout {
         padding-top: Theme.pad-md;
@@ -33,7 +42,7 @@ export component RadioFavoritesTab inherits Rectangle {
             grid := StationGrid {
                 width: 100%;
                 height: 100%;
-                rows: Radio.favorites-rows;
+                rows: root.rows;
                 card-width: root.card-w;
                 card-height: root.card-h;
                 row-height: root.row-h;
@@ -61,9 +70,9 @@ export component RadioFavoritesTab inherits Rectangle {
             }
 
             if root.is-empty: GridEmptyState {
-                icon: "favorite";
-                title: @tr("No stations kept yet");
-                body: @tr("Star a station in Browse, or add one by URL.");
+                icon: root.empty-icon;
+                title: root.empty-title;
+                body: root.empty-body;
             }
 
             // Browse's own pair, reused verbatim: the box is a filter, so "clear a filter" is

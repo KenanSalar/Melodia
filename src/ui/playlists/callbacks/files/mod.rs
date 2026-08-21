@@ -31,9 +31,7 @@ use slint::{Model, ModelRc, VecModel};
 use crate::state::AppState;
 use crate::ui::playlists::PlaylistsUi;
 use crate::ui::shell::notifications::NotificationsUi;
-// Local names for the shared saturating conversions, so the call sites below keep reading as
-// counts rather than as lengths.
-use crate::ui::util::{count_as_i32 as clamp_u32, len_as_i32 as clamp_usize};
+use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Dialog};
 
 /// Wire the `Playlists.*` import/export callbacks. Call once after both the
@@ -123,7 +121,7 @@ fn refresh_add_selection_meta(dlg: &Dialog) {
             selected += 1;
         }
     }
-    dlg.set_add_selected_count(clamp_usize(selected));
+    dlg.set_add_selected_count(len_as_i32(selected));
     dlg.set_add_select_all(enabled > 0 && selected == enabled);
 }
 
@@ -133,6 +131,6 @@ fn refresh_export_selection_meta(dlg: &Dialog) {
     let model = dlg.get_export_pick_rows();
     let total = model.row_count();
     let selected = model.iter().filter(|r| r.selected).count();
-    dlg.set_export_selected_count(clamp_usize(selected));
+    dlg.set_export_selected_count(len_as_i32(selected));
     dlg.set_export_select_all(total > 0 && selected == total);
 }

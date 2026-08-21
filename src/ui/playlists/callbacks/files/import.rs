@@ -7,12 +7,12 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use super::clamp_u32;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::file_dialog;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
+use crate::ui::util::count_as_i32;
 use crate::{AppWindow, Playlists, Settings};
 
 pub(super) fn wire(
@@ -84,9 +84,11 @@ pub(super) fn wire(
                 notifications.show_auto_dismiss(
                     NotificationParams::plain(
                         variant,
-                        settings.invoke_playlist_import_title(clamp_u32(imported)),
-                        settings
-                            .invoke_playlist_import_message(clamp_u32(tracks), clamp_u32(missing)),
+                        settings.invoke_playlist_import_title(count_as_i32(imported)),
+                        settings.invoke_playlist_import_message(
+                            count_as_i32(tracks),
+                            count_as_i32(missing),
+                        ),
                     ),
                     TOAST_AUTO_DISMISS_MS,
                 );
