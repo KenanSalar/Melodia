@@ -210,90 +210,157 @@ pub async fn set_artwork(db: &DbPool, id: i64, artwork_path: Option<&str>) -> Re
     Ok(())
 }
 
-/// Which of `favicon_urls` are still inside their backoff at `now`, so a browse can skip asking.
-///
-/// **Asked about a page, never about the table.** The key is a URL from a directory of tens of
-/// thousands of entries, a third of which carry a logo field that answers with nothing, so the row
-/// count has no bound a caller could read whole into a memo that holds two thousand.
-///
-/// The clock comparison lands in Rust rather than in the `WHERE`, since the placeholder list is
-/// what `chunked_in_query` binds and a second parameter would have to ride ahead of it. Still a
-/// string comparison against the same `to_rfc3339` shape both sides are written in.
-pub async fn suppressed_logo_urls(
-    db: &DbPool,
-    favicon_urls: &[String],
-    now: &str,
-) -> Result<Vec<String>, AppError> {
-    let scheduled: Vec<(String, String)> =
-        chunked_in_query(db.read(), favicon_urls, |placeholders| {
-            format!(
-                "SELECT favicon_url, retry_after FROM radio_logo_misses \
-                 WHERE favicon_url IN ({placeholders})"
-            )
-        })
-        .await?;
-
-    Ok(scheduled
-        .into_iter()
-        .filter(|(_, retry_after)| retry_after.as_str() > now)
-        .map(|(url, _)| url)
-        .collect())
+/// What an earlier session's attempt at one logo URL left behind.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct StoredLogoAnswer {
+    pub favicon_url: String,
+    /// The stored file, or `None` where the URL answered with nothing.
+    pub artwork_path: Option<String>,
+    /// When this URL may be asked again. `None` on a hit.
+    pub retry_after: Option<String>,
 }
 
-/// How many times `favicon_url` has already answered with nothing, or `None` if never.
+/// What is already known about each of `favicon_urls`.
+///
+/// **Asked about a page, never about the table.** The key is a URL from a directory of tens of
+/// thousands of entries, so the row count has no bound a caller could read whole into a memo that
+/// holds two thousand.
+///
+/// One query for both halves of the answer, which is the whole reason the two live in one table:
+/// a page of fifty stations asks once and learns both which logos it already has and which URLs
+/// it must not ask about yet.
+pub async fn logo_answers(
+    db: &DbPool,
+    favicon_urls: &[String],
+) -> Result<Vec<StoredLogoAnswer>, AppError> {
+    chunked_in_query(db.read(), favicon_urls, |placeholders| {
+        format!(
+            "SELECT favicon_url, artwork_path, retry_after FROM radio_logo_answers \
+             WHERE favicon_url IN ({placeholders})"
+        )
+    })
+    .await
+}
+
+/// How many times `favicon_url` has already answered with nothing.
 pub async fn logo_miss_attempts(db: &DbPool, favicon_url: &str) -> Result<Option<i64>, AppError> {
     let attempts =
-        sqlx::query_scalar("SELECT attempts FROM radio_logo_misses WHERE favicon_url = ?")
+        sqlx::query_scalar("SELECT attempts FROM radio_logo_answers WHERE favicon_url = ?")
             .bind(favicon_url)
             .fetch_optional(db.read())
             .await?;
     Ok(attempts)
 }
 
-/// Record that `favicon_url` answered with nothing, and when it may be asked again.
+/// Record that `favicon_url` answered with a file, and what it cost.
 ///
-/// Both values are the caller's: [`logo_miss_attempts`] is what it counted from, and the schedule
-/// is `library::radio`'s to decide.
-pub async fn upsert_logo_miss(
+/// Overwrites a miss rather than deleting one: a host that has started answering again must not
+/// stay suppressed by a backoff it earned while it was down, and the row is now the hit.
+pub async fn record_logo_hit(
     db: &DbPool,
     favicon_url: &str,
-    attempts: i64,
-    retry_after: &str,
+    artwork_path: &str,
+    bytes: i64,
+    answered_at: &str,
 ) -> Result<(), AppError> {
     sqlx::query(
-        "INSERT INTO radio_logo_misses (favicon_url, attempts, retry_after) VALUES (?, ?, ?)
+        "INSERT INTO radio_logo_answers
+             (favicon_url, artwork_path, bytes, attempts, retry_after, answered_at)
+         VALUES (?, ?, ?, 0, NULL, ?)
          ON CONFLICT(favicon_url) DO UPDATE SET
-             attempts = excluded.attempts,
-             retry_after = excluded.retry_after",
+             artwork_path = excluded.artwork_path,
+             bytes = excluded.bytes,
+             attempts = 0,
+             retry_after = NULL,
+             answered_at = excluded.answered_at",
     )
     .bind(favicon_url)
-    .bind(attempts)
-    .bind(retry_after)
+    .bind(artwork_path)
+    .bind(bytes)
+    .bind(answered_at)
     .execute(db.write())
     .await?;
     Ok(())
 }
 
-/// Forget `favicon_url`'s misses, for a host that has started answering again — otherwise a URL
-/// that failed twice and then recovered stays suppressed until its old backoff runs out.
-pub async fn clear_logo_miss(db: &DbPool, favicon_url: &str) -> Result<(), AppError> {
-    sqlx::query("DELETE FROM radio_logo_misses WHERE favicon_url = ?")
-        .bind(favicon_url)
-        .execute(db.write())
-        .await?;
+/// Record that `favicon_url` answered with nothing, and when it may be asked again.
+///
+/// Both values are the caller's: [`logo_miss_attempts`] is what it counted from, and the schedule
+/// is `library::radio`'s to decide. Clears any path the URL used to have — the logo moved or went
+/// away, and a row naming a file this URL no longer serves would hold it on disk forever.
+pub async fn record_logo_miss(
+    db: &DbPool,
+    favicon_url: &str,
+    attempts: i64,
+    retry_after: &str,
+    answered_at: &str,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "INSERT INTO radio_logo_answers
+             (favicon_url, artwork_path, bytes, attempts, retry_after, answered_at)
+         VALUES (?, NULL, 0, ?, ?, ?)
+         ON CONFLICT(favicon_url) DO UPDATE SET
+             artwork_path = NULL,
+             bytes = 0,
+             attempts = excluded.attempts,
+             retry_after = excluded.retry_after,
+             answered_at = excluded.answered_at",
+    )
+    .bind(favicon_url)
+    .bind(attempts)
+    .bind(retry_after)
+    .bind(answered_at)
+    .execute(db.write())
+    .await?;
     Ok(())
 }
 
-/// Drop misses whose retry time passed before `cutoff`, which is what bounds the table.
+/// Drop the answers no longer worth keeping, and report how many went.
 ///
-/// A row that far past its own backoff has nothing left to say: it would be retried on the next
-/// page carrying it either way, and keeping it only makes the load above larger.
-pub async fn prune_logo_misses(db: &DbPool, cutoff: &str) -> Result<(), AppError> {
-    sqlx::query("DELETE FROM radio_logo_misses WHERE retry_after < ?")
-        .bind(cutoff)
-        .execute(db.write())
-        .await?;
-    Ok(())
+/// Three rules, and the caller owns all three numbers. A **miss** past `miss_cutoff` has nothing
+/// left to say — it would be retried on the next page carrying it either way. A **hit** older than
+/// `hit_cutoff` is a logo nobody has looked at in long enough that re-fetching it once is cheaper
+/// than holding it. And past `max_bytes` the newest hits are kept and the rest go, which is the
+/// bound that actually holds: a TTL alone lets a heavy browsing habit run the store up as far as
+/// its own rate takes it.
+///
+/// **The rows go and the files follow.** Nothing here touches the store — a dropped row simply
+/// stops referencing its file, and the sweep retires whatever no column names.
+pub async fn prune_logo_answers(
+    db: &DbPool,
+    miss_cutoff: &str,
+    hit_cutoff: &str,
+    max_bytes: i64,
+) -> Result<u64, AppError> {
+    let stale = sqlx::query(
+        "DELETE FROM radio_logo_answers
+         WHERE (artwork_path IS NULL AND retry_after < ?)
+            OR (artwork_path IS NOT NULL AND answered_at < ?)",
+    )
+    .bind(miss_cutoff)
+    .bind(hit_cutoff)
+    .execute(db.write())
+    .await?
+    .rows_affected();
+
+    // Newest-first, so what survives is what a browse is most likely to ask for next. The running
+    // total is inclusive, hence `>`: the row that crosses the bound is the first one dropped.
+    let over_cap = sqlx::query(
+        "DELETE FROM radio_logo_answers WHERE favicon_url IN (
+             SELECT favicon_url FROM (
+                 SELECT favicon_url,
+                        SUM(bytes) OVER (ORDER BY answered_at DESC, favicon_url DESC) AS running
+                 FROM radio_logo_answers
+                 WHERE artwork_path IS NOT NULL
+             ) WHERE running > ?
+         )",
+    )
+    .bind(max_bytes)
+    .execute(db.write())
+    .await?
+    .rows_affected();
+
+    Ok(stale + over_cap)
 }
 
 #[cfg(test)]

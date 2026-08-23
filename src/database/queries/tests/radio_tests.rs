@@ -7,8 +7,9 @@ use crate::error::AppError;
 
 use super::{
     clear_play_history, delete_station, get_favorite_stations, get_recent_stations,
-    get_station_by_id, mark_played, save_station, set_artwork, set_favorite, station_id_with_url,
-    update_station,
+    get_station_by_id, logo_answers, logo_miss_attempts, mark_played, prune_logo_answers,
+    record_logo_hit, record_logo_miss, save_station, set_artwork, set_favorite,
+    station_id_with_url, update_station,
 };
 
 fn directory_station(uuid: &str, name: &str) -> radio::NewRadioStation {
@@ -304,5 +305,114 @@ async fn a_stream_url_already_kept_is_recognised_whether_or_not_it_has_a_uuid()
         "a browsed station occupies its URL too — importing a file naming it must skip, not \
          add a second row nothing can tell apart"
     );
+    Ok(())
+}
+
+/// Timestamps the retention rules compare, spelled rather than derived: the pass is a string
+/// comparison against the clock, so a test that built its dates the same way the code does would
+/// only be reading the format back to itself.
+const OLD: &str = "2026-01-01T00:00:00.000+00:00";
+const RECENT: &str = "2026-08-20T00:00:00.000+00:00";
+const NEWER: &str = "2026-08-21T00:00:00.000+00:00";
+
+/// One row per URL, holding whichever answer that URL last gave. The hit half is what makes the
+/// store a cache: without a path on the row nothing can know where a URL's bytes landed, the file
+/// being named by a hash of its own content, so every browsed logo was re-fetched every launch.
+#[tokio::test]
+async fn a_url_comes_back_with_whichever_answer_it_last_gave() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let (hit, miss) = ("https://a.invalid/logo.png", "https://b.invalid/logo.png");
+
+    record_logo_hit(&db, hit, "/store/a.png", 4_096, RECENT).await?;
+    record_logo_miss(&db, miss, 2, NEWER, RECENT).await?;
+
+    let answers = logo_answers(&db, &[hit.to_owned(), miss.to_owned()]).await?;
+    assert_eq!(answers.len(), 2);
+
+    let found = |url: &str| answers.iter().find(|a| a.favicon_url == url).cloned();
+    let Some(hit) = found(hit) else {
+        return Err(AppError::Validation("the hit did not come back".into()));
+    };
+    assert_eq!(hit.artwork_path.as_deref(), Some("/store/a.png"));
+    assert!(hit.retry_after.is_none(), "a hit suppresses nothing");
+
+    let Some(miss) = found(miss) else {
+        return Err(AppError::Validation("the miss did not come back".into()));
+    };
+    assert!(miss.artwork_path.is_none());
+    assert_eq!(miss.retry_after.as_deref(), Some(NEWER));
+    Ok(())
+}
+
+/// A host that starts answering again must not stay suppressed by a schedule it earned while it
+/// was down — and the escalating backoff means that schedule can be a week out.
+#[tokio::test]
+async fn a_hit_clears_the_backoff_the_same_url_earned_while_it_was_down() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let url = "https://a.invalid/logo.png";
+
+    record_logo_miss(&db, url, 5, NEWER, RECENT).await?;
+    assert_eq!(logo_miss_attempts(&db, url).await?, Some(5));
+
+    record_logo_hit(&db, url, "/store/a.png", 4_096, NEWER).await?;
+
+    let answers = logo_answers(&db, &[url.to_owned()]).await?;
+    let Some(answer) = answers.first() else {
+        return Err(AppError::Validation("the row went missing".into()));
+    };
+    assert_eq!(answer.artwork_path.as_deref(), Some("/store/a.png"));
+    assert!(answer.retry_after.is_none(), "the backoff outlived the recovery");
+    assert_eq!(logo_miss_attempts(&db, url).await?, Some(0));
+    Ok(())
+}
+
+/// The bound that actually holds. A TTL alone lets the store run up as far as the user's own
+/// browsing rate takes it, so what has to be true is that the newest hits survive and the tail
+/// goes — the row crossing the line being the first dropped, since the running total includes it.
+#[tokio::test]
+async fn the_byte_cap_keeps_the_newest_hits_and_drops_the_tail() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    for (url, stamp) in [
+        ("a", NEWER),
+        ("b", RECENT),
+        ("c", "2026-08-19T00:00:00.000+00:00"),
+    ] {
+        record_logo_hit(&db, url, &format!("/store/{url}.png"), 400, stamp).await?;
+    }
+
+    // Two rows' worth: the third crosses it and is the first to go.
+    assert_eq!(prune_logo_answers(&db, OLD, OLD, 800).await?, 1);
+
+    let kept: Vec<String> = logo_answers(&db, &["a".to_owned(), "b".to_owned(), "c".to_owned()])
+        .await?
+        .into_iter()
+        .map(|answer| answer.favicon_url)
+        .collect();
+    assert_eq!(kept.len(), 2, "got {kept:?}");
+    assert!(kept.contains(&"a".to_owned()) && kept.contains(&"b".to_owned()), "got {kept:?}");
+    Ok(())
+}
+
+/// The staleness half, and it reads a different column per kind: a miss is done once its retry
+/// time has passed, a hit once it has gone unasked-for long enough to be worth one request again.
+/// A cutoff that caught the wrong kind would either re-ask a dead host every launch or evict a
+/// warm cache on every pass.
+#[tokio::test]
+async fn each_kind_of_answer_ages_out_on_its_own_clock() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    record_logo_hit(&db, "fresh-hit", "/store/a.png", 400, NEWER).await?;
+    record_logo_hit(&db, "stale-hit", "/store/b.png", 400, OLD).await?;
+    record_logo_miss(&db, "live-miss", 1, NEWER, NEWER).await?;
+    record_logo_miss(&db, "spent-miss", 1, OLD, OLD).await?;
+
+    // A cutoff between the two stamps, and a cap far above what these rows occupy.
+    assert_eq!(prune_logo_answers(&db, RECENT, RECENT, 1 << 20).await?, 2);
+
+    let urls = ["fresh-hit", "stale-hit", "live-miss", "spent-miss"].map(str::to_owned);
+    let kept: Vec<String> =
+        logo_answers(&db, &urls).await?.into_iter().map(|a| a.favicon_url).collect();
+    assert_eq!(kept.len(), 2, "got {kept:?}");
+    assert!(kept.contains(&"fresh-hit".to_owned()), "a warm cache entry was evicted");
+    assert!(kept.contains(&"live-miss".to_owned()), "a backoff still in force was forgotten");
     Ok(())
 }

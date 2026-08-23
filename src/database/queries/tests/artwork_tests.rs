@@ -27,12 +27,13 @@ fn test_station() -> radio::NewRadioStation {
 ///
 /// Spelled as `(table, column)` so the walk can't be satisfied by a column name that happens to
 /// appear in another arm's text — `artwork_path` is on two tables.
-const EXPECTED_COLUMNS: [(&str, &str); 5] = [
+const EXPECTED_COLUMNS: [(&str, &str); 6] = [
     ("tracks", "artwork_path"),
     ("albums", "artwork_path"),
     ("artists", "image_path"),
     ("playlists", "thumbnail_path"),
     ("radio_stations", "artwork_path"),
+    ("radio_logo_answers", "artwork_path"),
 ];
 
 /// The sweep keeps only what the reference query returns and the renormalize pass re-points only
@@ -71,6 +72,14 @@ async fn repointing_moves_every_artwork_column_at_once() -> Result<(), AppError>
     // every table the ledger names or `moved > 0` can't hold for the empty ones.
     queries::playlist::create_playlist(&db, "Mosaic", None).await?;
     queries::radio::save_station(&db, &test_station()).await?;
+    queries::radio::record_logo_hit(
+        &db,
+        "https://example.invalid/logo.png",
+        OLD,
+        1_024,
+        "2026-08-24T00:00:00.000+00:00",
+    )
+    .await?;
 
     let mut tx = db.write().begin().await?;
     for (table, column) in EXPECTED_COLUMNS {

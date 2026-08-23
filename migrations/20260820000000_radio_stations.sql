@@ -53,10 +53,18 @@ CREATE TABLE
         play_count INTEGER NOT NULL DEFAULT 0
     );
 
--- Logo URLs that asked and got nothing back, so a browse doesn't spend the same
--- failed round trips every launch. A dead favicon is the normal condition on a
--- directory of community-maintained entries, and a host that hangs costs the
--- full timeout each time a page carrying it is drawn.
+-- What each logo URL answered last time it was asked, so a browse doesn't spend
+-- the same round trips every launch. Both outcomes, in one row per URL, because
+-- a URL has one answer: artwork_path names the stored file for a hit and is NULL
+-- for a miss, exactly as the session memo holds an Option. Two tables would mean
+-- two queries on the path a page of fifty stations takes, and a URL able to be
+-- in both.
+--
+-- The hit half is what makes the store a cache rather than a spool. The file is
+-- named by a hash of its own bytes, so nothing can know a URL's path without
+-- downloading the bytes first -- which meant every browsed logo was re-fetched
+-- on every launch and rewritten identically, and the files in between were never
+-- read by anything.
 --
 -- Keyed on the URL rather than on the station: a station repointed at a new logo
 -- has to be asked again, and the URL is what changed. That also means the table
@@ -70,11 +78,19 @@ CREATE TABLE
 -- date functions would have to parse chrono's nanosecond RFC3339 to do the same
 -- arithmetic here, and `library::radio` is where that policy belongs anyway.
 --
--- No index: the lookup is by primary key, and the sweep is a full scan on a table
--- this small either way.
+-- bytes is what the file cost, carried on the row so the retention pass can hold
+-- the cache to a size without stat-ing a directory to find out what it is holding.
+-- answered_at dates the row for the same pass. Both are zero and clock-stamped on
+-- a miss, which costs nothing and keeps one shape for the row.
+--
+-- No index: the page lookup is by primary key, and the retention pass is a full
+-- scan on a table this small either way.
 CREATE TABLE
-    IF NOT EXISTS radio_logo_misses (
+    IF NOT EXISTS radio_logo_answers (
         favicon_url TEXT PRIMARY KEY,
-        attempts INTEGER NOT NULL DEFAULT 1,
-        retry_after TEXT NOT NULL
+        artwork_path TEXT,
+        bytes INTEGER NOT NULL DEFAULT 0,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        retry_after TEXT,
+        answered_at TEXT NOT NULL
     );

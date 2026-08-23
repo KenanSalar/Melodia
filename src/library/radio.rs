@@ -14,6 +14,7 @@ use crate::database::queries;
 use crate::entities::radio;
 use crate::error::AppError;
 use crate::library::playback;
+use crate::media::station_logo::StoredLogo;
 use crate::player::stream_source::{self, StationFacts};
 use crate::player::types::RadioNowPlaying;
 use crate::services::radio_browser;
@@ -288,16 +289,8 @@ pub async fn update_custom_station(
 /// is what most of the directory takes anyway, and there is nothing a user could do about a dead
 /// favicon host.
 async fn adopt_logo(state: &AppState, id: i64, logo_url: &str) {
-    match fetch_logo(state, logo_url).await {
-        Ok(Some(path)) => {
-            if let Err(e) = set_artwork(state, id, Some(&path)).await {
-                log::debug!("radio: station logo not stored: {}", crate::services::describe(&e));
-            }
-        }
-        Ok(None) => {}
-        Err(e) => {
-            log::debug!("radio: station logo fetch failed: {}", crate::services::describe(&e));
-        }
+    if let Some(path) = ask_logo_url(state, logo_url).await {
+        adopted(state, id, path).await;
     }
 }
 
@@ -403,11 +396,14 @@ fn spawn_click(state: &AppState, station_uuid: Option<&str>) {
     });
 }
 
-/// Fetch a station's logo into the shared artwork store, returning its path there.
+/// Fetch a station's logo into the radio-logo store, returning where it landed.
 ///
 /// Through the same seam as the directory calls: "off" has to mean no traffic, and a logo
 /// download is traffic whoever is serving it.
-pub async fn fetch_logo(state: &AppState, favicon_url: &str) -> Result<Option<String>, AppError> {
+pub async fn fetch_logo(
+    state: &AppState,
+    favicon_url: &str,
+) -> Result<Option<StoredLogo>, AppError> {
     let client = directory_client(state)?;
     crate::media::station_logo::fetch(client, favicon_url, &state.paths.radio_logos_dir).await
 }
@@ -425,26 +421,58 @@ const LOGO_MISS_MAX_ATTEMPTS: i64 = 7;
 /// suppresses anything.
 const LOGO_MISS_MAX_AGE_DAYS: i64 = 30;
 
-/// Which of `favicon_urls` a browse should not ask about yet.
+/// How long a cached browse logo is kept without being asked for again.
+///
+/// The staleness half of the retention rule, and it dates from when the logo was *fetched* rather
+/// than when it was last drawn — nothing on the read path writes, and Linux mount options make
+/// access times a thing that may or may not exist. So a station browsed every week still re-fetches
+/// once a fortnight, which is the price of not tracking reads and is one request.
+const LOGO_CACHE_MAX_AGE_DAYS: i64 = 14;
+
+/// Ceiling on what cached browse logos may occupy.
+///
+/// **The bound that actually holds.** A TTL alone lets the store run up as far as the user's own
+/// browsing rate takes it — a directory page is fifty stations and most of them carry a logo — and
+/// a station scrolled past is worth keeping only while it is cheap. Sized so a heavy session's
+/// worth of pages survives and a month of them does not; a kept station's logo is not counted
+/// against it, its row holding the file regardless.
+const LOGO_CACHE_MAX_BYTES: i64 = 32 * 1024 * 1024;
+
+/// What this install already knows about each of `favicon_urls`.
 ///
 /// Asked about the page in hand rather than about the table, which has no bound worth reading
 /// whole — see the query's own note.
-pub async fn suppressed_logo_urls(
+pub async fn logo_answers(
     state: &AppState,
     favicon_urls: &[String],
-) -> Result<Vec<String>, AppError> {
-    queries::radio::suppressed_logo_urls(&state.db, favicon_urls, &crate::utils::now_rfc3339())
-        .await
+) -> Result<Vec<queries::radio::StoredLogoAnswer>, AppError> {
+    queries::radio::logo_answers(&state.db, favicon_urls).await
 }
 
-/// Drop misses too old to still be suppressing anything, which is what bounds the table.
+/// Whether a stored answer is still suppressing its URL at `now`.
 ///
-/// Once a session: the table only grows as that session records its own misses, and none of those
-/// is old enough to sweep.
-pub async fn prune_logo_misses(state: &AppState) -> Result<(), AppError> {
-    let stale = chrono::Utc::now()
-        - chrono::TimeDelta::try_days(LOGO_MISS_MAX_AGE_DAYS).unwrap_or_default();
-    queries::radio::prune_logo_misses(&state.db, &stale.to_rfc3339()).await
+/// The clock comparison lands here rather than in the `WHERE`: the placeholder list is what
+/// `chunked_in_query` binds and a second parameter would have to ride ahead of it. Still a string
+/// comparison against the same `to_rfc3339` shape both sides are written in.
+pub fn answer_is_suppressed(answer: &queries::radio::StoredLogoAnswer, now: &str) -> bool {
+    answer.retry_after.as_deref().is_some_and(|retry_after| retry_after > now)
+}
+
+/// Hold the answer table to its two bounds, dropping the rows that fall outside them.
+///
+/// The files those rows named become unreferenced by dropping, so the store follows on the next
+/// sweep rather than being touched here — see the query's own note.
+pub async fn prune_logo_answers(state: &AppState) -> Result<u64, AppError> {
+    let now = chrono::Utc::now();
+    let miss_cutoff = now - chrono::TimeDelta::try_days(LOGO_MISS_MAX_AGE_DAYS).unwrap_or_default();
+    let hit_cutoff = now - chrono::TimeDelta::try_days(LOGO_CACHE_MAX_AGE_DAYS).unwrap_or_default();
+    queries::radio::prune_logo_answers(
+        &state.db,
+        &miss_cutoff.to_rfc3339(),
+        &hit_cutoff.to_rfc3339(),
+        LOGO_CACHE_MAX_BYTES,
+    )
+    .await
 }
 
 /// Record that `favicon_url` answered with nothing, pushing its next attempt further out.
@@ -455,13 +483,34 @@ pub async fn note_logo_miss(state: &AppState, favicon_url: &str) -> Result<(), A
         .saturating_add(1);
     let hours = LOGO_MISS_BACKOFF_HOURS * attempts.min(LOGO_MISS_MAX_ATTEMPTS);
     let retry_after = chrono::Utc::now() + chrono::TimeDelta::try_hours(hours).unwrap_or_default();
-    queries::radio::upsert_logo_miss(&state.db, favicon_url, attempts, &retry_after.to_rfc3339())
-        .await
+    queries::radio::record_logo_miss(
+        &state.db,
+        favicon_url,
+        attempts,
+        &retry_after.to_rfc3339(),
+        &crate::utils::now_rfc3339(),
+    )
+    .await
 }
 
-/// Forget a URL's misses, for a host that has started answering again.
-pub async fn clear_logo_miss(state: &AppState, favicon_url: &str) -> Result<(), AppError> {
-    queries::radio::clear_logo_miss(&state.db, favicon_url).await
+/// Record where `favicon_url`'s logo landed, so the next session draws it without asking.
+///
+/// **This is what makes the store a cache.** The file is named by a hash of its own bytes, so
+/// nothing can know a URL's path without downloading the bytes first; without the row, every
+/// browsed logo was re-fetched on every launch and rewritten identically.
+pub async fn note_logo_hit(
+    state: &AppState,
+    favicon_url: &str,
+    logo: &StoredLogo,
+) -> Result<(), AppError> {
+    queries::radio::record_logo_hit(
+        &state.db,
+        favicon_url,
+        &logo.path,
+        i64::try_from(logo.bytes).unwrap_or(i64::MAX),
+        &crate::utils::now_rfc3339(),
+    )
+    .await
 }
 
 /// Point a station at its stored logo, or clear it with `None`.
@@ -494,28 +543,30 @@ async fn ask_logo_url(state: &AppState, url: &str) -> Option<String> {
     if is_logo_url_suppressed(state, url).await {
         return None;
     }
-    let path = match fetch_logo(state, url).await {
-        Ok(path) => path,
+    let logo = match fetch_logo(state, url).await {
+        Ok(logo) => logo,
         Err(e) => {
             log::debug!("radio: station logo fetch failed: {}", crate::services::describe(&e));
             return None;
         }
     };
-    let recorded = if path.is_some() {
-        clear_logo_miss(state, url).await
-    } else {
-        note_logo_miss(state, url).await
+    let recorded = match logo.as_ref() {
+        Some(logo) => note_logo_hit(state, url, logo).await,
+        None => note_logo_miss(state, url).await,
     };
     if let Err(e) = recorded {
         log::debug!("radio: logo outcome not recorded: {}", crate::services::describe(&e));
     }
-    path
+    logo.map(|logo| logo.path)
 }
 
 /// Whether `url` is inside a backoff an earlier attempt earned.
 async fn is_logo_url_suppressed(state: &AppState, url: &str) -> bool {
     let asked = [url.to_owned()];
-    suppressed_logo_urls(state, &asked).await.is_ok_and(|suppressed| !suppressed.is_empty())
+    let now = crate::utils::now_rfc3339();
+    logo_answers(state, &asked)
+        .await
+        .is_ok_and(|answers| answers.iter().any(|answer| answer_is_suppressed(answer, &now)))
 }
 
 /// The site a station's logo is discovered from, and the key its answer is memoized under.

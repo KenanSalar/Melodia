@@ -9,6 +9,9 @@
 //! hashes its output, so every change to a playlist's top four writes a new composite and orphans
 //! the one before it.
 
+use std::path::PathBuf;
+use std::time::Duration;
+
 use crate::config::Paths;
 use crate::database::DbPool;
 use crate::database::queries;
@@ -39,28 +42,64 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
 /// whole output is files that *become* orphans, and only a call ordered after its re-points can
 /// see them.
 pub(crate) async fn run(db: &DbPool, paths: &Paths) -> AppResult<()> {
-    let artwork_dir = paths.artwork_dir.clone();
-    let artists_dir = paths.artists_dir.clone();
-    let radio_logos_dir = paths.radio_logos_dir.clone();
+    sweep_stores(
+        db,
+        vec![
+            ("artwork", paths.artwork_dir.clone()),
+            ("artists", paths.artists_dir.clone()),
+            ("radio logo", paths.radio_logos_dir.clone()),
+        ],
+        GRACE,
+    )
+    .await
+}
 
-    // Listed first, and the reference set read second. Both are snapshots of state a scan is
-    // concurrently writing, and this is the order that fails safe: a row committed in between is
-    // visible to the query, where the reverse reads it as an orphan and unlinks a live cover.
-    //
-    // One `spawn_blocking` for all three stores: the listings are the same shape of work and
-    // splitting them would only buy more hops onto the same pool.
-    //
-    // **Three directories, one reference set**, which is what lets a store move without the query
-    // moving with it: the set is the union of all five artwork columns reduced to basenames, so a
-    // radio logo is held alive by `radio_stations.artwork_path` wherever it happens to sit. That
-    // is also why the logos that predate their own directory are safe where they are.
+/// How long a station logo is protected from the sweep purely for being new.
+///
+/// Far shorter than [`GRACE`], because the window it covers is a different size. That one protects
+/// a cover a scan worker wrote before its transaction committed, which is as long as the
+/// transaction; a logo's file and its cache row are written by the same task, one write-pool hop
+/// apart. What sets the floor is that the pool is single-connection, so the hop can queue behind a
+/// scan chunk — minutes of headroom over a gap measured in milliseconds. Inheriting the hour meant
+/// a store the retention pass had just released stayed on disk for the rest of the session.
+const RADIO_GRACE: Duration = Duration::from_mins(3);
+
+/// Sweep the radio-logo store alone.
+///
+/// **Its own entry point because its own schedule is the point.** Everything else here is retired
+/// after a *scan*, which is the only thing that orphans a cover — and which a user who browses
+/// radio and never touches their music folders may not run for weeks, leaving every logo dropped
+/// by the retention pass sitting on disk until they do. One directory rather than three keeps that
+/// cheap enough to run whenever Radio is done with.
+pub(crate) async fn run_radio_logos(db: &DbPool, paths: &Paths) -> AppResult<()> {
+    sweep_stores(db, vec![("radio logo", paths.radio_logos_dir.clone())], RADIO_GRACE).await
+}
+
+/// One pass over each of `stores`.
+///
+/// Listed first, and the reference set read second. Both are snapshots of state a scan is
+/// concurrently writing, and this is the order that fails safe: a row committed in between is
+/// visible to the query, where the reverse reads it as an orphan and unlinks a live cover.
+///
+/// One `spawn_blocking` for every store: the listings are the same shape of work and splitting
+/// them would only buy more hops onto the same pool.
+///
+/// **However many directories, one reference set**, which is what lets a store move without the
+/// query moving with it: the set is the union of all six artwork columns reduced to basenames, so
+/// a radio logo is held alive by `radio_stations.artwork_path` or by its cache row wherever it
+/// happens to sit. That is also why the logos that predate their own directory are safe where
+/// they are.
+async fn sweep_stores(
+    db: &DbPool,
+    stores: Vec<(&'static str, PathBuf)>,
+    grace: Duration,
+) -> AppResult<()> {
     let listed = tokio::task::spawn_blocking(move || {
         let now = std::time::SystemTime::now();
-        [
-            ("artwork", sweep::collect_candidates(&artwork_dir, GRACE, now)),
-            ("artists", sweep::collect_candidates(&artists_dir, GRACE, now)),
-            ("radio logo", sweep::collect_candidates(&radio_logos_dir, GRACE, now)),
-        ]
+        stores
+            .into_iter()
+            .map(|(store, dir)| (store, sweep::collect_candidates(&dir, grace, now)))
+            .collect::<Vec<_>>()
     })
     .await
     .map_err(AppError::io_source)?;
@@ -68,9 +107,12 @@ pub(crate) async fn run(db: &DbPool, paths: &Paths) -> AppResult<()> {
     let referenced = queries::artwork::referenced_filenames(db).await?;
 
     let reports = tokio::task::spawn_blocking(move || {
-        listed.map(|(store, (candidates, report))| {
-            (store, sweep::retire(candidates, &referenced, report))
-        })
+        listed
+            .into_iter()
+            .map(|(store, (candidates, report))| {
+                (store, sweep::retire(candidates, &referenced, report))
+            })
+            .collect::<Vec<_>>()
     })
     .await
     .map_err(AppError::io_source)?;

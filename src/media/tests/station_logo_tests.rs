@@ -74,17 +74,21 @@ fn a_content_type_is_read_past_its_parameters_and_its_case() {
 fn the_floor_admits_a_favicon_and_refuses_a_tracking_pixel() -> TestResult {
     let dir = tempfile::tempdir()?;
 
-    assert_eq!(store_if_big_enough(&png(1)?, "png", dir.path()), None, "a 1x1 must be refused");
-    assert_eq!(
-        store_if_big_enough(&png(MIN_LOGO_DIM - 1)?, "png", dir.path()),
-        None,
+    assert!(store_if_big_enough(&png(1)?, "png", dir.path()).is_none(), "a 1x1 must be refused");
+    assert!(
+        store_if_big_enough(&png(MIN_LOGO_DIM - 1)?, "png", dir.path()).is_none(),
         "one pixel under the floor must be refused"
     );
 
     let stored = store_if_big_enough(&png(MIN_LOGO_DIM)?, "png", dir.path());
     assert!(
-        stored.as_deref().is_some_and(|path| Path::new(path).exists()),
+        stored.as_ref().is_some_and(|logo| Path::new(&logo.path).exists()),
         "a {MIN_LOGO_DIM}px logo must reach the store, got {stored:?}"
+    );
+    // The size the answer table bills the cache for, and the one bound the row cannot re-derive.
+    assert!(
+        stored.is_some_and(|logo| logo.bytes > 0),
+        "a stored logo has to report what it cost, or the cache has no size to hold itself to"
     );
     Ok(())
 }

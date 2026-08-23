@@ -15,7 +15,6 @@
 
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use lru::LruCache;
 use parking_lot::Mutex;
@@ -23,6 +22,7 @@ use tokio::task::JoinSet;
 
 use crate::error::AppError;
 use crate::library;
+use crate::media::station_logo::StoredLogo;
 use crate::state::AppState;
 
 /// How many logo answers to remember.
@@ -84,7 +84,7 @@ impl Effort {
 }
 
 /// One in-flight download: the URL asked, and what came back.
-type LogoAnswer = (String, Result<Option<String>, AppError>);
+type LogoAnswer = (String, Result<Option<StoredLogo>, AppError>);
 
 /// The session's answers, keyed on the URL they came from.
 ///
@@ -94,20 +94,13 @@ type LogoAnswer = (String, Result<Option<String>, AppError>);
 #[derive(Debug)]
 pub struct LogoMemo {
     answers: Mutex<LruCache<String, Option<String>>>,
-    pruned: AtomicBool,
 }
 
 impl LogoMemo {
     pub fn new() -> Self {
         Self {
             answers: Mutex::new(LruCache::new(LOGO_MEMO_CAP)),
-            pruned: AtomicBool::new(false),
         }
-    }
-
-    /// Whether this call is the one that gets to sweep the misses table, claimed once per session.
-    fn claim_prune(&self) -> bool {
-        !self.pruned.swap(true, Ordering::Relaxed)
     }
 
     /// The stored path for a URL, if this session found one.
@@ -170,17 +163,13 @@ pub async fn fetch_missing<'a>(
     is_current: impl Fn() -> bool,
     on_landed: impl Fn(),
 ) -> bool {
-    prune_misses_once(state, memo).await;
-
     let mut wanted = memo.unanswered(favicon_urls, effort);
     if wanted.is_empty() {
         return false;
     }
-    if effort == Effort::Page {
-        drop_suppressed(state, memo, &mut wanted).await;
-        if wanted.is_empty() {
-            return false;
-        }
+    let mut landed = seed_from_store(state, memo, &mut wanted, effort, &on_landed).await;
+    if wanted.is_empty() {
+        return landed;
     }
 
     // A rolling window rather than `chunks(LOGO_BATCH)`: a chunk drained to empty before the next
@@ -192,7 +181,6 @@ pub async fn fetch_missing<'a>(
         spawn_fetch(&mut in_flight, state, url);
     }
 
-    let mut landed = false;
     while let Some(joined) = in_flight.join_next().await {
         if !is_current() {
             in_flight.abort_all();
@@ -226,10 +214,10 @@ async fn record_answer(
     state: &AppState,
     memo: &LogoMemo,
     url: String,
-    result: Result<Option<String>, AppError>,
+    result: Result<Option<StoredLogo>, AppError>,
 ) -> bool {
-    let path = match result {
-        Ok(path) => path,
+    let logo = match result {
+        Ok(logo) => logo,
         Err(e) => {
             // Debug rather than warn: a dead favicon is the normal condition on a directory of
             // 60,000 community-maintained entries, and the card has a monogram to fall back to.
@@ -239,9 +227,9 @@ async fn record_answer(
         }
     };
 
-    let hit = path.is_some();
-    record_outcome(state, &url, hit).await;
-    memo.record(url, path);
+    record_outcome(state, &url, logo.as_ref()).await;
+    let hit = logo.is_some();
+    memo.record(url, logo.map(|logo| logo.path));
     hit
 }
 
@@ -327,42 +315,68 @@ fn spawn_fetch(in_flight: &mut JoinSet<LogoAnswer>, state: &AppState, url: Strin
     });
 }
 
-/// Take the URLs still inside a backoff out of `wanted`, memoizing them so a later page in this
-/// session does not ask the table about them again.
+/// Answer as much of `wanted` as an earlier session already answered, and report whether any logo
+/// came back that way.
 ///
-/// A failure here is not worth a line: the whole feature is an optimization over asking again, and
+/// **This is the cold-start path, and it is the whole reason the store is a cache.** A logo's file
+/// is named by a hash of its own bytes, so nothing can know a URL's path without downloading the
+/// bytes first — before the answer table there was no way to reuse a stored logo, and a re-browse
+/// re-fetched every one of them and rewrote the identical file.
+///
+/// A hit whose file is gone stays in `wanted`: the store is swept, and a path that names nothing
+/// paints an empty tile where the monogram was the honest answer. The `exists` walk is the same
+/// one `kept::forget_absent_artwork` makes over a landed list, for the same reason.
+///
+/// A failure here is not worth a line — the feature is an optimization over asking again, and
 /// asking again is what a page with no answer does.
-async fn drop_suppressed(state: &AppState, memo: &LogoMemo, wanted: &mut Vec<String>) {
-    let Ok(suppressed) = library::radio::suppressed_logo_urls(state, wanted).await else {
-        return;
+async fn seed_from_store(
+    state: &AppState,
+    memo: &LogoMemo,
+    wanted: &mut Vec<String>,
+    effort: Effort,
+    on_landed: &impl Fn(),
+) -> bool {
+    let Ok(answers) = library::radio::logo_answers(state, wanted).await else {
+        return false;
     };
-    let suppressed: HashSet<String> = suppressed.into_iter().collect();
-    wanted.retain(|url| !suppressed.contains(url));
-    for url in suppressed {
-        memo.record(url, None);
-    }
-}
 
-/// Sweep the misses too old to still suppress anything, on the first page of the session.
-async fn prune_misses_once(state: &AppState, memo: &LogoMemo) {
-    if !memo.claim_prune() {
-        return;
+    let now = crate::utils::now_rfc3339();
+    let mut answered: HashSet<String> = HashSet::new();
+    let mut landed = false;
+    for answer in answers {
+        match answer.artwork_path {
+            Some(path) if library::radio::artwork_is_present(Some(&path)) => {
+                memo.record(answer.favicon_url.clone(), Some(path));
+                answered.insert(answer.favicon_url);
+                landed = true;
+            }
+            // Suppressed, and this page is not the one the backoff makes an exception for.
+            None if effort == Effort::Page
+                && library::radio::answer_is_suppressed(&answer, &now) =>
+            {
+                memo.record(answer.favicon_url.clone(), None);
+                answered.insert(answer.favicon_url);
+            }
+            _ => {}
+        }
     }
-    if let Err(e) = library::radio::prune_logo_misses(state).await {
-        log::debug!("radio: logo misses not pruned: {}", crate::services::describe(&e));
+
+    wanted.retain(|url| !answered.contains(url));
+    if landed {
+        on_landed();
     }
+    landed
 }
 
 /// Carry this page's answers back to the table the next session reads.
 ///
-/// A hit clears rather than being stored: the store path is re-derived free on the next browse,
-/// and what has to go is the *old* miss, or a host that recovered stays suppressed until a
-/// backoff earned when it was down finally runs out.
-async fn record_outcome(state: &AppState, favicon_url: &str, hit: bool) {
-    let recorded = if hit {
-        library::radio::clear_logo_miss(state, favicon_url).await
-    } else {
-        library::radio::note_logo_miss(state, favicon_url).await
+/// A hit stores its path, which is what lets that session draw the logo without asking; it also
+/// clears whatever backoff the URL had earned, or a host that recovered would stay suppressed
+/// until a schedule from when it was down finally ran out.
+async fn record_outcome(state: &AppState, favicon_url: &str, logo: Option<&StoredLogo>) {
+    let recorded = match logo {
+        Some(logo) => library::radio::note_logo_hit(state, favicon_url, logo).await,
+        None => library::radio::note_logo_miss(state, favicon_url).await,
     };
     if let Err(e) = recorded {
         log::debug!("radio: logo outcome not recorded: {}", crate::services::describe(&e));

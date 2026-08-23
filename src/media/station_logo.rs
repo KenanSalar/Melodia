@@ -44,7 +44,18 @@ const MIN_LOGO_DIM: u32 = 32;
 /// them queue behind each other.
 pub(super) const LOGO_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Fetch and store one station logo, returning its path in the artwork store.
+/// One logo that landed: where it is, and what it cost the store.
+///
+/// The size is read back off the file rather than taken from the bytes handed to `store_image` —
+/// that re-encodes anything over its own bounds, so the two differ exactly where the number
+/// matters most.
+#[derive(Debug, Clone)]
+pub struct StoredLogo {
+    pub path: String,
+    pub bytes: u64,
+}
+
+/// Fetch and store one station logo, returning where it landed.
 ///
 /// `Ok(None)` is a usable answer with no logo in it (not an image, an unsupported container, or
 /// too small to draw); `Err` is a failure worth retrying later. Callers memoize both, so the
@@ -54,7 +65,7 @@ pub async fn fetch(
     client: &reqwest::Client,
     favicon_url: &str,
     artwork_dir: &Path,
-) -> Result<Option<String>, AppError> {
+) -> Result<Option<StoredLogo>, AppError> {
     let parsed = fetchable_url(favicon_url)?;
 
     let response = client
@@ -137,15 +148,22 @@ pub(super) fn fetchable_url(favicon_url: &str) -> Result<reqwest::Url, AppError>
 ///
 /// The floor is asked first and off the header alone, so a source too small to draw costs no
 /// decode at all.
-fn store_if_big_enough(bytes: &[u8], ext: &'static str, dir: &Path) -> Option<String> {
+fn store_if_big_enough(bytes: &[u8], ext: &'static str, dir: &Path) -> Option<StoredLogo> {
     let (width, height) = image_decode::memory_dimensions(bytes, image_decode::MAX_SOURCE_DIM)?;
     if width < MIN_LOGO_DIM || height < MIN_LOGO_DIM {
         return None;
     }
-    match composed_tile(bytes) {
+    let path = match composed_tile(bytes) {
         Some(tile) => artwork::store_image(&tile, "png", dir),
         None => artwork::store_image(bytes, ext, dir),
-    }
+    }?;
+    // A file the store just wrote or already had; a stat that fails says nothing about whether it
+    // is drawable, so the answer stands and the size falls back to what arrived.
+    let stored = std::fs::metadata(&path).map_or(bytes.len() as u64, |meta| meta.len());
+    Some(StoredLogo {
+        path,
+        bytes: stored,
+    })
 }
 
 /// The source composed into a square opaque tile, or `None` where it already is one and its own

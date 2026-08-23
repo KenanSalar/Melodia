@@ -15,6 +15,7 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::state::AppState;
+use crate::tasks::TaskSpawner;
 use crate::ui::radio::{RadioUi, browse, covers, kept};
 use crate::{AppWindow, Radio};
 
@@ -31,6 +32,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             enter(&ui, &s, &ru);
         } else {
             covers::release(&ui, &ru);
+            // The browsed-logo cache only grows while this page is open, so the leave is when it
+            // stops — and the artwork sweep's own trigger is a library scan, which a user who
+            // browses radio and never touches their music folders may not run for weeks.
+            crate::tasks::radio_logo_cache::spawn(&TaskSpawner::from_state(&s), &s);
         }
     });
 }

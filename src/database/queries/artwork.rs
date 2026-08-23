@@ -19,12 +19,16 @@ use crate::error::AppError;
 ///
 /// [`repoint_all`] builds its statements from this. [`REFERENCED_PATHS`] spells the same five out
 /// by hand, a union reading better written than generated, and is pinned against this list.
-pub(super) const ARTWORK_COLUMNS: [(&str, &str); 5] = [
+pub(super) const ARTWORK_COLUMNS: [(&str, &str); 6] = [
     ("tracks", "artwork_path"),
     ("albums", "artwork_path"),
     ("artists", "image_path"),
     ("playlists", "thumbnail_path"),
     ("radio_stations", "artwork_path"),
+    // The one entry that is not a row the user owns. A cached browse logo is held alive by its
+    // cache row alone, so the sweep has to see it or the cache would name a file the sweep just
+    // deleted; `library::radio`'s retention pass drops the row, and the file follows.
+    ("radio_logo_answers", "artwork_path"),
 ];
 
 /// The read half of [`ARTWORK_COLUMNS`].
@@ -42,7 +46,10 @@ const REFERENCED_PATHS: &str = "\
     UNION \
     SELECT thumbnail_path FROM playlists WHERE thumbnail_path IS NOT NULL AND thumbnail_path <> '' \
     UNION \
-    SELECT artwork_path FROM radio_stations WHERE artwork_path IS NOT NULL AND artwork_path <> ''";
+    SELECT artwork_path FROM radio_stations WHERE artwork_path IS NOT NULL AND artwork_path <> '' \
+    UNION \
+    SELECT artwork_path FROM radio_logo_answers \
+    WHERE artwork_path IS NOT NULL AND artwork_path <> ''";
 
 /// The bare filenames every artwork column still points at.
 ///
