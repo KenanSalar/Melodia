@@ -13,6 +13,7 @@
 //! off refuses. Nothing here logs a URL.
 
 use std::path::Path;
+use std::time::Duration;
 
 use futures_util::StreamExt;
 
@@ -35,6 +36,14 @@ const MAX_LOGO_BYTES: u64 = 2 * 1024 * 1024;
 /// rather than one per surface, so nothing this small enters the store for a later tier to reject.
 const MIN_LOGO_DIM: u32 = 32;
 
+/// Deadline on one logo request, start to finish.
+///
+/// The shared client bounds a *read* and a connect, not a request, so a host that trickles bytes
+/// never trips either and holds its slot for minutes. `services::radio_browser` wraps its own calls
+/// for the same reason. Set well under that: a favicon this slow is a miss, and a page's worth of
+/// them queue behind each other.
+pub(super) const LOGO_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// Fetch and store one station logo, returning its path in the artwork store.
 ///
 /// `Ok(None)` is a usable answer with no logo in it (not an image, an unsupported container, or
@@ -50,6 +59,7 @@ pub async fn fetch(
 
     let response = client
         .get(parsed)
+        .timeout(LOGO_REQUEST_TIMEOUT)
         .send()
         .await
         .map_err(|e| AppError::network("Station logo download failed", e))?;
@@ -72,7 +82,7 @@ pub async fn fetch(
         )));
     }
 
-    let bytes = read_capped(response).await?;
+    let bytes = read_capped(response, MAX_LOGO_BYTES).await?;
 
     let dir = artwork_dir.to_path_buf();
     tokio::task::spawn_blocking(move || store_if_big_enough(&bytes, ext, &dir))
@@ -80,21 +90,27 @@ pub async fn fetch(
         .map_err(AppError::io_source)
 }
 
-/// Read at most [`MAX_LOGO_BYTES`] of `response`.
+/// Read at most `max_bytes` of `response`.
 ///
 /// Streamed rather than `bytes()`-ed, for the reason `player::stream_source::fetch_capped` is: the
 /// header check ahead of this is a courtesy, and a host that omits or lies about its content
 /// length owes it nothing. Unlike the artist path there is no allowlist behind the cap, the host
 /// being whoever the station's owner named.
-async fn read_capped(response: reqwest::Response) -> Result<Vec<u8>, AppError> {
+///
+/// Shared with [`super::logo_discovery`], which reads a page from the same kind of host under its
+/// own cap. The cap is the caller's; everything else about the risk is identical.
+pub(super) async fn read_capped(
+    response: reqwest::Response,
+    max_bytes: u64,
+) -> Result<Vec<u8>, AppError> {
     let mut body = Vec::new();
     let mut chunks = response.bytes_stream();
     while let Some(chunk) = chunks.next().await {
         let chunk =
             chunk.map_err(|e| AppError::network("Station logo body could not be read", e))?;
-        if body.len().saturating_add(chunk.len()) as u64 > MAX_LOGO_BYTES {
+        if body.len().saturating_add(chunk.len()) as u64 > max_bytes {
             return Err(AppError::network_msg(format!(
-                "Station logo is larger than {MAX_LOGO_BYTES} bytes"
+                "Station logo body is larger than {max_bytes} bytes"
             )));
         }
         body.extend_from_slice(&chunk);
@@ -108,7 +124,7 @@ async fn read_capped(response: reqwest::Response) -> Result<Vec<u8>, AppError> {
 /// directory row's say-so. Cleartext is admitted because refusing it cost real logos and bought
 /// little: no credential is sent, and what comes back is only ever bytes the store decodes as an
 /// image, bounds and re-encodes.
-fn fetchable_url(favicon_url: &str) -> Result<reqwest::Url, AppError> {
+pub(super) fn fetchable_url(favicon_url: &str) -> Result<reqwest::Url, AppError> {
     let parsed = reqwest::Url::parse(favicon_url)
         .map_err(|e| AppError::network("Station logo URL could not be parsed", e))?;
     if !matches!(parsed.scheme(), "http" | "https") {
@@ -140,7 +156,7 @@ fn store_if_big_enough(bytes: &[u8], ext: &'static str, dir: &Path) -> Option<St
 /// for the rare composite that lands over its byte bound.
 fn composed_tile(bytes: &[u8]) -> Option<Vec<u8>> {
     let decoded = image_decode::decode_memory_capped(bytes, image_decode::MAX_SOURCE_DIM)?;
-    let tile = logo_tile::compose(&decoded)?;
+    let tile = logo_tile::compose(decoded)?;
 
     let mut encoded = Vec::new();
     let encoder = image::codecs::png::PngEncoder::new(&mut encoded);

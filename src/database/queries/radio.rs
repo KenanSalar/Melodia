@@ -1,5 +1,5 @@
-use crate::database::DbPool;
 use crate::database::queries::scan::to_natural_sort_key;
+use crate::database::{DbPool, chunked_in_query};
 use crate::entities::radio;
 use crate::error::AppError;
 
@@ -198,17 +198,34 @@ pub async fn set_artwork(db: &DbPool, id: i64, artwork_path: Option<&str>) -> Re
     Ok(())
 }
 
-/// The logo URLs still inside their backoff at `now`, so a browse can skip asking about them.
+/// Which of `favicon_urls` are still inside their backoff at `now`, so a browse can skip asking.
 ///
-/// Returns the URLs alone: what a caller does with a miss is suppress a request, and the
-/// bookkeeping behind that answer is this module's.
-pub async fn suppressed_logo_urls(db: &DbPool, now: &str) -> Result<Vec<String>, AppError> {
-    let urls =
-        sqlx::query_scalar("SELECT favicon_url FROM radio_logo_misses WHERE retry_after > ?")
-            .bind(now)
-            .fetch_all(db.read())
-            .await?;
-    Ok(urls)
+/// **Asked about a page, never about the table.** The key is a URL from a directory of tens of
+/// thousands of entries, a third of which carry a logo field that answers with nothing, so the row
+/// count has no bound a caller could read whole into a memo that holds two thousand.
+///
+/// The clock comparison lands in Rust rather than in the `WHERE`, since the placeholder list is
+/// what `chunked_in_query` binds and a second parameter would have to ride ahead of it. Still a
+/// string comparison against the same `to_rfc3339` shape both sides are written in.
+pub async fn suppressed_logo_urls(
+    db: &DbPool,
+    favicon_urls: &[String],
+    now: &str,
+) -> Result<Vec<String>, AppError> {
+    let scheduled: Vec<(String, String)> =
+        chunked_in_query(db.read(), favicon_urls, |placeholders| {
+            format!(
+                "SELECT favicon_url, retry_after FROM radio_logo_misses \
+                 WHERE favicon_url IN ({placeholders})"
+            )
+        })
+        .await?;
+
+    Ok(scheduled
+        .into_iter()
+        .filter(|(_, retry_after)| retry_after.as_str() > now)
+        .map(|(url, _)| url)
+        .collect())
 }
 
 /// How many times `favicon_url` has already answered with nothing, or `None` if never.

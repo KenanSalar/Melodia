@@ -35,6 +35,10 @@ export global Albums {
 // the album column is redundant inside a single album.
 export global AlbumDetail {
     in-out property <int> album-id: -1;
+    // A persisted detail is being reopened and its id has not landed yet. Raised before
+    // `app.show()`, so the grid `album-id == -1` would otherwise mount never paints a frame of
+    // the wrong page while the fetch behind the restore runs.
+    in-out property <bool> restoring: false;
     in-out property <AlbumRow> album;
     in-out property <[TrackListRow]> tracks;
 

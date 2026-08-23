@@ -52,6 +52,16 @@ export component MyLibraryView inherits Rectangle {
     property <bool> detail-open:
         root.album-open || root.artist-open || root.genre-open || root.playlist-open;
 
+    // **The four above are false for the whole of a boot restore**, its id landing only when the
+    // fetch behind it does, so the grid the mounted tab would otherwise show paints the wrong page
+    // until it swaps. Each arm carries the tab check the `*-open` arms do, so a grid branch reads
+    // this on its own and reduces to its own view's flag. Songs takes no term, having no detail.
+    property <bool> detail-restoring:
+        (MyLibrary.tab-idx == MyLibrary.tab-albums && AlbumDetail.restoring)
+        || (MyLibrary.tab-idx == MyLibrary.tab-artists && ArtistDetail.restoring)
+        || (MyLibrary.tab-idx == MyLibrary.tab-genres && GenreDetail.restoring)
+        || (MyLibrary.tab-idx == MyLibrary.tab-playlists && PlaylistDetail.restoring);
+
     // **The arm the band's hero half paints, lagging the four above by one close.** Those flip
     // on the frame the id clears, which is the frame the exit morph starts, so the ternaries
     // below would spend the whole collapse on their last arm. Seeded by the binding and owned
@@ -351,7 +361,7 @@ export component MyLibraryView inherits Rectangle {
             // Each grid tab swaps grid ↔ detail on the predicate above, -1 being the
             // grid — the same split these four had while they were separate sidebar
             // sections, now stated once so the band and the pills follow it too.
-            if MyLibrary.tab-idx == MyLibrary.tab-albums && !root.album-open: ViewTransition {
+            if MyLibrary.tab-idx == MyLibrary.tab-albums && !root.album-open && !root.detail-restoring: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: band.tab-enter-from;
@@ -374,7 +384,7 @@ export component MyLibraryView inherits Rectangle {
                 slide: !band.morphing;
                 AlbumDetailBody { width: 100%; height: 100%; }
             }
-            if MyLibrary.tab-idx == MyLibrary.tab-artists && !root.artist-open: ViewTransition {
+            if MyLibrary.tab-idx == MyLibrary.tab-artists && !root.artist-open && !root.detail-restoring: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: band.tab-enter-from;
@@ -397,7 +407,7 @@ export component MyLibraryView inherits Rectangle {
                 slide: !band.morphing;
                 ArtistDetailBody { width: 100%; height: 100%; }
             }
-            if MyLibrary.tab-idx == MyLibrary.tab-genres && !root.genre-open: ViewTransition {
+            if MyLibrary.tab-idx == MyLibrary.tab-genres && !root.genre-open && !root.detail-restoring: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: band.tab-enter-from;
@@ -420,7 +430,7 @@ export component MyLibraryView inherits Rectangle {
                 slide: !band.morphing;
                 GenreDetailBody { width: 100%; height: 100%; }
             }
-            if MyLibrary.tab-idx == MyLibrary.tab-playlists && !root.playlist-open: ViewTransition {
+            if MyLibrary.tab-idx == MyLibrary.tab-playlists && !root.playlist-open && !root.detail-restoring: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: band.tab-enter-from;

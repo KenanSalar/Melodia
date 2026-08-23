@@ -11,7 +11,9 @@
 //! [`super::covers`].
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
+use parking_lot::Mutex;
 use slint::{ComponentHandle, Weak};
 
 use crate::entities::radio::{DirectoryStation, StationPage, StationSearch};
@@ -231,12 +233,16 @@ pub fn retry(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
 /// having to know which case it is. Through the same pass a landed page takes, which is why it
 /// costs no traffic — every URL it asks about is already answered in the session memo.
 pub fn rewarm(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
-    if radio_ui.browse.lock().is_empty() {
-        return;
-    }
+    let generation = {
+        let browse = radio_ui.browse.lock();
+        if browse.is_empty() {
+            return;
+        }
+        browse.generation
+    };
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), ui.as_weak());
     state.runtime.spawn(async move {
-        warm_page(&s, &ru, &weak).await;
+        warm_page(&s, &ru, &weak, generation).await;
     });
 }
 
@@ -277,7 +283,7 @@ fn fetch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, append: bool
         }
 
         paint(&weak, &ru);
-        warm_page(&s, &ru, &weak).await;
+        warm_page(&s, &ru, &weak, generation).await;
     });
 }
 
@@ -290,17 +296,64 @@ fn paint(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
     });
 }
 
-/// Fetch the page's missing logos, decode a screenful, and repaint whatever that moved.
+/// Repaint the grid with the logos that have landed so far, and announce the tier with it.
+///
+/// **The announce matters as much as the paint.** At generation `0` a card asks the tier
+/// cache-only and queues no decode, which is what a released tier wants and the opposite of what a
+/// page still filling in does — the path just written into the row would never be decoded at all.
+fn paint_landed(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
+    let ru = radio_ui.clone();
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        apply(&ui, &ru);
+        if ru.section_active() {
+            covers::announce_warm(&ui);
+        }
+    });
+}
+
+/// How often a filling page repaints while its logos land.
+///
+/// [`apply`] is a whole-model write, so one per station would spend more on rebuilds than the fill
+/// is worth. Long enough to coalesce a burst, short enough that the grid reads as filling in
+/// rather than as arriving in steps.
+const LOGO_REPAINT_INTERVAL: Duration = Duration::from_millis(150);
+
+/// Fetch the page's missing logos, decode a screenful, and repaint as they land.
 ///
 /// **After the grid is already on screen**, deliberately: the search was one network round trip
 /// and the logos are a second, so serialising them would put both in front of first paint.
-async fn warm_page(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>) {
+///
+/// `generation` is the page these logos belong to. A search that supersedes it stops the burst
+/// where it stands rather than paying for a page nobody is looking at any more.
+async fn warm_page(
+    state: &AppState,
+    radio_ui: &Arc<RadioUi>,
+    weak: &Weak<AppWindow>,
+    generation: u64,
+) {
     let favicon_urls: Vec<String> = {
         let browse = radio_ui.browse.lock();
         browse.stations.iter().filter_map(|station| station.favicon_url.clone()).collect()
     };
-    let new_logos =
-        logos::fetch_missing(state, &radio_ui.logos, favicon_urls.iter().map(String::as_str)).await;
+
+    let last_repaint: Mutex<Option<Instant>> = Mutex::new(None);
+    let new_logos = logos::fetch_missing(
+        state,
+        &radio_ui.logos,
+        favicon_urls.iter().map(String::as_str),
+        || radio_ui.browse.lock().generation == generation,
+        || {
+            {
+                let mut last = last_repaint.lock();
+                if last.is_some_and(|at| at.elapsed() < LOGO_REPAINT_INTERVAL) {
+                    return;
+                }
+                *last = Some(Instant::now());
+            }
+            paint_landed(weak, radio_ui);
+        },
+    )
+    .await;
 
     let artwork_paths: Vec<String> = {
         let browse = radio_ui.browse.lock();

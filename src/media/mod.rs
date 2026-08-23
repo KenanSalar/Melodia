@@ -3,6 +3,7 @@ pub mod cover_thumbs;
 pub mod deezer;
 pub mod image_decode;
 pub mod itunes;
+pub mod logo_discovery;
 pub mod logo_tile;
 pub mod metadata;
 pub mod scanner;

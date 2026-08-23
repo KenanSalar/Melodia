@@ -19,6 +19,9 @@ use crate::media::image_decode::{FilterType, fit_within, resize_rgb8};
 /// Alpha at or below which a pixel counts as transparent rather than faint. Above zero because an
 /// exporter's fully-clear pixels are not always exactly clear, and a mark's own soft edge is the
 /// thing that must not read as ground.
+///
+/// Answers where the *ground* comes from, never whether to composite at all — [`is_opaque`] owns
+/// that, and it has to be exact.
 const TRANSPARENT_ALPHA: u8 = 8;
 
 /// How much of the border ring must be opaque before the ring is taken to name the source's own
@@ -50,21 +53,28 @@ const GROUND_DARK: Rgb<u8> = Rgb([0x1a, 0x1a, 0x1a]);
 /// byte-identical path.
 ///
 /// **Blocking** — same contract as the resize behind it.
-pub fn compose(decoded: &DynamicImage) -> Option<RgbImage> {
+///
+/// Takes the decode by value: it is the caller's last use of it, and `into_rgba8` then costs
+/// nothing on a source that already is one, where `to_rgba8` copies the whole buffer.
+pub fn compose(decoded: DynamicImage) -> Option<RgbImage> {
     let (width, height) = (decoded.width(), decoded.height());
     let square = width == height;
     if square && !decoded.color().has_alpha() {
         return None;
     }
 
-    let source = decoded.to_rgba8();
-    // A channel is not transparency: over half of what carries alpha never uses it, and those
-    // want the untouched-bytes path as much as a plain JPEG does.
-    if square && !source.pixels().copied().any(is_transparent) {
+    let source = decoded.into_rgba8();
+    // A channel is not transparency: over half of what carries alpha never uses it, and those want
+    // the untouched-bytes path as much as a plain JPEG does. Exact rather than
+    // `TRANSPARENT_ALPHA`'s fudge — a tier below drops the channel instead of compositing it, so
+    // anything short of fully opaque still has to be flattened here.
+    if square && source.pixels().copied().all(is_opaque) {
         return None;
     }
 
-    let ground = ground_colour(&source);
+    // Nothing opaque to draw, so a tile would be a flat ground and nothing else. Worse than the
+    // monogram the card falls back to, which is what `None` buys.
+    let ground = ground_colour(&source)?;
     // Flattened before the downscale rather than after: resampling straight alpha against
     // undefined colour is where the halo around a mark's edge comes from.
     let flattened = DynamicImage::ImageRgb8(flatten(&source, ground)?);
@@ -89,50 +99,74 @@ fn is_transparent(pixel: Rgba<u8>) -> bool {
     pixel.0[3] <= TRANSPARENT_ALPHA
 }
 
-/// The colour the tile is padded and flattened with.
+fn is_opaque(pixel: Rgba<u8>) -> bool {
+    pixel.0[3] == u8::MAX
+}
+
+/// The colour the tile is padded and flattened with, or `None` where the source has no opaque
+/// pixel to take one from.
 ///
 /// A source that came with its own ground keeps it, which is what makes a branded rectangle read
 /// as the same tile it was: the ring is that ground wherever the logo is a rectangle rather than a
 /// floating mark. Only when the ring is mostly clear is a neutral chosen instead.
-fn ground_colour(source: &RgbaImage) -> Rgb<u8> {
-    modal_opaque_ring(source).unwrap_or_else(|| {
-        if mark_luma(source) > WHITE_GROUND_MAX_LUMA {
-            GROUND_DARK
-        } else {
-            GROUND_LIGHT
-        }
+fn ground_colour(source: &RgbaImage) -> Option<Rgb<u8>> {
+    if let Some(ring) = modal_opaque_ring(source) {
+        return Some(ring);
+    }
+    let luma = mark_luma(source)?;
+    Some(if luma > WHITE_GROUND_MAX_LUMA {
+        GROUND_DARK
+    } else {
+        GROUND_LIGHT
     })
 }
 
 /// The most common opaque colour around the source's outermost pixels, or `None` when too few of
 /// them are opaque for the ring to be a ground at all.
+///
+/// Ties break on the colour itself. `HashMap` iteration order varies per process, so a ring of all
+/// distinct colours — a photo behind the byte cap — would otherwise pad differently on every fetch,
+/// and the store being content-addressed on the composed bytes means that lands as a new file each
+/// time rather than deduplicating.
 fn modal_opaque_ring(source: &RgbaImage) -> Option<Rgb<u8>> {
     let (width, height) = source.dimensions();
     let mut tally: std::collections::HashMap<[u8; 3], u32> = std::collections::HashMap::new();
     let mut ring = 0u32;
     let mut opaque = 0u32;
 
-    for (x, y, pixel) in source.enumerate_pixels() {
-        if x != 0 && y != 0 && x + 1 != width && y + 1 != height {
-            continue;
-        }
+    let mut tally_pixel = |pixel: &Rgba<u8>| {
         ring += 1;
         if is_transparent(*pixel) {
-            continue;
+            return;
         }
         opaque += 1;
         *tally.entry([pixel.0[0], pixel.0[1], pixel.0[2]]).or_default() += 1;
+    };
+
+    // The border alone, rather than every pixel with the interior skipped: the ring is O(w + h) of
+    // an O(w · h) buffer, and this runs on the decode pool once per composed logo.
+    for x in 0..width {
+        tally_pixel(source.get_pixel(x, 0));
+        if height > 1 {
+            tally_pixel(source.get_pixel(x, height - 1));
+        }
+    }
+    for y in 1..height.saturating_sub(1) {
+        tally_pixel(source.get_pixel(0, y));
+        if width > 1 {
+            tally_pixel(source.get_pixel(width - 1, y));
+        }
     }
 
     if ring == 0 || f64::from(opaque) < f64::from(ring) * OPAQUE_RING_FRACTION {
         return None;
     }
-    tally.into_iter().max_by_key(|(_, count)| *count).map(|(rgb, _)| Rgb(rgb))
+    tally.into_iter().max_by_key(|(rgb, count)| (*count, *rgb)).map(|(rgb, _)| Rgb(rgb))
 }
 
-/// Rec. 709 luma of the mark alone. The clear field carries no colour, and averaging it in as
-/// black is how a light mark ends up asking for a light ground.
-fn mark_luma(source: &RgbaImage) -> f64 {
+/// Rec. 709 luma of the mark alone, or `None` where there is no mark. The clear field carries no
+/// colour, and averaging it in as black is how a light mark ends up asking for a light ground.
+fn mark_luma(source: &RgbaImage) -> Option<f64> {
     let mut sum = 0f64;
     let mut counted = 0u32;
     for pixel in source.pixels() {
@@ -144,11 +178,7 @@ fn mark_luma(source: &RgbaImage) -> f64 {
             0.0722f64.mul_add(f64::from(b), 0.2126f64.mul_add(f64::from(r), 0.7152 * f64::from(g)));
         counted += 1;
     }
-    if counted == 0 {
-        0.0
-    } else {
-        sum / f64::from(counted)
-    }
+    (counted > 0).then(|| sum / f64::from(counted))
 }
 
 /// `source` composited over a flat `ground`, in gamma space as the renderer would have done it.

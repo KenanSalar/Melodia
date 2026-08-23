@@ -106,6 +106,8 @@ export global Playlists {
 // clearing them when it rebuilds `tracks` under one; the view clears them on `init` too.
 export global PlaylistDetail {
     in-out property <int> playlist-id: -1;
+    // See `AlbumDetail.restoring`.
+    in-out property <bool> restoring: false;
     in-out property <PlaylistRow> playlist;
     in-out property <[TrackListRow]> tracks;
 

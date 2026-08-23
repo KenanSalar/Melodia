@@ -238,14 +238,103 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         let starred: HashSet<String> =
             favorites.iter().filter_map(|station| station.station_uuid.clone()).collect();
         *ru.starred.lock() = starred;
-        ru.kept.lock().stations = favorites;
-        ru.recent.lock().stations = recent;
+        // A stored path outlives its file more easily than the row outlives the path, so the
+        // column is not evidence on its own. Blanked here rather than in the converter: the
+        // projection stays a projection, and the stat lands on this worker instead of the UI
+        // thread. A card with no path draws its monogram; one with a dead path drew nothing.
+        ru.kept.lock().stations = forget_absent_artwork(favorites);
+        ru.recent.lock().stations = forget_absent_artwork(recent);
 
         paint_mounted(&weak, &ru);
         if let Some(tab) = mounted {
             warm(&ru, &weak, warm_targets(&ru, tab, sort.as_ref())).await;
         }
+        heal_logos(&s, &ru, &weak).await;
     });
+}
+
+/// Drop artwork paths whose file is gone, so the row says what is actually drawable.
+fn forget_absent_artwork(mut stations: Vec<RadioStation>) -> Vec<RadioStation> {
+    for station in &mut stations {
+        if !library::radio::artwork_is_present(station.artwork_path.as_deref()) {
+            station.artwork_path = None;
+        }
+    }
+    stations
+}
+
+/// How many logo repairs to have in flight at once.
+///
+/// Below Browse's window: a repair can cost two requests rather than one, and it runs behind a
+/// list that is already on screen rather than in front of one that is not.
+const HEAL_BATCH: usize = 4;
+
+/// Re-fetch logos for kept stations whose row has none, and repaint whatever lands.
+///
+/// **After the paint and the warm, never before them.** This is network work on behalf of a list
+/// already on screen; a station that has been without a logo since it was kept can wait for its
+/// tab to be drawn. Most refreshes find nothing to do and cost one walk.
+async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>) {
+    let mut pending = logoless_stations(radio_ui).into_iter();
+    let mut in_flight = tokio::task::JoinSet::new();
+    for station in pending.by_ref().take(HEAL_BATCH) {
+        spawn_heal(&mut in_flight, state, station);
+    }
+
+    let mut landed = false;
+    while let Some(joined) = in_flight.join_next().await {
+        if let Some(station) = pending.next() {
+            spawn_heal(&mut in_flight, state, station);
+        }
+        let Ok(Some((id, path))) = joined else {
+            continue;
+        };
+        adopt_logo_path(radio_ui, id, &path);
+        landed = true;
+    }
+    if landed {
+        paint_mounted(weak, radio_ui);
+    }
+}
+
+fn spawn_heal(
+    in_flight: &mut tokio::task::JoinSet<Option<(i64, String)>>,
+    state: &AppState,
+    station: RadioStation,
+) {
+    let state = state.clone();
+    in_flight.spawn(async move {
+        let path = library::radio::heal_station_logo(&state, &station).await?;
+        Some((station.id, path))
+    });
+}
+
+/// The kept and recent stations carrying no drawable logo, deduplicated by id.
+///
+/// The two lists overlap wherever a favorite has been played, and a station healed under one is
+/// the same row as the one healed under the other.
+fn logoless_stations(radio_ui: &RadioUi) -> Vec<RadioStation> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for cache in [&radio_ui.kept, &radio_ui.recent] {
+        for station in &cache.lock().stations {
+            if station.artwork_path.is_none() && seen.insert(station.id) {
+                out.push(station.clone());
+            }
+        }
+    }
+    out
+}
+
+/// Point both caches' copies of a station at the logo that just landed.
+fn adopt_logo_path(radio_ui: &RadioUi, id: i64, path: &str) {
+    for cache in [&radio_ui.kept, &radio_ui.recent] {
+        for station in &mut cache.lock().stations {
+            if station.id == id {
+                station.artwork_path = Some(path.to_owned());
+            }
+        }
+    }
 }
 
 /// Repaint the mounted local tab, and Browse's stars with it.
