@@ -79,6 +79,9 @@ pub mod window_chrome;
 #[path = "tests/aurora_backdrop_tests.rs"]
 mod aurora_backdrop_tests;
 #[cfg(test)]
+#[path = "tests/detail_restore_tests.rs"]
+mod detail_restore_tests;
+#[cfg(test)]
 #[path = "tests/hero_blur_backdrop_tests.rs"]
 mod hero_blur_backdrop_tests;
 #[cfg(test)]
