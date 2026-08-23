@@ -165,13 +165,16 @@ are gated internally.
   `paint.rs`, `mod.rs`) is referenced **only** via `wire_updater` (verified — no
   other module imports it), so gating the whole dir is clean.
 
-`src/ui/updater_settings.rs`
+`src/ui/settings/updater_settings.rs`
 - **`install()` stays ungated** — it seeds `MelodiaUpdater.current-version`
   (also read by `about-section.slint` for the About version row),
   `system-managed` (via the ungated `is_system_install`), and `platform-kind`.
-  Gating it would blank the About version. Add one line:
-  `updater.set_feature_enabled(cfg!(feature = "self-update"));` — `cfg!(...)` is a
-  runtime bool literal that compiles in both configs.
+  Gating it would blank the About version. **[fix]** It also already seeds
+  `updates-supported` from `is_available()` — the runtime source-build gate, which
+  landed after this plan was written and takes the same card by the same route.
+  Fold into it rather than adding a second boolean:
+  `updater.set_updates_supported(cfg!(feature = "self-update") && is_available());`
+  (`cfg!(...)` is a runtime bool literal that compiles in both configs).
 - **[fix] Split the import** (line 24): `use crate::services::updater::is_system_install;`
   stays unconditional; move `UpdaterEvent` to
   `#[cfg(feature = "self-update")] use crate::services::updater::UpdaterEvent;`
@@ -181,30 +184,25 @@ are gated internally.
 
 ## Slint touch points
 
-Add a feature flag the UI can read, and **hide the Update section without
-unmounting it.**
-
-`melodia-ui/ui/globals/updater.slint` — the `MelodiaUpdater` global:
-```slint
-in property <bool> feature-enabled: true;   // Rust overrides at startup
-```
-The `install()` / `restart()` / `check()` callbacks stay defined; with the
-feature off the Rust side simply never wires or invokes them (unwired Slint
+**[fix] Nothing to add — the property already exists.**
+`melodia-ui/ui/globals/updater.slint` carries
+`in property <bool> updates-supported: true;`, and
+`melodia-ui/ui/views/settings/update-section.slint` already ANDs it into
+`has-matches`, which takes the card and its settings-search hits together (every
+row lives inside `if has-matches: SectionCard`, so no per-row AND is needed).
+Seed it as above and the feature-off build gets the same collapse the source-build
+gate gets. The `install()` / `restart()` / `check()` callbacks stay defined; with
+the feature off the Rust side simply never wires or invokes them (unwired Slint
 callbacks are no-ops).
 
-`melodia-ui/ui/views/settings/update-section.slint` (`UpdateSection`):
-- AND every row's visibility with `MelodiaUpdater.feature-enabled`.
-- Force the section's `has-matches` out-property to `false` when
-  `!feature-enabled` so the section collapses via the **existing** search-hide
-  path (it already collapses when a section has no matches).
-
 > **Slint pitfall — do NOT wrap the mount in `if`.** In
-> `melodia-ui/ui/views/settings-view.slint:116` the section is `upd-sec := UpdateSection {}`,
-> and the no-results placeholder predicate references it by id
-> (`&& !upd-sec.has-matches`, line 133). Wrapping `upd-sec` in
-> `if MelodiaUpdater.feature-enabled :` would put the id inside a conditional and
-> break that sibling reference (and the `vertical-stretch` collapse math). Keep
-> the component mounted; gate its content + `has-matches` internally instead.
+> `melodia-ui/ui/views/settings/pages/about-page.slint:27` the section is
+> `updates := UpdateSection { … }`, and the page's `has-matches` references it by
+> id (`updates.has-matches`, line 14), which the tab-level no-results predicate in
+> `settings-tabs.slint` then reads. Wrapping `updates` in an `if` would put the id
+> inside a conditional and break that sibling reference (and the
+> `vertical-stretch` collapse math). Keep the component mounted; gate its content
+> + `has-matches` internally instead.
 
 `melodia-ui/ui/views/settings/about-section.slint` — unchanged (reads `current-version`,
 still seeded by the ungated `install()`).
@@ -218,7 +216,7 @@ intra-doc-link warnings. These do **not** fail the clippy/build gate below
 converting the `[path]` links to plain backticked text:
 - `src/services/updater/system_install.rs:~13` → `super::install::download_and_install`
 - `src/services/updater/linux_pkg.rs:~14` → `super::install::download_and_install`
-- `src/ui/updater_settings.rs:~3, ~12` → `UpdaterEvent`
+- `src/ui/settings/updater_settings.rs:~3, ~12` → `UpdaterEvent`
 
 (`event.rs:75`'s link to `install` is fine — `event` is gated, so it only
 compiles when `install` also exists.)

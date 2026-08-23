@@ -254,6 +254,17 @@ cargo clippy --all-targets -- -D warnings      # lint
 cargo test                                     # run tests
 ```
 
+> **Note: a source build keeps its own library.**
+> `cargo run` and `target/release/Melodia` store their data under `Melodia-dev`,
+> beside an installed copy's `Melodia` folder rather than inside it. A schema
+> migration still on a branch therefore can't leave an installed Melodia unable to
+> open its own database, and the two can run at the same time, each with its own
+> library, settings and queue. `MELODIA_DATA_DIR` points either build at a
+> directory of your choosing, which is how you reproduce something against real
+> data, and how a library built up under an older source build is reached after
+> this split. A source build also has no Updates card in Settings, `target/`
+> being cargo's to overwrite.
+
 > **Note: vendored winit fork.**
 > The `winit/` directory is a checked-in copy of winit 0.30.13 plus an unmerged
 > Wayland file drag-and-drop fix ([winit#1881]); `Cargo.toml`'s
@@ -376,6 +387,10 @@ Melodia stores its data under the OS application-data directory
 | `logs/` | Rolling log files and crash reports (see [Troubleshooting](#troubleshooting)) |
 | `backups/` | Database copies taken before each schema migration |
 | `artwork/`, `artists/` | Cached album and artist images |
+
+Setting `MELODIA_DATA_DIR` moves the whole folder somewhere else, resolving a
+relative value against the working directory. A build run from the source tree
+uses `Melodia-dev` instead, so it never shares a database with an installed copy.
 
 ## Troubleshooting
 

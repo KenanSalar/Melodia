@@ -134,6 +134,10 @@ fn main() -> AppResult<()> {
     // Before the runtime and before Slint, so boot panics are covered too.
     services::crash_report::install_hook(&paths.logs_dir);
     log::info!("Melodia starting");
+    // Which root this boot landed on is the one startup fact nothing downstream can infer: a dev
+    // build and `MELODIA_DATA_DIR` both move it. The diagnostics bundle carries it as a field of
+    // its own; this is the copy a live tail has.
+    log::info!("data directory: {}", services::redact_home(&paths.data_dir.to_string_lossy()));
     // The claim happened before there was anywhere to say this.
     if let Some(e) = unenforced_reason {
         log::warn!(
@@ -360,12 +364,16 @@ fn main() -> AppResult<()> {
 
     let updater_settings_snapshot =
         startup_settings.as_ref().map(|s| s.updates.clone()).unwrap_or_default();
-    if updater_settings_snapshot.auto_check_enabled && !services::updater::is_system_install() {
+    if updater_settings_snapshot.auto_check_enabled
+        && services::updater::is_available()
+        && !services::updater::is_system_install()
+    {
         tasks::updater_daily::spawn(&spawner, state.clone(), weak.clone(), updater_event_tx);
     } else {
         log::info!(
-            "updater_daily: not spawning (auto_check_enabled={}, system_managed={})",
+            "updater_daily: not spawning (auto_check_enabled={}, available={}, system_managed={})",
             updater_settings_snapshot.auto_check_enabled,
+            services::updater::is_available(),
             services::updater::is_system_install()
         );
     }

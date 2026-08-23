@@ -24,6 +24,16 @@ from `main.rs` without ever opening this file.
 
 ## Install methods
 
+- **Two gates decide whether the updater exists, and they are not the same question.**
+  `updater::is_available()` is the outer one: false on a source build, because `target/` belongs to
+  cargo and a swapped-in release would be older than the tree above it and gone at the next build.
+  It stops `updater_daily::spawn` in `main()` and clears `MelodiaUpdater.updates-supported`, which
+  gates `UpdateSection.has-matches` and so takes the card *and* its settings-search hits.
+  `is_system_install()` is the inner one and softer: the update is real, only the mechanism is the
+  package manager's, so the check survives and Download/Skip become a hint. Reach for the right one
+  — widening `is_system_install` to cover a dev build would offer a `sudo dnf update` hint to
+  someone running `cargo run`.
+
 - **Atomic-swap retains `.old` for rollback (Linux AppImage/tarball only).** Two-step rename:
   `target → target.old`, `staged → target`, smoke-test, rollback on failure; `.old` reaped on first
   successful boot, single source `install::old_path()`. The `pkexec mv` cross-fs fallback,
