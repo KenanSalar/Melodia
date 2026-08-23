@@ -13,6 +13,11 @@
 //!
 //! **The section leave is narrower than every other grid page's**: it drops the logo tier and
 //! keeps every list. See [`browse`], [`kept`] and [`covers`].
+//!
+//! It is also the *only* trigger for `tasks::radio_logo_cache`, which is the one piece of teardown
+//! here that reaches past the UI. The browsed-logo store grows only while this page is open, so a
+//! leave is exactly when it stops, and the artwork sweep's own trigger is a library scan — which a
+//! user who browses radio and never touches their music folders may not run for weeks.
 
 mod browse;
 mod callbacks;
@@ -157,6 +162,13 @@ pub struct RadioUi {
     /// memo entry, and a page carrying it drew a monogram beside the two local tabs painting the
     /// real thing. Filled from the same fetch as [`Self::starred`], for the same reason.
     known_logos: Mutex<HashMap<String, String>>,
+    /// The station ids the logo repair has already asked about this session.
+    ///
+    /// `kept::refresh` runs on a section enter, on every star flip — Browse's included — and on
+    /// every removal, and the repair walks every logo-less row each time. A station that failed is
+    /// a stored backoff, so the repeat buys two queries and the same answer; this is that answer
+    /// held where a click cannot spend a round trip on it.
+    healed: Mutex<HashSet<i64>>,
     /// The Favorites tab: everything starred, plus every station typed in by hand.
     kept: Mutex<kept::KeptState>,
     /// The Recently Played tab: every station with a play behind it, starred or not.
@@ -180,6 +192,7 @@ impl RadioUi {
             browse: Mutex::new(BrowseState::default()),
             starred: Mutex::new(HashSet::new()),
             known_logos: Mutex::new(HashMap::new()),
+            healed: Mutex::new(HashSet::new()),
             kept: Mutex::new(kept::KeptState::default()),
             recent: Mutex::new(kept::KeptState::default()),
             logos: LogoMemo::new(),

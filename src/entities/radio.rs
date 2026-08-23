@@ -22,7 +22,7 @@ pub struct RadioStation {
     pub favicon_url: Option<String>,
     /// The logo in the radio-logo store, which is its own directory precisely
     /// because this is the one artwork column whose file cannot be re-derived
-    /// from the user's own library. Still one of the five the sweep reads
+    /// from the user's own library. Still one of the six the sweep reads
     /// through — the reference set spans every store.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artwork_path: Option<String>,

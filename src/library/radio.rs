@@ -90,11 +90,12 @@ pub async fn set_favorite(state: &AppState, id: i64, favorite: bool) -> Result<(
 
 /// Drop a station out of the Favorites tab.
 ///
-/// **Un-starring and deleting are the same button on two different rows.** A station with a play
-/// behind it is still in Recently Played and its history is not the star's to take — the argument
-/// [`set_directory_favorite`] already makes from the other side. One that was only ever starred is
-/// listed nowhere once the star goes, and Browse rewrites it from the directory the moment it is
-/// kept again.
+/// **Un-starring and deleting are the same button on two different rows.** A *directory* station
+/// with a play behind it is still in Recently Played and its history is not the star's to take —
+/// the argument [`set_directory_favorite`] already makes from the other side. One that was only
+/// ever starred is listed nowhere once the star goes, and Browse rewrites it from the directory
+/// the moment it is kept again. A hand-typed one has no directory to be rewritten from, so this
+/// is its delete either way — see [`is_listed`].
 pub async fn remove_from_favorites(state: &AppState, id: i64) -> Result<(), AppError> {
     set_favorite(state, id, false).await?;
     delete_if_unlisted(state, id).await
@@ -113,7 +114,11 @@ pub async fn remove_from_recent(state: &AppState, id: i64) -> Result<(), AppErro
 ///
 /// The table backs the two local tabs and nothing else, so a station neither of them shows is a
 /// row nothing can reach — including the user, who has just removed it from both.
-async fn delete_if_unlisted(state: &AppState, id: i64) -> Result<(), AppError> {
+///
+/// **Every un-star owes this, not just the trash.** The star and the trash leave a station in the
+/// same place; [`set_directory_favorite`] deliberately doesn't decide, so the surface calling it
+/// has to, or a browse-and-unstar leaves a row behind on every pass.
+pub async fn delete_if_unlisted(state: &AppState, id: i64) -> Result<(), AppError> {
     let station = get_station(state, id).await?;
     if is_listed(&station) {
         return Ok(());
@@ -123,7 +128,16 @@ async fn delete_if_unlisted(state: &AppState, id: i64) -> Result<(), AppError> {
 
 /// Whether either local tab would still show a station: the star is Favorites' filter and the
 /// stamp is Recently Played's, so between them they are the whole of what a row is kept for.
+///
+/// **A hand-typed station is listed by its star alone**, whatever it has been played. No directory
+/// page names it, so the card offers no star to set (`starrable: station.uuid != ""`) and Browse
+/// cannot write the row back. Counting the stamp there leaves it in Recently Played with the one
+/// tab that could restore it unable to, which is the row-nothing-can-reach this predicate exists
+/// to prevent rather than a milder version of it.
 fn is_listed(station: &radio::RadioStation) -> bool {
+    if station.station_uuid.as_deref().is_none_or(str::is_empty) {
+        return station.is_favorite;
+    }
     station.is_favorite || station.last_played.is_some()
 }
 
@@ -434,8 +448,11 @@ const LOGO_CACHE_MAX_AGE_DAYS: i64 = 14;
 /// **The bound that actually holds.** A TTL alone lets the store run up as far as the user's own
 /// browsing rate takes it — a directory page is fifty stations and most of them carry a logo — and
 /// a station scrolled past is worth keeping only while it is cheap. Sized so a heavy session's
-/// worth of pages survives and a month of them does not; a kept station's logo is not counted
-/// against it, its row holding the file regardless.
+/// worth of pages survives and a month of them does not.
+///
+/// **A bound on the cache, not on the disk.** Every hit row is billed, a kept station's among
+/// them, and what the cap evicts is the row: the file behind one survives on
+/// `radio_stations.artwork_path` and is drawn from the column rather than from here.
 const LOGO_CACHE_MAX_BYTES: i64 = 32 * 1024 * 1024;
 
 /// What this install already knows about each of `favicon_urls`.
@@ -533,15 +550,21 @@ pub fn artwork_is_present(artwork_path: Option<&str>) -> bool {
     artwork_path.is_some_and(|path| !path.is_empty() && std::path::Path::new(path).exists())
 }
 
-/// Ask one logo URL, and carry the answer back into the misses table.
+/// Ask one logo URL, and carry the answer back into the answer table.
+///
+/// **The stored answer is consulted first, hit as well as miss.** The table holds where a URL's
+/// bytes landed precisely so nothing has to download them to find out, and a repair that went
+/// straight to the socket spent a request re-deriving a path the row beside it already had.
 ///
 /// **`Ok(None)` earns a backoff and an `Err` does not.** The two mean different things — one is
 /// the host saying it has nothing usable, the other is not reaching the host at all — and
 /// persisting a transport failure would suppress a perfectly good logo for a day over a moment
 /// offline. `ui::radio::logos` splits them the same way on the browse path.
 async fn ask_logo_url(state: &AppState, url: &str) -> Option<String> {
-    if is_logo_url_suppressed(state, url).await {
-        return None;
+    match stored_answer(state, url).await {
+        Answered::Hit(path) => return Some(path),
+        Answered::Suppressed => return None,
+        Answered::Unknown => {}
     }
     let logo = match fetch_logo(state, url).await {
         Ok(logo) => logo,
@@ -560,13 +583,40 @@ async fn ask_logo_url(state: &AppState, url: &str) -> Option<String> {
     logo.map(|logo| logo.path)
 }
 
-/// Whether `url` is inside a backoff an earlier attempt earned.
-async fn is_logo_url_suppressed(state: &AppState, url: &str) -> bool {
+/// What an earlier session already settled about one URL.
+enum Answered {
+    /// A stored file still on disk, so there is nothing to ask.
+    Hit(String),
+    /// A miss inside the backoff it earned.
+    Suppressed,
+    /// Never asked, past its backoff, or a hit whose file has since been swept.
+    Unknown,
+}
+
+/// The stored answer for `url`, read once for both questions it settles.
+///
+/// One query, because a second would ask the same row the same thing. A hit whose file is gone is
+/// [`Answered::Unknown`]: the store is swept against the columns that reference it, and a path
+/// naming nothing paints an empty tile where the monogram was the honest answer.
+async fn stored_answer(state: &AppState, url: &str) -> Answered {
     let asked = [url.to_owned()];
+    let Ok(answers) = logo_answers(state, &asked).await else {
+        return Answered::Unknown;
+    };
+    // The two arms are mutually exclusive on the row — a hit carries no `retry_after` and a miss
+    // carries no path — so the order is only what keeps the borrow ahead of the move.
     let now = crate::utils::now_rfc3339();
-    logo_answers(state, &asked)
-        .await
-        .is_ok_and(|answers| answers.iter().any(|answer| answer_is_suppressed(answer, &now)))
+    for answer in answers {
+        if answer_is_suppressed(&answer, &now) {
+            return Answered::Suppressed;
+        }
+        if let Some(path) = answer.artwork_path
+            && artwork_is_present(Some(&path))
+        {
+            return Answered::Hit(path);
+        }
+    }
+    Answered::Unknown
 }
 
 /// The site a station's logo is discovered from, and the key its answer is memoized under.
@@ -604,8 +654,10 @@ pub async fn heal_station_logo(state: &AppState, station: &radio::RadioStation) 
 /// result narrow enough to be the station the user typed — a directory page would pay one for the
 /// third of its rows that carry no logo field.
 pub async fn discover_site_logo(state: &AppState, origin: &reqwest::Url) -> Option<String> {
-    if is_logo_url_suppressed(state, origin.as_str()).await {
-        return None;
+    match stored_answer(state, origin.as_str()).await {
+        Answered::Hit(path) => return Some(path),
+        Answered::Suppressed => return None,
+        Answered::Unknown => {}
     }
     let landed = match discover_logo_url(state, origin).await {
         Some(url) => ask_logo_url(state, &url).await,

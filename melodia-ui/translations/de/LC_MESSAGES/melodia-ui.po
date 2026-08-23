@@ -1849,6 +1849,10 @@ msgstr "Aus Favoriten entfernen?"
 msgid "\"{}\" will be removed from your favorites."
 msgstr "„{}“ wird aus deinen Favoriten entfernt."
 
+# A hand-typed station: leaving Favorites is leaving everything, so this one names the deletion.
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "„{}“ wird aus deinen Sendern entfernt, zusammen mit dem Wiedergabeverlauf."
+
 msgid "Remove from Recently Played?"
 msgstr "Aus „Zuletzt gespielt“ entfernen?"
 

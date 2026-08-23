@@ -1849,6 +1849,10 @@ msgstr "Favorilerden kaldırılsın mı?"
 msgid "\"{}\" will be removed from your favorites."
 msgstr "\"{}\" favorilerinden kaldırılacak."
 
+# A hand-typed station: leaving Favorites is leaving everything, so this one names the deletion.
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "\"{}\" dinlenme geçmişiyle birlikte istasyonlarından kaldırılacak."
+
 msgid "Remove from Recently Played?"
 msgstr "Son Çalınanlardan kaldırılsın mı?"
 

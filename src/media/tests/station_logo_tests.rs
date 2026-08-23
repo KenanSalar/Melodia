@@ -92,3 +92,25 @@ fn the_floor_admits_a_favicon_and_refuses_a_tracking_pixel() -> TestResult {
     );
     Ok(())
 }
+
+/// A source with nothing opaque in it has no ground to build a tile from, and storing it untreated
+/// is the one outcome worse than storing nothing: every tier below drops the alpha channel rather
+/// than compositing it, so the card paints an empty square where its monogram was the honest
+/// answer. The two "no tile" verdicts are opposite instructions and the store has to tell them
+/// apart.
+#[test]
+fn a_source_with_no_opaque_pixel_is_refused_rather_than_stored_untreated() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let side = MIN_LOGO_DIM * 2;
+
+    let mut bytes = Vec::new();
+    image::RgbaImage::from_pixel(side, side, image::Rgba([200, 40, 40, 0]))
+        .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)?;
+
+    // Well clear of the floor, so the refusal is the tile's verdict and not the size guard's.
+    assert!(
+        store_if_big_enough(&bytes, "png", dir.path()).is_none(),
+        "a fully transparent {side}px source must not reach the store"
+    );
+    Ok(())
+}

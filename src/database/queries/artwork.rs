@@ -9,7 +9,7 @@ use crate::error::AppError;
 
 /// Every column that points into the artwork stores, as `(table, column)`.
 ///
-/// **Five, and the last two are the ones that bite.** The first three name covers a rescan
+/// **Six, and the last three are the ones that bite.** The first three name covers a rescan
 /// rebuilds from the user's own files. `playlists.thumbnail_path` carries composites that
 /// `compose_artwork` wrote and no other row names, so a union that omits it reads them as orphans
 /// and the sweep blanks every custom playlist mosaic in the app; the auto-populated thumbnails
@@ -17,7 +17,7 @@ use crate::error::AppError;
 /// `radio_stations.artwork_path` is the same shape and worse, a station logo having come off a
 /// third-party host that is often already dead, so nothing can re-derive it.
 ///
-/// [`repoint_all`] builds its statements from this. [`REFERENCED_PATHS`] spells the same five out
+/// [`repoint_all`] builds its statements from this. [`REFERENCED_PATHS`] spells the same six out
 /// by hand, a union reading better written than generated, and is pinned against this list.
 pub(super) const ARTWORK_COLUMNS: [(&str, &str); 6] = [
     ("tracks", "artwork_path"),
@@ -35,7 +35,7 @@ pub(super) const ARTWORK_COLUMNS: [(&str, &str); 6] = [
 ///
 /// `UNION` rather than `UNION ALL`: the tracks arm is one row per track, and deduplicating in
 /// `SQLite` is cheaper than moving a large library's worth of repeated paths across the boundary.
-/// The empty-string arm is not redundant — the schema leaves all five nullable and the ingest
+/// The empty-string arm is not redundant — the schema leaves all six nullable and the ingest
 /// paths write `''` as readily as `NULL`.
 const REFERENCED_PATHS: &str = "\
     SELECT artwork_path FROM tracks WHERE artwork_path IS NOT NULL AND artwork_path <> '' \

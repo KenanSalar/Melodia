@@ -66,16 +66,22 @@ export component KeptStationsTab inherits Rectangle {
                 edit-clicked(s) => { Radio.edit-station(s); }
                 // Chrome inline so `@tr` applies and so the message can name the station. The
                 // kind is what carries the tab to the dispatcher, so removal means the list the
-                // card was actually on rather than whichever is mounted when the confirm lands —
-                // and the copy names only the list, the row's own deletion being a cleanup the
-                // card cannot see the condition for.
+                // card was actually on rather than whichever is mounted when the confirm lands.
+                //
+                // **The copy names the list, except where the list is the whole of what the row
+                // is.** A hand-typed station has no uuid, so no page can name it and the card
+                // offers it no star; leaving Favorites is leaving everything, history included,
+                // and `is_listed` deletes it. That is the one deletion the card can see the
+                // condition for, and understating it is a destructive action with no undo.
                 remove-clicked(s) => {
                     Dialog.title = root.is-recent
                         ? @tr("Remove from Recently Played?")
                         : @tr("Remove from favorites?");
                     Dialog.message = root.is-recent
                         ? @tr("\"{}\" will be removed from Recently Played.", s.name)
-                        : @tr("\"{}\" will be removed from your favorites.", s.name);
+                        : s.uuid == ""
+                            ? @tr("\"{}\" will be removed from your stations, along with its play history.", s.name)
+                            : @tr("\"{}\" will be removed from your favorites.", s.name);
                     Dialog.confirm-label = @tr("Remove");
                     Dialog.cancel-label = @tr("Cancel");
                     Dialog.destructive = true;

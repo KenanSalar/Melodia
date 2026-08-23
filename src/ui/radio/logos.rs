@@ -115,9 +115,10 @@ impl LogoMemo {
     /// the visible prefix is fetched first.
     ///
     /// **Under [`Effort::Explicit`] a remembered `None` is not an answer.** It is written by a
-    /// genuine miss, by a transport failure, and by [`drop_suppressed`] — so a wide keystroke on
-    /// the way to a narrow one poisons every URL the two share, and the narrow result's whole
-    /// point is that the user is looking at these stations right now.
+    /// genuine miss, by a transport failure, and by [`seed_from_store`] carrying a stored
+    /// backoff in — so a wide keystroke on the way to a narrow one poisons every URL the two
+    /// share, and the narrow result's whole point is that the user is looking at these stations
+    /// right now.
     fn unanswered<'a>(
         &self,
         favicon_urls: impl Iterator<Item = &'a str>,

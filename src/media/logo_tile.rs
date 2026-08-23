@@ -46,21 +46,39 @@ const WHITE_GROUND_MAX_LUMA: f64 = 149.0;
 const GROUND_LIGHT: Rgb<u8> = Rgb([0xff, 0xff, 0xff]);
 const GROUND_DARK: Rgb<u8> = Rgb([0x1a, 0x1a, 0x1a]);
 
-/// `decoded` as a square, fully opaque tile, or `None` where it already is one.
+/// What [`compose`] decided about a source.
 ///
-/// `None` is the common answer and the reason this is cheap: most of what a directory serves is
-/// already a square opaque icon, and leaving it alone is what keeps `artwork::store_image`'s
-/// byte-identical path.
+/// **Three answers, not two.** "Already fine" and "nothing worth storing" both leave this module
+/// with no tile in hand and mean opposite things to the caller: one keeps the source's own bytes,
+/// the other has to refuse the logo entirely so the card draws its monogram. Folded into one
+/// `None` they were indistinguishable, and a fully transparent source went into the store to be
+/// painted as an empty tile.
+pub enum Tile {
+    /// Composed into a square opaque tile.
+    Composed(RgbImage),
+    /// Already a square opaque source. Keep its bytes, which is what preserves
+    /// `artwork::store_image`'s byte-identical path.
+    SourceIsFine,
+    /// The source needs a tile and none could be built from it — no opaque pixel to take a ground
+    /// from, so it would be flat ground and nothing else. Refuse it: storing the untreated source
+    /// paints exactly the empty square this module exists to prevent.
+    Undrawable,
+}
+
+/// `decoded` as a square, fully opaque tile, or the reason there isn't one.
+///
+/// [`Tile::SourceIsFine`] is the common answer and the reason this is cheap: most of what a
+/// directory serves is already a square opaque icon.
 ///
 /// **Blocking** — same contract as the resize behind it.
 ///
 /// Takes the decode by value: it is the caller's last use of it, and `into_rgba8` then costs
 /// nothing on a source that already is one, where `to_rgba8` copies the whole buffer.
-pub fn compose(decoded: DynamicImage) -> Option<RgbImage> {
+pub fn compose(decoded: DynamicImage) -> Tile {
     let (width, height) = (decoded.width(), decoded.height());
     let square = width == height;
     if square && !decoded.color().has_alpha() {
-        return None;
+        return Tile::SourceIsFine;
     }
 
     let source = decoded.into_rgba8();
@@ -69,21 +87,25 @@ pub fn compose(decoded: DynamicImage) -> Option<RgbImage> {
     // `TRANSPARENT_ALPHA`'s fudge — a tier below drops the channel instead of compositing it, so
     // anything short of fully opaque still has to be flattened here.
     if square && source.pixels().copied().all(is_opaque) {
-        return None;
+        return Tile::SourceIsFine;
     }
 
-    // Nothing opaque to draw, so a tile would be a flat ground and nothing else. Worse than the
-    // monogram the card falls back to, which is what `None` buys.
-    let ground = ground_colour(&source)?;
+    let Some(ground) = ground_colour(&source) else {
+        return Tile::Undrawable;
+    };
     // Flattened before the downscale rather than after: resampling straight alpha against
     // undefined colour is where the halo around a mark's edge comes from.
-    let flattened = DynamicImage::ImageRgb8(flatten(&source, ground)?);
+    let Some(flattened) = flatten(&source, ground).map(DynamicImage::ImageRgb8) else {
+        return Tile::Undrawable;
+    };
 
     // The store would cap anything larger on the way in, so composing above it only builds a
     // buffer to throw away.
     let side = width.max(height).min(STORE_MAX_DIM);
     let (mark_w, mark_h) = fit_within(width, height, side, side);
-    let mark = resize_rgb8(&flattened, mark_w, mark_h, FilterType::Lanczos3)?;
+    let Some(mark) = resize_rgb8(&flattened, mark_w, mark_h, FilterType::Lanczos3) else {
+        return Tile::Undrawable;
+    };
 
     let mut tile = RgbImage::from_pixel(side, side, ground);
     image::imageops::replace(
@@ -92,7 +114,7 @@ pub fn compose(decoded: DynamicImage) -> Option<RgbImage> {
         i64::from((side - mark_w) / 2),
         i64::from((side - mark_h) / 2),
     );
-    Some(tile)
+    Tile::Composed(tile)
 }
 
 fn is_transparent(pixel: Rgba<u8>) -> bool {

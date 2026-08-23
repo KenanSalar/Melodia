@@ -24,14 +24,15 @@ export component RadioView inherits Rectangle {
         clicked => { Radio.blur-search-tick += 1; }
     }
 
-    // **The one place in the tree where the debounce is load-bearing rather than an
-    // optimization**: on Browse a settled burst is a directory request, not a walk over rows
-    // already in hand. Hence the only `trailing` mount — a value the user typed through is a
-    // request and a logo burst spent on a page nobody will look at — and an interval sized to a
-    // round trip rather than to a re-filter.
+    // **One mount for three tabs, and only one of them is the network case.** On Browse a settled
+    // burst is a directory request, not a walk over rows already in hand, so it is the tree's only
+    // `trailing` mount — a value the user typed through is a request and a logo burst spent on a
+    // page nobody will look at — at an interval sized to a round trip. The two local tabs filter
+    // rows the session already holds and take the cadence every other box in the tree takes;
+    // `filter::dispatch` routes on the same `tab-idx`, so the pacing follows the destination.
     FilterThrottle {
-        trailing: true;
-        interval: 200ms;
+        trailing: Radio.tab-idx == Radio.tab-browse;
+        interval: Radio.tab-idx == Radio.tab-browse ? 200ms : 130ms;
         pending: root.filter-tick-pending;
         fire() => { Radio.filter-changed(Radio.filter); }
     }

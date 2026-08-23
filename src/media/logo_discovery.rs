@@ -69,7 +69,7 @@ async fn advertised_href(
         return Ok(None);
     }
 
-    let page = read_capped(response, MAX_PAGE_BYTES).await?;
+    let page = read_capped(response, "Station site document", MAX_PAGE_BYTES).await?;
     Ok(icon_href(&String::from_utf8_lossy(&page)))
 }
 

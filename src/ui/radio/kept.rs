@@ -237,13 +237,19 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
 
         // A stored path outlives its file more easily than the row outlives the path, so the
         // column is not evidence on its own. Blanked here rather than in the converter: the
-        // projection stays a projection, and the stat lands on this worker instead of the UI
-        // thread. A card with no path draws its monogram; one with a dead path drew nothing.
+        // projection stays a projection, and the walk lands off the UI thread. A card with no path
+        // draws its monogram; one with a dead path drew nothing.
         //
         // Ahead of everything derived from these lists, so nothing downstream can hand a card a
-        // path this pass already knows is gone.
-        let favorites = forget_absent_artwork(favorites);
-        let recent = forget_absent_artwork(recent);
+        // path this pass already knows is gone. On the blocking pool because it is a `stat` per
+        // row, and a large Favorites tab is a runtime worker parked on the filesystem.
+        let Ok((favorites, recent)) = tokio::task::spawn_blocking(move || {
+            (forget_absent_artwork(favorites), forget_absent_artwork(recent))
+        })
+        .await
+        else {
+            return;
+        };
 
         let starred: HashSet<String> =
             favorites.iter().filter_map(|station| station.station_uuid.clone()).collect();
@@ -301,7 +307,12 @@ const HEAL_BATCH: usize = 4;
 ///
 /// **After the paint and the warm, never before them.** This is network work on behalf of a list
 /// already on screen; a station that has been without a logo since it was kept can wait for its
-/// tab to be drawn. Most refreshes find nothing to do and cost one walk.
+/// tab to be drawn.
+///
+/// **Once per station per session**, which is what makes the cost bear the frequency: `refresh`
+/// runs on a section enter, on every star flip — Browse's included — and on every removal, and a
+/// station that failed is a stored backoff a repeat only pays two queries to be told about again.
+/// The set is what the backoff already says, held where a click can't spend a round trip on it.
 async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>) {
     let mut pending = logoless_stations(radio_ui).into_iter();
     let mut in_flight = tokio::task::JoinSet::new();
@@ -340,16 +351,19 @@ fn spawn_heal(
     });
 }
 
-/// The kept and recent stations carrying no drawable logo, deduplicated by id.
+/// The kept and recent stations carrying no drawable logo that this session has not already tried,
+/// deduplicated by id.
 ///
 /// The two lists overlap wherever a favorite has been played, and a station healed under one is
-/// the same row as the one healed under the other.
+/// the same row as the one healed under the other. Claiming the id here rather than after the
+/// attempt: what the walk is skipping is *asking again*, and that is owed whether the attempt
+/// found a logo or nothing.
 fn logoless_stations(radio_ui: &RadioUi) -> Vec<RadioStation> {
-    let mut seen = HashSet::new();
+    let mut tried = radio_ui.healed.lock();
     let mut out = Vec::new();
     for cache in [&radio_ui.kept, &radio_ui.recent] {
         for station in &cache.lock().stations {
-            if station.artwork_path.is_none() && seen.insert(station.id) {
+            if station.artwork_path.is_none() && tried.insert(station.id) {
                 out.push(station.clone());
             }
         }

@@ -180,6 +180,31 @@ fn a_row_survives_exactly_while_one_of_the_two_tabs_still_shows_it() {
     assert!(is_listed(&station), "and both at once is still one row worth keeping");
 }
 
+/// A hand-typed station is listed by its star alone, and the stamp does not stand in for one.
+///
+/// The card refuses a star to a row no directory names, so an unstarred one is stranded rather
+/// than merely unstarred: Recently Played goes on showing it and nothing anywhere can put it back
+/// in Favorites. Removing it there has to be the delete it was before the two tabs split.
+#[test]
+fn a_hand_typed_station_is_listed_by_its_star_and_never_by_its_plays() {
+    let mut station = stored(None);
+    station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
+
+    assert!(is_listed(&station), "the star still lists it");
+
+    station.is_favorite = false;
+    assert!(
+        !is_listed(&station),
+        "no page can name it and the card offers no star, so the plays list nothing"
+    );
+
+    // The directory's own rows keep the play history that removal takes from a hand-typed one.
+    let mut from_directory = stored(Some("uuid-1"));
+    from_directory.is_favorite = false;
+    from_directory.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
+    assert!(is_listed(&from_directory), "Browse can restore this one, so the plays still count");
+}
+
 /// Three ways a station ends up named, in the order they win. The host fallback is what stops a
 /// row being titled with a whole stream URL, which is unreadable in a card and sorts under
 /// `https`; the middle arm is the only reason a blank name field is worth offering at all.

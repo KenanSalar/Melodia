@@ -32,8 +32,9 @@ export component RadioBrowseTab inherits Rectangle {
         && Radio.browse-rows.length == 0;
 
     // The pill's own 32 px with `pad-md` of clearance above and below, so it lands where the
-    // footer row it replaced used to draw it.
-    private property <length> pill-band: 56px;
+    // footer row it replaced used to draw it. Summed rather than spelled: the padding below is the
+    // same token, and a literal drifts from it the first time the token is tuned.
+    private property <length> pill-band: 32px + 2 * Theme.pad-md;
 
     VerticalLayout {
         padding-top: Theme.pad-md;

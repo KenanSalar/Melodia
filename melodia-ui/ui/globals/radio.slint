@@ -27,8 +27,9 @@ export global Radio {
     // Bumped to make the filter input give up the keyboard; a global can't bind a callback inline,
     // so the `SearchBar` watches this counter.
     in-out property <int> blur-search-tick: 0;
-    // Fired by the view's `FilterThrottle`, the tree's one `trailing` mount: once the burst has
-    // settled, never on a value the user typed straight through.
+    // Fired by the view's `FilterThrottle`, whose pacing follows `tab-idx`: on Browse it is the
+    // tree's one `trailing` mount and waits for the burst to settle, since the value is a
+    // directory request; on the two local tabs it is the ordinary cadence.
     callback filter-changed(string);
 
     // Pre-filter station counts, one per tab, feeding the band's count line. `-1` until fetched

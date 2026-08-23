@@ -1847,6 +1847,10 @@ msgstr "Αφαίρεση από τα αγαπημένα;"
 msgid "\"{}\" will be removed from your favorites."
 msgstr "Ο σταθμός «{}» θα αφαιρεθεί από τα αγαπημένα σας."
 
+# A hand-typed station: leaving Favorites is leaving everything, so this one names the deletion.
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "Ο σταθμός «{}» θα αφαιρεθεί μαζί με το ιστορικό αναπαραγωγής του."
+
 msgid "Remove from Recently Played?"
 msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα;"
 

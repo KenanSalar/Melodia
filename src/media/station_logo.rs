@@ -18,6 +18,7 @@ use std::time::Duration;
 use futures_util::StreamExt;
 
 use crate::error::AppError;
+use crate::media::logo_tile::Tile;
 use crate::media::{artwork, image_decode, logo_tile};
 
 /// Ceiling on one logo download, checked against the header and again against the body.
@@ -93,7 +94,7 @@ pub async fn fetch(
         )));
     }
 
-    let bytes = read_capped(response, MAX_LOGO_BYTES).await?;
+    let bytes = read_capped(response, "Station logo body", MAX_LOGO_BYTES).await?;
 
     let dir = artwork_dir.to_path_buf();
     tokio::task::spawn_blocking(move || store_if_big_enough(&bytes, ext, &dir))
@@ -109,20 +110,20 @@ pub async fn fetch(
 /// being whoever the station's owner named.
 ///
 /// Shared with [`super::logo_discovery`], which reads a page from the same kind of host under its
-/// own cap. The cap is the caller's; everything else about the risk is identical.
+/// own cap. The cap is the caller's, and so is `what` — the two read different things off the same
+/// host, and an error naming a logo for a refused document sends whoever reads the log looking in
+/// the wrong half of the fetch.
 pub(super) async fn read_capped(
     response: reqwest::Response,
+    what: &str,
     max_bytes: u64,
 ) -> Result<Vec<u8>, AppError> {
     let mut body = Vec::new();
     let mut chunks = response.bytes_stream();
     while let Some(chunk) = chunks.next().await {
-        let chunk =
-            chunk.map_err(|e| AppError::network("Station logo body could not be read", e))?;
+        let chunk = chunk.map_err(|e| AppError::network(format!("{what} could not be read"), e))?;
         if body.len().saturating_add(chunk.len()) as u64 > max_bytes {
-            return Err(AppError::network_msg(format!(
-                "Station logo body is larger than {max_bytes} bytes"
-            )));
+            return Err(AppError::network_msg(format!("{what} is larger than {max_bytes} bytes")));
         }
         body.extend_from_slice(&chunk);
     }
@@ -153,8 +154,18 @@ fn store_if_big_enough(bytes: &[u8], ext: &'static str, dir: &Path) -> Option<St
     if width < MIN_LOGO_DIM || height < MIN_LOGO_DIM {
         return None;
     }
-    let path = match composed_tile(bytes) {
-        Some(tile) => artwork::store_image(&tile, "png", dir),
+    // `None` is "store the source's own bytes": it is already a square opaque icon, or the tile
+    // it wanted would not encode and the source is the better of the two.
+    let tile = match tile_for(bytes) {
+        Tile::Composed(tile) => encoded_png(tile),
+        Tile::SourceIsFine => None,
+        // Refused rather than stored untreated. The caller reads `None` as "nothing usable came
+        // back" and the card falls back to its monogram, where the source paints an empty square.
+        Tile::Undrawable => return None,
+    };
+
+    let path = match tile.as_deref() {
+        Some(tile) => artwork::store_image(tile, "png", dir),
         None => artwork::store_image(bytes, ext, dir),
     }?;
     // A file the store just wrote or already had; a stat that fails says nothing about whether it
@@ -166,16 +177,24 @@ fn store_if_big_enough(bytes: &[u8], ext: &'static str, dir: &Path) -> Option<St
     })
 }
 
-/// The source composed into a square opaque tile, or `None` where it already is one and its own
-/// bytes are the better thing to store.
+/// What [`logo_tile::compose`] makes of the source, past the decode it needs.
 ///
-/// **PNG rather than the store's JPEG.** A tile is flat ground behind a hard-edged mark, which is
-/// what JPEG rings around and what PNG holds in a few kilobytes; `store_image` re-encodes anyway
-/// for the rare composite that lands over its byte bound.
-fn composed_tile(bytes: &[u8]) -> Option<Vec<u8>> {
-    let decoded = image_decode::decode_memory_capped(bytes, image_decode::MAX_SOURCE_DIM)?;
-    let tile = logo_tile::compose(decoded)?;
+/// A source the decoder refuses is [`Tile::SourceIsFine`] rather than [`Tile::Undrawable`]: the
+/// header read in [`store_if_big_enough`] already says the store can hold it, and with no decode
+/// there is no evidence it wanted a tile at all.
+fn tile_for(bytes: &[u8]) -> Tile {
+    match image_decode::decode_memory_capped(bytes, image_decode::MAX_SOURCE_DIM) {
+        Some(decoded) => logo_tile::compose(decoded),
+        None => Tile::SourceIsFine,
+    }
+}
 
+/// A composed tile as PNG rather than the store's JPEG.
+///
+/// A tile is flat ground behind a hard-edged mark, which is what JPEG rings around and what PNG
+/// holds in a few kilobytes; `store_image` re-encodes anyway for the rare composite that lands
+/// over its byte bound.
+fn encoded_png(tile: image::RgbImage) -> Option<Vec<u8>> {
     let mut encoded = Vec::new();
     let encoder = image::codecs::png::PngEncoder::new(&mut encoded);
     image::DynamicImage::ImageRgb8(tile).write_with_encoder(encoder).ok()?;

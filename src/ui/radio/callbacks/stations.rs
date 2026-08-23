@@ -113,6 +113,10 @@ fn refresh_lists(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &slint::Weak<A
 /// Not optimistic, unlike the browsed toggle below: un-starring drops the row out of the Favorites
 /// list entirely, so there is nothing on screen for an optimistic flip to be right about — the
 /// refetch *is* the update.
+///
+/// **Un-starring goes through the removal door, not the flag.** The star and the trash leave a
+/// station in the same place, so they owe the same cleanup: a row neither tab would list is one
+/// nothing can reach, and `set_favorite` alone leaves it there for good.
 fn toggle_kept(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -122,7 +126,12 @@ fn toggle_kept(
 ) {
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), weak.clone());
     state.runtime.spawn(async move {
-        if let Err(e) = library::radio::set_favorite(&s, id, favorite).await {
+        let flipped = if favorite {
+            library::radio::set_favorite(&s, id, true).await
+        } else {
+            library::radio::remove_from_favorites(&s, id).await
+        };
+        if let Err(e) = flipped {
             log::warn!("radio: favorite toggle failed: {}", crate::services::describe(&e));
             return;
         }
@@ -153,9 +162,18 @@ fn toggle_browsed(
 
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), weak.clone());
     state.runtime.spawn(async move {
-        if let Err(e) =
-            library::radio::set_directory_favorite(&s, &station, wanted, logo.as_deref()).await
-        {
+        // The write is unconditional so the facade has a row to resolve, and un-starring then
+        // takes the cleanup the trash takes: a station released here without a play behind it is
+        // listed by neither tab, and leaving it costs a row per browse-and-unstar forever.
+        let flipped =
+            match library::radio::set_directory_favorite(&s, &station, wanted, logo.as_deref())
+                .await
+            {
+                Ok(id) if !wanted => library::radio::delete_if_unlisted(&s, id).await,
+                Ok(_) => Ok(()),
+                Err(e) => Err(e),
+            };
+        if let Err(e) = flipped {
             log::warn!("radio: favorite toggle failed: {}", crate::services::describe(&e));
             // Put the star back rather than leaving it claiming a row that was never written. A
             // routine failure, so it is a log line and not a toast.

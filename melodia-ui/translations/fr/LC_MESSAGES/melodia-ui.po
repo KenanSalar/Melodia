@@ -1843,6 +1843,10 @@ msgstr "Retirer des favoris ?"
 msgid "\"{}\" will be removed from your favorites."
 msgstr "« {} » sera retirée de vos favoris."
 
+# A hand-typed station: leaving Favorites is leaving everything, so this one names the deletion.
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "« {} » sera retirée de vos stations, ainsi que son historique d'écoute."
+
 msgid "Remove from Recently Played?"
 msgstr "Retirer des écoutés récemment ?"
 
