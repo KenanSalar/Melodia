@@ -7,14 +7,19 @@ import { FacetChip } from "facet-chip.slint";
 import { StationGrid } from "station-grid.slint";
 
 // The worldwide directory: a chip strip of filters over a virtualized station grid, with the
-// load-more pill under it.
+// load-more pill floating over its foot.
 //
 // **The scroller is here, not on the page.** Every tabbed page in the tree puts it in the tab
 // body, and a page-level `ScrollView` above a virtualized `ListView` is the nested-scroller pitfall.
 //
-// **The load-more pill is a footer rather than a row at the end of the list.** Reaching the list's
-// end from inside the virtualization means a `changed` handler on a layout property inside the
-// scroller, which is the change-tracker hazard; a footer says the same thing and cannot panic.
+// **Nothing insets under that pill**, so the last cards pass behind it at full scroll. Search's
+// mirror image reserves the band it floats in, which a `ListView` cannot do: its viewport height is
+// the mean of the delegates currently instantiated times the row count, so a taller final row would
+// move the scroll extent as it came into view.
+//
+// **It is not a row at the end of the list either.** Reaching the list's end from inside the
+// virtualization means a `changed` handler on a layout property inside the scroller, which is the
+// change-tracker hazard; a pinned pill says the same thing and cannot panic.
 export component RadioBrowseTab inherits Rectangle {
     in property <length> card-w;
     in property <length> card-h;
@@ -25,6 +30,10 @@ export component RadioBrowseTab inherits Rectangle {
     property <bool> is-empty: !Radio.browse-loading
         && !Radio.browse-failed
         && Radio.browse-rows.length == 0;
+
+    // The pill's own 32 px with `pad-md` of clearance above and below, so it lands where the
+    // footer row it replaced used to draw it.
+    private property <length> pill-band: 56px;
 
     VerticalLayout {
         padding-top: Theme.pad-md;
@@ -172,21 +181,27 @@ export component RadioBrowseTab inherits Rectangle {
                 scroll-to(o) => { grid.set-v-offset(o); }
             }
         }
+    }
 
-        // Only where there is more to ask for, so the row costs nothing at the end of a result
-        // set. A second click while a request is out needs no guard here: `BrowseState::begin`
-        // refuses an append that is already in flight.
-        if Radio.browse-has-more && Radio.browse-rows.length > 0: HorizontalLayout {
-            padding: Theme.pad-md;
-            alignment: center;
-            vertical-stretch: 0;
+    // **Out of the flow, not a row in the column.** As a footer it clipped the grid at its floor
+    // and left a full-width band nothing could be clicked in. Floating, the cards run under it and
+    // only the pill takes the hit test; declared last so it paints over the grid and the scrollbar,
+    // and the height is pinned because a layout child of a plain Rectangle otherwise fills the view
+    // and centres the pill down the middle of it.
+    //
+    // Only where there is more to ask for. A second click while a request is out needs no guard
+    // here: `BrowseState::begin` refuses an append that is already in flight.
+    if Radio.browse-has-more && Radio.browse-rows.length > 0: HorizontalLayout {
+        y: root.height - root.pill-band;
+        height: root.pill-band;
+        padding: Theme.pad-md;
+        alignment: center;
 
-            ActionPill {
-                PillButton {
-                    text: Radio.browse-loading ? @tr("Loading…") : @tr("Load more stations");
-                    icon: Radio.browse-loading ? "" : "expand_more";
-                    clicked => { Radio.load-more(); }
-                }
+        ActionPill {
+            PillButton {
+                text: Radio.browse-loading ? @tr("Loading…") : @tr("Load more stations");
+                icon: Radio.browse-loading ? "" : "expand_more";
+                clicked => { Radio.load-more(); }
             }
         }
     }
