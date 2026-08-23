@@ -40,7 +40,12 @@ pub fn new_tier() -> CoverThumbs {
 pub fn tune_cache_for_display(app: &AppWindow, radio_ui: &RadioUi) {
     let cap = grid_prewarm::cover_cap_for_window(app, DEFAULT_LOGO_CAP);
     radio_ui.covers.resize(cap);
-    radio_ui.covers.set_thumb_size(grid_prewarm::cover_size_for_window(app));
+
+    // Published as well as set, because the card compares the logo it was handed against it to
+    // decide whether the source can fill the tile — see `Radio.logo-decode-size`.
+    let thumb_size = grid_prewarm::cover_size_for_window(app);
+    radio_ui.covers.set_thumb_size(thumb_size);
+    app.global::<Radio>().set_logo_decode_size(i32::try_from(thumb_size).unwrap_or(i32::MAX));
 }
 
 /// Decode roughly a screenful of logos, off the UI thread.

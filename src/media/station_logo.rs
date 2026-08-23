@@ -5,7 +5,9 @@
 //! everything before it. Deezer serves a fixed size from two domains we can name, so its guards
 //! are an allowlist and a byte cap. A station's `favicon_url` points anywhere the station's owner
 //! typed, at whatever a browser tab wanted, so the guards here are about the host being unknown
-//! and the image being too small to draw rather than about it being the wrong host.
+//! and the image being too small to draw rather than about it being the wrong host. It is also
+//! why the bytes are run through [`logo_tile::compose`] on the way in and Deezer's are not: a
+//! press photo is already the shape its tier draws, a favicon is whatever the site had.
 //!
 //! Reached only through `library::radio::fetch_logo`, which is where the switch that turns Radio
 //! off refuses. Nothing here logs a URL.
@@ -15,7 +17,7 @@ use std::path::Path;
 use futures_util::StreamExt;
 
 use crate::error::AppError;
-use crate::media::{artwork, image_decode};
+use crate::media::{artwork, image_decode, logo_tile};
 
 /// Ceiling on one logo download, checked against the header and again against the body.
 ///
@@ -115,17 +117,35 @@ fn fetchable_url(favicon_url: &str) -> Result<reqwest::Url, AppError> {
     Ok(parsed)
 }
 
-/// The store's own bounds, plus the floor above, on the decode pool.
+/// The store's own bounds, plus the floor above and [`logo_tile::compose`], on the decode pool.
 ///
-/// `memory_dimensions` reads the header rather than decoding, so the floor costs nothing on the
-/// sources it rejects and nothing on the ones it passes: `store_image` asks the same question
-/// again and a header parse is not what either of them spends time on.
+/// The floor is asked first and off the header alone, so a source too small to draw costs no
+/// decode at all.
 fn store_if_big_enough(bytes: &[u8], ext: &'static str, dir: &Path) -> Option<String> {
     let (width, height) = image_decode::memory_dimensions(bytes, image_decode::MAX_SOURCE_DIM)?;
     if width < MIN_LOGO_DIM || height < MIN_LOGO_DIM {
         return None;
     }
-    artwork::store_image(bytes, ext, dir)
+    match composed_tile(bytes) {
+        Some(tile) => artwork::store_image(&tile, "png", dir),
+        None => artwork::store_image(bytes, ext, dir),
+    }
+}
+
+/// The source composed into a square opaque tile, or `None` where it already is one and its own
+/// bytes are the better thing to store.
+///
+/// **PNG rather than the store's JPEG.** A tile is flat ground behind a hard-edged mark, which is
+/// what JPEG rings around and what PNG holds in a few kilobytes; `store_image` re-encodes anyway
+/// for the rare composite that lands over its byte bound.
+fn composed_tile(bytes: &[u8]) -> Option<Vec<u8>> {
+    let decoded = image_decode::decode_memory_capped(bytes, image_decode::MAX_SOURCE_DIM)?;
+    let tile = logo_tile::compose(&decoded)?;
+
+    let mut encoded = Vec::new();
+    let encoder = image::codecs::png::PngEncoder::new(&mut encoded);
+    image::DynamicImage::ImageRgb8(tile).write_with_encoder(encoder).ok()?;
+    Some(encoded)
 }
 
 /// What the response says it is, folded through [`extension_for`].

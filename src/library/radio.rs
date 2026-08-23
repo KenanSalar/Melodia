@@ -377,6 +377,47 @@ pub async fn fetch_logo(state: &AppState, favicon_url: &str) -> Result<Option<St
     crate::media::station_logo::fetch(client, favicon_url, &state.paths.artwork_dir).await
 }
 
+/// How long a logo URL that answered with nothing is left alone, per failed attempt. A day, so a
+/// host down for an afternoon is asked again the next time the user opens Radio.
+const LOGO_MISS_BACKOFF_HOURS: i64 = 24;
+
+/// Ceiling on that multiplier. Past it the schedule stops escalating, a week between attempts
+/// already rounding to never for anyone but a user who leaves the app open.
+const LOGO_MISS_MAX_ATTEMPTS: i64 = 7;
+
+/// Age past which a miss is dropped rather than escalated further. Deliberately clear of
+/// `LOGO_MISS_BACKOFF_HOURS × LOGO_MISS_MAX_ATTEMPTS`, so nothing is pruned while it still
+/// suppresses anything.
+const LOGO_MISS_MAX_AGE_DAYS: i64 = 30;
+
+/// The logo URLs a browse should not ask about yet, and a prune of the ones too old to matter.
+///
+/// Called once a session rather than per page: the answer only shrinks as the session records
+/// its own misses, and the caller's memo is where those land.
+pub async fn suppressed_logo_urls(state: &AppState) -> Result<Vec<String>, AppError> {
+    let stale = chrono::Utc::now()
+        - chrono::TimeDelta::try_days(LOGO_MISS_MAX_AGE_DAYS).unwrap_or_default();
+    queries::radio::prune_logo_misses(&state.db, &stale.to_rfc3339()).await?;
+    queries::radio::suppressed_logo_urls(&state.db, &crate::utils::now_rfc3339()).await
+}
+
+/// Record that `favicon_url` answered with nothing, pushing its next attempt further out.
+pub async fn note_logo_miss(state: &AppState, favicon_url: &str) -> Result<(), AppError> {
+    let attempts = queries::radio::logo_miss_attempts(&state.db, favicon_url)
+        .await?
+        .unwrap_or(0)
+        .saturating_add(1);
+    let hours = LOGO_MISS_BACKOFF_HOURS * attempts.min(LOGO_MISS_MAX_ATTEMPTS);
+    let retry_after = chrono::Utc::now() + chrono::TimeDelta::try_hours(hours).unwrap_or_default();
+    queries::radio::upsert_logo_miss(&state.db, favicon_url, attempts, &retry_after.to_rfc3339())
+        .await
+}
+
+/// Forget a URL's misses, for a host that has started answering again.
+pub async fn clear_logo_miss(state: &AppState, favicon_url: &str) -> Result<(), AppError> {
+    queries::radio::clear_logo_miss(&state.db, favicon_url).await
+}
+
 /// Point a station at its stored logo, or clear it with `None`.
 pub async fn set_artwork(
     state: &AppState,

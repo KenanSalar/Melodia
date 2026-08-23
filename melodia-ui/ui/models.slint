@@ -321,6 +321,12 @@ export struct RadioStationRow {
     bitrate: int,          // 0 = the directory doesn't know
     hls: bool,
     is_favorite: bool,
+    // What the card paints with no logo: two name-hashed stops and the station's initials over
+    // them. Carried per row like `GenreRow`'s pair, Slint having no hash to derive them with.
+    // Empty `monogram` is a name with no letters in it, and leaves the card on the glyph.
+    tile_color_1: color,
+    tile_color_2: color,
+    monogram: string,
 }
 
 export struct RadioStationGridRow {

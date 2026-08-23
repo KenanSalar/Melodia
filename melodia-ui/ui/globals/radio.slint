@@ -73,6 +73,12 @@ export global Radio {
     in-out property <int> covers-generation: 0;
     pure callback request-logo(string /*artwork_path*/, int /*generation*/) -> image;
 
+    // Physical pixels the logo tier decodes to, retuned with it off `display-changed`. A card
+    // needs it to know whether the logo it was handed is big enough to fill the tile: the tier
+    // never pads a small source up, so the source's own width against this is the fraction of
+    // the tile it can cover at 1:1, on any display scale.
+    in-out property <int> logo-decode-size: 0;
+
     // Both take the whole row: a directory station has no database id (`id == 0`) and a kept one
     // has no place in the browse cache, so the row is the only thing that identifies either. One
     // door for all three tabs, and `id == 0` is where it splits.

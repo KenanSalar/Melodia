@@ -12,6 +12,8 @@ use slint::SharedString;
 use crate::entities::radio::{DirectoryStation, Facet, RadioStation};
 use crate::{RadioFacetRow, RadioStationRow};
 
+use super::identity;
+
 /// How many of a station's tags a card shows.
 ///
 /// The directory's tag field is free-form and user-entered, so a popular station routinely
@@ -32,6 +34,7 @@ pub fn to_slint_radio_station_row(
     is_favorite: bool,
     logo: Option<&str>,
 ) -> RadioStationRow {
+    let tile = identity::station_tile(&station.name);
     RadioStationRow {
         id: 0,
         uuid: SharedString::from(&station.station_uuid),
@@ -44,6 +47,9 @@ pub fn to_slint_radio_station_row(
         bitrate: station.bitrate,
         hls: station.hls,
         is_favorite,
+        tile_color_1: tile.color_1,
+        tile_color_2: tile.color_2,
+        monogram: tile.monogram,
     }
 }
 
@@ -53,6 +59,7 @@ pub fn to_slint_radio_station_row(
 /// to be told both. `uuid` stays empty for a station the user typed in, which is what the card
 /// splits its star and its Edit control on.
 pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
+    let tile = identity::station_tile(&station.name);
     RadioStationRow {
         id: crate::ui::util::clamp_i64_to_i32(station.id),
         uuid: station.station_uuid.as_deref().map(SharedString::from).unwrap_or_default(),
@@ -65,6 +72,9 @@ pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
         bitrate: station.bitrate,
         hls: station.hls,
         is_favorite: station.is_favorite,
+        tile_color_1: tile.color_1,
+        tile_color_2: tile.color_2,
+        monogram: tile.monogram,
     }
 }
 

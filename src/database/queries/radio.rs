@@ -198,6 +198,75 @@ pub async fn set_artwork(db: &DbPool, id: i64, artwork_path: Option<&str>) -> Re
     Ok(())
 }
 
+/// The logo URLs still inside their backoff at `now`, so a browse can skip asking about them.
+///
+/// Returns the URLs alone: what a caller does with a miss is suppress a request, and the
+/// bookkeeping behind that answer is this module's.
+pub async fn suppressed_logo_urls(db: &DbPool, now: &str) -> Result<Vec<String>, AppError> {
+    let urls =
+        sqlx::query_scalar("SELECT favicon_url FROM radio_logo_misses WHERE retry_after > ?")
+            .bind(now)
+            .fetch_all(db.read())
+            .await?;
+    Ok(urls)
+}
+
+/// How many times `favicon_url` has already answered with nothing, or `None` if never.
+pub async fn logo_miss_attempts(db: &DbPool, favicon_url: &str) -> Result<Option<i64>, AppError> {
+    let attempts =
+        sqlx::query_scalar("SELECT attempts FROM radio_logo_misses WHERE favicon_url = ?")
+            .bind(favicon_url)
+            .fetch_optional(db.read())
+            .await?;
+    Ok(attempts)
+}
+
+/// Record that `favicon_url` answered with nothing, and when it may be asked again.
+///
+/// Both values are the caller's: [`logo_miss_attempts`] is what it counted from, and the schedule
+/// is `library::radio`'s to decide.
+pub async fn upsert_logo_miss(
+    db: &DbPool,
+    favicon_url: &str,
+    attempts: i64,
+    retry_after: &str,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "INSERT INTO radio_logo_misses (favicon_url, attempts, retry_after) VALUES (?, ?, ?)
+         ON CONFLICT(favicon_url) DO UPDATE SET
+             attempts = excluded.attempts,
+             retry_after = excluded.retry_after",
+    )
+    .bind(favicon_url)
+    .bind(attempts)
+    .bind(retry_after)
+    .execute(db.write())
+    .await?;
+    Ok(())
+}
+
+/// Forget `favicon_url`'s misses, for a host that has started answering again — otherwise a URL
+/// that failed twice and then recovered stays suppressed until its old backoff runs out.
+pub async fn clear_logo_miss(db: &DbPool, favicon_url: &str) -> Result<(), AppError> {
+    sqlx::query("DELETE FROM radio_logo_misses WHERE favicon_url = ?")
+        .bind(favicon_url)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
+/// Drop misses whose retry time passed before `cutoff`, which is what bounds the table.
+///
+/// A row that far past its own backoff has nothing left to say: it would be retried on the next
+/// page carrying it either way, and keeping it only makes the load above larger.
+pub async fn prune_logo_misses(db: &DbPool, cutoff: &str) -> Result<(), AppError> {
+    sqlx::query("DELETE FROM radio_logo_misses WHERE retry_after < ?")
+        .bind(cutoff)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "tests/radio_tests.rs"]
 mod tests;

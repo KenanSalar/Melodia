@@ -19,6 +19,7 @@ mod callbacks;
 mod covers;
 mod facets;
 mod filter;
+mod identity;
 mod kept;
 mod logos;
 mod rows;

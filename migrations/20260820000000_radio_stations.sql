@@ -52,3 +52,29 @@ CREATE TABLE
         last_played TEXT,
         play_count INTEGER NOT NULL DEFAULT 0
     );
+
+-- Logo URLs that asked and got nothing back, so a browse doesn't spend the same
+-- failed round trips every launch. A dead favicon is the normal condition on a
+-- directory of community-maintained entries, and a host that hangs costs the
+-- full timeout each time a page carrying it is drawn.
+--
+-- Keyed on the URL rather than on the station: a station repointed at a new logo
+-- has to be asked again, and the URL is what changed. That also means the table
+-- describes our own network outcomes rather than directory rows, which is why it
+-- can exist at all next to the rule that browsed stations are never persisted.
+--
+-- attempts drives the backoff, so a host down for an afternoon is retried and one
+-- gone for good is asked at a rate that rounds to never. The answer is stored as
+-- the retry time rather than the attempt time so the read is a string comparison
+-- against the clock, the idiom the smart-playlist date rules already use: SQLite's
+-- date functions would have to parse chrono's nanosecond RFC3339 to do the same
+-- arithmetic here, and `library::radio` is where that policy belongs anyway.
+--
+-- No index: the lookup is by primary key, and the sweep is a full scan on a table
+-- this small either way.
+CREATE TABLE
+    IF NOT EXISTS radio_logo_misses (
+        favicon_url TEXT PRIMARY KEY,
+        attempts INTEGER NOT NULL DEFAULT 1,
+        retry_after TEXT NOT NULL
+    );

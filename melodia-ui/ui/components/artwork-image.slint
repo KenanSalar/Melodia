@@ -17,8 +17,16 @@ export component ArtworkImage inherits Rectangle {
     // Painted when no cover is present, as an SVG asset rather than a font glyph — see the branch
     // below. Each entity view passes the name matching its own sidebar icon.
     in property <string> fallback-icon: "music-note";
+    // Lettering in place of that glyph, for a host whose entries have identities of their own —
+    // the Radio grid, where a third of a page has no logo and one repeated icon is what a station
+    // looks like least. Takes precedence over `fallback-icon` and is empty everywhere else.
+    in property <string> fallback-text;
     // Scales the cover *inside* the tile frame for the hover zoom; the tile's own clip crops it.
     in property <float> cover-scale: 1.0;
+    // Draws the cover as a smaller card floating on `tile-bg` rather than filling the tile, for a
+    // source too small to stretch across it without going soft. Sized by the host, which is what
+    // knows the tier's decode size; `0px` is the ordinary fill and every other view leaves it there.
+    in property <length> cover-inset-size: 0px;
     // **The animated mirror, and what the ease belongs on.** Easing this rather than the derived
     // size means a tile *frame* resize — the grid reflowing as the sidebar collapses — tracks
     // instantly while a hover toggle still eases; animating the size conflates the two inputs.
@@ -37,6 +45,10 @@ export component ArtworkImage inherits Rectangle {
     // The one question the tile asks, stated once — every fallback branch spelled its negation
     // before.
     property <bool> shows-cover: root.has-cover && root.cover.width > 0;
+    // The glyph is the last resort, so both of the others have to be absent for it to paint.
+    property <bool> shows-glyph: !root.shows-cover && root.fallback-text == "";
+    // Which of the two cover arms draws.
+    property <bool> insets-cover: root.shows-cover && root.cover-inset-size > 0px;
 
     width: tile-size;
     height: tile-size;
@@ -44,7 +56,7 @@ export component ArtworkImage inherits Rectangle {
     background: tile-bg.transparentize(1.0 - root.fade);
     clip: true;
 
-    if root.shows-cover: Image {
+    if root.shows-cover && !root.insets-cover: Image {
         // Derived from the animating source, so size and centring track per frame with no lag.
         width: parent.width * root.anim-scale;
         height: parent.height * root.anim-scale;
@@ -55,11 +67,46 @@ export component ArtworkImage inherits Rectangle {
         opacity: root.fade;
     }
 
+    // The inset arm. **Its own `Rectangle` rather than a smaller `Image`**, because what makes
+    // this read as a card and not as a shrunken picture is the rounding, and an `Image` has none
+    // to give — the corner radius tracks the tile's by the same ratio the card does, so the two
+    // stay one family of shape at any size.
+    if root.insets-cover: Rectangle {
+        width: root.cover-inset-size * root.anim-scale;
+        height: self.width;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: root.tile-radius * self.width / root.tile-size;
+        clip: true;
+        opacity: root.fade;
+
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.cover;
+            image-fit: ImageFit.cover;
+        }
+    }
+
+    // **Deliberately outside the hover zoom**, unlike the cover and the glyphs below. Scaling this
+    // means scaling `font-size`, and text scales from its metrics origin rather than its centre —
+    // the same drift the glyph branches are `Image`s to avoid, which has no equivalent dodge here.
+    if !root.shows-cover && root.fallback-text != "": Text {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        text: root.fallback-text;
+        color: root.tile-icon-color;
+        // Two letters at this fraction fill about as much of the tile as the glyphs' 0.55 box.
+        font-size: parent.height * 0.3;
+        font-weight: 700;
+        opacity: root.fade;
+    }
+
     // **An SVG `Image`, not a Material Symbols glyph.** A glyph scales from its text-metrics origin
     // and isn't centred within its advance box, so scaling `font-size` for the hover zoom drifts it
     // sideways; an `Image` scales its *content* to fill the box. One `if` per name, because Slint
     // can't compose an `@image-url` from a runtime string — resources resolve at codegen.
-    if !root.shows-cover && root.fallback-icon == "music-note": Image {
+    if root.shows-glyph && root.fallback-icon == "music-note": Image {
         source: @image-url("../assets/icons/music-note.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
@@ -69,7 +116,7 @@ export component ArtworkImage inherits Rectangle {
         y: (parent.height - self.height) / 2;
         opacity: root.fade;
     }
-    if !root.shows-cover && root.fallback-icon == "person": Image {
+    if root.shows-glyph && root.fallback-icon == "person": Image {
         source: @image-url("../assets/icons/person.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
@@ -79,7 +126,7 @@ export component ArtworkImage inherits Rectangle {
         y: (parent.height - self.height) / 2;
         opacity: root.fade;
     }
-    if !root.shows-cover && root.fallback-icon == "playlist": Image {
+    if root.shows-glyph && root.fallback-icon == "playlist": Image {
         source: @image-url("../assets/icons/playlist.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
@@ -89,7 +136,7 @@ export component ArtworkImage inherits Rectangle {
         y: (parent.height - self.height) / 2;
         opacity: root.fade;
     }
-    if !root.shows-cover && root.fallback-icon == "theater_comedy": Image {
+    if root.shows-glyph && root.fallback-icon == "theater_comedy": Image {
         source: @image-url("../assets/icons/theater-comedy.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
@@ -99,7 +146,7 @@ export component ArtworkImage inherits Rectangle {
         y: (parent.height - self.height) / 2;
         opacity: root.fade;
     }
-    if !root.shows-cover && root.fallback-icon == "album": Image {
+    if root.shows-glyph && root.fallback-icon == "album": Image {
         source: @image-url("../assets/icons/album.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
@@ -111,7 +158,7 @@ export component ArtworkImage inherits Rectangle {
     }
     // A station whose logo is absent, plain-http, or too small for the store to keep — see
     // `media::station_logo` for why each of those is a glyph rather than a download.
-    if !root.shows-cover && root.fallback-icon == "radio": Image {
+    if root.shows-glyph && root.fallback-icon == "radio": Image {
         source: @image-url("../assets/icons/radio.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
@@ -123,7 +170,7 @@ export component ArtworkImage inherits Rectangle {
     }
     // Browse's card view, whose grid mixes subfolders and files — a folder card has no
     // cover to have, so this is its resting state rather than a missing-artwork one.
-    if !root.shows-cover && root.fallback-icon == "folder": Image {
+    if root.shows-glyph && root.fallback-icon == "folder": Image {
         source: @image-url("../assets/icons/folder.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;

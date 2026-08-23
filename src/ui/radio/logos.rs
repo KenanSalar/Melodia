@@ -10,6 +10,7 @@
 //! Nothing here holds a client, and nothing here logs a URL.
 
 use std::num::NonZeroUsize;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use lru::LruCache;
 use parking_lot::Mutex;
@@ -40,16 +41,28 @@ const LOGO_BATCH: usize = 6;
 /// `None` is "asked, nothing usable came back", and it is deliberately as durable as a hit: a
 /// station whose logo is under the floor or a dead link would otherwise be re-requested every
 /// time it appeared in a page.
+///
+/// **Seeded once from the misses previous sessions recorded**, so that durability survives a
+/// restart — a dead favicon host costs a full timeout per page that carries it, and a directory
+/// this size has plenty of them. Only misses are seeded: a *hit* is a path in the store, which
+/// the station row already carries and a browse re-derives for free.
 #[derive(Debug)]
 pub struct LogoMemo {
     answers: Mutex<LruCache<String, Option<String>>>,
+    seeded: AtomicBool,
 }
 
 impl LogoMemo {
     pub fn new() -> Self {
         Self {
             answers: Mutex::new(LruCache::new(LOGO_MEMO_CAP)),
+            seeded: AtomicBool::new(false),
         }
+    }
+
+    /// Whether this call is the one that gets to seed, claimed once for the session.
+    fn claim_seeding(&self) -> bool {
+        !self.seeded.swap(true, Ordering::Relaxed)
     }
 
     /// The stored path for a URL, if this session found one.
@@ -90,6 +103,8 @@ pub async fn fetch_missing<'a>(
     memo: &LogoMemo,
     favicon_urls: impl Iterator<Item = &'a str>,
 ) -> bool {
+    seed_from_recorded_misses(state, memo).await;
+
     let wanted = memo.unanswered(favicon_urls);
     if wanted.is_empty() {
         return false;
@@ -123,8 +138,41 @@ pub async fn fetch_missing<'a>(
                 }
             };
             landed |= path.is_some();
+            record_outcome(state, &url, path.is_some()).await;
             memo.record(url, path);
         }
     }
     landed
+}
+
+/// Fill the memo with what previous sessions already learned, on the first page of the session.
+///
+/// A failure here is not worth a line: the whole feature is an optimization over asking again,
+/// and asking again is what a session with no seed does.
+async fn seed_from_recorded_misses(state: &AppState, memo: &LogoMemo) {
+    if !memo.claim_seeding() {
+        return;
+    }
+    let Ok(urls) = library::radio::suppressed_logo_urls(state).await else {
+        return;
+    };
+    for url in urls {
+        memo.record(url, None);
+    }
+}
+
+/// Carry this page's answers back to the table the seed reads.
+///
+/// A hit clears rather than being stored: the store path is re-derived free on the next browse,
+/// and what has to go is the *old* miss, or a host that recovered stays suppressed until a
+/// backoff earned when it was down finally runs out.
+async fn record_outcome(state: &AppState, favicon_url: &str, hit: bool) {
+    let recorded = if hit {
+        library::radio::clear_logo_miss(state, favicon_url).await
+    } else {
+        library::radio::note_logo_miss(state, favicon_url).await
+    };
+    if let Err(e) = recorded {
+        log::debug!("radio: logo outcome not recorded: {}", crate::services::describe(&e));
+    }
 }

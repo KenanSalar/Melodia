@@ -27,6 +27,7 @@ pub mod model_diff;
 pub mod model_patch;
 pub mod mosaic_hero;
 pub mod my_library;
+pub mod name_palette;
 pub mod nav_history;
 pub mod nav_transition;
 pub mod now_playing;

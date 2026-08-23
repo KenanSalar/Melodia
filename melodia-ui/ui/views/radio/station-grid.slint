@@ -24,6 +24,9 @@ export component StationGrid inherits Rectangle {
     in property <int> covers-generation: 0;
     pure callback request-logo(string /*artwork_path*/, int /*generation*/) -> image;
 
+    // `Radio.logo-decode-size`, passed on to the card that measures its logo against it.
+    in property <int> logo-decode-size;
+
     // The kept tabs only. Browse leaves it false, so a directory row draws exactly as before.
     in property <bool> manageable;
 
@@ -74,6 +77,10 @@ export component StationGrid inherits Rectangle {
                             ? " · " : "")
                         + (station.bitrate > 0 ? @tr("{} kbps", station.bitrate) : "");
                     tags: station.tags;
+                    logo-decode-size: root.logo-decode-size;
+                    tile-color-1: station.tile_color_1;
+                    tile-color-2: station.tile_color_2;
+                    monogram: station.monogram;
                     is-favorite: station.is_favorite;
                     // An empty uuid is a station the user typed in: there is nothing in the
                     // directory to star it against, and Remove is what it has instead.

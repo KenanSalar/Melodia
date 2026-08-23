@@ -18,6 +18,10 @@ export component StationCard inherits Rectangle {
     in property <string> name;
     in property <string> meta;
     in property <string> tags;
+    // The logo-less tile's two stops and its lettering, hashed off the name in `ui::radio::rows`.
+    in property <color> tile-color-1;
+    in property <color> tile-color-2;
+    in property <string> monogram;
     in property <bool> is-favorite;
     // A station typed in by hand has no star: un-starring it would drop it from the only list
     // that shows it, leaving a row nothing can reach. Remove is its affordance instead.
@@ -31,6 +35,30 @@ export component StationCard inherits Rectangle {
 
     in property <length> card-width: 180px;
     in property <length> card-height: 226px;
+    // `Radio.logo-decode-size`, drilled like `covers-generation` — this file imports no global.
+    in property <int> logo-decode-size;
+
+    // Magnification past which a logo reads as soft rather than as art. The one knob: it decides
+    // both when a source is too small to stretch across the tile and how large the card it floats
+    // on instead may be, so the two can't disagree about what "sharp" means.
+    property <float> max-logo-upscale: 2.0;
+    // Ceiling on that floating card, so it always reads as inset rather than as a near-miss fill.
+    property <float> max-inset-fraction: 0.72;
+
+    // What the stored logo would draw at 1:1 here. The tier decodes to `logo-decode-size` physical
+    // pixels across this tile and never pads a small source up, so the source's own width is the
+    // fraction of the tile it can cover — scale-free, both numbers being physical.
+    property <length> logo-native-size: root.logo-decode-size > 0
+        ? root.tile-size * root.cover.width / root.logo-decode-size
+        : root.tile-size;
+
+    // `0px` for anything that can fill the tile inside the upscale budget, which is most of what
+    // a directory serves; the small remainder floats instead. Measured on the *native* size rather
+    // than on the result, so a source that only just clears the bar fills rather than landing on a
+    // card smaller than it could have drawn.
+    property <length> logo-inset-size: root.logo-native-size < root.tile-size / root.max-logo-upscale
+        ? min(root.logo-native-size * root.max-logo-upscale, root.tile-size * root.max-inset-fraction)
+        : 0px;
 
     callback clicked();
     callback play-clicked();
@@ -71,8 +99,19 @@ export component StationCard inherits Rectangle {
                 tile-size: root.tile-size;
                 tile-radius: Theme.radius-md;
                 cover-scale: root.card-hovered ? 1.04 : 1.0;
-                // A station whose logo is missing, dead, or too small to draw takes the glyph —
-                // which on this directory is most of them, so it has to look deliberate.
+                // A favicon is small by trade, so a good share of the directory has a logo that
+                // cannot cross the tile without going soft. Those float at a size that stays
+                // sharp, over the same gradient a station with no logo at all gets.
+                cover-inset-size: root.logo-inset-size;
+                // A station whose logo is missing, dead, or too small to draw gets its own two
+                // stops and its initials instead — a third of a directory page has no logo field
+                // at all, and one repeated glyph across them is what makes Browse read as a grid
+                // of icons rather than of stations. `ui::radio::identity` keeps the stops deep
+                // enough that this one ink is legible on every station.
+                tile-bg: @linear-gradient(135deg, root.tile-color-1, root.tile-color-2);
+                tile-icon-color: #ffffff.transparentize(0.1);
+                fallback-text: root.monogram;
+                // Still the last resort, for a name with no letters to take initials from.
                 fallback-icon: "radio";
             }
 
