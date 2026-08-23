@@ -8,9 +8,10 @@
 //! [`super::station_logo::fetch`] exactly as a directory-supplied `favicon_url` would, so the
 //! scheme guard, the byte caps, the size floor and the tile composition all apply unchanged.
 //!
-//! **Kept stations only.** A browsed page would pay a page fetch per logo-less row, which is a
-//! third of every page, against one extra request once for a station the user actually saved.
-//! `library::radio` is where that scoping lives. Nothing here logs a URL.
+//! **Never a whole directory page.** A page would pay a document fetch for the third of its rows
+//! that carry no logo field, so the two callers are the ones asking about a station somebody
+//! named: the kept-station heal, and a browse result narrow enough to be the station the user just
+//! searched for. `library::radio` is where that scoping lives. Nothing here logs a URL.
 
 use crate::error::AppError;
 use crate::media::station_logo::{LOGO_REQUEST_TIMEOUT, fetchable_url, read_capped};

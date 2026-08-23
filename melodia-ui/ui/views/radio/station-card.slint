@@ -26,6 +26,9 @@ export component StationCard inherits Rectangle {
     // A station typed in by hand has no star: un-starring it would drop it from the only list
     // that shows it, leaving a row nothing can reach. Remove is its affordance instead.
     in property <bool> starrable: true;
+    // Whether being a favorite is worth marking on this list. False where the list *is* the
+    // favorites, so the mark answers nothing — see the button.
+    in property <bool> star-marks-kept: true;
     in property <bool> editable;
     in property <bool> removable;
     in property <bool> homepage-known;
@@ -182,7 +185,10 @@ export component StationCard inherits Rectangle {
 
         // **Stays up when the station is starred**, unlike the rest of the overlay: the star is a
         // fact about the row and not an affordance, so a grid of results has to show which of them
-        // are already kept without being hovered one at a time.
+        // are already kept without being hovered one at a time. That is Browse, and it is Recently
+        // Played too — a station played out of Browse is kept without being starred, so the two
+        // are mixed there as well. On Favorites every row is starred, where the same mark says
+        // nothing and reads as chrome on every card.
         fav_btn := IconButton {
             visible: root.starrable;
             x: parent.width - self.width - Theme.pad-sm;
@@ -195,7 +201,7 @@ export component StationCard inherits Rectangle {
             idle-bg: Theme.floating-chrome-bg;
             idle-fg: root.is-favorite ? Theme.red : Theme.text;
             hover-fg: Theme.red;
-            opacity: root.card-hovered || root.is-favorite ? 1.0 : 0.0;
+            opacity: root.card-hovered || (root.is-favorite && root.star-marks-kept) ? 1.0 : 0.0;
             animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
             clicked => { root.favorite-clicked(); }
         }

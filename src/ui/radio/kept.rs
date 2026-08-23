@@ -12,7 +12,7 @@
 //! accent-folded, which is right for matching and wrong for the box: reseating from it would put
 //! a lowercased, unaccented spelling of what the user typed back in front of them.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Weak};
@@ -235,15 +235,22 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             }
         };
 
-        let starred: HashSet<String> =
-            favorites.iter().filter_map(|station| station.station_uuid.clone()).collect();
-        *ru.starred.lock() = starred;
         // A stored path outlives its file more easily than the row outlives the path, so the
         // column is not evidence on its own. Blanked here rather than in the converter: the
         // projection stays a projection, and the stat lands on this worker instead of the UI
         // thread. A card with no path draws its monogram; one with a dead path drew nothing.
-        ru.kept.lock().stations = forget_absent_artwork(favorites);
-        ru.recent.lock().stations = forget_absent_artwork(recent);
+        //
+        // Ahead of everything derived from these lists, so nothing downstream can hand a card a
+        // path this pass already knows is gone.
+        let favorites = forget_absent_artwork(favorites);
+        let recent = forget_absent_artwork(recent);
+
+        let starred: HashSet<String> =
+            favorites.iter().filter_map(|station| station.station_uuid.clone()).collect();
+        *ru.starred.lock() = starred;
+        ru.kept.lock().stations = favorites;
+        ru.recent.lock().stations = recent;
+        remember_logos(&ru);
 
         paint_mounted(&weak, &ru);
         if let Some(tab) = mounted {
@@ -251,6 +258,27 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         }
         heal_logos(&s, &ru, &weak).await;
     });
+}
+
+/// Re-derive the uuid-keyed logos Browse falls back on, from whatever the two caches now hold.
+///
+/// **Off the caches rather than off the rows a caller has in hand**, so the map cannot describe a
+/// list that has since moved: the bulk refresh and a landed heal both change what a row holds, and
+/// a partial update is exactly Browse painting a monogram beside a tab drawing the real thing.
+///
+/// Both lists, since a station can be in either — a played-but-unstarred station is as likely to
+/// come back in a directory page as a favorite. One the user typed in carries no uuid and no page
+/// can name it, so it contributes nothing.
+fn remember_logos(radio_ui: &RadioUi) {
+    let mut logos = HashMap::new();
+    for cache in [&radio_ui.kept, &radio_ui.recent] {
+        for station in &cache.lock().stations {
+            if let (Some(uuid), Some(path)) = (&station.station_uuid, &station.artwork_path) {
+                logos.insert(uuid.clone(), path.clone());
+            }
+        }
+    }
+    *radio_ui.known_logos.lock() = logos;
 }
 
 /// Drop artwork paths whose file is gone, so the row says what is actually drawable.
@@ -293,6 +321,9 @@ async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWi
         landed = true;
     }
     if landed {
+        // Browse draws from the map, not from the caches, so it has to be re-derived here too —
+        // this is the one path that finds a logo *after* the refresh built it.
+        remember_logos(radio_ui);
         paint_mounted(weak, radio_ui);
     }
 }

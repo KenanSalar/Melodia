@@ -1841,12 +1841,19 @@ msgstr "Diese Adresse liefert kein Audio, das Melodia dekodieren kann."
 msgid "Couldn't save the station."
 msgstr "Der Sender konnte nicht gespeichert werden."
 
-# The station card's destructive action.
-msgid "Remove station?"
-msgstr "Sender entfernen?"
+# The station card's destructive action, once per tab: the two lists are independent, so each
+# names only its own.
+msgid "Remove from favorites?"
+msgstr "Aus Favoriten entfernen?"
 
-msgid "\"{}\" will be removed from your stations, along with its play history."
-msgstr "„{}“ wird aus deinen Sendern entfernt, zusammen mit dem Wiedergabeverlauf."
+msgid "\"{}\" will be removed from your favorites."
+msgstr "„{}“ wird aus deinen Favoriten entfernt."
+
+msgid "Remove from Recently Played?"
+msgstr "Aus „Zuletzt gespielt“ entfernen?"
+
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "„{}“ wird aus „Zuletzt gespielt“ entfernt."
 
 # Station list import and export.
 msgid "{n} station added"

@@ -1,7 +1,7 @@
 use crate::entities::radio::{DirectoryStation, RadioStation, StationPage};
 use crate::error::AppError;
 
-use super::{ensure_editable, ensure_playable, hide_hls, resolve_station_name};
+use super::{ensure_editable, ensure_playable, hide_hls, is_listed, resolve_station_name};
 
 /// One directory row, segmented or not. Spelled out rather than defaulted: `DirectoryStation` has
 /// no `Default`, a station with no uuid and no URL being one nothing may keep.
@@ -154,6 +154,30 @@ fn a_segmented_station_is_refused_at_either_play_door() {
             "`{door}` reaches the decoder and must go through the gate"
         );
     }
+}
+
+/// The whole truth table behind removal, and the only place it is stated once.
+///
+/// A wrong arm here is silent both ways and each way loses something: read as listed, an unstarred
+/// never-played row survives forever with nothing able to show it; read as unlisted, removing a
+/// station from one tab deletes it out of the other — the play history a favorite's trash used to
+/// take with it.
+#[test]
+fn a_row_survives_exactly_while_one_of_the_two_tabs_still_shows_it() {
+    let mut station = stored(Some("uuid-1"));
+    station.is_favorite = false;
+    station.last_played = None;
+    assert!(!is_listed(&station), "neither tab holds it, so the row is the user's to lose");
+
+    station.is_favorite = true;
+    assert!(is_listed(&station), "Favorites filters on the star");
+
+    station.is_favorite = false;
+    station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
+    assert!(is_listed(&station), "Recently Played filters on the stamp, star or no star");
+
+    station.is_favorite = true;
+    assert!(is_listed(&station), "and both at once is still one row worth keeping");
 }
 
 /// Three ways a station ends up named, in the order they win. The host fallback is what stops a

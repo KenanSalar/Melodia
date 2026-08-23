@@ -30,6 +30,10 @@ export component StationGrid inherits Rectangle {
     // The kept tabs only. Browse leaves it false, so a directory row draws exactly as before.
     in property <bool> manageable;
 
+    // Favorites turns this off, its rows being starred by definition. Defaulted on for the two
+    // lists that mix kept and unkept stations — see the card's star.
+    in property <bool> star-marks-kept: true;
+
     callback station-clicked(RadioStationRow);
     callback play-clicked(RadioStationRow);
     callback favorite-clicked(RadioStationRow);
@@ -85,6 +89,7 @@ export component StationGrid inherits Rectangle {
                     // An empty uuid is a station the user typed in: there is nothing in the
                     // directory to star it against, and Remove is what it has instead.
                     starrable: station.uuid != "";
+                    star-marks-kept: root.star-marks-kept;
                     editable: root.manageable && station.uuid == "";
                     removable: root.manageable;
                     homepage-known: station.homepage != "";

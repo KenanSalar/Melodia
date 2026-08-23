@@ -43,6 +43,46 @@ const LOGO_MEMO_CAP: NonZeroUsize = match NonZeroUsize::new(2_048) {
 /// landing: sockets, and decode-pool tasks behind them.
 const LOGO_BATCH: usize = 6;
 
+/// How many stations a result may hold and still count as the one the user was looking for.
+///
+/// **The backoff is about what a page brings along, not about what the user asked for.** A
+/// directory page is fifty stations nobody named, so a dead favicon host on it is worth
+/// suppressing for a day; a result this narrow *is* the station the user typed, they are looking
+/// at it, and every extra request is bounded by this. A host that was merely down when it was
+/// last asked would otherwise stay blank for up to a week of deliberate searches.
+///
+/// A count rather than a "did they type a name" flag: a country or genre filter narrow enough to
+/// return a handful is the same situation from the user's side, and the ceiling is what bounds
+/// the cost either way. Outcomes are still recorded, so a browse keeps skipping what this asks.
+const EXPLICIT_RESULT_MAX: usize = 5;
+
+/// How hard a pass tries for the logos a page is missing.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Effort {
+    /// A page nobody named: ask once per URL per session, and skip whatever an earlier session
+    /// already found nothing at.
+    Page,
+    /// A result narrow enough to be the station the user just typed: ask past this session's own
+    /// misses and past the stored backoff, and read the sites of whatever carries no favicon.
+    Explicit,
+}
+
+impl Effort {
+    /// Measured on the **result**, not on how much of it is still unanswered — a fifty-row page
+    /// with forty-six logos in hand is still a page nobody named.
+    ///
+    /// Only a *fresh* query qualifies. Paging on and re-warming after a section leave are the
+    /// same stations a second time, and re-asking there would spend a request per re-entry for an
+    /// answer this session already has.
+    pub fn for_result(fresh: bool, results: usize) -> Self {
+        if fresh && results <= EXPLICIT_RESULT_MAX {
+            Self::Explicit
+        } else {
+            Self::Page
+        }
+    }
+}
+
 /// One in-flight download: the URL asked, and what came back.
 type LogoAnswer = (String, Result<Option<String>, AppError>);
 
@@ -78,9 +118,18 @@ impl LogoMemo {
         self.answers.lock().get(favicon_url).cloned().flatten()
     }
 
-    /// The URLs among `favicon_urls` this session has never asked about, deduplicated and in
-    /// first-seen order so the visible prefix is fetched first.
-    fn unanswered<'a>(&self, favicon_urls: impl Iterator<Item = &'a str>) -> Vec<String> {
+    /// The URLs among `favicon_urls` worth asking about, deduplicated and in first-seen order so
+    /// the visible prefix is fetched first.
+    ///
+    /// **Under [`Effort::Explicit`] a remembered `None` is not an answer.** It is written by a
+    /// genuine miss, by a transport failure, and by [`drop_suppressed`] — so a wide keystroke on
+    /// the way to a narrow one poisons every URL the two share, and the narrow result's whole
+    /// point is that the user is looking at these stations right now.
+    fn unanswered<'a>(
+        &self,
+        favicon_urls: impl Iterator<Item = &'a str>,
+        effort: Effort,
+    ) -> Vec<String> {
         let answers = self.answers.lock();
         let mut seen = HashSet::new();
         let mut out: Vec<String> = Vec::new();
@@ -88,7 +137,11 @@ impl LogoMemo {
             // `peek` rather than `get`: asking whether an answer exists must not reorder the
             // cache, or a page of already-known logos would promote itself over the page the
             // user is looking at.
-            if answers.peek(url).is_none() && seen.insert(url) {
+            let answered = match effort {
+                Effort::Page => answers.peek(url).is_some(),
+                Effort::Explicit => answers.peek(url).is_some_and(Option::is_some),
+            };
+            if !answered && seen.insert(url) {
                 out.push(url.to_owned());
             }
         }
@@ -106,22 +159,28 @@ impl LogoMemo {
 /// started for has been superseded; `on_landed` fires once per logo that arrives, which is what
 /// lets the grid fill in a card at a time. Returns whether anything landed at all, so a caller
 /// can skip the final repaint a page of already-known stations owes nothing.
+///
+/// [`Effort::Explicit`] skips the stored backoff entirely and re-asks what this session already
+/// gave up on.
 pub async fn fetch_missing<'a>(
     state: &AppState,
     memo: &LogoMemo,
     favicon_urls: impl Iterator<Item = &'a str>,
+    effort: Effort,
     is_current: impl Fn() -> bool,
     on_landed: impl Fn(),
 ) -> bool {
     prune_misses_once(state, memo).await;
 
-    let mut wanted = memo.unanswered(favicon_urls);
+    let mut wanted = memo.unanswered(favicon_urls, effort);
     if wanted.is_empty() {
         return false;
     }
-    drop_suppressed(state, memo, &mut wanted).await;
-    if wanted.is_empty() {
-        return false;
+    if effort == Effort::Page {
+        drop_suppressed(state, memo, &mut wanted).await;
+        if wanted.is_empty() {
+            return false;
+        }
     }
 
     // A rolling window rather than `chunks(LOGO_BATCH)`: a chunk drained to empty before the next
@@ -186,6 +245,79 @@ async fn record_answer(
     hit
 }
 
+/// Read the sites of stations the directory gave no usable logo for, and memoize what each one
+/// advertises.
+///
+/// **Keyed on the origin**, which is what the station had instead of a favicon URL and what the
+/// stored backoff is already written under, so the two agree about what has been asked.
+///
+/// Only reached under [`Effort::Explicit`], so the input is bounded by [`EXPLICIT_RESULT_MAX`] and
+/// one flight covers it — there is nothing here for a rolling window to pace.
+pub async fn discover_missing<'a>(
+    state: &AppState,
+    memo: &LogoMemo,
+    sites: impl Iterator<Item = (&'a str, &'a str)>,
+    is_current: impl Fn() -> bool,
+    on_landed: impl Fn(),
+) -> bool {
+    let wanted = unasked_sites(memo, sites);
+    if wanted.is_empty() {
+        return false;
+    }
+
+    let mut in_flight = JoinSet::new();
+    for origin in wanted {
+        let state = state.clone();
+        in_flight.spawn(async move {
+            let path = library::radio::discover_site_logo(&state, &origin).await;
+            (origin.to_string(), path)
+        });
+    }
+
+    let mut landed = false;
+    while let Some(joined) = in_flight.join_next().await {
+        if !is_current() {
+            in_flight.abort_all();
+            break;
+        }
+        let Ok((origin, path)) = joined else {
+            continue;
+        };
+        // The miss is already recorded against the site by the facade, so this only has to
+        // remember the answer for the session.
+        let hit = path.is_some();
+        memo.record(origin, path);
+        if hit {
+            landed = true;
+            on_landed();
+        }
+    }
+    landed
+}
+
+/// The sites among `sites` this session has not already answered for, deduplicated.
+///
+/// **A site that answered with nothing is not re-read**, where a favicon under [`Effort::Explicit`]
+/// is: the cost here is a whole document, and nothing but this pass and the kept-station heal ever
+/// records an origin, so there is no wide page to have poisoned it.
+fn unasked_sites<'a>(
+    memo: &LogoMemo,
+    sites: impl Iterator<Item = (&'a str, &'a str)>,
+) -> Vec<reqwest::Url> {
+    let answers = memo.answers.lock();
+    let mut seen = HashSet::new();
+    let mut out: Vec<reqwest::Url> = Vec::new();
+    for (homepage, stream_url) in sites {
+        let Some(origin) = library::radio::site_origin(homepage, stream_url) else {
+            continue;
+        };
+        if answers.peek(origin.as_str()).is_none() && seen.insert(origin.to_string()) {
+            out.push(origin);
+        }
+    }
+    out
+}
+
 /// Hand one URL to the download seam and tag the answer with what was asked.
 fn spawn_fetch(in_flight: &mut JoinSet<LogoAnswer>, state: &AppState, url: String) {
     let state = state.clone();
@@ -236,3 +368,7 @@ async fn record_outcome(state: &AppState, favicon_url: &str, hit: bool) {
         log::debug!("radio: logo outcome not recorded: {}", crate::services::describe(&e));
     }
 }
+
+#[cfg(test)]
+#[path = "tests/logos_tests.rs"]
+mod tests;

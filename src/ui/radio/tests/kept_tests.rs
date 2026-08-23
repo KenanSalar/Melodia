@@ -112,6 +112,90 @@ fn a_station_never_played_sorts_below_every_station_that_was() {
     );
 }
 
+/// A kept station carrying a directory uuid and a stored logo, which is the pair Browse falls
+/// back on.
+fn logo_row(id: i64, uuid: &str, artwork_path: Option<&str>) -> RadioStation {
+    let mut station = station("Kept", "2026-01-01T00:00:00.000+00:00", 0, None);
+    station.id = id;
+    station.station_uuid = Some(uuid.to_owned());
+    station.artwork_path = artwork_path.map(str::to_owned);
+    station
+}
+
+/// The map is a projection of the two caches, and the heal is what breaks a copy that isn't.
+///
+/// A station played out of Browse is kept with no logo, found on its own site a moment later, and
+/// patched into the caches by `adopt_logo_path` — so a map built before that lands describes a
+/// list that has since moved, and Browse paints a monogram beside a tab drawing the real thing.
+/// Only a second play fixed it, because only a second play re-read the row.
+#[test]
+fn a_logo_found_after_the_refresh_still_reaches_browse() {
+    let radio_ui = RadioUi::new(false);
+    radio_ui.recent.lock().stations = vec![logo_row(7, "uuid-7", None)];
+    remember_logos(&radio_ui);
+    assert!(radio_ui.known_logos.lock().is_empty(), "the row had no logo yet");
+
+    adopt_logo_path(&radio_ui, 7, "/store/7.png");
+    remember_logos(&radio_ui);
+
+    assert_eq!(radio_ui.known_logos.lock().get("uuid-7").map(String::as_str), Some("/store/7.png"));
+}
+
+/// The other half, and the one the bug actually lived in: the helper was right and the heal never
+/// called it.
+///
+/// A walk rather than a driven `heal_logos`, that one being network work behind a `JoinSet`. Both
+/// write sites are asserted, since a refresh that skipped it would leave Browse a whole section
+/// behind instead of one heal behind.
+#[test]
+fn every_write_to_the_two_caches_re_derives_the_map() {
+    let source = include_str!("../kept.rs");
+    for site in ["pub fn refresh", "async fn heal_logos"] {
+        let body = source
+            .split_once(site)
+            .and_then(|(_, rest)| rest.split_once("\n}\n"))
+            .map_or("", |(body, _)| body);
+        assert!(
+            body.contains("remember_logos("),
+            "`{site}` moves what a row holds, and Browse reads the map rather than the caches"
+        );
+    }
+}
+
+/// Both lists feed it, and a station the user typed in feeds neither: Browse asks the directory,
+/// which has no name for a row that was never in it.
+#[test]
+fn the_map_spans_both_tabs_and_skips_what_no_directory_page_can_name() {
+    let radio_ui = RadioUi::new(false);
+    radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", Some("/store/1.png")), {
+        let mut typed = logo_row(2, "uuid-2", Some("/store/2.png"));
+        typed.station_uuid = None;
+        typed
+    }];
+    radio_ui.recent.lock().stations = vec![logo_row(3, "uuid-3", Some("/store/3.png"))];
+
+    remember_logos(&radio_ui);
+
+    let known = radio_ui.known_logos.lock();
+    assert_eq!(known.len(), 2);
+    assert!(known.contains_key("uuid-1"), "a favorite");
+    assert!(known.contains_key("uuid-3"), "and a station only ever played");
+}
+
+/// A path the refresh already blanked must not come back through the map — the file is gone, and
+/// a card handed a dead path drew nothing at all where a monogram was the honest answer.
+#[test]
+fn a_row_whose_logo_went_missing_contributes_nothing() {
+    let radio_ui = RadioUi::new(false);
+    radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", Some("/store/1.png"))];
+    remember_logos(&radio_ui);
+    assert_eq!(radio_ui.known_logos.lock().len(), 1);
+
+    radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", None)];
+    remember_logos(&radio_ui);
+    assert!(radio_ui.known_logos.lock().is_empty());
+}
+
 /// What the box can reach. The card shows name, country, codec and tags, and the needle covers
 /// all four — a field drawn but not searchable is the shape of miss nobody reports, since the
 /// station is visibly right there while the filter says it is not.

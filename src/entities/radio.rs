@@ -20,9 +20,10 @@ pub struct RadioStation {
     /// stored file is swept.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub favicon_url: Option<String>,
-    /// The logo in the shared artwork store. One of the five columns the sweep
-    /// reads through, and the only one whose file cannot be re-derived from the
-    /// user's own library.
+    /// The logo in the radio-logo store, which is its own directory precisely
+    /// because this is the one artwork column whose file cannot be re-derived
+    /// from the user's own library. Still one of the five the sweep reads
+    /// through — the reference set spans every store.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artwork_path: Option<String>,
     /// The directory's free-form comma-separated tags, stored verbatim.

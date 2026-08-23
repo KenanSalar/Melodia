@@ -1,4 +1,4 @@
-//! One radio station's logo, from a third-party host into the shared artwork store.
+//! One radio station's logo, from a third-party host into the radio-logo store.
 //!
 //! [`super::deezer::download_and_cache_artist_image`]'s shape, and deliberately not a
 //! parameterisation of it: what the two share is the store handoff, and what they differ on is

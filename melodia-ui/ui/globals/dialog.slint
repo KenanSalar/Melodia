@@ -139,8 +139,10 @@ export global Dialog {
         } else if (root.kind == "add-station" || root.kind == "edit-station") {
             // Stays open across the probe, like the two logins below; Rust closes it on success.
             RadioForm.submit();
-        } else if (root.kind == "remove-station") {
-            Radio.remove-station(root.target-id);
+        } else if (root.kind == "remove-from-favorites") {
+            Radio.remove-from-favorites(root.target-id);
+        } else if (root.kind == "remove-from-recent") {
+            Radio.remove-from-recent(root.target-id);
         } else if (root.kind == "scrobble-listenbrainz-login") {
             // The dialog stays open — `dialog.slint` suppresses auto-close for this kind — until
             // Rust closes it on a valid token.

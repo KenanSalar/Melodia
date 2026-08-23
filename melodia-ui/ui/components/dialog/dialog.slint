@@ -95,7 +95,8 @@ export component DialogOverlay inherits Rectangle {
             DialogGlobal.kind == "remove-playlist-selected" ? "playlist_remove" :
             DialogGlobal.kind == "remove-queue-selected" ? "playlist_remove" :
             DialogGlobal.kind == "remove-folder" ? "folder_off" :
-            DialogGlobal.kind == "remove-station" ? "delete" :
+            DialogGlobal.kind == "remove-from-favorites"
+                || DialogGlobal.kind == "remove-from-recent" ? "delete" :
             DialogGlobal.kind == "clear-queue" ? "clear_all" :
             // One arm for all three restart flows rather than three lines; the tray one had no
             // entry at all and rendered with no tile.

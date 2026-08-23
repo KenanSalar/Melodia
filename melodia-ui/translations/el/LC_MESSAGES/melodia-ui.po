@@ -1839,12 +1839,19 @@ msgstr "Η διεύθυνση δεν δίνει ήχο που μπορεί να 
 msgid "Couldn't save the station."
 msgstr "Δεν ήταν δυνατή η αποθήκευση του σταθμού."
 
-# The station card's destructive action.
-msgid "Remove station?"
-msgstr "Αφαίρεση σταθμού;"
+# The station card's destructive action, once per tab: the two lists are independent, so each
+# names only its own.
+msgid "Remove from favorites?"
+msgstr "Αφαίρεση από τα αγαπημένα;"
 
-msgid "\"{}\" will be removed from your stations, along with its play history."
-msgstr "Ο σταθμός «{}» θα αφαιρεθεί μαζί με το ιστορικό αναπαραγωγής του."
+msgid "\"{}\" will be removed from your favorites."
+msgstr "Ο σταθμός «{}» θα αφαιρεθεί από τα αγαπημένα σας."
+
+msgid "Remove from Recently Played?"
+msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα;"
+
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "Ο σταθμός «{}» θα αφαιρεθεί από τα πρόσφατα αναπαραγόμενα."
 
 # Station list import and export.
 msgid "{n} station added"

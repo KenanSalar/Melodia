@@ -87,8 +87,43 @@ pub async fn set_favorite(state: &AppState, id: i64, favorite: bool) -> Result<(
     queries::radio::set_favorite(&state.db, id, favorite).await
 }
 
-pub async fn remove_station(state: &AppState, id: i64) -> Result<(), AppError> {
+/// Drop a station out of the Favorites tab.
+///
+/// **Un-starring and deleting are the same button on two different rows.** A station with a play
+/// behind it is still in Recently Played and its history is not the star's to take — the argument
+/// [`set_directory_favorite`] already makes from the other side. One that was only ever starred is
+/// listed nowhere once the star goes, and Browse rewrites it from the directory the moment it is
+/// kept again.
+pub async fn remove_from_favorites(state: &AppState, id: i64) -> Result<(), AppError> {
+    set_favorite(state, id, false).await?;
+    delete_if_unlisted(state, id).await
+}
+
+/// Drop a station out of the Recently Played tab.
+///
+/// The mirror of [`remove_from_favorites`]: forget the plays, and keep the row while a star still
+/// lists it somewhere.
+pub async fn remove_from_recent(state: &AppState, id: i64) -> Result<(), AppError> {
+    queries::radio::clear_play_history(&state.db, id).await?;
+    delete_if_unlisted(state, id).await
+}
+
+/// Delete a row no tab would list any more.
+///
+/// The table backs the two local tabs and nothing else, so a station neither of them shows is a
+/// row nothing can reach — including the user, who has just removed it from both.
+async fn delete_if_unlisted(state: &AppState, id: i64) -> Result<(), AppError> {
+    let station = get_station(state, id).await?;
+    if is_listed(&station) {
+        return Ok(());
+    }
     queries::radio::delete_station(&state.db, id).await
+}
+
+/// Whether either local tab would still show a station: the star is Favorites' filter and the
+/// stamp is Recently Played's, so between them they are the whole of what a row is kept for.
+fn is_listed(station: &radio::RadioStation) -> bool {
+    station.is_favorite || station.last_played.is_some()
 }
 
 /// Open a URL far enough to know it plays, and report what the server said about itself.
@@ -374,7 +409,7 @@ fn spawn_click(state: &AppState, station_uuid: Option<&str>) {
 /// download is traffic whoever is serving it.
 pub async fn fetch_logo(state: &AppState, favicon_url: &str) -> Result<Option<String>, AppError> {
     let client = directory_client(state)?;
-    crate::media::station_logo::fetch(client, favicon_url, &state.paths.artwork_dir).await
+    crate::media::station_logo::fetch(client, favicon_url, &state.paths.radio_logos_dir).await
 }
 
 /// How long a logo URL that answered with nothing is left alone, per failed attempt. A day, so a
@@ -483,14 +518,17 @@ async fn is_logo_url_suppressed(state: &AppState, url: &str) -> bool {
     suppressed_logo_urls(state, &asked).await.is_ok_and(|suppressed| !suppressed.is_empty())
 }
 
+/// The site a station's logo is discovered from, and the key its answer is memoized under.
+///
+/// Re-exported so a caller needing that key doesn't have to name the discovery module: the
+/// backoff, the session memo and the fetch all have to agree on one spelling of "this station's
+/// site", and there is only ever one place it is derived.
+pub use crate::media::logo_discovery::origin_for as site_origin;
+
 /// Give a kept station with no usable logo another chance at one, and point its row at what lands.
 ///
 /// Two sources, in order: the `favicon_url` the directory carries, then whatever the station's own
-/// site advertises. The second is why this is kept-station-only — it costs a page fetch, and a
-/// browsed page would pay one for the third of its rows that carry no logo field, against one
-/// extra request once for a station the user actually saved.
-///
-/// Returns the store path that landed, so a caller can patch the row it already holds.
+/// site advertises. Returns the store path that landed, so a caller can patch the row it holds.
 pub async fn heal_station_logo(state: &AppState, station: &radio::RadioStation) -> Option<String> {
     let favicon = station.favicon_url.as_deref().filter(|url| !url.is_empty());
     if let Some(url) = favicon
@@ -500,23 +538,32 @@ pub async fn heal_station_logo(state: &AppState, station: &radio::RadioStation) 
     }
 
     let homepage = station.homepage.as_deref().unwrap_or_default();
-    let origin = crate::media::logo_discovery::origin_for(homepage, &station.stream_url)?;
-    // The backoff rides on the site, not on whichever icon it named this time: re-reading the
-    // document is the expensive half, and a site with nothing to advertise will not have grown
-    // something by the next refresh.
+    let origin = site_origin(homepage, &station.stream_url)?;
+    let path = discover_site_logo(state, &origin).await?;
+    adopted(state, station.id, path).await
+}
+
+/// The logo a station's own site advertises, past the backoff that rides on the site.
+///
+/// **The backoff is on the site, not on whichever icon it named this time**: re-reading the
+/// document is the expensive half, and a site with nothing to advertise will not have grown
+/// something by the next refresh.
+///
+/// Costs a page fetch on top of the download, which is why the browse side asks only about a
+/// result narrow enough to be the station the user typed — a directory page would pay one for the
+/// third of its rows that carry no logo field.
+pub async fn discover_site_logo(state: &AppState, origin: &reqwest::Url) -> Option<String> {
     if is_logo_url_suppressed(state, origin.as_str()).await {
         return None;
     }
-    let discovered = discover_logo_url(state, &origin).await;
-    let landed = match discovered {
+    let landed = match discover_logo_url(state, origin).await {
         Some(url) => ask_logo_url(state, &url).await,
         None => None,
     };
-    let Some(path) = landed else {
+    if landed.is_none() {
         note_site_miss(state, origin.as_str()).await;
-        return None;
-    };
-    adopted(state, station.id, path).await
+    }
+    landed
 }
 
 /// Point the row at `path`, reporting it only once the write took.

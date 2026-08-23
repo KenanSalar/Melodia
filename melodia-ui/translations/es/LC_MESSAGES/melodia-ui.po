@@ -1835,12 +1835,19 @@ msgstr "Esa dirección no reproduce audio que Melodia pueda decodificar."
 msgid "Couldn't save the station."
 msgstr "No se pudo guardar la emisora."
 
-# The station card's destructive action.
-msgid "Remove station?"
-msgstr "¿Eliminar emisora?"
+# The station card's destructive action, once per tab: the two lists are independent, so each
+# names only its own.
+msgid "Remove from favorites?"
+msgstr "¿Quitar de favoritos?"
 
-msgid "\"{}\" will be removed from your stations, along with its play history."
-msgstr "«{}» se eliminará de tus emisoras, junto con su historial de reproducción."
+msgid "\"{}\" will be removed from your favorites."
+msgstr "«{}» se quitará de tus favoritos."
+
+msgid "Remove from Recently Played?"
+msgstr "¿Quitar de Reproducido recientemente?"
+
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "«{}» se quitará de Reproducido recientemente."
 
 # Station list import and export.
 msgid "{n} station added"

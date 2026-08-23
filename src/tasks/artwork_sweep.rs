@@ -41,18 +41,25 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
 pub(crate) async fn run(db: &DbPool, paths: &Paths) -> AppResult<()> {
     let artwork_dir = paths.artwork_dir.clone();
     let artists_dir = paths.artists_dir.clone();
+    let radio_logos_dir = paths.radio_logos_dir.clone();
 
     // Listed first, and the reference set read second. Both are snapshots of state a scan is
     // concurrently writing, and this is the order that fails safe: a row committed in between is
     // visible to the query, where the reverse reads it as an orphan and unlinks a live cover.
     //
-    // One `spawn_blocking` for both stores: the two listings are the same shape of work and
-    // splitting them would only buy a second hop onto the same pool.
+    // One `spawn_blocking` for all three stores: the listings are the same shape of work and
+    // splitting them would only buy more hops onto the same pool.
+    //
+    // **Three directories, one reference set**, which is what lets a store move without the query
+    // moving with it: the set is the union of all five artwork columns reduced to basenames, so a
+    // radio logo is held alive by `radio_stations.artwork_path` wherever it happens to sit. That
+    // is also why the logos that predate their own directory are safe where they are.
     let listed = tokio::task::spawn_blocking(move || {
         let now = std::time::SystemTime::now();
         [
             ("artwork", sweep::collect_candidates(&artwork_dir, GRACE, now)),
             ("artists", sweep::collect_candidates(&artists_dir, GRACE, now)),
+            ("radio logo", sweep::collect_candidates(&radio_logos_dir, GRACE, now)),
         ]
     })
     .await

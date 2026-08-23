@@ -138,8 +138,33 @@ pub fn query_name(radio_ui: &RadioUi) -> String {
 pub fn resolve(radio_ui: &RadioUi, uuid: &str) -> Option<(DirectoryStation, Option<String>)> {
     let browse = radio_ui.browse.lock();
     let station = browse.stations.iter().find(|station| station.station_uuid == uuid)?.clone();
-    let logo = station.favicon_url.as_deref().and_then(|url| radio_ui.logos.path_for(url));
+    let logo = logo_for(radio_ui, &station);
     Some((station, logo))
+}
+
+/// The logo a browsed station draws, from the three places this install can know one.
+///
+/// The `favicon_url` answer comes first because a *moved* logo is exactly what the URL-keyed memo
+/// is for. **The row is the better answer wherever the two differ**, and they differ whenever the
+/// logo did not come from `favicon_url` at all — a station whose favicon 404s and whose logo was
+/// found on its own site has a row and can have no memo entry, and one inside a backoff has a memo
+/// entry of `None`. Either way the two local tabs paint it and Browse was painting a monogram.
+/// Last is what a narrow search discovered on the site of a station that has no row yet.
+fn logo_for(radio_ui: &RadioUi, station: &DirectoryStation) -> Option<String> {
+    station
+        .favicon_url
+        .as_deref()
+        .and_then(|url| radio_ui.logos.path_for(url))
+        .or_else(|| radio_ui.known_logos.lock().get(&station.station_uuid).cloned())
+        .or_else(|| site_logo(radio_ui, station))
+}
+
+/// What this session read off the station's own site, for a row the directory gave no usable
+/// favicon. Keyed on the origin, the same spelling [`logos::discover_missing`] records under.
+fn site_logo(radio_ui: &RadioUi, station: &DirectoryStation) -> Option<String> {
+    let homepage = station.homepage.as_deref().unwrap_or_default();
+    let origin = library::radio::site_origin(homepage, &station.stream_url)?;
+    radio_ui.logos.path_for(origin.as_str())
 }
 
 /// Rebuild the grid from the cache, this install's favorites and the logos found so far.
@@ -158,8 +183,7 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
             .stations
             .iter()
             .map(|station| {
-                let logo =
-                    station.favicon_url.as_deref().and_then(|url| radio_ui.logos.path_for(url));
+                let logo = logo_for(radio_ui, station);
                 rows::to_slint_radio_station_row(
                     station,
                     starred.contains(&station.station_uuid),
@@ -242,7 +266,9 @@ pub fn rewarm(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     };
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), ui.as_weak());
     state.runtime.spawn(async move {
-        warm_page(&s, &ru, &weak, generation).await;
+        // Not fresh: these are the same stations a second time, so the harder effort a narrow
+        // query earns would spend a request per re-entry on an answer already in the memo.
+        warm_page(&s, &ru, &weak, generation, false).await;
     });
 }
 
@@ -283,7 +309,7 @@ fn fetch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, append: bool
         }
 
         paint(&weak, &ru);
-        warm_page(&s, &ru, &weak, generation).await;
+        warm_page(&s, &ru, &weak, generation, !append).await;
     });
 }
 
@@ -311,6 +337,40 @@ fn paint_landed(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
     });
 }
 
+/// Ask the sites of whatever the page still has no logo for.
+///
+/// Runs after the favicon burst, mirroring the order [`library::radio::heal_station_logo`] takes
+/// for a kept station: the field the directory carries first, the station's own site second. A
+/// third of the directory carries no logo field at all, which is why this is reached only where
+/// the result is narrow enough to be the station the user typed.
+async fn discover_page(
+    state: &AppState,
+    radio_ui: &Arc<RadioUi>,
+    is_current: &impl Fn() -> bool,
+    on_landed: &impl Fn(),
+) -> bool {
+    let sites: Vec<(String, String)> = {
+        let browse = radio_ui.browse.lock();
+        browse
+            .stations
+            .iter()
+            .filter(|station| logo_for(radio_ui, station).is_none())
+            .map(|station| {
+                (station.homepage.clone().unwrap_or_default(), station.stream_url.clone())
+            })
+            .collect()
+    };
+
+    logos::discover_missing(
+        state,
+        &radio_ui.logos,
+        sites.iter().map(|(homepage, stream_url)| (homepage.as_str(), stream_url.as_str())),
+        is_current,
+        on_landed,
+    )
+    .await
+}
+
 /// How often a filling page repaints while its logos land.
 ///
 /// [`apply`] is a whole-model write, so one per station would spend more on rebuilds than the fill
@@ -324,45 +384,63 @@ const LOGO_REPAINT_INTERVAL: Duration = Duration::from_millis(150);
 /// and the logos are a second, so serialising them would put both in front of first paint.
 ///
 /// `generation` is the page these logos belong to. A search that supersedes it stops the burst
-/// where it stands rather than paying for a page nobody is looking at any more.
+/// where it stands rather than paying for a page nobody is looking at any more. `fresh` is whether
+/// this page is a new query rather than a page appended or a tier re-warmed — see
+/// [`logos::Effort::for_result`].
 async fn warm_page(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
     weak: &Weak<AppWindow>,
     generation: u64,
+    fresh: bool,
 ) {
-    let favicon_urls: Vec<String> = {
+    // A station whose row already holds a logo is not asked about again, which is a page of
+    // requests saved wherever the user has kept much of what they browse. **The trade is a logo
+    // that moved**: the URL-keyed memo is what would notice, and it is never asked. Worth it
+    // because the row is only written by a keep or a play, so a moved logo could not have
+    // reached it either way — nothing here regresses, it just doesn't improve.
+    let (favicon_urls, effort) = {
         let browse = radio_ui.browse.lock();
-        browse.stations.iter().filter_map(|station| station.favicon_url.clone()).collect()
+        let known = radio_ui.known_logos.lock();
+        let urls: Vec<String> = browse
+            .stations
+            .iter()
+            .filter(|station| !known.contains_key(&station.station_uuid))
+            .filter_map(|station| station.favicon_url.clone())
+            .collect();
+        (urls, logos::Effort::for_result(fresh, browse.stations.len()))
     };
 
     let last_repaint: Mutex<Option<Instant>> = Mutex::new(None);
-    let new_logos = logos::fetch_missing(
+    let is_current = || radio_ui.browse.lock().generation == generation;
+    let on_landed = || {
+        {
+            let mut last = last_repaint.lock();
+            if last.is_some_and(|at| at.elapsed() < LOGO_REPAINT_INTERVAL) {
+                return;
+            }
+            *last = Some(Instant::now());
+        }
+        paint_landed(weak, radio_ui);
+    };
+
+    let mut new_logos = logos::fetch_missing(
         state,
         &radio_ui.logos,
         favicon_urls.iter().map(String::as_str),
-        || radio_ui.browse.lock().generation == generation,
-        || {
-            {
-                let mut last = last_repaint.lock();
-                if last.is_some_and(|at| at.elapsed() < LOGO_REPAINT_INTERVAL) {
-                    return;
-                }
-                *last = Some(Instant::now());
-            }
-            paint_landed(weak, radio_ui);
-        },
+        effort,
+        &is_current,
+        &on_landed,
     )
     .await;
 
+    if effort == logos::Effort::Explicit {
+        new_logos |= discover_page(state, radio_ui, &is_current, &on_landed).await;
+    }
+
     let artwork_paths: Vec<String> = {
         let browse = radio_ui.browse.lock();
-        browse
-            .stations
-            .iter()
-            .filter_map(|station| station.favicon_url.as_deref())
-            .filter_map(|url| radio_ui.logos.path_for(url))
-            .collect()
+        browse.stations.iter().filter_map(|station| logo_for(radio_ui, station)).collect()
     };
 
     // `Some(())` only once the decode reports the tier is still its own: a leave landing inside

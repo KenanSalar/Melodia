@@ -18,6 +18,14 @@ pub struct Paths {
     pub scrobble_mbid_state_path: PathBuf,
     pub artwork_dir: PathBuf,
     pub artists_dir: PathBuf,
+    /// Station logos, deliberately **not** in [`Self::artwork_dir`].
+    ///
+    /// Everything in the artwork store is derived from the user's own files and can be rebuilt by
+    /// re-scanning; a station logo came off a third-party host and cannot. Sharing one directory
+    /// made that asymmetry a hazard rather than a note — a second install sweeping the same root
+    /// against a database with no `radio_stations` table reads every logo as an orphan, which is
+    /// how two of them were deleted out from under their rows.
+    pub radio_logos_dir: PathBuf,
     /// Pre-migration copies of [`Self::db_path`], written by
     /// `database::backup`. Its own directory so the retention sweep runs
     /// somewhere the live database and its `-wal`/`-shm` sidecars aren't.
@@ -104,6 +112,7 @@ impl Paths {
             scrobble_mbid_state_path: data_dir.join("scrobble_mbid_attempted.json"),
             artwork_dir: data_dir.join("artwork"),
             artists_dir: data_dir.join("artists"),
+            radio_logos_dir: data_dir.join("radio-logos"),
             backups_dir: data_dir.join("backups"),
             logs_dir: data_dir.join("logs"),
             data_dir,
@@ -116,6 +125,7 @@ impl Paths {
             &self.data_dir,
             &self.artwork_dir,
             &self.artists_dir,
+            &self.radio_logos_dir,
             &self.backups_dir,
             &self.logs_dir,
         ] {

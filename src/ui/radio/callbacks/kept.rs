@@ -57,16 +57,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         let s = state.clone();
         let ru = radio_ui.clone();
         let weak = weak.clone();
-        g.on_remove_station(move |id| {
-            let (s, ru, weak) = (s.clone(), ru.clone(), weak.clone());
-            let id = i64::from(id);
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::radio::remove_station(&s, id).await {
-                    log::warn!("radio::remove_station: {}", crate::services::describe(&e));
-                    return;
-                }
-                let _ = weak.upgrade_in_event_loop(move |ui| kept::refresh(&ui, &s, &ru));
-            });
+        g.on_remove_from_favorites(move |id| {
+            remove(&s, &ru, &weak, i64::from(id), RemoveFrom::Favorites);
+        });
+    }
+
+    {
+        let s = state.clone();
+        let ru = radio_ui.clone();
+        let weak = weak.clone();
+        g.on_remove_from_recent(move |id| {
+            remove(&s, &ru, &weak, i64::from(id), RemoveFrom::Recent);
         });
     }
 
@@ -79,6 +80,38 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             submit(&ui, &s, &ru, &weak);
         });
     }
+}
+
+/// Which list the trash was clicked on, and so what removal means there.
+#[derive(Clone, Copy)]
+enum RemoveFrom {
+    Favorites,
+    Recent,
+}
+
+/// Drop a station out of one tab, then re-read both lists.
+///
+/// Whether the row itself survives is the facade's call — it knows what the other tab still holds
+/// — so all this has to carry is which list asked.
+fn remove(
+    state: &AppState,
+    radio_ui: &Arc<RadioUi>,
+    weak: &Weak<AppWindow>,
+    id: i64,
+    from: RemoveFrom,
+) {
+    let (s, ru, weak) = (state.clone(), radio_ui.clone(), weak.clone());
+    state.runtime.spawn(async move {
+        let removed = match from {
+            RemoveFrom::Favorites => library::radio::remove_from_favorites(&s, id).await,
+            RemoveFrom::Recent => library::radio::remove_from_recent(&s, id).await,
+        };
+        if let Err(e) = removed {
+            log::warn!("radio: station removal failed: {}", crate::services::describe(&e));
+            return;
+        }
+        let _ = weak.upgrade_in_event_loop(move |ui| kept::refresh(&ui, &s, &ru));
+    });
 }
 
 /// Fill the form from the station behind a card and open the dialog on it.

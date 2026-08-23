@@ -25,7 +25,7 @@ mod logos;
 mod rows;
 mod tabs;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -149,6 +149,14 @@ pub struct RadioUi {
     /// Derived from the same fetch that fills [`Self::kept`], since a starred station *is* a kept
     /// one — a query of its own would be a second answer to keep true.
     starred: Mutex<HashSet<String>>,
+    /// The logo every kept station already has, keyed on directory uuid.
+    ///
+    /// **A row answers a question the memo cannot.** The memo is keyed on the `favicon_url` a
+    /// browse asked about, so it only ever holds what *that URL* returned this session; a station
+    /// whose favicon 404s and whose logo was found on its own site has an `artwork_path` and no
+    /// memo entry, and a page carrying it drew a monogram beside the two local tabs painting the
+    /// real thing. Filled from the same fetch as [`Self::starred`], for the same reason.
+    known_logos: Mutex<HashMap<String, String>>,
     /// The Favorites tab: everything starred, plus every station typed in by hand.
     kept: Mutex<kept::KeptState>,
     /// The Recently Played tab: every station with a play behind it, starred or not.
@@ -171,6 +179,7 @@ impl RadioUi {
             section,
             browse: Mutex::new(BrowseState::default()),
             starred: Mutex::new(HashSet::new()),
+            known_logos: Mutex::new(HashMap::new()),
             kept: Mutex::new(kept::KeptState::default()),
             recent: Mutex::new(kept::KeptState::default()),
             logos: LogoMemo::new(),

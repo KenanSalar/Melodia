@@ -33,6 +33,11 @@ export component KeptStationsTab inherits Rectangle {
     property <bool> is-empty: root.count == 0;
     property <bool> no-matches: root.count > 0 && root.rows.length == 0;
 
+    // Which of the two this mount is. Off the live tab rather than a property the page passes,
+    // since only one of the two is ever mounted and the page already spells the same test to
+    // mount it.
+    property <bool> is-recent: Radio.tab-idx == Radio.tab-recent;
+
     VerticalLayout {
         padding-top: Theme.pad-md;
 
@@ -48,6 +53,9 @@ export component KeptStationsTab inherits Rectangle {
                 row-height: root.row-h;
                 gap: root.gap;
                 manageable: true;
+                // Recently Played mixes starred and unstarred stations, so the mark still says
+                // something there; on Favorites it would be on every card.
+                star-marks-kept: root.is-recent;
                 covers-generation: Radio.covers-generation;
                 logo-decode-size: Radio.logo-decode-size;
                 request-logo(p, g) => { Radio.request-logo(p, g) }
@@ -56,15 +64,22 @@ export component KeptStationsTab inherits Rectangle {
                 favorite-clicked(s) => { Radio.toggle-favorite(s); }
                 homepage-clicked(s) => { Radio.open-homepage(s.homepage); }
                 edit-clicked(s) => { Radio.edit-station(s); }
-                // Chrome inline so `@tr` applies and so the message can name the station; the
-                // dispatcher forwards the accept to `Radio.remove-station`.
+                // Chrome inline so `@tr` applies and so the message can name the station. The
+                // kind is what carries the tab to the dispatcher, so removal means the list the
+                // card was actually on rather than whichever is mounted when the confirm lands —
+                // and the copy names only the list, the row's own deletion being a cleanup the
+                // card cannot see the condition for.
                 remove-clicked(s) => {
-                    Dialog.title = @tr("Remove station?");
-                    Dialog.message = @tr("\"{}\" will be removed from your stations, along with its play history.", s.name);
+                    Dialog.title = root.is-recent
+                        ? @tr("Remove from Recently Played?")
+                        : @tr("Remove from favorites?");
+                    Dialog.message = root.is-recent
+                        ? @tr("\"{}\" will be removed from Recently Played.", s.name)
+                        : @tr("\"{}\" will be removed from your favorites.", s.name);
                     Dialog.confirm-label = @tr("Remove");
                     Dialog.cancel-label = @tr("Cancel");
                     Dialog.destructive = true;
-                    Dialog.kind = "remove-station";
+                    Dialog.kind = root.is-recent ? "remove-from-recent" : "remove-from-favorites";
                     Dialog.target-id = s.id;
                     Dialog.open = true;
                 }

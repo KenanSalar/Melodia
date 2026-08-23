@@ -188,6 +188,18 @@ pub async fn mark_played(db: &DbPool, id: i64) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Forget a station's plays, which is what drops it out of the recents list.
+///
+/// The count goes with the stamp: Favorites sorts on it, and a station showing seven plays and no
+/// last-played is a history half-erased.
+pub async fn clear_play_history(db: &DbPool, id: i64) -> Result<(), AppError> {
+    sqlx::query("UPDATE radio_stations SET last_played = NULL, play_count = 0 WHERE id = ?")
+        .bind(id)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
 /// Point a station at its stored logo, or clear it with `None`.
 pub async fn set_artwork(db: &DbPool, id: i64, artwork_path: Option<&str>) -> Result<(), AppError> {
     sqlx::query("UPDATE radio_stations SET artwork_path = ? WHERE id = ?")

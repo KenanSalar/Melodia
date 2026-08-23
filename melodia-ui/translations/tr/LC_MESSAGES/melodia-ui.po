@@ -1841,12 +1841,19 @@ msgstr "Bu adres, Melodia'nın çözebileceği bir ses yayını vermiyor."
 msgid "Couldn't save the station."
 msgstr "İstasyon kaydedilemedi."
 
-# The station card's destructive action.
-msgid "Remove station?"
-msgstr "İstasyon kaldırılsın mı?"
+# The station card's destructive action, once per tab: the two lists are independent, so each
+# names only its own.
+msgid "Remove from favorites?"
+msgstr "Favorilerden kaldırılsın mı?"
 
-msgid "\"{}\" will be removed from your stations, along with its play history."
-msgstr "\"{}\" dinlenme geçmişiyle birlikte istasyonlarından kaldırılacak."
+msgid "\"{}\" will be removed from your favorites."
+msgstr "\"{}\" favorilerinden kaldırılacak."
+
+msgid "Remove from Recently Played?"
+msgstr "Son Çalınanlardan kaldırılsın mı?"
+
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "\"{}\" Son Çalınanlar listesinden kaldırılacak."
 
 # Station list import and export. Turkish doesn't pluralize after a numeral, so both
 # forms are the same sentence — the layout stays for msgid alignment.

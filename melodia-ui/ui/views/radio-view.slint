@@ -26,8 +26,12 @@ export component RadioView inherits Rectangle {
 
     // **The one place in the tree where the debounce is load-bearing rather than an
     // optimization**: on Browse a settled burst is a directory request, not a walk over rows
-    // already in hand.
+    // already in hand. Hence the only `trailing` mount — a value the user typed through is a
+    // request and a logo burst spent on a page nobody will look at — and an interval sized to a
+    // round trip rather than to a re-filter.
     FilterThrottle {
+        trailing: true;
+        interval: 200ms;
         pending: root.filter-tick-pending;
         fire() => { Radio.filter-changed(Radio.filter); }
     }
