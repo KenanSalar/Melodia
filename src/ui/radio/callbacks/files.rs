@@ -59,9 +59,7 @@ pub fn wire(
                 let mut skipped: u32 = 0;
                 let mut failures: u32 = 0;
                 for handle in &handles {
-                    match library::radio_files::import_stations_from_file(&s.db, handle.path())
-                        .await
-                    {
+                    match library::radio_files::import_stations_from_file(&s, handle.path()).await {
                         Ok(result) => {
                             imported = imported.saturating_add(result.imported);
                             skipped = skipped.saturating_add(result.skipped);
@@ -119,7 +117,7 @@ pub fn wire(
                     return;
                 };
                 let path = target.path().to_path_buf();
-                let outcome = library::radio_files::export_stations(&s.db, &path).await;
+                let outcome = library::radio_files::export_stations(&s, &path).await;
 
                 let Some(ui) = weak.upgrade() else { return };
                 let settings = ui.global::<Settings>();

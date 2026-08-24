@@ -10,7 +10,8 @@ use crate::entities::radio::{self, RadioStation};
 use crate::error::AppError;
 
 use super::{
-    ImportStationsResult, StationEntry, import_stations_from_file, indexed_key, parse, serialize,
+    ImportStationsResult, StationEntry, indexed_key, parse, read_station_list, serialize,
+    write_station_list,
 };
 
 /// A kept row, seeded from the same shape the writer tests build.
@@ -26,7 +27,7 @@ async fn import_text(db: &DbPool, text: &str) -> Result<ImportStationsResult, Ap
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("stations.m3u8");
     std::fs::write(&path, text)?;
-    import_stations_from_file(db, &path).await
+    read_station_list(db, &path).await
 }
 
 /// One entry, spelled the way the assertions read. Nothing but the name and the URL: every
@@ -397,5 +398,167 @@ async fn an_import_restores_each_station_as_the_kind_it_was_exported_as() -> Res
     assert!(typed_back.station_uuid.is_none(), "a hand-typed one has no directory behind it");
     assert_eq!(typed_back.website(), Some("https://typed.example/"));
     assert_eq!(typed_back.genre(), Some("Talk"), "and keeps the fields the user filled in");
+    Ok(())
+}
+
+/// A re-import may not undo the edits made since the export it is reading.
+///
+/// `set_local_fields` writes all four `local_*` columns in one statement, so an import that
+/// applied a file's tags to a row already in the table would clear whatever the file says nothing
+/// about — export a station carrying only a website, add a genre on the card, re-import, and the
+/// genre is gone with nothing on screen naming the loss.
+///
+/// Both arms of the existing-row branch are walked. The first acts on the row and must still leave
+/// its columns alone, which is what makes it sharper than a no-op; the second is the one a user
+/// meets, a backup re-imported over a library they still hold landing on rows already starred.
+#[tokio::test]
+async fn a_re_import_leaves_the_columns_the_file_says_nothing_about() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let saved = seed(&db, &station("Typed", "https://example.test/one")).await?;
+    let website = radio::StationOverrides {
+        website: Some("https://typed.example/".to_owned()),
+        ..Default::default()
+    };
+    queries::radio::set_local_fields(&db, saved.id, &website).await?;
+
+    let text = serialize(&queries::radio::get_favorite_stations(&db).await?);
+
+    // Grown since the export, and un-starred so the import has something to do for the row.
+    queries::radio::set_local_fields(
+        &db,
+        saved.id,
+        &radio::StationOverrides {
+            genre: Some("Talk".to_owned()),
+            country: Some("Tunisia".to_owned()),
+            ..website
+        },
+    )
+    .await?;
+    queries::radio::set_favorite(&db, saved.id, false).await?;
+
+    assert_eq!(
+        import_text(&db, &text).await?,
+        ImportStationsResult {
+            imported: 1,
+            skipped: 0
+        }
+    );
+
+    let back = queries::radio::get_station_by_id(&db, saved.id).await?;
+    assert!(back.is_favorite, "the star is what a re-import is for");
+    assert_eq!(back.website(), Some("https://typed.example/"), "and the file's own field stands");
+    assert_eq!(back.genre(), Some("Talk"), "the edits since the export outrank the file");
+    assert_eq!(back.country_name(), Some("Tunisia"));
+
+    assert_eq!(
+        import_text(&db, &text).await?,
+        ImportStationsResult {
+            imported: 0,
+            skipped: 1
+        },
+        "starred already, so there is nothing left to put back"
+    );
+    let again = queries::radio::get_station_by_id(&db, saved.id).await?;
+    assert_eq!(again.genre(), Some("Talk"), "and a skipped entry rewrites nothing either");
+    assert_eq!(again.country_name(), Some("Tunisia"));
+    Ok(())
+}
+
+/// A station block that will not parse costs the station its kind, never its row.
+///
+/// The block is the half a hand-edit is most likely to break, and everything in it refines a name
+/// and a URL the entry already carries — so a broken one arrives as a hand-typed station, which is
+/// what a list from anywhere else arrives as anyway.
+#[tokio::test]
+async fn an_unreadable_station_block_still_imports_the_station() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let text = concat!(
+        "#EXTM3U\n",
+        "#EXTINF:-1,Nidaa FM\n",
+        "#MELODIA-STATION:{\"station_uuid\":\"uuid-1\",\n",
+        "https://example.test/one\n",
+    );
+
+    assert_eq!(
+        import_text(&db, text).await?,
+        ImportStationsResult {
+            imported: 1,
+            skipped: 0
+        }
+    );
+
+    let rows = queries::radio::get_favorite_stations(&db).await?;
+    let [back] = rows.as_slice() else {
+        return Err(AppError::io_other("expected exactly the one station"));
+    };
+    assert_eq!(back.name, "Nidaa FM", "the lines beside the block are what the entry is made of");
+    assert_eq!(back.stream_url, "https://example.test/one");
+    assert!(back.station_uuid.is_none(), "and nothing survives the block that did not parse");
+    Ok(())
+}
+
+/// A hand-edited blob spelling its uuid `""` is a station with no uuid, not a station whose uuid
+/// is the empty string.
+///
+/// `SQLite` reads `''` as a value rather than a gap under `UNIQUE`, so two of them would upsert
+/// onto a single row through `DIRECTORY_CONFLICT` and the second station would silently overwrite
+/// the first. The same guard `DirectoryStation::is_usable` makes on the directory's side.
+#[tokio::test]
+async fn blank_uuids_in_a_blob_do_not_collapse_onto_one_row() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let text = concat!(
+        "#EXTM3U\n",
+        "#EXTINF:-1,First\n",
+        "#MELODIA-STATION:{\"station_uuid\":\"\",\"name\":\"First\"}\n",
+        "https://example.test/one\n",
+        "#EXTINF:-1,Second\n",
+        "#MELODIA-STATION:{\"station_uuid\":\"\",\"name\":\"Second\"}\n",
+        "https://example.test/two\n",
+    );
+
+    assert_eq!(
+        import_text(&db, text).await?,
+        ImportStationsResult {
+            imported: 2,
+            skipped: 0
+        }
+    );
+
+    let rows = queries::radio::get_favorite_stations(&db).await?;
+    assert_eq!(rows.len(), 2, "two stations, not one overwritten by the other: {rows:?}");
+    assert!(rows.iter().all(|row| row.station_uuid.is_none()));
+    Ok(())
+}
+
+/// The export door, which nothing had reached: the count it reports, and that what it leaves on
+/// disk is what the importer reads back.
+///
+/// [`serialize`] is covered on its own, so what is under test here is the half around it — the
+/// count comes off the rows rather than off the text, and the file lands where the picker named
+/// it, headed the way every other player needs to see.
+#[tokio::test]
+async fn an_export_writes_a_file_the_import_reads_back() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    seed(&db, &station("First", "https://example.test/one")).await?;
+    seed(&db, &station("Second", "https://example.test/two")).await?;
+
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("stations.m3u8");
+    assert_eq!(write_station_list(&db, &path).await?, 2, "the count is the rows written");
+
+    let text = std::fs::read_to_string(&path)?;
+    assert!(
+        text.starts_with("#EXTM3U\n"),
+        "a file without the header is one nothing reads: {text}"
+    );
+
+    assert_eq!(
+        read_station_list(&db, &path).await?,
+        ImportStationsResult {
+            imported: 0,
+            skipped: 2
+        },
+        "both rows are still starred, so the round trip has nothing to do"
+    );
     Ok(())
 }

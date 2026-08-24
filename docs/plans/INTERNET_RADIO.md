@@ -1031,7 +1031,9 @@ claimed was working:
 - **An import restored nothing.** `is_listed` keeps a played directory station's row alive
   after its star goes, and the import refused any entry whose stream URL was already a row —
   so re-importing an export put nothing back, and clearing Recently Played was the only way
-  through it. It merges now, in the shape `add_custom_station` already used and documented.
+  through it. It merges now, in the shape `add_custom_station` already used and documented — and
+  a row already in the table takes nothing from the file but its star, `set_local_fields` writing
+  all four `local_*` columns at once, so a file naming one of them would clear the rest.
 - **And it restored the wrong kind.** The file carried a name, a URL and the four override
   tags, so every station came back hand-typed whatever it had been — the pencil then offering
   the full editor over a row the directory owns. `#MELODIA-STATION:` carries the row's own
@@ -1042,13 +1044,18 @@ claimed was working:
   card being centred with no cap. `dialog.slint` caps it against the window and
   `AddStationBody` scrolls — taking its `preferred-height` off the column rather than the
   scroller, the widget binding `viewport-height` to `max(content, flickable.height)` so that
-  reading closes a loop through the height it is meant to set.
+  reading closes a loop through the height it is meant to set. **The cap is per kind, not the
+  card's**: nothing in that file clips, so a kind whose body cannot scroll squeezes below what
+  its children need and paints the remainder, action buttons included, outside the card and
+  onto the backdrop. `body-scrolls` names the two station kinds; a kind joining it owes a
+  scroller.
 
 **Gates:** fmt, `clippy --all-targets --locked -- -D warnings` at the root (both crates
-moved), full `cargo test` green at 1955 lib tests. `import_stations_from_file` had **no
-coverage at all** before this, which is exactly where both import bugs lived; it is DB-backed
-now. Two pins were mutation-checked: dropping one `can-edit-*` from `reset()` fails the form
-walk by name, and restoring the by-URL skip fails the re-import test.
+moved), full `cargo test` green at 1959 lib tests. Neither door had **any coverage** before
+this, which is exactly where both import bugs lived; both are DB-backed now. Three pins were
+mutation-checked: dropping one `can-edit-*` from `reset()` fails the form walk by name,
+restoring the by-URL skip fails the re-import test, and re-applying a file's tags to a row
+already in the table fails it on both arms.
 
 ---
 

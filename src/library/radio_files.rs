@@ -19,6 +19,7 @@ use std::path::Path;
 use crate::database::{DbPool, queries};
 use crate::entities::radio;
 use crate::error::AppError;
+use crate::state::AppState;
 
 const HEADER: &str = "#EXTM3U";
 const EXTINF_TAG: &str = "#EXTINF:";
@@ -119,7 +120,14 @@ impl Pending {
 ///
 /// Returns how many were written. `#EXTINF:-1` throughout — a live stream has no duration, and
 /// `-1` is the tag's own spelling for that.
-pub async fn export_stations(db: &DbPool, dest: &Path) -> Result<u32, AppError> {
+pub async fn export_stations(state: &AppState, dest: &Path) -> Result<u32, AppError> {
+    write_station_list(&state.db, dest).await
+}
+
+/// [`export_stations`]'s body, narrowed to what it actually reaches so the tests can drive it off
+/// a bare pool. `playlist_files`'s shape: the library door takes the state, the work takes the
+/// database.
+async fn write_station_list(db: &DbPool, dest: &Path) -> Result<u32, AppError> {
     let stations = queries::radio::get_favorite_stations(db).await?;
     let text = serialize(&stations);
     let path = dest.to_path_buf();
@@ -134,18 +142,22 @@ pub async fn export_stations(db: &DbPool, dest: &Path) -> Result<u32, AppError> 
 /// Read a station playlist and put everything in it back in the kept list.
 ///
 /// **A merge rather than an insert, which is what makes an export a backup.** `is_listed` keeps a
-/// played directory station's row alive after its star goes, so the rows a plain by-URL insert
-/// refused to touch were exactly the ones Recently Played was still holding — un-star a list,
-/// re-import it, and nothing came back. [`super::radio::add_custom_station`] already answers this
-/// the right way and says so; this is the same answer at the other door.
+/// played *directory* station's row alive after its star goes, so a row an entry lands on may be
+/// one Recently Played is holding for it — putting the star back is what an import is for.
+/// [`super::radio::add_custom_station`] gives the same answer at the other door.
 ///
 /// Deliberately **not** probed: a file of fifty stations would mean fifty connects, and the user
 /// asked to import a list rather than to audition one. A dead entry reports at the click, like a
 /// directory station that went off air.
 pub async fn import_stations_from_file(
-    db: &DbPool,
+    state: &AppState,
     src: &Path,
 ) -> Result<ImportStationsResult, AppError> {
+    read_station_list(&state.db, src).await
+}
+
+/// [`import_stations_from_file`]'s body, narrowed for the reason [`write_station_list`] is.
+async fn read_station_list(db: &DbPool, src: &Path) -> Result<ImportStationsResult, AppError> {
     let path = src.to_path_buf();
     let body = tokio::task::spawn_blocking(move || std::fs::read_to_string(&path))
         .await
@@ -164,10 +176,12 @@ pub async fn import_stations_from_file(
 
 /// Put one entry in the kept list, answering whether that changed anything.
 ///
-/// **What a re-import may rewrite is the row owner's call.** A directory station is left alone:
-/// every column of it is the directory's, and a snapshot out of a file is not evidence against a
-/// live row. A hand-typed one takes the file's `local_*` fields back, those being the user's own
-/// and the whole reason to keep a backup of them.
+/// **A row already here takes nothing from the file but its star.** A snapshot out of a file is
+/// not evidence against a live row, and `set_local_fields` writes all four columns in one
+/// statement, so a file naming one of them would clear the three it says nothing about. Nothing is
+/// lost by that: a station the user deleted arrives as a new row, and un-starring one never
+/// touched its `local_*` columns. It also keeps every row [`apply_overrides`] writes to logo-less,
+/// which is the state [`super::radio::heal_station_logo`] needs to reach one.
 async fn import_one(db: &DbPool, entry: &StationEntry) -> Result<bool, AppError> {
     let station = entry.to_new_station();
     let Some(existing) = find_existing(db, &station).await? else {
@@ -177,9 +191,6 @@ async fn import_one(db: &DbPool, entry: &StationEntry) -> Result<bool, AppError>
         return Ok(true);
     };
 
-    if existing.station_uuid.is_none() {
-        apply_overrides(db, existing.id, &entry.overrides).await;
-    }
     if existing.is_favorite {
         return Ok(false);
     }
@@ -216,7 +227,7 @@ async fn find_existing(
 /// Validated and written rather than put through `radio::set_station_overrides`, which would
 /// download a logo per entry — the fifty connects the import already refuses to spend on probing.
 /// The repair behind the completion toast fetches them in batches instead, and every row this
-/// touches is one it just created or just starred, so all of them qualify.
+/// touches is one the import just created, so all of them qualify.
 ///
 /// Best-effort: one hand-edited line is not worth refusing a file of fifty stations over, and
 /// every field is editable on the card.
