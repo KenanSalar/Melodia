@@ -2,6 +2,7 @@ import { Theme } from "../../theme.slint";
 import { ArtworkImage } from "../../components/artwork-image.slint";
 import { IconButton } from "../../components/icon-button.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
+import { PlayCountBadge } from "../../components/grid/play-count-badge.slint";
 
 // One station, as all three Radio tabs draw it. `EntityCard`'s shape rather than `EntityCard`
 // itself: what a station card carries under the tile is three lines rather than two, and its hover
@@ -35,6 +36,9 @@ export component StationCard inherits Rectangle {
     // Segmented stream: listed rather than hidden (the directory row says so), and inert. The
     // badge is what stops the refusal arriving at the moment of a click.
     in property <bool> unplayable;
+    // Recently Played only, where it is what tells a station listened to daily from one played
+    // once by accident. `0` everywhere else draws nothing.
+    in property <int> play-count: 0;
 
     in property <length> card-width: 180px;
     // The square tile plus three text lines, where an entity card of the same width carries two.
@@ -254,9 +258,18 @@ export component StationCard inherits Rectangle {
     }
 
     // Top-left of the tile, clear of the hover trio. Non-interactive, so card clicks pass through.
+    plays := PlayCountBadge {
+        x: 2 * Theme.pad-sm;
+        y: 2 * Theme.pad-sm;
+        count: root.play-count;
+    }
+
+    // The same corner, and unlike `EntityCard`'s pair these two can both be true: a re-import
+    // rewrites `hls` wholesale, so a station played while it was streamable keeps its count and
+    // gains the warning. The count holds the corner, being the one Recently Played is about.
     Rectangle {
         visible: root.unplayable;
-        x: 2 * Theme.pad-sm;
+        x: 2 * Theme.pad-sm + (root.play-count > 0 ? plays.width + Theme.pad-xs : 0px);
         y: 2 * Theme.pad-sm;
         width: 28px;
         height: 28px;

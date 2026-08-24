@@ -35,6 +35,10 @@ export component StationGrid inherits Rectangle {
     // lists that mix kept and unkept stations — see the card's star.
     in property <bool> star-marks-kept: true;
 
+    // `EntityCardGrid`'s own opt-in, and off for the same reason: a badge on every card of a list
+    // that isn't ranked by it says nothing. Recently Played is the one tab that turns it on.
+    in property <bool> show-play-count: false;
+
     callback station-clicked(RadioStationRow);
     callback play-clicked(RadioStationRow);
     callback favorite-clicked(RadioStationRow);
@@ -99,6 +103,7 @@ export component StationGrid inherits Rectangle {
                     removable: root.manageable;
                     homepage-known: station.homepage != "";
                     unplayable: station.hls;
+                    play-count: root.show-play-count ? station.play_count : 0;
                     clicked => { root.station-clicked(station); }
                     play-clicked => { root.play-clicked(station); }
                     favorite-clicked => { root.favorite-clicked(station); }

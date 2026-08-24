@@ -329,6 +329,9 @@ export struct RadioStationRow {
     bitrate: int,          // 0 = the directory doesn't know
     hls: bool,
     is_favorite: bool,
+    // `0` for a browsed station, which has no row to have been played on. Only Recently Played
+    // asks for it, so the badge stays off the two tabs that would carry one on every card.
+    play_count: int,
     // What the card paints with no logo: two name-hashed stops and the station's initials over
     // them. Carried per row like `GenreRow`'s pair, Slint having no hash to derive them with.
     // Empty `monogram` is a name with no letters in it, and leaves the card on the glyph.

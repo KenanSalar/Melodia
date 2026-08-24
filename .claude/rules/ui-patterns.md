@@ -137,8 +137,10 @@ silently miss the other.
   zero-width `chunks` is a panic. Grid tabs take `chunk_entity_rows` + `write_grid` (generic over
   the row type, so Browse uses it too). Don't re-roll either.
 
-- **The play-count badge lives on `EntityCard`**, not on whichever host wants it, and renders a
-  `MaterialIcon` rather than a `"▶"` in the string (the fallback-font line-box pitfall).
+- **The play-count badge is its own leaf** (`grid/play-count-badge.slint`), mounted by `EntityCard`
+  and by Radio's `StationCard` — a host that isn't an `EntityCard` is what turned it into markup a
+  card could own. It renders a `MaterialIcon` rather than a `"▶"` in the string (the fallback-font
+  line-box pitfall) and hides itself at a count of zero, so no host restates the suppression.
 
 - **`MosaicHeroTile`** is the 140 px artwork square both curated heroes draw, and it draws **one
   composed collage, never a live `CoverMosaic`** — `media::artwork`'s `COMPOSITE_LAYOUTS` owns the

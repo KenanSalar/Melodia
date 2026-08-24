@@ -50,6 +50,8 @@ pub fn to_slint_radio_station_row(
         bitrate: station.bitrate,
         hls: station.hls,
         is_favorite,
+        // Nothing has been played from the directory: a play writes the row first.
+        play_count: 0,
         tile_color_1: tile.color_1,
         tile_color_2: tile.color_2,
         monogram: tile.monogram,
@@ -76,6 +78,7 @@ pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
         bitrate: station.bitrate,
         hls: station.hls,
         is_favorite: station.is_favorite,
+        play_count: station.play_count,
         tile_color_1: tile.color_1,
         tile_color_2: tile.color_2,
         monogram: tile.monogram,

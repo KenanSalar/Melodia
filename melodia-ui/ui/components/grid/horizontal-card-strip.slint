@@ -84,11 +84,7 @@ export component HorizontalCardStrip inherits Rectangle {
                             card-height: root.card-height;
                             circular: root.circular;
                             fallback-icon: root.fallback-icon;
-                            // The card owns the badge, so the strip and the
-                            // vertical `EntityCardGrid` render the same one.
-                            badge-text: root.show-play-count && row.play_count > 0
-                                ? row.play_count
-                                : "";
+                            play-count: root.show-play-count ? row.play_count : 0;
                             clicked => { root.row-clicked(row.id); }
                         }
 
