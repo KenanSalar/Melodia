@@ -77,6 +77,7 @@ settings
 shield
 show_chart
 shuffle
+sort
 speed
 star
 star_border

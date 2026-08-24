@@ -238,6 +238,10 @@ msgstr "Parçaları filtrele…"
 msgid "Columns"
 msgstr "Sütunlar"
 
+# `SortMenuPopup`'s trigger, the pill-chrome twin of "Columns".
+msgid "Sort"
+msgstr "Sırala"
+
 msgid "Card view"
 msgstr "Kart görünümü"
 
@@ -1796,22 +1800,14 @@ msgstr "Farklı bir ad dene ya da bir filtreyi kaldır."
 msgid "{} kbps"
 msgstr "{} kbps"
 
-# The Recently Played tab's empty state.
-msgid "Nothing played yet"
-msgstr "Henüz bir şey dinlenmedi"
-
+# The Recently Played tab's empty state body; its title takes the library's "Nothing played yet".
 msgid "Stations you listen to show up here."
 msgstr "Dinlediğin istasyonlar burada görünür."
 
-# The Favorites tab's sort pills. "Name" is shared with the library sorts.
+# The Favorites tab's sort picker. Only "Added" is its own: "Name", "Plays" and "Last played" are
+# the library's entries above, one msgid being one string to gettext however many surfaces use it.
 msgid "Added"
 msgstr "Eklenme"
-
-msgid "Plays"
-msgstr "Dinlenme"
-
-msgid "Last played"
-msgstr "Son dinlenme"
 
 # The add / edit station dialog.
 msgid "Add Station"

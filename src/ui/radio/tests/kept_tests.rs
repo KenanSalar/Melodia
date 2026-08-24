@@ -116,6 +116,53 @@ fn a_station_never_played_sorts_below_every_station_that_was() {
     );
 }
 
+/// Every field the Favorites sort picker offers has to reach an arm of its own.
+///
+/// The token is a bare string on both sides, an element of the mount's `fields` array against a
+/// `match` arm in [`sort_stations`], so a typo or a rename on either compiles and the picker
+/// quietly sorts by the default while painting the arrow beside it as though it had worked.
+/// Restating the arms here would only move the guess, so each token is run through the comparator
+/// and checked against the order it names.
+#[test]
+fn every_sort_the_picker_offers_reaches_an_arm_of_its_own() {
+    const TAB_PILLS: &str = include_str!("../../../../melodia-ui/ui/views/radio/tab-pills.slint");
+
+    let arrays = crate::test_support::sort_mount_arrays(TAB_PILLS, "Radio.sort-field");
+    assert!(
+        arrays.is_some(),
+        "`views/radio/tab-pills.slint` must mount a sort control bound to Radio.sort-field"
+    );
+    // Unreachable past the assert; spelled this way because the crate denies `unwrap`, `expect`
+    // and `panic!` in tests as well as in production code.
+    let Some((labels, asked)) = arrays else {
+        return;
+    };
+    let asked: Vec<&str> = asked.split(',').map(|f| f.trim().trim_matches('"')).collect();
+
+    // **The two arrays are indexed against each other**, so a picker that grows a label without a
+    // field reads `fields[i]` past the end and sorts by the empty string.
+    assert_eq!(
+        labels.matches("@tr(").count(),
+        asked.len(),
+        "the sort picker must carry one `@tr` label per field, found {asked:?}"
+    );
+
+    let stations = sample();
+    let by_default = ordered(&stations, "unknown-field", SortDir::Asc);
+    for field in &asked {
+        let by_field = ordered(&stations, field, SortDir::Asc);
+        if *field == "name" {
+            assert_eq!(by_field, by_default, "`name` is the default arm and is reached by falling");
+            continue;
+        }
+        assert_ne!(
+            by_field, by_default,
+            "the picker offers `{field}`, which `sort_stations` has no arm for, so it lands on \
+             name order while the row paints its arrow as though it had worked"
+        );
+    }
+}
+
 /// A kept station carrying a directory uuid and a stored logo, which is the pair Browse falls
 /// back on.
 fn logo_row(id: i64, uuid: &str, artwork_path: Option<&str>) -> RadioStation {

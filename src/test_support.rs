@@ -307,15 +307,18 @@ pub(crate) fn array_body<'a>(src: &'a str, marker: &str) -> Option<&'a str> {
     src.split_once(marker).and_then(|(_, rest)| rest.split_once("];")).map(|(body, _)| body)
 }
 
-/// The `labels` and `fields` arrays of the one `SortPillRow` mount in `src` whose
+/// The `labels` and `fields` arrays of the one sort mount in `src` whose
 /// `sort-field` reads `field_property`, as raw comma-separated element lists.
+///
+/// Either presentation answers to it: `SortPillRow` and `SortMenuPopup` take the same
+/// parallel arrays, and the anchor below is a binding both spell.
 ///
 /// `field_property` is the whole property path the mount binds (`Albums.sort-field`, or
 /// `Favorites.artist-sort-field` where one global sorts more than one thing) — the only
 /// binding naming both the component and the global, so it locates the mount, and the two
 /// arrays are read backwards from it. `None` when no such mount exists, which is itself the
 /// failure a caller reports.
-pub(crate) fn sort_pill_row_arrays<'a>(
+pub(crate) fn sort_mount_arrays<'a>(
     src: &'a str,
     field_property: &str,
 ) -> Option<(&'a str, &'a str)> {

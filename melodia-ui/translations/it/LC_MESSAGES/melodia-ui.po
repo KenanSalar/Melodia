@@ -233,6 +233,10 @@ msgstr "Filtra brani…"
 msgid "Columns"
 msgstr "Colonne"
 
+# `SortMenuPopup`'s trigger, the pill-chrome twin of "Columns".
+msgid "Sort"
+msgstr "Ordina"
+
 msgid "Card view"
 msgstr "Vista a schede"
 
@@ -1789,22 +1793,14 @@ msgstr "Prova un altro nome o rimuovi un filtro."
 msgid "{} kbps"
 msgstr "{} kbps"
 
-# The Recently Played tab's empty state.
-msgid "Nothing played yet"
-msgstr "Non hai ancora ascoltato nulla"
-
+# The Recently Played tab's empty state body; its title takes the library's "Nothing played yet".
 msgid "Stations you listen to show up here."
 msgstr "Le stazioni che ascolti compaiono qui."
 
-# The Favorites tab's sort pills. "Name" is shared with the library sorts.
+# The Favorites tab's sort picker. Only "Added" is its own: "Name", "Plays" and "Last played" are
+# the library's entries above, one msgid being one string to gettext however many surfaces use it.
 msgid "Added"
 msgstr "Aggiunta"
-
-msgid "Plays"
-msgstr "Riproduzioni"
-
-msgid "Last played"
-msgstr "Ultimo ascolto"
 
 # The add / edit station dialog.
 msgid "Add Station"

@@ -865,8 +865,7 @@ const SORT_ROWS: [(&str, [&str; 3]); 3] = [
 #[test]
 fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     for (global, fields) in SORT_ROWS {
-        let arrays =
-            crate::test_support::sort_pill_row_arrays(PILLS, &format!("{global}.sort-field"));
+        let arrays = crate::test_support::sort_mount_arrays(PILLS, &format!("{global}.sort-field"));
         assert!(
             arrays.is_some(),
             "`tab-pills.slint` must mount a `SortPillRow` bound to {global}.sort-field",

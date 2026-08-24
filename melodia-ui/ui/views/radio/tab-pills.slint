@@ -3,12 +3,17 @@ import { Radio } from "../../globals/radio.slint";
 import { RadioForm } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { ActionPill, PillButton, PillDivider } from "../../components/action-pill.slint";
-import { SortPillRow } from "../../components/sort-pill-row.slint";
+import { SortMenuPopup } from "../../components/sort-menu-popup.slint";
 import { FacetChip } from "facet-chip.slint";
 
 // Every pill row the Radio band can show, mutually exclusive on the mounted tab and handed to
-// `LibraryTabBand` as its whole `@children`: Browse's filter chips, then Favorites' sort row and
-// its add/import/export pills. Recently Played has none, its order being the page.
+// `LibraryTabBand` as its whole `@children`: Browse's filter chips, then Favorites' single chip of
+// add / import / export plus its sort picker. Recently Played has none, its order being the page.
+//
+// **Favorites sorts through a popup rather than the usual `SortPillRow`.** Four fields spelled out
+// beside three operations mounted two chips at once, flush against each other under the
+// `spacing: 0px` below, and left the band no room for the count line it reserves against
+// `pills.width`.
 //
 // **Text labels rather than icon-and-tooltip.** The band paints its slot before the body, so a
 // tooltip drawn from in here would need the published-anchor treatment `MyLibraryTabPills` carries
@@ -103,17 +108,6 @@ export component RadioTabPills inherits Rectangle {
             }
         }
 
-        // `labels` stays an inline literal — `@tr` folds msgids at codegen, so a Rust-seeded array
-        // renders untranslated — and `fields` is the parallel list of tokens Rust's comparator
-        // matches on.
-        if Radio.tab-idx == Radio.tab-favorites: SortPillRow {
-            labels: [@tr("Name"), @tr("Added"), @tr("Plays"), @tr("Last played")];
-            fields: ["name", "added", "plays", "played"];
-            sort-field: Radio.sort-field;
-            sort-dir: Radio.sort-dir;
-            request-sort(f) => { Radio.request-sort(f); }
-        }
-
         if Radio.tab-idx == Radio.tab-favorites: ActionPill {
             // Fills the Dialog inline rather than hopping through Rust: a synchronous
             // `set_open(true)` mid-click-handler trips Slint's recursion guard.
@@ -151,6 +145,16 @@ export component RadioTabPills inherits Rectangle {
                 icon: "upload";
                 text: @tr("Export");
                 clicked => { Radio.export-stations(); }
+            }
+
+            PillDivider { }
+
+            SortMenuPopup {
+                labels: [@tr("Name"), @tr("Added"), @tr("Plays"), @tr("Last played")];
+                fields: ["name", "added", "plays", "played"];
+                sort-field: Radio.sort-field;
+                sort-dir: Radio.sort-dir;
+                request-sort(f) => { Radio.request-sort(f); }
             }
         }
     }
