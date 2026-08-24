@@ -139,7 +139,12 @@ export component FacetChip inherits Rectangle {
         // Always under the chip; flipping above near the viewport's bottom edge is polish nobody
         // has asked for yet. Both dimensions are spelled because the body scrolls — a popup sized
         // by its content would grow to the whole list.
-        x: 0;
+        //
+        // **Trailing edges aligned rather than leading ones.** The strip sits at the band's right,
+        // where a left-anchored picker runs past the window and `place_popup` clamps it flush to
+        // that edge, gutterless and no longer under the chip that opened it. The room is to the
+        // left, and `ColumnTogglePopup` answers the same clamp the same way.
+        x: root.width - self.width;
         y: chip.height + 4px;
         width: 320px;
         height: 380px;

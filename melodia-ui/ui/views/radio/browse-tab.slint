@@ -3,11 +3,10 @@ import { Radio } from "../../globals/radio.slint";
 import { ActionPill, PillButton } from "../../components/action-pill.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
-import { FacetChip } from "facet-chip.slint";
 import { StationGrid } from "station-grid.slint";
 
-// The worldwide directory: a chip strip of filters over a virtualized station grid, with the
-// load-more pill floating over its foot.
+// The worldwide directory: a virtualized station grid with the load-more pill floating over its
+// foot. The filters that drive it are pills in the band, with the rest of the page's controls.
 //
 // **The scroller is here, not on the page.** Every tabbed page in the tree puts it in the tab
 // body, and a page-level `ScrollView` above a virtualized `ListView` is the nested-scroller pitfall.
@@ -38,90 +37,6 @@ export component RadioBrowseTab inherits Rectangle {
 
     VerticalLayout {
         padding-top: Theme.pad-md;
-        spacing: Theme.pad-sm;
-
-        // The filters. Country carries a code because `countrycode` is the search endpoint's one
-        // code-keyed parameter; the rest filter by name, and the bitrate chip's `code` is its own
-        // floor in kbps.
-        HorizontalLayout {
-            padding-left: Theme.pad-md;
-            padding-right: Theme.pad-md;
-            spacing: Theme.pad-sm;
-            alignment: start;
-            vertical-stretch: 0;
-
-            FacetChip {
-                kind: Radio.facet-country;
-                label: @tr("Country");
-                value: Radio.pick-country;
-                options: Radio.facet-shown == Radio.facet-country ? Radio.facet-options : [];
-                loading: Radio.facet-shown == Radio.facet-country && Radio.facet-loading;
-                needle <=> Radio.facet-filter;
-                opened(k) => { Radio.request-facet(k); }
-                needle-edited(t) => { Radio.facet-filter-changed(t); }
-                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
-                cleared(k) => { Radio.clear-facet(k); }
-            }
-
-            FacetChip {
-                kind: Radio.facet-language;
-                label: @tr("Language");
-                value: Radio.pick-language;
-                options: Radio.facet-shown == Radio.facet-language ? Radio.facet-options : [];
-                loading: Radio.facet-shown == Radio.facet-language && Radio.facet-loading;
-                needle <=> Radio.facet-filter;
-                opened(k) => { Radio.request-facet(k); }
-                needle-edited(t) => { Radio.facet-filter-changed(t); }
-                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
-                cleared(k) => { Radio.clear-facet(k); }
-            }
-
-            FacetChip {
-                kind: Radio.facet-tag;
-                label: @tr("Genre");
-                value: Radio.pick-tag;
-                options: Radio.facet-shown == Radio.facet-tag ? Radio.facet-options : [];
-                loading: Radio.facet-shown == Radio.facet-tag && Radio.facet-loading;
-                needle <=> Radio.facet-filter;
-                opened(k) => { Radio.request-facet(k); }
-                needle-edited(t) => { Radio.facet-filter-changed(t); }
-                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
-                cleared(k) => { Radio.clear-facet(k); }
-            }
-
-            FacetChip {
-                kind: Radio.facet-codec;
-                label: @tr("Format");
-                value: Radio.pick-codec;
-                options: Radio.facet-shown == Radio.facet-codec ? Radio.facet-options : [];
-                loading: Radio.facet-shown == Radio.facet-codec && Radio.facet-loading;
-                needle <=> Radio.facet-filter;
-                opened(k) => { Radio.request-facet(k); }
-                needle-edited(t) => { Radio.facet-filter-changed(t); }
-                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
-                cleared(k) => { Radio.clear-facet(k); }
-            }
-
-            // Its options are a literal rather than a fetch: the floors are ours to choose, not
-            // the directory's to list. `code` is what the request carries, so it stays unlocalized
-            // while the label is not.
-            FacetChip {
-                kind: Radio.facet-bitrate;
-                label: @tr("Bitrate");
-                value: Radio.pick-bitrate-min > 0
-                    ? @tr("{} kbps and up", Radio.pick-bitrate-min)
-                    : "";
-                searchable: false;
-                options: [
-                    { name: @tr("{} kbps and up", 64), code: "64" },
-                    { name: @tr("{} kbps and up", 128), code: "128" },
-                    { name: @tr("{} kbps and up", 192), code: "192" },
-                    { name: @tr("{} kbps and up", 320), code: "320" },
-                ];
-                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
-                cleared(k) => { Radio.clear-facet(k); }
-            }
-        }
 
         body := Rectangle {
             vertical-stretch: 1;

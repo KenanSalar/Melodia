@@ -1,23 +1,107 @@
+import { Theme } from "../../theme.slint";
 import { Radio } from "../../globals/radio.slint";
 import { RadioForm } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { ActionPill, PillButton, PillDivider } from "../../components/action-pill.slint";
 import { SortPillRow } from "../../components/sort-pill-row.slint";
+import { FacetChip } from "facet-chip.slint";
 
-// The Favorites tab's action row, handed to `LibraryTabBand` as its whole `@children`.
+// Every pill row the Radio band can show, mutually exclusive on the mounted tab and handed to
+// `LibraryTabBand` as its whole `@children`: Browse's filter chips, then Favorites' sort row and
+// its add/import/export pills. Recently Played has none, its order being the page.
 //
 // **Text labels rather than icon-and-tooltip.** The band paints its slot before the body, so a
 // tooltip drawn from in here would need the published-anchor treatment `MyLibraryTabPills` carries
 // for exactly one of its rows; a labelled pill says the same thing and needs none of it.
-//
-// Browse's own controls are its chip strip, inside the tab body, and Recently Played has none —
-// its order is the page.
 export component RadioTabPills inherits Rectangle {
     HorizontalLayout {
         alignment: end;
         // The rows are mutually exclusive, so any spacing here would read as a permanent inset on
         // the tabs that mount nothing.
         spacing: 0px;
+
+        // The Browse filters, in the band's slot rather than in the tab body: this is where the
+        // page's controls go and where a station detail's own will land. Country carries a code
+        // because `countrycode` is the search endpoint's one code-keyed parameter; the rest filter
+        // by name, and the bitrate chip's `code` is its own floor in kbps.
+        //
+        // Nested so the chips carry their own spacing, the outer row's `0px` being what keeps
+        // every other row flush with the band's edge.
+        if Radio.tab-idx == Radio.tab-browse: HorizontalLayout {
+            spacing: Theme.pad-sm;
+
+            FacetChip {
+                kind: Radio.facet-country;
+                label: @tr("Country");
+                value: Radio.pick-country;
+                options: Radio.facet-shown == Radio.facet-country ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-country && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            FacetChip {
+                kind: Radio.facet-language;
+                label: @tr("Language");
+                value: Radio.pick-language;
+                options: Radio.facet-shown == Radio.facet-language ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-language && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            FacetChip {
+                kind: Radio.facet-tag;
+                label: @tr("Genre");
+                value: Radio.pick-tag;
+                options: Radio.facet-shown == Radio.facet-tag ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-tag && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            FacetChip {
+                kind: Radio.facet-codec;
+                label: @tr("Format");
+                value: Radio.pick-codec;
+                options: Radio.facet-shown == Radio.facet-codec ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-codec && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            // Its options are a literal rather than a fetch: the floors are ours to choose, not
+            // the directory's to list. `code` is what the request carries, so it stays unlocalized
+            // while the label is not.
+            FacetChip {
+                kind: Radio.facet-bitrate;
+                label: @tr("Bitrate");
+                value: Radio.pick-bitrate-min > 0
+                    ? @tr("{} kbps and up", Radio.pick-bitrate-min)
+                    : "";
+                searchable: false;
+                options: [
+                    { name: @tr("{} kbps and up", 64), code: "64" },
+                    { name: @tr("{} kbps and up", 128), code: "128" },
+                    { name: @tr("{} kbps and up", 192), code: "192" },
+                    { name: @tr("{} kbps and up", 320), code: "320" },
+                ];
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+        }
 
         // `labels` stays an inline literal — `@tr` folds msgids at codegen, so a Rust-seeded array
         // renders untranslated — and `fields` is the parallel list of tokens Rust's comparator
