@@ -1,6 +1,8 @@
+import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { RadioForm } from "../../globals/dialog-forms.slint";
 import { LabeledInput } from "../labeled-input.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
 // Add or edit a station by URL. One body for both kinds — `RadioForm.edit-id` is the only
 // difference, and it belongs to the state rather than to the form.
@@ -15,96 +17,150 @@ import { LabeledInput } from "../labeled-input.slint";
 export component AddStationBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 
-    if !RadioForm.directory-owned: LabeledInput {
-        label: @tr("Stream URL");
-        // Not translated: an example URL is the same in every locale, and a catalogue entry for
-        // one is an invitation to localize a hostname.
-        placeholder: "https://example.com/stream";
-        text <=> RadioForm.url;
-        accepted => {
-            if (RadioForm.url != "" && !RadioForm.busy) {
-                RadioForm.submit();
+    // Six fields is more than a short window has room for, and the card is capped against the
+    // window rather than allowed to run off both its edges — so the deficit has to land somewhere
+    // that can absorb it. `vertical-stretch` puts it here, and a ScrollView clips its own viewport,
+    // which is what the fields get instead of being drawn outside the card.
+    //
+    // **`preferred-height` has to be spelled, and taken off the column rather than the scroller.**
+    // A ScrollView reports a preferred height of its own rather than its content's — that is what
+    // it is for — so a wrapper left to derive one sits at `min-height` however much room the card
+    // has and the bar is up on every open. Its `viewport-height` is not the way back either: the
+    // widget binds that to `max(content, flickable.height)`, so reading it closes a loop through
+    // this very property. `form`'s own layout info is computed from its children and from nothing
+    // downstream of the height it is handed, which is what makes it the honest measurement.
+    Rectangle {
+        min-height: 96px;
+        preferred-height: form.preferred-height;
+        vertical-stretch: 1;
+
+        fields := ScrollView {
+            horizontal-scrollbar-policy: always-off;
+            vertical-scrollbar-policy: always-off;
+            // Locked to the viewport: left alone a ScrollView sizes its content to the content's
+            // own preferred width, and every input here stretches to the card.
+            viewport-width: fields.visible-width;
+
+            form := VerticalLayout {
+                spacing: Theme.pad-md;
+                // A gutter for the bar rather than letting it overlay the column — parked over an
+                // input's right edge, its TouchArea eats the click that lands there.
+                padding-right: Theme.pad-md;
+
+                if !RadioForm.directory-owned: LabeledInput {
+                    label: @tr("Stream URL");
+                    // Not translated: an example URL is the same in every locale, and a catalogue
+                    // entry for one is an invitation to localize a hostname.
+                    placeholder: "https://example.com/stream";
+                    text <=> RadioForm.url;
+                    accepted => {
+                        if (RadioForm.url != "" && !RadioForm.busy) {
+                            RadioForm.submit();
+                        }
+                    }
+                }
+
+                if !RadioForm.directory-owned: LabeledInput {
+                    label: @tr("Name (optional)");
+                    placeholder: @tr("Leave blank to use the station's own name");
+                    text <=> RadioForm.name;
+                    accepted => {
+                        if (RadioForm.url != "" && !RadioForm.busy) {
+                            RadioForm.submit();
+                        }
+                    }
+                }
+
+                // The four the directory may have left blank. Each is gated on its own flag rather
+                // than on `directory-owned`, so a station that has a genre but no website shows one
+                // field and not the other; a hand-typed station has no directory behind it and sees
+                // all four.
+                if RadioForm.can-edit-website: LabeledInput {
+                    label: @tr("Website");
+                    placeholder: "https://example.com";
+                    text <=> RadioForm.website;
+                    accepted => {
+                        if (!RadioForm.busy) {
+                            RadioForm.submit();
+                        }
+                    }
+                }
+
+                if RadioForm.can-edit-logo: LabeledInput {
+                    label: @tr("Logo URL");
+                    placeholder: "https://example.com/logo.png";
+                    text <=> RadioForm.logo-url;
+                    accepted => {
+                        if (!RadioForm.busy) {
+                            RadioForm.submit();
+                        }
+                    }
+                }
+
+                // Left blank with a website filled in, the logo is read off that site instead —
+                // which is the path most stations take, so the field is the fallback rather than
+                // the ask.
+                if RadioForm.can-edit-logo && RadioForm.logo-url == "" && RadioForm.website != "": Text {
+                    text: @tr("Leave blank to look for a logo on the website above.");
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
+                }
+
+                if RadioForm.can-edit-genre: LabeledInput {
+                    label: @tr("Genre");
+                    placeholder: @tr("Jazz, Blues");
+                    text <=> RadioForm.genre;
+                    accepted => {
+                        if (!RadioForm.busy) {
+                            RadioForm.submit();
+                        }
+                    }
+                }
+
+                if RadioForm.can-edit-country: LabeledInput {
+                    label: @tr("Country");
+                    placeholder: @tr("Tunisia");
+                    text <=> RadioForm.country;
+                    accepted => {
+                        if (!RadioForm.busy) {
+                            RadioForm.submit();
+                        }
+                    }
+                }
+
+                // Says why the name and stream URL are missing, which otherwise reads as a broken
+                // dialog.
+                if RadioForm.directory-owned: Text {
+                    text: @tr("The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again.");
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        OverlayScrollbar {
+            horizontal: false;
+            track-color: Theme.scrollbar-track-on-card;
+            x: parent.width - self.width;
+            y: 0;
+            width: Theme.scrollbar-slot;
+            height: parent.height;
+            visible-size: fields.visible-height;
+            content-size: fields.viewport-height;
+            offset: -fields.viewport-y;
+            scroll-to(o) => {
+                fields.viewport-y = -o;
             }
         }
     }
 
-    if !RadioForm.directory-owned: LabeledInput {
-        label: @tr("Name (optional)");
-        placeholder: @tr("Leave blank to use the station's own name");
-        text <=> RadioForm.name;
-        accepted => {
-            if (RadioForm.url != "" && !RadioForm.busy) {
-                RadioForm.submit();
-            }
-        }
-    }
-
-    // The four the directory may have left blank. Each is gated on its own flag rather than on
-    // `directory-owned`, so a station that has a genre but no website shows one field and not the
-    // other; a hand-typed station has no directory behind it and sees all four.
-    if RadioForm.can-edit-website: LabeledInput {
-        label: @tr("Website");
-        placeholder: "https://example.com";
-        text <=> RadioForm.website;
-        accepted => {
-            if (!RadioForm.busy) {
-                RadioForm.submit();
-            }
-        }
-    }
-
-    if RadioForm.can-edit-logo: LabeledInput {
-        label: @tr("Logo URL");
-        placeholder: "https://example.com/logo.png";
-        text <=> RadioForm.logo-url;
-        accepted => {
-            if (!RadioForm.busy) {
-                RadioForm.submit();
-            }
-        }
-    }
-
-    // Left blank with a website filled in, the logo is read off that site instead — which is the
-    // path most stations take, so the field is the fallback rather than the ask.
-    if RadioForm.can-edit-logo && RadioForm.logo-url == "" && RadioForm.website != "": Text {
-        text: @tr("Leave blank to look for a logo on the website above.");
-        color: Theme.subtext0;
-        font-size: Theme.font-size-sm;
-        wrap: word-wrap;
-    }
-
-    if RadioForm.can-edit-genre: LabeledInput {
-        label: @tr("Genre");
-        placeholder: @tr("Jazz, Blues");
-        text <=> RadioForm.genre;
-        accepted => {
-            if (!RadioForm.busy) {
-                RadioForm.submit();
-            }
-        }
-    }
-
-    if RadioForm.can-edit-country: LabeledInput {
-        label: @tr("Country");
-        placeholder: @tr("Tunisia");
-        text <=> RadioForm.country;
-        accepted => {
-            if (!RadioForm.busy) {
-                RadioForm.submit();
-            }
-        }
-    }
-
-    // Says why the name and stream URL are missing, which otherwise reads as a broken dialog.
-    if RadioForm.directory-owned: Text {
-        text: @tr("The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again.");
-        color: Theme.subtext0;
-        font-size: Theme.font-size-sm;
-        wrap: word-wrap;
-    }
-
-    // Says what the wait is for. The submit is a real connect, not a save, and a dialog that
-    // simply sat there for a few seconds would read as stuck.
+    // Outside the scroller, both of them: a wait the user is watching for and a refusal they have
+    // to read are the two lines that must not be somewhere else on the page.
+    //
+    // Says what the wait is for. The submit is a real connect, not a save, and a dialog that simply
+    // sat there for a few seconds would read as stuck.
     if RadioForm.busy: Text {
         text: @tr("Checking the stream…");
         color: Theme.subtext0;

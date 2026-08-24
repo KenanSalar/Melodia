@@ -226,7 +226,7 @@ pub async fn add_custom_station(
     Ok(saved.id)
 }
 
-/// Record what the user says about a station, fetching a logo they named if `fetch` says so.
+/// Record what the user says about a station, and fetch a logo where they named one.
 ///
 /// **The only fields a directory-owned row will take from them**, and it takes them because the
 /// directory is community-maintained and frequently partial: an entry carrying no homepage has no
@@ -236,39 +236,38 @@ pub async fn add_custom_station(
 /// that follows the next play. Everything else about a browsed row stays the directory's, per
 /// [`ensure_editable`].
 ///
-/// The two URLs are validated before anything is written, so a typo in one leaves the whole save
-/// untouched rather than half-applied. An empty field clears its column.
+/// **The fetch is this door's and not the import's**, and the asymmetry is not an optimization: a
+/// station whose row already points at a logo is one [`heal_station_logo`] skips, so a
+/// *replacement* URL typed here would never land on its own. Every row an import creates is new
+/// and logo-less, so the refresh behind its toast heals the lot four at a time — which is why
+/// `radio_files` composes [`validated_overrides`] with the write itself rather than calling this.
 pub async fn set_station_overrides(
     state: &AppState,
     id: i64,
     form: &radio::StationOverrides,
-    fetch: LogoFetch,
 ) -> Result<(), AppError> {
-    let overrides = radio::StationOverrides {
-        website: website_url(form.website.as_deref().unwrap_or_default())?,
-        logo_url: website_url(form.logo_url.as_deref().unwrap_or_default())?,
-        genre: trimmed(form.genre.as_deref()),
-        country: trimmed(form.country.as_deref()),
-    };
+    let overrides = validated_overrides(form)?;
     queries::radio::set_local_fields(&state.db, id, &overrides).await?;
 
-    if let (LogoFetch::Now, Some(logo_url)) = (fetch, overrides.logo_url.as_deref()) {
+    if let Some(logo_url) = overrides.logo_url.as_deref() {
         adopt_logo(state, id, logo_url).await;
     }
     Ok(())
 }
 
-/// When the logo behind a typed URL is downloaded.
+/// What the four typed fields store as, or the first refusal among them.
 ///
-/// **`Now` is the dialog's**, and it has to be: a station whose row already points at a logo is
-/// one [`heal_station_logo`] skips, so a *replacement* URL would never land. `Deferred` is the
-/// import's, where every row is new and logo-less and the refresh behind the toast heals them
-/// four at a time — a fetch per entry in that loop is the fifty connects the import already
-/// refuses to spend on probing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LogoFetch {
-    Now,
-    Deferred,
+/// **Everything is checked before anything is written**, so a typo in one URL leaves the whole
+/// save untouched rather than half-applied. An empty field clears its column.
+pub(super) fn validated_overrides(
+    form: &radio::StationOverrides,
+) -> Result<radio::StationOverrides, AppError> {
+    Ok(radio::StationOverrides {
+        website: website_url(form.website.as_deref().unwrap_or_default())?,
+        logo_url: website_url(form.logo_url.as_deref().unwrap_or_default())?,
+        genre: trimmed(form.genre.as_deref()),
+        country: trimmed(form.country.as_deref()),
+    })
 }
 
 /// A typed free-text field, or `None` where it holds nothing worth storing.

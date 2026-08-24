@@ -11,7 +11,6 @@ use slint::{ComponentHandle, SharedString, Weak};
 use crate::entities::radio;
 use crate::error::AppError;
 use crate::library;
-use crate::library::radio::LogoFetch;
 use crate::state::AppState;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::radio::{RadioTab, RadioUi, kept};
@@ -237,7 +236,7 @@ async fn save_form(
 ) -> Result<i64, AppError> {
     if directory_owned {
         let id = i64::from(edit_id);
-        library::radio::set_station_overrides(state, id, overrides, LogoFetch::Now).await?;
+        library::radio::set_station_overrides(state, id, overrides).await?;
         return Ok(id);
     }
     let id = if edit_id < 0 {
@@ -247,7 +246,7 @@ async fn save_form(
         library::radio::update_custom_station(state, id, url, name).await?;
         id
     };
-    library::radio::set_station_overrides(state, id, overrides, LogoFetch::Now).await?;
+    library::radio::set_station_overrides(state, id, overrides).await?;
     Ok(id)
 }
 

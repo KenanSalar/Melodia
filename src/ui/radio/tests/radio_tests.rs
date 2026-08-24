@@ -152,3 +152,40 @@ fn the_kept_cache_splits_on_the_recent_tab_alone() {
     // Cheap proof the enum this splits on is the one under test.
     assert_ne!(RadioTab::Recent, RadioTab::Favorites);
 }
+
+/// Every property the station form declares is answered by `RadioForm.reset()`.
+///
+/// The add dialog opens on whatever the last close left behind, so a property the reset forgets is
+/// the previous station's value riding into the next one — and for the four `can-edit-*` flags it
+/// is worse than stale, `false` being a field the dialog does not draw at all. Neither is a build
+/// failure, and both read on screen as a form that is simply wrong rather than as a bug with a
+/// cause.
+#[test]
+fn the_station_form_resets_every_property_it_declares() {
+    const FORMS: &str = include_str!("../../../../melodia-ui/ui/globals/dialog-forms.slint");
+    let src = crate::test_support::strip_line_comments(FORMS);
+
+    let global = src
+        .find("export global RadioForm")
+        .and_then(|at| src[at..].find('{').map(|rel| at + rel))
+        .and_then(|open| crate::test_support::block_body(&src, open))
+        .unwrap_or_default();
+    let reset = global
+        .find("public function reset()")
+        .and_then(|at| global[at..].find('{').map(|rel| at + rel))
+        .and_then(|open| crate::test_support::block_body(global, open))
+        .unwrap_or_default();
+    assert!(!reset.is_empty(), "RadioForm must keep a reset() for both openers to share");
+
+    let declared: Vec<&str> = global
+        .match_indices("in-out property <")
+        .filter_map(|(at, _)| global[at..].split_once('>'))
+        .filter_map(|(_, rest)| rest.trim_start().split([';', ':']).next())
+        .map(str::trim)
+        .collect();
+    assert!(declared.len() >= 12, "only {} properties found — the walk is broken", declared.len());
+
+    let missing: Vec<&&str> =
+        declared.iter().filter(|name| !reset.contains(&format!("root.{name} ="))).collect();
+    assert!(missing.is_empty(), "reset() leaves these for the next dialog to inherit: {missing:?}");
+}

@@ -354,9 +354,12 @@ The things that are silent when missed. Each is checked off in the phase that ow
 
 - [x] `radio_stations.artwork_path` in **both** `ARTWORK_COLUMNS` and `REFERENCED_PATHS`
       in `src/database/queries/artwork.rs`, and the array widened to `; 5]` (D12).
-- [ ] The logo fetch compares `favicon_url` before trusting `artwork_path`. A re-import
+- [x] The logo fetch compares `favicon_url` before trusting `artwork_path`. A re-import
       refreshes the URL and deliberately keeps the stored file, so a station whose logo
-      moved otherwise shows the old one forever (Phase 3).
+      moved otherwise shows the old one forever (Phase 3). Landed in a stronger form than
+      a comparison: `keep_station` re-points `artwork_path` at whatever the *current*
+      `favicon_url` returned, and `heal_station_logo` asks `RadioStation::logo_source()`,
+      so a logo URL the user typed over a blank is what the repair reads.
 - [x] **Every `[RadioStationGridRow]` the global declares is handed a `VecModel` in
       `install_models`.** Silent at both ends: an unbound Slint array is a model of its own
       kind, so `write_grid`'s downcast misses and the grid paints empty with one log line per
@@ -1008,6 +1011,44 @@ titles by position instead of by index drops the first station's name.
 
 **Done when.** A user-typed URL survives a restart, plays, and can be exported and
 re-imported. ✅
+
+**Amended after this section was marked landed**, each half a bug the "done when" above
+claimed was working:
+
+- **Four override fields, not one.** `local_homepage` shipped alone. The directory is
+  community-maintained and partial — roughly one entry in fifteen carries no homepage, a
+  third no logo, and a hand-typed station has no country or genre at all — so
+  `local_favicon_url`, `local_tags` and `local_country` sit beside it, each offered only
+  where the directory said nothing (`RadioStation::can_override`). Folded into the
+  branch-local migration rather than added as a second, per the `country` column's argument
+  above.
+- **The add dialog opened with no fields at all.** The four `can-edit-*` flags default
+  `false` and only the *edit* path wrote them, so a fresh launch drew Add Station as Stream
+  URL and Name — losing the Website field it had shipped with — and a later open inherited
+  whichever flags the last edited station happened to leave. `RadioForm.reset()` is now the
+  field list's one home, called by both openers;
+  `the_station_form_resets_every_property_it_declares` walks the global against it.
+- **An import restored nothing.** `is_listed` keeps a played directory station's row alive
+  after its star goes, and the import refused any entry whose stream URL was already a row —
+  so re-importing an export put nothing back, and clearing Recently Played was the only way
+  through it. It merges now, in the shape `add_custom_station` already used and documented.
+- **And it restored the wrong kind.** The file carried a name, a URL and the four override
+  tags, so every station came back hand-typed whatever it had been — the pencil then offering
+  the full editor over a row the directory owns. `#MELODIA-STATION:` carries the row's own
+  `NewRadioStation` as one JSON comment line, `station_uuid` included, so a station kept from
+  Browse returns as the directory's and the next Browse encounter refreshes it through the
+  conflict clause as usual. It is a comment, so an older build and every other player skip it.
+- **The dialog grew past the window.** Six fields on a short window ran off *both* edges, the
+  card being centred with no cap. `dialog.slint` caps it against the window and
+  `AddStationBody` scrolls — taking its `preferred-height` off the column rather than the
+  scroller, the widget binding `viewport-height` to `max(content, flickable.height)` so that
+  reading closes a loop through the height it is meant to set.
+
+**Gates:** fmt, `clippy --all-targets --locked -- -D warnings` at the root (both crates
+moved), full `cargo test` green at 1955 lib tests. `import_stations_from_file` had **no
+coverage at all** before this, which is exactly where both import bugs lived; it is DB-backed
+now. Two pins were mutation-checked: dropping one `can-edit-*` from `reset()` fails the form
+walk by name, and restoring the by-URL skip fails the re-import test.
 
 ---
 

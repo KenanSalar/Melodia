@@ -157,11 +157,25 @@ pub async fn update_station(
 /// hand-typed station carries no `station_uuid`, and `SQLite` treats NULLs as
 /// distinct under `UNIQUE`, so the constraint that stops a directory station
 /// arriving twice says nothing at all about this one. The id comes back rather
-/// than a bool because the add merges onto the row it finds; the import only
-/// asks whether there was one.
+/// than a bool because both doors merge onto the row they find.
 pub async fn station_id_with_url(db: &DbPool, stream_url: &str) -> Result<Option<i64>, AppError> {
     Ok(sqlx::query_scalar("SELECT id FROM radio_stations WHERE stream_url = ? LIMIT 1")
         .bind(stream_url)
+        .fetch_optional(db.read())
+        .await?)
+}
+
+/// The station the directory identifies by `station_uuid`, if it is already kept.
+///
+/// [`station_id_with_url`]'s twin for the half of the import that carries a uuid, and it has to
+/// be asked first: the uuid is the directory's own identity for a station, so one repointed at a
+/// new mount is the same row under a `stream_url` that has moved.
+pub async fn station_id_with_uuid(
+    db: &DbPool,
+    station_uuid: &str,
+) -> Result<Option<i64>, AppError> {
+    Ok(sqlx::query_scalar("SELECT id FROM radio_stations WHERE station_uuid = ? LIMIT 1")
+        .bind(station_uuid)
         .fetch_optional(db.read())
         .await?)
 }

@@ -143,6 +143,32 @@ impl RadioStation {
             || self.can_set_genre()
             || self.can_set_country()
     }
+
+    /// This row as the save input that would recreate it, for an export that has to survive as
+    /// the station it is rather than as a name and a URL.
+    ///
+    /// **`station_uuid` is the field the whole projection is for**: it is what separates a station
+    /// the directory owns from a hand-typed lookalike, and everything the card gates on that
+    /// follows from it. Nothing derived crosses — no id, no `sort_key`, no play stats — and
+    /// deliberately **not `artwork_path`**, which names a file in this install's logo store and
+    /// means nothing anywhere else; the logo is re-fetched from `favicon_url` wherever the row
+    /// lands. The four `local_*` columns stay out too, being [`StationOverrides`]'s to carry.
+    pub fn to_new_station(&self) -> NewRadioStation {
+        NewRadioStation {
+            station_uuid: self.station_uuid.clone(),
+            name: self.name.clone(),
+            stream_url: self.stream_url.clone(),
+            homepage: self.homepage.clone(),
+            favicon_url: self.favicon_url.clone(),
+            tags: self.tags.clone(),
+            country: self.country.clone(),
+            country_code: self.country_code.clone(),
+            language: self.language.clone(),
+            codec: self.codec.clone(),
+            bitrate: self.bitrate,
+            hls: self.hls,
+        }
+    }
 }
 
 /// The four fields a user may fill in where the directory left a blank.
@@ -164,7 +190,14 @@ pub struct StationOverrides {
 /// `sort_key`, `date_added`, and the play stats a save must never reset. A
 /// struct rather than a dozen parameters because most of them are `String` and
 /// a positional list of those is a bind-order bug waiting to happen.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+///
+/// **`#[serde(default)]` because this shape travels between builds.**
+/// `radio_files` writes it into an exported station list, so a file from a build
+/// carrying one more column still has to import here, and one written here still
+/// has to import there. Unknown fields are already ignored; this is the other
+/// direction.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct NewRadioStation {
     pub station_uuid: Option<String>,
     pub name: String,

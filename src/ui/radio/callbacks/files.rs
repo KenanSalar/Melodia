@@ -49,12 +49,19 @@ pub fn wire(
                 let Some(handles) = dialog.pick_files().await else {
                     return;
                 };
+                // A pick that returned nothing is a cancel by another name, and reporting
+                // "0 stations added" over it reads as a failed import.
+                if handles.is_empty() {
+                    return;
+                }
 
                 let mut imported: u32 = 0;
                 let mut skipped: u32 = 0;
                 let mut failures: u32 = 0;
                 for handle in &handles {
-                    match library::radio_files::import_stations_from_file(&s, handle.path()).await {
+                    match library::radio_files::import_stations_from_file(&s.db, handle.path())
+                        .await
+                    {
                         Ok(result) => {
                             imported = imported.saturating_add(result.imported);
                             skipped = skipped.saturating_add(result.skipped);
@@ -103,13 +110,16 @@ pub fn wire(
         g.on_export_stations(move || {
             let (s, weak, notifications) = (s.clone(), weak.clone(), notifications.clone());
             let _ = slint::spawn_local(Compat::new(async move {
-                let dialog =
-                    file_dialog::parented(&weak, "Export Stations").set_file_name(EXPORT_FILE_NAME);
+                // Same filter as the import, so a save name retyped without an extension can't
+                // land somewhere the import picker then refuses to show.
+                let dialog = file_dialog::parented(&weak, "Export Stations")
+                    .set_file_name(EXPORT_FILE_NAME)
+                    .add_filter("Station lists", &IMPORT_EXTENSIONS);
                 let Some(target) = dialog.save_file().await else {
                     return;
                 };
                 let path = target.path().to_path_buf();
-                let outcome = library::radio_files::export_stations(&s, &path).await;
+                let outcome = library::radio_files::export_stations(&s.db, &path).await;
 
                 let Some(ui) = weak.upgrade() else { return };
                 let settings = ui.global::<Settings>();

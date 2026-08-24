@@ -107,7 +107,11 @@ export component DialogOverlay inherits Rectangle {
         width: min(self.max-w, max(360px, parent.width - 96px));
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2 + (1.0 - root.card-t) * 12px;
-        height: layout.preferred-height;
+        // The width clamp's twin, and the card is centred, so an uncapped one runs off *both*
+        // edges of a short window rather than overflowing downward where a scroll would find it.
+        // A body that can grow past this owes a scroller — `AddStationBody` is the worked example;
+        // nothing here clips, deliberately, a rounded clip over text costing an upscaled layer.
+        height: min(layout.preferred-height, max(240px, parent.height - 96px));
         background: Theme.surface0;
         // `Tooltip`'s chrome, and for its reason: a transient surface floating over the
         // app has to state its own edge. **Not `Theme.border`** — all four Catppuccin
