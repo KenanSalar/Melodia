@@ -8,7 +8,7 @@ use crate::error::AppError;
 use super::{
     clear_play_history, delete_station, get_favorite_stations, get_recent_stations,
     get_station_by_id, logo_answers, logo_miss_attempts, mark_played, prune_logo_answers,
-    record_logo_hit, record_logo_miss, save_station, set_artwork, set_favorite,
+    record_logo_hit, record_logo_miss, save_station, set_artwork, set_favorite, set_local_homepage,
     station_id_with_url, update_station,
 };
 
@@ -33,6 +33,49 @@ async fn station_count(db: &DbPool) -> Result<i64, AppError> {
     Ok(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radio_stations")
         .fetch_one(db.read())
         .await?)
+}
+
+/// The two homepage columns have one writer each, which is the whole reason there are two.
+///
+/// Roughly one directory entry in fifteen carries no homepage, and nothing can be derived from a
+/// stream URL that is usually a shared host, so the field has to be fillable by hand. Folded into
+/// one column it is a choice between the re-import blanking what the user typed and the directory
+/// never being able to correct a site that moved; kept apart, both hold at once.
+#[tokio::test]
+async fn a_re_import_rewrites_the_directory_column_and_never_the_user_s() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let saved = save_station(&db, &directory_station("uuid-1", "Nidaa")).await?;
+    assert!(saved.homepage.is_none(), "the directory sent none, which is the case under test");
+
+    set_local_homepage(&db, saved.id, Some("https://nidaa.fm/")).await?;
+
+    // A play or a star re-sends the same directory row, still carrying no homepage.
+    save_station(&db, &directory_station("uuid-1", "Nidaa")).await?;
+    let kept = get_station_by_id(&db, saved.id).await?;
+    assert_eq!(
+        kept.local_homepage.as_deref(),
+        Some("https://nidaa.fm/"),
+        "the re-import blanked what the user typed"
+    );
+    assert_eq!(kept.website(), Some("https://nidaa.fm/"));
+    assert!(kept.is_editable(), "their own answer stays theirs to correct");
+
+    // The directory catching up writes its own column, and does not touch theirs.
+    let mut listed = directory_station("uuid-1", "Nidaa");
+    listed.homepage = Some("https://www.nidaa.fm/".to_owned());
+    save_station(&db, &listed).await?;
+    let updated = get_station_by_id(&db, saved.id).await?;
+    assert_eq!(updated.homepage.as_deref(), Some("https://www.nidaa.fm/"));
+    assert_eq!(updated.local_homepage.as_deref(), Some("https://nidaa.fm/"));
+    assert_eq!(updated.website(), Some("https://nidaa.fm/"), "the user's answer wins the read");
+
+    // Cleared, the directory's own link is what the card falls back to — and with nothing of the
+    // user's left over it, the control goes away rather than offering that link up for editing.
+    set_local_homepage(&db, saved.id, None).await?;
+    let cleared = get_station_by_id(&db, saved.id).await?;
+    assert_eq!(cleared.website(), Some("https://www.nidaa.fm/"));
+    assert!(!cleared.is_editable(), "a directory link is not the user's to overwrite");
+    Ok(())
 }
 
 /// The whole reason the conflict list is spelled out rather than blanket: a directory refresh

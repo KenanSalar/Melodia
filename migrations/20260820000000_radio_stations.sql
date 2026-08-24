@@ -30,6 +30,18 @@
 -- Deriving one from the other would mean shipping an ISO table for a string the
 -- directory already hands over, and a kept station rendering "DE" where the same
 -- card on Browse renders "Germany" reads as a bug.
+--
+-- local_homepage sits beside homepage for the same reason, one column short of
+-- the same mistake: homepage is the directory's and is rewritten wholesale on
+-- every re-import, while local_homepage is the user's and nothing but they can
+-- write it. Roughly one directory entry in fifteen carries no homepage at all,
+-- and nothing can be derived from a stream URL that is usually a shared host
+-- rather than the station's own domain, so the field has to be fillable by hand.
+-- Folding both into one column means either the re-import blanks what the user
+-- typed or the directory can never correct a site that moved; kept apart, each
+-- has exactly one writer and the card just reads local_homepage first. It is
+-- also what lets the pencil be offered only where the *directory* said nothing,
+-- so a link it did supply is never one click from being overwritten.
 CREATE TABLE
     IF NOT EXISTS radio_stations (
         id INTEGER PRIMARY KEY,
@@ -37,6 +49,7 @@ CREATE TABLE
         name TEXT NOT NULL,
         stream_url TEXT NOT NULL,
         homepage TEXT,
+        local_homepage TEXT,
         favicon_url TEXT,
         artwork_path TEXT,
         tags TEXT NOT NULL DEFAULT '',

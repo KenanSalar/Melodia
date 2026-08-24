@@ -24,6 +24,15 @@ use crate::state::AppState;
 const HEADER: &str = "#EXTM3U";
 const EXTINF_TAG: &str = "#EXTINF:";
 
+/// Carries the one thing about a station that is the user's rather than the directory's or the
+/// stream's, so a list survives the round trip with their own edits on it.
+///
+/// **A comment, in `playlist_files`'s `#MELODIA-HASH:` shape and for its reason.** Every player
+/// skips a `#` line it does not know, and so does [`parse`] below, so a file written by this build
+/// still imports into an older one and into everything else — it simply arrives without the
+/// website, which is what a file that never had one arrives as anyway.
+const WEBSITE_TAG: &str = "#MELODIA-WEBSITE:";
+
 /// What an import did, for the toast that reports it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ImportStationsResult {
@@ -33,11 +42,14 @@ pub struct ImportStationsResult {
     pub skipped: u32,
 }
 
-/// One entry of a station playlist: the URL, and whatever the file called it.
+/// One entry of a station playlist: the URL, whatever the file called it, and the site the user
+/// recorded for it if the file is one of ours.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StationEntry {
     pub name: Option<String>,
     pub url: String,
+    /// `None` from any file that is not a Melodia export, which is most of them.
+    pub website: Option<String>,
 }
 
 /// Write every kept station to one Extended-M3U8 file.
@@ -88,6 +100,14 @@ pub async fn import_stations_from_file(
         };
         let saved = queries::radio::save_station(&state.db, &station).await?;
         queries::radio::set_favorite(&state.db, saved.id, true).await?;
+        // Only a Melodia export carries one, and it lands in the column it came out of. A bad
+        // address is skipped rather than failing the import: one hand-edited line is not worth
+        // refusing a file of fifty stations over, and the field is editable on the card.
+        if let Some(website) = entry.website.as_deref()
+            && let Err(e) = super::radio::set_station_website(state, saved.id, website).await
+        {
+            log::debug!("radio: imported website not stored: {}", crate::services::describe(&e));
+        }
         result.imported = result.imported.saturating_add(1);
     }
     Ok(result)
@@ -112,6 +132,13 @@ fn serialize(stations: &[radio::RadioStation]) -> String {
         out.push_str("-1,");
         out.push_str(&one_line(&station.name));
         out.push('\n');
+        // The user's own, not `website()`: a directory link is re-fetched by whoever imports this
+        // and writing it here would harden one install's snapshot of the directory into the file.
+        if let Some(website) = station.local_homepage.as_deref().filter(|url| !url.is_empty()) {
+            out.push_str(WEBSITE_TAG);
+            out.push_str(&one_line(website));
+            out.push('\n');
+        }
         out.push_str(&one_line(&station.stream_url));
         out.push('\n');
     }
@@ -133,6 +160,9 @@ fn parse(body: &str) -> Vec<StationEntry> {
     // `FileN`'s index against where its entry landed, so a later `TitleN` can find it.
     let mut pls_slots: Vec<(u32, usize)> = Vec::new();
     let mut pending_name: Option<String> = None;
+    // Rides alongside `pending_name` and is taken by the same entry, the tag sitting between the
+    // `#EXTINF:` and the URL that [`serialize`] writes it between.
+    let mut pending_website: Option<String> = None;
 
     for line in body.lines() {
         let line = line.trim_start_matches('\u{feff}').trim();
@@ -142,6 +172,11 @@ fn parse(body: &str) -> Vec<StationEntry> {
 
         if let Some(rest) = line.strip_prefix(EXTINF_TAG) {
             pending_name = extinf_title(rest);
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix(WEBSITE_TAG) {
+            let rest = rest.trim();
+            pending_website = (!rest.is_empty()).then(|| rest.to_owned());
             continue;
         }
         if line.starts_with('#') || line.starts_with('[') {
@@ -156,6 +191,7 @@ fn parse(body: &str) -> Vec<StationEntry> {
                     entries.push(StationEntry {
                         name: pending_name.take(),
                         url: value.to_owned(),
+                        website: pending_website.take(),
                     });
                 }
                 continue;
@@ -178,6 +214,7 @@ fn parse(body: &str) -> Vec<StationEntry> {
             entries.push(StationEntry {
                 name: pending_name.take(),
                 url: line.to_owned(),
+                website: pending_website.take(),
             });
         }
     }

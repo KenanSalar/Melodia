@@ -226,12 +226,52 @@ pub async fn add_custom_station(
     Ok(saved.id)
 }
 
+/// Record the site the user says a station has.
+///
+/// **The one field a directory-owned row will take from them**, and it takes it because the
+/// directory frequently has nothing to put there: an entry carrying no homepage has no website
+/// button and no way to grow one, nothing being derivable from a stream URL that is usually a
+/// shared host rather than the station's own domain. It lands in `local_homepage`, which the
+/// directory never writes, so it survives the re-import that follows the next play. Everything
+/// else about a browsed row stays the directory's, per [`ensure_editable`].
+///
+/// An empty `website` clears the column.
+pub async fn set_station_website(state: &AppState, id: i64, website: &str) -> Result<(), AppError> {
+    let website = website_url(website)?;
+    queries::radio::set_local_homepage(&state.db, id, website.as_deref()).await
+}
+
+/// What to store for a typed website, or a refusal.
+///
+/// `None` is the empty field, which clears the column. Anything else has to parse as an HTTP(S)
+/// URL with a host: the value ends up behind a button that opens the user's browser, so a typo is
+/// caught while they are looking at the field rather than handed to `open::that_detached`. The
+/// scheme list is [`media::station_logo::fetchable_url`]'s, for the same reason it is there.
+///
+/// Normalized through `Url` rather than stored as typed, so `nidaa.fm` and a trailing-slash-less
+/// spelling of the same site do not read as two different links.
+fn website_url(website: &str) -> Result<Option<String>, AppError> {
+    let website = website.trim();
+    if website.is_empty() {
+        return Ok(None);
+    }
+    reqwest::Url::parse(website)
+        .ok()
+        .filter(|url| matches!(url.scheme(), "http" | "https") && url.has_host())
+        .map(|url| Some(url.to_string()))
+        .ok_or_else(|| {
+            AppError::Validation("A station website must be an http:// or https:// address".into())
+        })
+}
+
 /// Refuse to edit a station the directory owns.
 ///
 /// **The refusal is the point rather than a nicety**: `save_station`'s conflict clause rewrites
 /// `name` and `stream_url` from the directory on the next favorite or play of the same uuid, so
 /// an edit to a browsed station would revert with nothing on screen to say why. The card only
-/// offers Edit on a custom station; this is what holds when something else asks.
+/// offers the full editor on a custom station; this is what holds when something else asks.
+/// [`set_station_website`] is the deliberate exception and takes no part in it, `homepage` being
+/// the one column the conflict clause yields on.
 fn ensure_editable(station: &radio::RadioStation) -> Result<(), AppError> {
     if station.station_uuid.is_none() {
         return Ok(());

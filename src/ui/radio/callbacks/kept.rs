@@ -128,15 +128,27 @@ fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
     };
 
     let _ = weak.upgrade_in_event_loop(move |ui| {
+        // The uuid is what the directory identifies the row by, so carrying one is what makes the
+        // name and stream URL the directory's rather than the user's.
+        let directory_owned = station.station_uuid.is_some();
         let form = ui.global::<RadioForm>();
         form.set_edit_id(crate::ui::util::clamp_i64_to_i32(station.id));
         form.set_url(SharedString::from(&station.stream_url));
         form.set_name(SharedString::from(&station.name));
+        // The user's own answer, never the directory's: the field is what they may change, and
+        // seeding it from `website()` would offer a directory link up for editing by way of the
+        // save that follows.
+        form.set_website(SharedString::from(station.local_homepage.unwrap_or_default()));
+        form.set_directory_owned(directory_owned);
         form.set_busy(false);
         form.set_error(SharedString::default());
 
         let dialog = ui.global::<Dialog>();
-        dialog.set_title(form.invoke_edit_title());
+        dialog.set_title(if directory_owned {
+            form.invoke_website_title()
+        } else {
+            form.invoke_edit_title()
+        });
         dialog.set_message(SharedString::default());
         dialog.set_confirm_label(form.invoke_save_label());
         dialog.set_cancel_label(form.invoke_cancel_label());
@@ -148,11 +160,15 @@ fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
 }
 
 /// Validate and save whatever the form holds, closing the dialog only once it worked.
+///
+/// **A blank field means different things in the two modes**, hence the split guard: an empty
+/// stream URL is nothing to save, where an empty website is the user clearing the link.
 fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>) {
     let form = ui.global::<RadioForm>();
     let (url, name, edit_id) =
         (form.get_url().to_string(), form.get_name().to_string(), form.get_edit_id());
-    if url.trim().is_empty() || form.get_busy() {
+    let (website, directory_owned) = (form.get_website().to_string(), form.get_directory_owned());
+    if form.get_busy() || (!directory_owned && url.trim().is_empty()) {
         return;
     }
     form.set_busy(true);
@@ -160,11 +176,7 @@ fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak
 
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), weak.clone());
     state.runtime.spawn(async move {
-        let outcome = if edit_id < 0 {
-            library::radio::add_custom_station(&s, url.trim(), &name).await.map(|_id| ())
-        } else {
-            library::radio::update_custom_station(&s, i64::from(edit_id), url.trim(), &name).await
-        };
+        let outcome = save_form(&s, edit_id, directory_owned, url.trim(), &name, &website).await;
 
         let _ = weak.upgrade_in_event_loop(move |ui| {
             let form = ui.global::<RadioForm>();
@@ -183,18 +195,50 @@ fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak
     });
 }
 
-/// Which of the form's three localized lines an error deserves.
+/// Write whatever the form is for, and the website with it.
+///
+/// **Two calls rather than a wider `update_custom_station`**, because they answer to different
+/// owners: the station's own fields are re-derived from the stream whenever its URL moves, where
+/// the website is the user's and survives that. Folding it into the probe path is what would put
+/// them back in one column.
+///
+/// The website goes **last**, so a refused address leaves nothing half-written on a station that
+/// was otherwise saved — the form stays open on the error and the retry re-runs both.
+async fn save_form(
+    state: &AppState,
+    edit_id: i32,
+    directory_owned: bool,
+    url: &str,
+    name: &str,
+    website: &str,
+) -> Result<(), AppError> {
+    if directory_owned {
+        return library::radio::set_station_website(state, i64::from(edit_id), website).await;
+    }
+    let id = if edit_id < 0 {
+        library::radio::add_custom_station(state, url, name).await?
+    } else {
+        let id = i64::from(edit_id);
+        library::radio::update_custom_station(state, id, url, name).await?;
+        id
+    };
+    library::radio::set_station_website(state, id, website).await
+}
+
+/// Which of the form's four localized lines an error deserves.
 ///
 /// Resolved through the `err-*` callbacks rather than built in Rust: `@tr` folds msgids at
 /// codegen, so a sentence Rust pushed would render untranslated. The split is by stage — the
-/// connection, the decode, or the write.
+/// address, the connection, the decode, or the write.
 fn form_error(form: &RadioForm<'_>, error: &AppError) -> SharedString {
     match error {
+        // The website field's own refusal. `ensure_editable` raises the same variant and its line
+        // would read wrong here, but it cannot reach this form: a directory-owned row submits
+        // through `set_station_website`, which never asks it.
+        AppError::Validation(_) => form.invoke_err_bad_website(),
         AppError::Network { .. } => form.invoke_err_unreachable(),
         AppError::Database(_) | AppError::Io(_) => form.invoke_err_save_failed(),
-        // `Player` is the decoder's own refusal and is what this arm is for. It also catches
-        // `ensure_editable`'s `Validation`, where the line reads wrong — unreachable, the card
-        // offering Edit only on a custom station.
+        // `Player` is the decoder's own refusal and is what this arm is for.
         _ => form.invoke_err_not_audio(),
     }
 }

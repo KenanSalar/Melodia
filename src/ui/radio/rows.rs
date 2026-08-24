@@ -40,6 +40,9 @@ pub fn to_slint_radio_station_row(
         uuid: SharedString::from(&station.station_uuid),
         name: SharedString::from(&station.name),
         homepage: station.homepage.as_deref().map(SharedString::from).unwrap_or_default(),
+        // Browse mounts the grid with `manageable: false`, so no card here draws a pencil and the
+        // question never arises; the kept tabs are where a station is edited.
+        editable: false,
         artwork_path: logo.map(SharedString::from).unwrap_or_default(),
         tags: SharedString::from(display_tags(&station.tags)),
         country: SharedString::from(&station.country),
@@ -64,7 +67,8 @@ pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
         id: crate::ui::util::clamp_i64_to_i32(station.id),
         uuid: station.station_uuid.as_deref().map(SharedString::from).unwrap_or_default(),
         name: SharedString::from(&station.name),
-        homepage: station.homepage.as_deref().map(SharedString::from).unwrap_or_default(),
+        homepage: station.website().map(SharedString::from).unwrap_or_default(),
+        editable: station.is_editable(),
         artwork_path: station.artwork_path.as_deref().map(SharedString::from).unwrap_or_default(),
         tags: SharedString::from(display_tags(&station.tags)),
         country: SharedString::from(&station.country),

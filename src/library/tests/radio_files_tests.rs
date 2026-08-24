@@ -8,11 +8,13 @@ use crate::entities::radio::RadioStation;
 
 use super::{StationEntry, indexed_key, parse, serialize};
 
-/// One entry, spelled the way the assertions read.
+/// One entry, spelled the way the assertions read. No website: that tag is a Melodia export's
+/// alone, and the formats these tests mostly cover have never heard of it.
 fn entry(name: Option<&str>, url: &str) -> StationEntry {
     StationEntry {
         name: name.map(str::to_owned),
         url: url.to_owned(),
+        website: None,
     }
 }
 
@@ -24,6 +26,7 @@ fn station(name: &str, stream_url: &str) -> RadioStation {
         name: name.to_owned(),
         stream_url: stream_url.to_owned(),
         homepage: None,
+        local_homepage: None,
         favicon_url: None,
         artwork_path: None,
         tags: String::new(),
@@ -63,6 +66,65 @@ fn what_the_writer_emits_is_what_the_parser_reads_back() {
 
 /// A name carrying a newline would otherwise close the `#EXTINF` line early and leave the rest of
 /// it parsed as a URL — a station named out of the directory's free-form fields can hold one.
+/// The website is the one thing on a station row that is the user's rather than the directory's
+/// or the stream's, so an export that dropped it would hand back a list with their edits gone.
+///
+/// Written from `local_homepage` alone: a directory link is re-fetched by whoever imports the
+/// file, and writing it out would harden one install's snapshot of the directory into the file.
+#[test]
+fn an_export_carries_the_website_the_user_set_and_nothing_the_directory_said() {
+    let mut mine = station("Nidaa FM", "https://example.test/one");
+    mine.local_homepage = Some("https://nidaa.fm/".to_owned());
+    let mut theirs = station("Listed", "https://example.test/two");
+    theirs.homepage = Some("https://listed.example/".to_owned());
+
+    let text = serialize(&[mine, theirs]);
+    assert!(!text.contains("listed.example"), "the directory's own link is not ours to write out");
+
+    assert_eq!(
+        parse(&text),
+        vec![
+            StationEntry {
+                name: Some("Nidaa FM".to_owned()),
+                url: "https://example.test/one".to_owned(),
+                website: Some("https://nidaa.fm/".to_owned()),
+            },
+            entry(Some("Listed"), "https://example.test/two"),
+        ],
+        "the tag has to survive the round trip and belong to its own entry"
+    );
+}
+
+/// The tag is a comment, so everything that is not this build skips it — including this build
+/// before the tag existed, and every other player the export is meant to open in.
+#[test]
+fn a_reader_that_does_not_know_the_website_tag_still_reads_the_station() {
+    let text = "#EXTM3U\n\
+                #EXTINF:-1,Nidaa FM\n\
+                #MELODIA-WEBSITE:https://nidaa.fm/\n\
+                #SOMETHING-ELSE:ignored\n\
+                https://example.test/one\n";
+    assert_eq!(
+        parse(text),
+        vec![StationEntry {
+            name: Some("Nidaa FM".to_owned()),
+            url: "https://example.test/one".to_owned(),
+            website: Some("https://nidaa.fm/".to_owned()),
+        }]
+    );
+
+    // And an entry with no tag above it must not inherit the previous one's.
+    let two = "#EXTM3U\n\
+               #EXTINF:-1,One\n\
+               #MELODIA-WEBSITE:https://one.example/\n\
+               https://example.test/one\n\
+               #EXTINF:-1,Two\n\
+               https://example.test/two\n";
+    let parsed = parse(two);
+    assert_eq!(parsed.len(), 2);
+    assert_eq!(parsed[1].website, None, "a website leaked onto the next station");
+}
+
 #[test]
 fn a_name_with_a_line_break_cannot_split_its_own_tag() {
     let text = serialize(&[station("Two\nLines", "https://example.test/one")]);

@@ -313,7 +313,15 @@ export struct RadioStationRow {
     id: int,
     uuid: string,
     name: string,
+    // Whoever supplied it — the user's own answer wins over the directory's. `RadioStation::website`
+    // is the one place that order is decided.
     homepage: string,
+    // Whether the card offers its pencil, which means different things to the two kinds. A
+    // hand-typed station is always editable, having no directory behind it to disagree with. A
+    // directory one is editable only while the directory named no site: that link is not the
+    // user's to overwrite, and an editor over it is one misclick from a typo replacing a correct
+    // address. What the pencil then opens is the dialog's own split.
+    editable: bool,
     artwork_path: string,
     tags: string,
     country: string,

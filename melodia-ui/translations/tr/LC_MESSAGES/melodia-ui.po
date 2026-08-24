@@ -1841,6 +1841,19 @@ msgstr "Bu adres, Melodia'nın çözebileceği bir ses yayını vermiyor."
 msgid "Couldn't save the station."
 msgstr "İstasyon kaydedilemedi."
 
+# The same dialog opened on a directory-owned station: one field, and the note saying why.
+msgid "Station Website"
+msgstr "İstasyon Web Sitesi"
+
+msgid "Website"
+msgstr "Web sitesi"
+
+msgid "The directory owns this station's name and stream, so only the website is yours to set. Leave it blank to remove the link."
+msgstr "Bu istasyonun adı ve yayını dizine ait, bu yüzden yalnızca web sitesini sen belirleyebilirsin. Bağlantıyı kaldırmak için boş bırak."
+
+msgid "That doesn't look like a web address. It should start with https://"
+msgstr "Bu bir web adresine benzemiyor. https:// ile başlamalı."
+
 # The station card's destructive action, once per tab: the two lists are independent, so each
 # names only its own.
 msgid "Remove from favorites?"

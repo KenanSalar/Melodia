@@ -40,6 +40,11 @@ export component RadioTabPills inherits Rectangle {
                     RadioForm.edit-id = -1;
                     RadioForm.url = "";
                     RadioForm.name = "";
+                    RadioForm.website = "";
+                    // Seeded here rather than left to the teardown, like the four above it: a
+                    // station typed in by URL is never the directory's, and inheriting the flag
+                    // from a website edit would open Add on the wrong field.
+                    RadioForm.directory-owned = false;
                     RadioForm.busy = false;
                     RadioForm.error = "";
                     Dialog.title = @tr("Add Station");

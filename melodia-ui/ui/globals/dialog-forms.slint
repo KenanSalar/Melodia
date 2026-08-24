@@ -157,6 +157,12 @@ export global RadioForm {
     in-out property <string> name;
     in-out property <bool> busy;
     in-out property <string> error;
+    // The row belongs to the directory, so the form is the website field and nothing else: name
+    // and stream URL are rewritten from the directory on the next play, and offering them would
+    // be offering an edit that reverts.
+    in-out property <bool> directory-owned;
+    // Where the station's own site is, for a directory entry that names none.
+    in-out property <string> website;
 
     callback submit();
 
@@ -167,6 +173,10 @@ export global RadioForm {
     pure callback edit-title() -> string;
     edit-title => {
         return @tr("Edit Station");
+    }
+    pure callback website-title() -> string;
+    website-title => {
+        return @tr("Station Website");
     }
     pure callback save-label() -> string;
     save-label => {
@@ -189,5 +199,9 @@ export global RadioForm {
     pure callback err-save-failed() -> string;
     err-save-failed => {
         return @tr("Couldn't save the station.");
+    }
+    pure callback err-bad-website() -> string;
+    err-bad-website => {
+        return @tr("That doesn't look like a web address. It should start with https://");
     }
 }

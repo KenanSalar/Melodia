@@ -1839,6 +1839,19 @@ msgstr "Η διεύθυνση δεν δίνει ήχο που μπορεί να 
 msgid "Couldn't save the station."
 msgstr "Δεν ήταν δυνατή η αποθήκευση του σταθμού."
 
+# The same dialog opened on a directory-owned station: one field, and the note saying why.
+msgid "Station Website"
+msgstr "Ιστότοπος σταθμού"
+
+msgid "Website"
+msgstr "Ιστότοπος"
+
+msgid "The directory owns this station's name and stream, so only the website is yours to set. Leave it blank to remove the link."
+msgstr "Ο κατάλογος κατέχει το όνομα και τη ροή αυτού του σταθμού, οπότε μόνο ο ιστότοπος είναι δικός σας. Αφήστε το κενό για να αφαιρέσετε τον σύνδεσμο."
+
+msgid "That doesn't look like a web address. It should start with https://"
+msgstr "Αυτό δεν μοιάζει με διεύθυνση ιστού. Θα πρέπει να ξεκινά με https://"
+
 # The station card's destructive action, once per tab: the two lists are independent, so each
 # names only its own.
 msgid "Remove from favorites?"

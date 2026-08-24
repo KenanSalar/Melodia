@@ -90,7 +90,11 @@ export component StationGrid inherits Rectangle {
                     // directory to star it against, and Remove is what it has instead.
                     starrable: station.uuid != "";
                     star-marks-kept: root.star-marks-kept;
-                    editable: root.manageable && station.uuid == "";
+                    // Both kinds, and the dialog decides what that means: a hand-typed station
+                    // gets its whole form, a directory one gets the website field alone. Gated on
+                    // the row rather than on the uuid, because a directory entry that already
+                    // names a site has nothing here for the user to set and everything to lose.
+                    editable: root.manageable && station.editable;
                     removable: root.manageable;
                     homepage-known: station.homepage != "";
                     unplayable: station.hls;

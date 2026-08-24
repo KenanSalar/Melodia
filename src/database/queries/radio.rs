@@ -12,6 +12,10 @@ const INSERT_COLUMNS: &str = "station_uuid, name, stream_url, homepage, favicon_
 /// user's side of the row and must survive it; `artwork_path` is left alone
 /// because the stored logo is still valid and blanking it would strand the file
 /// until the next sweep.
+/// `local_homepage` is absent for the same reason and a stronger one: it is the
+/// user's own answer to a directory entry that carries no homepage, so the
+/// directory has nothing to say about it and rewriting `homepage` in full stays
+/// correct.
 const DIRECTORY_CONFLICT: &str = "\
     ON CONFLICT(station_uuid) DO UPDATE SET
         name = excluded.name,
@@ -194,6 +198,25 @@ pub async fn mark_played(db: &DbPool, id: i64) -> Result<(), AppError> {
 /// last-played is a history half-erased.
 pub async fn clear_play_history(db: &DbPool, id: i64) -> Result<(), AppError> {
     sqlx::query("UPDATE radio_stations SET last_played = NULL, play_count = 0 WHERE id = ?")
+        .bind(id)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
+/// Record the site the *user* says a station has, or clear it with `None`.
+///
+/// Deliberately not `homepage`, which is the directory's column and is rewritten in full by
+/// [`DIRECTORY_CONFLICT`] on the next play. Narrower than [`update_station`] too, that being a
+/// hand-typed station's whole editable surface: this touches one column, and it is the only edit a
+/// directory-owned row accepts.
+pub async fn set_local_homepage(
+    db: &DbPool,
+    id: i64,
+    homepage: Option<&str>,
+) -> Result<(), AppError> {
+    sqlx::query("UPDATE radio_stations SET local_homepage = ? WHERE id = ?")
+        .bind(homepage)
         .bind(id)
         .execute(db.write())
         .await?;

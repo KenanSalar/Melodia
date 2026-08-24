@@ -1,7 +1,9 @@
 use crate::entities::radio::{DirectoryStation, RadioStation, StationPage};
 use crate::error::AppError;
 
-use super::{ensure_editable, ensure_playable, hide_hls, is_listed, resolve_station_name};
+use super::{
+    ensure_editable, ensure_playable, hide_hls, is_listed, resolve_station_name, website_url,
+};
 
 /// One directory row, segmented or not. Spelled out rather than defaulted: `DirectoryStation` has
 /// no `Default`, a station with no uuid and no URL being one nothing may keep.
@@ -97,6 +99,7 @@ fn stored(station_uuid: Option<&str>) -> RadioStation {
         name: "Test Station".to_owned(),
         stream_url: "https://example.test/stream".to_owned(),
         homepage: None,
+        local_homepage: None,
         favicon_url: None,
         artwork_path: None,
         tags: String::new(),
@@ -178,6 +181,38 @@ fn a_row_survives_exactly_while_one_of_the_two_tabs_still_shows_it() {
 
     station.is_favorite = true;
     assert!(is_listed(&station), "and both at once is still one row worth keeping");
+}
+
+/// The one field a directory-owned row takes from the user, so it is the one that has to be
+/// checked before it is stored.
+///
+/// What lands here goes behind a button that opens the browser, so a bare hostname or a `file://`
+/// is refused while the user is still looking at the field. Blank is not a refusal: it is how the
+/// link is removed again.
+#[test]
+fn a_typed_website_is_normalized_or_refused_and_blank_clears_it() {
+    assert!(matches!(website_url(""), Ok(None)), "blank clears the link");
+    assert!(matches!(website_url("   "), Ok(None)), "so does whitespace");
+
+    assert_eq!(
+        website_url("https://nidaa.fm").ok().flatten().as_deref(),
+        Some("https://nidaa.fm/"),
+        "stored through `Url`, so one site has one spelling"
+    );
+    assert_eq!(
+        website_url("  http://example.com/live  ").ok().flatten().as_deref(),
+        Some("http://example.com/live"),
+        "cleartext is admitted for the reason the logo fetch admits it"
+    );
+
+    for refused in [
+        "nidaa.fm",
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "https://",
+    ] {
+        assert!(website_url(refused).is_err(), "{refused} must not reach a browser launch");
+    }
 }
 
 /// A hand-typed station is listed by its star alone, and the stamp does not stand in for one.

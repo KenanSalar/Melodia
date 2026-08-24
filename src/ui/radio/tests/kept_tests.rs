@@ -15,6 +15,7 @@ fn station(name: &str, added: &str, plays: i32, last_played: Option<&str>) -> Ra
         name: name.to_owned(),
         stream_url: "https://example.test/stream".to_owned(),
         homepage: None,
+        local_homepage: None,
         favicon_url: None,
         artwork_path: None,
         tags: String::new(),

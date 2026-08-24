@@ -14,8 +14,17 @@ pub struct RadioStation {
     pub station_uuid: Option<String>,
     pub name: String,
     pub stream_url: String,
+    /// The directory's, and rewritten in full on every re-import.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub homepage: Option<String>,
+    /// The user's own, for a directory entry that carries no homepage — roughly
+    /// one in fifteen, and nothing can be derived from a stream URL that is
+    /// usually a shared host. Its own column so each has exactly one writer:
+    /// folded into [`Self::homepage`] it would either be blanked by the next
+    /// re-import or block the directory from ever correcting a site that moved.
+    /// Read through [`Self::website`], never directly.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_homepage: Option<String>,
     /// Where the logo came from, kept so a re-download can be retried after the
     /// stored file is swept.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -49,6 +58,45 @@ pub struct RadioStation {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_played: Option<String>,
     pub play_count: i32,
+}
+
+impl RadioStation {
+    /// The site this station links out to, whoever supplied it.
+    ///
+    /// **The user's answer wins**, since it is only ever written where they went and found the
+    /// site the directory had no entry for. Every surface that draws or opens a station website
+    /// reads this rather than either column, so a card and the browser launch behind it cannot
+    /// disagree about which one is live.
+    ///
+    /// Empty strings answer `None` alongside NULL: the directory serves `""` about as readily,
+    /// and a caller asking "is there a website" means the same thing by both.
+    pub fn website(&self) -> Option<&str> {
+        [self.local_homepage.as_deref(), self.homepage.as_deref()]
+            .into_iter()
+            .flatten()
+            .find(|url| !url.is_empty())
+    }
+
+    /// Whether the *directory* named a site of its own.
+    fn has_directory_website(&self) -> bool {
+        self.homepage.as_deref().is_some_and(|url| !url.is_empty())
+    }
+
+    /// Whether the card offers its pencil.
+    ///
+    /// **The one case it hides is a directory link the user has not overridden.** That address is
+    /// not theirs to overwrite and an editor over it is one misclick from replacing a correct site
+    /// with a typo, which is the whole reason the control is gated rather than always up.
+    ///
+    /// The two cases it stays up for are both the user's own: a hand-typed station has no
+    /// directory behind it to disagree with, and a `local_homepage` they already set has to remain
+    /// correctable — hiding the control the moment a website exists would make a typo permanent
+    /// and would take back the "leave it blank to remove the link" the dialog offers.
+    pub fn is_editable(&self) -> bool {
+        self.station_uuid.is_none()
+            || !self.has_directory_website()
+            || self.local_homepage.is_some()
+    }
 }
 
 /// What a caller supplies when saving a station.

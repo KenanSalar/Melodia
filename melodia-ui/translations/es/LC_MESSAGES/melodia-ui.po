@@ -1835,6 +1835,19 @@ msgstr "Esa dirección no reproduce audio que Melodia pueda decodificar."
 msgid "Couldn't save the station."
 msgstr "No se pudo guardar la emisora."
 
+# The same dialog opened on a directory-owned station: one field, and the note saying why.
+msgid "Station Website"
+msgstr "Sitio web de la emisora"
+
+msgid "Website"
+msgstr "Sitio web"
+
+msgid "The directory owns this station's name and stream, so only the website is yours to set. Leave it blank to remove the link."
+msgstr "El directorio es dueño del nombre y la emisión de esta emisora, así que solo el sitio web es tuyo. Déjalo en blanco para quitar el enlace."
+
+msgid "That doesn't look like a web address. It should start with https://"
+msgstr "Eso no parece una dirección web. Debería empezar por https://"
+
 # The station card's destructive action, once per tab: the two lists are independent, so each
 # names only its own.
 msgid "Remove from favorites?"

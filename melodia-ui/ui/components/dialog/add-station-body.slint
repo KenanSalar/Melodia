@@ -5,12 +5,17 @@ import { LabeledInput } from "../labeled-input.slint";
 // Add or edit a station by URL. One body for both kinds — `RadioForm.edit-id` is the only
 // difference, and it belongs to the state rather than to the form.
 //
+// **A directory-owned row is the website field and nothing else.** Its name and stream URL are
+// rewritten from the directory on the next play, so showing them would be offering an edit that
+// silently reverts; `homepage` is the one column the conflict clause yields on, and roughly one
+// entry in fifteen carries none.
+//
 // **No auto-focus on init**: calling `focus()` during the open re-enters Slint's property
 // evaluator and trips its recursion guard.
 export component AddStationBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 
-    LabeledInput {
+    if !RadioForm.directory-owned: LabeledInput {
         label: @tr("Stream URL");
         // Not translated: an example URL is the same in every locale, and a catalogue entry for
         // one is an invitation to localize a hostname.
@@ -23,7 +28,7 @@ export component AddStationBody inherits VerticalLayout {
         }
     }
 
-    LabeledInput {
+    if !RadioForm.directory-owned: LabeledInput {
         label: @tr("Name (optional)");
         placeholder: @tr("Leave blank to use the station's own name");
         text <=> RadioForm.name;
@@ -32,6 +37,28 @@ export component AddStationBody inherits VerticalLayout {
                 RadioForm.submit();
             }
         }
+    }
+
+    // Both kinds. It is a directory row's whole form, and one more field on a hand-typed one —
+    // the same column either way, so a station exported with a website and re-imported as
+    // hand-typed can still be corrected.
+    LabeledInput {
+        label: @tr("Website");
+        placeholder: "https://example.com";
+        text <=> RadioForm.website;
+        accepted => {
+            if (!RadioForm.busy) {
+                RadioForm.submit();
+            }
+        }
+    }
+
+    // Says why the two fields above it are missing, which otherwise reads as a broken dialog.
+    if RadioForm.directory-owned: Text {
+        text: @tr("The directory owns this station's name and stream, so only the website is yours to set. Leave it blank to remove the link.");
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        wrap: word-wrap;
     }
 
     // Says what the wait is for. The submit is a real connect, not a save, and a dialog that
