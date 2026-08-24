@@ -100,6 +100,9 @@ mod nav_transition_tests;
 #[path = "tests/placeholder_tests.rs"]
 mod placeholder_tests;
 #[cfg(test)]
+#[path = "tests/play_count_badge_tests.rs"]
+mod play_count_badge_tests;
+#[cfg(test)]
 #[path = "tests/scrollbar_tests.rs"]
 mod scrollbar_tests;
 #[cfg(test)]

@@ -109,3 +109,7 @@ fn display_tags(raw: &str) -> String {
     }
     out
 }
+
+#[cfg(test)]
+#[path = "tests/rows_tests.rs"]
+mod tests;
