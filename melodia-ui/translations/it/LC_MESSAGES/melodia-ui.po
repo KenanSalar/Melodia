@@ -1856,9 +1856,6 @@ msgstr "La directory possiede il nome e lo stream di questa stazione. Ciò che h
 msgid "Website"
 msgstr "Sito web"
 
-msgid "The directory owns this station's name and stream, so only the website is yours to set. Leave it blank to remove the link."
-msgstr "La directory possiede il nome e lo stream di questa stazione, quindi solo il sito web è tuo. Lascia il campo vuoto per rimuovere il collegamento."
-
 msgid "That doesn't look like a web address. It should start with https://"
 msgstr "Non sembra un indirizzo web. Dovrebbe iniziare con https://"
 

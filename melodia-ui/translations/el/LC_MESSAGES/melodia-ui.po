@@ -1861,9 +1861,6 @@ msgstr "Το όνομα και η ροή αυτού του σταθμού ανή
 msgid "Website"
 msgstr "Ιστότοπος"
 
-msgid "The directory owns this station's name and stream, so only the website is yours to set. Leave it blank to remove the link."
-msgstr "Ο κατάλογος κατέχει το όνομα και τη ροή αυτού του σταθμού, οπότε μόνο ο ιστότοπος είναι δικός σας. Αφήστε το κενό για να αφαιρέσετε τον σύνδεσμο."
-
 msgid "That doesn't look like a web address. It should start with https://"
 msgstr "Αυτό δεν μοιάζει με διεύθυνση ιστού. Θα πρέπει να ξεκινά με https://"
 

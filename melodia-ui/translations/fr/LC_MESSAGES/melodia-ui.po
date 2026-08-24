@@ -1857,9 +1857,6 @@ msgstr "L'annuaire possède le nom et le flux de cette station. Ce qu'il a laiss
 msgid "Website"
 msgstr "Site web"
 
-msgid "The directory owns this station's name and stream, so only the website is yours to set. Leave it blank to remove the link."
-msgstr "L'annuaire possède le nom et le flux de cette station ; seul le site web vous revient. Laissez le champ vide pour retirer le lien."
-
 msgid "That doesn't look like a web address. It should start with https://"
 msgstr "Cela ne ressemble pas à une adresse web. Elle doit commencer par https://"
 

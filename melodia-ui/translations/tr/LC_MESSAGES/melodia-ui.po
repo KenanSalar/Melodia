@@ -1863,9 +1863,6 @@ msgstr "Bu istasyonun adı ve yayını dizine ait. Boş bıraktıklarını sen d
 msgid "Website"
 msgstr "Web sitesi"
 
-msgid "The directory owns this station's name and stream, so only the website is yours to set. Leave it blank to remove the link."
-msgstr "Bu istasyonun adı ve yayını dizine ait, bu yüzden yalnızca web sitesini sen belirleyebilirsin. Bağlantıyı kaldırmak için boş bırak."
-
 msgid "That doesn't look like a web address. It should start with https://"
 msgstr "Bu bir web adresine benzemiyor. https:// ile başlamalı."
 

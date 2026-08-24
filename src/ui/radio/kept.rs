@@ -47,10 +47,13 @@ impl KeptState {
 /// The card's own three lines plus the two fields behind them the user is most likely to reach
 /// for — a station is remembered by its country or its genre at least as often as by its name.
 /// An empty needle matches everything, so an unfiltered list needs no branch.
+///
+/// Through the resolvers, so the box searches what the card draws: a genre the user typed over a
+/// blank directory entry is on screen, and a directory value an override replaced is not.
 fn station_matches(station: &RadioStation, needle: &Needle) -> bool {
     needle.contains(&station.name)
-        || needle.contains(&station.tags)
-        || needle.contains(&station.country)
+        || needle.contains(station.genre().unwrap_or_default())
+        || needle.contains(station.country_name().unwrap_or_default())
         || needle.contains(&station.codec)
 }
 

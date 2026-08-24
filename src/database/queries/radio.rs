@@ -12,10 +12,10 @@ const INSERT_COLUMNS: &str = "station_uuid, name, stream_url, homepage, favicon_
 /// user's side of the row and must survive it; `artwork_path` is left alone
 /// because the stored logo is still valid and blanking it would strand the file
 /// until the next sweep.
-/// `local_homepage` is absent for the same reason and a stronger one: it is the
-/// user's own answer to a directory entry that carries no homepage, so the
-/// directory has nothing to say about it and rewriting `homepage` in full stays
-/// correct.
+/// The four `local_*` columns are absent for the same reason and a stronger one:
+/// they are the user's own answers to what a directory entry left blank, so the
+/// directory has nothing to say about them and rewriting its own four in full
+/// stays correct.
 const DIRECTORY_CONFLICT: &str = "\
     ON CONFLICT(station_uuid) DO UPDATE SET
         name = excluded.name,

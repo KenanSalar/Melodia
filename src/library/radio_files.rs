@@ -106,9 +106,16 @@ pub async fn import_stations_from_file(
         // Only a Melodia export carries these, and they land in the columns they came out of. A
         // bad URL is skipped rather than failing the import: one hand-edited line is not worth
         // refusing a file of fifty stations over, and every field is editable on the card.
+        // `Deferred` for the same reason the probe is absent — the logo repair behind the
+        // completion toast fetches these in batches instead.
         if entry.overrides != radio::StationOverrides::default()
-            && let Err(e) =
-                super::radio::set_station_overrides(state, saved.id, &entry.overrides).await
+            && let Err(e) = super::radio::set_station_overrides(
+                state,
+                saved.id,
+                &entry.overrides,
+                super::radio::LogoFetch::Deferred,
+            )
+            .await
         {
             log::debug!("radio: imported details not stored: {}", crate::services::describe(&e));
         }

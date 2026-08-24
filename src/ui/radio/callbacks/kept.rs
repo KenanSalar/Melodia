@@ -11,6 +11,7 @@ use slint::{ComponentHandle, SharedString, Weak};
 use crate::entities::radio;
 use crate::error::AppError;
 use crate::library;
+use crate::library::radio::LogoFetch;
 use crate::state::AppState;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::radio::{RadioTab, RadioUi, kept};
@@ -157,7 +158,7 @@ fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
 
         let dialog = ui.global::<Dialog>();
         dialog.set_title(if directory_owned {
-            form.invoke_website_title()
+            form.invoke_details_title()
         } else {
             form.invoke_edit_title()
         });
@@ -236,7 +237,7 @@ async fn save_form(
 ) -> Result<i64, AppError> {
     if directory_owned {
         let id = i64::from(edit_id);
-        library::radio::set_station_overrides(state, id, overrides).await?;
+        library::radio::set_station_overrides(state, id, overrides, LogoFetch::Now).await?;
         return Ok(id);
     }
     let id = if edit_id < 0 {
@@ -246,7 +247,7 @@ async fn save_form(
         library::radio::update_custom_station(state, id, url, name).await?;
         id
     };
-    library::radio::set_station_overrides(state, id, overrides).await?;
+    library::radio::set_station_overrides(state, id, overrides, LogoFetch::Now).await?;
     Ok(id)
 }
 
@@ -257,10 +258,10 @@ async fn save_form(
 /// address, the connection, the decode, or the write.
 fn form_error(form: &RadioForm<'_>, error: &AppError) -> SharedString {
     match error {
-        // The website field's own refusal. `ensure_editable` raises the same variant and its line
+        // Either typed URL's own refusal. `ensure_editable` raises the same variant and its line
         // would read wrong here, but it cannot reach this form: a directory-owned row submits
-        // through `set_station_website`, which never asks it.
-        AppError::Validation(_) => form.invoke_err_bad_website(),
+        // through `set_station_overrides`, which never asks it.
+        AppError::Validation(_) => form.invoke_err_bad_url(),
         AppError::Network { .. } => form.invoke_err_unreachable(),
         AppError::Database(_) | AppError::Io(_) => form.invoke_err_save_failed(),
         // `Player` is the decoder's own refusal and is what this arm is for.

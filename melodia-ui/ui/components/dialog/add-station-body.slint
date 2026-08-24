@@ -5,10 +5,10 @@ import { LabeledInput } from "../labeled-input.slint";
 // Add or edit a station by URL. One body for both kinds — `RadioForm.edit-id` is the only
 // difference, and it belongs to the state rather than to the form.
 //
-// **A directory-owned row is the website field and nothing else.** Its name and stream URL are
-// rewritten from the directory on the next play, so showing them would be offering an edit that
-// silently reverts; `homepage` is the one column the conflict clause yields on, and roughly one
-// entry in fifteen carries none.
+// **A directory-owned row drops its name and stream URL**, which are rewritten from the directory
+// on the next play, so showing them would be offering an edit that silently reverts. What it keeps
+// is whatever the directory left blank, per field — the four `local_*` columns the conflict clause
+// yields on.
 //
 // **No auto-focus on init**: calling `focus()` during the open re-enters Slint's property
 // evaluator and trips its recursion guard.

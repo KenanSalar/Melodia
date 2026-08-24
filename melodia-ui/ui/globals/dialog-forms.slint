@@ -174,6 +174,29 @@ export global RadioForm {
     in-out property <string> country;
     in-out property <bool> can-edit-country;
 
+    // The state an add opens on, and what a close hands back. Spelled once rather than at both
+    // sites: every property here has to be answered, a flag left at its `false` default being a
+    // field the add dialog never draws. A `public function` rather than a callback, per
+    // `Dialog.closed-teardown()` — a callback's single handler slot is clobberable.
+    public function reset() {
+        root.edit-id = -1;
+        root.url = "";
+        root.name = "";
+        root.website = "";
+        root.logo-url = "";
+        root.genre = "";
+        root.country = "";
+        // A station typed in by URL has no directory to disagree with, so all four are the user's;
+        // the editor answers them off the row it opens on.
+        root.directory-owned = false;
+        root.can-edit-website = true;
+        root.can-edit-logo = true;
+        root.can-edit-genre = true;
+        root.can-edit-country = true;
+        root.busy = false;
+        root.error = "";
+    }
+
     callback submit();
 
     // The edit dialog's chrome. Resolved here rather than written from Rust for the reason every
@@ -184,8 +207,8 @@ export global RadioForm {
     edit-title => {
         return @tr("Edit Station");
     }
-    pure callback website-title() -> string;
-    website-title => {
+    pure callback details-title() -> string;
+    details-title => {
         return @tr("Station Details");
     }
     pure callback save-label() -> string;
@@ -210,8 +233,10 @@ export global RadioForm {
     err-save-failed => {
         return @tr("Couldn't save the station.");
     }
-    pure callback err-bad-website() -> string;
-    err-bad-website => {
+    // Both typed URLs refuse through this one — the sentence names neither field, so the website
+    // and the logo address share it.
+    pure callback err-bad-url() -> string;
+    err-bad-url => {
         return @tr("That doesn't look like a web address. It should start with https://");
     }
 }

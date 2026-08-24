@@ -1863,9 +1863,6 @@ msgstr "Name und Stream dieses Senders gehören dem Verzeichnis. Was es offen ge
 msgid "Website"
 msgstr "Website"
 
-msgid "The directory owns this station's name and stream, so only the website is yours to set. Leave it blank to remove the link."
-msgstr "Das Verzeichnis besitzt Name und Stream dieses Senders, daher kannst du nur die Website festlegen. Lass das Feld leer, um den Link zu entfernen."
-
 msgid "That doesn't look like a web address. It should start with https://"
 msgstr "Das sieht nicht nach einer Webadresse aus. Sie sollte mit https:// beginnen."
 

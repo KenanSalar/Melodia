@@ -226,7 +226,7 @@ pub async fn add_custom_station(
     Ok(saved.id)
 }
 
-/// Record what the user says about a station, and fetch a logo if they named one.
+/// Record what the user says about a station, fetching a logo they named if `fetch` says so.
 ///
 /// **The only fields a directory-owned row will take from them**, and it takes them because the
 /// directory is community-maintained and frequently partial: an entry carrying no homepage has no
@@ -238,14 +238,11 @@ pub async fn add_custom_station(
 ///
 /// The two URLs are validated before anything is written, so a typo in one leaves the whole save
 /// untouched rather than half-applied. An empty field clears its column.
-///
-/// **The logo fetch is best-effort and deliberately not part of the result.** A dead logo host is
-/// the normal condition on a directory this size, and it must not fail a save that also carried a
-/// genre the user typed; the card falls back to its monogram and the heal retries later.
 pub async fn set_station_overrides(
     state: &AppState,
     id: i64,
     form: &radio::StationOverrides,
+    fetch: LogoFetch,
 ) -> Result<(), AppError> {
     let overrides = radio::StationOverrides {
         website: website_url(form.website.as_deref().unwrap_or_default())?,
@@ -255,10 +252,23 @@ pub async fn set_station_overrides(
     };
     queries::radio::set_local_fields(&state.db, id, &overrides).await?;
 
-    if let Some(logo_url) = overrides.logo_url.as_deref() {
+    if let (LogoFetch::Now, Some(logo_url)) = (fetch, overrides.logo_url.as_deref()) {
         adopt_logo(state, id, logo_url).await;
     }
     Ok(())
+}
+
+/// When the logo behind a typed URL is downloaded.
+///
+/// **`Now` is the dialog's**, and it has to be: a station whose row already points at a logo is
+/// one [`heal_station_logo`] skips, so a *replacement* URL would never land. `Deferred` is the
+/// import's, where every row is new and logo-less and the refresh behind the toast heals them
+/// four at a time — a fetch per entry in that loop is the fifty connects the import already
+/// refuses to spend on probing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LogoFetch {
+    Now,
+    Deferred,
 }
 
 /// A typed free-text field, or `None` where it holds nothing worth storing.
@@ -295,8 +305,8 @@ fn website_url(website: &str) -> Result<Option<String>, AppError> {
 /// `name` and `stream_url` from the directory on the next favorite or play of the same uuid, so
 /// an edit to a browsed station would revert with nothing on screen to say why. The card only
 /// offers the full editor on a custom station; this is what holds when something else asks.
-/// [`set_station_website`] is the deliberate exception and takes no part in it, `homepage` being
-/// the one column the conflict clause yields on.
+/// [`set_station_overrides`] is the deliberate exception and takes no part in it, the four
+/// `local_*` columns being the ones the conflict clause yields on.
 fn ensure_editable(station: &radio::RadioStation) -> Result<(), AppError> {
     if station.station_uuid.is_none() {
         return Ok(());
@@ -324,6 +334,8 @@ fn ensure_playable(hls: bool) -> Result<(), AppError> {
 /// air today still works — and when it did move, **everything the old mount said about itself
 /// goes with it**, logo included. A repointed station keeping the previous brand's icon and
 /// homepage link is the failure `keep_station` already argues against on the directory's side.
+/// The `local_*` columns are outside that: a value the user typed is theirs to carry over or
+/// clear, and the editor shows it on the form that repointed the station.
 pub async fn update_custom_station(
     state: &AppState,
     id: i64,
