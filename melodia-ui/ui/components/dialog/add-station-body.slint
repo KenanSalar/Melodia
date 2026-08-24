@@ -39,10 +39,10 @@ export component AddStationBody inherits VerticalLayout {
         }
     }
 
-    // Both kinds. It is a directory row's whole form, and one more field on a hand-typed one —
-    // the same column either way, so a station exported with a website and re-imported as
-    // hand-typed can still be corrected.
-    LabeledInput {
+    // The four the directory may have left blank. Each is gated on its own flag rather than on
+    // `directory-owned`, so a station that has a genre but no website shows one field and not the
+    // other; a hand-typed station has no directory behind it and sees all four.
+    if RadioForm.can-edit-website: LabeledInput {
         label: @tr("Website");
         placeholder: "https://example.com";
         text <=> RadioForm.website;
@@ -53,9 +53,51 @@ export component AddStationBody inherits VerticalLayout {
         }
     }
 
-    // Says why the two fields above it are missing, which otherwise reads as a broken dialog.
+    if RadioForm.can-edit-logo: LabeledInput {
+        label: @tr("Logo URL");
+        placeholder: "https://example.com/logo.png";
+        text <=> RadioForm.logo-url;
+        accepted => {
+            if (!RadioForm.busy) {
+                RadioForm.submit();
+            }
+        }
+    }
+
+    // Left blank with a website filled in, the logo is read off that site instead — which is the
+    // path most stations take, so the field is the fallback rather than the ask.
+    if RadioForm.can-edit-logo && RadioForm.logo-url == "" && RadioForm.website != "": Text {
+        text: @tr("Leave blank to look for a logo on the website above.");
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        wrap: word-wrap;
+    }
+
+    if RadioForm.can-edit-genre: LabeledInput {
+        label: @tr("Genre");
+        placeholder: @tr("Jazz, Blues");
+        text <=> RadioForm.genre;
+        accepted => {
+            if (!RadioForm.busy) {
+                RadioForm.submit();
+            }
+        }
+    }
+
+    if RadioForm.can-edit-country: LabeledInput {
+        label: @tr("Country");
+        placeholder: @tr("Tunisia");
+        text <=> RadioForm.country;
+        accepted => {
+            if (!RadioForm.busy) {
+                RadioForm.submit();
+            }
+        }
+    }
+
+    // Says why the name and stream URL are missing, which otherwise reads as a broken dialog.
     if RadioForm.directory-owned: Text {
-        text: @tr("The directory owns this station's name and stream, so only the website is yours to set. Leave it blank to remove the link.");
+        text: @tr("The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again.");
         color: Theme.subtext0;
         font-size: Theme.font-size-sm;
         wrap: word-wrap;

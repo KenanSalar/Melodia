@@ -8,7 +8,7 @@ use crate::error::AppError;
 use super::{
     clear_play_history, delete_station, get_favorite_stations, get_recent_stations,
     get_station_by_id, logo_answers, logo_miss_attempts, mark_played, prune_logo_answers,
-    record_logo_hit, record_logo_miss, save_station, set_artwork, set_favorite, set_local_homepage,
+    record_logo_hit, record_logo_miss, save_station, set_artwork, set_favorite, set_local_fields,
     station_id_with_url, update_station,
 };
 
@@ -47,34 +47,45 @@ async fn a_re_import_rewrites_the_directory_column_and_never_the_user_s() -> Res
     let saved = save_station(&db, &directory_station("uuid-1", "Nidaa")).await?;
     assert!(saved.homepage.is_none(), "the directory sent none, which is the case under test");
 
-    set_local_homepage(&db, saved.id, Some("https://nidaa.fm/")).await?;
+    let mine = radio::StationOverrides {
+        website: Some("https://nidaa.fm/".to_owned()),
+        genre: Some("Talk".to_owned()),
+        ..Default::default()
+    };
+    set_local_fields(&db, saved.id, &mine).await?;
 
-    // A play or a star re-sends the same directory row, still carrying no homepage.
+    // A play or a star re-sends the same directory row, still carrying none of this.
     save_station(&db, &directory_station("uuid-1", "Nidaa")).await?;
     let kept = get_station_by_id(&db, saved.id).await?;
     assert_eq!(
-        kept.local_homepage.as_deref(),
-        Some("https://nidaa.fm/"),
+        (kept.local_homepage.as_deref(), kept.local_tags.as_deref()),
+        (Some("https://nidaa.fm/"), Some("Talk")),
         "the re-import blanked what the user typed"
     );
     assert_eq!(kept.website(), Some("https://nidaa.fm/"));
-    assert!(kept.is_editable(), "their own answer stays theirs to correct");
+    assert_eq!(kept.genre(), Some("Talk"));
+    assert!(kept.can_set_website(), "their own answer stays theirs to correct");
 
-    // The directory catching up writes its own column, and does not touch theirs.
+    // The directory catching up writes its own columns, and does not touch theirs.
     let mut listed = directory_station("uuid-1", "Nidaa");
     listed.homepage = Some("https://www.nidaa.fm/".to_owned());
+    listed.tags = "News".to_owned();
     save_station(&db, &listed).await?;
     let updated = get_station_by_id(&db, saved.id).await?;
     assert_eq!(updated.homepage.as_deref(), Some("https://www.nidaa.fm/"));
     assert_eq!(updated.local_homepage.as_deref(), Some("https://nidaa.fm/"));
     assert_eq!(updated.website(), Some("https://nidaa.fm/"), "the user's answer wins the read");
+    assert_eq!(updated.genre(), Some("Talk"));
 
-    // Cleared, the directory's own link is what the card falls back to — and with nothing of the
-    // user's left over it, the control goes away rather than offering that link up for editing.
-    set_local_homepage(&db, saved.id, None).await?;
+    // Cleared, the directory's own values are what the card falls back to — and with nothing of
+    // the user's left over them, those fields close rather than offering them up for editing.
+    set_local_fields(&db, saved.id, &radio::StationOverrides::default()).await?;
     let cleared = get_station_by_id(&db, saved.id).await?;
     assert_eq!(cleared.website(), Some("https://www.nidaa.fm/"));
-    assert!(!cleared.is_editable(), "a directory link is not the user's to overwrite");
+    assert_eq!(cleared.genre(), Some("News"));
+    assert!(!cleared.can_set_website(), "a directory link is not the user's to overwrite");
+    assert!(!cleared.can_set_genre(), "nor is a genre it supplied");
+    assert!(cleared.can_set_country(), "but a field it still says nothing about stays open");
     Ok(())
 }
 

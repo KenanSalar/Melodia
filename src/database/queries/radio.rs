@@ -204,22 +204,32 @@ pub async fn clear_play_history(db: &DbPool, id: i64) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Record the site the *user* says a station has, or clear it with `None`.
+/// Record what the *user* says about a station, clearing each field it carries `None` for.
 ///
-/// Deliberately not `homepage`, which is the directory's column and is rewritten in full by
-/// [`DIRECTORY_CONFLICT`] on the next play. Narrower than [`update_station`] too, that being a
-/// hand-typed station's whole editable surface: this touches one column, and it is the only edit a
-/// directory-owned row accepts.
-pub async fn set_local_homepage(
+/// Deliberately not the four columns beside them, which are the directory's and are rewritten in
+/// full by [`DIRECTORY_CONFLICT`] on the next play. Narrower than [`update_station`] too, that
+/// being a hand-typed station's whole editable surface: this touches only the local columns, and
+/// they are the only edit a directory-owned row accepts.
+///
+/// One statement for all four, so a save cannot land half-applied and leave a card describing a
+/// station out of two different edits.
+pub async fn set_local_fields(
     db: &DbPool,
     id: i64,
-    homepage: Option<&str>,
+    fields: &radio::StationOverrides,
 ) -> Result<(), AppError> {
-    sqlx::query("UPDATE radio_stations SET local_homepage = ? WHERE id = ?")
-        .bind(homepage)
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    sqlx::query(
+        "UPDATE radio_stations
+         SET local_homepage = ?, local_favicon_url = ?, local_tags = ?, local_country = ?
+         WHERE id = ?",
+    )
+    .bind(fields.website.as_deref())
+    .bind(fields.logo_url.as_deref())
+    .bind(fields.genre.as_deref())
+    .bind(fields.country.as_deref())
+    .bind(id)
+    .execute(db.write())
+    .await?;
     Ok(())
 }
 

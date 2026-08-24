@@ -1839,9 +1839,24 @@ msgstr "Η διεύθυνση δεν δίνει ήχο που μπορεί να 
 msgid "Couldn't save the station."
 msgstr "Δεν ήταν δυνατή η αποθήκευση του σταθμού."
 
-# The same dialog opened on a directory-owned station: one field, and the note saying why.
-msgid "Station Website"
-msgstr "Ιστότοπος σταθμού"
+# The same dialog opened on a directory-owned station: whatever the directory left blank.
+msgid "Station Details"
+msgstr "Στοιχεία σταθμού"
+
+msgid "Logo URL"
+msgstr "URL λογότυπου"
+
+msgid "Leave blank to look for a logo on the website above."
+msgstr "Αφήστε το κενό για αναζήτηση λογότυπου στον παραπάνω ιστότοπο."
+
+msgid "Jazz, Blues"
+msgstr "Τζαζ, Μπλουζ"
+
+msgid "Tunisia"
+msgstr "Τυνησία"
+
+msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
+msgstr "Το όνομα και η ροή αυτού του σταθμού ανήκουν στον κατάλογο. Ό,τι άφησε κενό μπορείτε να το συμπληρώσετε· αφήστε ένα πεδίο κενό για να το αφαιρέσετε ξανά."
 
 msgid "Website"
 msgstr "Ιστότοπος"

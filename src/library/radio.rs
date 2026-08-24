@@ -226,19 +226,44 @@ pub async fn add_custom_station(
     Ok(saved.id)
 }
 
-/// Record the site the user says a station has.
+/// Record what the user says about a station, and fetch a logo if they named one.
 ///
-/// **The one field a directory-owned row will take from them**, and it takes it because the
-/// directory frequently has nothing to put there: an entry carrying no homepage has no website
-/// button and no way to grow one, nothing being derivable from a stream URL that is usually a
-/// shared host rather than the station's own domain. It lands in `local_homepage`, which the
-/// directory never writes, so it survives the re-import that follows the next play. Everything
-/// else about a browsed row stays the directory's, per [`ensure_editable`].
+/// **The only fields a directory-owned row will take from them**, and it takes them because the
+/// directory is community-maintained and frequently partial: an entry carrying no homepage has no
+/// website button and no way to grow one, a third of them ship no logo, and nothing is derivable
+/// from a stream URL that usually belongs to a streaming provider rather than to the station. They
+/// land in the `local_*` columns, which the directory never writes, so they survive the re-import
+/// that follows the next play. Everything else about a browsed row stays the directory's, per
+/// [`ensure_editable`].
 ///
-/// An empty `website` clears the column.
-pub async fn set_station_website(state: &AppState, id: i64, website: &str) -> Result<(), AppError> {
-    let website = website_url(website)?;
-    queries::radio::set_local_homepage(&state.db, id, website.as_deref()).await
+/// The two URLs are validated before anything is written, so a typo in one leaves the whole save
+/// untouched rather than half-applied. An empty field clears its column.
+///
+/// **The logo fetch is best-effort and deliberately not part of the result.** A dead logo host is
+/// the normal condition on a directory this size, and it must not fail a save that also carried a
+/// genre the user typed; the card falls back to its monogram and the heal retries later.
+pub async fn set_station_overrides(
+    state: &AppState,
+    id: i64,
+    form: &radio::StationOverrides,
+) -> Result<(), AppError> {
+    let overrides = radio::StationOverrides {
+        website: website_url(form.website.as_deref().unwrap_or_default())?,
+        logo_url: website_url(form.logo_url.as_deref().unwrap_or_default())?,
+        genre: trimmed(form.genre.as_deref()),
+        country: trimmed(form.country.as_deref()),
+    };
+    queries::radio::set_local_fields(&state.db, id, &overrides).await?;
+
+    if let Some(logo_url) = overrides.logo_url.as_deref() {
+        adopt_logo(state, id, logo_url).await;
+    }
+    Ok(())
+}
+
+/// A typed free-text field, or `None` where it holds nothing worth storing.
+fn trimmed(value: Option<&str>) -> Option<String> {
+    value.map(str::trim).filter(|text| !text.is_empty()).map(str::to_owned)
 }
 
 /// What to store for a typed website, or a refusal.
@@ -668,18 +693,21 @@ pub use crate::media::logo_discovery::origin_for as site_origin;
 
 /// Give a kept station with no usable logo another chance at one, and point its row at what lands.
 ///
-/// Two sources, in order: the `favicon_url` the directory carries, then whatever the station's own
-/// site advertises. Returns the store path that landed, so a caller can patch the row it holds.
+/// Two sources, in order: the logo URL the row carries, then whatever the station's own site
+/// advertises. Returns the store path that landed, so a caller can patch the row it holds.
+///
+/// **Both come off the resolvers, so a field the user filled in is what this asks about.** That is
+/// the whole payoff of letting them record a website for an entry the directory left blank: the
+/// site they named is the one read for a `<link rel="icon">`, and a station that had no logo and
+/// no way to get one now has both.
 pub async fn heal_station_logo(state: &AppState, station: &radio::RadioStation) -> Option<String> {
-    let favicon = station.favicon_url.as_deref().filter(|url| !url.is_empty());
-    if let Some(url) = favicon
+    if let Some(url) = station.logo_source()
         && let Some(path) = ask_logo_url(state, url).await
     {
         return adopted(state, station.id, path).await;
     }
 
-    let homepage = station.homepage.as_deref().unwrap_or_default();
-    let origin = site_origin(homepage, &station.stream_url)?;
+    let origin = site_origin(station.website().unwrap_or_default(), &station.stream_url)?;
     let path = discover_site_logo(state, &origin).await?;
     adopted(state, station.id, path).await
 }

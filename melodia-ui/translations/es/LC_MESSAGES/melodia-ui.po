@@ -1835,9 +1835,24 @@ msgstr "Esa dirección no reproduce audio que Melodia pueda decodificar."
 msgid "Couldn't save the station."
 msgstr "No se pudo guardar la emisora."
 
-# The same dialog opened on a directory-owned station: one field, and the note saying why.
-msgid "Station Website"
-msgstr "Sitio web de la emisora"
+# The same dialog opened on a directory-owned station: whatever the directory left blank.
+msgid "Station Details"
+msgstr "Detalles de la emisora"
+
+msgid "Logo URL"
+msgstr "URL del logotipo"
+
+msgid "Leave blank to look for a logo on the website above."
+msgstr "Déjalo en blanco para buscar un logotipo en el sitio web de arriba."
+
+msgid "Jazz, Blues"
+msgstr "Jazz, Blues"
+
+msgid "Tunisia"
+msgstr "Túnez"
+
+msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
+msgstr "El directorio es dueño del nombre y la emisión de esta emisora. Lo que dejó en blanco es tuyo para rellenar; deja un campo vacío para quitarlo de nuevo."
 
 msgid "Website"
 msgstr "Sitio web"

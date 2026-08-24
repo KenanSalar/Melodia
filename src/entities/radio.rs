@@ -29,6 +29,19 @@ pub struct RadioStation {
     /// stored file is swept.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub favicon_url: Option<String>,
+    /// The user's own logo URL, for the third of the directory that ships none.
+    /// [`Self::local_homepage`]'s twin in every respect — read through
+    /// [`Self::logo_source`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_favicon_url: Option<String>,
+    /// The user's own genre, read through [`Self::genre`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_tags: Option<String>,
+    /// The user's own country, read through [`Self::country_name`]. A hand-typed
+    /// station has none of its own: a stream announces no country, and guessing
+    /// one from the host would be wrong more often than blank is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_country: Option<String>,
     /// The logo in the radio-logo store, which is its own directory precisely
     /// because this is the one artwork column whose file cannot be re-derived
     /// from the user's own library. Still one of the six the sweep reads
@@ -60,43 +73,89 @@ pub struct RadioStation {
     pub play_count: i32,
 }
 
+/// A value that is empty rather than absent reads as absent: the directory serves `""` about as
+/// readily as it omits a field, and a caller asking "is there one" means the same by both.
+fn filled(value: Option<&str>) -> Option<&str> {
+    value.filter(|text| !text.is_empty())
+}
+
 impl RadioStation {
     /// The site this station links out to, whoever supplied it.
     ///
-    /// **The user's answer wins**, since it is only ever written where they went and found the
-    /// site the directory had no entry for. Every surface that draws or opens a station website
-    /// reads this rather than either column, so a card and the browser launch behind it cannot
-    /// disagree about which one is live.
-    ///
-    /// Empty strings answer `None` alongside NULL: the directory serves `""` about as readily,
-    /// and a caller asking "is there a website" means the same thing by both.
+    /// **The user's answer wins**, since it is only ever written where they went and found what
+    /// the directory had no entry for. Every surface that draws or opens a station website reads
+    /// this rather than either column, so a card and the browser launch behind it cannot disagree.
     pub fn website(&self) -> Option<&str> {
-        [self.local_homepage.as_deref(), self.homepage.as_deref()]
-            .into_iter()
-            .flatten()
-            .find(|url| !url.is_empty())
+        filled(self.local_homepage.as_deref()).or_else(|| filled(self.homepage.as_deref()))
     }
 
-    /// Whether the *directory* named a site of its own.
-    fn has_directory_website(&self) -> bool {
-        self.homepage.as_deref().is_some_and(|url| !url.is_empty())
+    /// Where this station's logo should be fetched from. [`Self::website`]'s rule.
+    pub fn logo_source(&self) -> Option<&str> {
+        filled(self.local_favicon_url.as_deref()).or_else(|| filled(self.favicon_url.as_deref()))
     }
 
-    /// Whether the card offers its pencil.
+    /// The genre a card shows. [`Self::website`]'s rule.
+    pub fn genre(&self) -> Option<&str> {
+        filled(self.local_tags.as_deref()).or_else(|| filled(Some(self.tags.as_str())))
+    }
+
+    /// The country a card shows. [`Self::website`]'s rule.
+    pub fn country_name(&self) -> Option<&str> {
+        filled(self.local_country.as_deref()).or_else(|| filled(Some(self.country.as_str())))
+    }
+
+    /// Whether one field is the user's to fill in.
     ///
-    /// **The one case it hides is a directory link the user has not overridden.** That address is
-    /// not theirs to overwrite and an editor over it is one misclick from replacing a correct site
-    /// with a typo, which is the whole reason the control is gated rather than always up.
+    /// **The one case that answers `false` is a directory value the user has not overridden.**
+    /// That value is not theirs to overwrite and an editor over it is one misclick from replacing
+    /// something correct with a typo, which is the whole reason these are gated rather than always
+    /// offered.
     ///
-    /// The two cases it stays up for are both the user's own: a hand-typed station has no
-    /// directory behind it to disagree with, and a `local_homepage` they already set has to remain
-    /// correctable — hiding the control the moment a website exists would make a typo permanent
-    /// and would take back the "leave it blank to remove the link" the dialog offers.
+    /// The two cases it answers `true` for are both the user's own: a hand-typed station has no
+    /// directory behind it to disagree with, and anything they already set has to stay
+    /// correctable — closing the field the moment it holds a value would make a typo permanent and
+    /// would take back the "leave it blank to remove" the dialog offers.
+    fn can_override(&self, from_directory: Option<&str>, local: Option<&str>) -> bool {
+        self.station_uuid.is_none() || filled(from_directory).is_none() || local.is_some()
+    }
+
+    pub fn can_set_website(&self) -> bool {
+        self.can_override(self.homepage.as_deref(), self.local_homepage.as_deref())
+    }
+
+    pub fn can_set_logo(&self) -> bool {
+        self.can_override(self.favicon_url.as_deref(), self.local_favicon_url.as_deref())
+    }
+
+    pub fn can_set_genre(&self) -> bool {
+        self.can_override(Some(self.tags.as_str()), self.local_tags.as_deref())
+    }
+
+    pub fn can_set_country(&self) -> bool {
+        self.can_override(Some(self.country.as_str()), self.local_country.as_deref())
+    }
+
+    /// Whether the card offers its pencil at all: it does while any one field is still the user's
+    /// to fill, and goes away once the directory has answered for all of them.
     pub fn is_editable(&self) -> bool {
-        self.station_uuid.is_none()
-            || !self.has_directory_website()
-            || self.local_homepage.is_some()
+        self.can_set_website()
+            || self.can_set_logo()
+            || self.can_set_genre()
+            || self.can_set_country()
     }
+}
+
+/// The four fields a user may fill in where the directory left a blank.
+///
+/// A struct rather than four parameters for [`RadioStation`]'s own reason: they are all
+/// `Option<String>` and a positional list of those is a bind-order bug waiting to happen. `None`
+/// clears the column, which is how a value is removed again.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StationOverrides {
+    pub website: Option<String>,
+    pub logo_url: Option<String>,
+    pub genre: Option<String>,
+    pub country: Option<String>,
 }
 
 /// What a caller supplies when saving a station.

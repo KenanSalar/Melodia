@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString, Weak};
 
+use crate::entities::radio;
 use crate::error::AppError;
 use crate::library;
 use crate::state::AppState;
@@ -128,6 +129,10 @@ fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
     };
 
     let _ = weak.upgrade_in_event_loop(move |ui| {
+        // Asked before the fields below move out of the row. Which of the four the form offers is
+        // the entity's call, not the dialog's — the rule is one misclick away from being wrong.
+        let (can_website, can_logo) = (station.can_set_website(), station.can_set_logo());
+        let (can_genre, can_country) = (station.can_set_genre(), station.can_set_country());
         // The uuid is what the directory identifies the row by, so carrying one is what makes the
         // name and stream URL the directory's rather than the user's.
         let directory_owned = station.station_uuid.is_some();
@@ -135,10 +140,17 @@ fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
         form.set_edit_id(crate::ui::util::clamp_i64_to_i32(station.id));
         form.set_url(SharedString::from(&station.stream_url));
         form.set_name(SharedString::from(&station.name));
-        // The user's own answer, never the directory's: the field is what they may change, and
-        // seeding it from `website()` would offer a directory link up for editing by way of the
-        // save that follows.
+        // The user's own answers, never the resolved ones: these fields are what they may change,
+        // and seeding from `website()` or `genre()` would offer a directory value up for editing
+        // by way of the save that follows.
         form.set_website(SharedString::from(station.local_homepage.unwrap_or_default()));
+        form.set_logo_url(SharedString::from(station.local_favicon_url.unwrap_or_default()));
+        form.set_genre(SharedString::from(station.local_tags.unwrap_or_default()));
+        form.set_country(SharedString::from(station.local_country.unwrap_or_default()));
+        form.set_can_edit_website(can_website);
+        form.set_can_edit_logo(can_logo);
+        form.set_can_edit_genre(can_genre);
+        form.set_can_edit_country(can_country);
         form.set_directory_owned(directory_owned);
         form.set_busy(false);
         form.set_error(SharedString::default());
@@ -167,7 +179,13 @@ fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak
     let form = ui.global::<RadioForm>();
     let (url, name, edit_id) =
         (form.get_url().to_string(), form.get_name().to_string(), form.get_edit_id());
-    let (website, directory_owned) = (form.get_website().to_string(), form.get_directory_owned());
+    let directory_owned = form.get_directory_owned();
+    let overrides = radio::StationOverrides {
+        website: Some(form.get_website().to_string()),
+        logo_url: Some(form.get_logo_url().to_string()),
+        genre: Some(form.get_genre().to_string()),
+        country: Some(form.get_country().to_string()),
+    };
     if form.get_busy() || (!directory_owned && url.trim().is_empty()) {
         return;
     }
@@ -176,14 +194,18 @@ fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak
 
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), weak.clone());
     state.runtime.spawn(async move {
-        let outcome = save_form(&s, edit_id, directory_owned, url.trim(), &name, &website).await;
+        let outcome = save_form(&s, edit_id, directory_owned, url.trim(), &name, &overrides).await;
 
         let _ = weak.upgrade_in_event_loop(move |ui| {
             let form = ui.global::<RadioForm>();
             form.set_busy(false);
             match outcome {
-                Ok(()) => {
+                Ok(id) => {
                     ui.global::<Dialog>().set_open(false);
+                    // A station the user just described is worth one more look for a logo, even
+                    // where this session already gave up on it: the site they named is new
+                    // evidence, and the repair skips an id it has tried.
+                    ru.forget_heal(id);
                     kept::refresh(&ui, &s, &ru);
                 }
                 Err(e) => {
@@ -195,25 +217,27 @@ fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak
     });
 }
 
-/// Write whatever the form is for, and the website with it.
+/// Write whatever the form is for, and the user's own fields with it. Returns the station's id.
 ///
 /// **Two calls rather than a wider `update_custom_station`**, because they answer to different
 /// owners: the station's own fields are re-derived from the stream whenever its URL moves, where
-/// the website is the user's and survives that. Folding it into the probe path is what would put
-/// them back in one column.
+/// the four overrides are the user's and survive that. Folding them into the probe path is what
+/// would put them back in the directory's columns.
 ///
-/// The website goes **last**, so a refused address leaves nothing half-written on a station that
-/// was otherwise saved — the form stays open on the error and the retry re-runs both.
+/// The overrides go **last**, so a refused URL leaves nothing half-written on a station that was
+/// otherwise saved — the form stays open on the error and the retry re-runs both.
 async fn save_form(
     state: &AppState,
     edit_id: i32,
     directory_owned: bool,
     url: &str,
     name: &str,
-    website: &str,
-) -> Result<(), AppError> {
+    overrides: &radio::StationOverrides,
+) -> Result<i64, AppError> {
     if directory_owned {
-        return library::radio::set_station_website(state, i64::from(edit_id), website).await;
+        let id = i64::from(edit_id);
+        library::radio::set_station_overrides(state, id, overrides).await?;
+        return Ok(id);
     }
     let id = if edit_id < 0 {
         library::radio::add_custom_station(state, url, name).await?
@@ -222,7 +246,8 @@ async fn save_form(
         library::radio::update_custom_station(state, id, url, name).await?;
         id
     };
-    library::radio::set_station_website(state, id, website).await
+    library::radio::set_station_overrides(state, id, overrides).await?;
+    Ok(id)
 }
 
 /// Which of the form's four localized lines an error deserves.

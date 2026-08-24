@@ -157,12 +157,22 @@ export global RadioForm {
     in-out property <string> name;
     in-out property <bool> busy;
     in-out property <string> error;
-    // The row belongs to the directory, so the form is the website field and nothing else: name
-    // and stream URL are rewritten from the directory on the next play, and offering them would
-    // be offering an edit that reverts.
+    // The row belongs to the directory, so name and stream URL are left out: they are rewritten
+    // from the directory on the next play, and offering them would be offering an edit that
+    // reverts. What remains is whatever the directory left blank.
     in-out property <bool> directory-owned;
-    // Where the station's own site is, for a directory entry that names none.
+
+    // The four the user may fill in, each shown only where the directory said nothing — a value it
+    // did supply is not theirs to overwrite, and an editor over it is one misclick from a typo.
+    // Rust answers each flag off the row; see `RadioStation::can_override`.
     in-out property <string> website;
+    in-out property <bool> can-edit-website;
+    in-out property <string> logo-url;
+    in-out property <bool> can-edit-logo;
+    in-out property <string> genre;
+    in-out property <bool> can-edit-genre;
+    in-out property <string> country;
+    in-out property <bool> can-edit-country;
 
     callback submit();
 
@@ -176,7 +186,7 @@ export global RadioForm {
     }
     pure callback website-title() -> string;
     website-title => {
-        return @tr("Station Website");
+        return @tr("Station Details");
     }
     pure callback save-label() -> string;
     save-label => {

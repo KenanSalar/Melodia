@@ -24,14 +24,17 @@ use crate::state::AppState;
 const HEADER: &str = "#EXTM3U";
 const EXTINF_TAG: &str = "#EXTINF:";
 
-/// Carries the one thing about a station that is the user's rather than the directory's or the
+/// The four things about a station that are the user's rather than the directory's or the
 /// stream's, so a list survives the round trip with their own edits on it.
 ///
-/// **A comment, in `playlist_files`'s `#MELODIA-HASH:` shape and for its reason.** Every player
+/// **Comments, in `playlist_files`'s `#MELODIA-HASH:` shape and for its reason.** Every player
 /// skips a `#` line it does not know, and so does [`parse`] below, so a file written by this build
-/// still imports into an older one and into everything else — it simply arrives without the
-/// website, which is what a file that never had one arrives as anyway.
+/// still imports into an older one and into everything else — it simply arrives without them,
+/// which is what a file that never had them arrives as anyway.
 const WEBSITE_TAG: &str = "#MELODIA-WEBSITE:";
+const LOGO_TAG: &str = "#MELODIA-LOGO:";
+const GENRE_TAG: &str = "#MELODIA-GENRE:";
+const COUNTRY_TAG: &str = "#MELODIA-COUNTRY:";
 
 /// What an import did, for the toast that reports it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -42,14 +45,14 @@ pub struct ImportStationsResult {
     pub skipped: u32,
 }
 
-/// One entry of a station playlist: the URL, whatever the file called it, and the site the user
-/// recorded for it if the file is one of ours.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// One entry of a station playlist: the URL, whatever the file called it, and whatever the user
+/// recorded about it if the file is one of ours.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StationEntry {
     pub name: Option<String>,
     pub url: String,
-    /// `None` from any file that is not a Melodia export, which is most of them.
-    pub website: Option<String>,
+    /// All `None` from any file that is not a Melodia export, which is most of them.
+    pub overrides: radio::StationOverrides,
 }
 
 /// Write every kept station to one Extended-M3U8 file.
@@ -100,17 +103,39 @@ pub async fn import_stations_from_file(
         };
         let saved = queries::radio::save_station(&state.db, &station).await?;
         queries::radio::set_favorite(&state.db, saved.id, true).await?;
-        // Only a Melodia export carries one, and it lands in the column it came out of. A bad
-        // address is skipped rather than failing the import: one hand-edited line is not worth
-        // refusing a file of fifty stations over, and the field is editable on the card.
-        if let Some(website) = entry.website.as_deref()
-            && let Err(e) = super::radio::set_station_website(state, saved.id, website).await
+        // Only a Melodia export carries these, and they land in the columns they came out of. A
+        // bad URL is skipped rather than failing the import: one hand-edited line is not worth
+        // refusing a file of fifty stations over, and every field is editable on the card.
+        if entry.overrides != radio::StationOverrides::default()
+            && let Err(e) =
+                super::radio::set_station_overrides(state, saved.id, &entry.overrides).await
         {
-            log::debug!("radio: imported website not stored: {}", crate::services::describe(&e));
+            log::debug!("radio: imported details not stored: {}", crate::services::describe(&e));
         }
         result.imported = result.imported.saturating_add(1);
     }
     Ok(result)
+}
+
+/// Read one `#MELODIA-*:` line into `pending`, answering whether the line was one.
+///
+/// The four are collected rather than matched one at a time so a fifth is a row in the table
+/// rather than a fifth arm to keep parallel with [`serialize`]'s own loop.
+fn take_override_tag(line: &str, pending: &mut radio::StationOverrides) -> bool {
+    let slots: [(&str, &mut Option<String>); 4] = [
+        (WEBSITE_TAG, &mut pending.website),
+        (LOGO_TAG, &mut pending.logo_url),
+        (GENRE_TAG, &mut pending.genre),
+        (COUNTRY_TAG, &mut pending.country),
+    ];
+    for (tag, slot) in slots {
+        if let Some(rest) = line.strip_prefix(tag) {
+            let rest = rest.trim();
+            *slot = (!rest.is_empty()).then(|| rest.to_owned());
+            return true;
+        }
+    }
+    false
 }
 
 /// Replace CR/LF with a space, so a name carrying one cannot break the single-line tag format.
@@ -132,12 +157,20 @@ fn serialize(stations: &[radio::RadioStation]) -> String {
         out.push_str("-1,");
         out.push_str(&one_line(&station.name));
         out.push('\n');
-        // The user's own, not `website()`: a directory link is re-fetched by whoever imports this
-        // and writing it here would harden one install's snapshot of the directory into the file.
-        if let Some(website) = station.local_homepage.as_deref().filter(|url| !url.is_empty()) {
-            out.push_str(WEBSITE_TAG);
-            out.push_str(&one_line(website));
-            out.push('\n');
+        // The user's own columns, never the resolved values: what the directory supplied is
+        // re-fetched by whoever imports this, and writing it out would harden one install's
+        // snapshot of the directory into the file.
+        for (tag, value) in [
+            (WEBSITE_TAG, station.local_homepage.as_deref()),
+            (LOGO_TAG, station.local_favicon_url.as_deref()),
+            (GENRE_TAG, station.local_tags.as_deref()),
+            (COUNTRY_TAG, station.local_country.as_deref()),
+        ] {
+            if let Some(value) = value.filter(|text| !text.is_empty()) {
+                out.push_str(tag);
+                out.push_str(&one_line(value));
+                out.push('\n');
+            }
         }
         out.push_str(&one_line(&station.stream_url));
         out.push('\n');
@@ -160,9 +193,9 @@ fn parse(body: &str) -> Vec<StationEntry> {
     // `FileN`'s index against where its entry landed, so a later `TitleN` can find it.
     let mut pls_slots: Vec<(u32, usize)> = Vec::new();
     let mut pending_name: Option<String> = None;
-    // Rides alongside `pending_name` and is taken by the same entry, the tag sitting between the
-    // `#EXTINF:` and the URL that [`serialize`] writes it between.
-    let mut pending_website: Option<String> = None;
+    // Rides alongside `pending_name` and is taken by the same entry, the tags sitting between the
+    // `#EXTINF:` and the URL that [`serialize`] writes them between.
+    let mut pending_overrides = radio::StationOverrides::default();
 
     for line in body.lines() {
         let line = line.trim_start_matches('\u{feff}').trim();
@@ -174,9 +207,7 @@ fn parse(body: &str) -> Vec<StationEntry> {
             pending_name = extinf_title(rest);
             continue;
         }
-        if let Some(rest) = line.strip_prefix(WEBSITE_TAG) {
-            let rest = rest.trim();
-            pending_website = (!rest.is_empty()).then(|| rest.to_owned());
+        if take_override_tag(line, &mut pending_overrides) {
             continue;
         }
         if line.starts_with('#') || line.starts_with('[') {
@@ -191,7 +222,7 @@ fn parse(body: &str) -> Vec<StationEntry> {
                     entries.push(StationEntry {
                         name: pending_name.take(),
                         url: value.to_owned(),
-                        website: pending_website.take(),
+                        overrides: std::mem::take(&mut pending_overrides),
                     });
                 }
                 continue;
@@ -214,7 +245,7 @@ fn parse(body: &str) -> Vec<StationEntry> {
             entries.push(StationEntry {
                 name: pending_name.take(),
                 url: line.to_owned(),
-                website: pending_website.take(),
+                overrides: std::mem::take(&mut pending_overrides),
             });
         }
     }

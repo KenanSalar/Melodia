@@ -206,6 +206,16 @@ impl RadioUi {
         self.section.active()
     }
 
+    /// Let the logo repair ask about a station again.
+    ///
+    /// [`Self::healed`] is what stops a refresh re-asking about a station whose backoff already
+    /// answered, and a website or logo URL the user has just typed is precisely the new evidence
+    /// that claim was made without. Without this the field they filled in has no effect until the
+    /// next launch.
+    fn forget_heal(&self, id: i64) {
+        self.healed.lock().remove(&id);
+    }
+
     /// Flip a station's star in the shadow the grid is built from.
     ///
     /// The optimistic half of the toggle, and its revert: the write is a round trip through

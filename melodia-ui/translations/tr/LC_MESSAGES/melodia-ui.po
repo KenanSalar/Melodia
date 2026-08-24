@@ -1841,9 +1841,24 @@ msgstr "Bu adres, Melodia'nın çözebileceği bir ses yayını vermiyor."
 msgid "Couldn't save the station."
 msgstr "İstasyon kaydedilemedi."
 
-# The same dialog opened on a directory-owned station: one field, and the note saying why.
-msgid "Station Website"
-msgstr "İstasyon Web Sitesi"
+# The same dialog opened on a directory-owned station: whatever the directory left blank.
+msgid "Station Details"
+msgstr "İstasyon Ayrıntıları"
+
+msgid "Logo URL"
+msgstr "Logo URL'si"
+
+msgid "Leave blank to look for a logo on the website above."
+msgstr "Yukarıdaki web sitesinde logo aramak için boş bırak."
+
+msgid "Jazz, Blues"
+msgstr "Caz, Blues"
+
+msgid "Tunisia"
+msgstr "Tunus"
+
+msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
+msgstr "Bu istasyonun adı ve yayını dizine ait. Boş bıraktıklarını sen doldurabilirsin; bir alanı kaldırmak için boş bırak."
 
 msgid "Website"
 msgstr "Web sitesi"

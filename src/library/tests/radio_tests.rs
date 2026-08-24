@@ -101,6 +101,9 @@ fn stored(station_uuid: Option<&str>) -> RadioStation {
         homepage: None,
         local_homepage: None,
         favicon_url: None,
+        local_favicon_url: None,
+        local_tags: None,
+        local_country: None,
         artwork_path: None,
         tags: String::new(),
         country: String::new(),
@@ -213,6 +216,47 @@ fn a_typed_website_is_normalized_or_refused_and_blank_clears_it() {
     ] {
         assert!(website_url(refused).is_err(), "{refused} must not reach a browser launch");
     }
+}
+
+/// Which fields the pencil offers, across the three states each one can be in.
+///
+/// The gate is the whole safety of the feature and it is silent both ways: too open and a
+/// directory value the user never chose is one misclick from a typo, too closed and a field they
+/// filled in themselves can never be corrected or cleared.
+#[test]
+fn a_field_is_the_users_only_while_the_directory_has_not_answered_for_it() {
+    let mut listed = stored(Some("uuid-1"));
+    assert!(listed.can_set_website(), "the directory sent no homepage, so the field is open");
+    assert!(listed.can_set_genre() && listed.can_set_country() && listed.can_set_logo());
+
+    listed.homepage = Some("https://listed.example/".to_owned());
+    listed.tags = "Jazz".to_owned();
+    assert!(!listed.can_set_website(), "a link the directory supplied is not theirs to overwrite");
+    assert!(!listed.can_set_genre());
+    assert!(listed.can_set_country(), "and the fields it still says nothing about stay open");
+    assert!(listed.is_editable(), "so the pencil is still worth drawing");
+
+    // Overridden, the field reopens: a typo has to be correctable and the dialog promises a blank
+    // field removes the value again.
+    listed.local_homepage = Some("https://mine.example/".to_owned());
+    assert!(listed.can_set_website());
+    assert_eq!(listed.website(), Some("https://mine.example/"), "and the override is what reads");
+
+    // Every field answered by the directory, none overridden: nothing left to offer.
+    let mut complete = stored(Some("uuid-1"));
+    complete.homepage = Some("https://listed.example/".to_owned());
+    complete.favicon_url = Some("https://listed.example/logo.png".to_owned());
+    complete.tags = "Jazz".to_owned();
+    complete.country = "Tunisia".to_owned();
+    assert!(!complete.is_editable(), "the pencil goes away rather than offering a misclick");
+
+    // A hand-typed station has no directory behind it to disagree with, so it is always the
+    // user's whole to edit however much it already holds.
+    let mut typed = stored(None);
+    typed.homepage = Some("https://probed.example/".to_owned());
+    typed.tags = "Talk".to_owned();
+    typed.country = "Tunisia".to_owned();
+    assert!(typed.is_editable() && typed.can_set_website() && typed.can_set_genre());
 }
 
 /// A hand-typed station is listed by its star alone, and the stamp does not stand in for one.
