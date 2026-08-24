@@ -12,10 +12,11 @@ import { StationCard } from "station-card.slint";
 export component StationGrid inherits Rectangle {
     in property <[RadioStationGridRow]> rows;
     in property <length> card-width: 180px;
-    in property <length> card-height: 226px;
+    // Taller than an entity card of the same width by the station card's third text line.
+    in property <length> card-height: 246px;
     // The gap is baked into the slot height because a `ListView` lays its delegates back-to-back
     // and has no `spacing`.
-    in property <length> row-height: 246px;
+    in property <length> row-height: 266px;
     in property <length> gap: 20px;
 
     // Read by the card's binding, which is the only thing that makes a landed decode repaint: a

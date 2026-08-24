@@ -37,7 +37,8 @@ export component StationCard inherits Rectangle {
     in property <bool> unplayable;
 
     in property <length> card-width: 180px;
-    in property <length> card-height: 226px;
+    // The square tile plus three text lines, where an entity card of the same width carries two.
+    in property <length> card-height: 246px;
     // `Radio.logo-decode-size`, drilled like `covers-generation` — this file imports no global.
     in property <int> logo-decode-size;
 

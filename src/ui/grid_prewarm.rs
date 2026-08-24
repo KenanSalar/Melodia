@@ -91,9 +91,11 @@ pub fn cover_cap(
     NonZeroUsize::new(cap).unwrap_or(fallback)
 }
 
-/// `GridGeometry`'s three defaults, which every one of its four mounts takes: they all bind
-/// `avail-width: body.width` and the shared gap and nothing else, so there is one answer to what
-/// a card measures and this is what derives it.
+/// `GridGeometry`'s three defaults. Every one of its five mounts binds `avail-width: body.width`
+/// and the shared gap and takes the width pitch as declared, so there is one answer to what a card
+/// measures and this is what derives it. Radio is the one mount that moves `card-text-h`, its
+/// station card carrying a third line, and that can only make its rows taller than [`cover_cap`]'s
+/// `ROW_PITCH_H` assumes: fewer rows on screen than counted, which is the safe direction for a cap.
 const MIN_CARD_W: u32 = 180;
 const GAP: u32 = 20;
 const CARD_TEXT_H: u32 = 46;

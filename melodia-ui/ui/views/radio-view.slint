@@ -52,14 +52,16 @@ export component RadioView inherits Rectangle {
 
     // One derivation for all three tabs — they draw the same card in the same grid. Measured off
     // the body, whose width the layout fixes independently of the cards inside it, so a card
-    // sizing itself from it is a derivation and not a cycle. The extra text height is the station
-    // card's third line.
+    // sizing itself from it is a derivation and not a cycle.
+    //
+    // **The width pitch stays the shared default**, so a station row packs like an album row and
+    // the tier `grid_prewarm` derives from that same default covers the card this grid draws. The
+    // text height is the one thing Radio moves, its card carrying a third line.
     property <length> grid-gap: 20px;
 
     geom := GridGeometry {
         avail-width: body.width;
         gap: root.grid-gap;
-        min-card-w: 200px;
         card-text-h: 66px;
     }
 
