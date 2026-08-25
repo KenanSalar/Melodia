@@ -16,8 +16,14 @@ import { RadioTabPills } from "radio/tab-pills.slint";
 // carries the tab bar, the filter box, the action pills and the count line; each tab body owns
 // whatever scroller it grows.
 //
-// **The band's hero half is idle here**, `detail-open` a literal `false`, until the station detail
-// gives it something to morph into.
+// **A station page is a fourth body branch, and it belongs to the tab it was opened from.**
+// `Radio.detail-open` is derived from the seat and the live tab, My Library's `album-open` shape,
+// so a tab pick unmounts the page without forgetting it and coming back re-mounts it.
+//
+// **The band's filter box goes away over a station page.** A station has no songs of its own to
+// narrow — its page is a list of facts about one stream — and a box that filters nothing is worse
+// than no box. The page's own actions take the band's pill slot instead, where every My Library
+// detail puts them.
 export component RadioView inherits Rectangle {
     property <int> filter-tick-pending: 0;
 
@@ -136,14 +142,13 @@ export component RadioView inherits Rectangle {
             // to a line that re-reads the arriving tab mid-fade.
             count-text: root.count-line;
 
-            // The box means different things per surface — a search sent to the directory, a
-            // filter over rows already here, a filter over the titles a station announced — so
-            // the placeholder says which.
-            filter-placeholder: Radio.detail-open
-                ? @tr("Filter songs…")
-                : Radio.tab-idx == Radio.tab-browse
-                    ? @tr("Search stations…")
-                    : @tr("Filter stations…");
+            // The box means different things on the two kinds of tab — a search sent to the
+            // directory against a filter over rows already here — so the placeholder says which.
+            // Over a station page there is no box to place a holder in.
+            search-shown: !Radio.detail-open;
+            filter-placeholder: Radio.tab-idx == Radio.tab-browse
+                ? @tr("Search stations…")
+                : @tr("Filter stations…");
 
             detail-open: Radio.detail-open;
             back-clicked => { Radio.close-detail(); }

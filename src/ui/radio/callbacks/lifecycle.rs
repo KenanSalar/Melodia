@@ -66,11 +66,13 @@ fn leave(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     covers::release(ui, radio_ui);
 
     let g = ui.global::<Radio>();
-    if g.get_detail_open() {
+    // The seat, not the flag: a page seated on a tab the user is not standing on still holds a
+    // decoded hero, and the leave is what has to hand it back.
+    if detail::is_seated(&g) {
         // The band is not collapsing, so `hero-collapsed` will not fire: the page keeps its
         // station and comes back to it. What cannot stay is what a *different* hero would paint
         // over — hence the two shared globals going with the images, through the same pair every
-        // detail close takes. `detail-open` is deliberately still `true` here, and
+        // detail close takes. The seat is deliberately still set here, and
         // `hero_chips::is_open` reads the nav index beside it for exactly that reason.
         release_hero_slots!(g);
         release_shared_hero!(ui);

@@ -123,11 +123,23 @@ export global Radio {
     // arrow means "close this detail" and there is no origin to restore — a drill never leaves
     // nav 10.
     //
-    // **`detail-open` is the flag, and it is written last.** Every other detail in the tree spells
-    // "closed" as `id < 0`, which this one cannot: `id == 0` is a browsed station with no database
-    // row, and that is a perfectly good thing to have open. Everything the hero paints is read
-    // through this, so it lands in the same tick as the facts it gates.
-    in-out property <bool> detail-open: false;
+    // **The seat: which tab's station page is open, `-1` for none.** Every other detail in the
+    // tree spells "closed" as `id < 0`, which this one cannot — `id == 0` is a browsed station
+    // with no database row, and that is a perfectly good thing to have open. The tab is what it
+    // carries instead, because a station opens from all three and the page has to know which one
+    // it belongs to: the Remove action means a different thing on each, and a tab pick has to
+    // leave the page without forgetting it.
+    //
+    // Written last, in the same tick as the facts below, and **after** the navigation has landed.
+    in-out property <int> detail-tab: -1;
+    // **Is the page the mounted body right now** — My Library's `album-open` shape, tab test and
+    // seat test, so a tab pick unmounts the page without clearing it and coming back re-mounts it.
+    // Derived here rather than in the view because all three inputs are this global's own; My
+    // Library's equivalent has to be private to its sheet, needing four *other* globals.
+    //
+    // A reader wants one of these two, and they are not interchangeable: this one answers "is it
+    // painted", the seat answers "is it still ours to come back to".
+    out property <bool> detail-open: root.detail-tab >= 0 && root.detail-tab == root.tab-idx;
     // Raised synchronously at boot when `views.json` names a station to reopen, and lowered behind
     // the fetch. The tab bodies gate on it, or a restore paints a grid and swaps a beat later.
     in-out property <bool> restoring: false;
@@ -142,6 +154,9 @@ export global Radio {
     in-out property <bool> detail-check-ok: false;
     // A vote needs a station the directory knows and a switch that lets us talk to it.
     in-out property <bool> detail-votable: false;
+    // How many votes the directory holds, `-1` until it has answered — which for a station it no
+    // longer lists is forever. `0` is a real number of votes and would print as one.
+    in-out property <int> detail-votes: -1;
 
     // The hero's own image slots. The blur pair is a crossfade, so neither is ever cleared while
     // the other is showing — `write_crossfade_slot` flips `blur-use-a` and both opacities animate.
@@ -155,11 +170,11 @@ export global Radio {
     in-out property <bool> blur-use-a;
     in-out property <bool> has-blur;
 
-    // The titles this station has announced since it started playing, newest first, already
-    // through the box's needle. `-1` until a station has been on: an empty list and "no station
-    // playing" are different empty states.
+    // The titles this station has announced since it started playing, newest first. The page
+    // mounts the section only when there are some, so there is no empty state to distinguish and
+    // the count is just the length.
     in-out property <[string]> history-rows;
-    in-out property <int> history-count: -1;
+    in-out property <int> history-count: 0;
 
     callback open-station(RadioStationRow);
     callback close-detail();
@@ -167,8 +182,9 @@ export global Radio {
     // the hero paints all the way through that morph and dropping its images at the flag would
     // collapse a blank square.
     callback hero-collapsed();
-    // The box now describes one of four surfaces, and three of the four can change with nobody
-    // typing. `ui::radio::filter::sync_box` reseats it from whichever is mounted.
+    // The box is hidden while a station page is open — a station has no songs to filter — so what
+    // this announces is the page *closing*, and the tab's own needle going back into a box that
+    // has been away. `ui::radio::filter::sync_box` reseats it from whichever tab is mounted.
     callback detail-scope-changed();
     callback vote();
     callback copy-stream-url();

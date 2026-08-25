@@ -1,14 +1,12 @@
-import { ListView } from "std-widgets.slint";
+import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { Radio } from "../../globals/radio.slint";
-import { Dialog } from "../../globals/dialog.slint";
-import { ActionPill, PillButton, PillDivider } from "../../components/action-pill.slint";
-import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
+import { IconButton } from "../../components/icon-button.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 
-// A tinted glyph and a sentence. Two of these sit under the action row and say different things,
-// and both are notes about the station rather than controls, so neither is a pill.
+// A tinted glyph and a sentence. Two of these sit above the facts and say different things, and
+// both are notes about the station rather than controls, so neither is a pill.
 component StatusLine inherits HorizontalLayout {
     in property <string> icon;
     in property <brush> tint;
@@ -36,18 +34,63 @@ component StatusLine inherits HorizontalLayout {
     }
 }
 
+// One labelled fact, with an optional control on the value. Local rather than `SettingRow`, which
+// reads `SettingsPage.row-icon-w` and is Settings chrome.
+component DetailRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    in property <string> action-icon;
+    in property <string> action-tooltip;
+    callback action-clicked();
+
+    spacing: Theme.pad-md;
+    vertical-stretch: 0;
+
+    VerticalLayout {
+        alignment: center;
+        Text {
+            // Fixed, so the values line up down the column rather than tracking each label.
+            width: 128px;
+            text: root.label;
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            overflow: elide;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        Text {
+            // The mark is what keeps a URL from re-ordering under a right-to-left UI locale: it
+            // is the station's text, not the interface's.
+            text: "\u{200e}" + root.value;
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            overflow: elide;
+        }
+    }
+    if root.action-icon != "": IconButton {
+        icon: root.action-icon;
+        icon-size: 16px;
+        diameter: 28px;
+        tooltip-text: root.action-tooltip;
+        clicked => { root.action-clicked(); }
+    }
+}
+
 // One station's page, under the band it morphed into that station's hero.
 //
-// **The band owns the title, the artwork and the chips**; this file owns the actions, what the
-// directory's last check said, and the titles the station has announced this session. Nothing
-// here grows a header of its own — `ui::hero_chips::tests` walks every band host for that.
+// **The band owns the title, the artwork, the chips and every action**; this file owns the facts.
+// That split is what both radio players with a station page settle on — Shortwave's dialog and
+// RadioDroid's detail are each a labelled list — and it is why nothing here grows a header of its
+// own, which `ui::hero_chips::tests` walks every band host for.
 //
-// **The actions are in the body rather than in the band's pill slot**, which is where My Library
-// puts a detail's. Six of them will not fit as text pills, and the band paints its slot before
-// the body does, so an icon-only row up there would owe the published-anchor tooltip treatment
-// `MyLibraryTabPills` carries for exactly one of its rows.
+// **No empty state.** The song history is a section that exists only once the station has
+// announced something, so a station that has never played shows its facts rather than a page
+// apologising for having no songs.
 export component RadioStationDetail inherits Rectangle {
-    // A click anywhere the row and the list don't claim gives the band's filter box up.
+    // A click anywhere the rows don't claim gives the band's box up. Harmless while the box is
+    // hidden over this page, and correct on the frame it comes back.
     TouchArea {
         clicked => { Radio.blur-search-tick += 1; }
     }
@@ -64,162 +107,116 @@ export component RadioStationDetail inherits Rectangle {
         text: Radio.detail-stream-url;
     }
 
-    property <bool> has-history: Radio.history-count > 0;
-    property <bool> no-matches: root.has-history && Radio.history-rows.length == 0;
-
     VerticalLayout {
-        // Left, right and top only — a bottom pad here sits *outside* the list's viewport and
+        // Left, right and top only — a bottom pad here sits *outside* the scroller's viewport and
         // reads as a dead strip rather than as breathing room.
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
         padding-top: Theme.pad-lg;
-        spacing: Theme.pad-md;
-
-        HorizontalLayout {
-            alignment: start;
-            vertical-stretch: 0;
-
-            ActionPill {
-                // Gated rather than greyed, the card's own treatment: `PillButton` has no
-                // disabled state and a control that looks live and does nothing is worse than
-                // one that isn't there. What is missing is said in words below.
-                if !Radio.detail-station.hls: PillButton {
-                    icon: "play_arrow";
-                    icon-filled: true;
-                    text: @tr("Play");
-                    clicked => { Radio.play-station(Radio.detail-station); }
-                }
-                if !Radio.detail-station.hls: PillDivider { }
-
-                // A directory station is starred; a hand-typed one has no star to give, only a
-                // removal — the same split the card makes, for the same reason: un-starring the
-                // second would drop it from the only list showing it.
-                if Radio.detail-station.uuid != "": PillButton {
-                    icon: "favorite";
-                    icon-filled: Radio.detail-station.is_favorite;
-                    text: Radio.detail-station.is_favorite ? @tr("Favorited") : @tr("Favorite");
-                    clicked => { Radio.toggle-favorite(Radio.detail-station); }
-                }
-
-                if Radio.detail-votable: PillButton {
-                    icon: "thumb_up";
-                    text: @tr("Vote");
-                    tooltip-text: @tr("Vote for this station in the directory");
-                    clicked => { Radio.vote(); }
-                }
-
-                PillButton {
-                    icon: "content_copy";
-                    text: @tr("Copy URL");
-                    clicked => {
-                        url-field.select-all();
-                        url-field.copy();
-                        Radio.copy-stream-url();
-                    }
-                }
-
-                if Radio.detail-station.homepage != "": PillButton {
-                    icon: "link";
-                    text: @tr("Website");
-                    clicked => { Radio.open-homepage(Radio.detail-station.homepage); }
-                }
-
-                if Radio.detail-station.editable: PillButton {
-                    icon: "edit";
-                    text: @tr("Edit");
-                    clicked => { Radio.edit-station(Radio.detail-station); }
-                }
-
-                // Only for a station with a row: a browsed one has nothing to remove.
-                if Radio.detail-station.id != 0: PillDivider { }
-                if Radio.detail-station.id != 0: PillButton {
-                    icon: "delete";
-                    danger: true;
-                    text: @tr("Remove");
-                    // The copy names what removal costs, and the hand-typed case is the one where
-                    // it costs everything — `is_listed` deletes a row no tab would list.
-                    clicked => {
-                        Dialog.title = @tr("Remove from favorites?");
-                        Dialog.message = Radio.detail-station.uuid == ""
-                            ? @tr("\"{}\" will be removed from your stations, along with its play history.", Radio.detail-station.name)
-                            : @tr("\"{}\" will be removed from your favorites.", Radio.detail-station.name);
-                        Dialog.confirm-label = @tr("Remove");
-                        Dialog.cancel-label = @tr("Cancel");
-                        Dialog.destructive = true;
-                        Dialog.kind = "remove-from-favorites";
-                        Dialog.target-id = Radio.detail-station.id;
-                        Dialog.open = true;
-                    }
-                }
-            }
-        }
-
-        // Why there is no Play button. D13's whole point is that a segmented station is listed
-        // and labelled rather than hidden, and this is the one surface with room to say why.
-        if Radio.detail-station.hls: StatusLine {
-            icon: "error";
-            tint: Theme.yellow;
-            text: @tr("This station streams in a segmented format Melodia can't play yet.");
-        }
-
-        // What the directory's own reachability check last said. Shown only once an answer has
-        // arrived: "we asked and it failed" and "nobody has asked" are different, and only the
-        // first is worth printing.
-        if Radio.detail-check-known: StatusLine {
-            icon: Radio.detail-check-ok ? "check_circle" : "error";
-            tint: Radio.detail-check-ok ? Theme.green : Theme.yellow;
-            text: Radio.detail-check-ok
-                ? @tr("The directory reached this station on its last check.")
-                : @tr("The directory could not reach this station on its last check.");
-        }
 
         body := Rectangle {
             vertical-stretch: 1;
 
-            list := ListView {
-                vertical-scrollbar-policy: always-off;
+            // One scroller for the whole page. The history is capped by the ring that fills it,
+            // so there is nothing here to virtualize and no second scroller to nest.
+            sv := ScrollView {
+                width: 100%;
+                height: 100%;
                 horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy: always-off;
+                viewport-width: self.width;
 
-                for title in Radio.history-rows: Rectangle {
-                    // A `ListView` delegate needs a fixed height or the virtualization math
-                    // breaks.
-                    min-height: Theme.row-h-compact;
-                    max-height: Theme.row-h-compact;
+                VerticalLayout {
+                    spacing: Theme.pad-md;
+                    padding-right: Theme.scrollbar-slot;
+                    alignment: start;
 
-                    HorizontalLayout {
-                        padding-right: Theme.scrollbar-slot;
-                        alignment: start;
+                    // Why there is no Play control. D13's whole point is that a segmented station
+                    // is listed and labelled rather than hidden, and this is the surface with
+                    // room to say why.
+                    if Radio.detail-station.hls: StatusLine {
+                        icon: "error";
+                        tint: Theme.yellow;
+                        text: @tr("This station streams in a segmented format Melodia can't play yet.");
+                    }
 
-                        VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: "\u{200e}" + title;
-                                color: Theme.text;
-                                font-size: Theme.font-size-md;
-                                overflow: elide;
-                            }
+                    // What the directory's own reachability check last said. Shown only once an
+                    // answer has arrived: "we asked and it failed" and "nobody has asked" are
+                    // different, and only the first is worth printing.
+                    if Radio.detail-check-known: StatusLine {
+                        icon: Radio.detail-check-ok ? "check_circle" : "error";
+                        tint: Radio.detail-check-ok ? Theme.green : Theme.yellow;
+                        text: Radio.detail-check-ok
+                            ? @tr("The directory reached this station on its last check.")
+                            : @tr("The directory could not reach this station on its last check.");
+                    }
+
+                    // The facts, each absent when the station carries nothing for it. A
+                    // hand-typed station arrives with almost none of them.
+                    DetailRow {
+                        label: @tr("Stream");
+                        value: Radio.detail-stream-url;
+                        action-icon: "content_copy";
+                        action-tooltip: @tr("Copy stream URL");
+                        action-clicked => {
+                            url-field.select-all();
+                            url-field.copy();
+                            Radio.copy-stream-url();
                         }
                     }
+                    if Radio.detail-station.homepage != "": DetailRow {
+                        label: @tr("Website");
+                        value: Radio.detail-station.homepage;
+                        action-icon: "link";
+                        action-tooltip: @tr("Open in your browser");
+                        action-clicked => { Radio.open-homepage(Radio.detail-station.homepage); }
+                    }
+                    if Radio.detail-station.codec != "": DetailRow {
+                        label: @tr("Format");
+                        value: Radio.detail-station.codec;
+                    }
+                    // Zero on a large share of live stations, where it means the directory does
+                    // not know rather than that the station is silent.
+                    if Radio.detail-station.bitrate > 0: DetailRow {
+                        label: @tr("Bitrate");
+                        value: @tr("{} kbps", Radio.detail-station.bitrate);
+                    }
+                    if Radio.detail-votes >= 0: DetailRow {
+                        label: @tr("Votes");
+                        value: @tr("{n} vote" | "{n} votes" % Radio.detail-votes);
+                    }
+                    if Radio.detail-station.play_count > 0: DetailRow {
+                        label: @tr("Plays");
+                        value: @tr("{n} play" | "{n} plays" % Radio.detail-station.play_count);
+                    }
 
-                    Rectangle {
-                        y: parent.height - 1px;
-                        height: 1px;
-                        background: Theme.surface0;
+                    // **Mounted only when it has something**, which is what retires the empty
+                    // state: a station that has never played shows the facts above and nothing
+                    // where this would be. Neither radio player with a station page carries a
+                    // song list on it at all; this is the one thing Melodia adds, so it earns its
+                    // place by never being in the way.
+                    if Radio.history-count > 0: Rectangle {
+                        height: Theme.pad-sm;
+                    }
+                    if Radio.history-count > 0: Text {
+                        text: @tr("Recently played on this station");
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        font-weight: Theme.page-title-weight;
+                        overflow: elide;
+                    }
+                    for title in Radio.history-rows: VerticalLayout {
+                        alignment: center;
+                        min-height: Theme.row-h-compact;
+                        max-height: Theme.row-h-compact;
+                        Text {
+                            text: "\u{200e}" + title;
+                            color: Theme.text;
+                            font-size: Theme.font-size-md;
+                            overflow: elide;
+                        }
                     }
                 }
-            }
-
-            // Two empty states, because they are two different facts about the page: nothing
-            // announced, and nothing matching the box.
-            if !root.has-history: GridEmptyState {
-                icon: "music_note";
-                title: @tr("No songs yet");
-                body: @tr("Songs this station announces show up here while it plays.");
-            }
-            if root.no-matches: GridEmptyState {
-                icon: "search_off";
-                title: @tr("No songs matched");
-                body: @tr("Try a different word, or clear the box.");
             }
 
             OverlayScrollbar {
@@ -227,10 +224,10 @@ export component RadioStationDetail inherits Rectangle {
                 x: parent.width - self.width;
                 width: 10px;
                 height: 100%;
-                visible-size: list.visible-height;
-                content-size: list.viewport-height;
-                offset: -list.viewport-y;
-                scroll-to(o) => { list.viewport-y = -o; }
+                visible-size: sv.visible-height;
+                content-size: sv.viewport-height;
+                offset: -sv.viewport-y;
+                scroll-to(o) => { sv.viewport-y = -o; }
             }
         }
     }

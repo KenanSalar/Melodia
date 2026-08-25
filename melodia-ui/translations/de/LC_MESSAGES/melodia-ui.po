@@ -1904,20 +1904,11 @@ msgstr "Die Senderliste konnte nicht geschrieben werden."
 
 # --- The station page ---
 
-msgid "Copy URL"
-msgstr "URL kopieren"
-
-msgid "Edit"
-msgstr "Bearbeiten"
-
-msgid "Favorited"
-msgstr "Favorisiert"
-
 msgid "Vote"
 msgstr "Bewerten"
 
-msgid "Vote for this station in the directory"
-msgstr "Diesen Sender im Verzeichnis bewerten"
+msgid "Edit"
+msgstr "Bearbeiten"
 
 msgid "Vote not counted"
 msgstr "Bewertung nicht gezählt"
@@ -1936,17 +1927,17 @@ msgstr "Das Verzeichnis hat diesen Sender bei der letzten Prüfung erreicht."
 msgid "The directory could not reach this station on its last check."
 msgstr "Das Verzeichnis konnte diesen Sender bei der letzten Prüfung nicht erreichen."
 
-msgid "Filter songs…"
-msgstr "Titel filtern…"
+msgid "Stream"
+msgstr "Stream"
 
-msgid "No songs yet"
-msgstr "Noch keine Titel"
+msgid "Copy stream URL"
+msgstr "Stream-URL kopieren"
 
-msgid "Songs this station announces show up here while it plays."
-msgstr "Titel, die dieser Sender ansagt, erscheinen hier während der Wiedergabe."
+msgid "Open in your browser"
+msgstr "Im Browser öffnen"
 
-msgid "No songs matched"
-msgstr "Keine Titel gefunden"
+msgid "Votes"
+msgstr "Bewertungen"
 
-msgid "Try a different word, or clear the box."
-msgstr "Versuche ein anderes Wort oder leere das Feld."
+msgid "Recently played on this station"
+msgstr "Zuletzt auf diesem Sender gespielt"

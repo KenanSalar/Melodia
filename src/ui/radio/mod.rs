@@ -53,7 +53,7 @@ use tabs::section_is_up;
 
 pub use callbacks::files::wire as wire_files;
 pub use covers::tune_cache_for_display;
-pub use detail::{StationRef, open_station_with, seed_detail_from_settings};
+pub use detail::{StationRef, is_seated, open_station_with, seed_detail_from_settings};
 pub use history::install as install_history;
 pub use rows::station_has_row;
 pub use tabs::{RadioTab, seed_tab, tab_from_index};
@@ -93,8 +93,10 @@ pub fn disable(ui: &AppWindow, state: &AppState) {
     // images and the artwork tier all go the one way they ever go. It is the whole page that is
     // being taken away; leaving a station named in `views.json` would reopen it the next time
     // the switch went back on.
+    // The **seat**, not `detail-open`: a station page seated on a tab the user is not standing on
+    // is still open, and its id is still in `views.json` waiting for the next boot.
     let radio = ui.global::<Radio>();
-    if radio.get_detail_open() {
+    if is_seated(&radio) {
         radio.invoke_close_detail();
     }
 

@@ -25,6 +25,9 @@ export component LibraryTabBand inherits Rectangle {
     in-out property <string> filter;
     in property <string> filter-placeholder;
     in property <int> blur-tick;
+    // Forwarded, not decided here: whether a page's content is something to narrow is the page's
+    // question. Radio hides it over a station, whose page is facts about one stream.
+    in property <bool> search-shown: true;
 
     // --- Idle ---------------------------------------------------------------
     //
@@ -272,6 +275,7 @@ export component LibraryTabBand inherits Rectangle {
             filter <=> root.filter;
             filter-placeholder: root.filter-placeholder;
             blur-tick: root.blur-tick;
+            search-shown: root.search-shown;
 
             // **All four cross from a theme token to a solved hero tier.** `active-color` matters
             // most, driving the selected label, its FILL=1 icon and the underline from one input:

@@ -7,10 +7,10 @@
 //! reached for either would need the handle, and the caller already holds both while it walks the
 //! page. A kept station carries them as columns and so needs neither.
 
-use slint::SharedString;
+use slint::{Model, SharedString, VecModel};
 
 use crate::entities::radio::{DirectoryStation, Facet, RadioStation};
-use crate::{RadioFacetRow, RadioStationRow};
+use crate::{RadioFacetRow, RadioStationGridRow, RadioStationRow};
 
 use super::identity;
 
@@ -33,6 +33,48 @@ const TAG_SEPARATOR: &str = " · ";
 /// station is a directory answer with a shelf life and no row until the user keeps or plays it.
 pub fn station_has_row(id: i64) -> bool {
     id != 0
+}
+
+/// Re-stamp the logos on cards already on screen, leaving the models their delegates are mounted
+/// on alone.
+///
+/// **A whole-grid write is what this exists to avoid.** `write_grid` is a `set_vec`, a model reset
+/// that tears down every delegate and rebuilds it — and a delegate destroyed mid-press takes the
+/// pointer grab with it, so the click never lands. A page repaints on a timer while its logos
+/// arrive, which is exactly the second or two somebody spends clicking a station they just
+/// searched for; `set_row_data` on the row that moved updates the mounted card instead.
+///
+/// `logo` answers what a station's path should be now. Returns `false` when the grid's shape no
+/// longer matches the cards it was built from, which is a caller owing a full write instead.
+///
+/// UI thread only.
+pub fn patch_logos(
+    grid: &slint::ModelRc<RadioStationGridRow>,
+    logo: impl Fn(&RadioStationRow) -> SharedString,
+) -> bool {
+    let Some(chunks) = grid.as_any().downcast_ref::<VecModel<RadioStationGridRow>>() else {
+        return false;
+    };
+    for chunk in 0..chunks.row_count() {
+        let Some(row) = chunks.row_data(chunk) else {
+            return false;
+        };
+        let Some(cards) = row.stations.as_any().downcast_ref::<VecModel<RadioStationRow>>() else {
+            return false;
+        };
+        for slot in 0..cards.row_count() {
+            let Some(mut card) = cards.row_data(slot) else {
+                return false;
+            };
+            let found = logo(&card);
+            if card.artwork_path == found {
+                continue;
+            }
+            card.artwork_path = found;
+            cards.set_row_data(slot, card);
+        }
+    }
+    true
 }
 
 /// One browsed station, with this install's answers about it folded in.

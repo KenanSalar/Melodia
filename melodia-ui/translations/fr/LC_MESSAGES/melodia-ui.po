@@ -1898,20 +1898,11 @@ msgstr "Impossible d'écrire la liste des stations."
 
 # --- The station page ---
 
-msgid "Copy URL"
-msgstr "Copier l'URL"
-
-msgid "Edit"
-msgstr "Modifier"
-
-msgid "Favorited"
-msgstr "En favori"
-
 msgid "Vote"
 msgstr "Voter"
 
-msgid "Vote for this station in the directory"
-msgstr "Voter pour cette station dans l'annuaire"
+msgid "Edit"
+msgstr "Modifier"
 
 msgid "Vote not counted"
 msgstr "Vote non comptabilisé"
@@ -1930,17 +1921,17 @@ msgstr "L'annuaire a joint cette station lors de sa dernière vérification."
 msgid "The directory could not reach this station on its last check."
 msgstr "L'annuaire n'a pas pu joindre cette station lors de sa dernière vérification."
 
-msgid "Filter songs…"
-msgstr "Filtrer les titres…"
+msgid "Stream"
+msgstr "Flux"
 
-msgid "No songs yet"
-msgstr "Aucun titre pour l'instant"
+msgid "Copy stream URL"
+msgstr "Copier l'URL du flux"
 
-msgid "Songs this station announces show up here while it plays."
-msgstr "Les titres annoncés par cette station apparaissent ici pendant la lecture."
+msgid "Open in your browser"
+msgstr "Ouvrir dans le navigateur"
 
-msgid "No songs matched"
-msgstr "Aucun titre trouvé"
+msgid "Votes"
+msgstr "Votes"
 
-msgid "Try a different word, or clear the box."
-msgstr "Essayez un autre mot ou videz le champ."
+msgid "Recently played on this station"
+msgstr "Diffusé récemment sur cette station"

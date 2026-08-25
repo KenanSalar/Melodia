@@ -10,18 +10,21 @@ import { FacetChip } from "facet-chip.slint";
 // `LibraryTabBand` as its whole `@children`: Browse's filter chips, then Favorites' single chip of
 // add / import / export plus its sort picker. Recently Played has none, its order being the page.
 //
-// **Both rows also gate on `!detail-open`.** They describe the tab under the station page, not the
-// page, and a station's own actions are in its body rather than up here — six of them will not fit
-// as text pills, and the tooltip note below is why they cannot be icons.
+// **The two tab rows gate on `!detail-open`**, describing the tab under a station page rather
+// than the page, and the station's own row takes the slot instead — which is where My Library
+// puts each of its four details' actions.
 //
 // **Favorites sorts through a popup rather than the usual `SortPillRow`.** Four fields spelled out
 // beside three operations mounted two chips at once, flush against each other under the
 // `spacing: 0px` below, and left the band no room for the count line it reserves against
 // `pills.width`.
 //
-// **Text labels rather than icon-and-tooltip.** The band paints its slot before the body, so a
-// tooltip drawn from in here would need the published-anchor treatment `MyLibraryTabPills` carries
-// for exactly one of its rows; a labelled pill says the same thing and needs none of it.
+// **Every row here is labelled, and none of them carries a tooltip.** A label is legible without
+// aiming at it, and a tooltip restating one is a second copy of the same string; icon-only is what
+// My Library's detail arms take because theirs run to fifteen segments, where the widest row here
+// is four. Nothing in this file needs the published-anchor treatment `MyLibraryTabPills` carries
+// for exactly one of its rows either — that is for a tooltip opening *downward* past the band's
+// edge, and `Tooltip`'s default side is `above`.
 export component RadioTabPills inherits Rectangle {
     HorizontalLayout {
         alignment: end;
@@ -159,6 +162,52 @@ export component RadioTabPills inherits Rectangle {
                 sort-field: Radio.sort-field;
                 sort-dir: Radio.sort-dir;
                 request-sort(f) => { Radio.request-sort(f); }
+            }
+        }
+
+        // --- The station page -----------------------------------------------------------------
+        //
+        // Everything the page can *do*; everything it can *say* is a row in its body. Copy URL and
+        // Website went there with the facts they act on.
+        //
+        // **Starring and removing are the grid's, not the page's.** Every card already carries
+        // both, on the tab whose list the answer changes — un-starring from a page is a row
+        // leaving a list the page is not showing, and removing is a confirm about membership of a
+        // list you are not looking at. Keeping them here meant the same station offering the same
+        // two actions twice, and the trash needing to know which tab it was opened from to mean
+        // anything. All three of these act on the station itself.
+        //
+        // One mount for all three tabs: what is on the page is decided by the station, so
+        // Recently Played's page is Favorites' page is Browse's.
+        if Radio.detail-open: ActionPill {
+            // Gone rather than disabled for a segmented stream — `PillButton` has no disabled
+            // state, and the page says in words why there is nothing to press.
+            if !Radio.detail-station.hls: PillButton {
+                icon: "play_arrow";
+                icon-filled: true;
+                text: @tr("Play");
+                clicked => { Radio.play-station(Radio.detail-station); }
+            }
+            if !Radio.detail-station.hls && (Radio.detail-votable
+                || Radio.detail-station.editable): PillDivider { }
+
+            // **Labelled, and no tooltip with it.** Three segments fit the slot, and a label a
+            // reader can weigh at a glance beats a glyph they have to hover to identify — which
+            // is the trade the two tab rows above already make. A tooltip restating the label is
+            // a second copy of the same string.
+            if Radio.detail-votable: PillButton {
+                icon: "thumb_up";
+                icon-size: 16px;
+                text: @tr("Vote");
+                clicked => { Radio.vote(); }
+            }
+
+            if Radio.detail-votable && Radio.detail-station.editable: PillDivider { }
+
+            if Radio.detail-station.editable: PillButton {
+                icon: "edit";
+                text: @tr("Edit");
+                clicked => { Radio.edit-station(Radio.detail-station); }
             }
         }
     }

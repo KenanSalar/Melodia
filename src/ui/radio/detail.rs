@@ -23,7 +23,6 @@ use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_view::impl_detail_view_helpers;
 use crate::ui::hero_chips::{self, StationFacts};
-use crate::ui::row_match::fold_needle;
 use crate::ui::track_list_view::view_id;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{AppWindow, NavEnterFrom, Radio, RadioStationRow};
@@ -70,14 +69,30 @@ struct OpenStation {
 }
 
 /// The page's detail state, held beside the three tab caches.
+///
+/// No needle: the band's box is hidden while a station page is open, a station having no songs of
+/// its own to filter, so the page is the one surface here that is never filtered.
 #[derive(Default)]
 pub struct DetailState {
     open: Option<OpenStation>,
-    /// The box's needle over the song history. Stored **raw**, `kept::KeptState`'s shape rather
-    /// than the four track details': the box is reseated from this, and a folded `Needle` holds
-    /// its text lowercased and unaccented, which is not the spelling to put back in front of
-    /// somebody.
-    filter: String,
+}
+
+/// `Radio.detail-votes` before the directory has answered — which for a station it no longer
+/// lists is forever. `0` is a real number of votes and prints as one.
+const VOTES_UNKNOWN: i32 = -1;
+
+/// `Radio.detail-tab` with no station page open.
+pub const NO_SEAT: i32 = -1;
+
+/// Whether a station page is open **at all**, on this tab or another.
+///
+/// **Not `Radio.detail-open`**, and the pair is the easiest thing here to get backwards. That one
+/// answers "is the page the mounted body", which a tab pick makes false while the page is still
+/// very much the user's; this answers "is it still ours to come back to". Anything handing the
+/// hero back — the images, the two globals six heroes share — asks *this*, or a tab pick drops
+/// what the return trip re-mounts.
+pub fn is_seated(g: &Radio<'_>) -> bool {
+    g.get_detail_tab() != NO_SEAT
 }
 
 /// The station a page was opened for, from whichever side had it.
@@ -106,8 +121,12 @@ impl StationSource {
         }
     }
 
-    /// What the band's chip strip states. A kept station has no `state` and no vote count: those
-    /// live only in the directory's answer, and [`refresh_from_directory`] is what fills them in.
+    /// What the band's chip strip states — where the station is and what it plays, and nothing
+    /// about how it streams. The codec, bitrate and vote count are rows on the page instead, so
+    /// the band and the body never say the same thing twice.
+    ///
+    /// A kept station has no `state`: only the directory carries it, and
+    /// [`refresh_from_directory`] is what fills it in.
     fn facts(&self) -> StationFacts {
         match self {
             Self::Kept(station) => StationFacts {
@@ -115,19 +134,22 @@ impl StationSource {
                 country: station.country_name().unwrap_or_default().to_owned(),
                 state: String::new(),
                 language: station.language.clone(),
-                codec: station.codec.clone(),
-                bitrate: station.bitrate,
-                votes: None,
             },
             Self::Browsed(station, _) => StationFacts {
                 tags: rows::split_tags(&station.tags),
                 country: station.country.clone(),
                 state: station.state.clone(),
                 language: station.language.clone(),
-                codec: station.codec.clone(),
-                bitrate: station.bitrate,
-                votes: Some(station.votes),
             },
+        }
+    }
+
+    /// The directory's vote count where the page was opened from a directory answer, so the row
+    /// is right on the first frame rather than after the refresh lands.
+    fn votes(&self) -> i32 {
+        match self {
+            Self::Kept(_) => VOTES_UNKNOWN,
+            Self::Browsed(station, _) => clamp_i64_to_i32(station.votes),
         }
     }
 
@@ -176,19 +198,18 @@ where
     let stream_url = source.stream_url().to_owned();
     let artwork_path = source.artwork_path();
     let facts = source.facts();
+    let votes = source.votes();
     let pair =
         decode_detail_pair(state, radio_ui.detail_artwork.clone(), artwork_path.clone()).await;
     let votable = state.radio_enabled() && !station.uuid.is_empty();
 
-    let open = OpenStation {
-        station: station.clone(),
-        stream_url: stream_url.clone(),
-        artwork_path,
-        facts: facts.clone(),
-    };
     *radio_ui.detail.lock() = DetailState {
-        open: Some(open),
-        filter: String::new(),
+        open: Some(OpenStation {
+            station: station.clone(),
+            stream_url: stream_url.clone(),
+            artwork_path,
+            facts: facts.clone(),
+        }),
     };
 
     let history_state = state.clone();
@@ -205,22 +226,24 @@ where
         // than none.
         g.set_detail_check_known(false);
         g.set_detail_check_ok(false);
+        g.set_detail_votes(votes);
         g.set_detail_logo_size(logo_size(&pair));
         apply_history(&ui, &radio_ui);
 
         crate::ui::nav_transition::mark(&ui, enter_from);
-        // The flag, and everything above is what it gates.
-        g.set_detail_open(true);
         on_applied(&ui);
+        // **The seat, last, and after the hook** — everything above is what it gates, and the
+        // hook is what moves the tab on a history replay, so a seat written ahead of it would
+        // name the tab being left and the page would mount nowhere.
+        g.set_detail_tab(g.get_tab_idx());
 
-        // Live, and after the hook: the section shadow updates next frame, and a replay moves
-        // the nav index from inside that hook.
+        // Live, and after the hook for the same reason: the section shadow updates next frame.
         let on_screen = section_is_up(&ui);
         hero_chips::publish_station(&ui, &facts, on_screen);
         apply_detail_artwork(&ui, &g, pair, true, on_screen);
         crate::ui::nav_history::record_current(&history_state, &ui);
-        // Last: the box now describes the song history rather than the tab under it, and a
-        // re-open with the same station has no edge for the sheet's mirror to fire on.
+        // Last: the box has just gone away, so whatever the user typed on the tab underneath is
+        // no longer in front of them, and a re-open with the same station fires no mirror.
         g.invoke_detail_scope_changed();
     });
 
@@ -295,12 +318,12 @@ async fn refresh_from_directory(
                 return;
             };
             open.facts.state.clone_from(&found.state);
-            open.facts.votes = Some(found.votes);
             open.facts.clone()
         };
         let g = ui.global::<Radio>();
         g.set_detail_check_known(true);
         g.set_detail_check_ok(found.last_check_ok);
+        g.set_detail_votes(clamp_i64_to_i32(found.votes));
         hero_chips::publish_station(&ui, &facts, section_is_up(&ui));
     });
 }
@@ -329,27 +352,57 @@ pub fn open_station_ref(radio_ui: &RadioUi) -> Option<StationRef> {
     radio_ui.detail.lock().open.as_ref().map(|open| open.station.clone())
 }
 
-/// The detail's needle, for the box reseat.
-pub fn filter_text(radio_ui: &RadioUi) -> String {
-    radio_ui.detail.lock().filter.clone()
-}
-
-/// Narrow the song history. The page's fourth filter destination.
-pub fn set_filter(ui: &AppWindow, radio_ui: &RadioUi, filter: &str) {
-    {
-        let mut detail = radio_ui.detail.lock();
-        if detail.filter == filter {
-            return;
-        }
-        filter.clone_into(&mut detail.filter);
-    }
-    apply_history(ui, radio_ui);
-}
-
-/// Write the open station's song history into the global, through the box's needle.
+/// Re-read the open station from whichever cache owns it and rewrite the row the page paints.
 ///
-/// **The count is the unfiltered one**, `kept::apply`'s rule: it is what tells "this station has
-/// announced nothing" from "the box matched nothing", and those are different empty states.
+/// Called at the tail of the two single write paths, `browse::apply` and `kept::apply`, so the
+/// page and the grid behind it cannot disagree about a station they both draw.
+///
+/// **A miss is left alone**, deliberately: these run at boot and on a column change too, when the
+/// cache the page's station lives in may simply not have been filled yet. Whether the station is
+/// *gone* is [`close_if_gone`]'s question, and only one caller is in a position to ask it.
+///
+/// UI thread only.
+pub fn restamp(ui: &AppWindow, radio_ui: &RadioUi) {
+    let Some(station) = open_station_ref(radio_ui) else {
+        return;
+    };
+    let Some(source) = from_cache(radio_ui, &station) else {
+        return;
+    };
+    ui.global::<Radio>().set_detail_station(source.to_row(radio_ui));
+}
+
+/// Close a kept station's page once its row is gone.
+///
+/// **Called from the one place a miss is authoritative** — `kept::refresh`'s landing, which has
+/// just rebuilt both caches from the database. Elsewhere an absent station is an unfilled cache.
+///
+/// It is not defensive: un-starring a station with no play behind it takes `delete_if_unlisted`
+/// with it, so the row a page is about really can vanish under it. Left open, the page keeps
+/// offering Play and Remove against a dead id, each failing to a log line with nothing on screen
+/// to say so.
+///
+/// UI thread only.
+pub fn close_if_gone(ui: &AppWindow, radio_ui: &RadioUi) {
+    let Some(station) = open_station_ref(radio_ui) else {
+        return;
+    };
+    // A browsed page is backed by the directory answer, not by these caches, and outlives them.
+    if station.is_kept() && kept_from_cache(radio_ui, station.id).is_none() {
+        ui.global::<Radio>().invoke_close_detail();
+    }
+}
+
+/// The open station as whichever cache holds it describes it now.
+fn from_cache(radio_ui: &RadioUi, station: &StationRef) -> Option<StationSource> {
+    if station.is_kept() {
+        return kept_from_cache(radio_ui, station.id).map(StationSource::Kept);
+    }
+    browse::resolve(radio_ui, &station.uuid)
+        .map(|(found, logo)| StationSource::Browsed(found, logo))
+}
+
+/// Write the open station's song history into the global.
 ///
 /// UI thread only.
 pub fn apply_history(ui: &AppWindow, radio_ui: &RadioUi) {
@@ -357,25 +410,19 @@ pub fn apply_history(ui: &AppWindow, radio_ui: &RadioUi) {
     let Some(open) = detail.open.as_ref() else {
         return;
     };
+    // Empty where a different station is playing, or none has yet — the page mounts the section
+    // only when there is something in it, so this needs no empty state to distinguish.
     let history = radio_ui.history.lock();
-    let Some(titles) = history.titles_for(&open.stream_url) else {
-        // A different station is playing, or none has yet. The page is not wrong to be empty.
-        let g = ui.global::<Radio>();
-        g.set_history_count(0);
-        g.set_history_rows(ModelRc::new(VecModel::<slint::SharedString>::default()));
-        return;
-    };
-
-    let needle = fold_needle(&detail.filter);
-    let matched: Vec<slint::SharedString> = titles
-        .iter()
-        .filter(|title| needle.contains(title))
+    let titles: Vec<slint::SharedString> = history
+        .titles_for(&open.stream_url)
+        .into_iter()
+        .flatten()
         .map(|title| slint::SharedString::from(title.as_str()))
         .collect();
 
     let g = ui.global::<Radio>();
     g.set_history_count(len_as_i32(titles.len()));
-    g.set_history_rows(ModelRc::new(VecModel::from(matched)));
+    g.set_history_rows(ModelRc::new(VecModel::from(titles)));
 }
 
 /// Re-publish the hero for a detail that was left open when the section was.
@@ -399,7 +446,9 @@ pub fn rewarm_hero(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWin
         let pair = decode_detail_pair(&state, radio_ui.detail_artwork.clone(), artwork_path).await;
         let _ = weak.upgrade_in_event_loop(move |ui| {
             let g = ui.global::<Radio>();
-            if !g.get_detail_open() {
+            // The seat, not the flag: the page can be seated on a tab the user is not standing
+            // on, and its hero still has to be there when they come back to it.
+            if !is_seated(&g) {
                 return;
             }
             g.set_detail_logo_size(logo_size(&pair));

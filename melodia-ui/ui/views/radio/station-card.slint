@@ -55,7 +55,6 @@ export component StationCard inherits Rectangle {
         : root.tile-size;
 
     callback clicked();
-    callback play-clicked();
     callback favorite-clicked();
     callback homepage-clicked();
     callback edit-clicked();
@@ -65,7 +64,6 @@ export component StationCard inherits Rectangle {
     // captures the pointer, so hovering any nested button flips that false and the fill, the zoom
     // and the overlay would all drop out while the user is aiming at one.
     property <bool> card-hovered: touch.has-hover
-        || play_btn.has-hover
         || fav_btn.has-hover
         || home_btn.has-hover
         || edit_btn.has-hover
@@ -160,20 +158,13 @@ export component StationCard inherits Rectangle {
         width: root.tile-size;
         height: root.tile-size;
 
-        play_btn := IconButton {
-            visible: !root.unplayable;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            icon: "play_arrow";
-            icon-size: 26px;
-            diameter: 48px;
-            filled: true;
-            force-bg: true;
-            idle-bg: Theme.floating-chrome-bg;
-            opacity: root.card-hovered ? 1.0 : 0.0;
-            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
-            clicked => { root.play-clicked(); }
-        }
+        // **No play control, and its absence is the point.** The card body opens the station's
+        // page, and a 48 px disc in the middle of the tile is exactly where a body click lands —
+        // so the card played instead of opening for anyone who aimed at the artwork. Every other
+        // card in the tree keeps its centre clear and puts its controls in the corners
+        // (`components/grid/entity-card.slint`), and all four corners here are already spoken
+        // for. Playing is the page's Play pill, one click further in, which is also where
+        // Shortwave and RadioDroid put it.
 
         // **Stays up when the station is starred**, unlike the rest of the overlay: the star is a
         // fact about the row and not an affordance, so a grid of results has to show which of them

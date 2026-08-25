@@ -54,7 +54,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             // close spells, so a later cross-section entry finds it already right.
             crate::ui::nav_transition::mark_drill_back(&ui);
 
-            ui.global::<Radio>().set_detail_open(false);
+            // Giving up the seat is what closes it: `detail-open` is derived from this.
+            ui.global::<Radio>().set_detail_tab(detail::NO_SEAT);
             // The hero's images are deliberately left alone: the band paints them all the way
             // through the collapse, and `hero-collapsed` is what hands them back at the end.
             detail::close_detail(&ru);
@@ -79,7 +80,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         g.on_hero_collapsed(move || {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<Radio>();
-            if g.get_detail_open() {
+            // **The seat, not the flag.** A tab pick collapses the band too, and the page is
+            // still seated behind it — dropping the cover and the blur there is dropping exactly
+            // what the return trip morphs back open.
+            if detail::is_seated(&g) {
                 return;
             }
             // Not `release_detail_hero_images!`: its slot gate asks whether *My Library's* band

@@ -40,7 +40,6 @@ export component StationGrid inherits Rectangle {
     in property <bool> show-play-count: false;
 
     callback station-clicked(RadioStationRow);
-    callback play-clicked(RadioStationRow);
     callback favorite-clicked(RadioStationRow);
     callback homepage-clicked(RadioStationRow);
     callback edit-clicked(RadioStationRow);
@@ -57,6 +56,13 @@ export component StationGrid inherits Rectangle {
     list := ListView {
         vertical-scrollbar-policy: always-off;
         horizontal-scrollbar-policy: always-off;
+        // **Opted out, because a card click and a drag-pan are one gesture and the pan wins by
+        // default.** `Flickable.interactive` defaults true, and past 8 px of travel inside 500 ms
+        // the flickable intercepts the grab and every item under it is sent a cancel — so a click
+        // with any pointer drift never becomes one. That reads as "sometimes it doesn't open",
+        // and it only ever happens on a grid long enough to flick. Nothing here wants
+        // drag-to-pan; the wheel still works, `!interactive` forwarding it unchanged.
+        mouse-drag-pan-enabled: false;
 
         for grid-row in root.rows: Rectangle {
             // A `ListView` delegate needs a fixed height or the virtualization math breaks.
@@ -105,7 +111,6 @@ export component StationGrid inherits Rectangle {
                     unplayable: station.hls;
                     play-count: root.show-play-count ? station.play_count : 0;
                     clicked => { root.station-clicked(station); }
-                    play-clicked => { root.play-clicked(station); }
                     favorite-clicked => { root.favorite-clicked(station); }
                     homepage-clicked => { root.homepage-clicked(station); }
                     edit-clicked => { root.edit-clicked(station); }

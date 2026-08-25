@@ -1905,20 +1905,11 @@ msgstr "İstasyon listesi yazılamadı."
 
 # --- The station page ---
 
-msgid "Copy URL"
-msgstr "URL'yi kopyala"
-
-msgid "Edit"
-msgstr "Düzenle"
-
-msgid "Favorited"
-msgstr "Favorilerde"
-
 msgid "Vote"
 msgstr "Oy ver"
 
-msgid "Vote for this station in the directory"
-msgstr "Bu istasyona dizinde oy verin"
+msgid "Edit"
+msgstr "Düzenle"
 
 msgid "Vote not counted"
 msgstr "Oy sayılmadı"
@@ -1938,17 +1929,17 @@ msgstr "Dizin son denetiminde bu istasyona ulaştı."
 msgid "The directory could not reach this station on its last check."
 msgstr "Dizin son denetiminde bu istasyona ulaşamadı."
 
-msgid "Filter songs…"
-msgstr "Parçaları filtrele…"
+msgid "Stream"
+msgstr "Yayın"
 
-msgid "No songs yet"
-msgstr "Henüz parça yok"
+msgid "Copy stream URL"
+msgstr "Yayın URL'sini kopyala"
 
-msgid "Songs this station announces show up here while it plays."
-msgstr "Bu istasyonun duyurduğu parçalar çalarken burada görünür."
+msgid "Open in your browser"
+msgstr "Tarayıcıda aç"
 
-msgid "No songs matched"
-msgstr "Parça bulunamadı"
+msgid "Votes"
+msgstr "Oylar"
 
-msgid "Try a different word, or clear the box."
-msgstr "Başka bir sözcük deneyin veya kutuyu temizleyin."
+msgid "Recently played on this station"
+msgstr "Bu istasyonda yakın zamanda çalanlar"

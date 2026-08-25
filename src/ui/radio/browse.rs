@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
-use slint::{ComponentHandle, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 
 use crate::entities::radio::{DirectoryStation, StationPage, StationSearch};
 use crate::library;
@@ -204,6 +204,10 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
         RadioStationGridRow { stations }
     });
     write_grid(&g.get_browse_rows(), grid, "radio::browse");
+
+    // The station page draws the same station some card here does, off the same cache, so it is
+    // re-stamped from the write path rather than from each thing that could have moved a field.
+    super::detail::restamp(ui, radio_ui);
 }
 
 /// Change what Browse is asking for and fetch the first page of the answer.
@@ -322,7 +326,16 @@ fn paint(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
     });
 }
 
-/// Repaint the grid with the logos that have landed so far, and announce the tier with it.
+/// Stamp the logos that have landed so far onto the cards already on screen, and announce the
+/// tier with them.
+///
+/// **A patch rather than [`apply`], because this one runs on a timer.** A whole-grid write resets
+/// the model and rebuilds every delegate, which drops the pointer grab of anyone mid-click — and
+/// this fires every `LOGO_REPAINT_INTERVAL` for as long as a page takes to fill, i.e. over exactly
+/// the moment somebody is clicking a station they just searched for. `rows::patch_logos` writes
+/// only the cards whose path moved. The station set cannot change here, a landed logo not being a
+/// fetch, so the patch always has the right shape to write into; the `false` arm is the model not
+/// being where it was installed, and [`apply`] logs that for itself.
 ///
 /// **The announce matters as much as the paint.** At generation `0` a card asks the tier
 /// cache-only and queues no decode, which is what a released tier wants and the opposite of what a
@@ -330,11 +343,29 @@ fn paint(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
 fn paint_landed(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
     let ru = radio_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        apply(&ui, &ru);
+        let patched = {
+            let g = ui.global::<Radio>();
+            rows::patch_logos(&g.get_browse_rows(), |card| {
+                logo_by_uuid(&ru, &card.uuid).map(SharedString::from).unwrap_or_default()
+            })
+        };
+        if !patched {
+            apply(&ui, &ru);
+        }
         if ru.section_active() {
             covers::announce_warm(&ui);
         }
     });
+}
+
+/// The logo a browsed card should be drawing, by the uuid its row carries.
+///
+/// The card is the only handle a patch has — the model is chunked, so a position is true for the
+/// frame it was read on and no longer.
+pub(super) fn logo_by_uuid(radio_ui: &RadioUi, uuid: &str) -> Option<String> {
+    let browse = radio_ui.browse.lock();
+    let station = browse.stations.iter().find(|station| station.station_uuid == uuid)?;
+    logo_for(radio_ui, station)
 }
 
 /// Ask the sites of whatever the page still has no logo for.

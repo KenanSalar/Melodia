@@ -94,12 +94,6 @@ impl ChipLabels for EnglishLabels {
     fn compilation(&self) -> SharedString {
         SharedString::from("Compilation")
     }
-    fn bitrate(&self, kbps: i32) -> SharedString {
-        SharedString::from(format!("{kbps} kbps"))
-    }
-    fn votes(&self, count: i32) -> SharedString {
-        SharedString::from(format!("{count} votes"))
-    }
 }
 
 fn texts(chips: &[SharedString]) -> Vec<&str> {

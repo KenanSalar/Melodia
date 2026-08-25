@@ -1902,20 +1902,11 @@ msgstr "Δεν ήταν δυνατή η εγγραφή της λίστας στ�
 
 # --- The station page ---
 
-msgid "Copy URL"
-msgstr "Αντιγραφή URL"
-
-msgid "Edit"
-msgstr "Επεξεργασία"
-
-msgid "Favorited"
-msgstr "Στα αγαπημένα"
-
 msgid "Vote"
 msgstr "Ψήφος"
 
-msgid "Vote for this station in the directory"
-msgstr "Ψηφίστε αυτόν τον σταθμό στον κατάλογο"
+msgid "Edit"
+msgstr "Επεξεργασία"
 
 msgid "Vote not counted"
 msgstr "Η ψήφος δεν καταμετρήθηκε"
@@ -1934,17 +1925,17 @@ msgstr "Ο κατάλογος προσέγγισε αυτόν τον σταθμ�
 msgid "The directory could not reach this station on its last check."
 msgstr "Ο κατάλογος δεν μπόρεσε να προσεγγίσει αυτόν τον σταθμό στον τελευταίο έλεγχο."
 
-msgid "Filter songs…"
-msgstr "Φιλτράρισμα τραγουδιών…"
+msgid "Stream"
+msgstr "Ροή"
 
-msgid "No songs yet"
-msgstr "Κανένα τραγούδι ακόμη"
+msgid "Copy stream URL"
+msgstr "Αντιγραφή URL ροής"
 
-msgid "Songs this station announces show up here while it plays."
-msgstr "Τα τραγούδια που ανακοινώνει αυτός ο σταθμός εμφανίζονται εδώ κατά την αναπαραγωγή."
+msgid "Open in your browser"
+msgstr "Άνοιγμα στο πρόγραμμα περιήγησης"
 
-msgid "No songs matched"
-msgstr "Δεν βρέθηκαν τραγούδια"
+msgid "Votes"
+msgstr "Ψήφοι"
 
-msgid "Try a different word, or clear the box."
-msgstr "Δοκιμάστε μια άλλη λέξη ή καθαρίστε το πεδίο."
+msgid "Recently played on this station"
+msgstr "Πρόσφατα σε αυτόν τον σταθμό"

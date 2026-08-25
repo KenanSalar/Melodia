@@ -72,8 +72,6 @@ trait ChipLabels {
     fn discs(&self, count: i32) -> SharedString;
     fn plays(&self, count: i32) -> SharedString;
     fn compilation(&self) -> SharedString;
-    fn bitrate(&self, kbps: i32) -> SharedString;
-    fn votes(&self, count: i32) -> SharedString;
 }
 
 impl ChipLabels for HeroChips<'_> {
@@ -97,12 +95,6 @@ impl ChipLabels for HeroChips<'_> {
     }
     fn compilation(&self) -> SharedString {
         self.invoke_compilation()
-    }
-    fn bitrate(&self, kbps: i32) -> SharedString {
-        self.invoke_bitrate(kbps)
-    }
-    fn votes(&self, count: i32) -> SharedString {
-        self.invoke_votes(count)
     }
 }
 
@@ -313,13 +305,15 @@ fn is_open(ui: &AppWindow, owner: ChipOwner) -> bool {
         ChipOwner::Artist(id) => i64::from(ui.global::<ArtistDetail>().get_artist_id()) == id,
         ChipOwner::Genre(id) => i64::from(ui.global::<GenreDetail>().get_genre_id()) == id,
         ChipOwner::Playlist(id) => i64::from(ui.global::<PlaylistDetail>().get_playlist_id()) == id,
-        // **Nav too, where the four above need none.** Their page-level teardown clears
-        // unconditionally, so `is_open` is only ever asked while My Library is on screen;
-        // Radio's leave hands its hero back through the same macro every detail close takes,
-        // and a station page left standing on an unmounted page is not a band mid-collapse.
+        // **The seat, not `detail-open`** — the same distinction the four above draw by reading
+        // an id rather than the tab: a Radio tab pick collapses the band over a page that is
+        // still seated behind it, and that is precisely the "mid-morph, coming back" case this
+        // is asked about. Nav too, where the four need none: their page-level teardown clears
+        // unconditionally, so `is_open` is only ever asked while My Library is on screen, and
+        // Radio's leave hands its hero back through the same macro a close takes.
         ChipOwner::Station => {
             ui.global::<Nav>().get_selected_index() == NAV_RADIO
-                && ui.global::<Radio>().get_detail_open()
+                && crate::ui::radio::is_seated(&ui.global::<Radio>())
         }
         ChipOwner::Favorites | ChipOwner::RecentlyPlayed => false,
     }
@@ -389,10 +383,12 @@ pub fn publish_playlist(
 
 /// The station hero's facts, gathered rather than read off one entity: a station opened from
 /// Browse and one opened from a kept tab come from different types, and the directory refresh
-/// behind the open fills in what neither had.
+/// behind the open fills the `state` in.
 ///
-/// `votes` is `None` until the directory has answered, which for a station it no longer lists
-/// is forever. `0` is a real number of votes and would print as one.
+/// **What the station *is*, and nothing about how it works.** The codec, the bitrate, the votes
+/// and the stream URL are rows on the page below rather than chips up here, so no fact is stated
+/// twice — the band is the glance, the body is the reference. Both radio players with a station
+/// page put that second set in a list.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StationFacts {
     /// Already split and capped by the caller, which is where the tag-display policy lives —
@@ -401,14 +397,10 @@ pub struct StationFacts {
     pub country: String,
     pub state: String,
     pub language: String,
-    pub codec: String,
-    pub bitrate: i32,
-    pub votes: Option<i64>,
 }
 
 pub fn publish_station(ui: &AppWindow, facts: &StationFacts, section_active: bool) {
-    let chips = station_chips(&ui.global::<HeroChips>(), facts);
-    publish(ui, ChipOwner::Station, chips, section_active);
+    publish(ui, ChipOwner::Station, station_chips(facts), section_active);
 }
 
 /// Favorites is assembled from three fetches, so it takes the handle and gathers rather
@@ -492,24 +484,19 @@ fn album_chips(
     out
 }
 
-/// **Tags last, for `album_chips`' reason**: they say what a station plays rather than what it
-/// *is*, so on a band narrow enough to drop a row they are what should go before the country and
-/// the codec do. Every field is omitted when blank — the directory leaves most of them blank on
-/// some station or other, and a hand-typed one arrives with almost nothing.
-fn station_chips(labels: &impl ChipLabels, facts: &StationFacts) -> Vec<SharedString> {
-    let mut out = Vec::with_capacity(6 + facts.tags.len());
-    for field in [&facts.country, &facts.state, &facts.language, &facts.codec] {
+/// **Tags last, for `album_chips`' reason**: they say what a station plays rather than where it
+/// is, so on a band narrow enough to drop a row they are what should go before the country does.
+/// Every field is omitted when blank — the directory leaves most of them blank on some station or
+/// other, and a hand-typed one arrives with almost nothing.
+///
+/// Takes no labels: every chip here is a name the directory supplied, so there is nothing to
+/// translate and nothing to pluralize.
+fn station_chips(facts: &StationFacts) -> Vec<SharedString> {
+    let mut out = Vec::with_capacity(3 + facts.tags.len());
+    for field in [&facts.country, &facts.state, &facts.language] {
         if !field.is_empty() {
             out.push(SharedString::from(field.as_str()));
         }
-    }
-    // Zero on a large share of live stations, where it means "the directory doesn't know"
-    // rather than silence.
-    if facts.bitrate > 0 {
-        out.push(labels.bitrate(facts.bitrate));
-    }
-    if let Some(votes) = facts.votes {
-        out.push(labels.votes(i32::try_from(votes).unwrap_or(i32::MAX)));
     }
     out.extend(facts.tags.iter().map(|tag| SharedString::from(tag.as_str())));
     out
