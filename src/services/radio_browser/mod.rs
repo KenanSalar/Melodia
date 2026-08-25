@@ -24,7 +24,7 @@ use tokio::sync::OnceCell;
 
 use crate::entities::radio::{DirectoryStation, Facet, FacetKind, StationPage, StationSearch};
 use crate::error::AppError;
-use model::{ApiFacet, ApiServer, ApiStation};
+use model::{ApiFacet, ApiServer, ApiStation, ApiVote};
 
 pub use query::DEFAULT_PAGE_LIMIT;
 
@@ -106,6 +106,55 @@ pub async fn count_click(client: &reqwest::Client, station_uuid: &str) -> Result
         return Ok(());
     }
     Err(AppError::network_msg(format!("Radio directory click returned HTTP {status}")))
+}
+
+/// One station as the directory currently describes it.
+///
+/// `Ok(None)` for a uuid the directory does not know, which is a station that
+/// was withdrawn rather than a failure to report: the endpoint answers an empty
+/// array for it, and a row kept locally outlives its directory entry by design.
+///
+/// This is what a kept station's page is refreshed from. The table has no column
+/// for the popularity figures or the directory's own last check, so without a
+/// call here the same station would state fewer facts opened from Favorites than
+/// opened from Browse.
+pub async fn station_by_uuid(
+    client: &reqwest::Client,
+    station_uuid: &str,
+) -> Result<Option<DirectoryStation>, AppError> {
+    if !model::is_path_safe_uuid(station_uuid) {
+        return Err(AppError::Validation("Not a radio directory station id".to_owned()));
+    }
+    let url = endpoint(client, &format!("stations/byuuid/{station_uuid}")).await;
+    let stations: Vec<ApiStation> =
+        get_json(client, &url, &BTreeMap::new(), "station lookup").await?;
+
+    Ok(stations
+        .into_iter()
+        .map(ApiStation::into_directory_station)
+        .find(DirectoryStation::is_usable))
+}
+
+/// Vote for a station.
+///
+/// **Checked on the body, never on the status**, which is the opposite of
+/// [`count_click`] and the reason neither can borrow the other's guard: this
+/// endpoint reports a refusal as `200 {"ok":false}`.
+///
+/// Deduplicated server-side at one vote per station per ten minutes, so a second
+/// press inside that window is refused rather than counted — a real answer to
+/// report, not an error to swallow.
+pub async fn cast_vote(client: &reqwest::Client, station_uuid: &str) -> Result<(), AppError> {
+    if !model::is_path_safe_uuid(station_uuid) {
+        return Err(AppError::Validation("Not a radio directory station id".to_owned()));
+    }
+    let url = endpoint(client, &format!("vote/{station_uuid}")).await;
+    let vote: ApiVote = get_json(client, &url, &BTreeMap::new(), "vote").await?;
+
+    if vote.ok {
+        return Ok(());
+    }
+    Err(AppError::network_msg(format!("Radio directory refused the vote: {}", vote.message)))
 }
 
 /// One of the directory's facet lists, fetched once per session.

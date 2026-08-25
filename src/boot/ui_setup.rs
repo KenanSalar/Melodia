@@ -181,8 +181,9 @@ pub fn install_views(
     *state.ui_handles.artists.lock() = Some(artists_ui.clone());
     *state.ui_handles.genres.lock() = Some(genres_ui.clone());
     *state.ui_handles.playlists.lock() = Some(playlists_ui.clone());
+    *state.ui_handles.radio.lock() = Some(radio_ui.clone());
 
-    // The four persisted-detail reopens stay adjacent here rather than folding
+    // The five persisted-detail reopens stay adjacent here rather than folding
     // into each slice's `install`, because the history seed below depends on
     // none of them having landed yet. The tabbed pages' tab seeds *did* fold
     // in, their handle being the receiver.
@@ -190,6 +191,7 @@ pub fn install_views(
     ui::artists::seed_detail_from_settings(app, state, &artists_ui);
     ui::genres::seed_detail_from_settings(app, state, &genres_ui);
     ui::playlists::seed_detail_from_settings(app, state, &playlists_ui);
+    ui::radio::seed_detail_from_settings(app, state, &radio_ui);
 
     // Seed the nav-history with the boot view, so Mouse-4 has a target after the
     // first sidebar click — otherwise a boot landing on a section with no
@@ -673,6 +675,20 @@ pub fn install_toast_bridge(
                             message: detail.into(),
                             action_label: slint::SharedString::default(),
                             action_kind: "info".into(),
+                        },
+                        6000,
+                    );
+                }
+                // A vote the directory would not take. Auto-dismissing: nothing is broken
+                // and there is nothing for the user to do about it.
+                ToastKind::RadioVote => {
+                    notifications.show_auto_dismiss(
+                        NotificationParams {
+                            variant: "warning".into(),
+                            title: g.invoke_toast_radio_vote_title(),
+                            message: detail.into(),
+                            action_label: slint::SharedString::default(),
+                            action_kind: "warning".into(),
                         },
                         6000,
                     );

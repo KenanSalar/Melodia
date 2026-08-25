@@ -1,13 +1,15 @@
 //! Every `Radio.*` callback.
 //!
 //! Split by what each group answers to: the page itself here, the directory grid in [`browse`],
-//! the filter chips in [`facets`], the kept tabs in [`kept`], the row actions every tab shares in
-//! [`stations`], and the section's own arrivals and departures in [`lifecycle`].
+//! the station page in [`detail`], the filter chips in [`facets`], the kept tabs in [`kept`], the
+//! row actions every tab shares in [`stations`], and the section's own arrivals and departures in
+//! [`lifecycle`].
 //!
 //! [`files`] is the exception and wires from `main()`, its toasts needing a stack that does not
 //! exist at install time.
 
 mod browse;
+mod detail;
 mod facets;
 pub(super) mod files;
 mod kept;
@@ -79,6 +81,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
 
     lifecycle::wire(ui, state, radio_ui);
     browse::wire(ui, state, radio_ui);
+    detail::wire(ui, state, radio_ui);
     facets::wire(ui, state, radio_ui);
     stations::wire(ui, state, radio_ui);
     kept::wire(ui, state, radio_ui);

@@ -1902,3 +1902,53 @@ msgstr[1] "{n} istasyon dışa aktarıldı"
 
 msgid "Couldn't write the station list."
 msgstr "İstasyon listesi yazılamadı."
+
+# --- The station page ---
+
+msgid "Copy URL"
+msgstr "URL'yi kopyala"
+
+msgid "Edit"
+msgstr "Düzenle"
+
+msgid "Favorited"
+msgstr "Favorilerde"
+
+msgid "Vote"
+msgstr "Oy ver"
+
+msgid "Vote for this station in the directory"
+msgstr "Bu istasyona dizinde oy verin"
+
+msgid "Vote not counted"
+msgstr "Oy sayılmadı"
+
+# Turkish doesn't pluralize the noun after a numeral, so both forms are the same.
+msgid "{n} vote"
+msgid_plural "{n} votes"
+msgstr[0] "{n} oy"
+msgstr[1] "{n} oy"
+
+msgid "This station streams in a segmented format Melodia can't play yet."
+msgstr "Bu istasyon, Melodia'nın henüz çalamadığı bölümlenmiş bir biçimde yayın yapıyor."
+
+msgid "The directory reached this station on its last check."
+msgstr "Dizin son denetiminde bu istasyona ulaştı."
+
+msgid "The directory could not reach this station on its last check."
+msgstr "Dizin son denetiminde bu istasyona ulaşamadı."
+
+msgid "Filter songs…"
+msgstr "Parçaları filtrele…"
+
+msgid "No songs yet"
+msgstr "Henüz parça yok"
+
+msgid "Songs this station announces show up here while it plays."
+msgstr "Bu istasyonun duyurduğu parçalar çalarken burada görünür."
+
+msgid "No songs matched"
+msgstr "Parça bulunamadı"
+
+msgid "Try a different word, or clear the box."
+msgstr "Başka bir sözcük deneyin veya kutuyu temizleyin."

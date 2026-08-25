@@ -18,7 +18,7 @@ use crate::{AppWindow, Radio, RadioStationRow};
 
 /// Whether a row names a station that already has a database row.
 fn is_kept(row: &RadioStationRow) -> bool {
-    row.id != 0
+    super::super::station_has_row(i64::from(row.id))
 }
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {

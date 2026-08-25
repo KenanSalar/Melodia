@@ -181,7 +181,7 @@ fn logo_row(id: i64, uuid: &str, artwork_path: Option<&str>) -> RadioStation {
 /// Only a second play fixed it, because only a second play re-read the row.
 #[test]
 fn a_logo_found_after_the_refresh_still_reaches_browse() {
-    let radio_ui = RadioUi::new(false);
+    let radio_ui = RadioUi::new(false, None);
     radio_ui.recent.lock().stations = vec![logo_row(7, "uuid-7", None)];
     remember_logos(&radio_ui);
     assert!(radio_ui.known_logos.lock().is_empty(), "the row had no logo yet");
@@ -217,7 +217,7 @@ fn every_write_to_the_two_caches_re_derives_the_map() {
 /// which has no name for a row that was never in it.
 #[test]
 fn the_map_spans_both_tabs_and_skips_what_no_directory_page_can_name() {
-    let radio_ui = RadioUi::new(false);
+    let radio_ui = RadioUi::new(false, None);
     radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", Some("/store/1.png")), {
         let mut typed = logo_row(2, "uuid-2", Some("/store/2.png"));
         typed.station_uuid = None;
@@ -237,7 +237,7 @@ fn the_map_spans_both_tabs_and_skips_what_no_directory_page_can_name() {
 /// a card handed a dead path drew nothing at all where a monogram was the honest answer.
 #[test]
 fn a_row_whose_logo_went_missing_contributes_nothing() {
-    let radio_ui = RadioUi::new(false);
+    let radio_ui = RadioUi::new(false, None);
     radio_ui.kept.lock().stations = vec![logo_row(1, "uuid-1", Some("/store/1.png"))];
     remember_logos(&radio_ui);
     assert_eq!(radio_ui.known_logos.lock().len(), 1);

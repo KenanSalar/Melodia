@@ -116,6 +116,63 @@ export global Radio {
     callback import-stations();
     callback export-stations();
 
+    // --- The station detail -------------------------------------------------------------------
+    //
+    // A fourth body branch rather than a route: the band morphs into the station's hero and the
+    // tab bar keeps naming the tab underneath, which is My Library's shape exactly. So the back
+    // arrow means "close this detail" and there is no origin to restore — a drill never leaves
+    // nav 10.
+    //
+    // **`detail-open` is the flag, and it is written last.** Every other detail in the tree spells
+    // "closed" as `id < 0`, which this one cannot: `id == 0` is a browsed station with no database
+    // row, and that is a perfectly good thing to have open. Everything the hero paints is read
+    // through this, so it lands in the same tick as the facts it gates.
+    in-out property <bool> detail-open: false;
+    // Raised synchronously at boot when `views.json` names a station to reopen, and lowered behind
+    // the fetch. The tab bodies gate on it, or a restore paints a grid and swaps a beat later.
+    in-out property <bool> restoring: false;
+    in-out property <RadioStationRow> detail-station;
+    // The one place a stream URL crosses into the UI, and it is here rather than on
+    // `RadioStationRow` for the reason that struct's own note gives: this is a single station's,
+    // read by the copy action alone, where the row is built fifty at a time.
+    in-out property <string> detail-stream-url;
+    // The directory's own last reachability check. Two properties because "it failed" and "nobody
+    // has said" are different answers and only the first is worth printing.
+    in-out property <bool> detail-check-known: false;
+    in-out property <bool> detail-check-ok: false;
+    // A vote needs a station the directory knows and a switch that lets us talk to it.
+    in-out property <bool> detail-votable: false;
+
+    // The hero's own image slots. The blur pair is a crossfade, so neither is ever cleared while
+    // the other is showing — `write_crossfade_slot` flips `blur-use-a` and both opacities animate.
+    in-out property <image> cover;
+    // The decoded logo's own smallest side. A station logo is routinely a favicon, so the hero
+    // draws one under its tile size inset at native size over the monogram gradient rather than
+    // stretching it across a 232 px square.
+    in-out property <int> detail-logo-size: 0;
+    in-out property <image> blur-img-a;
+    in-out property <image> blur-img-b;
+    in-out property <bool> blur-use-a;
+    in-out property <bool> has-blur;
+
+    // The titles this station has announced since it started playing, newest first, already
+    // through the box's needle. `-1` until a station has been on: an empty list and "no station
+    // playing" are different empty states.
+    in-out property <[string]> history-rows;
+    in-out property <int> history-count: -1;
+
+    callback open-station(RadioStationRow);
+    callback close-detail();
+    // Fired by the band once the collapse animation is done, not when `detail-open` goes false —
+    // the hero paints all the way through that morph and dropping its images at the flag would
+    // collapse a blank square.
+    callback hero-collapsed();
+    // The box now describes one of four surfaces, and three of the four can change with nobody
+    // typing. `ui::radio::filter::sync_box` reseats it from whichever is mounted.
+    callback detail-scope-changed();
+    callback vote();
+    callback copy-stream-url();
+
     // --- Filter chips -------------------------------------------------------------------------
     //
     // The four directory facets are fetched lazily, on first open of their chip, and cached for

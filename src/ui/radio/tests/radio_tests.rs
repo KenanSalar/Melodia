@@ -14,6 +14,25 @@ const MOD: &str = include_str!("../mod.rs");
 /// silently rewrite what this asserts.
 const TABS: usize = 3;
 
+/// Join a wrapped condition back onto the `if` it belongs to, so a per-line walk sees one
+/// statement. Slint has no formatter of its own and the branch heads here are long enough to
+/// wrap; a test that only reads first lines counts a wrapped branch as absent, which is the
+/// loudest possible way to be wrong about a file that builds.
+fn fold_continuations(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    for line in source.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("&&") || trimmed.starts_with("||") {
+            out.push(' ');
+            out.push_str(trimmed);
+        } else {
+            out.push('\n');
+            out.push_str(line);
+        }
+    }
+    out
+}
+
 /// `Radio.tab-count` is the sole definition of how many sub-views exist — `seed_tab` clamps the
 /// persisted `views.json` index against it instead of carrying its own const. Nothing else in the
 /// build notices when it drifts from the tabs actually declared: a fourth tab added without
@@ -42,9 +61,13 @@ fn tab_count_matches_the_tabs_slint_declares() {
     // `tab-idx` again for the count line, the placeholder and the pill row, and none of those is
     // a sub-view. It also pins that every body is wrapped — one mounted bare would appear without
     // the sideways enter the others play.
-    let branches = VIEW
+    //
+    // **Continuations are folded in first.** Each branch head now carries the station page's
+    // terms as well as its own and wraps to a second line, so a per-line test would count zero
+    // and read as three missing bodies.
+    let branches = fold_continuations(VIEW)
         .lines()
-        .filter(|line| line.contains("if Radio.tab-idx == Radio.tab-"))
+        .filter(|line| line.contains("Radio.tab-idx == Radio.tab-"))
         .filter(|line| line.contains(": ViewTransition {"))
         .count();
     assert_eq!(

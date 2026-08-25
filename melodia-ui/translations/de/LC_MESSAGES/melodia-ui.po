@@ -1901,3 +1901,52 @@ msgstr[1] "{n} Sender exportiert"
 
 msgid "Couldn't write the station list."
 msgstr "Die Senderliste konnte nicht geschrieben werden."
+
+# --- The station page ---
+
+msgid "Copy URL"
+msgstr "URL kopieren"
+
+msgid "Edit"
+msgstr "Bearbeiten"
+
+msgid "Favorited"
+msgstr "Favorisiert"
+
+msgid "Vote"
+msgstr "Bewerten"
+
+msgid "Vote for this station in the directory"
+msgstr "Diesen Sender im Verzeichnis bewerten"
+
+msgid "Vote not counted"
+msgstr "Bewertung nicht gezählt"
+
+msgid "{n} vote"
+msgid_plural "{n} votes"
+msgstr[0] "{n} Stimme"
+msgstr[1] "{n} Stimmen"
+
+msgid "This station streams in a segmented format Melodia can't play yet."
+msgstr "Dieser Sender überträgt in einem segmentierten Format, das Melodia noch nicht abspielen kann."
+
+msgid "The directory reached this station on its last check."
+msgstr "Das Verzeichnis hat diesen Sender bei der letzten Prüfung erreicht."
+
+msgid "The directory could not reach this station on its last check."
+msgstr "Das Verzeichnis konnte diesen Sender bei der letzten Prüfung nicht erreichen."
+
+msgid "Filter songs…"
+msgstr "Titel filtern…"
+
+msgid "No songs yet"
+msgstr "Noch keine Titel"
+
+msgid "Songs this station announces show up here while it plays."
+msgstr "Titel, die dieser Sender ansagt, erscheinen hier während der Wiedergabe."
+
+msgid "No songs matched"
+msgstr "Keine Titel gefunden"
+
+msgid "Try a different word, or clear the box."
+msgstr "Versuche ein anderes Wort oder leere das Feld."

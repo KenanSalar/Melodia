@@ -297,6 +297,11 @@ fn main() -> AppResult<()> {
         .map_err(|e| AppError::Window(format!("queue subscriber: {e}")))?;
     ui::shell::bridge::spawn_position_subscriber(weak.clone(), &state.position_tx)
         .map_err(|e| AppError::Window(format!("position subscriber: {e}")))?;
+    // Reads the same view model as the first of those, for the ICY titles a station announces.
+    // Beside them rather than inside `radio::install`, so every subscription to a player channel
+    // is spawned in one place.
+    ui::radio::install_history(weak.clone(), &views.radio_ui, &state.sinks)
+        .map_err(|e| AppError::Window(format!("station history subscriber: {e}")))?;
 
     match ui::queue_sheet::install(&app, &state) {
         Ok(h) => ui::window_chrome::set_queue_sheet_open(h.is_open),

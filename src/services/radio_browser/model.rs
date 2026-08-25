@@ -104,6 +104,19 @@ impl ApiFacet {
     }
 }
 
+/// The answer to `/json/vote/{uuid}`.
+///
+/// The only response here whose success is in the body rather than in the
+/// status: an unknown station and a vote the server is rate-limiting both come
+/// back `200 {"ok":false}`. `message` carries the server's own wording, which is
+/// what a refusal has to say for itself.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct ApiVote {
+    pub ok: bool,
+    pub message: String,
+}
+
 /// The distinct hostnames in a mirror list.
 ///
 /// The list carries one entry per address family, so a single mirror appears
@@ -132,6 +145,19 @@ pub fn hosts(servers: &[ApiServer]) -> Vec<String> {
 /// path rather than name a mirror.
 fn is_bare_host(name: &str) -> bool {
     !name.is_empty() && !name.contains(['/', ':', '?', '#']) && !name.contains(char::is_whitespace)
+}
+
+/// Whether a station uuid is safe to interpolate into a request path.
+///
+/// The two uuid-keyed endpoints take theirs as a path segment rather than as a
+/// query parameter, and a uuid does not only ever come from the directory: an
+/// imported station list carries whatever `station_uuid` the file named, so a
+/// value with a `/` or a `?` in it would reach past the endpoint it was meant
+/// for. Shaped like what the directory issues rather than parsed as a UUID,
+/// since it is the *path* this has to be safe in and nothing here cares whether
+/// the version nibble is plausible.
+pub fn is_path_safe_uuid(uuid: &str) -> bool {
+    !uuid.is_empty() && uuid.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
 /// `None` for a field the directory left blank, which it does far more often

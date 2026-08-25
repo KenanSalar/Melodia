@@ -10,6 +10,10 @@ import { FacetChip } from "facet-chip.slint";
 // `LibraryTabBand` as its whole `@children`: Browse's filter chips, then Favorites' single chip of
 // add / import / export plus its sort picker. Recently Played has none, its order being the page.
 //
+// **Both rows also gate on `!detail-open`.** They describe the tab under the station page, not the
+// page, and a station's own actions are in its body rather than up here — six of them will not fit
+// as text pills, and the tooltip note below is why they cannot be icons.
+//
 // **Favorites sorts through a popup rather than the usual `SortPillRow`.** Four fields spelled out
 // beside three operations mounted two chips at once, flush against each other under the
 // `spacing: 0px` below, and left the band no room for the count line it reserves against
@@ -32,7 +36,7 @@ export component RadioTabPills inherits Rectangle {
         //
         // Nested so the chips carry their own spacing, the outer row's `0px` being what keeps
         // every other row flush with the band's edge.
-        if Radio.tab-idx == Radio.tab-browse: HorizontalLayout {
+        if !Radio.detail-open && Radio.tab-idx == Radio.tab-browse: HorizontalLayout {
             spacing: Theme.pad-sm;
 
             FacetChip {
@@ -108,7 +112,7 @@ export component RadioTabPills inherits Rectangle {
             }
         }
 
-        if Radio.tab-idx == Radio.tab-favorites: ActionPill {
+        if !Radio.detail-open && Radio.tab-idx == Radio.tab-favorites: ActionPill {
             // Fills the Dialog inline rather than hopping through Rust: a synchronous
             // `set_open(true)` mid-click-handler trips Slint's recursion guard.
             PillButton {

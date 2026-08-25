@@ -50,4 +50,16 @@ export global HeroChips {
     compilation() => {
         return @tr("Compilation");
     }
+
+    // The station hero's two. Everything else it states — tags, country, state, language, codec —
+    // is a name the directory supplied and goes through untranslated.
+    pure callback bitrate(int /*kbps*/) -> string;
+    bitrate(kbps) => {
+        return @tr("{} kbps", kbps);
+    }
+
+    pure callback votes(int /*count*/) -> string;
+    votes(count) => {
+        return @tr("{n} vote" | "{n} votes" % count);
+    }
 }

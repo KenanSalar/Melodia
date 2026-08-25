@@ -38,11 +38,13 @@ use crate::ui::chips;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi, NAV_FAVORITES};
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::my_library::{MyLibraryTab, NAV_MY_LIBRARY, tab_from_index};
+use crate::ui::radio::NAV_RADIO;
 use crate::ui::recently_played::{NAV_RECENTLY_PLAYED, RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::tracks::format_duration_ms;
 use crate::ui::util::len_as_i32;
 use crate::{
     AlbumDetail, AppWindow, ArtistDetail, GenreDetail, HeroChips, MyLibrary, Nav, PlaylistDetail,
+    Radio,
 };
 
 /// How many rows a hero band gives its chips before dropping the rest.
@@ -70,6 +72,8 @@ trait ChipLabels {
     fn discs(&self, count: i32) -> SharedString;
     fn plays(&self, count: i32) -> SharedString;
     fn compilation(&self) -> SharedString;
+    fn bitrate(&self, kbps: i32) -> SharedString;
+    fn votes(&self, count: i32) -> SharedString;
 }
 
 impl ChipLabels for HeroChips<'_> {
@@ -93,6 +97,12 @@ impl ChipLabels for HeroChips<'_> {
     }
     fn compilation(&self) -> SharedString {
         self.invoke_compilation()
+    }
+    fn bitrate(&self, kbps: i32) -> SharedString {
+        self.invoke_bitrate(kbps)
+    }
+    fn votes(&self, count: i32) -> SharedString {
+        self.invoke_votes(count)
     }
 }
 
@@ -130,6 +140,12 @@ pub enum ChipOwner {
     Playlist(i64),
     Favorites,
     RecentlyPlayed,
+    /// The station detail, and the one owner carrying no id. It cannot: a browsed station
+    /// has no database row, so every one of them would record `Station(0)` and a hand-off
+    /// between two of them would read as the same banner. Nothing is lost — Radio has one
+    /// detail and every open republishes, so the worst a collapsed owner costs is a clear
+    /// that didn't need to happen.
+    Station,
 }
 
 /// The published chips, who published them, and the width they were chunked against.
@@ -250,6 +266,11 @@ fn band_owner(ui: &AppWindow) -> Option<ChipOwner> {
     if nav == NAV_RECENTLY_PLAYED {
         return Some(ChipOwner::RecentlyPlayed);
     }
+    if nav == NAV_RADIO {
+        // Unlike the two curated pages, this band has an idle state: with no detail open
+        // the Radio band states a count and no chips at all.
+        return ui.global::<Radio>().get_detail_open().then_some(ChipOwner::Station);
+    }
     if nav != NAV_MY_LIBRARY {
         return None;
     }
@@ -292,6 +313,14 @@ fn is_open(ui: &AppWindow, owner: ChipOwner) -> bool {
         ChipOwner::Artist(id) => i64::from(ui.global::<ArtistDetail>().get_artist_id()) == id,
         ChipOwner::Genre(id) => i64::from(ui.global::<GenreDetail>().get_genre_id()) == id,
         ChipOwner::Playlist(id) => i64::from(ui.global::<PlaylistDetail>().get_playlist_id()) == id,
+        // **Nav too, where the four above need none.** Their page-level teardown clears
+        // unconditionally, so `is_open` is only ever asked while My Library is on screen;
+        // Radio's leave hands its hero back through the same macro every detail close takes,
+        // and a station page left standing on an unmounted page is not a band mid-collapse.
+        ChipOwner::Station => {
+            ui.global::<Nav>().get_selected_index() == NAV_RADIO
+                && ui.global::<Radio>().get_detail_open()
+        }
         ChipOwner::Favorites | ChipOwner::RecentlyPlayed => false,
     }
 }
@@ -356,6 +385,30 @@ pub fn publish_playlist(
 ) {
     let chips = playlist_chips(&ui.global::<HeroChips>(), playlist, fold);
     publish(ui, ChipOwner::Playlist(playlist.id), chips, section_active);
+}
+
+/// The station hero's facts, gathered rather than read off one entity: a station opened from
+/// Browse and one opened from a kept tab come from different types, and the directory refresh
+/// behind the open fills in what neither had.
+///
+/// `votes` is `None` until the directory has answered, which for a station it no longer lists
+/// is forever. `0` is a real number of votes and would print as one.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StationFacts {
+    /// Already split and capped by the caller, which is where the tag-display policy lives —
+    /// this module decides layout, not how many genres are worth naming.
+    pub tags: Vec<String>,
+    pub country: String,
+    pub state: String,
+    pub language: String,
+    pub codec: String,
+    pub bitrate: i32,
+    pub votes: Option<i64>,
+}
+
+pub fn publish_station(ui: &AppWindow, facts: &StationFacts, section_active: bool) {
+    let chips = station_chips(&ui.global::<HeroChips>(), facts);
+    publish(ui, ChipOwner::Station, chips, section_active);
 }
 
 /// Favorites is assembled from three fetches, so it takes the handle and gathers rather
@@ -436,6 +489,29 @@ fn album_chips(
     if let Some(genre) = genre {
         out.push(SharedString::from(genre));
     }
+    out
+}
+
+/// **Tags last, for `album_chips`' reason**: they say what a station plays rather than what it
+/// *is*, so on a band narrow enough to drop a row they are what should go before the country and
+/// the codec do. Every field is omitted when blank — the directory leaves most of them blank on
+/// some station or other, and a hand-typed one arrives with almost nothing.
+fn station_chips(labels: &impl ChipLabels, facts: &StationFacts) -> Vec<SharedString> {
+    let mut out = Vec::with_capacity(6 + facts.tags.len());
+    for field in [&facts.country, &facts.state, &facts.language, &facts.codec] {
+        if !field.is_empty() {
+            out.push(SharedString::from(field.as_str()));
+        }
+    }
+    // Zero on a large share of live stations, where it means "the directory doesn't know"
+    // rather than silence.
+    if facts.bitrate > 0 {
+        out.push(labels.bitrate(facts.bitrate));
+    }
+    if let Some(votes) = facts.votes {
+        out.push(labels.votes(i32::try_from(votes).unwrap_or(i32::MAX)));
+    }
+    out.extend(facts.tags.iter().map(|tag| SharedString::from(tag.as_str())));
     out
 }
 

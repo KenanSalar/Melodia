@@ -74,6 +74,21 @@ fn my_library_tag(ui: &AppWindow) -> String {
     format!("MyLibrary/{}", detail.unwrap_or_else(|| format!("{tab:?}")))
 }
 
+/// The Radio half — which tab, and the station page over it.
+///
+/// The one detail whose id can legitimately be zero, so `detail_tag`'s `id < 0` guard is the
+/// wrong question here and `detail-open` is asked instead. A browsed station reads as
+/// `Station(0 "…")`, which is exactly what it is: on screen, and nothing `views.json` can name.
+fn radio_tag(ui: &AppWindow) -> String {
+    let g = ui.global::<Radio>();
+    let tab = radio_tab(&g, g.get_tab_idx());
+    if !g.get_detail_open() {
+        return format!("Radio/{tab:?}");
+    }
+    let station = g.get_detail_station();
+    format!("Radio/{tab:?}/Station({} {:?})", station.id, station.name)
+}
+
 /// Emit the verbose log's `nav:` line. One spelling for all three callers —
 /// the history's own record, and the two curated pages' tab picks, which move
 /// no nav index and so never reach it.
@@ -106,10 +121,7 @@ pub fn format_view(ui: &AppWindow) -> String {
             let g = ui.global::<SettingsPage>();
             format!("Settings/{:?}", settings_tab(&g, g.get_tab_idx()))
         }
-        NAV_RADIO => {
-            let g = ui.global::<Radio>();
-            format!("Radio/{:?}", radio_tab(&g, g.get_tab_idx()))
-        }
+        NAV_RADIO => radio_tag(ui),
         n => format!("Nav({n})"),
     };
 

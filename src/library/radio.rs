@@ -801,6 +801,31 @@ fn hide_hls(page: &mut radio::StationPage, hide: bool) {
     }
 }
 
+/// What the directory currently says about one station, for the station page.
+///
+/// Deliberately **additive**: the caller keeps whatever the row it opened from
+/// already said and takes only the facts the table has no column for — the
+/// state, the popularity figures and the directory's own last check. Letting it
+/// overwrite the rest would undo a user's `local_*` override from a background
+/// fetch, which is the one thing the split columns exist to prevent.
+///
+/// `Ok(None)` is a uuid the directory no longer lists.
+pub async fn station_details(
+    state: &AppState,
+    station_uuid: &str,
+) -> Result<Option<radio::DirectoryStation>, AppError> {
+    radio_browser::station_by_uuid(directory_client(state)?, station_uuid).await
+}
+
+/// Vote for a station, which is how its popularity ordering stays meaningful.
+///
+/// No opt-out of its own, unlike the play click: a vote happens only because
+/// somebody pressed a button that says so, where the click rides every play and
+/// is therefore the one that needs a setting. The master switch still covers it.
+pub async fn vote(state: &AppState, station_uuid: &str) -> Result<(), AppError> {
+    radio_browser::cast_vote(directory_client(state)?, station_uuid).await
+}
+
 /// One of the directory's facet lists, for the filter chips. Large and
 /// near-static, so it is fetched once per session and shared thereafter.
 pub async fn facets(

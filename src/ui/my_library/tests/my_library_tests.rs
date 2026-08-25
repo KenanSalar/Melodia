@@ -1040,6 +1040,11 @@ fn only_a_tab_pick_records_a_history_entry() {
 /// *synchronous* body carrying neither write.
 #[test]
 fn a_history_walk_lands_the_tab_beside_the_detail_id() {
+    /// The four My Library details plus Radio's station page, which is a walkable detail on
+    /// another section entirely — the one thing `spawn_open_detail` dispatches that isn't a tab
+    /// of this page.
+    const WALKABLE_DETAILS: usize = 5;
+
     let deferred = NAV_HISTORY
         .split_once("let pending = PendingNav {")
         .and_then(|(_, rest)| rest.split_once("\n    }\n"))
@@ -1070,6 +1075,7 @@ fn a_history_walk_lands_the_tab_beside_the_detail_id() {
         "open_artist_with(",
         "open_genre_with(",
         "open_playlist_with(",
+        "open_station_with(",
     ] {
         assert!(
             NAV_HISTORY.contains(open),
@@ -1083,12 +1089,12 @@ fn a_history_walk_lands_the_tab_beside_the_detail_id() {
     // the reachable case. Both spellings are pinned by role: the bail runs before the
     // spawn and reads the caller's `state`, the failure arm after it and reads the clone.
     for (spelling, role) in [
-        ("land_pending(pending, state, &fallback);", "the four missing-handle bails"),
-        ("land_pending(pending, &s, &fallback);", "the four failed opens"),
+        ("land_pending(pending, state, &fallback);", "the missing-handle bails"),
+        ("land_pending(pending, &s, &fallback);", "the failed opens"),
     ] {
         assert_eq!(
             NAV_HISTORY.matches(spelling).count(),
-            4,
+            WALKABLE_DETAILS,
             "{role} in `spawn_open_detail` must each land the pending navigation",
         );
     }

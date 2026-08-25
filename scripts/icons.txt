@@ -20,6 +20,7 @@ chevron_right
 clear_all
 close
 colorize
+content_copy
 create_new_folder
 crop_square
 delete
@@ -84,6 +85,7 @@ star_border
 swap_horiz
 system_update
 theater_comedy
+thumb_up
 title
 tonality
 translate

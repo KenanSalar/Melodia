@@ -28,8 +28,9 @@ use crate::state::AppState;
 use crate::ui::my_library::{
     self, MyLibraryTab, NAV_MY_LIBRARY, persist_tab, tab_from_index, tab_of_section,
 };
+use crate::ui::radio::NAV_RADIO;
 use crate::ui::view_tag;
-use crate::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Queue};
+use crate::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Queue, Radio};
 
 const HISTORY_CAP: usize = 24;
 
@@ -162,10 +163,22 @@ impl Default for NavHistory {
 }
 
 /// The visible detail id for `(section, tab)`, or `None` if that view has no detail
-/// concept or its detail is closed. Only My Library has details, so everything past that
-/// check is [`my_library::detail_id_for`] — which takes the tab rather than reading the
-/// mounted one precisely so this caller can ask about a *recorded* entry's tab.
+/// concept or its detail is closed. Past the My Library check everything is
+/// [`my_library::detail_id_for`] — which takes the tab rather than reading the mounted one
+/// precisely so this caller can ask about a *recorded* entry's tab.
+///
+/// **Radio's detail is walkable only where it has a row.** A browsed station is a directory
+/// answer with a shelf life and `id == 0`, so there is nothing for a later replay to reopen
+/// it by; the walk steps over it to the tab it was opened from, which is where the station
+/// still is.
 fn current_detail_id_for(ui: &AppWindow, section: i32, tab: i32) -> Option<i64> {
+    if section == NAV_RADIO {
+        let g = ui.global::<Radio>();
+        return g
+            .get_detail_open()
+            .then(|| i64::from(g.get_detail_station().id))
+            .filter(|id| crate::ui::radio::station_has_row(*id));
+    }
     if section != NAV_MY_LIBRARY {
         return None;
     }
@@ -352,6 +365,13 @@ impl PendingNav {
 }
 
 fn invoke_close_detail(ui: &AppWindow, section: i32, tab: i32) {
+    if section == NAV_RADIO {
+        let g = ui.global::<Radio>();
+        if g.get_detail_open() {
+            g.invoke_close_detail();
+        }
+        return;
+    }
     if section != NAV_MY_LIBRARY {
         return;
     }
@@ -384,7 +404,7 @@ fn spawn_open_detail(
     direction: NavEnterFrom,
     pending: Option<PendingNav>,
 ) {
-    if section != NAV_MY_LIBRARY {
+    if section != NAV_MY_LIBRARY && section != NAV_RADIO {
         return;
     }
     // Two handles: `weak` is consumed by whichever `open_*_with` runs, `fallback` is what
@@ -397,6 +417,31 @@ fn spawn_open_detail(
         tab,
         detail_id: Some(id),
     };
+    if section == NAV_RADIO {
+        let Some(ru) = state.ui_handles.radio.lock().clone() else {
+            land_pending(pending, state, &fallback);
+            return;
+        };
+        // Only a kept station is ever recorded, so the uuid is the row's to look up and this
+        // one is left empty — `StationRef::is_kept` splits on the id.
+        let station = crate::ui::radio::StationRef {
+            id,
+            uuid: String::new(),
+        };
+        state.runtime.clone().spawn(async move {
+            if s.nav_history.lock().current() != Some(expected) {
+                return;
+            }
+            let hook = pending_hook(pending, &s);
+            if let Err(e) =
+                crate::ui::radio::open_station_with(&s, &ru, weak, station, direction, hook).await
+            {
+                log::warn!("nav_history::replay open_station({id}): {e}");
+                land_pending(pending, &s, &fallback);
+            }
+        });
+        return;
+    }
     match tab_from_index(&ui.global::<MyLibrary>(), tab) {
         MyLibraryTab::Songs => {}
         MyLibraryTab::Albums => {
@@ -515,6 +560,7 @@ pub struct UiHandles {
     pub artists: Mutex<Option<Arc<crate::ui::artists::ArtistsUi>>>,
     pub genres: Mutex<Option<Arc<crate::ui::genres::GenresUi>>>,
     pub playlists: Mutex<Option<Arc<crate::ui::playlists::PlaylistsUi>>>,
+    pub radio: Mutex<Option<Arc<crate::ui::radio::RadioUi>>>,
 }
 
 #[cfg(test)]

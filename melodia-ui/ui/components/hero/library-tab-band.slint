@@ -45,6 +45,12 @@ export component LibraryTabBand inherits Rectangle {
     in property <image> cover;
     in property <bool> circular-artwork: false;
     in property <string> fallback-icon: "music-note";
+    // The station hero's two, both empty for the four library details and both there so a station
+    // reads the same in the banner as on the card it was picked from: its initials over the
+    // name-hashed tile, and a favicon-sized logo floated at a size that stays sharp rather than
+    // stretched across the square. `ArtworkImage` prefers the text and falls back to the glyph.
+    in property <string> fallback-text;
+    in property <length> native-size: 0px;
     // Genre Detail's name-hashed gradient overrides both. The defaults take the hero's own
     // `placeholder` tier, never `Theme.accent` — the tile sits *on* the hero, and only Rust knows
     // which backdrop is under it.
@@ -332,6 +338,8 @@ export component LibraryTabBand inherits Rectangle {
                         ? Theme.hero-artwork / 2
                         : Theme.radius-lg;
                     fallback-icon: root.fallback-icon;
+                    fallback-text: root.fallback-text;
+                    native-size: root.native-size;
                     tile-bg: root.tile-bg;
                     tile-icon-color: root.tile-icon-color;
                     // **The tile fades through the component, not under an `opacity` here.** Safe

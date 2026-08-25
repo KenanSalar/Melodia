@@ -453,6 +453,10 @@ export global Settings {
     toast-love-sync-title => {
         return @tr("Loved tracks");
     }
+    pure callback toast-radio-vote-title() -> string;
+    toast-radio-vote-title => {
+        return @tr("Vote not counted");
+    }
     // The one toast kind whose body is localized too — a restart that couldn't
     // relaunch carries no path or error worth showing, only an instruction.
     pure callback toast-restart-required-title() -> string;

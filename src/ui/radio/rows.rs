@@ -25,6 +25,16 @@ const TAG_DISPLAY_LIMIT: usize = 3;
 /// reads as a set of labels and not as prose.
 const TAG_SEPARATOR: &str = " · ";
 
+/// Whether a station id names a database row.
+///
+/// **The one place `id == 0` is given its meaning**, and it is asked from four directions: which
+/// cache a page resolves from, whether a removal has anything to remove, whether `views.json` can
+/// name the open page for the next launch, and whether a history walk can reopen it. A browsed
+/// station is a directory answer with a shelf life and no row until the user keeps or plays it.
+pub fn station_has_row(id: i64) -> bool {
+    id != 0
+}
+
 /// One browsed station, with this install's answers about it folded in.
 ///
 /// `id` stays `0`: a directory station has no row until the user keeps or plays it, and that zero
@@ -92,6 +102,18 @@ pub fn to_slint_facet_row(facet: &Facet) -> RadioFacetRow {
         code: facet.code.as_deref().map(SharedString::from).unwrap_or_default(),
         station_count: i32::try_from(facet.station_count).unwrap_or(i32::MAX),
     }
+}
+
+/// The directory's tag field as the separate labels a chip strip wants, under the same cap the
+/// card's meta line takes. The hero is the one surface that can draw them as individual chips —
+/// it is mounted once, where a card is a delegate inside a virtualized list.
+pub fn split_tags(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|tag| !tag.is_empty())
+        .take(TAG_DISPLAY_LIMIT)
+        .map(str::to_owned)
+        .collect()
 }
 
 /// The directory's comma-separated tag field as one display line.

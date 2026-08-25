@@ -22,8 +22,10 @@
 mod browse;
 mod callbacks;
 mod covers;
+mod detail;
 mod facets;
 mod filter;
+mod history;
 mod identity;
 mod kept;
 mod logos;
@@ -39,6 +41,8 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::state::AppState;
+use crate::ui::artwork_cache::BlurSpec;
+use crate::ui::detail_artwork::DetailArtwork;
 use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
 use crate::{AppWindow, Nav, Radio, RadioFacetRow, RadioStationGridRow};
@@ -49,6 +53,9 @@ use tabs::section_is_up;
 
 pub use callbacks::files::wire as wire_files;
 pub use covers::tune_cache_for_display;
+pub use detail::{StationRef, open_station_with, seed_detail_from_settings};
+pub use history::install as install_history;
+pub use rows::station_has_row;
 pub use tabs::{RadioTab, seed_tab, tab_from_index};
 
 /// This page's `Nav.selected-index`, and the single definition of it.
@@ -82,6 +89,15 @@ pub fn disable(ui: &AppWindow, state: &AppState) {
     }
     state.nav_history.lock().forget_section(NAV_RADIO);
 
+    // Through the callback rather than by clearing the flag, so the persisted id, the hero's
+    // images and the artwork tier all go the one way they ever go. It is the whole page that is
+    // being taken away; leaving a station named in `views.json` would reopen it the next time
+    // the switch went back on.
+    let radio = ui.global::<Radio>();
+    if radio.get_detail_open() {
+        radio.invoke_close_detail();
+    }
+
     let nav = ui.global::<Nav>();
     // Through the boot path's own fold, so the two can't disagree about where 10 goes.
     // Settings being the only way to the switch keeps this quiet today, but the placeholder
@@ -108,7 +124,17 @@ pub fn disable(ui: &AppWindow, state: &AppState) {
 /// wiring is what keeps the handle alive.
 pub fn install(cx: ViewCtx<'_>) -> Arc<RadioUi> {
     install_models(cx.app);
-    let radio_ui = Arc::new(RadioUi::new(section_is_up(cx.app)));
+    let radio_ui =
+        Arc::new(RadioUi::new(section_is_up(cx.app), crate::ui::detail_artwork::blur_spec(cx.app)));
+    // **A boot landing on another section owes the flag its own leave never set.**
+    // `SectionState` starts clean so the boot pre-fetch wins the first enter, but a station page
+    // restored from `views.json` while Radio is off screen publishes into neither shared global —
+    // and with nothing marked, the first enter would consume no flag and never republish, leaving
+    // the band on a hero with no chips and no backdrop. The four detail sections seed it the same
+    // way.
+    if !radio_ui.section_active() {
+        radio_ui.mark_dirty();
+    }
     // A scheduled logo decode landing has nothing the card binding read to change, so the tier
     // signals and the generation is what re-runs it. Never off `0`: a batch landing after a
     // leave cleared the tier would otherwise read as warm.
@@ -143,8 +169,12 @@ pub struct RadioUi {
     /// fires on transitions only and whose `ChangeTracker` baselines silently inside
     /// `AppWindow::new()` — a section seeded wrong has no edge left to correct it.
     ///
-    /// No dirty flag rides with it. What a leave hands back here is the logo tier and nothing
-    /// else, and the enter re-warms unconditionally, so there is no state for a flag to describe.
+    /// The dirty flag rides with it, and describes the **hero and nothing else**. What a leave
+    /// hands back here is the logo tier and, where a station page is open, the hero's decoded
+    /// images and the colours it published into the two globals six heroes share — the three
+    /// grids and the directory page survive, which is this page's whole departure from the
+    /// tabbed-page contract. The enter re-warms the tier unconditionally and rebuilds the hero
+    /// only when the flag says it was given up.
     section: SectionState,
     /// The directory page on screen, and the query it answers.
     browse: Mutex<BrowseState>,
@@ -179,12 +209,21 @@ pub struct RadioUi {
     /// narrows it and Slint cannot filter an array, so every keystroke rebuilds the model from
     /// here rather than re-asking the facade across the runtime.
     facet_list: Mutex<Option<Arc<[crate::entities::radio::Facet]>>>,
+    /// The station page on screen, or nothing with the band idle.
+    detail: Mutex<detail::DetailState>,
+    /// The titles the station currently playing has announced. Not the detail's, and deliberately
+    /// outside it: the ring fills whether or not anybody has the page open, which is the only way
+    /// it can be there to read when they do.
+    history: Mutex<history::StationHistory>,
     /// The grid tier the cards decode into. Released by the section leave.
     covers: Arc<CoverThumbs>,
+    /// The hero's own tier, at detail size and with its blur half. Separate from [`Self::covers`]
+    /// for `AlbumsUi`'s reason: one is a page of small cards, the other a single large tile.
+    detail_artwork: Arc<DetailArtwork>,
 }
 
 impl RadioUi {
-    fn new(section_active: bool) -> Self {
+    fn new(section_active: bool, hero_blur: Option<BlurSpec>) -> Self {
         let section = SectionState::new();
         section.set_active(section_active);
         Self {
@@ -197,8 +236,22 @@ impl RadioUi {
             recent: Mutex::new(kept::KeptState::default()),
             logos: LogoMemo::new(),
             facet_list: Mutex::new(None),
+            detail: Mutex::new(detail::DetailState::default()),
+            history: Mutex::new(history::StationHistory::default()),
             covers: Arc::new(covers::new_tier()),
+            detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
         }
+    }
+
+    /// Mark the hero stale. Written synchronously on the UI thread at section leave, before the
+    /// release task is spawned.
+    fn mark_dirty(&self) {
+        self.section.mark_dirty();
+    }
+
+    /// Give the hero's decode tier back. The Slint image slots are the leave's own.
+    fn release_detail_artwork(&self) {
+        self.detail_artwork.clear();
     }
 
     /// Whether the page is the section on screen.
