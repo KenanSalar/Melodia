@@ -14,6 +14,10 @@
 //! into it. Here rather than beside one component because the defect is one copy-pasted
 //! block in three files with no Rust owner between them.
 //!
+//! `SearchBar` is also the one input with two shapes, and the pins for that sit here because it
+//! is where the rest of its source contract already lives: floating chrome by default, recessed
+//! into a surface under `inset`. Three bindings answer that one question and only together.
+//!
 //! **The last two pins are corpus walks rather than checks on a named file**: one asks
 //! every page and shell container whether it hand-rolled a tooltip frame, the other asks
 //! every shared band whether it drew a pill where it should have published an anchor.
@@ -24,8 +28,8 @@
 // `contains` would match — so each pin reads the source stripped of comments, with
 // indentation collapsed.
 use crate::test_support::{
-    MIN_SLINT_SOURCES, UI_DIR, normalize_ws as normalized, strip_line_comments as code,
-    stripped_sources,
+    MIN_SLINT_SOURCES, UI_DIR, binding_value, normalize_ws as normalized,
+    strip_line_comments as code, stripped_sources,
 };
 
 /// The two trees, relative to [`UI_DIR`], where a hand-rolled tooltip frame is the defect
@@ -54,6 +58,8 @@ const FRAME_DIRS: [&str; 2] = ["views/", "layout/"];
 const BAND_DIR: &str = "components/hero/";
 
 const SEARCH_BAR: &str = include_str!("../../../melodia-ui/ui/components/search-bar.slint");
+/// The chrome every `PopupWindow` body wraps, and so the corner an `inset` bar sits inside.
+const POPUP_SURFACE: &str = include_str!("../../../melodia-ui/ui/components/popup-surface.slint");
 const LABELED_INPUT: &str = include_str!("../../../melodia-ui/ui/components/labeled-input.slint");
 const RULE_VALUE_INPUT: &str =
     include_str!("../../../melodia-ui/ui/components/dialog/smart-playlist-editor-body.slint");
@@ -199,6 +205,56 @@ fn the_search_bar_measures_its_own_placeholder() {
     assert!(
         src.contains("input-width: clamp(root.natural-width,"),
         "search-bar.slint's default width no longer follows its placeholder"
+    );
+}
+
+/// Both corners read off their own file rather than restated here, so a retune of the popup
+/// chrome carries the bar inside it. Spelled independently they agree on the day they are
+/// written and part on the first one that moves — a filter box with a corner nothing around it
+/// has, which is exactly the mismatch `inset` was added to close.
+#[test]
+fn an_inset_bar_takes_the_popup_surfaces_own_corner() {
+    // Two ternaries read from opposite ends: the surface's non-pill corner is its last arm, the
+    // bar's inset corner its first.
+    let surface_src = normalized(&code(POPUP_SURFACE));
+    let bar_src = normalized(&code(SEARCH_BAR));
+    let surface_corner = binding_value(&surface_src, "border-radius:")
+        .rsplit_once(':')
+        .map_or("", |(_, arm)| arm.trim());
+    let bar_corner = binding_value(&bar_src, "border-radius: root.inset ?")
+        .split_once(':')
+        .map_or("", |(arm, _)| arm.trim());
+
+    assert!(
+        surface_corner.starts_with("Theme."),
+        "popup-surface.slint no longer ends its radius ternary on a theme token"
+    );
+    assert_eq!(
+        bar_corner, surface_corner,
+        "an inset SearchBar draws a corner the surface it is recessed into doesn't"
+    );
+}
+
+/// A shadow and a focus swell both say "above the content", and inside a popup there is nothing
+/// to be above — so the two are one decision and a bar keeping either reads as a pill dropped on
+/// a panel. The lift goes through the shadow's **colour** because the renderer bails on a
+/// transparent one, where a zeroed blur still paints an occluded rect under a fill that is
+/// translucent at rest.
+#[test]
+fn an_inset_bar_neither_lifts_nor_swells() {
+    let src = normalized(SEARCH_BAR);
+    assert!(
+        src.contains("in property <bool> inset: false;"),
+        "search-bar.slint's variant no longer defaults to the floating shape, which is what the \
+         three mounts that never name it are asking for"
+    );
+    assert!(
+        src.contains("focus-scale: input.has-focus && !root.inset ? 1.015 : 1.0;"),
+        "an inset SearchBar swells on focus, shoving whatever the surface seats beside it"
+    );
+    assert!(
+        src.contains("drop-shadow-color: root.inset ? transparent :"),
+        "an inset SearchBar casts onto the surface it is recessed into"
     );
 }
 

@@ -22,7 +22,9 @@ component FacetOption inherits Rectangle {
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
-        padding-right: Theme.pad-sm;
+        // The row's own inset plus the scrollbar's lane: flush against the bar, the count's last
+        // pixels sit under a `TouchArea` that eats the click landing on them.
+        padding-right: Theme.pad-sm + Theme.scrollbar-slot;
         spacing: Theme.pad-sm;
 
         VerticalLayout {
@@ -35,7 +37,10 @@ component FacetOption inherits Rectangle {
                 overflow: elide;
             }
         }
-        VerticalLayout {
+        // The bitrate floors are ours rather than the directory's, so they arrive with no count at
+        // all. Suppressed here rather than at that mount, and an `if` rather than `visible` — a
+        // hidden child still claims the row's spacing.
+        if root.count > 0: VerticalLayout {
             alignment: center;
             horizontal-stretch: 0;
             Text {
@@ -79,6 +84,9 @@ export component FacetChip inherits Rectangle {
     callback cleared(int /*kind*/);
 
     property <bool> is-set: root.value != "";
+    // Spelled once because the filter box's slot is this number less the surface's padding, and a
+    // hand-derived second copy is what left the box floating in a gutter.
+    property <length> popup-w: 320px;
 
     height: 32px;
     // **Never a bound `width`** — a root's is reported as both `min` and `max`, so five chips of
@@ -146,7 +154,7 @@ export component FacetChip inherits Rectangle {
         // left, and `ColumnTogglePopup` answers the same clamp the same way.
         x: root.width - self.width;
         y: chip.height + 4px;
-        width: 320px;
+        width: root.popup-w;
         height: 380px;
         // The rows need their own handlers to run before it closes, so they close it themselves.
         close-policy: close-on-click-outside;
@@ -164,7 +172,8 @@ export component FacetChip inherits Rectangle {
                 spacing: Theme.pad-xs;
 
                 if root.searchable: SearchBar {
-                    input-width: 320px - 4 * Theme.pad-xs - 44px;
+                    inset: true;
+                    input-width: root.popup-w - 2 * Theme.pad-xs;
                     placeholder: @tr("Filter…");
                     text <=> root.needle;
                     edited(t) => { root.needle-edited(t); }
@@ -212,7 +221,7 @@ export component FacetChip inherits Rectangle {
                     OverlayScrollbar {
                         horizontal: false;
                         x: parent.width - self.width;
-                        width: 10px;
+                        width: Theme.scrollbar-slot;
                         height: 100%;
                         visible-size: list.visible-height;
                         content-size: list.viewport-height;

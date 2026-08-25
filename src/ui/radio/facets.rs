@@ -198,8 +198,8 @@ fn apply_pick(chip: ChipFilter, name: &str, code: &str, search: &mut StationSear
     }
 }
 
-/// The bitrate chip's own options carry the floor in `code`; anything unparseable is no floor,
-/// which is also what the "Any bitrate" entry sends.
+/// The bitrate chip's own options carry the floor in `code`; anything unparseable is no floor.
+/// The chip offers no "any" row — clearing it goes through the pill's own `close`.
 fn bitrate_floor(code: &str) -> u32 {
     code.parse().unwrap_or(0)
 }
