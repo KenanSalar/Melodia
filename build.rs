@@ -22,6 +22,25 @@ mod blocklist {
     include!("src/services/radio_blocklist/source.rs");
 }
 
+/// Leave the pre-hashed form beside the list, for `gh secret set` to read.
+///
+/// Written here rather than by a separate tool because the hashing already happened:
+/// a second binary or example target to redo it would cost a `Cargo.toml` entry
+/// naming the feature, which is the visible surface this whole path avoids.
+///
+/// **Not an error if it fails.** It is a convenience copy of numbers that ship in
+/// the binary regardless, so a read-only checkout should still build.
+fn refresh_hashed_copy(terms: &blocklist::Terms) {
+    let rendered = blocklist::render_hashed(terms);
+    // An identical rewrite would touch the mtime on every build for nothing.
+    if std::fs::read_to_string(BLOCKLIST_HASHED_FILE).is_ok_and(|current| current == rendered) {
+        return;
+    }
+    if let Err(e) = std::fs::write(BLOCKLIST_HASHED_FILE, rendered) {
+        println!("cargo::warning=radio blocklist: could not refresh {BLOCKLIST_HASHED_FILE}: {e}");
+    }
+}
+
 /// One fingerprint as a Rust literal, digits grouped so the generated file clears
 /// `clippy::unreadable_literal`.
 fn separated(value: u64) -> String {
@@ -46,6 +65,10 @@ const BLOCKLIST_FILE: &str = ".env.radio.local";
 /// over a secret it has no file for.
 const BLOCKLIST_ENV: &str = "MELODIA_RADIO_BLOCKLIST";
 
+/// Where the pre-hashed form is left after a local build, for the CI secret to be
+/// set from. Covered by the same `.env.*.local` ignore rule as the source.
+const BLOCKLIST_HASHED_FILE: &str = ".env.radio.hashed.local";
+
 /// Bake the radio blocklist's fingerprints into `$OUT_DIR` for
 /// `services::radio_blocklist` to `include!`.
 ///
@@ -67,19 +90,26 @@ fn write_blocklist() {
     // Without this the hashes would survive a change to how they are computed.
     println!("cargo:rerun-if-changed=src/services/radio_blocklist/source.rs");
 
-    let source = std::env::var(BLOCKLIST_ENV)
-        .ok()
-        .filter(|contents| !contents.trim().is_empty())
-        .or_else(|| std::fs::read_to_string(BLOCKLIST_FILE).ok())
-        .unwrap_or_default();
+    let from_environment =
+        std::env::var(BLOCKLIST_ENV).ok().filter(|contents| !contents.trim().is_empty());
+    let from_file = std::fs::read_to_string(BLOCKLIST_FILE).ok();
+    // Only a build that read the *list* has a fresh hashing to leave behind. A CI
+    // build is already handed the result, and writing into a runner's workspace would
+    // put it where a caching or artifact step could pick it up.
+    let refresh_hashed = from_environment.is_none() && from_file.is_some();
+    let source = from_environment.or(from_file).unwrap_or_default();
 
-    let terms = match blocklist::parse_source(&source) {
+    let terms = match blocklist::parse_any(&source) {
         Ok(terms) => terms,
         Err(reason) => {
             println!("cargo::error=radio blocklist: {reason}");
             std::process::exit(1);
         }
     };
+
+    if refresh_hashed {
+        refresh_hashed_copy(&terms);
+    }
 
     let key = terms.key.map(|byte| byte.to_string()).join(",");
     let term_count = terms.fingerprints.len();

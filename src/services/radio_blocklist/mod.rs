@@ -222,3 +222,7 @@ impl Blocklist {
         self.terms.binary_search(&source::fingerprint(&self.key, kind, value)).is_ok()
     }
 }
+
+#[cfg(test)]
+#[path = "tests/mod_tests.rs"]
+mod tests;

@@ -220,6 +220,129 @@ pub fn parse_source(text: &str) -> Result<Terms, String> {
     })
 }
 
+/// First line of a pre-hashed source, and the whole of how the two shapes are told
+/// apart. Versioned because the fields below are a format, not an internal detail:
+/// something outside this repo holds one.
+pub const HASHED_MARKER: &str = "melodia-blocklist-hashed-v1";
+
+/// Parse either shape, dispatching on [`HASHED_MARKER`].
+///
+/// # Errors
+///
+/// Whatever the chosen parser reports, under [`parse_source`]'s rule about never
+/// quoting the line.
+pub fn parse_any(text: &str) -> Result<Terms, String> {
+    if entries(text).next().is_some_and(|(_, line)| line == HASHED_MARKER) {
+        return parse_hashed(text);
+    }
+    parse_source(text)
+}
+
+/// Render terms back out as a pre-hashed source.
+///
+/// **This is what CI is handed instead of the list.** It carries exactly what the
+/// binary would carry anyway, so a runner holding it — or an action that reads its
+/// environment — learns nothing a released artifact does not already contain. The
+/// plaintext then never leaves the machine that wrote it.
+pub fn render_hashed(terms: &Terms) -> String {
+    let key = hex(&terms.key);
+    let numbers = |values: &[u64]| values.iter().map(u64::to_string).collect::<Vec<_>>().join(",");
+    let fingerprints = numbers(&terms.fingerprints);
+    let patterns = numbers(&terms.patterns);
+    let lengths = terms.pattern_lengths.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
+
+    format!(
+        "{HASHED_MARKER}\n\
+         key = {key}\n\
+         terms = {fingerprints}\n\
+         patterns = {patterns}\n\
+         lengths = {lengths}\n"
+    )
+}
+
+/// Read back what [`render_hashed`] wrote.
+///
+/// `field = value` rather than the plaintext side's `kind: value`, so a file fed to
+/// the wrong parser fails on the first line rather than being read as a list of
+/// terms named `key`, `terms` and `patterns`.
+///
+/// # Errors
+///
+/// A missing field, an unknown one, a key that is not 32 bytes of hex, or a list
+/// carrying something that is not a number.
+pub fn parse_hashed(text: &str) -> Result<Terms, String> {
+    let (mut key, mut fingerprints, mut patterns, mut pattern_lengths) = (None, None, None, None);
+
+    for (number, line) in entries(text) {
+        if line == HASHED_MARKER {
+            continue;
+        }
+        let Some((field, value)) = line.split_once('=') else {
+            return Err(format!("line {number}: expected `field = value`"));
+        };
+        let value = value.trim();
+        match field.trim() {
+            "key" => key = Some(hex_key(value, number)?),
+            "terms" => fingerprints = Some(numbers(value, number)?),
+            "patterns" => patterns = Some(numbers(value, number)?),
+            "lengths" => pattern_lengths = Some(numbers::<u32>(value, number)?),
+            _ => return Err(format!("line {number}: unknown field")),
+        }
+    }
+
+    let missing = || "pre-hashed source is missing a field".to_owned();
+    let mut terms = Terms {
+        key: key.ok_or_else(missing)?,
+        fingerprints: fingerprints.ok_or_else(missing)?,
+        patterns: patterns.ok_or_else(missing)?,
+        pattern_lengths: pattern_lengths.ok_or_else(missing)?,
+    };
+
+    // Sorted here rather than trusted: a lookup binary-searches, so an out-of-order
+    // list read back would miss silently instead of failing.
+    terms.fingerprints.sort_unstable();
+    terms.patterns.sort_unstable();
+    terms.pattern_lengths.sort_unstable();
+    Ok(terms)
+}
+
+fn numbers<T: std::str::FromStr>(value: &str, number: usize) -> Result<Vec<T>, String> {
+    if value.is_empty() {
+        return Ok(Vec::new());
+    }
+    value
+        .split(',')
+        .map(|item| item.trim().parse::<T>().map_err(|_| format!("line {number}: not a number")))
+        .collect()
+}
+
+/// [`hex_key`]'s inverse, written by hand because both idiomatic spellings are
+/// denied here: `format!` in a `collect` is `format_collect`, and pushing one onto a
+/// `String` is `format_push_string`.
+fn hex(key: &[u8; 32]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+
+    let mut encoded = String::with_capacity(key.len() * 2);
+    for byte in key {
+        encoded.push(char::from(DIGITS[usize::from(byte >> 4)]));
+        encoded.push(char::from(DIGITS[usize::from(byte & 0x0f)]));
+    }
+    encoded
+}
+
+fn hex_key(value: &str, number: usize) -> Result<[u8; 32], String> {
+    let invalid = || format!("line {number}: key wants 64 hex characters");
+    if value.len() != 64 {
+        return Err(invalid());
+    }
+    let mut key = [0u8; 32];
+    for (index, byte) in key.iter_mut().enumerate() {
+        let pair = value.get(index * 2..index * 2 + 2).ok_or_else(invalid)?;
+        *byte = u8::from_str_radix(pair, 16).map_err(|_| invalid())?;
+    }
+    Ok(key)
+}
+
 /// Shortest a `-contains` pattern may be.
 ///
 /// A one- or two-character substring appears in nearly every tag, so a typo there
