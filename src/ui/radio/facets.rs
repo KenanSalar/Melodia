@@ -240,13 +240,30 @@ pub fn filter(ui: &AppWindow, radio_ui: &Arc<RadioUi>, needle: &str) {
     write_filtered(&ui.global::<Radio>(), &facets, needle);
 }
 
+/// How many options the picker draws when the user has typed nothing.
+///
+/// A ceiling on the *drawing*, never on what is reachable: the lists arrive ordered
+/// by station count, so an untouched picker shows the popular head, and the needle
+/// below searches every entry the fetch brought back. Nobody scrolls to the end of
+/// the tag list, and building a row per entry to let them try costs a model rebuild
+/// on every open and every clear.
+///
+/// Only the tag list is long enough to reach this; the curated three sit well under
+/// it and are drawn whole.
+pub(super) const UNFILTERED_ROW_CAP: usize = 500;
+
 fn write_filtered(g: &Radio<'_>, facets: &[Facet], needle: &str) {
     let folded = row_match::fold_needle(needle);
-    let facet_rows: Vec<_> = facets
-        .iter()
-        .filter(|facet| folded.is_empty() || folded.contains(&facet.name))
-        .map(rows::to_slint_facet_row)
-        .collect();
+    let matches = facets.iter().filter(|facet| folded.contains(&facet.name));
+
+    // `Needle::contains` answers true for an empty needle, so the filter above is
+    // already the identity there and the cap is the whole difference. Gated on the
+    // *folded* needle, since a box holding only spaces narrows nothing either.
+    let facet_rows: Vec<_> = if folded.is_empty() {
+        matches.take(UNFILTERED_ROW_CAP).map(rows::to_slint_facet_row).collect()
+    } else {
+        matches.map(rows::to_slint_facet_row).collect()
+    };
     write_grid(&g.get_facet_options(), facet_rows, "radio::facets");
 }
 

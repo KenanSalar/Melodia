@@ -201,14 +201,16 @@ fn every_facet_list_sends_a_limit() {
     }
 }
 
-/// Tags are free-form and run to five figures with a tail of one-station typos,
-/// so only the popular head is worth fetching. The curated lists fit whole.
+/// Tags are the one facet nobody curates: free-form, user-entered and an order of
+/// magnitude longer than the approved lists. So its ceiling is the loose one, and
+/// a limit that fell to theirs would silently stop fetching the tail — where the
+/// specific genres are, the head being all general.
 #[test]
-fn the_tag_list_is_capped_tighter_than_the_curated_ones() {
-    const { assert!(TAG_FACET_LIMIT < FACET_LIMIT) };
+fn the_tag_list_is_capped_looser_than_the_curated_ones() {
+    const { assert!(TAG_FACET_LIMIT > FACET_LIMIT) };
 
-    let head = TAG_FACET_LIMIT.to_string();
-    assert_eq!(get(&facet_params(FacetKind::Tags), "limit"), Some(head.as_str()));
+    let whole_tail = TAG_FACET_LIMIT.to_string();
+    assert_eq!(get(&facet_params(FacetKind::Tags), "limit"), Some(whole_tail.as_str()));
 
     let whole = FACET_LIMIT.to_string();
     for kind in [

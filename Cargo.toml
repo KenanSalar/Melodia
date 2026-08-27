@@ -408,6 +408,13 @@ dunce = "1.0.5"
 # loop Slint owns. See `src/services/tray/`.
 tray-icon = { version = "0.24.2", default-features = false }
 
+# The build script hashes with the same primitive the crate looks up with, by
+# compiling the one shared file twice — see `src/services/radio_blocklist/source.rs`.
+# Pinned to the version the runtime dependency already carries, since two of them
+# would be two different hashes.
+[build-dependencies]
+blake3 = "1.8.5"
+
 # Embeds an `ICON` resource into Melodia.exe, so the taskbar, Alt-Tab thumbnail
 # and Explorer entry aren't the generic placeholder. A maintained fork of
 # `winres` (which broke on rustc ≥ 1.61); works from MSVC and GNU alike.

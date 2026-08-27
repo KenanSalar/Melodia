@@ -163,6 +163,9 @@ jobs:
       # ListenBrainz-only rather than failing.
       LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
       LASTFM_SHARED_SECRET: ${{ secrets.LASTFM_SHARED_SECRET }}
+      # Read by `build.rs`, on the same terms: an absent secret substitutes an empty
+      # string, which counts as no source at all rather than failing the build.
+      MELODIA_RADIO_BLOCKLIST: ${{ secrets.RADIO_BLOCKLIST }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

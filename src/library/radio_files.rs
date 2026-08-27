@@ -184,6 +184,13 @@ async fn read_station_list(db: &DbPool, src: &Path) -> Result<ImportStationsResu
 /// which is the state [`super::radio::heal_station_logo`] needs to reach one.
 async fn import_one(db: &DbPool, entry: &StationEntry) -> Result<bool, AppError> {
     let station = entry.to_new_station();
+    // A file is the one door into the table that never passed the directory, so
+    // without this a blocked station is one export away from a row. Counted as
+    // skipped rather than reported: the caller has no vocabulary for the difference
+    // and giving it one would describe the blocklist to whoever read the toast.
+    if crate::services::radio_blocklist::blocks(&station) {
+        return Ok(false);
+    }
     let Some(existing) = find_existing(db, &station).await? else {
         let saved = queries::radio::save_station(db, &station).await?;
         queries::radio::set_favorite(db, saved.id, true).await?;

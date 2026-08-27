@@ -24,6 +24,7 @@ use tokio::sync::OnceCell;
 
 use crate::entities::radio::{DirectoryStation, Facet, FacetKind, StationPage, StationSearch};
 use crate::error::AppError;
+use crate::services::radio_blocklist;
 use model::{ApiFacet, ApiServer, ApiStation, ApiVote};
 
 pub use query::DEFAULT_PAGE_LIMIT;
@@ -61,13 +62,16 @@ pub async fn search(
     Ok(page_from(stations, search.limit))
 }
 
-/// Project one response onto a page, dropping the rows nothing can use.
+/// Project one response onto a page, dropping the rows nothing can use and the rows
+/// this build refuses to show.
 ///
 /// Rows failing [`DirectoryStation::is_usable`] are dropped here rather than at
 /// the surface, so a page can come back shorter than the limit it asked for. Hence
 /// [`StationPage::has_more`] off the **raw** response length: read off what
 /// survived the drop, a full page holding one uuid-less station would report the
-/// end of the directory and paging would stop there.
+/// end of the directory and paging would stop there. `radio_blocklist` thins the
+/// same page for the same reason and needs the same care — a blocked country can
+/// empty a page the directory did serve, and paging has to step over it.
 fn page_from(stations: Vec<ApiStation>, limit: u32) -> StationPage {
     let full_page = usize::try_from(query::page_limit(limit)).unwrap_or(usize::MAX);
     let has_more = stations.len() >= full_page;
@@ -76,6 +80,7 @@ fn page_from(stations: Vec<ApiStation>, limit: u32) -> StationPage {
             .into_iter()
             .map(ApiStation::into_directory_station)
             .filter(DirectoryStation::is_usable)
+            .filter(|station| !radio_blocklist::blocks(station))
             .collect(),
         has_more,
     }
@@ -113,6 +118,8 @@ pub async fn count_click(client: &reqwest::Client, station_uuid: &str) -> Result
 /// `Ok(None)` for a uuid the directory does not know, which is a station that
 /// was withdrawn rather than a failure to report: the endpoint answers an empty
 /// array for it, and a row kept locally outlives its directory entry by design.
+/// A blocked station answers the same way on purpose — every caller already
+/// handles a page that no longer exists, and none has to learn a second shape.
 ///
 /// This is what a kept station's page is refreshed from. The table has no column
 /// for the popularity figures or the directory's own last check, so without a
@@ -132,7 +139,7 @@ pub async fn station_by_uuid(
     Ok(stations
         .into_iter()
         .map(ApiStation::into_directory_station)
-        .find(DirectoryStation::is_usable))
+        .find(|station| station.is_usable() && !radio_blocklist::blocks(station)))
 }
 
 /// Vote for a station.
@@ -184,7 +191,24 @@ async fn fetch_facets(client: &reqwest::Client, kind: FacetKind) -> Result<Arc<[
     let path = query::facet_path(kind);
     let url = endpoint(client, path).await;
     let facets: Vec<ApiFacet> = get_json(client, &url, &query::facet_params(kind), path).await?;
-    Ok(facets.into_iter().map(ApiFacet::into_facet).collect())
+
+    // A ceiling is not optional — omitting the parameter takes the directory's own
+    // default slice rather than everything — so the only question is whether hitting
+    // one is silent. Read off the **raw** length, before the blocklist thins it, for
+    // `page_from`'s reason. A cut list is a degradation nothing else can report: the
+    // missing tags are simply not offered, and no surface looks wrong.
+    if facets.len() >= query::facet_limit(kind) as usize {
+        log::warn!("radio: the {path} list came back at its ceiling and is likely cut short");
+    }
+
+    // Filtered before the list is frozen into its cell, so the cost lands once a
+    // session rather than on every chip open, and every consumer of the cached list
+    // — the pickers, their needle filter and the scope pills — is covered by it.
+    Ok(facets
+        .into_iter()
+        .map(ApiFacet::into_facet)
+        .filter(|facet| !radio_blocklist::facet_is_blocked(kind, facet))
+        .collect())
 }
 
 /// A full URL for one directory path, against this session's mirror.

@@ -17,13 +17,30 @@ use crate::entities::radio::{FacetKind, SearchOrder, StationSearch};
 /// entire directory, tens of thousands of rows.
 pub const DEFAULT_PAGE_LIMIT: u32 = 50;
 
-/// How much of the tag list is worth having.
+/// Ceiling on the tag list, which is the one facet the directory does not curate.
 ///
-/// Tags are free-form and user-entered, so the list runs to five figures with a
-/// long tail of one-station spellings and typos. This takes the popular head.
-pub const TAG_FACET_LIMIT: u32 = 500;
+/// Tags are free-form and user-entered, so this list is an order of magnitude
+/// past the others and grows without anyone approving an entry. Its own knob for
+/// that reason, and a ceiling rather than no limit at all because the size of the
+/// response is a third party's to decide.
+///
+/// **High enough to take the whole list, not just its head.** A tag the picker
+/// never fetched is one nothing can filter by and no scope pill can offer, and the
+/// tail is where a specific genre lives — the head is all general. What the picker
+/// *draws* with nothing typed is a separate question, answered by
+/// `ui::radio::facets::UNFILTERED_ROW_CAP`.
+///
+/// There is no "no ceiling" to raise this to: the endpoint answers a call carrying
+/// no `limit` with a default slice of its own, so a number is going to be sent
+/// whatever this says. Since the list outgrowing it would otherwise go unnoticed —
+/// the missing tags are simply never offered and no surface looks wrong —
+/// `fetch_facets` logs a list that comes back sitting exactly on it.
+pub const TAG_FACET_LIMIT: u32 = 25_000;
 
 /// Ceiling for the curated facet lists, with room for them to grow.
+///
+/// Well clear of all three today. They are approved rather than typed, so they
+/// grow slowly and none is near it.
 pub const FACET_LIMIT: u32 = 2000;
 
 /// Query parameters for `/json/stations/search`.
@@ -98,7 +115,7 @@ fn order_params(order: SearchOrder) -> (&'static str, bool) {
 }
 
 /// How many entries of a facet list to take.
-fn facet_limit(kind: FacetKind) -> u32 {
+pub(super) fn facet_limit(kind: FacetKind) -> u32 {
     match kind {
         FacetKind::Tags => TAG_FACET_LIMIT,
         FacetKind::Countries | FacetKind::Languages | FacetKind::Codecs => FACET_LIMIT,

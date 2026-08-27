@@ -17,6 +17,7 @@ use crate::library::playback;
 use crate::media::station_logo::StoredLogo;
 use crate::player::stream_source::{self, StationFacts};
 use crate::player::types::RadioNowPlaying;
+use crate::services::radio_blocklist;
 use crate::services::radio_browser;
 use crate::state::AppState;
 
@@ -194,6 +195,22 @@ pub async fn add_custom_station(
     stream_url: &str,
     name: &str,
 ) -> Result<i64, AppError> {
+    // Ahead of both the merge and the probe: a refused station should cost no network
+    // and must not star a row it may already have from before it was blocked. **The
+    // URL is the only handle worth checking at this door** — the user supplies the
+    // name, and a stream announces no country, language or tags to match on.
+    if radio_blocklist::blocks(radio_blocklist::StationTerms {
+        station_uuid: None,
+        name: "",
+        stream_url,
+        country_code: "",
+        language: "",
+        codec: "",
+        tags: "",
+    }) {
+        return Err(AppError::Validation("This station can't be added".to_owned()));
+    }
+
     if let Some(id) = queries::radio::station_id_with_url(&state.db, stream_url).await? {
         set_favorite(state, id, true).await?;
         return Ok(id);
