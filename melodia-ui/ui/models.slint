@@ -352,3 +352,17 @@ export struct RadioFacetRow {
     code: string,
     station_count: int,
 }
+
+// One scope the typed needle could be asking for, offered above the Browse grid. `kind` is the
+// chip it fills, in the same `Radio.facet-*` numbering a picker uses, so taking a suggestion and
+// picking from a chip are the same edit arriving two ways.
+//
+// `station_count` is `-1` where there is no count to state — a bitrate floor and a frequency are
+// read off the needle rather than matched against a fetched list, so nothing has counted them.
+// `0` is a real answer and would print as one.
+export struct RadioSuggestionRow {
+    kind: int,
+    name: string,
+    code: string,
+    station_count: int,
+}

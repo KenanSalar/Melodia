@@ -8,7 +8,7 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::state::AppState;
-use crate::ui::radio::{RadioUi, facets};
+use crate::ui::radio::{RadioUi, facets, suggest};
 use crate::{AppWindow, Radio};
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
@@ -51,9 +51,21 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         // country" are the same edit with different values.
         let s = state.clone();
         let ru = radio_ui.clone();
+        let weak = weak.clone();
         g.on_clear_facet(move |kind| {
             let Some(ui) = weak.upgrade() else { return };
             facets::pick(&ui, &s, &ru, kind, "", "");
+        });
+    }
+
+    {
+        // Deliberately *not* `facets::pick`: taking a scope also empties the box, and the two have
+        // to reach the query as one edit or the page fetches a guaranteed-empty page on the way.
+        let s = state.clone();
+        let ru = radio_ui.clone();
+        g.on_suggestion_picked(move |kind, name, code| {
+            let Some(ui) = weak.upgrade() else { return };
+            suggest::apply(&ui, &s, &ru, kind, &name, &code);
         });
     }
 }

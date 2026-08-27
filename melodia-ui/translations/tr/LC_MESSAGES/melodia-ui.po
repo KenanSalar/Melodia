@@ -1943,3 +1943,6 @@ msgstr "Oylar"
 
 msgid "Recently played on this station"
 msgstr "Bu istasyonda yakın zamanda çalanlar"
+
+msgid "{}: {}"
+msgstr "{}: {}"

@@ -19,7 +19,7 @@ use slint::ComponentHandle;
 use crate::state::AppState;
 use crate::{AppWindow, Radio};
 
-use super::{RadioTab, RadioUi, browse, kept, tab_from_index};
+use super::{RadioTab, RadioUi, browse, kept, suggest, tab_from_index};
 
 pub fn dispatch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, text: &str) {
     let g = ui.global::<Radio>();
@@ -27,6 +27,10 @@ pub fn dispatch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, text:
         RadioTab::Browse => browse::set_query(ui, state, radio_ui, text),
         tab => kept::set_filter(ui, radio_ui, tab, text),
     }
+    // After the dispatch, so the pills describe the needle Browse is now asking for rather than
+    // the one it was. Called on every tab, `refresh` being the one place that decides a tab has no
+    // scopes to offer.
+    suggest::refresh(ui, radio_ui);
 }
 
 /// Put the box back to whatever the tab under it is filtered by.
@@ -44,6 +48,9 @@ pub fn sync_box(ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
         RadioTab::Browse => browse::query_name(radio_ui),
         tab => kept::filter_text(radio_ui, tab),
     };
+    // Outside the early return below: what moved is the *surface* under the box, and a tab whose
+    // needle happens to match the one being left still has to gain or lose its pill row.
+    suggest::refresh(ui, radio_ui);
     if g.get_filter() == mounted.as_str() {
         return;
     }

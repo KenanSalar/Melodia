@@ -22,7 +22,7 @@ use slint::ComponentHandle;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
-use crate::ui::radio::{RadioUi, browse, covers, detail, kept};
+use crate::ui::radio::{RadioUi, browse, covers, detail, facets, kept};
 use crate::{AppWindow, Radio};
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
@@ -52,6 +52,10 @@ fn enter(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     kept::refresh(ui, state, radio_ui);
     browse::ensure_loaded(ui, state, radio_ui);
     browse::rewarm(ui, state, radio_ui);
+    // Once per session, whichever tab the enter lands on: the lists back the scope suggestions the
+    // Browse box offers, and a user who types before the first chip is ever opened would otherwise
+    // be offered nothing. Skips whatever it already holds, so a re-enter costs nothing.
+    facets::prime(ui, state, radio_ui);
     // The flag is consumed whether or not a station page is open, so a leave with the band idle
     // cannot leave it armed for the next one.
     if radio_ui.section.take_dirty() {

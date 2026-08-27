@@ -1939,3 +1939,6 @@ msgstr "Ψήφοι"
 
 msgid "Recently played on this station"
 msgstr "Πρόσφατα σε αυτόν τον σταθμό"
+
+msgid "{}: {}"
+msgstr "{}: {}"

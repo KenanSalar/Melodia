@@ -1,8 +1,11 @@
 //! The filter chips: the lists behind them, and what a pick does to the query.
 //!
-//! Lists are fetched on the first open of a chip rather than on entering the section: four lists
-//! nobody may ever filter by are four requests, and `services::radio_browser` caches each for the
-//! session, so every reopen after the first costs nothing.
+//! **All four lists are fetched once, on the first Browse enter.** They used to wait for a chip to
+//! be opened, on the argument that four lists nobody may ever filter by are four requests; that
+//! stopped being true when [`super::suggest`] started matching every keystroke against them, so
+//! there is no longer a session in which they go unread. `services::radio_browser` caches each in
+//! a `OnceCell`, so [`prime`] is the only cost and every chip now opens on its list rather than on
+//! a spinner.
 //!
 //! One model serves every chip, because only one picker can be up at a time. `Radio.facet-shown`
 //! records which chip it holds, and is what a landing list is checked against: a user who opens
@@ -29,7 +32,7 @@ use super::{RadioUi, browse, rows};
 /// carries itself, so it has a [`ChipFilter`] and no [`FacetKind`], which is the whole reason the
 /// two are separate types.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum ChipFilter {
+pub(super) enum ChipFilter {
     Country,
     Language,
     Tag,
@@ -50,25 +53,131 @@ impl ChipFilter {
     }
 }
 
-/// Resolve a chip index against the global's own constants. UI thread only, that being where the
-/// global is reachable.
+/// The chip indices, read off the global's own constants. **The one place the mapping is
+/// spelled**, and both directions come out of it rather than out of a lookup and a hand-written
+/// inverse that can disagree about a single arm.
 ///
-/// `None` for anything unrecognised, so a sixth chip added to the global without an arm here does
-/// nothing rather than filtering by the wrong field.
-fn chip_from_index(g: &Radio<'_>, idx: i32) -> Option<ChipFilter> {
-    if idx == g.get_facet_country() {
-        Some(ChipFilter::Country)
-    } else if idx == g.get_facet_language() {
-        Some(ChipFilter::Language)
-    } else if idx == g.get_facet_tag() {
-        Some(ChipFilter::Tag)
-    } else if idx == g.get_facet_codec() {
-        Some(ChipFilter::Codec)
-    } else if idx == g.get_facet_bitrate() {
-        Some(ChipFilter::BitrateMin)
-    } else {
-        None
+/// UI thread only, that being where the global is reachable.
+fn chip_indices(g: &Radio<'_>) -> [(ChipFilter, i32); 5] {
+    [
+        (ChipFilter::Country, g.get_facet_country()),
+        (ChipFilter::Language, g.get_facet_language()),
+        (ChipFilter::Tag, g.get_facet_tag()),
+        (ChipFilter::Codec, g.get_facet_codec()),
+        (ChipFilter::BitrateMin, g.get_facet_bitrate()),
+    ]
+}
+
+/// Resolve a chip index against the global's own constants.
+///
+/// `None` for anything unrecognised, so a sixth chip added to the global without an entry above
+/// does nothing rather than filtering by the wrong field.
+pub(super) fn chip_from_index(g: &Radio<'_>, idx: i32) -> Option<ChipFilter> {
+    chip_indices(g).into_iter().find(|(_, at)| *at == idx).map(|(chip, _)| chip)
+}
+
+/// [`chip_from_index`]'s inverse, for a suggestion naming the chip it offers to fill. `-1` where
+/// the chip has no index, which no live [`ChipFilter`] can be.
+pub(super) fn chip_index(g: &Radio<'_>, chip: ChipFilter) -> i32 {
+    chip_indices(g).into_iter().find(|(c, _)| *c == chip).map_or(-1, |(_, at)| at)
+}
+
+/// The four directory lists held together, so a keystroke can match against them without going
+/// near the runtime.
+///
+/// Beside [`RadioUi::facet_list`](super::RadioUi) rather than replacing it: that one is whichever
+/// list the *open picker* is narrowing, and answers a question about one chip. This is all four at
+/// once and answers a question about the needle.
+#[derive(Default)]
+pub(super) struct FacetIndex {
+    countries: Option<Arc<[Facet]>>,
+    languages: Option<Arc<[Facet]>>,
+    tags: Option<Arc<[Facet]>>,
+    codecs: Option<Arc<[Facet]>>,
+}
+
+impl FacetIndex {
+    fn slot_mut(&mut self, kind: FacetKind) -> &mut Option<Arc<[Facet]>> {
+        match kind {
+            FacetKind::Countries => &mut self.countries,
+            FacetKind::Languages => &mut self.languages,
+            FacetKind::Tags => &mut self.tags,
+            FacetKind::Codecs => &mut self.codecs,
+        }
     }
+
+    /// A primed index, for tests that need the four lists without a directory behind them.
+    #[cfg(test)]
+    pub(super) fn from_lists(
+        countries: Vec<Facet>,
+        languages: Vec<Facet>,
+        tags: Vec<Facet>,
+        codecs: Vec<Facet>,
+    ) -> Self {
+        Self {
+            countries: Some(countries.into()),
+            languages: Some(languages.into()),
+            tags: Some(tags.into()),
+            codecs: Some(codecs.into()),
+        }
+    }
+
+    /// Each chip paired with the list behind it, empty where that list has not landed. A list
+    /// still in flight suggests nothing rather than blocking, which is what makes [`prime`] safe
+    /// to leave asynchronous.
+    pub(super) fn lists(&self) -> [(ChipFilter, &[Facet]); 4] {
+        fn entries(list: Option<&Arc<[Facet]>>) -> &[Facet] {
+            list.map(Arc::as_ref).unwrap_or_default()
+        }
+        [
+            (ChipFilter::Country, entries(self.countries.as_ref())),
+            (ChipFilter::Language, entries(self.languages.as_ref())),
+            (ChipFilter::Tag, entries(self.tags.as_ref())),
+            (ChipFilter::Codec, entries(self.codecs.as_ref())),
+        ]
+    }
+}
+
+/// Fetch every facet list once, so the suggestion pass has something to match against.
+///
+/// Fired on Browse enter and idempotent twice over: a list already held is skipped here, and the
+/// facade's own `OnceCell` answers a repeat without a request. A failure is logged and left
+/// unfilled — that facet simply suggests nothing, and the chip's own open retries it.
+pub fn prime(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
+    let wanted: Vec<FacetKind> = {
+        let index = radio_ui.facet_index.lock();
+        index
+            .lists()
+            .into_iter()
+            .filter(|(_, entries)| entries.is_empty())
+            .filter_map(|(chip, _)| chip.facet_kind())
+            .collect()
+    };
+    if wanted.is_empty() {
+        return;
+    }
+
+    let (s, ru, weak) = (state.clone(), radio_ui.clone(), ui.as_weak());
+    state.runtime.spawn(async move {
+        for kind in wanted {
+            match library::radio::facets(&s, kind).await {
+                Ok(facets) => *ru.facet_index.lock().slot_mut(kind) = Some(facets),
+                Err(e) => {
+                    log::warn!(
+                        "radio: priming the {kind:?} facet list failed: {}",
+                        crate::services::describe(&e)
+                    );
+                    continue;
+                }
+            }
+            // Per list rather than after all four: the needle the user has already typed gets
+            // the answers as they land instead of waiting on the slowest.
+            let _ = weak.upgrade_in_event_loop({
+                let ru = ru.clone();
+                move |ui| super::suggest::refresh(&ui, &ru)
+            });
+        }
+    });
 }
 
 /// Fill the shared picker model for the chip at `idx`.
@@ -155,6 +264,14 @@ pub fn pick(
         return;
     };
 
+    show_pick(&g, chip, name, code);
+    browse::edit_query(ui, state, radio_ui, |search| apply_pick(chip, name, code, search));
+}
+
+/// Put a pick on the chip that carries it. Split from [`pick`] because a suggestion sets the same
+/// chip through a *different* query edit — it moves the needle out of the name as it goes, which
+/// has to be one edit or the page fetches twice.
+pub(super) fn show_pick(g: &Radio<'_>, chip: ChipFilter, name: &str, code: &str) {
     match chip {
         ChipFilter::Country => {
             g.set_pick_country(name.into());
@@ -167,8 +284,6 @@ pub fn pick(
             g.set_pick_bitrate_min(i32::try_from(bitrate_floor(code)).unwrap_or(0));
         }
     }
-
-    browse::edit_query(ui, state, radio_ui, |search| apply_pick(chip, name, code, search));
 }
 
 /// Fold one chip's pick into the query.
@@ -180,7 +295,7 @@ pub fn pick(
 /// sole code-keyed parameter, so a language filters by its name even though the directory hands
 /// one an `iso_639` beside it — sent as a code, `language=en` would substring-match english,
 /// armenian and slovenian alike.
-fn apply_pick(chip: ChipFilter, name: &str, code: &str, search: &mut StationSearch) {
+pub(super) fn apply_pick(chip: ChipFilter, name: &str, code: &str, search: &mut StationSearch) {
     match chip {
         ChipFilter::Country => code.clone_into(&mut search.country_code),
         ChipFilter::Language => name.clone_into(&mut search.language),

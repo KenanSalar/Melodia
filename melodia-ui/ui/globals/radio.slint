@@ -1,4 +1,4 @@
-import { RadioFacetRow, RadioStationGridRow, RadioStationRow } from "../models.slint";
+import { RadioFacetRow, RadioStationGridRow, RadioStationRow, RadioSuggestionRow } from "../models.slint";
 
 // The Radio page at nav index 10: three tabs over the radio-browser.info directory, the stations
 // the user kept and the ones they played. **One `SectionActiveGate`, not one per tab** — the three
@@ -223,4 +223,19 @@ export global Radio {
     callback request-facet(int /*kind*/);
     callback facet-picked(int /*kind*/, string /*name*/, string /*code*/);
     callback clear-facet(int /*kind*/);
+
+    // --- Scope suggestions ----------------------------------------------------------------------
+    //
+    // The directory has no search across fields — `name`, `tag`, `country`, `language`, `codec` and
+    // `bitrateMin` are separate parameters that AND together — so the box means `name` and anything
+    // else the needle could be is offered here instead of guessed at. Filled by
+    // `ui::radio::suggest` from the resident facet lists, so a keystroke costs no request.
+    //
+    // Browse only, and never over a station page: the box is hidden there and a suggestion about a
+    // needle nobody can see would have nothing to explain it.
+    in-out property <[RadioSuggestionRow]> suggestions;
+    // Taking one *moves* the needle: the chip fills and the box empties, because the two filter the
+    // same request and `name=turkish&language=Turkish` is a page of nothing. `kind` and the two
+    // values are the picker's own, so this lands in the same edit a chip pick does.
+    callback suggestion-picked(int /*kind*/, string /*name*/, string /*code*/);
 }

@@ -30,6 +30,7 @@ mod identity;
 mod kept;
 mod logos;
 mod rows;
+mod suggest;
 mod tabs;
 
 use std::collections::{HashMap, HashSet};
@@ -45,7 +46,7 @@ use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::DetailArtwork;
 use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
-use crate::{AppWindow, Nav, Radio, RadioFacetRow, RadioStationGridRow};
+use crate::{AppWindow, Nav, Radio, RadioFacetRow, RadioStationGridRow, RadioSuggestionRow};
 
 use browse::BrowseState;
 use logos::LogoMemo;
@@ -169,6 +170,9 @@ fn install_models(ui: &AppWindow) {
 
     let facets: Rc<VecModel<RadioFacetRow>> = Rc::new(VecModel::default());
     g.set_facet_options(ModelRc::from(facets));
+
+    let suggestions: Rc<VecModel<RadioSuggestionRow>> = Rc::new(VecModel::default());
+    g.set_suggestions(ModelRc::from(suggestions));
 }
 
 /// Rust-side state for the Radio page.
@@ -217,6 +221,13 @@ pub struct RadioUi {
     /// narrows it and Slint cannot filter an array, so every keystroke rebuilds the model from
     /// here rather than re-asking the facade across the runtime.
     facet_list: Mutex<Option<Arc<[crate::entities::radio::Facet]>>>,
+    /// All four directory lists at once, filled by `facets::prime` on the first Browse enter.
+    ///
+    /// The sibling above is whichever list the open picker is narrowing and answers a question
+    /// about one chip; this answers a question about the *needle*, which is why it has to hold
+    /// every list and to be readable without an `.await` — the scope suggestions are recomputed on
+    /// each settled keystroke, on the UI thread.
+    facet_index: Mutex<facets::FacetIndex>,
     /// A station page per tab, since one opens from all three and a tab move must not evict what
     /// another is holding. `detail.rs` owns the shape.
     detail: Mutex<detail::DetailState>,
@@ -253,6 +264,7 @@ impl RadioUi {
             recent: Mutex::new(kept::KeptState::default()),
             logos: LogoMemo::new(),
             facet_list: Mutex::new(None),
+            facet_index: Mutex::new(facets::FacetIndex::default()),
             detail: Mutex::new(detail::DetailState::default()),
             persist_writer: Mutex::new(()),
             history: Mutex::new(history::StationHistory::default()),

@@ -1934,3 +1934,6 @@ msgstr "Voti"
 
 msgid "Recently played on this station"
 msgstr "Trasmesso di recente su questa stazione"
+
+msgid "{}: {}"
+msgstr "{}: {}"

@@ -44,17 +44,23 @@ impl KeptState {
 
 /// What a station row is searchable by.
 ///
-/// The card's own three lines plus the two fields behind them the user is most likely to reach
-/// for — a station is remembered by its country or its genre at least as often as by its name.
-/// An empty needle matches everything, so an unfiltered list needs no branch.
+/// The card's own three lines plus the fields behind them the user is most likely to reach for —
+/// a station is remembered by its country or its genre at least as often as by its name. An empty
+/// needle matches everything, so an unfiltered list needs no branch.
 ///
 /// Through the resolvers, so the box searches what the card draws: a genre the user typed over a
 /// blank directory entry is on screen, and a directory value an override replaced is not.
+///
+/// **Bitrate is `Option` here because `0` is the directory saying it does not know**, not a
+/// station that streams at zero, and a large share of live rows carry it — matched raw, the needle
+/// `0` would select all of them.
 fn station_matches(station: &RadioStation, needle: &Needle) -> bool {
     needle.contains(&station.name)
         || needle.contains(station.genre().unwrap_or_default())
         || needle.contains(station.country_name().unwrap_or_default())
+        || needle.contains(&station.language)
         || needle.contains(&station.codec)
+        || needle.matches_number((station.bitrate > 0).then_some(station.bitrate))
 }
 
 /// The Favorites tab's sort, lifted off the global by whoever holds the UI thread.

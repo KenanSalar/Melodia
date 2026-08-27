@@ -450,6 +450,15 @@ silently miss the other.
   over them. Sixteen surfaces route through it; on all three tabbed pages the needle is **one
   shadow shared across the tabs**, cleared on both sides by a tab pick.
 
+- **Radio's Browse box narrows nothing, and is the one box with no row predicate to find.** The
+  directory searches one field per request, so the needle *is* the query, and what else it could
+  have meant is offered as a scope pill rather than folded in — `ui::radio::filter` routes it,
+  `ui::radio::suggest` builds the pills. The constraint spanning both, which neither file owns
+  alone: a pill and a filter chip write the same `StationSearch` fields, so `facets::pick` stays
+  their only writer and a pill's edit has to land as **one** `edit_query` — the needle and the chip
+  filter the same request, so a pill that set the chip and left the name behind would fetch a
+  guaranteed-empty page on its way to the right one.
+
 - **A needle is folded exactly once, and `Needle` is the type that makes anything else
   unspellable** — `fold_needle` is the only constructor and the predicates take nothing else. The
   filter box's fold deliberately doesn't match the FTS side's: it is looser everywhere (which only

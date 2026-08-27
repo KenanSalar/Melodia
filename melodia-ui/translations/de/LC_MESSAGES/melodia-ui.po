@@ -1941,3 +1941,6 @@ msgstr "Bewertungen"
 
 msgid "Recently played on this station"
 msgstr "Zuletzt auf diesem Sender gespielt"
+
+msgid "{}: {}"
+msgstr "{}: {}"

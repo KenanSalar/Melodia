@@ -1,0 +1,89 @@
+import { Theme } from "../../theme.slint";
+import { Radio } from "../../globals/radio.slint";
+import { RadioSuggestionRow } from "../../models.slint";
+import { MaterialIcon } from "../../components/material-icon.slint";
+
+// One scope the typed needle could be asking for: "Language: Turkish · 281 stations".
+//
+// The directory searches one field per request, so the box means `name` and everything else the
+// needle could be is offered here. Taking one fills the chip of the same name and empties the box —
+// `ui::radio::suggest::apply` does both in one query edit, the two filtering the same request.
+//
+// **The five scope names are the chips' own msgids**, not new strings: a pill and the chip it fills
+// must not end up called different things in a locale that translated only one of them.
+//
+// **`FacetChip`'s chrome rather than `ActionPill`'s**, and for `FacetChip`'s reason — an
+// `ActionPill` binds its root `width`, which Slint reports as both `min` and `max`, so a row of
+// four locale-sized labels would become a floor under the window's own resize. Spelled as the
+// split below instead: no floor, content width where there is room, and the label elides under it.
+export component SuggestionPill inherits Rectangle {
+    in property <RadioSuggestionRow> data;
+
+    callback picked();
+
+    private property <string> scope-label:
+        root.data.kind == Radio.facet-country ? @tr("Country")
+        : root.data.kind == Radio.facet-language ? @tr("Language")
+        : root.data.kind == Radio.facet-tag ? @tr("Genre")
+        : root.data.kind == Radio.facet-codec ? @tr("Format")
+        : @tr("Bitrate");
+
+    // A bitrate names a floor rather than a value, and reads the way its own chip shows it.
+    private property <string> scope-value: root.data.kind == Radio.facet-bitrate
+        ? @tr("{} kbps and up", root.data.name)
+        : root.data.name;
+
+    height: 32px;
+    min-width: 0px;
+    preferred-width: chip.preferred-width;
+    max-width: chip.preferred-width;
+
+    chip := Rectangle {
+        height: 100%;
+        border-radius: self.height / 2;
+        background: touch.has-hover ? Theme.surface2 : Theme.surface1;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        HorizontalLayout {
+            padding-left: Theme.pad-sm;
+            padding-right: Theme.pad-md;
+            spacing: Theme.pad-xs;
+
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: "filter_alt";
+                    icon-size: 16px;
+                    icon-color: Theme.subtext0;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: @tr("{}: {}", root.scope-label, root.scope-value);
+                    color: Theme.text;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+            }
+
+            // `-1` is a scope read off the needle's own shape — a bitrate floor, a frequency —
+            // which nothing has counted. `0` would be a real answer and is not what this hides.
+            if root.data.station_count >= 0: VerticalLayout {
+                alignment: center;
+                Text {
+                    text: @tr("{n} station" | "{n} stations" % root.data.station_count);
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+            }
+        }
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.picked(); }
+        }
+    }
+}

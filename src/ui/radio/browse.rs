@@ -131,6 +131,14 @@ pub fn query_name(radio_ui: &RadioUi) -> String {
     radio_ui.browse.lock().search.name.clone()
 }
 
+/// The whole query, for the scope suggestions — they read the needle *and* every chip already set,
+/// a scope the page is filtered by not being worth offering back. Cloned rather than borrowed
+/// because the caller holds the UI thread and must not still be under this lock when it takes the
+/// facet index.
+pub fn query(radio_ui: &RadioUi) -> StationSearch {
+    radio_ui.browse.lock().search.clone()
+}
+
 /// The cached station behind a row, and whatever logo this session found for it.
 ///
 /// A row identifies a browsed station by its uuid rather than by an index: the model is chunked
@@ -317,17 +325,24 @@ fn fetch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, append: bool
             return;
         }
 
-        paint(&weak, &ru);
+        paint(&s, &weak, &ru, !append);
         warm_page(&s, &ru, &weak, generation, !append).await;
     });
 }
 
 /// Push the cache onto the grid and lower the spinner.
-fn paint(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
-    let ru = radio_ui.clone();
+///
+/// `fresh` tells a new query from a page appended onto one, which only the scope adoption below
+/// cares about: an append that comes back empty is the end of the results, not a search that found
+/// nothing.
+fn paint(state: &AppState, weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>, fresh: bool) {
+    let (s, ru) = (state.clone(), radio_ui.clone());
     let _ = weak.upgrade_in_event_loop(move |ui| {
         ui.global::<Radio>().set_browse_loading(false);
         apply(&ui, &ru);
+        if fresh {
+            super::suggest::adopt_only_scope(&ui, &s, &ru);
+        }
     });
 }
 
