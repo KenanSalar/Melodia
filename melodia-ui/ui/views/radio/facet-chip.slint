@@ -76,6 +76,7 @@ export component FacetChip inherits Rectangle {
     in property <bool> loading: false;
     // The four directory facets need a needle; the bitrate list is five entries and does not.
     in property <bool> searchable: true;
+    // Reset by Rust on `opened`, beside the model it narrows: the two have to move together.
     in-out property <string> needle;
 
     callback opened(int /*kind*/);
@@ -135,7 +136,6 @@ export component FacetChip inherits Rectangle {
                 if (root.is-set) {
                     root.cleared(root.kind);
                 } else {
-                    root.needle = "";
                     root.opened(root.kind);
                     popup.show();
                 }

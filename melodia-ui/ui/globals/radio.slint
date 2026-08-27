@@ -191,9 +191,9 @@ export global Radio {
 
     // --- Filter chips -------------------------------------------------------------------------
     //
-    // The four directory facets are fetched lazily, on first open of their chip, and cached for
-    // the session by `services::radio_browser`. Minimum bitrate is not a facet at all: its options
-    // are a fixed list the chip carries itself, and it never asks for one.
+    // The four directory facets are fetched on the first Radio enter and cached for the session by
+    // `services::radio_browser`. Minimum bitrate is not a facet at all: its options are a fixed
+    // list the chip carries itself, and it never asks for one.
     out property <int> facet-country: 0;
     out property <int> facet-language: 1;
     out property <int> facet-tag: 2;
@@ -217,7 +217,7 @@ export global Radio {
     in-out property <bool> facet-loading: false;
     // The picker's own search box. Slint rejects an inline `for … : if …`, so narrowing a list of
     // several hundred countries has to happen in Rust: this is the needle, and `facet-options` is
-    // rewritten from the fetched list on every settled keystroke.
+    // rewritten from the fetched list on every keystroke.
     in-out property <string> facet-filter;
     callback facet-filter-changed(string);
     callback request-facet(int /*kind*/);

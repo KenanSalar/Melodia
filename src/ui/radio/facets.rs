@@ -14,7 +14,7 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model};
+use slint::ComponentHandle;
 
 use crate::entities::radio::{Facet, FacetKind, StationSearch};
 use crate::library;
@@ -182,14 +182,28 @@ pub fn prime(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
 
 /// Fill the shared picker model for the chip at `idx`.
 ///
-/// A repeat open of the chip already in the model is a no-op, which is what makes the session
-/// cache visible: the popup comes back up on the list it had.
+/// **A picker opens on the whole list, and the needle is emptied here rather than at the chip.**
+/// The box and the model it narrows are one reset; split across the two trees only one half runs,
+/// leaving a filter no box on screen still names.
+///
+/// A chip whose list is already in hand skips the fetch, which is what makes the session cache
+/// visible: the popup comes straight back up, widened.
 pub fn request(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, idx: i32) {
     let g = ui.global::<Radio>();
     let Some(kind) = chip_from_index(&g, idx).and_then(ChipFilter::facet_kind) else {
         return;
     };
-    if g.get_facet_shown() == idx && g.get_facet_options().row_count() > 0 {
+    let narrowed = !g.get_facet_filter().is_empty();
+    g.set_facet_filter("".into());
+
+    // Keyed on the list held, not on the rows drawn: a needle that matched nothing leaves an empty
+    // model over a list already in hand, and asking again would clear the picker and flash a
+    // spinner to re-derive it. A failed fetch parks `facet-shown` at `-1`, so that one still asks.
+    if g.get_facet_shown() == idx && radio_ui.facet_list.lock().is_some() {
+        // An empty box was already drawing the whole list, so there is nothing to widen.
+        if narrowed {
+            filter(ui, radio_ui, "");
+        }
         return;
     }
 
@@ -216,7 +230,9 @@ pub fn request(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, idx: i
                     // is a session `OnceCell`) but it is `async`, and a keystroke has no business
                     // hopping the runtime to answer.
                     *ru.facet_list.lock() = Some(Arc::clone(&facets));
-                    write_filtered(&g, &facets, "");
+                    // Not the empty needle: `filter` bails while the list is in flight, so a box
+                    // typed into under the spinner is only honoured here.
+                    write_filtered(&g, &facets, &g.get_facet_filter());
                 }
                 Err(e) => {
                     log::warn!("radio: facet list failed: {}", crate::services::describe(&e));
