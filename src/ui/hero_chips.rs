@@ -389,12 +389,15 @@ pub fn publish_playlist(
 /// and the stream URL are rows on the page below rather than chips up here, so no fact is stated
 /// twice — the band is the glance, the body is the reference. Both radio players with a station
 /// page put that second set in a list.
+///
+/// **No country either, for the same rule one line up**: it is the band's own subtitle, off the
+/// same resolver the chip took it from, so a chip of it printed the line above twice. The state
+/// stays — it names somewhere the subtitle doesn't.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StationFacts {
     /// Already split and capped by the caller, which is where the tag-display policy lives —
     /// this module decides layout, not how many genres are worth naming.
     pub tags: Vec<String>,
-    pub country: String,
     pub state: String,
     pub language: String,
 }
@@ -485,15 +488,15 @@ fn album_chips(
 }
 
 /// **Tags last, for `album_chips`' reason**: they say what a station plays rather than where it
-/// is, so on a band narrow enough to drop a row they are what should go before the country does.
+/// is, so on a band narrow enough to drop a row they are what should go before the state does.
 /// Every field is omitted when blank — the directory leaves most of them blank on some station or
 /// other, and a hand-typed one arrives with almost nothing.
 ///
 /// Takes no labels: every chip here is a name the directory supplied, so there is nothing to
 /// translate and nothing to pluralize.
 fn station_chips(facts: &StationFacts) -> Vec<SharedString> {
-    let mut out = Vec::with_capacity(3 + facts.tags.len());
-    for field in [&facts.country, &facts.state, &facts.language] {
+    let mut out = Vec::with_capacity(2 + facts.tags.len());
+    for field in [&facts.state, &facts.language] {
         if !field.is_empty() {
             out.push(SharedString::from(field.as_str()));
         }

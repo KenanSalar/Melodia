@@ -399,13 +399,25 @@ export component LibraryTabBand inherits Rectangle {
                         }
                     }
 
-                    if root.subtitle != "": Text {
+                    // **Nudged right, because the two lines share a layout edge and not an ink
+                    // edge.** A glyph's left side bearing is blank built into the glyph and scales
+                    // with the size drawn at, so the title's first stem sits further in than the
+                    // subtitle's on most strings — 22 px SemiBold against 14 px Regular — and the
+                    // smaller line reads as hanging left of the larger. The correction is optical
+                    // and the exact amount is per-string, so this is a tune-by-eye number; a
+                    // padding rather than an `x`, a layout child that binds one being dropped from
+                    // its parent's layout info. Not the LRM, which is zero-advance in both faces.
+                    if root.subtitle != "": HorizontalLayout {
                         vertical-stretch: 0;
-                        text: "\u{200e}" + root.subtitle;
-                        color: HeroBackdrop.on-backdrop.transparentize(1.0 - root.hero-t);
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: left;
-                        overflow: elide;
+                        padding-left: 1px;
+
+                        Text {
+                            text: "\u{200e}" + root.subtitle;
+                            color: HeroBackdrop.on-backdrop.transparentize(1.0 - root.hero-t);
+                            font-size: Theme.font-size-md;
+                            horizontal-alignment: left;
+                            overflow: elide;
+                        }
                     }
                 }
 

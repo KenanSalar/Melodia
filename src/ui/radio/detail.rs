@@ -122,8 +122,8 @@ impl StationSource {
     }
 
     /// What the band's chip strip states — where the station is and what it plays, and nothing
-    /// about how it streams. The codec, bitrate and vote count are rows on the page instead, so
-    /// the band and the body never say the same thing twice.
+    /// the band or the body already says. The codec, bitrate and vote count are rows on the page
+    /// instead, and the country is the band's own subtitle.
     ///
     /// A kept station has no `state`: only the directory carries it, and
     /// [`refresh_from_directory`] is what fills it in.
@@ -131,13 +131,11 @@ impl StationSource {
         match self {
             Self::Kept(station) => StationFacts {
                 tags: rows::split_tags(station.genre().unwrap_or_default()),
-                country: station.country_name().unwrap_or_default().to_owned(),
                 state: String::new(),
                 language: station.language.clone(),
             },
             Self::Browsed(station, _) => StationFacts {
                 tags: rows::split_tags(&station.tags),
-                country: station.country.clone(),
                 state: station.state.clone(),
                 language: station.language.clone(),
             },
