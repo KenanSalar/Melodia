@@ -3,8 +3,8 @@
 //!
 //! **A station is opened from a row, not fetched by id.** A browsed station has no database row —
 //! `RadioStationRow.id` is `0` for one — so the id cannot be the handle, and it cannot be the
-//! open/closed flag either. [`StationRef`] carries both halves of what identifies either kind and
-//! `Radio.detail-open` carries the flag.
+//! open/closed flag either. [`StationRef`] carries both halves of what identifies either kind, and
+//! `Radio.detail-tab` is the flag; [`is_seated`] is how it is asked.
 //!
 //! **The refresh is additive.** What a kept row knows and what the directory knows overlap but do
 //! not agree: the table has no column for the popularity figures, the state or the directory's own
@@ -24,7 +24,7 @@ use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_view::impl_detail_view_helpers;
 use crate::ui::hero_chips::{self, StationFacts};
 use crate::ui::track_list_view::view_id;
-use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
+use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, NavEnterFrom, Radio, RadioStationRow};
 
 use super::tabs::{RadioTab, section_is_up};
@@ -420,9 +420,7 @@ pub fn apply_history(ui: &AppWindow, radio_ui: &RadioUi) {
         .map(|title| slint::SharedString::from(title.as_str()))
         .collect();
 
-    let g = ui.global::<Radio>();
-    g.set_history_count(len_as_i32(titles.len()));
-    g.set_history_rows(ModelRc::new(VecModel::from(titles)));
+    ui.global::<Radio>().set_history_rows(ModelRc::new(VecModel::from(titles)));
 }
 
 /// Re-publish the hero for a detail that was left open when the section was.

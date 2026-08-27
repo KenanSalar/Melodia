@@ -4,6 +4,7 @@ import { Radio } from "../../globals/radio.slint";
 import { IconButton } from "../../components/icon-button.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { TooltipSide } from "../../components/tooltip.slint";
 
 // A tinted glyph and a sentence. Two of these sit above the facts and say different things, and
 // both are notes about the station rather than controls, so neither is a pill.
@@ -69,11 +70,17 @@ component DetailRow inherits HorizontalLayout {
             overflow: elide;
         }
     }
+    // **Left, where every other tooltip in the tree clears above.** The button is the row's
+    // trailing cell, so a pill centred on it runs past the scroller's right edge; and the first
+    // row sits at the scroller's *top* edge on a station carrying neither a format warning nor a
+    // directory verdict, which cuts an above-pill off entirely. The left arm centres vertically
+    // and clears inward, so both edges stop mattering.
     if root.action-icon != "": IconButton {
         icon: root.action-icon;
         icon-size: 16px;
         diameter: 28px;
         tooltip-text: root.action-tooltip;
+        tooltip-side: TooltipSide.left;
         clicked => { root.action-clicked(); }
     }
 }
@@ -195,10 +202,10 @@ export component RadioStationDetail inherits Rectangle {
                     // where this would be. Neither radio player with a station page carries a
                     // song list on it at all; this is the one thing Melodia adds, so it earns its
                     // place by never being in the way.
-                    if Radio.history-count > 0: Rectangle {
+                    if Radio.history-rows.length > 0: Rectangle {
                         height: Theme.pad-sm;
                     }
-                    if Radio.history-count > 0: Text {
+                    if Radio.history-rows.length > 0: Text {
                         text: @tr("Recently played on this station");
                         color: Theme.subtext0;
                         font-size: Theme.font-size-sm;

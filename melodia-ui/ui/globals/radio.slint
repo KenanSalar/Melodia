@@ -172,9 +172,8 @@ export global Radio {
 
     // The titles this station has announced since it started playing, newest first. The page
     // mounts the section only when there are some, so there is no empty state to distinguish and
-    // the count is just the length.
+    // no count to carry beside the model.
     in-out property <[string]> history-rows;
-    in-out property <int> history-count: 0;
 
     callback open-station(RadioStationRow);
     callback close-detail();

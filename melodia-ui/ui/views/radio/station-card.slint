@@ -142,8 +142,7 @@ export component StationCard inherits Rectangle {
         // **Ungated, and it used to be the opposite.** The body's click was the play, so an
         // unplayable station had to swallow it rather than let the facade refuse something
         // nothing on screen said would fail; now it opens the station's page, which is where a
-        // segmented stream can say in words what the badge only marks. Only the play control
-        // below still gates.
+        // segmented stream can say in words what the badge only marks.
         clicked => { root.clicked(); }
     }
 
