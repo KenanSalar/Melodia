@@ -53,7 +53,7 @@ use tabs::section_is_up;
 
 pub use callbacks::files::wire as wire_files;
 pub use covers::tune_cache_for_display;
-pub use detail::{StationRef, is_seated, open_station_with, seed_detail_from_settings};
+pub use detail::{StationRef, open_station_with, seed_detail_from_settings};
 pub use history::install as install_history;
 pub use rows::station_has_row;
 pub use tabs::{RadioTab, seed_tab, tab_from_index};
@@ -89,15 +89,21 @@ pub fn disable(ui: &AppWindow, state: &AppState) {
     }
     state.nav_history.lock().forget_section(NAV_RADIO);
 
-    // Through the callback rather than by clearing the flag, so the persisted id, the hero's
-    // images and the artwork tier all go the one way they ever go. It is the whole page that is
-    // being taken away; leaving a station named in `views.json` would reopen it the next time
-    // the switch went back on.
-    // The **seat**, not `detail-open`: a station page seated on a tab the user is not standing on
-    // is still open, and its id is still in `views.json` waiting for the next boot.
+    // Through the callback rather than by clearing the flag, so the persisted id and the hero's
+    // images go the one way they ever go. It is the whole page that is being taken away; leaving
+    // a station named in `views.json` would reopen it the next time the switch went back on.
     let radio = ui.global::<Radio>();
-    if is_seated(&radio) {
+    if radio.get_detail_open() {
         radio.invoke_close_detail();
+    }
+    // The pages waiting on the other two tabs never reached `detail-open`, so nothing above can
+    // see them. Nothing is owed but forgetting them: the page they belong to is gone, and the
+    // one name `views.json` carries is the mounted tab's, which the close above already cleared.
+    if let Some(radio_ui) = state.ui_handles.radio.lock().clone() {
+        state.runtime.spawn_blocking(move || {
+            detail::forget_all_seats(&radio_ui);
+            radio_ui.release_detail_artwork();
+        });
     }
 
     let nav = ui.global::<Nav>();
@@ -211,7 +217,8 @@ pub struct RadioUi {
     /// narrows it and Slint cannot filter an array, so every keystroke rebuilds the model from
     /// here rather than re-asking the facade across the runtime.
     facet_list: Mutex<Option<Arc<[crate::entities::radio::Facet]>>>,
-    /// The station page on screen, or nothing with the band idle.
+    /// A station page per tab, since one opens from all three and a tab move must not evict what
+    /// another is holding. `detail.rs` owns the shape.
     detail: Mutex<detail::DetailState>,
     /// The titles the station currently playing has announced. Not the detail's, and deliberately
     /// outside it: the ring fills whether or not anybody has the page open, which is the only way

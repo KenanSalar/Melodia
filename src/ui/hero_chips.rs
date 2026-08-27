@@ -303,15 +303,12 @@ fn is_open(ui: &AppWindow, owner: ChipOwner) -> bool {
         ChipOwner::Artist(id) => i64::from(ui.global::<ArtistDetail>().get_artist_id()) == id,
         ChipOwner::Genre(id) => i64::from(ui.global::<GenreDetail>().get_genre_id()) == id,
         ChipOwner::Playlist(id) => i64::from(ui.global::<PlaylistDetail>().get_playlist_id()) == id,
-        // **The seat, not `detail-open`** — the same distinction the four above draw by reading
-        // an id rather than the tab: a Radio tab pick collapses the band over a page that is
-        // still seated behind it, and that is precisely the "mid-morph, coming back" case this
-        // is asked about. Nav too, where the four need none: their page-level teardown clears
-        // unconditionally, so `is_open` is only ever asked while My Library is on screen, and
-        // Radio's leave hands its hero back through the same macro a close takes.
+        // Nav too, where the four need none: their page-level teardown clears unconditionally, so
+        // `is_open` is only ever asked while My Library is on screen, and Radio's leave hands its
+        // hero back through the same macro a close takes while the page is still seated.
         ChipOwner::Station => {
             ui.global::<Nav>().get_selected_index() == NAV_RADIO
-                && crate::ui::radio::is_seated(&ui.global::<Radio>())
+                && ui.global::<Radio>().get_detail_open()
         }
         ChipOwner::Favorites | ChipOwner::RecentlyPlayed => false,
     }

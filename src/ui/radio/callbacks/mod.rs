@@ -53,10 +53,19 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             view_tag::log_current(&ui);
             // The needle belongs to the tab, not to the page, so the box follows the mount.
             filter::sync_box(&ui, &ru);
+            let mounted = tab_from_index(&ui.global::<Radio>(), tab);
+            // **The station page belongs to the tab the same way**, and this is the one move that
+            // can leave one behind. Synchronously and on this tick: `tab-idx` has already moved,
+            // so a hop would let the view's own `changed` trackers read a `detail-open` that is
+            // briefly neither tab's answer. (`super::detail` is the slice's state module; the
+            // sibling `detail` here is its wiring.)
+            super::detail::reseat(&ui, &ru, mounted);
+            // Which station `views.json` names follows the mount too — with a page per tab, "the
+            // last one opened" stopped being "the one the restored tab is showing".
+            super::detail::persist_seat(&s, &ui, &ru);
             // A pick paints from cache and asks for nothing: the fetch is the section enter's.
             // Browse keeps its own rows and its own warm tier across a pick, so only the two
             // local tabs have anything to do here.
-            let mounted = tab_from_index(&ui.global::<Radio>(), tab);
             if mounted != RadioTab::Browse {
                 // `super::kept` is the slice's state module; the sibling `kept` here is its
                 // wiring.

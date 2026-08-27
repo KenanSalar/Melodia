@@ -8,12 +8,12 @@
 //! No *count* is rewound, because no model is cleared: each keeps describing the rows it belongs
 //! to, per "rewind if and only if you clear".
 //!
-//! **The hero is the exception, and the only thing the dirty flag describes.** An open station
-//! page holds a decoded cover, a blur pair and a solve published into the two globals six heroes
-//! share, and those cannot be left behind a page that is no longer on screen — one of them is the
+//! **The hero is the exception, and the only thing the dirty flag describes.** A station page
+//! holds a decoded cover, a blur pair and a solve published into the two globals six heroes share,
+//! and those cannot be left behind a page that is no longer on screen — one of them is the
 //! backdrop another section's hero paints from. So the leave hands them back and marks the page
-//! dirty, and the enter rebuilds them from the station it still remembers. The tier goes with
-//! them; the grids, the browse page and the logo memo do not.
+//! dirty, and the enter rebuilds them from the station each tab still remembers. The tier goes
+//! with them; the grids, the browse page and the logo memo do not.
 
 use std::sync::Arc;
 
@@ -55,7 +55,7 @@ fn enter(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     // The flag is consumed whether or not a station page is open, so a leave with the band idle
     // cannot leave it armed for the next one.
     if radio_ui.section.take_dirty() {
-        detail::rewarm_hero(state, radio_ui, &ui.as_weak());
+        detail::rewarm_hero(ui, state, radio_ui);
     }
 }
 
@@ -65,17 +65,23 @@ fn leave(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     radio_ui.mark_dirty();
     covers::release(ui, radio_ui);
 
+    // **Any tab seated, not the painted one.** A mounted page always holds a seat, so this is the
+    // wider question — and the difference is real: a leave lands mid-collapse often enough, and
+    // the band's `hero-collapsed` timer dies with the view, leaving the slots holding a station
+    // nothing is painting.
     let g = ui.global::<Radio>();
-    // The seat, not the flag: a page seated on a tab the user is not standing on still holds a
-    // decoded hero, and the leave is what has to hand it back.
-    if detail::is_seated(&g) {
-        // The band is not collapsing, so `hero-collapsed` will not fire: the page keeps its
+    if detail::any_seated(radio_ui) {
+        // The band is not collapsing, so `hero-collapsed` will not fire: each tab keeps its
         // station and comes back to it. What cannot stay is what a *different* hero would paint
         // over — hence the two shared globals going with the images, through the same pair every
-        // detail close takes. The seat is deliberately still set here, and
-        // `hero_chips::is_open` reads the nav index beside it for exactly that reason.
+        // detail close takes. The seats are deliberately still set here, and
+        // `hero_chips::is_open` reads the nav index beside them for exactly that reason.
         release_hero_slots!(g);
         release_shared_hero!(ui);
+        // Every seat's decoded hero, since each holds one so a tab move can repaint in its own
+        // tick, and those are exactly the buffers the tier below is being cleared of.
+        // `detail::rewarm_hero` is what the enter rebuilds them with.
+        detail::release_seated_artwork(radio_ui);
         let ru = radio_ui.clone();
         state.runtime.spawn_blocking(move || ru.release_detail_artwork());
     }

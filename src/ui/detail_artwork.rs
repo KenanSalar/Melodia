@@ -73,7 +73,7 @@ impl DetailArtwork {
 /// the raw-buffer form). `None` on either buffer means missing /
 /// failed-decode artwork, and `sample` is then empty too — the publisher
 /// falls back to the theme accent and the gradient floor's own luma.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct DetailPair {
     pub(crate) cover: Option<SharedPixelBuffer<Rgb8Pixel>>,
     pub(crate) blur: Option<SharedPixelBuffer<Rgb8Pixel>>,

@@ -14,6 +14,13 @@ pub enum RadioTab {
     Recent,
 }
 
+impl RadioTab {
+    /// The variants, for the walks over per-tab state — the three station-page seats, and the
+    /// artwork each holds. A tab added here and left out of this is the one way such a walk goes
+    /// quiet rather than wrong, `[Self; 3]` being a length no new variant disagrees with.
+    pub const ALL: [Self; 3] = [Self::Browse, Self::Favorites, Self::Recent];
+}
+
 /// Resolve a `Radio.tab-idx` value against the global's own `tab-*` constants. UI thread only —
 /// that's where the global is reachable.
 ///

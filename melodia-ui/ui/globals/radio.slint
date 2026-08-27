@@ -123,22 +123,23 @@ export global Radio {
     // arrow means "close this detail" and there is no origin to restore — a drill never leaves
     // nav 10.
     //
-    // **The seat: which tab's station page is open, `-1` for none.** Every other detail in the
-    // tree spells "closed" as `id < 0`, which this one cannot — `id == 0` is a browsed station
+    // **The seat: which tab the painted page belongs to, `-1` for none.** Every other detail in
+    // the tree spells "closed" as `id < 0`, which this one cannot — `id == 0` is a browsed station
     // with no database row, and that is a perfectly good thing to have open. The tab is what it
-    // carries instead, because a station opens from all three and the page has to know which one
-    // it belongs to: the Remove action means a different thing on each, and a tab pick has to
-    // leave the page without forgetting it.
+    // carries instead, the Remove action meaning a different thing on each.
+    //
+    // **All three tabs may be holding a page, and only one of them is here.** The facts below are
+    // one set between six heroes, so what is per-tab is a seat on the Rust side
+    // (`ui::radio::detail::DetailState`) and `ui::radio::detail::reseat` repoints these at
+    // whichever tab is mounted. So this is always either the mounted tab or `-1`, and a reseat
+    // that failed to run unmounts the page rather than painting the wrong station under the right
+    // title.
     //
     // Written last, in the same tick as the facts below, and **after** the navigation has landed.
     in-out property <int> detail-tab: -1;
     // **Is the page the mounted body right now** — My Library's `album-open` shape, tab test and
-    // seat test, so a tab pick unmounts the page without clearing it and coming back re-mounts it.
-    // Derived here rather than in the view because all three inputs are this global's own; My
-    // Library's equivalent has to be private to its sheet, needing four *other* globals.
-    //
-    // A reader wants one of these two, and they are not interchangeable: this one answers "is it
-    // painted", the seat answers "is it still ours to come back to".
+    // seat test. Derived here rather than in the view because both inputs are this global's own;
+    // My Library's equivalent has to be private to its sheet, needing four *other* globals.
     out property <bool> detail-open: root.detail-tab >= 0 && root.detail-tab == root.tab-idx;
     // Raised synchronously at boot when `views.json` names a station to reopen, and lowered behind
     // the fetch. The tab bodies gate on it, or a restore paints a grid and swaps a beat later.
