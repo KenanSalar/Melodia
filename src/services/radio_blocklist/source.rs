@@ -35,6 +35,12 @@ pub enum TermKind {
     Station,
     Name,
     Url,
+    /// The three substring axes. A hash cannot match a substring, so these are
+    /// matched by hashing *windows of the candidate* instead — the pattern text
+    /// itself still never ships. See `Blocklist::pattern_hit`.
+    TagContains,
+    NameContains,
+    UrlContains,
 }
 
 impl TermKind {
@@ -49,7 +55,15 @@ impl TermKind {
             Self::Station => "station",
             Self::Name => "name",
             Self::Url => "url",
+            Self::TagContains => "tag-contains",
+            Self::NameContains => "name-contains",
+            Self::UrlContains => "url-contains",
         }
+    }
+
+    /// Whether this axis matches a substring rather than the whole value.
+    pub const fn is_pattern(self) -> bool {
+        matches!(self, Self::TagContains | Self::NameContains | Self::UrlContains)
     }
 
     fn from_label(label: &str) -> Option<Self> {
@@ -61,6 +75,9 @@ impl TermKind {
             Self::Station,
             Self::Name,
             Self::Url,
+            Self::TagContains,
+            Self::NameContains,
+            Self::UrlContains,
         ]
         .into_iter()
         .find(|kind| kind.label() == label)
@@ -72,6 +89,13 @@ pub struct Terms {
     pub key: [u8; 32],
     /// Sorted and deduplicated, which is what lets a lookup binary-search.
     pub fingerprints: Vec<u64>,
+    /// The substring axes, kept apart because they are matched by a different
+    /// question: not "is this value a term" but "does any window of it hash to one".
+    pub patterns: Vec<u64>,
+    /// Every distinct pattern length in characters, ascending. This is what sizes the
+    /// windows, so it has to ship alongside the patterns — the one thing about them
+    /// that does. A length is a far smaller disclosure than the text it measures.
+    pub pattern_lengths: Vec<u32>,
 }
 
 /// Derive the hashing key from a source's `key:` line, or [`DEFAULT_KEY`] without one.
@@ -88,10 +112,18 @@ pub fn key_from(material: Option<&str>) -> [u8; 32] {
 /// of a few hundred blocked terms and one of the directory's few tens of thousands
 /// of values, and the cost of one is a station hidden that shouldn't be.
 pub fn fingerprint(key: &[u8; 32], kind: TermKind, value: &str) -> u64 {
+    fingerprint_normalized(key, kind, &normalize(value))
+}
+
+/// [`fingerprint`] for a value already through [`normalize`].
+///
+/// The window scan calls this once per window over a string it normalized once, so
+/// folding again per window would be the whole cost of the scan.
+pub fn fingerprint_normalized(key: &[u8; 32], kind: TermKind, normalized: &str) -> u64 {
     let mut hasher = blake3::Hasher::new_keyed(key);
     hasher.update(kind.label().as_bytes());
     hasher.update(&[AXIS_SEPARATOR]);
-    hasher.update(normalize(value).as_bytes());
+    hasher.update(normalized.as_bytes());
 
     let digest = hasher.finalize();
     let mut head = [0u8; 8];
@@ -106,7 +138,7 @@ pub fn fingerprint(key: &[u8; 32], kind: TermKind, value: &str) -> u64 {
 /// run of spaces collapses to one and everything lowercases. Applied to the
 /// code-shaped axes too, where it changes nothing, because one normalization is the
 /// only kind anybody can reason about.
-fn normalize(value: &str) -> String {
+pub fn normalize(value: &str) -> String {
     let mut folded = String::with_capacity(value.len());
     let mut break_pending = false;
 
@@ -136,6 +168,9 @@ pub fn parse_source(text: &str) -> Result<Terms, String> {
     let key = key_from(key_material(text)?);
 
     let mut fingerprints = Vec::new();
+    let mut patterns = Vec::new();
+    let mut pattern_lengths = Vec::new();
+
     for (number, line) in entries(text) {
         let (label, value) = split_entry(line, number)?;
         if label == KEY_LABEL {
@@ -150,13 +185,48 @@ pub fn parse_source(text: &str) -> Result<Terms, String> {
         if kind == TermKind::Country && !is_country_code(value) {
             return Err(format!("line {number}: country wants a two-letter ISO 3166-1 code"));
         }
-        fingerprints.push(fingerprint(&key, kind, value));
+
+        if !kind.is_pattern() {
+            fingerprints.push(fingerprint(&key, kind, value));
+            continue;
+        }
+
+        // Only a pattern needs the fold in hand: its length in characters is what
+        // sizes the windows scanned against it.
+        let normalized = normalize(value);
+        let length = normalized.chars().count();
+        if length < MIN_PATTERN_CHARS {
+            return Err(format!(
+                "line {number}: a contains pattern needs at least {MIN_PATTERN_CHARS} characters"
+            ));
+        }
+        patterns.push(fingerprint_normalized(&key, kind, &normalized));
+        pattern_lengths.push(u32::try_from(length).unwrap_or(u32::MAX));
     }
 
     fingerprints.sort_unstable();
     fingerprints.dedup();
-    Ok(Terms { key, fingerprints })
+    patterns.sort_unstable();
+    patterns.dedup();
+    // Ascending, so the scan can stop at the first length the candidate is too short for.
+    pattern_lengths.sort_unstable();
+    pattern_lengths.dedup();
+
+    Ok(Terms {
+        key,
+        fingerprints,
+        patterns,
+        pattern_lengths,
+    })
 }
+
+/// Shortest a `-contains` pattern may be.
+///
+/// A one- or two-character substring appears in nearly every tag, so a typo there
+/// would blank most of the directory, and it is also the worst case for the scan:
+/// every position in every candidate becomes a window. Refusing it at build time is
+/// cheaper than finding out either way.
+pub const MIN_PATTERN_CHARS: usize = 3;
 
 /// The label reserved for the hashing key rather than naming an axis.
 const KEY_LABEL: &str = "key";

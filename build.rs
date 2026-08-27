@@ -82,16 +82,23 @@ fn write_blocklist() {
     };
 
     let key = terms.key.map(|byte| byte.to_string()).join(",");
-    let count = terms.fingerprints.len();
+    let term_count = terms.fingerprints.len();
+    let pattern_count = terms.patterns.len();
+    let length_count = terms.pattern_lengths.len();
     // No `u64` suffixes: the declared array type is what gives them their type. The
     // digit separators are not cosmetic — the generated file is compiled as part of
     // the crate and `clippy::unreadable_literal` denies a bare 19-digit literal, so
     // without them any build carrying a non-empty list fails the gate.
     let fingerprints =
         terms.fingerprints.iter().map(|f| separated(*f)).collect::<Vec<_>>().join(",");
+    let patterns = terms.patterns.iter().map(|f| separated(*f)).collect::<Vec<_>>().join(",");
+    // Lengths are short enough to need no separators.
+    let lengths = terms.pattern_lengths.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
     let generated = format!(
         "const BLOCKED_KEY: [u8; 32] = [{key}];\n\
-         const BLOCKED_TERMS: [u64; {count}] = [{fingerprints}];\n"
+         const BLOCKED_TERMS: [u64; {term_count}] = [{fingerprints}];\n\
+         const BLOCKED_PATTERNS: [u64; {pattern_count}] = [{patterns}];\n\
+         const PATTERN_LENGTHS: [u32; {length_count}] = [{lengths}];\n"
     );
 
     let Some(out_dir) = std::env::var_os("OUT_DIR") else {
