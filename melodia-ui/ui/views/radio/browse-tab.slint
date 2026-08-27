@@ -41,7 +41,8 @@ export component RadioBrowseTab inherits Rectangle {
 
         // What the needle could mean besides a station name. Above the grid rather than inside the
         // empty state, because the most useful case is a name search that found *some* stations and
-        // is still not what was meant — `turkish` matches two station names and 281 Turkish ones.
+        // is still not what was meant — a handful are *named* `turkish` where hundreds broadcast in
+        // it.
         //
         // Rust caps the row at what one line holds, so there is no wrap to measure here.
         if Radio.suggestions.length > 0: HorizontalLayout {

@@ -454,8 +454,8 @@ silently miss the other.
   directory searches one field per request, so the needle *is* the query, and what else it could
   have meant is offered as a scope pill rather than folded in — `ui::radio::filter` routes it,
   `ui::radio::suggest` builds the pills. The constraint spanning both, which neither file owns
-  alone: a pill and a filter chip write the same `StationSearch` fields, so `facets::pick` stays
-  their only writer and a pill's edit has to land as **one** `edit_query` — the needle and the chip
+  alone: a pill and a filter chip write the same `StationSearch` fields, so `facets::apply_pick`
+  stays their only writer and a pill's edit has to land as **one** `edit_query` — the needle and the chip
   filter the same request, so a pill that set the chip and left the name behind would fetch a
   guaranteed-empty page on its way to the right one.
 

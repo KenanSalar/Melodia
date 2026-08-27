@@ -34,6 +34,7 @@ expand_less
 expand_more
 favorite
 favorite_border
+filter_alt
 filter_none
 folder
 folder_off

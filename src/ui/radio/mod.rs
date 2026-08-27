@@ -221,7 +221,7 @@ pub struct RadioUi {
     /// narrows it and Slint cannot filter an array, so every keystroke rebuilds the model from
     /// here rather than re-asking the facade across the runtime.
     facet_list: Mutex<Option<Arc<[crate::entities::radio::Facet]>>>,
-    /// All four directory lists at once, filled by `facets::prime` on the first Browse enter.
+    /// All four directory lists at once, filled by `facets::prime` on the first section enter.
     ///
     /// The sibling above is whichever list the open picker is narrowing and answers a question
     /// about one chip; this answers a question about the *needle*, which is why it has to hold

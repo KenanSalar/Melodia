@@ -81,8 +81,9 @@ fn a_country_is_offered_by_its_code_because_that_is_what_the_endpoint_takes() {
 
 #[test]
 fn a_frequency_offers_a_tag_scope_and_states_no_count() {
-    // The tag list holds the most-used 500 and `92.1 fm` carries 27 stations, so nothing
-    // resident can match it — the pill carries the needle itself.
+    // A dial position is a tag only one station's own listeners use, so it sits far below
+    // the cap on the resident tag list and nothing there can match it — the pill carries
+    // the needle itself.
     let out = offered("92.1");
     assert_eq!(
         out.iter().find(|s| s.count.is_none()).map(|s| (s.chip, s.name.as_str())),

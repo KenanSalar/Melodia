@@ -53,14 +53,15 @@ impl KeptState {
 ///
 /// **Bitrate is `Option` here because `0` is the directory saying it does not know**, not a
 /// station that streams at zero, and a large share of live rows carry it — matched raw, the needle
-/// `0` would select all of them.
+/// `0` would select all of them. It is also the one field matched whole rather than as a
+/// substring: the directory serves nine bitrates and they share digits, so `2` reaches six of them.
 fn station_matches(station: &RadioStation, needle: &Needle) -> bool {
     needle.contains(&station.name)
         || needle.contains(station.genre().unwrap_or_default())
         || needle.contains(station.country_name().unwrap_or_default())
         || needle.contains(&station.language)
         || needle.contains(&station.codec)
-        || needle.matches_number((station.bitrate > 0).then_some(station.bitrate))
+        || needle.equals_number((station.bitrate > 0).then_some(station.bitrate))
 }
 
 /// The Favorites tab's sort, lifted off the global by whoever holds the UI thread.

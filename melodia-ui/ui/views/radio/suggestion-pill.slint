@@ -28,10 +28,12 @@ export component SuggestionPill inherits Rectangle {
         : root.data.kind == Radio.facet-codec ? @tr("Format")
         : @tr("Bitrate");
 
-    // A bitrate names a floor rather than a value, and reads the way its own chip shows it.
+    // A bitrate names a floor rather than a value, and reads the way its own chip shows it. Every
+    // other value is the directory's own, so it carries `FacetOption`'s mark: an Arabic country or
+    // tag reorders against the label in front of it otherwise.
     private property <string> scope-value: root.data.kind == Radio.facet-bitrate
         ? @tr("{} kbps and up", root.data.name)
-        : root.data.name;
+        : "\u{200e}" + root.data.name;
 
     height: 32px;
     min-width: 0px;

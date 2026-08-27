@@ -102,7 +102,7 @@ pub struct Needle {
     /// haystack, so a non-ASCII query short-circuits that scan.
     ascii: bool,
     /// A non-empty run of ASCII digits — the only shape that can name one of the integer
-    /// fields, and so the gate keeping an ordinary text query off [`Self::matches_number`].
+    /// fields, and so the gate keeping an ordinary text query off both number predicates.
     digits: bool,
 }
 
@@ -188,7 +188,22 @@ impl Needle {
     ///
     /// `None` is a row that has no such number and matches nothing — which is what lets a
     /// caller whose sentinel is `0` rather than absence hand over that decision here.
+    ///
+    /// Wrong for a field drawn from a short set of values — see [`Self::equals_number`].
     pub fn matches_number(&self, value: Option<i32>) -> bool {
+        self.over_decimal(value, |decimal| decimal.contains(&self.text))
+    }
+
+    /// [`Self::matches_number`] on the whole number rather than a run inside it, for a
+    /// field whose values are few and share digits. The nine bitrates in circulation are
+    /// close enough that six of them carry a `2`, so the substring rule that picks a
+    /// decade out of the years picks most of a station list here.
+    pub fn equals_number(&self, value: Option<i32>) -> bool {
+        self.over_decimal(value, |decimal| decimal == self.text)
+    }
+
+    /// The digit gate and the stack buffer both number predicates run on.
+    fn over_decimal(&self, value: Option<i32>, matches: impl FnOnce(&str) -> bool) -> bool {
         if !self.digits {
             return false;
         }
@@ -196,7 +211,7 @@ impl Needle {
             return false;
         };
         let mut buf = [0u8; MAX_I32_DIGITS];
-        write_decimal(&mut buf, value).contains(&self.text)
+        matches(write_decimal(&mut buf, value))
     }
 }
 

@@ -1,11 +1,11 @@
 //! The filter chips: the lists behind them, and what a pick does to the query.
 //!
-//! **All four lists are fetched once, on the first Browse enter.** They used to wait for a chip to
-//! be opened, on the argument that four lists nobody may ever filter by are four requests; that
-//! stopped being true when [`super::suggest`] started matching every keystroke against them, so
-//! there is no longer a session in which they go unread. `services::radio_browser` caches each in
-//! a `OnceCell`, so [`prime`] is the only cost and every chip now opens on its list rather than on
-//! a spinner.
+//! **All four lists are fetched once, on the first Radio enter, whichever tab it lands on.** They
+//! used to wait for a chip to be opened, on the argument that four lists nobody may ever filter by
+//! are four requests. [`super::suggest`] is what overtook that: a list arriving on the chip's own
+//! open arrives after the needle it was wanted for. They are still four requests a session that
+//! never leaves Favorites will not read — `services::radio_browser` holds each in a `OnceCell`, so
+//! that is one round of them per run, and every chip now opens on its list rather than a spinner.
 //!
 //! One model serves every chip, because only one picker can be up at a time. `Radio.facet-shown`
 //! records which chip it holds, and is what a landing list is checked against: a user who opens
@@ -140,9 +140,9 @@ impl FacetIndex {
 
 /// Fetch every facet list once, so the suggestion pass has something to match against.
 ///
-/// Fired on Browse enter and idempotent twice over: a list already held is skipped here, and the
-/// facade's own `OnceCell` answers a repeat without a request. A failure is logged and left
-/// unfilled — that facet simply suggests nothing, and the chip's own open retries it.
+/// Fired on the section enter and idempotent twice over: a list already held is skipped here,
+/// and the facade's own `OnceCell` answers a repeat without a request. A failure is logged and
+/// left unfilled — that facet simply suggests nothing, and the chip's own open retries it.
 pub fn prime(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     let wanted: Vec<FacetKind> = {
         let index = radio_ui.facet_index.lock();

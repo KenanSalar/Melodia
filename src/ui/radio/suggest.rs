@@ -11,9 +11,10 @@
 //!
 //! Two shapes have no list to be matched against, and are read off the needle instead. A
 //! **bitrate** is a bare integer in the kbps band. A **frequency** is the harder case and the
-//! reason [`Suggestion::count`] is optional: the tag list is capped at the most-used 500 and
-//! `92.1 fm` carries 27 stations, so it is nowhere near the part of the tail we hold — the pill
-//! offers the raw needle as a tag scope, with no count because we have not asked for one.
+//! reason [`Suggestion::count`] is optional: the resident tag list is capped to the most-used
+//! entries, and a dial position is a tag only one station's own listeners use, so it sits far
+//! below that cut — the pill offers the raw needle as a tag scope, with no count because nothing
+//! has asked the directory for one.
 
 use std::sync::Arc;
 
@@ -99,9 +100,12 @@ fn best_match(
     facets: &[Facet],
     active: &StationSearch,
 ) -> Option<(bool, Suggestion)> {
+    // The tail of a `hidebroken` list carries facets every station of which was filtered out, and
+    // a scope with nothing behind it is a click that guarantees an empty grid.
     facets
         .iter()
-        .filter(|facet| !facet.name.is_empty() && needle.contains(&facet.name))
+        .filter(|facet| !facet.name.is_empty() && facet.station_count > 0)
+        .filter(|facet| needle.contains(&facet.name))
         .filter(|facet| !already_filtered_by(chip, facet, active))
         .map(|facet| (needle.equals(&facet.name), facet))
         .max_by(|a, b| a.0.cmp(&b.0).then(a.1.station_count.cmp(&b.1.station_count)))
@@ -258,6 +262,12 @@ pub(super) fn apply(
 /// displace. A needle that found stations is a name search that worked, and choosing between two
 /// scopes is the user's — so the pills stay pills in every other case.
 ///
+/// **A bitrate floor is never adopted**, the one scope that is a guess about digits rather than
+/// something a list confirmed: `128` is as likely to be part of a station's name, and answering a
+/// search for one with every station at 128 kbps and up is further from the intent than the empty
+/// page. Its sibling shape stays in — a frequency reaches those stations through nothing else,
+/// which is the case the rule was written for.
+///
 /// Terminates without a guard: adopting empties the needle, so the query this triggers offers no
 /// scopes of its own however few stations come back.
 pub(super) fn adopt_only_scope(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
@@ -269,6 +279,9 @@ pub(super) fn adopt_only_scope(ui: &AppWindow, state: &AppState, radio_ui: &Arc<
     let Some(only) = offered.row_data(0) else {
         return;
     };
+    if facets::chip_from_index(&g, only.kind) == Some(ChipFilter::BitrateMin) {
+        return;
+    }
     apply(ui, state, radio_ui, only.kind, &only.name, &only.code);
 }
 
