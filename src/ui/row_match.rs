@@ -195,9 +195,8 @@ impl Needle {
     }
 
     /// [`Self::matches_number`] on the whole number rather than a run inside it, for a
-    /// field whose values are few and share digits. The nine bitrates in circulation are
-    /// close enough that six of them carry a `2`, so the substring rule that picks a
-    /// decade out of the years picks most of a station list here.
+    /// field drawn from a short ladder of values that share digits. The substring rule
+    /// that picks a decade out of the years picks most of a bitrate column here.
     pub fn equals_number(&self, value: Option<i32>) -> bool {
         self.over_decimal(value, |decimal| decimal == self.text)
     }

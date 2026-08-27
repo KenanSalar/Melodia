@@ -455,9 +455,9 @@ silently miss the other.
   have meant is offered as a scope pill rather than folded in — `ui::radio::filter` routes it,
   `ui::radio::suggest` builds the pills. The constraint spanning both, which neither file owns
   alone: a pill and a filter chip write the same `StationSearch` fields, so `facets::apply_pick`
-  stays their only writer and a pill's edit has to land as **one** `edit_query` — the needle and the chip
-  filter the same request, so a pill that set the chip and left the name behind would fetch a
-  guaranteed-empty page on its way to the right one.
+  stays their only writer and a pill's edit has to land as **one** `edit_query` — the needle and
+  the chip filter the same request, so a pill that set the chip and left the name behind would
+  fetch a guaranteed-empty page on its way to the right one.
 
 - **A needle is folded exactly once, and `Needle` is the type that makes anything else
   unspellable** — `fold_needle` is the only constructor and the predicates take nothing else. The

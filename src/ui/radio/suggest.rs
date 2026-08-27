@@ -262,12 +262,6 @@ pub(super) fn apply(
 /// displace. A needle that found stations is a name search that worked, and choosing between two
 /// scopes is the user's — so the pills stay pills in every other case.
 ///
-/// **A bitrate floor is never adopted**, the one scope that is a guess about digits rather than
-/// something a list confirmed: `128` is as likely to be part of a station's name, and answering a
-/// search for one with every station at 128 kbps and up is further from the intent than the empty
-/// page. Its sibling shape stays in — a frequency reaches those stations through nothing else,
-/// which is the case the rule was written for.
-///
 /// Terminates without a guard: adopting empties the needle, so the query this triggers offers no
 /// scopes of its own however few stations come back.
 pub(super) fn adopt_only_scope(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
@@ -279,10 +273,21 @@ pub(super) fn adopt_only_scope(ui: &AppWindow, state: &AppState, radio_ui: &Arc<
     let Some(only) = offered.row_data(0) else {
         return;
     };
-    if facets::chip_from_index(&g, only.kind) == Some(ChipFilter::BitrateMin) {
+    if !facets::chip_from_index(&g, only.kind).is_some_and(adoptable) {
         return;
     }
     apply(ui, state, radio_ui, only.kind, &only.name, &only.code);
+}
+
+/// Whether a scope is one an empty page may take on the user's behalf.
+///
+/// **A bitrate floor is not**, being the one scope that is a guess about digits rather than
+/// something a list confirmed: `128` is as likely to be part of a station's name, and answering a
+/// search for one with every station at 128 kbps and up is further from the intent than the empty
+/// page. Its sibling shape stays in — a frequency reaches those stations through nothing else,
+/// which is the case the rule was written for.
+fn adoptable(chip: ChipFilter) -> bool {
+    chip != ChipFilter::BitrateMin
 }
 
 #[cfg(test)]

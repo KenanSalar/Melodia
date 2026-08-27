@@ -54,7 +54,8 @@ impl KeptState {
 /// **Bitrate is `Option` here because `0` is the directory saying it does not know**, not a
 /// station that streams at zero, and a large share of live rows carry it — matched raw, the needle
 /// `0` would select all of them. It is also the one field matched whole rather than as a
-/// substring: the directory serves nine bitrates and they share digits, so `2` reaches six of them.
+/// substring: the values come off a short ladder that shares digits, where a single one selects
+/// most of the list.
 fn station_matches(station: &RadioStation, needle: &Needle) -> bool {
     needle.contains(&station.name)
         || needle.contains(station.genre().unwrap_or_default())

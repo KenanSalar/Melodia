@@ -28,12 +28,10 @@ export component SuggestionPill inherits Rectangle {
         : root.data.kind == Radio.facet-codec ? @tr("Format")
         : @tr("Bitrate");
 
-    // A bitrate names a floor rather than a value, and reads the way its own chip shows it. Every
-    // other value is the directory's own, so it carries `FacetOption`'s mark: an Arabic country or
-    // tag reorders against the label in front of it otherwise.
+    // A bitrate names a floor rather than a value, and reads the way its own chip shows it.
     private property <string> scope-value: root.data.kind == Radio.facet-bitrate
         ? @tr("{} kbps and up", root.data.name)
-        : "\u{200e}" + root.data.name;
+        : root.data.name;
 
     height: 32px;
     min-width: 0px;
@@ -63,7 +61,10 @@ export component SuggestionPill inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 Text {
-                    text: @tr("{}: {}", root.scope-label, root.scope-value);
+                    // Leading U+200E, as `FacetOption` marks the same names: the value is the
+                    // directory's and can be any script, and the mark is what pins the line's
+                    // direction and its elide edge whatever arrives.
+                    text: "\u{200e}" + @tr("{}: {}", root.scope-label, root.scope-value);
                     color: Theme.text;
                     font-size: Theme.font-size-sm;
                     overflow: elide;
