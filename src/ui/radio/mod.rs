@@ -220,12 +220,13 @@ pub struct RadioUi {
     /// A station page per tab, since one opens from all three and a tab move must not evict what
     /// another is holding. `detail.rs` owns the shape.
     detail: Mutex<detail::DetailState>,
-    /// Held by the `views.json` writers for the length of the write.
+    /// Held by the station-detail writer for the length of its `views.json` write.
     ///
     /// **That is the ordering** — two `spawn_blocking` tasks have none of their own, and with a
     /// name written on every tab move a bounce queues alternating values that can land reversed,
-    /// naming the station the restored tab is *not* showing. `NavIndexPersist`'s shape minus the
-    /// atomic: the value a writer reloads under this already lives beside the seats.
+    /// naming the station the restored tab is *not* showing. `IndexPersist`'s shape minus the
+    /// atomic, which is what the tab index beside it takes instead: the value a writer reloads
+    /// under this is an `Option<i64>` and already lives beside the seats.
     persist_writer: Mutex<()>,
     /// The titles the station currently playing has announced. Not the detail's, and deliberately
     /// outside it: the ring fills whether or not anybody has the page open, which is the only way

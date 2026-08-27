@@ -8,6 +8,7 @@ use slint::ComponentHandle;
 
 use crate::library;
 use crate::state::AppState;
+use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::spawn_play_then_shuffle;
 use crate::ui::model_diff::clear_vec_model;
@@ -65,10 +66,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         let s = state.clone();
         let ru = rp_ui.clone();
         let weak = weak.clone();
+        // Ordered: a bounce queues a value per pick and two blocking tasks have
+        // none of their own, so a reversed pair reopens the page on a tab the
+        // user only passed through.
+        let persist = Arc::new(IndexPersist::new(g.get_tab_idx()));
         g.on_tab_changed(move |tab| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<RecentlyPlayed>();
             let entering = recently_played_ui_mod::tab_from_index(&g, tab);
+            persist.publish(tab);
             // A sub-view pick moves no nav index, so `record_current` never
             // hears about it. The bar has already written `tab-idx`, so the tag
             // reads the tab being entered.
@@ -143,10 +149,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
             let ru_covers = ru.clone();
             let s_disk = s.clone();
             let weak_warm = weak.clone();
+            let persist_disk = Arc::clone(&persist);
             s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_recently_played_tab(&s_disk, tab) {
-                    log::warn!("recently_played::set_recently_played_tab: {e}");
-                }
+                // Scoped to the write alone: a superseded tab drops its own disk
+                // hop, and the cover swap below is this task's regardless.
+                persist_disk.write_if_current(tab, || {
+                    if let Err(e) = library::settings::set_recently_played_tab(&s_disk, tab) {
+                        log::warn!("recently_played::set_recently_played_tab: {e}");
+                    }
+                });
                 // `warm` is the decode's own verdict — a section leave landing
                 // inside it handed the buffers back — so `Some(entering)` is
                 // exactly "we decoded for this tab and still hold it", which is

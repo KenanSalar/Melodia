@@ -479,7 +479,8 @@ pub fn release_seated_artwork(radio_ui: &RadioUi) {
 /// The shadow beside it is what keeps a tab bounce off the disk: the value changes on an open and
 /// a close, and on a tab move only where the two tabs disagree. What survives that holds
 /// `RadioUi::persist_writer` for the whole round trip, and reloads the shadow under it so a
-/// superseded write drops its own — the ordering the pool does not give.
+/// superseded write drops its own — the ordering the pool does not give, and which the tab index
+/// written beside this one takes from `IndexPersist`.
 ///
 /// UI thread only.
 pub fn persist_seat(state: &AppState, ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
@@ -515,6 +516,18 @@ pub fn open_station_ref(ui: &AppWindow, radio_ui: &RadioUi) -> Option<StationRef
     radio_ui.detail.lock().seat(tab).map(|open| open.station.clone())
 }
 
+/// Every tab holding a page, and which station each is about.
+///
+/// Taken as a snapshot rather than walked under the lock: both callers reach a cache per seat and
+/// `restamp` reaches the star shadow besides, and neither is ours to order against `detail`.
+fn seated_stations(radio_ui: &RadioUi) -> Vec<(RadioTab, StationRef)> {
+    let detail = radio_ui.detail.lock();
+    RadioTab::ALL
+        .into_iter()
+        .filter_map(|tab| detail.seat(tab).map(|open| (tab, open.station.clone())))
+        .collect()
+}
+
 /// Re-read every seated station from whichever cache owns it and rewrite the row the page paints.
 ///
 /// Called at the tail of the two single write paths, `browse::apply` and `kept::apply`, so the
@@ -533,15 +546,8 @@ pub fn open_station_ref(ui: &AppWindow, radio_ui: &RadioUi) -> Option<StationRef
 pub fn restamp(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
     let mounted = mounted_tab(&g);
-    let seated: Vec<(RadioTab, StationRef)> = {
-        let detail = radio_ui.detail.lock();
-        RadioTab::ALL
-            .into_iter()
-            .filter_map(|tab| detail.seat(tab).map(|open| (tab, open.station.clone())))
-            .collect()
-    };
 
-    for (tab, station) in seated {
+    for (tab, station) in seated_stations(radio_ui) {
         let Some(source) = from_cache(radio_ui, &station) else {
             continue;
         };
@@ -572,17 +578,9 @@ pub fn restamp(ui: &AppWindow, radio_ui: &RadioUi) {
 ///
 /// UI thread only.
 pub fn close_if_gone(ui: &AppWindow, radio_ui: &RadioUi) {
-    let seated: Vec<(RadioTab, StationRef)> = {
-        let detail = radio_ui.detail.lock();
-        RadioTab::ALL
-            .into_iter()
-            .filter_map(|tab| detail.seat(tab).map(|open| (tab, open.station.clone())))
-            .collect()
-    };
-
     let g = ui.global::<Radio>();
     let mounted = mounted_tab(&g);
-    for (tab, station) in seated {
+    for (tab, station) in seated_stations(radio_ui) {
         // A browsed page is backed by the directory answer, not by these caches, and outlives
         // them.
         if !station.is_kept() || kept_from_cache(radio_ui, station.id).is_some() {

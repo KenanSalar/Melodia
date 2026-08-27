@@ -72,9 +72,9 @@ pub(crate) const CALLBACK_HOMES: [&str; 13] = [
     "tracks",
 ];
 
-/// A floor under the walk itself, so it can't pass vacuously *ahead of* the set check.
-/// Loose on purpose — [`CALLBACK_HOMES`] is the real guard.
-const MIN_UI_SOURCES: usize = 180;
+/// A floor under any walk of [`UI_SRC_DIR`], so one can't pass vacuously. Loose on purpose —
+/// each caller has a real guard of its own, [`CALLBACK_HOMES`] here.
+pub(crate) const MIN_UI_SOURCES: usize = 180;
 
 /// Every wiring source under [`UI_SRC_DIR`], comment-stripped and paired with its
 /// `src/ui`-relative path.

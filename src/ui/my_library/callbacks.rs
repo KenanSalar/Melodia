@@ -12,23 +12,36 @@
 //! finished) and `page-active-changed` (all of it, once the page is gone).
 
 use std::cell::Cell;
+use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
 use crate::library;
 use crate::state::AppState;
+use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::callbacks::macros::release_hero_slots;
 use crate::ui::my_library as my_library_mod;
 use crate::{AlbumDetail, AppWindow, ArtistDetail, MyLibrary, PlaylistDetail};
 
 /// Write the active tab to `views.json` on the blocking pool. The Slint property is
 /// already correct by the time any caller gets here, so this is pure catch-up.
-fn persist_tab(state: &AppState, tab: i32) {
+///
+/// **Ordered, and one `persist` covers both callers — the field is one, so the ordering has
+/// to be.** `nav_history::replay` moves the tab on the user's behalf where a pick moves it
+/// directly, and two blocking tasks have no ordering whichever tick queued them, so the tab
+/// walked *through* can land last.
+///
+/// UI thread only, for the publish.
+fn persist_tab(state: &AppState, persist: &Arc<IndexPersist>, tab: i32) {
+    persist.publish(tab);
     let s = state.clone();
+    let persist = Arc::clone(persist);
     state.runtime.spawn_blocking(move || {
-        if let Err(e) = library::settings::set_my_library_tab(&s, tab) {
-            log::warn!("my_library: set_my_library_tab({tab}): {e}");
-        }
+        persist.write_if_current(tab, || {
+            if let Err(e) = library::settings::set_my_library_tab(&s, tab) {
+                log::warn!("my_library: set_my_library_tab({tab}): {e}");
+            }
+        });
     });
 }
 
@@ -87,6 +100,8 @@ fn release_page_hero(ui: &AppWindow) {
 pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<MyLibrary>();
     let weak = ui.as_weak();
+    // Shared by the two handlers below, which write the one field between them.
+    let tab_persist = Arc::new(IndexPersist::new(g.get_tab_idx()));
 
     // tab-changed: fires after the bar has moved `tab-idx` and the entering tab's gate has
     // re-fetched, so all the page owes is dropping the filter and remembering the pick.
@@ -101,6 +116,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     {
         let s = state.clone();
         let weak = weak.clone();
+        let persist = Arc::clone(&tab_persist);
         g.on_tab_changed(move |tab| {
             if let Some(ui) = weak.upgrade() {
                 let g = ui.global::<MyLibrary>();
@@ -109,7 +125,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
                 my_library_mod::filter::clear_mounted(&ui);
                 crate::ui::nav_history::record_current(&s, &ui);
             }
-            persist_tab(&s, tab);
+            persist_tab(&s, &persist, tab);
         });
     }
 
@@ -117,7 +133,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     // move the tab on the user's behalf — a cross-tab drill, a Mouse-4/5 walk.
     {
         let s = state.clone();
-        g.on_persist_tab_idx(move |tab| persist_tab(&s, tab));
+        g.on_persist_tab_idx(move |tab| persist_tab(&s, &tab_persist, tab));
     }
 
     // filter-changed: one box, nine destinations. See `ui::my_library::filter`.
