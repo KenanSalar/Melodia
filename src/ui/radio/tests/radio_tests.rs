@@ -114,6 +114,16 @@ fn an_unknown_tab_index_resolves_to_browse() {
         .and_then(|(_, rest)| rest.split_once('}'))
         .map_or(0, |(body, _)| body.lines().filter(|l| l.trim_end().ends_with(',')).count());
     assert_eq!(variants, TABS, "`RadioTab` needs one variant per tab the global declares");
+
+    // The walks over per-tab state take `ALL`, and a variant left out of it is skipped rather
+    // than caught: the array's own length is no help, a fourth variant not being something
+    // `[Self; 3]` disagrees with.
+    assert_eq!(
+        RadioTab::ALL.len(),
+        TABS,
+        "`RadioTab::ALL` must list every tab — a seat left out of it is never released, \
+         restamped or closed"
+    );
 }
 
 /// **Every station grid the global declares has to be handed a `VecModel` at install.**

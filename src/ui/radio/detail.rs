@@ -477,10 +477,12 @@ pub fn release_seated_artwork(radio_ui: &RadioUi) {
 /// showing" stopped being the same answer, and only the second is what a boot can act on.
 ///
 /// The shadow beside it is what keeps a tab bounce off the disk: the value changes on an open and
-/// a close, and on a tab move only where the two tabs disagree.
+/// a close, and on a tab move only where the two tabs disagree. What survives that holds
+/// `RadioUi::persist_writer` for the whole round trip, and reloads the shadow under it so a
+/// superseded write drops its own — the ordering the pool does not give.
 ///
 /// UI thread only.
-pub fn persist_seat(state: &AppState, ui: &AppWindow, radio_ui: &RadioUi) {
+pub fn persist_seat(state: &AppState, ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
     let tab = mounted_tab(&ui.global::<Radio>());
     let named = {
         let mut detail = radio_ui.detail.lock();
@@ -493,7 +495,13 @@ pub fn persist_seat(state: &AppState, ui: &AppWindow, radio_ui: &RadioUi) {
         named
     };
     let state = state.clone();
+    let radio_ui = radio_ui.clone();
     state.runtime.clone().spawn_blocking(move || {
+        let _writer = radio_ui.persist_writer.lock();
+        let latest = radio_ui.detail.lock().persisted;
+        if latest != named {
+            return;
+        }
         if let Err(e) = library::settings::set_last_detail_id(&state, view_id::RADIO_DETAIL, named)
         {
             log::warn!("radio: persist station detail: {e}");
@@ -507,7 +515,7 @@ pub fn open_station_ref(ui: &AppWindow, radio_ui: &RadioUi) -> Option<StationRef
     radio_ui.detail.lock().seat(tab).map(|open| open.station.clone())
 }
 
-/// Re-read the open station from whichever cache owns it and rewrite the row the page paints.
+/// Re-read every seated station from whichever cache owns it and rewrite the row the page paints.
 ///
 /// Called at the tail of the two single write paths, `browse::apply` and `kept::apply`, so the
 /// page and the grid behind it cannot disagree about a station they both draw.
@@ -516,24 +524,37 @@ pub fn open_station_ref(ui: &AppWindow, radio_ui: &RadioUi) -> Option<StationRef
 /// cache the page's station lives in may simply not have been filled yet. Whether the station is
 /// *gone* is [`close_if_gone`]'s question, and only one caller is in a position to ask it.
 ///
-/// The seat takes the fresher answer too, so a later tab move repaints from it rather than from
-/// the one the page was opened on.
+/// **Every seat, not just the mounted one**, because a tab move repaints from the seat's own
+/// source: left unstamped, a page waiting on another tab comes back describing the station as it
+/// was when it was opened, and a star flipped in the meantime is invisible until it is reopened.
+/// Only the mounted tab's row reaches Slint.
 ///
 /// UI thread only.
 pub fn restamp(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
-    let tab = mounted_tab(&g);
-    let Some(station) = radio_ui.detail.lock().seat(tab).map(|open| open.station.clone()) else {
-        return;
+    let mounted = mounted_tab(&g);
+    let seated: Vec<(RadioTab, StationRef)> = {
+        let detail = radio_ui.detail.lock();
+        RadioTab::ALL
+            .into_iter()
+            .filter_map(|tab| detail.seat(tab).map(|open| (tab, open.station.clone())))
+            .collect()
     };
-    let Some(source) = from_cache(radio_ui, &station) else {
-        return;
-    };
-    let row = source.to_row(radio_ui);
-    if let Some(open) = radio_ui.detail.lock().seat_mut(tab).as_mut() {
-        open.source = source;
+
+    for (tab, station) in seated {
+        let Some(source) = from_cache(radio_ui, &station) else {
+            continue;
+        };
+        // Built before the seat takes the source: `to_row` reaches the star shadow, and the two
+        // are not ours to order.
+        let row = (tab == mounted).then(|| source.to_row(radio_ui));
+        if let Some(open) = radio_ui.detail.lock().seat_mut(tab).as_mut() {
+            open.source = source;
+        }
+        if let Some(row) = row {
+            g.set_detail_station(row);
+        }
     }
-    g.set_detail_station(row);
 }
 
 /// Close a kept station's page once its row is gone.
@@ -614,7 +635,7 @@ pub fn apply_history(ui: &AppWindow, radio_ui: &RadioUi) {
 ///
 /// **Every seat, not only the mounted one.** A tab move repaints from the seat's own held pair,
 /// so a seat left cold would come back a decode late and flash its monogram on the way. Bounded
-/// at three, and the tier answers all but the first from its own LRU.
+/// at three.
 ///
 /// **The mounted tab decodes first**, the rest being work for a tab move that has not happened
 /// yet: queued in declaration order the banner on screen waits behind up to two heroes nobody is
@@ -708,7 +729,7 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, radio_ui: &Ar
 ///
 /// Zero where nothing decoded, and the hero reads that as "draw the monogram" rather than as a
 /// zero-sized image.
-fn logo_size(pair: &crate::ui::detail_artwork::DetailPair) -> i32 {
+fn logo_size(pair: &DetailPair) -> i32 {
     pair.cover
         .as_ref()
         .map_or(0, |cover| clamp_i64_to_i32(i64::from(cover.width().min(cover.height()))))

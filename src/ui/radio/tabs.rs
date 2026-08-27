@@ -16,8 +16,9 @@ pub enum RadioTab {
 
 impl RadioTab {
     /// The variants, for the walks over per-tab state — the three station-page seats, and the
-    /// artwork each holds. A tab added here and left out of this is the one way such a walk goes
-    /// quiet rather than wrong, `[Self; 3]` being a length no new variant disagrees with.
+    /// artwork each holds. **A variant added to the enum and left out of here still compiles**,
+    /// and every walk then skips that tab quietly rather than failing, so the length is pinned
+    /// against `Radio.tab-count` in `super::tests` rather than trusted to the array.
     pub const ALL: [Self; 3] = [Self::Browse, Self::Favorites, Self::Recent];
 }
 
