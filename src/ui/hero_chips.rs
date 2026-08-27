@@ -53,11 +53,9 @@ use crate::{
 /// hero's trailing spacer already leaves. A third overruns the tile on all six and pushes
 /// the action pill out of the banner — unlike the Now Playing strip, which passes `None`.
 ///
-/// What makes the second row fit on the two heroes carrying a subtitle (Album's artist,
-/// Playlist's description) is that the line sits *under the title, inside the title row*,
-/// where the `SearchBar` beside it has already claimed the height. Moving either onto a
-/// row of its own is what breaks this, not the row count — and it makes
-/// `Theme.hero-title-size` and `font-size-md` a pair, raising either spending the slack.
+/// The slack is what the title block leaves, so on the two heroes carrying a subtitle
+/// (Album's artist, Playlist's description) `Theme.hero-title-size` and `font-size-md` are a
+/// pair: raising either spends it.
 const HERO_MAX_ROWS: usize = 2;
 
 /// The translated labels a builder needs. A trait rather than the global directly, so the

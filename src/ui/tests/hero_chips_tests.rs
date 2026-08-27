@@ -915,9 +915,11 @@ fn the_strip_spaces_its_rows_tighter_than_its_chips() {
 /// It sits on a row of its own, forced rather than chosen: the band's search box is up
 /// in the tab row, so the line costs its full box plus a gap out of a meta column
 /// bounded by `Theme.hero-artwork` less the pill band. What that buys back is that there
-/// is exactly one of it. Two things stay pinned: the size, `HERO_MAX_ROWS`' slack being
-/// measured against what the title block spends, and that the line collapses when empty,
-/// an always-mounted row spending it on the four heroes that state nothing there.
+/// is exactly one of it. Three things stay pinned: the size, `HERO_MAX_ROWS`' slack being
+/// measured against what the title block spends; that the line collapses when empty, an
+/// always-mounted row spending it on the four heroes that state nothing there; and the
+/// optical inset, whose wrapper reads as redundant to anyone reaching for the `Text` inside
+/// it.
 #[test]
 fn the_subtitled_heroes_share_one_collapsing_line() {
     const SHEET: &str = include_str!("../../../melodia-ui/ui/views/my-library-view.slint");
