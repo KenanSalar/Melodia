@@ -63,6 +63,7 @@ export component KeptStationsTab inherits Rectangle {
                 logo-decode-size: Radio.logo-decode-size;
                 request-logo(p, g) => { Radio.request-logo(p, g) }
                 station-clicked(s) => { Radio.open-station(s); }
+                play-clicked(s) => { Radio.play-station(s); }
                 favorite-clicked(s) => { Radio.toggle-favorite(s); }
                 homepage-clicked(s) => { Radio.open-homepage(s.homepage); }
                 edit-clicked(s) => { Radio.edit-station(s); }

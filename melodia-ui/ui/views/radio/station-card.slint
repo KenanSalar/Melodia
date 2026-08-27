@@ -55,6 +55,7 @@ export component StationCard inherits Rectangle {
         : root.tile-size;
 
     callback clicked();
+    callback play-clicked();
     callback favorite-clicked();
     callback homepage-clicked();
     callback edit-clicked();
@@ -65,6 +66,7 @@ export component StationCard inherits Rectangle {
     // and the overlay would all drop out while the user is aiming at one.
     property <bool> card-hovered: touch.has-hover
         || fav_btn.has-hover
+        || play_btn.has-hover
         || home_btn.has-hover
         || edit_btn.has-hover
         || remove_btn.has-hover;
@@ -157,13 +159,12 @@ export component StationCard inherits Rectangle {
         width: root.tile-size;
         height: root.tile-size;
 
-        // **No play control, and its absence is the point.** The card body opens the station's
-        // page, and a 48 px disc in the middle of the tile is exactly where a body click lands —
-        // so the card played instead of opening for anyone who aimed at the artwork. Every other
-        // card in the tree keeps its centre clear and puts its controls in the corners
-        // (`components/grid/entity-card.slint`), and all four corners here are already spoken
-        // for. Playing is the page's Play pill, one click further in, which is also where
-        // Shortwave and RadioDroid put it.
+        // **The centre stays clear, and that is the part worth keeping.** The play control used
+        // to be a 48 px disc in the middle of the tile, which is exactly where a body click lands,
+        // so the card played instead of opening for anyone who aimed at the artwork. It is a
+        // corner control now like every other card's in the tree
+        // (`components/grid/entity-card.slint`), so both actions are reachable and neither is in
+        // the other's way.
 
         // **Stays up when the station is starred**, unlike the rest of the overlay: the star is a
         // fact about the row and not an affordance, so a grid of results has to show which of them
@@ -179,7 +180,6 @@ export component StationCard inherits Rectangle {
             icon-size: 18px;
             diameter: 30px;
             filled: root.is-favorite;
-            force-bg: true;
             idle-bg: Theme.floating-chrome-bg;
             idle-fg: root.is-favorite ? Theme.red : Theme.text;
             hover-fg: Theme.red;
@@ -195,11 +195,28 @@ export component StationCard inherits Rectangle {
             icon: "link";
             icon-size: 18px;
             diameter: 30px;
-            force-bg: true;
             idle-bg: Theme.floating-chrome-bg;
             opacity: root.card-hovered ? 1.0 : 0.0;
             animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
             clicked => { root.homepage-clicked(); }
+        }
+
+        // **Above the link, and in its slot when the station has no site**: the right edge is a
+        // stack off the bottom, so a control left hovering over a gap reads as a sibling that
+        // failed to draw. Gated where the page's Play pill is, a segmented stream having nothing
+        // to press — the badge in the opposite corner is what says so.
+        play_btn := IconButton {
+            visible: !root.unplayable;
+            x: parent.width - self.width - Theme.pad-sm;
+            y: home_btn.y - (root.homepage-known ? self.height + Theme.pad-xs : 0px);
+            icon: "play_arrow";
+            icon-size: 18px;
+            diameter: 30px;
+            filled: true;
+            idle-bg: Theme.floating-chrome-bg;
+            opacity: root.card-hovered ? 1.0 : 0.0;
+            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            clicked => { root.play-clicked(); }
         }
 
         // Bottom-left, opposite the homepage link: the two that change the row rather than
@@ -211,7 +228,6 @@ export component StationCard inherits Rectangle {
             icon: "delete";
             icon-size: 18px;
             diameter: 30px;
-            force-bg: true;
             idle-bg: Theme.floating-chrome-bg;
             hover-fg: Theme.danger;
             opacity: root.card-hovered ? 1.0 : 0.0;
@@ -226,7 +242,6 @@ export component StationCard inherits Rectangle {
             icon: "edit";
             icon-size: 18px;
             diameter: 30px;
-            force-bg: true;
             idle-bg: Theme.floating-chrome-bg;
             opacity: root.card-hovered ? 1.0 : 0.0;
             animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }

@@ -40,6 +40,7 @@ export component StationGrid inherits Rectangle {
     in property <bool> show-play-count: false;
 
     callback station-clicked(RadioStationRow);
+    callback play-clicked(RadioStationRow);
     callback favorite-clicked(RadioStationRow);
     callback homepage-clicked(RadioStationRow);
     callback edit-clicked(RadioStationRow);
@@ -111,6 +112,7 @@ export component StationGrid inherits Rectangle {
                     unplayable: station.hls;
                     play-count: root.show-play-count ? station.play_count : 0;
                     clicked => { root.station-clicked(station); }
+                    play-clicked => { root.play-clicked(station); }
                     favorite-clicked => { root.favorite-clicked(station); }
                     homepage-clicked => { root.homepage-clicked(station); }
                     edit-clicked => { root.edit-clicked(station); }

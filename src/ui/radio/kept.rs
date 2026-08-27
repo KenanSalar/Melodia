@@ -15,7 +15,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use slint::{ComponentHandle, SharedString, Weak};
+use slint::{ComponentHandle, Weak};
 
 use crate::entities::radio::RadioStation;
 use crate::library;
@@ -171,15 +171,20 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
         g.set_recent_count(count);
     }
 
-    let grid = chunk_built_rows(station_rows, g.get_grid_columns(), |stations| {
-        RadioStationGridRow { stations }
-    });
     let model = if tab == RadioTab::Favorites {
         g.get_favorites_rows()
     } else {
         g.get_recent_rows()
     };
-    write_grid(&model, grid, "radio::kept");
+    // `browse::apply`'s reason: a refetch that moved one row must not reset a grid the pointer is
+    // sitting on. Recently Played is the tab that genuinely reshapes — a play moves its station to
+    // the front — and there the full write is what the reorder asks for anyway.
+    let columns = g.get_grid_columns();
+    if !rows::patch_grid(&model, &station_rows, columns) {
+        let grid =
+            chunk_built_rows(station_rows, columns, |stations| RadioStationGridRow { stations });
+        write_grid(&model, grid, "radio::kept");
+    }
 
     // `browse::apply`'s reason: the station page draws a station this cache owns, so it follows
     // the write path rather than each caller that could have moved a field.
@@ -342,47 +347,11 @@ async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWi
         // Browse draws from the map, not from the caches, so it has to be re-derived here too —
         // this is the one path that finds a logo *after* the refresh built it.
         remember_logos(radio_ui);
-        patch_landed_logos(weak, radio_ui);
+        // Both grids, because a heal moves both: the row's own `artwork_path`, and the uuid-keyed
+        // map a browsed card reads. Only the paths moved, so each `apply` patches rather than
+        // resetting, which is what lets this land under a pointer that is mid-click.
+        paint_mounted(weak, radio_ui);
     }
-}
-
-/// Stamp landed logos onto whatever cards are on screen, `browse::paint_landed`'s reason: a
-/// whole-grid write resets the model and takes the pointer grab of anyone mid-click with it, and
-/// a heal lands while the user is looking at the grid it repaints.
-///
-/// Both grids, because a heal moves both: the row's own `artwork_path`, and the uuid-keyed map a
-/// browsed card reads. The `false` arms are the model not being where it was installed, which the
-/// full writes log for themselves.
-fn patch_landed_logos(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
-    let ru = radio_ui.clone();
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        let g = ui.global::<Radio>();
-        let browsed = rows::patch_logos(&g.get_browse_rows(), |card| {
-            super::browse::logo_by_uuid(&ru, &card.uuid).map(SharedString::from).unwrap_or_default()
-        });
-        if !browsed {
-            super::browse::apply(&ui, &ru);
-        }
-
-        let Some(tab) = local_tab(&g) else { return };
-        let model = if tab == RadioTab::Favorites {
-            g.get_favorites_rows()
-        } else {
-            g.get_recent_rows()
-        };
-        if !rows::patch_logos(&model, |card| kept_logo(&ru, tab, i64::from(card.id))) {
-            apply(&ui, &ru, tab);
-        }
-    });
-}
-
-/// The logo a kept card should be drawing, by the database id its row carries. By id rather than
-/// by position for [`resolve`]'s reason.
-fn kept_logo(radio_ui: &RadioUi, tab: RadioTab, id: i64) -> SharedString {
-    resolve(radio_ui, tab, id)
-        .and_then(|station| station.artwork_path)
-        .map(SharedString::from)
-        .unwrap_or_default()
 }
 
 fn spawn_heal(
@@ -429,6 +398,8 @@ fn adopt_logo_path(radio_ui: &RadioUi, id: i64, path: &str) {
 }
 
 /// Repaint the mounted local tab, and Browse's stars with it.
+///
+/// Twice per [`refresh`]: once on the landing, once more if a heal found a logo behind it.
 fn paint_mounted(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
     let ru = radio_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -438,9 +409,9 @@ fn paint_mounted(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
         if let Some(tab) = local_tab(&ui.global::<Radio>()) {
             apply(&ui, &ru, tab);
         }
-        // **Here and nowhere else**: both caches were just rebuilt from the database above, so a
-        // station page whose row is in neither is a page about a station that is gone. Everywhere
-        // else a miss is a cache that has not been filled yet.
+        // **From this path and no other**: both caches were rebuilt from the database above and a
+        // heal only ever stamps a logo onto one, so a station in neither is a station that is
+        // gone. Everywhere else a miss is a cache that has not been filled yet.
         super::detail::close_if_gone(&ui, &ru);
     });
 }

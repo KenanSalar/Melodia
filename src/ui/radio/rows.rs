@@ -35,46 +35,72 @@ pub fn station_has_row(id: i64) -> bool {
     id != 0
 }
 
-/// Re-stamp the logos on cards already on screen, leaving the models their delegates are mounted
-/// on alone.
+/// Write `cards` onto the delegates a grid already has mounted, or report that it cannot.
 ///
-/// **A whole-grid write is what this exists to avoid.** `write_grid` is a `set_vec`, a model reset
-/// that tears down every delegate and rebuilds it — and a delegate destroyed mid-press takes the
-/// pointer grab with it, so the click never lands. A page repaints on a timer while its logos
-/// arrive, which is exactly the second or two somebody spends clicking a station they just
-/// searched for; `set_row_data` on the row that moved updates the mounted card instead.
+/// **A model reset is what this exists to avoid**, and it costs more than a repaint. `write_grid`
+/// is a `set_vec`: every delegate is torn down and rebuilt, and a rebuilt card carries no pointer
+/// state until the next mouse *event*. So a click that repaints the grid it was aimed at leaves
+/// the card still under the cursor drawn as though it had never been hovered — the star, the play
+/// control and the fill all drop out with nothing having moved — and a delegate destroyed
+/// mid-press takes the grab with it, so the click never lands at all. Both are reachable from an
+/// ordinary card click: playing or starring a station refetches the kept lists, and the logo
+/// sweep repaints on a timer for as long as a page takes to fill.
 ///
-/// `logo` answers what a station's path should be now. Returns `false` when the grid's shape no
-/// longer matches the cards it was built from, which is a caller owing a full write instead.
+/// Returns `false` when the grid is not the same stations in the same places, which is a caller
+/// owing the full write instead — there is nothing to reuse, so the reset is the honest answer.
+/// It may have written some cards before deciding that; the full write behind it covers them.
 ///
 /// UI thread only.
-pub fn patch_logos(
+pub fn patch_grid(
     grid: &slint::ModelRc<RadioStationGridRow>,
-    logo: impl Fn(&RadioStationRow) -> SharedString,
+    cards: &[RadioStationRow],
+    columns: i32,
 ) -> bool {
+    // The chunking the caller would have built, so a column change is a shape change rather than
+    // a rechunk this silently skips: the same stations in the same order fill different rows at
+    // different column counts, and every position would still agree.
+    let cols = usize::try_from(columns.max(1)).unwrap_or(1);
     let Some(chunks) = grid.as_any().downcast_ref::<VecModel<RadioStationGridRow>>() else {
         return false;
     };
-    for chunk in 0..chunks.row_count() {
+    if chunks.row_count() != cards.len().div_ceil(cols) {
+        return false;
+    }
+
+    for (chunk, wanted) in cards.chunks(cols).enumerate() {
         let Some(row) = chunks.row_data(chunk) else {
             return false;
         };
-        let Some(cards) = row.stations.as_any().downcast_ref::<VecModel<RadioStationRow>>() else {
+        let Some(mounted) = row.stations.as_any().downcast_ref::<VecModel<RadioStationRow>>()
+        else {
             return false;
         };
-        for slot in 0..cards.row_count() {
-            let Some(mut card) = cards.row_data(slot) else {
+        if mounted.row_count() != wanted.len() {
+            return false;
+        }
+        for (slot, card) in wanted.iter().enumerate() {
+            let Some(current) = mounted.row_data(slot) else {
                 return false;
             };
-            let found = logo(&card);
-            if card.artwork_path == found {
-                continue;
+            if !same_station(&current, card) {
+                return false;
             }
-            card.artwork_path = found;
-            cards.set_row_data(slot, card);
+            // Value-compared, so an unchanged card notifies nothing: the common repaint is a
+            // refetch that moved one row, and the rest of the page owes no work for it.
+            if current != *card {
+                mounted.set_row_data(slot, card.clone());
+            }
         }
     }
     true
+}
+
+/// Whether two rows name the same station.
+///
+/// Both halves, for [`super::detail::StationRef`]'s reason: a browsed row's `id` is always `0`,
+/// and a hand-typed one carries no `uuid`.
+fn same_station(a: &RadioStationRow, b: &RadioStationRow) -> bool {
+    a.id == b.id && a.uuid == b.uuid
 }
 
 /// One browsed station, with this install's answers about it folded in.
