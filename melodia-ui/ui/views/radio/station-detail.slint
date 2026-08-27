@@ -37,6 +37,11 @@ component StatusLine inherits HorizontalLayout {
 
 // One labelled fact, with an optional control on the value. Local rather than `SettingRow`, which
 // reads `SettingsPage.row-icon-w` and is Settings chrome.
+//
+// **Pinned to the list's row height, not sized from what it holds.** Two of these carry a 28 px
+// control and the rest carry one line box, so left to their content they stand at two different
+// heights and the column's rhythm breaks on exactly the rows the eye is drawn to. Every list in
+// the tree pins the pair instead (`components/track-list/track-list-row.slint`).
 component DetailRow inherits HorizontalLayout {
     in property <string> label;
     in property <string> value;
@@ -46,6 +51,8 @@ component DetailRow inherits HorizontalLayout {
 
     spacing: Theme.pad-md;
     vertical-stretch: 0;
+    min-height: Theme.row-h-compact;
+    max-height: Theme.row-h-compact;
 
     VerticalLayout {
         alignment: center;
@@ -158,43 +165,54 @@ export component RadioStationDetail inherits Rectangle {
                             : @tr("The directory could not reach this station on its last check.");
                     }
 
-                    // The facts, each absent when the station carries nothing for it. A
-                    // hand-typed station arrives with almost none of them.
-                    DetailRow {
-                        label: @tr("Stream");
-                        value: Radio.detail-stream-url;
-                        action-icon: "content_copy";
-                        action-tooltip: @tr("Copy stream URL");
-                        action-clicked => {
-                            url-field.select-all();
-                            url-field.copy();
-                            Radio.copy-stream-url();
+                    // **The facts are a list, so they take a row pitch and no gap between rows.**
+                    // The `pad-md` above separates this page's *sections*; handing it to the rows
+                    // as well spaces a labelled list like a set of unrelated blocks, and does it
+                    // on top of heights that differ by whether a row happens to carry a control.
+                    // One group at one pitch is what every other list here does.
+                    VerticalLayout {
+                        vertical-stretch: 0;
+
+                        // The facts, each absent when the station carries nothing for it. A
+                        // hand-typed station arrives with almost none of them.
+                        DetailRow {
+                            label: @tr("Stream");
+                            value: Radio.detail-stream-url;
+                            action-icon: "content_copy";
+                            action-tooltip: @tr("Copy stream URL");
+                            action-clicked => {
+                                url-field.select-all();
+                                url-field.copy();
+                                Radio.copy-stream-url();
+                            }
                         }
-                    }
-                    if Radio.detail-station.homepage != "": DetailRow {
-                        label: @tr("Website");
-                        value: Radio.detail-station.homepage;
-                        action-icon: "link";
-                        action-tooltip: @tr("Open in your browser");
-                        action-clicked => { Radio.open-homepage(Radio.detail-station.homepage); }
-                    }
-                    if Radio.detail-station.codec != "": DetailRow {
-                        label: @tr("Format");
-                        value: Radio.detail-station.codec;
-                    }
-                    // Zero on a large share of live stations, where it means the directory does
-                    // not know rather than that the station is silent.
-                    if Radio.detail-station.bitrate > 0: DetailRow {
-                        label: @tr("Bitrate");
-                        value: @tr("{} kbps", Radio.detail-station.bitrate);
-                    }
-                    if Radio.detail-votes >= 0: DetailRow {
-                        label: @tr("Votes");
-                        value: @tr("{n} vote" | "{n} votes" % Radio.detail-votes);
-                    }
-                    if Radio.detail-station.play_count > 0: DetailRow {
-                        label: @tr("Plays");
-                        value: @tr("{n} play" | "{n} plays" % Radio.detail-station.play_count);
+                        if Radio.detail-station.homepage != "": DetailRow {
+                            label: @tr("Website");
+                            value: Radio.detail-station.homepage;
+                            action-icon: "link";
+                            action-tooltip: @tr("Open in your browser");
+                            action-clicked => {
+                                Radio.open-homepage(Radio.detail-station.homepage);
+                            }
+                        }
+                        if Radio.detail-station.codec != "": DetailRow {
+                            label: @tr("Format");
+                            value: Radio.detail-station.codec;
+                        }
+                        // Zero on a large share of live stations, where it means the directory
+                        // does not know rather than that the station is silent.
+                        if Radio.detail-station.bitrate > 0: DetailRow {
+                            label: @tr("Bitrate");
+                            value: @tr("{} kbps", Radio.detail-station.bitrate);
+                        }
+                        if Radio.detail-votes >= 0: DetailRow {
+                            label: @tr("Votes");
+                            value: @tr("{n} vote" | "{n} votes" % Radio.detail-votes);
+                        }
+                        if Radio.detail-station.play_count > 0: DetailRow {
+                            label: @tr("Plays");
+                            value: @tr("{n} play" | "{n} plays" % Radio.detail-station.play_count);
+                        }
                     }
 
                     // **Mounted only when it has something**, which is what retires the empty
@@ -202,25 +220,34 @@ export component RadioStationDetail inherits Rectangle {
                     // where this would be. Neither radio player with a station page carries a
                     // song list on it at all; this is the one thing Melodia adds, so it earns its
                     // place by never being in the way.
-                    if Radio.history-rows.length > 0: Rectangle {
-                        height: Theme.pad-sm;
-                    }
-                    if Radio.history-rows.length > 0: Text {
-                        text: @tr("Recently played on this station");
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                        font-weight: Theme.page-title-weight;
-                        overflow: elide;
-                    }
-                    for title in Radio.history-rows: VerticalLayout {
-                        alignment: center;
-                        min-height: Theme.row-h-compact;
-                        max-height: Theme.row-h-compact;
-                        Text {
-                            text: "\u{200e}" + title;
-                            color: Theme.text;
-                            font-size: Theme.font-size-md;
-                            overflow: elide;
+                    //
+                    // The heading takes a row at the same pitch rather than a margin of its own,
+                    // so it sits in the rhythm of what it labels — `TrackListHeader`'s shape.
+                    if Radio.history-rows.length > 0: VerticalLayout {
+                        vertical-stretch: 0;
+
+                        VerticalLayout {
+                            alignment: center;
+                            min-height: Theme.row-h-compact;
+                            max-height: Theme.row-h-compact;
+                            Text {
+                                text: @tr("Recently played on this station");
+                                color: Theme.subtext0;
+                                font-size: Theme.font-size-sm;
+                                font-weight: Theme.page-title-weight;
+                                overflow: elide;
+                            }
+                        }
+                        for title in Radio.history-rows: VerticalLayout {
+                            alignment: center;
+                            min-height: Theme.row-h-compact;
+                            max-height: Theme.row-h-compact;
+                            Text {
+                                text: "\u{200e}" + title;
+                                color: Theme.text;
+                                font-size: Theme.font-size-md;
+                                overflow: elide;
+                            }
                         }
                     }
                 }

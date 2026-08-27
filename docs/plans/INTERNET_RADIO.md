@@ -731,9 +731,11 @@ What later phases reach for:
 single box and the two tabs want different things from it: on Browse a directory query,
 debounced and sent over the network; on Favorites a local `row_match` filter. One dispatch
 site in Rust routes a settled keystroke by the live tab, the way
-`my_library/filter.rs::dispatch` routes its nine surfaces. Phase 8 adds a third destination,
-which is why it is a function from the outset rather than an `if` that grows. What landed
-here is the box, its per-tab placeholder, and the tab pick that clears it.
+`my_library/filter.rs::dispatch` routes its nine surfaces. ⚠️ **Reversed in Phase 8**, which
+was to have added a third destination and instead took the box away over a station page: a
+station has no songs of its own to narrow. The function stays a function for the two tabs it
+does route. What landed here is the box, its per-tab placeholder, and the tab pick that clears
+it.
 
 **The sidebar row and the router branch landed ungated**, and Phase 5 adds the `if` term to
 each. Two one-line edits of churn, taken deliberately: the alternative is a phase whose only
@@ -1059,50 +1061,93 @@ already in the table fails it on both arms.
 
 ---
 
-## Phase 8: The station detail
+## Phase 8: The station detail ✅ landed
 
 **Goal.** A station card drills into a page, and the band morphs into that station's hero.
 Everything before this phase works without it, so it is the one phase that can be cut or
 postponed without stranding the rest.
 
-1. `melodia-ui/ui/views/radio/station-detail.slint`: the body under the morphed band. The
-   band itself needs no new component, only its hero inputs populated.
+Shipped: the fourth body branch and its hero, the page's labelled facts list, the session
+song history, the actions in the band's pill slot, the boot restore and the Mouse-4/5 walk.
+`src/ui/radio/detail.rs` and `callbacks/detail.rs`, `views/radio/station-detail.slint`, the
+`Radio` global's detail half, and `hero_chips::publish_station` with `ChipOwner::Station`.
 
-2. The band's hero half: `detail-open`, `title` (station name), `subtitle` (country and
-   language, or the homepage host), `artwork-path` and `cover`, `fallback-icon: "radio"`,
-   and the `blur-a`/`blur-b`/`use-a`/`has-blur` pair from `ui::detail_artwork`. Three
-   invariants come with it, all in the checklist: `hero-t` is written from
-   `changed detail-open` and only seeded by its binding; the teardown rides
-   `hero-collapsed()` rather than the id going away; and the chip strip stays mounted and
-   fades by brush alpha rather than hanging off an `if`.
+What later phases reach for:
 
-3. The source-size floor from D7: below a minimum stored dimension, skip the image tier
-   and take the `fallback-icon` + `tile-bg` path. `HeroBackdrop`'s blur seeds and palette
-   come off the same image, so this is one gate answering both.
+- **`Radio.detail-tab` is the seat and `detail-open` is derived from it**, the seat tested
+  against the live tab. The pair is the easiest thing here to get backwards: one answers "is
+  the page the mounted body", which a tab pick makes false while the page is still the
+  user's, and the other "is it still ours to come back to". Anything handing the hero back
+  asks `detail::is_seated`.
+- **`detail::restamp` and `detail::close_if_gone`** keep the page and the grids agreeing: the
+  first runs at the tail of the two single write paths, the second only from `kept::refresh`'s
+  landing, which is the one place a cache miss is authoritative rather than unfilled.
+- **`rows::patch_grid`** is how a repaint reaches a mounted card without resetting the model.
+  Any later surface that repaints under a pointer wants it rather than `write_grid`.
 
-4. Content: the chip strip carries tags, country, state, language, codec, bitrate and
-   votes, through `HeroChipStrip` like every other hero. The body carries the actions
-   (play, favorite, vote, copy stream URL, open homepage, and edit or remove for a custom
-   station), the directory's last-checked state, and the session song history from this
-   station.
+**Nine deviations from this section as first drafted**, each argued at its anchor:
 
-5. Open and close: a card's click builds the open call from the whole
-   `RadioStationRow` it already has (D6), the navigation rides `PendingNav` into the
-   `on_applied` hook so id and navigation land in one tick, and `origin-nav-index` is
-   stamped `-1` so the back arrow means "close this detail" (D5). `last_detail_ids` is
-   written only when `id != 0`, and the boot seed reads it back through the same guard.
+- **The band carries the actions, not the body.** Play, Vote and Edit are an `ActionPill` in
+  the pill slot, where every My Library detail puts a detail's. Six of them will not fit as
+  text pills, so the set had to shrink: Copy stream URL and Website became controls on the
+  rows they act on, and Favorite and Remove stayed on the cards alone. Un-starring from a page
+  is a row leaving a list the page is not showing, and the trash would have needed to know
+  which tab it was opened from to mean anything.
+- **The body is a labelled facts list**, not an action row over a song list: Stream, Website,
+  Format, Bitrate, Votes, Plays, each row absent when the station carries nothing for it. It is
+  the split both radio players with a station page settle on.
+- **The chip strip sheds the codec, the bitrate, the votes and the country.** The first three
+  are rows on the page and the country is the band's own subtitle, so no fact is stated twice:
+  the band is the glance, the body is the reference. What is left is state, language and tags,
+  every one a name the directory supplied, so `station_chips` takes no labels and
+  `HeroChips.bitrate`/`votes` are gone.
+- **The subtitle is the country alone**, not country and language or a homepage host. Language
+  is a chip, and an empty subtitle is a line the band simply doesn't draw.
+- **The filter box gains no third destination — it is hidden over the page.** A station has no
+  songs of its own to narrow, and a box that filters nothing is worse than no box, so
+  `search-shown` rides through the band and collapses the cell. What `filter::sync_box` then
+  answers is the page *closing*. This reverses the Phase 4 note that deferred the third arm.
+- **The song history has no empty state and no filter.** The section is mounted only when the
+  station has announced something, so a station that has never played shows its facts rather
+  than a page apologising for having no songs, and `history-count` retired with the sentinel
+  that used to tell the two empty states apart.
+- **D7's floor is an inset card, not a glyph fallback.** `ArtworkImage` measures `native-size`
+  against `max-upscale` and draws a source that would have to stretch as a smaller card
+  floating on `tile-bg`, so a 32 px favicon reads as inset rather than as the "radio" glyph —
+  which is now only for a station carrying no artwork at all. One answer for the tile and the
+  grid card both, rather than a hero-only gate.
+- **No `origin-nav-index` stamp.** Radio never sets an origin, a drill never leaving nav 10, so
+  there is nothing to stamp `-1` and the back arrow means "close this detail" by construction.
+- **The card's play control moved rather than staying put** (open question 4). The click opens
+  the page, and a 48 px disc in the middle of the tile is exactly where a body click lands, so
+  the play is a corner control beside the station's other three.
 
-6. The filter box gains its third destination: with a detail open it filters the song
-   history, which is the only list on screen. The Phase 4 dispatch function grows one arm.
+**Four bugs the manual pass found**, none of them reachable by a static gate:
 
-7. `view_id::RADIO_DETAIL`, and a `detail-scope-changed()` re-seat on open so a re-open
-   with the same id still reseats the box.
+1. **The two row tooltips were clipped by the page's own scroller.** `Tooltip` centres on its
+   host, so a pill on the row's trailing 28 px button ran past the viewport's right edge — and
+   on a station with neither a format warning nor a directory verdict the Stream row is the
+   scroller's first child, which put the pill outside the top edge entirely. `IconButton` had
+   no way to say otherwise, forwarding neither `side` nor `host-height`; it takes both now and
+   the rows clear to the left.
+2. **A card click threw away its own hover state.** A play or a star refetches the kept lists,
+   and `write_grid` is a `set_vec`: every delegate is rebuilt, and a rebuilt card carries no
+   pointer state until the next mouse *event*. So the card still under the cursor drew as
+   though it had never been hovered. `rows::patch_grid` writes onto the mounted delegates when
+   the grid is the same stations in the same places, which retired the two bespoke logo
+   patchers along with the bug.
+3. **The hover buttons were opaque and never animated.** `force-bg: true` pins an
+   `IconButton`'s fill to `hover-bg`, which is what a popup trigger wants and not what a card
+   does; it left the translucent `idle-bg` beside it dead. The four literals are gone and the
+   tree has none left.
+4. **The facts list had no row pitch.** Two rows carry a control and four carry a line box, so
+   uniform spacing over heights that differed by whether a row had a button broke the rhythm on
+   exactly the rows the eye lands on. `DetailRow` pins the pair like every list row in the tree
+   and the spacing separates sections instead.
 
-**Gates.** Same three.
-
-**Done when.** A drill-in morphs the band rather than routing, the back arrow closes it,
-a favorited station's detail survives a restart, a directory-only one lands on the tab
-root instead, and a 32 px favicon produces the glyph fallback rather than a blurry tile.
+**Done when.** ✅ A drill-in morphs the band rather than routing, the back arrow closes it, a
+favorited station's detail survives a restart, a directory-only one lands on the tab root
+instead, and a 32 px favicon produces the inset card rather than a blurry tile.
 
 ---
 
@@ -1221,11 +1266,11 @@ Answer before Phase 6, not before Phase 1.
    ✅ **Neither — its own tab**, and D5 was amended to allow it. Both options this question
    offered are over the favorites, which is the one set a played-but-unstarred station is not
    in; the argument is at D5.
-4. **Does a card click play the station or open its detail?** ⚠️ **Plays, until Phase 8.**
-   Every other card in the tree drills in and plays from a hover control, so consistency
-   says drill, and there is nothing to drill into yet. Radio-first apps split anyway:
-   Shortwave opens a detail, Tuner plays. Phase 8 re-points `clicked` at the station detail
-   and leaves the play control where it is.
+4. **Does a card click play the station or open its detail?** ✅ **Opens the detail**, from
+   Phase 8. Every other card in the tree drills in and plays from a hover control, so
+   consistency says drill. Radio-first apps split anyway: Shortwave opens a detail, Tuner
+   plays. The play control did not stay where it was, though — the tile's centre is exactly
+   where a body click lands, so it is a corner control beside the station's other three.
 
 ---
 
