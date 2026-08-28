@@ -67,7 +67,7 @@ pub(super) struct NowPlayingSource {
 /// **A station is its stream URL and nothing else.** Its announced title moves several times an
 /// hour and changes none of what this module produces — the labels are Slint bindings on
 /// `Player.vm` — so folding the title in would re-decode the same logo per song.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum SourceKey {
     Track(i64),
     Station(String),

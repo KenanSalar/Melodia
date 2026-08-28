@@ -8,6 +8,12 @@
 //! Borrowed throughout. [`PlayerViewModelLight::source`] runs on every state emit, so it may not
 //! allocate; a consumer that needs to keep an answer past the borrow owns the few fields it
 //! compares rather than the whole summary.
+//!
+//! **Spelled a second time in Slint**, as `Player.source-{title,subtitle,tertiary}` over the four
+//! on-screen surfaces, because only `@tr` at a literal reaches the catalogues and a translated
+//! fallback is one this side cannot hand over. The song-then-station order is the same and the
+//! empty arms deliberately are not: a label always paints something, where an absent field is
+//! what an OS surface wants rather than a placeholder nothing asked for.
 
 use super::state::PlayerViewModelLight;
 
@@ -79,3 +85,7 @@ fn non_empty(value: &str) -> Option<&str> {
     let value = value.trim();
     (!value.is_empty()).then_some(value)
 }
+
+#[cfg(test)]
+#[path = "tests/now_playing_tests.rs"]
+mod tests;
