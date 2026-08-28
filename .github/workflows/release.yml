@@ -60,8 +60,9 @@ jobs:
           # The tag is the trigger, but Cargo.toml is what the binary, all five
           # package formats and latest.json carry. A mismatch ships a v0.13.0
           # release whose artifacts call themselves v0.12.0, so it fails here
-          # rather than an hour into the matrix. Dispatch runs from a branch and
-          # has no tag to check, which is the escape hatch for a re-run.
+          # rather than an hour into the matrix. A dispatch on a branch has no
+          # tag to check; one on a tag is checked like a push, which is what the
+          # re-run path in docs/RELEASING.md relies on.
           if [[ "$REF_TYPE" == "tag" && "$REF_NAME" != "v$VERSION" ]]; then
             echo "::error::Tag $REF_NAME does not match Cargo.toml's v$VERSION."
             echo "::error::Fix the version on main and re-point the tag; see docs/RELEASING.md."
@@ -569,7 +570,7 @@ jobs:
             echo "==> creating empty draft $TAG"
             # `--target` is ignored when the tag already exists, which on the
             # tag-push path it always does. It is here for `workflow_dispatch`,
-            # which runs from a branch ref where the tag may not exist yet and
+            # which can run from a branch ref where the tag may not exist yet and
             # would otherwise have the draft created against the default branch.
             gh release create "$TAG" --draft \
               --target "$GITHUB_SHA" \

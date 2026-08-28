@@ -96,8 +96,7 @@ results. No coverage on this path.
   dispatch takes a ref**, so the dropdown picks what gets measured and runs that branch's copy; the
   button exists only because the workflow sits on `main`. Two one-time settings: **Pages enabled**
   (Source = GitHub Actions) **and** the **`github-pages` environment's** branch allowlist,
-  currently `main` alone — dispatching from elsewhere builds and uploads, then fails at
-  `deploy`.
+  currently `main` alone — dispatching from elsewhere builds and uploads, then fails at `deploy`.
 
 - **Every action is SHA-pinned** with a trailing `# vX.Y.Z` comment — no floating tags, no
   `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` (every pin resolves to `node24` or a composite over one);

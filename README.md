@@ -470,7 +470,8 @@ Contributions are welcome. Before opening a pull request:
 - Follow the existing [Conventional Commits](https://www.conventionalcommits.org/)
   style used in the git history.
 - Open pull requests against the `main` branch. Releases are pushed tags, so a
-  merge ships nothing on its own.
+  merge ships nothing on its own; the procedure is
+  [`docs/RELEASING.md`](docs/RELEASING.md).
 - Fill in the pull request template. Link the issue from the PR's Development
   sidebar rather than with `Fixes #N`; the link is set once on the branch and
   survives every reword of the description.

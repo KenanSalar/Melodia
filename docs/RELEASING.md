@@ -44,17 +44,25 @@ re-signs `latest.json` from the final body, which is why step 4 comes first.
 
 ## When the draft is wrong
 
-Bump to the next patch, tag again, delete the old draft. Re-pointing the tag is the
-other option and needs an admin bypass of the `v*.*.*` ruleset, which is deliberate: a
-published tag is referenced by every download URL and by `latest.json`, so moving
-one breaks links for everybody already on that version.
+Bump to the next patch, tag again, delete the old draft. Deleting a draft leaves its tag
+behind and the ruleset blocks that deletion too, so the abandoned tag stays, pointing at
+a commit that never shipped. Re-pointing the tag is the other option and needs an admin
+bypass of the `v*.*.*` ruleset, which is deliberate: a published tag is referenced by
+every download URL and by `latest.json`, so moving one breaks links for everybody
+already on that version.
 
 ## Re-running a build
 
-`workflow_dispatch` runs from a branch ref, where there is no tag to check, so
-`prepare` falls back to `Cargo.toml` alone and rebuilds into the existing draft in
-place. That is the recovery path for a slot that failed on infrastructure rather
-than on code.
+Dispatch **on the tag**, not on a branch: the Run workflow dropdown lists tags as well
+as branches, or `gh workflow run release.yml --ref v0.12.0`. That rebuilds the commit
+the draft was signed from, and it shares the tag push's concurrency group, so a re-run
+started while the first is still going queues instead of racing it into the same draft.
+The version check runs and passes, which is why it is worth leaving live.
+
+A branch ref is for a build nobody has tagged yet. From `main` after the next bump has
+landed it resolves *that* version's tag and opens a different draft, which is not a
+re-run of anything. Neither path survives publication: `prepare` short-circuits on a
+published tag, so the recovery window is the draft.
 
 ## Patching a version `main` has moved past
 
