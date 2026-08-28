@@ -8,63 +8,19 @@
 use std::sync::Arc;
 
 use super::{SourceId, SourceSummary};
-use crate::entities::track::TrackSummary;
-use crate::player::state::PlayerViewModelLight;
-use crate::player::tests::helpers::test_station;
+use crate::player::tests::helpers::{test_station, test_track, test_view_model as deck};
 use crate::player::types::RadioNowPlaying;
 
+/// Mirrors the stream URL [`test_station`] hands back; spelled here because the assertions below
+/// compare a whole `SourceSummary` and the id is one of its fields.
 const STREAM_URL: &str = "http://example.test/live.mp3";
-
-fn test_track(title: &str, artist: Option<&str>, album: Option<&str>) -> Arc<TrackSummary> {
-    Arc::new(TrackSummary {
-        id: 7,
-        file_path: String::new(),
-        file_name: String::new(),
-        title: title.to_owned(),
-        artist: artist.map(str::to_owned),
-        album: album.map(str::to_owned),
-        duration_ms: 200_000,
-        artwork_path: Some("cover.jpg".to_owned()),
-        track_number: None,
-        disc_number: None,
-        last_position: 0,
-        is_favorite: false,
-        rating: 0,
-        replaygain_track_gain: None,
-        replaygain_track_peak: None,
-        replaygain_album_gain: None,
-        replaygain_album_peak: None,
-    })
-}
 
 /// [`test_station`] with the two fields this suite varies filled in.
 fn tuned_to(name: &str, live_title: Option<&str>) -> Arc<RadioNowPlaying> {
-    let mut station = (*test_station(name)).clone();
+    let mut station = Arc::unwrap_or_clone(test_station(name));
     station.live_title = live_title.map(str::to_owned);
     station.artwork_path = Some("logo.png".to_owned());
     Arc::new(station)
-}
-
-fn deck(
-    current_track: Option<Arc<TrackSummary>>,
-    radio: Option<Arc<RadioNowPlaying>>,
-    duration_ms: u64,
-) -> PlayerViewModelLight {
-    PlayerViewModelLight {
-        status: "playing",
-        current_track,
-        position_ms: 0,
-        duration_ms,
-        progress_percent: 0.0,
-        volume: 100,
-        is_muted: false,
-        playback_speed: 1.0,
-        gapless_enabled: false,
-        sleep_at_track_end: false,
-        radio,
-        has_next: false,
-        has_previous: false,
-    }
 }
 
 /// The two lines a surface draws, so a test naming the ladder asserts on nothing else.
@@ -140,7 +96,7 @@ fn a_live_source_reports_no_length_where_an_untimed_track_reports_zero() {
 
 #[test]
 fn a_blank_field_arrives_absent_rather_than_empty() {
-    let mut track = (*test_track("Nocturne", Some("  "), Some(""))).clone();
+    let mut track = Arc::unwrap_or_clone(test_track("Nocturne", Some("  "), Some("")));
     track.artwork_path = Some("   ".to_owned());
     let vm = deck(Some(Arc::new(track)), None, 200_000);
 
@@ -161,7 +117,7 @@ fn a_whitespace_announcement_leaves_the_station_lending_its_name() {
 fn a_station_is_keyed_on_its_stream_url() {
     // Every station the user has only browsed to carries `station_id == 0`, so the id cannot tell
     // two of them apart and the identity a consumer dedupes on is the URL.
-    let mut first = (*tuned_to("First", None)).clone();
+    let mut first = Arc::unwrap_or_clone(tuned_to("First", None));
     first.station_id = 0;
     let mut second = first.clone();
     second.name = "Second".to_owned();

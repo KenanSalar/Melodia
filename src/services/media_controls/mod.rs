@@ -337,7 +337,11 @@ impl MediaControlsSync for MediaControlsHandle {
             }
         }
 
-        guard.last_metadata = source.as_ref().map(PublishedMetadata::from);
+        // Only on a move: unchanged, the held value already describes the source, and a volume
+        // drag reaches here per pointer move.
+        if metadata_changed {
+            guard.last_metadata = source.as_ref().map(PublishedMetadata::from);
+        }
         guard.last_status = Some(status);
         guard.last_position_ms = vm.position_ms;
         guard.last_volume = vm.volume;

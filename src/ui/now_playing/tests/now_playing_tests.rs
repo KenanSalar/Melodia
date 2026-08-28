@@ -1,6 +1,9 @@
-use super::SourceKey;
+use std::sync::Arc;
+
 use super::metadata::{format_channels, format_sample_rate};
+use super::{NowPlayingSource, SourceKey};
 use crate::player::now_playing::SourceId;
+use crate::player::tests::helpers::{test_station, test_track, test_view_model};
 
 #[test]
 fn sample_rate_drops_trailing_zero() {
@@ -52,8 +55,25 @@ fn describes_answers_the_key_compare_it_replaced() {
 }
 
 #[test]
-fn an_empty_deck_only_describes_an_empty_deck() {
-    assert!(SourceKey::describes(None, None));
-    assert!(!SourceKey::describes(None, Some(SourceId::Track(1))));
-    assert!(!SourceKey::describes(Some(&SourceKey::Track(1)), None));
+fn a_station_hands_the_chips_no_row_of_its_own() {
+    // The chips come off an eight-column projection of a `tracks` row, and a stream has none — so
+    // the row has to follow the arm the key came from rather than be read off `vm` beside it.
+    // Both halves set is unreachable through the state machine, which is why nothing else catches
+    // a projection that asks `current_track` independently.
+    let station = test_station("Night Radio");
+    let stream_url = station.stream_url.clone();
+    let mut station = Arc::unwrap_or_clone(station);
+    station.artwork_path = Some("logo.png".to_owned());
+
+    let vm = test_view_model(
+        Some(test_track("Nocturne", Some("Field"), Some("Airs"))),
+        Some(Arc::new(station)),
+        200_000,
+    );
+    let projected = NowPlayingSource::from_vm(&vm).map(|s| (s.key, s.track, s.artwork_path));
+
+    assert_eq!(
+        projected,
+        Some((SourceKey::Station(stream_url), None, Some("logo.png".to_owned())))
+    );
 }
