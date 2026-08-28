@@ -27,9 +27,9 @@ use minisign_verify::{Error as MinisignVerifyError, PublicKey, Signature};
 ///   2. Replace `assets/updater-pubkey.b64` with the contents of `new.pub`.
 ///   3. Update the `MINISIGN_SECRET_KEY` GitHub Secret (base64-encoded `new.key`) and
 ///      `MINISIGN_PASSWORD`.
-///   4. Bump `Cargo.toml`'s version and let `release.yml` ship the first release signed with the
-///      new key. Clients on prior releases stay stuck on their installed version until the user
-///      manually downloads and installs from the GitHub release page.
+///   4. Bump `Cargo.toml`'s version and push the matching tag; `release.yml` ships the first
+///      release signed with the new key. Clients on prior releases stay stuck on their installed
+///      version until the user manually downloads and installs from the GitHub release page.
 const EMBEDDED_PUBKEY: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/updater-pubkey.b64"));
 

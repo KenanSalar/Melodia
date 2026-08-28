@@ -469,11 +469,11 @@ Contributions are welcome. Before opening a pull request:
   already honours the file.
 - Follow the existing [Conventional Commits](https://www.conventionalcommits.org/)
   style used in the git history.
-- Open pull requests against the `dev` branch. (`main` only accepts merges from
-  `dev` or a `hotfix/*` branch.)
+- Open pull requests against the `main` branch. Releases are pushed tags, so a
+  merge ships nothing on its own.
 - Fill in the pull request template. Link the issue from the PR's Development
-  sidebar rather than with `Fixes #N`; GitHub ignores closing keywords on a PR
-  that doesn't target the default branch.
+  sidebar rather than with `Fixes #N`; the link is set once on the branch and
+  survives every reword of the description.
 
 Every pull request runs the **PR Validation** workflow: a `cargo audit`
 advisory scan, a `cargo fmt` check, `clippy` (with `-D warnings`) and the full

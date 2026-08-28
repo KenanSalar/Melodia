@@ -1,19 +1,21 @@
 name: Release
 
-# `Cargo.toml` is the version source, not a tag push: a push to `main` derives
-# `v<version>` and builds into the matching draft, updating it in place
-# (`--clobber`) if one exists. An already-PUBLISHED tag short-circuits — bumping
-# the version is what starts a new cycle.
+# A pushed `v*.*.*` tag starts a cycle, and `Cargo.toml` has to agree with it:
+# `prepare` fails the run on a mismatch, so the bump and the tag are one act
+# rather than two that can drift. An already-PUBLISHED tag short-circuits; a
+# still-draft one is rebuilt into place (`--clobber`).
 #
 # The flip to published stays manual (`gh release edit "$TAG" --draft=false
 # --latest`). Drafts aren't served by `/releases/latest/download/`, so the
 # updater only sees a release once you've taken that QA step yourself.
+#
+# The procedure around all of this is `docs/RELEASING.md`.
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*.*.*'
 
 permissions:
   contents: write
@@ -40,6 +42,9 @@ jobs:
       - name: Resolve version + tag from Cargo.toml
         id: meta
         shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           # Bare checkout, no toolchain, so a scrape rather than `cargo
           # metadata`. Both packages inherit from `[workspace.package]`, so
@@ -50,6 +55,16 @@ jobs:
           ' Cargo.toml)"
           if [[ -z "$VERSION" ]]; then
             echo "ERROR: no version in Cargo.toml's [workspace.package]" >&2
+            exit 1
+          fi
+          # The tag is the trigger, but Cargo.toml is what the binary, all five
+          # package formats and latest.json carry. A mismatch ships a v0.13.0
+          # release whose artifacts call themselves v0.12.0, so it fails here
+          # rather than an hour into the matrix. Dispatch runs from a branch and
+          # has no tag to check, which is the escape hatch for a re-run.
+          if [[ "$REF_TYPE" == "tag" && "$REF_NAME" != "v$VERSION" ]]; then
+            echo "::error::Tag $REF_NAME does not match Cargo.toml's v$VERSION."
+            echo "::error::Fix the version on main and re-point the tag; see docs/RELEASING.md."
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -111,9 +126,10 @@ jobs:
   # Holds the release on a RustSec advisory: the updater ships executable code to
   # every installed client, so a delayed release beats a vulnerable one.
   #
-  # Still a gate rather than a formality even though `dev` already ran the same
-  # command on the PR — a `hotfix/*` into `main` never did, and the advisory DB
-  # moves on its own. Shared composite so the two can't reach different verdicts.
+  # Still a gate rather than a formality even though every PR into `main` ran the
+  # same command: the advisory DB moves on its own, and a tag can be pushed weeks
+  # after the merge that last asked. Shared composite so the two can't reach
+  # different verdicts.
   audit:
     needs: prepare
     if: needs.prepare.outputs.should_release == 'true'
@@ -551,7 +567,12 @@ jobs:
             echo "==> draft $TAG already exists"
           else
             echo "==> creating empty draft $TAG"
+            # `--target` is ignored when the tag already exists, which on the
+            # tag-push path it always does. It is here for `workflow_dispatch`,
+            # which runs from a branch ref where the tag may not exist yet and
+            # would otherwise have the draft created against the default branch.
             gh release create "$TAG" --draft \
+              --target "$GITHUB_SHA" \
               --title "Melodia $TAG" \
               --generate-notes
           fi
