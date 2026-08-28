@@ -73,6 +73,20 @@ pub(super) enum SourceKey {
     Station(String),
 }
 
+impl SourceKey {
+    /// Whether `id` is the source `held` already names. Asked on every player emit, so it
+    /// compares against the borrowed form rather than building a key to compare with: only a
+    /// genuine move is worth a `String`.
+    pub(super) fn describes(held: Option<&Self>, id: Option<SourceId<'_>>) -> bool {
+        match (held, id) {
+            (None, None) => true,
+            (Some(Self::Track(held)), Some(SourceId::Track(id))) => *held == id,
+            (Some(Self::Station(held)), Some(SourceId::Station(url))) => held == url,
+            _ => false,
+        }
+    }
+}
+
 impl NowPlayingSource {
     /// Project a published view model, or `None` when nothing is on the deck.
     pub(super) fn from_vm(vm: &PlayerViewModelLight) -> Option<Self> {

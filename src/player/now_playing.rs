@@ -41,13 +41,6 @@ pub struct SourceSummary<'a> {
     pub duration_ms: Option<u64>,
 }
 
-impl SourceSummary<'_> {
-    /// Whether the source is a stream, for the handful of consumers that have to say so.
-    pub fn is_live(&self) -> bool {
-        matches!(self.id, SourceId::Station(_))
-    }
-}
-
 impl PlayerViewModelLight {
     /// The source on the deck, or `None` when there is none.
     ///

@@ -1951,6 +1951,11 @@ msgstr "LIVE"
 msgid "Buffering…"
 msgstr "Wird gepuffert…"
 
+# Same pill, on a station the user paused. Pausing closes the connection, so this is a state and
+# not a hold; a transport verb like the Pause button's would read as the control it isn't.
+msgid "Paused"
+msgstr "Pausiert"
+
 # Heading over the Now Playing panel that replaces "Up Next" while a station plays. Names the
 # kind of thing the panel describes, so keep it as short as that one.
 msgid "Station"

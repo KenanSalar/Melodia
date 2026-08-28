@@ -36,13 +36,17 @@ export global Player {
         ? (root.vm.radio.country == "" ? "" : "‎" + root.vm.radio.country)
         : (root.vm.has_track && root.vm.track.album != "" ? "‎" + root.vm.track.album : "");
 
-    // What the station pill says, in the slot a track's seek bar occupies. Three states, one
+    // What the station pill says, in the slot a track's seek bar occupies. Four states, one
     // pill: `loading` is the initial connect *and* the re-open a play on a paused station is,
-    // which is what keeps that from reading as a resume; `buffering` is a starved ring beside a
-    // still-`playing` status, so a dip never looks like a stop.
+    // which is what keeps that from reading as a resume; `paused` has no connection left to be
+    // live over, `build_pause_actions` dropping it rather than holding a socket the server would
+    // back-pressure; `buffering` is a starved ring beside a still-`playing` status, so a dip
+    // never looks like a stop.
     out property <string> live-label: root.vm.status == "loading"
         ? @tr("Connecting…")
-        : (root.vm.radio.buffering ? @tr("Buffering…") : @tr("LIVE"));
+        : (root.vm.status == "paused"
+            ? @tr("Paused")
+            : (root.vm.radio.buffering ? @tr("Buffering…") : @tr("LIVE")));
 
     // Standalone rather than fields of `vm`, so the 500 ms monitor publish only invalidates
     // the bindings that read them — see `PlayerVm` in `models.slint`.

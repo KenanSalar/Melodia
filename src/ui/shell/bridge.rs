@@ -232,7 +232,7 @@ fn reuse_or_warm(
 fn to_slint_radio_vm(station: &RadioNowPlaying, cover_thumbs: &CoverThumbs) -> RadioVm {
     let tile = crate::ui::radio::station_tile(&station.name);
     RadioVm {
-        station_id: clamp_to_i32(u64::try_from(station.station_id).unwrap_or(0)),
+        station_id: i32::try_from(station.station_id).unwrap_or(i32::MAX),
         uuid: opt_shared(station.station_uuid.as_deref()),
         name: SharedString::from(station.name.as_str()),
         live_title: SharedString::from(station.live_title.as_deref().unwrap_or("")),

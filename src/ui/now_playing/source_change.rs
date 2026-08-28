@@ -62,17 +62,19 @@ pub(super) fn spawn_source_change_subscriber(
             }
             // *Only* the source's identity: this fires on every `view_model` push — play,
             // pause, volume, speed, and every ICY title a station announces — and acts
-            // solely on a source change. The borrow guard is statement-scoped, dropped
-            // before the `.await` below.
-            let new_source = rx.borrow_and_update().as_ref().map(NowPlayingSource::from_vm);
-            let Some(new_source) = new_source else {
-                continue;
+            // solely on a source change. Both the read and the compare happen under the
+            // borrow, so a push that moved nothing allocates nothing; the guard is gone by
+            // the closing brace, well before the `.await` below.
+            let new_source = {
+                let vm = rx.borrow_and_update();
+                let Some(vm) = vm.as_ref() else { continue };
+                let source = vm.source();
+                if SourceKey::describes(last_key.as_ref(), source.as_ref().map(|s| s.id)) {
+                    continue;
+                }
+                NowPlayingSource::from_vm(vm)
             };
-            let new_key = new_source.as_ref().map(|s| s.key.clone());
-            if new_key == last_key {
-                continue;
-            }
-            last_key = new_key;
+            last_key = new_source.as_ref().map(|s| s.key.clone());
             // Regardless of visibility, so a later open can seed the artwork from it.
             np_state.current_source.borrow_mut().clone_from(&new_source);
             // The decode, blur and metadata read only produce something on screen while
@@ -145,8 +147,14 @@ pub(super) async fn apply_source_change(
         player.set_np_station_logo(cover.unwrap_or_default());
         player.set_np_station_logo_size(logo_size);
         player.set_np_cover_has_image(false);
+        // The never-clear rule on these two is about a track *fading into* another track, where
+        // the outgoing slot has to stay painted for the duration. Nothing fades into a station,
+        // so the pair would otherwise hold a detail-tier decode, and its texture, for as long as
+        // the stream runs.
+        player.set_np_cover_a(Image::default());
+        player.set_np_cover_b(Image::default());
     } else {
-        player.set_np_station_logo(slint::Image::default());
+        player.set_np_station_logo(Image::default());
         player.set_np_station_logo_size(0);
         write_crossfade_slot(
             cover,
