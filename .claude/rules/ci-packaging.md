@@ -50,11 +50,14 @@ results. No coverage on this path.
   and the job would never skip. `fkirc/skip-duplicate-actions` catches the identical tree arriving
   twice and is given **no** `paths_filter`, so the two can't drift into a stale pass.
 
-- **`.github/` is excluded per-file, never as `.github/**`.** `deploy-coverage`, `refresh-manifest`
-  and `ISSUE_TEMPLATE/` compile nothing and nothing reads them, so each is named
-  (`pull_request_template.md` rides the `*.md` line). The four exercised paths stay in:
-  `.github/actions/{linux-system-deps,cargo-audit}`, `pr-validation.yml` itself, and
+- **`.github/` is excluded per-file, never as `.github/**`.** `deploy-coverage`,
+  `refresh-manifest`, `FUNDING.yml` and `ISSUE_TEMPLATE/` compile nothing and nothing reads them,
+  so each is named (`pull_request_template.md` rides the `*.md` line). Four exercised paths stay
+  in: `.github/actions/{linux-system-deps,cargo-audit}`, `pr-validation.yml` itself, and
   `release.yml` — which compiles nothing but **is read by `test`** (the licence pins below).
+  `CODEOWNERS` stays in as well and is exercised by nothing, so a PR touching only it pays the
+  full gate; it governs who may approve a workflow change, and a control of that reach failing
+  closed is worth one wasted run.
   Excluding a composite lands a broken provisioning step green; excluding `pr-validation.yml` lets
   a change to the clippy invocation, the job list or the `results` array merge without the jobs it
   governs ever running. Anything new under `.github/` runs everything by default — an exclusion is

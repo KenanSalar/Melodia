@@ -25,8 +25,15 @@ permissions:
   id-token: write
   attestations: write
 
+# One group for every release run, keyed on nothing: the shared resource is the
+# draft, not the ref that reached it. A dispatch from a branch resolves whatever
+# version `Cargo.toml` names there, which between a tag push and the next bump is
+# the tag already building, and a per-ref group would leave the two `--clobber`ing
+# one draft from different queues. Releases never overlap, so a queued unrelated
+# version costs only the wait. Only one run sits pending, though: a third arrival
+# cancels the one waiting rather than queueing behind it.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:

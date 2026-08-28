@@ -23,7 +23,11 @@ fails the run in seconds rather than an hour into the matrix, because the binary
 all five package formats and `latest.json` take their version from `Cargo.toml`
 and would otherwise ship under a name the tag contradicts. Recovering from that
 mismatch means correcting the version on `main` and re-pointing the tag, which is
-an admin bypass of the `v*.*.*` ruleset even though nothing has been built yet.
+an admin bypass of the `v*.*.*` ruleset even though nothing has been built yet. Where
+the typo names a version above the one you meant, pushing the tag you meant is cheaper
+and needs neither: the check fails in `prepare`'s first step, so nothing exists under
+the mistyped tag, not even a draft, and the correct tag is still free. The cost is that
+number, which the ruleset keeps alive until a later cycle has to skip past it.
 
 **3. Wait for the draft.** `release.yml` holds on a RustSec advisory, then runs ten
 build slots, signs every artifact with minisign, attests them through Sigstore and
@@ -55,9 +59,9 @@ already on that version.
 
 Dispatch **on the tag**, not on a branch: the Run workflow dropdown lists tags as well
 as branches, or `gh workflow run release.yml --ref v0.12.0`. That rebuilds the commit
-the draft was signed from, and it shares the tag push's concurrency group, so a re-run
-started while the first is still going queues instead of racing it into the same draft.
-The version check runs and passes, which is why it is worth leaving live.
+the draft was signed from, and every release run shares one concurrency group, so a
+re-run started while the first is still going queues instead of racing it into the same
+draft. The version check runs and passes, which is why it is worth leaving live.
 
 A branch ref is for a build nobody has tagged yet. From `main` after the next bump has
 landed it resolves *that* version's tag and opens a different draft, which is not a
