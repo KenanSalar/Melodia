@@ -4,15 +4,17 @@
 //! thread:
 //!
 //! 1. **Dual-slot blurred background + sharp cover.** A `sinks.view_model` subscriber
-//!    decodes and blurs the cover off-thread through [`crate::ui::now_playing_artwork`] —
-//!    *only while the view is open*, one decode yielding both — into the *inactive*
-//!    `Player.blur-img-{a,b}` slot, then flips `Player.blur-use-a`.
+//!    decodes and blurs the source's artwork off-thread through
+//!    [`crate::ui::now_playing_artwork`] — *only while the view is open*, one decode yielding
+//!    both — into the *inactive* `Player.blur-img-{a,b}` slot, then flips `Player.blur-use-a`.
+//!    A station's logo runs the same path: the tier is keyed on a path and knows nothing about
+//!    entity kinds.
 //! 2. **Technical-metadata chips**, off the same subscriber's `TrackMeta` fetch.
 //! 3. **"Up Next" list.** A `sinks.queue` subscriber rebuilds `NowPlaying.up-next-rows`
 //!    and resets `slide-phase` only when the current track actually changed.
 
 mod metadata;
-mod track_change;
+mod source_change;
 mod up_next;
 
 use std::cell::{Cell, RefCell};
@@ -23,7 +25,8 @@ use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
 use crate::entities::track::TrackSummary;
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::player::state::{QueueViewModel, lock_state};
+use crate::player::now_playing::SourceId;
+use crate::player::state::{PlayerViewModelLight, QueueViewModel, lock_state};
 use crate::state::AppState;
 use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
@@ -31,8 +34,8 @@ use crate::{AppWindow, Nav, NowPlaying, Player, QueueRow};
 
 use async_compat::Compat;
 
-pub(crate) use track_change::republish_for_palette;
-use track_change::{apply_track_change, spawn_track_change_subscriber};
+pub(crate) use source_change::republish_for_palette;
+use source_change::{apply_source_change, spawn_source_change_subscriber};
 use up_next::{rebuild_up_next, spawn_up_next_subscriber, wire_now_playing_open};
 
 /// Re-seed a `NowPlayingState`-shadowed surface — the Up Next list or the high-res cover
@@ -46,6 +49,45 @@ type Seeder = Box<dyn Fn()>;
 /// that rebuilding it on every queue mutation stays cheap.
 pub(crate) const UP_NEXT_N: usize = 20;
 
+/// What the view's artwork, backdrop tiers and chips describe.
+///
+/// One type for both kinds of source, because every consumer in this module asks the same three
+/// questions: has it moved, what is there to decode, and is there a `tracks` row behind it. A
+/// station answers the last with `None` — chips come off an eight-column projection of a row it
+/// does not have.
+#[derive(Clone)]
+pub(super) struct NowPlayingSource {
+    pub(super) key: SourceKey,
+    pub(super) artwork_path: Option<String>,
+    pub(super) track: Option<Arc<TrackSummary>>,
+}
+
+/// The identity a repaint dedupes on.
+///
+/// **A station is its stream URL and nothing else.** Its announced title moves several times an
+/// hour and changes none of what this module produces — the labels are Slint bindings on
+/// `Player.vm` — so folding the title in would re-decode the same logo per song.
+#[derive(Clone, PartialEq, Eq)]
+pub(super) enum SourceKey {
+    Track(i64),
+    Station(String),
+}
+
+impl NowPlayingSource {
+    /// Project a published view model, or `None` when nothing is on the deck.
+    pub(super) fn from_vm(vm: &PlayerViewModelLight) -> Option<Self> {
+        let source = vm.source()?;
+        Some(Self {
+            key: match source.id {
+                SourceId::Track(id) => SourceKey::Track(id),
+                SourceId::Station(stream_url) => SourceKey::Station(stream_url.to_owned()),
+            },
+            artwork_path: source.artwork_path.map(str::to_owned),
+            track: vm.current_track.clone(),
+        })
+    }
+}
+
 /// Shared UI-thread state coordinating the view's two subscribers and the
 /// `now-playing-open` callback. All three run on the event-loop thread, so
 /// `Rc<Cell/RefCell>` is enough.
@@ -58,7 +100,7 @@ pub struct NowPlayingState {
     /// horizontal-variant rebuild is a handful of rows.
     pub(crate) mini_visible: Cell<bool>,
     /// Mirrors `MiniPlayer.square`, the variant with the large artwork tile. The
-    /// track-change subscriber gates its high-res decode on
+    /// source-change subscriber gates its high-res decode on
     /// `open || (mini_visible && mini_square)`, so the rectangle variant — served from the
     /// row tier — doesn't pay for a decode it can't display.
     pub(crate) mini_square: Cell<bool>,
@@ -73,23 +115,23 @@ pub struct NowPlayingState {
     /// Queue play-order index at the last rebuild; a forward step (wrap included) slides
     /// up. Seeded from the install snapshot so the first real change picks right.
     pub(super) last_queue_index: Cell<i32>,
-    /// Latest current track, kept whether or not the view is open so opening it can
+    /// Latest source on the deck, kept whether or not the view is open so opening it can
     /// seed the artwork and chips.
-    pub(super) current_track: RefCell<Option<Arc<TrackSummary>>>,
-    /// Track id whose artwork and chips are currently in the `Player` global. The open
-    /// callback compares it against `current_track` to skip a redundant re-seed when
-    /// the track didn't change while the view was closed.
-    pub(super) applied_track_id: Cell<Option<i64>>,
+    pub(super) current_source: RefCell<Option<NowPlayingSource>>,
+    /// The source whose artwork and chips are currently in the `Player` global. The open
+    /// callback compares it against `current_source` to skip a redundant re-seed when
+    /// nothing changed while the view was closed.
+    pub(super) applied_source: RefCell<Option<SourceKey>>,
     /// Visible chip texts in declared order for the applied `track-meta`, re-chunked on
     /// every `Player.recompute-chip-rows(width)` so a resize needn't re-walk
     /// `TrackMetaRow`.
     pub(super) chip_texts: RefCell<Vec<SharedString>>,
-    /// Last width the `MetaChipStrip` reported, so the track-change subscriber can chunk
+    /// Last width the `MetaChipStrip` reported, so the source-change subscriber can chunk
     /// against the current layout without waiting for the next `changed` fire.
     pub(super) chip_last_width: Cell<f32>,
     /// Row lengths of the split last handed to `Player.chip-rows` — see
     /// [`crate::ui::chips::split_shape`]. Only the width channel consults it; the
-    /// track-change subscriber writes unconditionally, its chips having moved by
+    /// source-change subscriber writes unconditionally, its chips having moved by
     /// definition, and records the shape on its way past.
     pub(super) chip_last_shape: RefCell<Vec<usize>>,
     /// `None` only between `Rc::new(…)` and [`install`]'s post-init writes. Captures a
@@ -97,7 +139,7 @@ pub struct NowPlayingState {
     up_next_seeder: RefCell<Option<Seeder>>,
     /// The high-res cover, accent and chips, invoked by [`Self::kick_artwork`] when the
     /// square miniplayer becomes visible so the sharp tile replaces the row-tier fallback
-    /// without waiting for the next track change.
+    /// without waiting for the next source change.
     artwork_seeder: RefCell<Option<Seeder>>,
 }
 
@@ -145,14 +187,14 @@ pub fn install(
     // `watch::Receiver::changed()` only fires on sends *after* subscribe and the
     // startup queue-restore already broadcast, so without an explicit seed the view is
     // empty until the next playback transition. As in `queue_sheet::install`.
-    let (current_track, qvm) = {
+    let (current_source, qvm) = {
         let s = lock_state(&state.player_state);
-        (s.to_view_model_light().current_track, s.to_queue_view_model())
+        (NowPlayingSource::from_vm(&s.to_view_model_light()), s.to_queue_view_model())
     };
-    let initial_track_id = current_track.as_ref().map(|t| t.id);
+    let initial_key = current_source.as_ref().map(|s| s.key.clone());
 
     // `last_current_id` from the snapshot so the first real track change slides the right
-    // way, `current_track` so the first open can seed the artwork. `applied_track_id`
+    // way, `current_source` so the first open can seed the artwork. `applied_source`
     // starts `None`: the `Player` global's artwork slots are empty, so the first open
     // always seeds.
     let np_state = Rc::new(NowPlayingState {
@@ -163,8 +205,8 @@ pub fn install(
         rendered_ids: RefCell::new(Vec::new()),
         last_current_id: Cell::new(current_track_id(&qvm)),
         last_queue_index: Cell::new(qvm.queue_index),
-        current_track: RefCell::new(current_track),
-        applied_track_id: Cell::new(None),
+        current_source: RefCell::new(current_source),
+        applied_source: RefCell::new(None),
         chip_texts: RefCell::new(Vec::new()),
         chip_last_width: Cell::new(0.0),
         chip_last_shape: RefCell::new(Vec::new()),
@@ -172,17 +214,11 @@ pub fn install(
         artwork_seeder: RefCell::new(None),
     });
 
-    spawn_track_change_subscriber(
-        ui,
-        state,
-        np_artwork.clone(),
-        np_state.clone(),
-        initial_track_id,
-    )?;
+    spawn_source_change_subscriber(ui, state, np_artwork.clone(), np_state.clone(), initial_key)?;
     spawn_up_next_subscriber(ui, state, up_next_model.clone(), np_state.clone())?;
     wire_now_playing_open(ui, state, np_artwork.clone(), up_next_model.clone(), np_state.clone());
 
-    // Cached on `chip_last_width` so the track-change subscriber can re-chunk against the
+    // Cached on `chip_last_width` so the source-change subscriber can re-chunk against the
     // current layout without waiting for the next `changed` fire.
     {
         let weak = ui.as_weak();
@@ -191,7 +227,7 @@ pub fn install(
             np.chip_last_width.set(width);
             let Some(ui) = weak.upgrade() else { return };
             let rows = chips::chunk_chips_to_rows(&np.chip_texts.borrow(), width, None);
-            // The chips can't have moved — only `track_change` writes them — and
+            // The chips can't have moved — only `source_change` writes them — and
             // `set_chip_rows` is a model reset, fired here per pointer motion of a drag.
             let shape = chips::split_shape(&rows);
             if *np.chip_last_shape.borrow() == shape {
@@ -223,7 +259,7 @@ pub fn install(
         }));
     }
 
-    // `wire_now_playing_open`'s seed-on-open path: dedup against `applied_track_id`, then
+    // `wire_now_playing_open`'s seed-on-open path: dedup against `applied_source`, then
     // an off-thread decode and UI-thread write. `animate = false` — the cover should
     // already be there when the square miniplayer paints, not cross-fade in.
     {
@@ -235,17 +271,24 @@ pub fn install(
             let Some(np_state) = weak_np.upgrade() else {
                 return;
             };
-            let current_track = np_state.current_track.borrow().clone();
-            let current_id = current_track.as_ref().map(|t| t.id);
-            if current_id == np_state.applied_track_id.get() {
+            let current_source = np_state.current_source.borrow().clone();
+            let current_key = current_source.as_ref().map(|s| s.key.clone());
+            if current_key == *np_state.applied_source.borrow() {
                 return;
             }
             let weak_ui = weak_ui.clone();
             let state = state.clone();
             let np_artwork = np_artwork.clone();
             let res = slint::spawn_local(Compat::new(async move {
-                apply_track_change(&weak_ui, &state, &np_artwork, &np_state, current_track, false)
-                    .await;
+                apply_source_change(
+                    &weak_ui,
+                    &state,
+                    &np_artwork,
+                    &np_state,
+                    current_source,
+                    false,
+                )
+                .await;
             }));
             if let Err(e) = res {
                 log::warn!("ui::now_playing artwork seeder task spawn_local: {e}");

@@ -59,7 +59,7 @@ pub struct PlayerState {
     /// and every transport builder branches on it: a stream has no next, no previous, no seek and
     /// no speed. The queue underneath is left exactly as it was, so stopping the station resumes
     /// the library where it left off.
-    pub radio: Option<RadioNowPlaying>,
+    pub radio: Option<Arc<RadioNowPlaying>>,
     /// Which station session is current. Bumped by every transition that starts or ends one, so a
     /// connect that finishes after the user moved on is refused rather than played late. An open
     /// takes seconds and a click takes none, which is why this is a counter rather than a flag.
@@ -159,7 +159,7 @@ pub struct PlayerViewModel {
     pub playback_speed: f64,
     pub gapless_enabled: bool,
     pub sleep_at_track_end: bool,
-    pub radio: Option<RadioNowPlaying>,
+    pub radio: Option<Arc<RadioNowPlaying>>,
     pub queue_tracks: Vec<Arc<TrackSummary>>,
     pub queue_index: i32,
     pub shuffle_enabled: bool,
@@ -188,7 +188,7 @@ pub struct PlayerViewModelLight {
     /// The station playing, when the source is a live one. `current_track` is `None` throughout,
     /// so a surface reads whichever of the two is `Some` rather than a flag saying which to trust.
     /// Its `buffering` is where the spinner comes from.
-    pub radio: Option<RadioNowPlaying>,
+    pub radio: Option<Arc<RadioNowPlaying>>,
     pub has_next: bool,
     pub has_previous: bool,
 }
@@ -674,7 +674,7 @@ impl PlayerState {
     /// re-anchoring seek.
     pub fn build_station_connecting_actions(
         &mut self,
-        station: RadioNowPlaying,
+        station: Arc<RadioNowPlaying>,
     ) -> (u64, Vec<PlayerAction>) {
         self.end_stream_session();
         self.status = PlaybackStatus::Loading;
@@ -726,7 +726,7 @@ impl PlayerState {
     fn end_stream_session(&mut self) {
         self.radio_generation = self.radio_generation.wrapping_add(1);
         if let Some(radio) = self.radio.as_mut() {
-            radio.buffering = false;
+            Arc::make_mut(radio).buffering = false;
         }
     }
 }

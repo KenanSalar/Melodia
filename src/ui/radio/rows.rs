@@ -189,7 +189,7 @@ pub fn split_tags(raw: &str) -> Vec<String> {
 /// Joined here rather than handed over as a list, because a card cannot split a string and a
 /// per-card chip strip inside a virtualized `ListView` would put a `changed` tracker in a
 /// delegate the virtualization destroys.
-fn display_tags(raw: &str) -> String {
+pub fn display_tags(raw: &str) -> String {
     let mut out = String::new();
     for tag in raw.split(',').map(str::trim).filter(|tag| !tag.is_empty()).take(TAG_DISPLAY_LIMIT) {
         if !out.is_empty() {

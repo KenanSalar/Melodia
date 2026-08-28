@@ -1195,16 +1195,7 @@ fn every_player_action_names_what_it_did() {
 // branch for it. What these pin is that the branch is taken *and* that the queue underneath comes
 // through untouched: stopping a station is supposed to hand the library back exactly as it was.
 
-fn station(name: &str) -> RadioNowPlaying {
-    RadioNowPlaying {
-        station_id: 42,
-        name: name.to_owned(),
-        stream_url: "http://example.test/live.mp3".to_owned(),
-        artwork_path: None,
-        live_title: None,
-        buffering: false,
-    }
-}
+use crate::player::tests::helpers::test_station as station;
 
 /// A player mid-album, so every "the queue is untouched" assertion has something to be about.
 fn playing_a_queue() -> PlayerState {
@@ -1396,6 +1387,7 @@ fn the_view_model_carries_the_station_instead_of_a_track() {
     let (mut state, generation) = tuned_in();
     let _started = state.build_station_connected_actions(generation);
     if let Some(radio) = state.radio.as_mut() {
+        let radio = std::sync::Arc::make_mut(radio);
         radio.live_title = Some("Artist - Track".to_owned());
         radio.buffering = true;
     }

@@ -341,11 +341,14 @@ pub fn seed_initial_view_model(
     // The row tier is empty this early, so the seed above is guaranteed to be the cache-only
     // lookup's miss — and no `view_model` push is owed on a restored-but-paused session, so
     // nothing else would ever fill it.
+    // Track only: nothing persists a tuned station across a restart, so the radio half of the
+    // seeded view model is always empty here.
     ui::shell::bridge::warm_vm_cover(
         app.as_weak(),
         &state.runtime,
         cover_thumbs,
         light.current_track.as_ref().and_then(|t| t.artwork_path.clone()).unwrap_or_default(),
+        ui::shell::bridge::VmCoverSlot::Track,
     );
 }
 

@@ -165,9 +165,62 @@ export struct SmartRuleRow {
 // `Player.vm` and dirty-marked every binding reading *any* field — a recursive walk of the
 // dependency list twice a second, for as long as playback lasted. Kept out, a tick's dirty
 // set is the three readers that care.
+// The station on the deck, as every Now-Playing surface draws it. `PlayerVm`'s `track` half at
+// the same altitude, and mutually exclusive with it: `has_track` and `has_station` are never both
+// true, so a surface reads whichever says yes.
+//
+// **`stream_url` crosses here where `RadioStationRow` withholds it**, and the difference is a
+// surface rather than a rule: a row is one of hundreds on a grid and none of them show a URL,
+// where the Now Playing view states the playing station's the way the station page already does
+// through `Radio.detail-stream-url`. The rule itself is unchanged — a station can carry a session
+// token in its query string, so this may never be interpolated into a log line.
+//
+// The facts below `buffering` are what the Now Playing view's panel states. They ride the view
+// model rather than a second published description of the playing station, so the bar's country
+// line and that panel cannot disagree about what is on the deck.
+//
+// `monogram` and the two stops are what a logo-less station paints, and come from the same
+// `ui::radio::identity::station_tile` the grid card and the station hero take theirs from, so one
+// station cannot wear two different tiles on two pages.
+export struct RadioVm {
+    // `0` for a station the user has only browsed to, matching `RadioStationRow.id`.
+    station_id: int,
+    // The directory's own id, empty for a hand-typed station. What decides whether a surface can
+    // offer to vote: the directory has nothing to record a vote against otherwise.
+    uuid: string,
+    name: string,
+    // What the stream announced, or empty until it announces something — which for plenty of
+    // stations is never.
+    live_title: string,
+    artwork_path: string,
+    // The row tier's logo, on `TrackSummaryRow.cover_img`'s contract: empty (`width == 0`) until
+    // the decode lands, and the full view takes its own larger copy from `Player.np-station-logo`.
+    logo_img: image,
+    monogram: string,
+    tile_color_1: color,
+    tile_color_2: color,
+    // The stream is running on empty. Raised beside a `playing` status rather than instead of it,
+    // so a dip in the buffer never reads to the OS as a stop.
+    buffering: bool,
+
+    stream_url: string,
+    // The country's full name, empty where nobody has said. A hand-typed station has none: a
+    // stream announces no country and guessing from the host would be wrong more often than blank.
+    country: string,
+    // The directory's free-form genre list, already trimmed and joined by Rust.
+    tags: string,
+    homepage: string,
+    codec: string,
+    // Advertised kbps; `0` means the directory does not know, not that the station is silent.
+    bitrate: int,
+    play_count: int,
+}
+
 export struct PlayerVm {
     has_track: bool,
     track: TrackSummaryRow,
+    has_station: bool,
+    radio: RadioVm,
     status: string,
     is_playing: bool,
     volume: int,

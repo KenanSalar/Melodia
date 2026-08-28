@@ -9,8 +9,56 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 use crate::player::event_sink::{EventSink, MediaControlsSync, PlayerEvent};
+use crate::player::now_playing::SourceSummary;
 use crate::player::state::PlayerViewModelLight;
 use crate::player::types::PlaybackStatus;
+
+/// What was last handed to the OS panel.
+///
+/// **The dedupe key is the metadata, not a proxy for it.** Keyed on the track id, a live title
+/// arriving on the station already playing looked unchanged and never reached the panel — and so
+/// did a track re-tagged in place. The identity is deliberately *not* part of the comparison:
+/// two sources that would publish the same panel do not need a second D-Bus round trip.
+///
+/// Owned, since it outlives the borrow it is built from, and compared *against* the borrowed form
+/// so the steady state allocates nothing.
+struct PublishedMetadata {
+    title: String,
+    secondary: Option<String>,
+    album: Option<String>,
+    artwork_path: Option<String>,
+    duration_ms: Option<u64>,
+}
+
+impl PublishedMetadata {
+    /// Whether the panel already says what `source` would say. Nothing held and nothing playing
+    /// is a match: there is no metadata to clear.
+    fn still_current(held: Option<&Self>, source: Option<&SourceSummary<'_>>) -> bool {
+        match (held, source) {
+            (None, None) => true,
+            (Some(held), Some(source)) => {
+                held.title == source.title
+                    && held.secondary.as_deref() == source.secondary
+                    && held.album.as_deref() == source.album
+                    && held.artwork_path.as_deref() == source.artwork_path
+                    && held.duration_ms == source.duration_ms
+            }
+            _ => false,
+        }
+    }
+}
+
+impl From<&SourceSummary<'_>> for PublishedMetadata {
+    fn from(source: &SourceSummary<'_>) -> Self {
+        Self {
+            title: source.title.to_owned(),
+            secondary: source.secondary.map(str::to_owned),
+            album: source.album.map(str::to_owned),
+            artwork_path: source.artwork_path.map(str::to_owned),
+            duration_ms: source.duration_ms,
+        }
+    }
+}
 
 /// Wrapper around souvlaki's `MediaControls`.
 /// `Option` allows graceful degradation when OS media controls are unavailable
@@ -28,7 +76,7 @@ struct MediaControlsInner {
     #[cfg(target_os = "windows")]
     event_tx: mpsc::Sender<MediaControlEvent>,
     /// Last-synced state to avoid redundant D-Bus/SMTC calls on queue-only changes.
-    last_track_id: Option<i64>,
+    last_metadata: Option<PublishedMetadata>,
     last_status: Option<PlaybackStatus>,
     last_position_ms: u64,
     last_volume: u32,
@@ -67,7 +115,7 @@ pub fn init_media_controls() -> (MediaControlsHandle, mpsc::Receiver<MediaContro
             controls,
             #[cfg(target_os = "windows")]
             event_tx: tx,
-            last_track_id: None,
+            last_metadata: None,
             last_status: None,
             last_position_ms: 0,
             last_volume: 0,
@@ -235,13 +283,14 @@ impl MediaControlsSync for MediaControlsHandle {
     fn sync(&self, vm: &PlayerViewModelLight, status: PlaybackStatus) {
         let mut guard = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
-        let track_id = vm.current_track.as_ref().map(|t| t.id);
-        let track_changed = guard.last_track_id != track_id;
+        let source = vm.source();
+        let metadata_changed =
+            !PublishedMetadata::still_current(guard.last_metadata.as_ref(), source.as_ref());
         let status_changed = guard.last_status != Some(status);
         let position_changed = guard.last_position_ms != vm.position_ms;
         let volume_changed = guard.last_volume != vm.volume || guard.last_is_muted != vm.is_muted;
 
-        if !track_changed && !status_changed && !position_changed && !volume_changed {
+        if !metadata_changed && !status_changed && !position_changed && !volume_changed {
             return;
         }
 
@@ -249,15 +298,16 @@ impl MediaControlsSync for MediaControlsHandle {
             return;
         };
 
-        if track_changed {
-            if let Some(ref track) = vm.current_track {
-                let cover_url = track.artwork_path.as_ref().map(|p| format!("file://{p}"));
-
+        if metadata_changed {
+            if let Some(source) = source.as_ref() {
+                let cover_url = source.artwork_path.map(|p| format!("file://{p}"));
                 if let Err(e) = controls.set_metadata(MediaMetadata {
-                    title: Some(&track.title),
-                    artist: track.artist.as_deref(),
-                    album: track.album.as_deref(),
-                    duration: Some(Duration::from_millis(vm.duration_ms)),
+                    title: Some(source.title),
+                    artist: source.secondary,
+                    album: source.album,
+                    // Absent rather than zero for a live source: MPRIS renders the two
+                    // differently, and a stream has no length to seek within.
+                    duration: source.duration_ms.map(Duration::from_millis),
                     cover_url: cover_url.as_deref(),
                 }) {
                     log::debug!("Failed to set media metadata: {e}");
@@ -267,7 +317,7 @@ impl MediaControlsSync for MediaControlsHandle {
             }
         }
 
-        if status_changed || track_changed || position_changed {
+        if status_changed || metadata_changed || position_changed {
             let progress = Some(MediaPosition(Duration::from_millis(vm.position_ms)));
             let playback = match status {
                 PlaybackStatus::Playing => MediaPlayback::Playing { progress },
@@ -287,7 +337,7 @@ impl MediaControlsSync for MediaControlsHandle {
             }
         }
 
-        guard.last_track_id = track_id;
+        guard.last_metadata = source.as_ref().map(PublishedMetadata::from);
         guard.last_status = Some(status);
         guard.last_position_ms = vm.position_ms;
         guard.last_volume = vm.volume;

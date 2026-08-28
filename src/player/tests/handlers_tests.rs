@@ -270,15 +270,9 @@ fn the_last_track_neither_crossfades_nor_preloads() {
 /// makes the assertions mean something.
 fn playing_a_station() -> PlayerState {
     let mut state = playing_state();
-    let (generation, _actions) =
-        state.build_station_connecting_actions(crate::player::types::RadioNowPlaying {
-            station_id: 42,
-            name: "Example FM".to_owned(),
-            stream_url: "http://example.test/live.mp3".to_owned(),
-            artwork_path: None,
-            live_title: None,
-            buffering: false,
-        });
+    let (generation, _actions) = state.build_station_connecting_actions(
+        crate::player::tests::helpers::test_station("Example FM"),
+    );
     let _started = state.build_station_connected_actions(generation);
     state
 }

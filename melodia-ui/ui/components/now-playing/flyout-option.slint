@@ -7,12 +7,15 @@ import { FlyoutMetrics } from "flyout-presets.slint";
 export component FlyoutOption inherits Rectangle {
     in property <string> label;
     in property <bool> active;
+    // Dimmed and inert, but still in the list: a flyout reserves its height from the preset
+    // count, so a row that comes and goes moves the popup's geometry under the pointer.
+    in property <bool> option-enabled: true;
 
     callback clicked();
 
     height: FlyoutMetrics.option-row-h;
     border-radius: Theme.radius-sm;
-    background: touch.has-hover ? Theme.surface1 : transparent;
+    background: touch.has-hover && root.option-enabled ? Theme.surface1 : transparent;
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
     HorizontalLayout {
@@ -26,7 +29,9 @@ export component FlyoutOption inherits Rectangle {
             horizontal-stretch: 1;
             Text {
                 text: root.label;
-                color: root.active ? Theme.accent : Theme.text;
+                color: !root.option-enabled
+                    ? Theme.overlay0
+                    : (root.active ? Theme.accent : Theme.text);
                 font-size: Theme.font-size-md;
             }
         }
@@ -42,7 +47,8 @@ export component FlyoutOption inherits Rectangle {
     }
 
     touch := TouchArea {
-        mouse-cursor: pointer;
+        enabled: root.option-enabled;
+        mouse-cursor: root.option-enabled ? pointer : default;
         clicked => { root.clicked(); }
     }
 }

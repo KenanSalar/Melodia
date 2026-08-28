@@ -504,15 +504,8 @@ fn toggle_from_stopped_without_track_is_noop() {
 
 // --- radio transport routing -----------------------------------------------
 
-fn station() -> RadioNowPlaying {
-    RadioNowPlaying {
-        station_id: 42,
-        name: "Example FM".to_owned(),
-        stream_url: "http://example.test/live.mp3".to_owned(),
-        artwork_path: None,
-        live_title: None,
-        buffering: false,
-    }
+fn station() -> std::sync::Arc<RadioNowPlaying> {
+    crate::player::tests::helpers::test_station("Example FM")
 }
 
 fn tuned_in() -> PlayerState {

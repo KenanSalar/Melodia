@@ -56,7 +56,8 @@ pub use callbacks::files::wire as wire_files;
 pub use covers::tune_cache_for_display;
 pub use detail::{StationRef, open_station_with, seed_detail_from_settings};
 pub use history::install as install_history;
-pub use rows::station_has_row;
+pub use identity::{StationTile, station_tile};
+pub use rows::{display_tags, station_has_row};
 pub use tabs::{RadioTab, seed_tab, tab_from_index};
 
 /// This page's `Nav.selected-index`, and the single definition of it.

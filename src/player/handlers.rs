@@ -215,6 +215,9 @@ fn reconcile_live_stream(
 
     with_state_emit(player_state, sinks, |state| {
         if let Some(radio) = state.radio.as_mut() {
+            // The one place the station is mutated in flight, so the `Arc`'s copy-on-write lands
+            // here: once a song, against a clone per emit if the struct were held inline.
+            let radio = std::sync::Arc::make_mut(radio);
             radio.buffering = buffering;
             if let Some(title) = title {
                 radio.live_title = title;

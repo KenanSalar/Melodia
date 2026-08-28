@@ -8,13 +8,16 @@
 //! station you paused or stopped is still the one on screen, and a list that empties the moment
 //! you press stop is a list nobody gets to read.
 //!
-//! Radio owns it because the Radio page is what draws it; the Now Playing view reaches the same
-//! ring through the handle registry rather than keeping a second one.
+//! Radio owns it because the Radio page draws it, and the Now Playing view reads the *same*
+//! model rather than a second one: `Radio.history-rows` is by definition the playing station's
+//! titles, and the station page gates them on `Radio.detail-station-is-playing`. So the rows are
+//! written here, once per move, and a seat change only re-answers the flag.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
 
 use async_compat::Compat;
+use slint::ComponentHandle;
 
 use crate::AppWindow;
 use crate::player::event_sink::PlayerSinks;
@@ -60,9 +63,14 @@ impl StationHistory {
         true
     }
 
-    /// The titles for one station, or `None` where the ring is holding another's.
-    pub fn titles_for(&self, stream_url: &str) -> Option<&VecDeque<String>> {
-        (self.stream_url == stream_url).then_some(&self.titles)
+    /// Everything held, whichever station it belongs to.
+    pub fn titles(&self) -> &VecDeque<String> {
+        &self.titles
+    }
+
+    /// Whether the ring is holding `stream_url`'s titles.
+    pub fn describes(&self, stream_url: &str) -> bool {
+        self.stream_url == stream_url
     }
 }
 
@@ -96,9 +104,23 @@ pub fn install(
                 continue;
             }
             let Some(ui) = weak.upgrade() else { break };
-            detail::apply_history(&ui, &radio_ui);
+            apply(&ui, &radio_ui);
         }
         log::debug!("ui::radio::history subscriber stopped");
     }))?;
     Ok(())
+}
+
+/// Publish the ring into `Radio.history-rows` and re-answer whose station it describes.
+///
+/// The borrow is scoped so the flag's own read of the ring is a second acquisition rather than a
+/// re-entrant one — `parking_lot::Mutex` would deadlock on the latter.
+pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
+    let titles: Vec<slint::SharedString> = {
+        let history = radio_ui.history.lock();
+        history.titles().iter().map(|title| slint::SharedString::from(title.as_str())).collect()
+    };
+    ui.global::<crate::Radio>()
+        .set_history_rows(slint::ModelRc::new(slint::VecModel::from(titles)));
+    detail::sync_history_seat(ui, radio_ui);
 }

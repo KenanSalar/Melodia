@@ -1936,5 +1936,19 @@ msgstr "Votos"
 msgid "Recently played on this station"
 msgstr "Sonó hace poco en esta emisora"
 
+# ---- Radio: a station on the transport ---------------------------------------
+
+# The badge where a track's seek bar goes. Keep it short and shouty — it is a pill.
+msgid "LIVE"
+msgstr "EN DIRECTO"
+
+msgid "Buffering…"
+msgstr "Almacenando en búfer…"
+
+# Heading over the Now Playing panel that replaces "Up Next" while a station plays. Names the
+# kind of thing the panel describes, so keep it as short as that one.
+msgid "Station"
+msgstr "Emisora"
+
 msgid "{}: {}"
 msgstr "{}: {}"

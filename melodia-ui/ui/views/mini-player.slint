@@ -2,7 +2,8 @@ import { Theme } from "../theme.slint";
 import { Player } from "../globals/player.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
 import { IconButton } from "../components/icon-button.slint";
-import { ArtworkImage } from "../components/artwork-image.slint";
+import { MetaChip } from "../components/meta-chip.slint";
+import { SourceArtwork } from "../components/now-playing/source-artwork.slint";
 import { SliderTrack } from "../components/slider-track.slint";
 import { VolumePopup } from "../components/now-playing/volume-popup.slint";
 import { VolumePopupHorizontal } from "../components/now-playing/volume-popup-horizontal.slint";
@@ -68,9 +69,7 @@ export component MiniPlayerView inherits Rectangle {
 
             VerticalLayout {
                 alignment: center;
-                ArtworkImage {
-                    artwork-path: Player.vm.track.artwork_path;
-                    cover: Player.vm.track.cover_img;
+                SourceArtwork {
                     tile-size: 48px;
                 }
             }
@@ -82,20 +81,14 @@ export component MiniPlayerView inherits Rectangle {
                     alignment: center;
                     spacing: 2px;
                     Text {
-                        text: Player.vm.has_track
-                            ? "‎" + Player.vm.track.title
-                            : @tr("No track playing");
+                        text: Player.source-title;
                         color: Theme.text;
                         font-size: Theme.font-size-sm;
                         font-weight: 500;
                         overflow: elide;
                     }
                     Text {
-                        text: Player.vm.has_track
-                            ? "‎" + (Player.vm.track.artist == ""
-                                ? @tr("Unknown artist")
-                                : Player.vm.track.artist)
-                            : "—";
+                        text: Player.source-subtitle;
                         color: Theme.subtext0;
                         font-size: 11px;
                         overflow: elide;
@@ -183,7 +176,7 @@ export component MiniPlayerView inherits Rectangle {
         // and the slider floats mid-row. Leave `SliderTrack` its native 24 px
         // min-height so the pill thumb clears the bottom edge; the track still
         // reads slim at 4 px.
-        h-slider := SliderTrack {
+        if !Player.vm.has_station: SliderTrack {
             vertical-stretch: 0;
             value: root.slider-frac;
             is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
@@ -192,6 +185,17 @@ export component MiniPlayerView inherits Rectangle {
                 if (Player.duration-ms > 0) {
                     Player.seek(round(v * Player.duration-ms));
                 }
+            }
+        }
+        // The bar's state pill, in the slot the seek track would have taken. No elapsed readout
+        // beside it — there are no time labels on this variant either.
+        if Player.vm.has_station: HorizontalLayout {
+            vertical-stretch: 0;
+            alignment: center;
+            MetaChip {
+                text: Player.live-label;
+                fill: Theme.accent.with-alpha(0.18);
+                label-color: Theme.accent;
             }
         }
     }
@@ -259,12 +263,21 @@ export component MiniPlayerView inherits Rectangle {
             vertical-stretch: 0;
             HorizontalLayout {
                 alignment: center;
-                ArtworkImage {
-                    artwork-path: Player.vm.track.artwork_path;
-                    cover: Player.np-cover-has-image
-                        ? (Player.np-cover-use-a ? Player.np-cover-a : Player.np-cover-b)
-                        : Player.vm.track.cover_img;
+                SourceArtwork {
                     tile-size: clamp(root.width * 0.5, 90px, 180px);
+                    // The only binding this site overrides: everything else about the tile is
+                    // the shared track-or-station split. A station's large slot is its own,
+                    // `np-cover-*` being the track cross-fade.
+                    cover: Player.vm.has_station
+                        ? (Player.np-station-logo.width > 0
+                            ? Player.np-station-logo
+                            : Player.vm.radio.logo_img)
+                        : (Player.np-cover-has-image
+                            ? (Player.np-cover-use-a ? Player.np-cover-a : Player.np-cover-b)
+                            : Player.vm.track.cover_img);
+                    // Written together with the slot above, so a `0` here means the row-tier
+                    // fallback is what's drawing and there is nothing to measure.
+                    native-size: Player.np-station-logo-size * 1px;
                 }
             }
         }
@@ -274,9 +287,7 @@ export component MiniPlayerView inherits Rectangle {
             vertical-stretch: 0;
             spacing: 2px;
             Text {
-                text: Player.vm.has_track
-                    ? "‎" + Player.vm.track.title
-                    : @tr("No track playing");
+                text: Player.source-title;
                 color: Theme.text;
                 font-size: Theme.font-size-md;
                 font-weight: 500;
@@ -284,11 +295,7 @@ export component MiniPlayerView inherits Rectangle {
                 overflow: elide;
             }
             Text {
-                text: Player.vm.has_track
-                    ? "‎" + (Player.vm.track.artist == ""
-                        ? @tr("Unknown artist")
-                        : Player.vm.track.artist)
-                    : "—";
+                text: Player.source-subtitle;
                 color: Theme.subtext0;
                 font-size: 11px;
                 horizontal-alignment: center;
@@ -375,7 +382,7 @@ export component MiniPlayerView inherits Rectangle {
 
         // Native 24 px height again, so the pill thumb clears the Up Next list
         // above it and the bottom edge when that list isn't mounted.
-        s-slider := SliderTrack {
+        if !Player.vm.has_station: SliderTrack {
             vertical-stretch: 0;
             value: root.slider-frac;
             is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
@@ -384,6 +391,15 @@ export component MiniPlayerView inherits Rectangle {
                 if (Player.duration-ms > 0) {
                     Player.seek(round(v * Player.duration-ms));
                 }
+            }
+        }
+        if Player.vm.has_station: HorizontalLayout {
+            vertical-stretch: 0;
+            alignment: center;
+            MetaChip {
+                text: Player.live-label;
+                fill: Theme.accent.with-alpha(0.18);
+                label-color: Theme.accent;
             }
         }
 

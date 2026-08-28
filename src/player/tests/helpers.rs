@@ -1,11 +1,12 @@
 //! Shared fixtures for the player's DSP tests.
 //!
-//! Three things were being written out more than once, so each lives here:
+//! Four things were being written out more than once, so each lives here:
 //! [`TestSource`] and its `NonZero` wrappers, which the equalizer and
 //! visualizer suites both drain to compare a source's output against its input;
 //! the float comparisons, which four suites need to check a value that is exact
-//! in principle but rides through float maths; and [`fill_sine`], which the
-//! spectrum and waveform suites both feed a known tone.
+//! in principle but rides through float maths; [`fill_sine`], which the
+//! spectrum and waveform suites both feed a known tone; and [`test_station`],
+//! which four transport suites tune to.
 //!
 //! The crossfade suite deliberately takes none of it: it exercises pure
 //! predicates and the ramp cell, so it needs no source, and it holds a tighter
@@ -106,4 +107,28 @@ impl Source for TestSource {
         self.pos = 0;
         Ok(())
     }
+}
+
+/// A station for the transport tests, with only what they assert on filled in.
+///
+/// Four suites were spelling this out — three under `player/` and one under `library/` — so a
+/// field added to `RadioNowPlaying` broke all four the same way. The display facts are left empty
+/// deliberately: nothing below the UI layer reads them, so a fixture carrying them would suggest
+/// the transport cares.
+pub fn test_station(name: &str) -> std::sync::Arc<crate::player::types::RadioNowPlaying> {
+    std::sync::Arc::new(crate::player::types::RadioNowPlaying {
+        station_id: 42,
+        station_uuid: None,
+        name: name.to_owned(),
+        stream_url: "http://example.test/live.mp3".to_owned(),
+        artwork_path: None,
+        live_title: None,
+        buffering: false,
+        country: None,
+        tags: None,
+        homepage: None,
+        codec: None,
+        bitrate: 0,
+        play_count: 0,
+    })
 }

@@ -20,7 +20,7 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, ModelRc, VecModel, Weak};
+use slint::{ComponentHandle, Weak};
 
 use crate::entities::radio::{DirectoryStation, RadioStation};
 use crate::error::{AppError, AppResult};
@@ -271,7 +271,7 @@ where
         paint_seat(&ui, &g, &radio_ui, &seated, true);
         *radio_ui.detail.lock().seat_mut(tab) = Some(seated);
         // Reads the seat, so it comes after the store.
-        apply_history(&ui, &radio_ui);
+        sync_history_seat(&ui, &radio_ui);
         // **The seat property last** — everything above is what it gates.
         g.set_detail_tab(g.get_tab_idx());
 
@@ -345,7 +345,7 @@ pub fn reseat(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
         return;
     };
     paint_seat(ui, &g, radio_ui, &open, true);
-    apply_history(ui, radio_ui);
+    sync_history_seat(ui, radio_ui);
     g.set_detail_tab(g.get_tab_idx());
 }
 
@@ -510,12 +510,6 @@ pub fn persist_seat(state: &AppState, ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
     });
 }
 
-/// The station the mounted tab's page is about, for the callbacks that act on what is painted.
-pub fn open_station_ref(ui: &AppWindow, radio_ui: &RadioUi) -> Option<StationRef> {
-    let tab = mounted_tab(&ui.global::<Radio>());
-    radio_ui.detail.lock().seat(tab).map(|open| open.station.clone())
-}
-
 /// Every tab holding a page, and which station each is about.
 ///
 /// Taken as a snapshot rather than walked under the lock: both callers reach a cache per seat and
@@ -603,26 +597,21 @@ fn from_cache(radio_ui: &RadioUi, station: &StationRef) -> Option<StationSource>
         .map(|(found, logo)| StationSource::Browsed(found, logo))
 }
 
-/// Write the mounted tab's station history into the global.
+/// Re-answer whether the mounted tab's page is the station whose titles `Radio.history-rows` holds.
+///
+/// The rows themselves belong to whatever is playing and are written by `history::apply`; this is
+/// the only thing a seat change moves, which is why a tab hand-off no longer rebuilds a model.
 ///
 /// UI thread only.
-pub fn apply_history(ui: &AppWindow, radio_ui: &RadioUi) {
+pub fn sync_history_seat(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
-    let detail = radio_ui.detail.lock();
-    let Some(open) = detail.seat(mounted_tab(&g)) else {
-        return;
-    };
-    // Empty where a different station is playing, or none has yet — the page mounts the section
-    // only when there is something in it, so this needs no empty state to distinguish.
-    let history = radio_ui.history.lock();
-    let titles: Vec<slint::SharedString> = history
-        .titles_for(open.source.stream_url())
-        .into_iter()
-        .flatten()
-        .map(|title| slint::SharedString::from(title.as_str()))
-        .collect();
-
-    g.set_history_rows(ModelRc::new(VecModel::from(titles)));
+    let seated_url = radio_ui
+        .detail
+        .lock()
+        .seat(mounted_tab(&g))
+        .map(|open| open.source.stream_url().to_owned());
+    let is_playing = seated_url.is_some_and(|url| radio_ui.history.lock().describes(&url));
+    g.set_detail_station_is_playing(is_playing);
 }
 
 /// Re-decode the heroes for whatever tabs were left holding a page when the section was left.

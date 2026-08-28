@@ -5,6 +5,7 @@ pub(crate) mod dsp;
 pub mod equalizer;
 pub mod event_sink;
 pub mod handlers;
+pub mod now_playing;
 pub mod prebuffer;
 pub mod queue;
 pub mod replaygain;

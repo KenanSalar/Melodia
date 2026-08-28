@@ -18,8 +18,9 @@ use crate::entities::track::TrackSummary;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::player::event_sink::PlayerSinks;
 use crate::player::state::{PlayerViewModelLight, PositionTick, QueueViewModel};
+use crate::player::types::RadioNowPlaying;
 use crate::ui::util::len_as_i32;
-use crate::{AppWindow, Player, PlayerVm, QueueVm, TrackSummaryRow};
+use crate::{AppWindow, Player, PlayerVm, QueueVm, RadioVm, TrackSummaryRow};
 
 /// Subscribe to the lightweight player `ViewModel` (status, current track,
 /// volume, `has_next/prev`). Fires on every state change; replaces the whole
@@ -50,10 +51,18 @@ pub fn spawn_view_model_subscriber(
                 // the cover as a brand-new texture on each volume step /
                 // seek / queue edit. Same pixels either way — both handles
                 // wrap the same cached RGB8 buffer.
-                let cover_changed = new_vm.track.artwork_path != prev_vm.track.artwork_path;
-                if !cover_changed {
-                    new_vm.track.cover_img = prev_vm.track.cover_img.clone();
-                }
+                let cover_path = reuse_or_warm(
+                    &new_vm.track.artwork_path,
+                    &prev_vm.track.artwork_path,
+                    &mut new_vm.track.cover_img,
+                    &prev_vm.track.cover_img,
+                );
+                let logo_path = reuse_or_warm(
+                    &new_vm.radio.artwork_path,
+                    &prev_vm.radio.artwork_path,
+                    &mut new_vm.radio.logo_img,
+                    &prev_vm.radio.logo_img,
+                );
                 let new_position_ms = clamp_to_i32(vm.position_ms);
                 let new_duration_ms = clamp_to_i32(vm.duration_ms);
                 let new_progress = if vm.duration_ms > 0 {
@@ -78,11 +87,6 @@ pub fn spawn_view_model_subscriber(
                 player.set_position_ms(new_position_ms);
                 player.set_duration_ms(new_duration_ms);
                 player.set_progress(new_progress);
-                // Gated on the path having *moved* rather than on the slot being empty: the
-                // reuse above hands a cover that failed to decode straight back, so an
-                // is-it-empty test would re-ask on every volume step for the rest of the track.
-                let warm = cover_changed && new_vm.track.cover_img.size().width == 0;
-                let cover_path = warm.then(|| new_vm.track.artwork_path.to_string());
                 // `Property::set` is value-compared, so this guard spares only the move into the
                 // setter and the binding-handle access it opens with, and pays a second compare
                 // whenever the VM *did* change. Worth it because most emits are value-identical —
@@ -91,7 +95,16 @@ pub fn spawn_view_model_subscriber(
                     player.set_vm(new_vm);
                 }
                 if let Some(path) = cover_path {
-                    warm_vm_cover(ui.as_weak(), &runtime, &cover_thumbs, path);
+                    warm_vm_cover(ui.as_weak(), &runtime, &cover_thumbs, path, VmCoverSlot::Track);
+                }
+                if let Some(path) = logo_path {
+                    warm_vm_cover(
+                        ui.as_weak(),
+                        &runtime,
+                        &cover_thumbs,
+                        path,
+                        VmCoverSlot::Station,
+                    );
                 }
             }
         }
@@ -186,6 +199,78 @@ pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSumm
     }
 }
 
+/// Both halves of one artwork slot's contract: keep the handle where the path stands still, and
+/// answer the path to warm where it moved onto a tier that had nothing.
+///
+/// **Stable identity is the first half and it is invisible until profiled.** Slint compares
+/// `Image` by identity, so a fresh handle per emit dirties every binding reading `vm` and makes
+/// `FemtoVG` treat the artwork as a brand-new texture on each volume step, seek or queue edit. Same
+/// pixels either way; both handles wrap the same cached RGB8 buffer.
+///
+/// The second is gated on the path having *moved* rather than on the slot being empty, since the
+/// reuse hands a cover that failed to decode straight back — an is-it-empty test would re-ask on
+/// every volume step for the rest of the track.
+fn reuse_or_warm(
+    new_path: &SharedString,
+    prev_path: &SharedString,
+    new_image: &mut slint::Image,
+    prev_image: &slint::Image,
+) -> Option<String> {
+    if new_path == prev_path {
+        new_image.clone_from(prev_image);
+        return None;
+    }
+    (new_image.size().width == 0).then(|| new_path.to_string())
+}
+
+/// Convert the station on the deck for the Slint boundary.
+///
+/// The logo is resolved exactly as [`to_slint_track`] resolves a cover — cache-only, so nothing
+/// decodes on the event loop, with [`warm_vm_cover`] filling a miss. The tile comes from
+/// `ui::radio::station_tile`, the same derivation the grid card and the station hero take theirs
+/// from, so one station cannot wear two different tiles on two pages.
+fn to_slint_radio_vm(station: &RadioNowPlaying, cover_thumbs: &CoverThumbs) -> RadioVm {
+    let tile = crate::ui::radio::station_tile(&station.name);
+    RadioVm {
+        station_id: clamp_to_i32(u64::try_from(station.station_id).unwrap_or(0)),
+        uuid: opt_shared(station.station_uuid.as_deref()),
+        name: SharedString::from(station.name.as_str()),
+        live_title: SharedString::from(station.live_title.as_deref().unwrap_or("")),
+        artwork_path: SharedString::from(station.artwork_path.as_deref().unwrap_or("")),
+        logo_img: cover_thumbs.get_cached_opt(station.artwork_path.as_deref()),
+        monogram: tile.monogram,
+        tile_color_1: tile.color_1,
+        tile_color_2: tile.color_2,
+        buffering: station.buffering,
+        stream_url: SharedString::from(station.stream_url.as_str()),
+        country: opt_shared(station.country.as_deref()),
+        // Trimmed and joined here rather than carried that way, so the bar's second line and a
+        // station card show the same few tags off the same rule.
+        tags: SharedString::from(crate::ui::radio::display_tags(
+            station.tags.as_deref().unwrap_or_default(),
+        )),
+        homepage: opt_shared(station.homepage.as_deref()),
+        codec: opt_shared(station.codec.as_deref()),
+        bitrate: station.bitrate,
+        play_count: station.play_count,
+    }
+}
+
+/// Slint has no `Option<T>`, so an absent fact crosses as the empty string every consumer already
+/// gates on.
+fn opt_shared(value: Option<&str>) -> SharedString {
+    SharedString::from(value.unwrap_or(""))
+}
+
+/// Which half of `Player.vm` a warm is filling. The two paths differ only in the field they guard
+/// on and the field they write, so a parallel `warm_vm_logo` would be the same round trip, the
+/// same staleness check and the same bail spelled twice.
+#[derive(Clone, Copy)]
+pub enum VmCoverSlot {
+    Track,
+    Station,
+}
+
 /// Decode `path` into the row tier off the event loop, then write it into `Player.vm`.
 ///
 /// [`to_slint_track`]'s other half: it answers cache-only so nothing decodes on the UI thread, and
@@ -198,6 +283,7 @@ pub fn warm_vm_cover(
     runtime: &Handle,
     cover_thumbs: &Arc<CoverThumbs>,
     path: String,
+    slot: VmCoverSlot,
 ) {
     if path.is_empty() {
         return;
@@ -214,10 +300,18 @@ pub fn warm_vm_cover(
         let _ = weak.upgrade_in_event_loop(move |ui| {
             let player = ui.global::<Player>();
             let mut vm = player.get_vm();
-            if vm.track.artwork_path != path.as_str() {
+            let held = match slot {
+                VmCoverSlot::Track => &vm.track.artwork_path,
+                VmCoverSlot::Station => &vm.radio.artwork_path,
+            };
+            if held != path.as_str() {
                 return;
             }
-            vm.track.cover_img = slint::Image::from_rgb8(buffer);
+            let image = slint::Image::from_rgb8(buffer);
+            match slot {
+                VmCoverSlot::Track => vm.track.cover_img = image,
+                VmCoverSlot::Station => vm.radio.logo_img = image,
+            }
             player.set_vm(vm);
         });
     });
@@ -234,9 +328,12 @@ pub fn to_slint_player_vm(vm: &PlayerViewModelLight, cover_thumbs: &CoverThumbs)
         .as_ref()
         .map(|t| to_slint_track(t.as_ref(), cover_thumbs))
         .unwrap_or_default();
+    let radio = vm.radio.as_ref().map(|r| to_slint_radio_vm(r, cover_thumbs)).unwrap_or_default();
     PlayerVm {
         has_track: vm.current_track.is_some(),
         track,
+        has_station: vm.radio.is_some(),
+        radio,
         status: SharedString::from(vm.status),
         is_playing: vm.status == "playing",
         volume: i32::try_from(vm.volume).unwrap_or(i32::MAX),

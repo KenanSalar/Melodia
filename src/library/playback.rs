@@ -149,7 +149,7 @@ fn resume_station(ctx: &PlaybackContext) -> bool {
 /// a station the user has already moved off must not start playing seconds later.
 pub async fn player_play_station(
     ctx: &PlaybackContext,
-    station: &RadioNowPlaying,
+    station: &Arc<RadioNowPlaying>,
 ) -> Result<(), AppError> {
     // The session number has to come back out of the emit, since only the state machine can
     // allocate one atomically with the transition that starts it.
@@ -169,7 +169,7 @@ pub async fn player_play_station(
 /// predicate that authorised it, and still share everything past the `.await`.
 async fn open_and_start_station(
     ctx: &PlaybackContext,
-    station: &RadioNowPlaying,
+    station: &Arc<RadioNowPlaying>,
     generation: u64,
 ) -> Result<(), AppError> {
     let client = ctx.http.get_or_init(crate::services::build_http_client).clone();
@@ -352,9 +352,14 @@ pub fn player_set_gapless(ctx: &PlaybackContext, enabled: bool) -> Result<(), Ap
 /// UI's `Player.vm.sleep_at_track_end` (and thus the overflow-menu sleep row)
 /// tracks the flag; the monitor disarms it when it fires, which re-emits and
 /// auto-clears the row.
+///
+/// **Refused while a station plays.** A live source has no track end, so the monitor would never
+/// fire the flag and the sleep row would sit reading "Track end" over a timer that can only be
+/// cancelled. The guard is here rather than at the one caller so no later caller can arm it, and
+/// so a grep can prove it; the flyout dims the row on top of this.
 pub fn player_set_pause_at_track_end(ctx: &PlaybackContext, armed: bool) -> Result<(), AppError> {
     with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
-        s.pause_after_current_track = armed;
+        s.pause_after_current_track = armed && s.radio.is_none();
     });
     Ok(())
 }

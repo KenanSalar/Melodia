@@ -1,5 +1,11 @@
 //! `sinks.view_model` subscriber + the (decode + metadata fetch + write)
 //! apply step. Skipped while the view is closed; seeded on open.
+//!
+//! **Source, not track.** A station has no `current_track` from the first tick to the last, so a
+//! subscriber keyed on the track id never fires for one and the view paints an empty cover under
+//! an empty title. What moves is `PlayerViewModelLight::source`, and everything below reduces to
+//! the three things it answers: an identity to dedupe on, a path to decode, and an optional
+//! `tracks` row for the chips.
 
 use std::cell::Cell;
 use std::path::Path;
@@ -9,9 +15,9 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, Weak};
 
-use super::NowPlayingState;
 use super::metadata::to_slint_track_meta;
 use super::write_crossfade_slot;
+use super::{NowPlayingSource, NowPlayingState, SourceKey};
 use crate::entities::track::TrackSummary;
 use crate::library;
 use crate::state::AppState;
@@ -32,50 +38,52 @@ thread_local! {
 /// blurred backdrop, and the hue + brightness measured off the sharp downscale.
 type DecodedArtwork = (Option<Image>, Option<Image>, backdrop::BackdropSample);
 
-/// Subscribe to `sinks.view_model` and react only to actual track changes. Always
-/// stashes the current track; then, *only while the view is open*, decodes and blurs
-/// the cover into the inactive slot, flips, and fetches the chips. Closed, it stashes
+/// Subscribe to `sinks.view_model` and react only to actual source changes. Always
+/// stashes the current source; then, *only while the view is open*, decodes and blurs
+/// the artwork into the inactive slot, flips, and fetches the chips. Closed, it stashes
 /// and stops — `wire_now_playing_open` decodes on the next open.
-pub(super) fn spawn_track_change_subscriber(
+pub(super) fn spawn_source_change_subscriber(
     ui: &AppWindow,
     state: &AppState,
     np_artwork: Arc<NowPlayingArtwork>,
     np_state: Rc<NowPlayingState>,
-    initial_track_id: Option<i64>,
+    initial_key: Option<SourceKey>,
 ) -> Result<(), slint::EventLoopError> {
     let weak = ui.as_weak();
     let state = state.clone();
     let mut rx = state.sinks.view_model.subscribe();
     // Seeded from the snapshot in `install` so the subscriber doesn't
-    // re-fire for the already-seeded restored track.
-    let mut last_track_id = initial_track_id;
+    // re-fire for the already-seeded restored source.
+    let mut last_key = initial_key;
     slint::spawn_local(Compat::new(async move {
         loop {
             if rx.changed().await.is_err() {
                 break;
             }
-            // *Only* `current_track`: this fires on every `view_model` push — play,
-            // pause, volume, speed — and acts solely on a track change, so cloning the
-            // whole `ViewModel` is waste where this is an `Arc` refcount bump. The
-            // borrow guard is statement-scoped, dropped before the `.await` below.
-            let new_track = rx.borrow_and_update().as_ref().map(|vm| vm.current_track.clone());
-            let Some(new_track) = new_track else { continue };
-            let new_id = new_track.as_ref().map(|t| t.id);
-            if new_id == last_track_id {
+            // *Only* the source's identity: this fires on every `view_model` push — play,
+            // pause, volume, speed, and every ICY title a station announces — and acts
+            // solely on a source change. The borrow guard is statement-scoped, dropped
+            // before the `.await` below.
+            let new_source = rx.borrow_and_update().as_ref().map(NowPlayingSource::from_vm);
+            let Some(new_source) = new_source else {
+                continue;
+            };
+            let new_key = new_source.as_ref().map(|s| s.key.clone());
+            if new_key == last_key {
                 continue;
             }
-            last_track_id = new_id;
+            last_key = new_key;
             // Regardless of visibility, so a later open can seed the artwork from it.
-            np_state.current_track.borrow_mut().clone_from(&new_track);
+            np_state.current_source.borrow_mut().clone_from(&new_source);
             // The decode, blur and metadata read only produce something on screen while
             // a surface renders them — the full view, or the square miniplayer, whose
             // artwork reads the same dual slot. Otherwise `wire_now_playing_open` or
             // `kick_artwork` seeds on the next open.
             if np_state.open.get() || (np_state.mini_visible.get() && np_state.mini_square.get()) {
-                apply_track_change(&weak, &state, &np_artwork, &np_state, new_track, true).await;
+                apply_source_change(&weak, &state, &np_artwork, &np_state, new_source, true).await;
             }
         }
-        log::debug!("ui::now_playing track-change subscriber stopped");
+        log::debug!("ui::now_playing source-change subscriber stopped");
     }))?;
     Ok(())
 }
@@ -85,29 +93,31 @@ pub(super) fn spawn_track_change_subscriber(
 /// `.await`s.
 ///
 /// `animate` picks the cross-fade behaviour — `true` for a live change while the view is
-/// open, `false` for the seed-on-open path. Records the applied id in
-/// `applied_track_id`, so a redundant re-seed is skipped.
-pub(super) async fn apply_track_change(
+/// open, `false` for the seed-on-open path. Records the applied identity in
+/// `applied_source`, so a redundant re-seed is skipped.
+pub(super) async fn apply_source_change(
     weak: &Weak<AppWindow>,
     state: &AppState,
     np_artwork: &Arc<NowPlayingArtwork>,
     np_state: &NowPlayingState,
-    track: Option<Arc<TrackSummary>>,
+    source: Option<NowPlayingSource>,
     animate: bool,
 ) {
-    let track_id = track.as_ref().map(|t| t.id);
+    let key = source.as_ref().map(|s| s.key.clone());
+    let track = source.as_ref().and_then(|s| s.track.clone());
+    let artwork_path = source.as_ref().and_then(|s| s.artwork_path.clone());
+    let is_station = matches!(key, Some(SourceKey::Station(_)));
 
     let meta = fetch_track_meta(state, track.as_ref()).await;
-    let (cover, blurred, sample) = decode_artwork_for(state, np_artwork, track.as_ref()).await;
+    let (cover, blurred, sample) = decode_artwork_for(state, np_artwork, artwork_path).await;
 
     // --- Write to Slint (UI thread) ---
     let Some(ui) = weak.upgrade() else { return };
 
-    // A newer track change may have landed mid-decode: the open-seed task and the
-    // subscriber can both have an `apply_track_change` in flight. If the decoded track
-    // is no longer current, drop it — the newer call owns the slots and
-    // `applied_track_id`.
-    if track_id != np_state.current_track.borrow().as_ref().map(|t| t.id) {
+    // A newer source change may have landed mid-decode: the open-seed task and the
+    // subscriber can both have an `apply_source_change` in flight. If the decoded source
+    // is no longer current, drop it — the newer call owns the slots and `applied_source`.
+    if key != np_state.current_source.borrow().as_ref().map(|s| s.key.clone()) {
         return;
     }
 
@@ -115,6 +125,7 @@ pub(super) async fn apply_track_change(
     publish_chips(&player, np_state, meta);
     write_backdrop_tiers(&ui, sample);
 
+    // The blur is the backdrop for both kinds, so it takes the same cross-fade either way.
     write_crossfade_slot(
         blurred,
         animate,
@@ -124,17 +135,38 @@ pub(super) async fn apply_track_change(
         |v| player.set_blur_use_a(v),
         |v| player.set_blur_has_image(v),
     );
-    write_crossfade_slot(
-        cover,
-        animate,
-        player.get_np_cover_use_a(),
-        |img| player.set_np_cover_a(img),
-        |img| player.set_np_cover_b(img),
-        |v| player.set_np_cover_use_a(v),
-        |v| player.set_np_cover_has_image(v),
-    );
 
-    np_state.applied_track_id.set(track_id);
+    // **The foreground splits by kind.** `np-cover-*` is the *track's* dual-slot cross-fade and a
+    // station has nothing to cross-fade between; what a logo needs instead is its own pixel count,
+    // so a favicon can draw as an inset card rather than be magnified across the tile. Whichever
+    // slot isn't the live one is emptied, so a hand-off between kinds can't leave both painted.
+    if is_station {
+        let logo_size = cover.as_ref().map_or(0, native_size_of);
+        player.set_np_station_logo(cover.unwrap_or_default());
+        player.set_np_station_logo_size(logo_size);
+        player.set_np_cover_has_image(false);
+    } else {
+        player.set_np_station_logo(slint::Image::default());
+        player.set_np_station_logo_size(0);
+        write_crossfade_slot(
+            cover,
+            animate,
+            player.get_np_cover_use_a(),
+            |img| player.set_np_cover_a(img),
+            |img| player.set_np_cover_b(img),
+            |v| player.set_np_cover_use_a(v),
+            |v| player.set_np_cover_has_image(v),
+        );
+    }
+
+    *np_state.applied_source.borrow_mut() = key;
+}
+
+/// A decoded image's own smallest side, which is what tells a tile whether it would have to
+/// magnify. `pair_from_image` only ever shrinks, so this is the source's pixel count.
+fn native_size_of(image: &Image) -> i32 {
+    let size = image.size();
+    i32::try_from(size.width.min(size.height)).unwrap_or(i32::MAX)
 }
 
 /// The eight chip columns for `track`, awaited inline — sqlx has a reactor here. Every failure arm
@@ -155,21 +187,24 @@ async fn fetch_track_meta(state: &AppState, track: Option<&Arc<TrackSummary>>) -
     }
 }
 
-/// Decode `track`'s cover on the blocking pool. A *single* decode derives both the sharp tile and
-/// the blurred backdrop — the cover is the largest image on the app's hot path, so decoding it once
-/// rather than twice halves the per-skip cost.
+/// Decode the source's artwork on the blocking pool. A *single* decode derives both the sharp tile
+/// and the blurred backdrop — the cover is the largest image on the app's hot path, so decoding it
+/// once rather than twice halves the per-skip cost.
+///
+/// Takes a path rather than the source, which is all it ever wanted: `ArtworkCache` is path-keyed
+/// and knows nothing about entity kinds, so a station's logo needs no tier of its own.
 ///
 /// Every arm that isn't a decoded pair answers with an empty sample rather than a previous one:
 /// `BackdropSample::solve` reads that as "no artwork" and falls back to `Theme.accent`, the honest
-/// answer for a track whose cover is missing or unreadable.
+/// answer for a source whose artwork is missing or unreadable.
 async fn decode_artwork_for(
     state: &AppState,
     np_artwork: &Arc<NowPlayingArtwork>,
-    track: Option<&Arc<TrackSummary>>,
+    artwork_path: Option<String>,
 ) -> DecodedArtwork {
     let empty = (None, None, BackdropSample::default());
 
-    let Some(path) = track.and_then(|t| t.artwork_path.clone()).filter(|p| !p.is_empty()) else {
+    let Some(path) = artwork_path.filter(|p| !p.is_empty()) else {
         return empty;
     };
 
@@ -232,8 +267,8 @@ fn write_backdrop_tiers(ui: &AppWindow, sample: BackdropSample) {
 
 /// Re-solve the view's tiers against a palette that has just changed —
 /// `hero_backdrop::republish_for_palette`'s twin, and the one that matters more. A band republishes
-/// on every detail open, where all three callers of [`apply_track_change`] dedup on
-/// `applied_track_id`, so without this the tiers hold until the next *track*.
+/// on every detail open, where all three callers of [`apply_source_change`] dedup on
+/// `applied_source`, so without this the tiers hold until the next *source*.
 pub(crate) fn republish_for_palette(ui: &AppWindow) {
     if let Some(sample) = PUBLISHED_SAMPLE.get() {
         write_backdrop_tiers(ui, sample);

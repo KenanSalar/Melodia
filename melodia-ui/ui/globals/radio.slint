@@ -171,10 +171,15 @@ export global Radio {
     in-out property <bool> blur-use-a;
     in-out property <bool> has-blur;
 
-    // The titles this station has announced since it started playing, newest first. The page
-    // mounts the section only when there are some, so there is no empty state to distinguish and
-    // no count to carry beside the model.
+    // The titles the station **on the deck** has announced since it started, newest first — not
+    // the open page's. One ring, one model, two readers: the Now Playing view draws it whole,
+    // and the station page gates it on the flag below. Written only when the ring moves, so a
+    // tab hand-off costs nothing.
     in-out property <[string]> history-rows;
+    // Whether the station page on screen is the one those titles belong to. The page has no
+    // history of its own to fall back on, so this is what keeps it from listing another
+    // station's songs under this one's name.
+    in-out property <bool> detail-station-is-playing;
 
     callback open-station(RadioStationRow);
     callback close-detail();
@@ -186,8 +191,16 @@ export global Radio {
     // this announces is the page *closing*, and the tab's own needle going back into a box that
     // has been away. `ui::radio::filter::sync_box` reseats it from whichever tab is mounted.
     callback detail-scope-changed();
-    callback vote();
-    callback copy-stream-url();
+    // Takes the station rather than reading the seated page, because two surfaces vote: the
+    // station page's pill, and the Now Playing view for whatever is on the deck. The uuid is what
+    // the directory records against; the id is only there so the vote count can be repainted on a
+    // page holding the same station, and a station seated under a different id simply skips that.
+    callback vote(string /*station_uuid*/, int /*station_id*/);
+    // The clipboard write is the caller's — Slint's `TextInput` owns it. What this reports is
+    // *which* station's URL was taken, and it takes the id because two surfaces copy: this page,
+    // and the Now Playing panel for whatever is on the deck. `0` for a browsed station with no
+    // row, matching `RadioStationRow.id`.
+    callback copy-stream-url(int /*station_id*/);
 
     // --- Filter chips -------------------------------------------------------------------------
     //

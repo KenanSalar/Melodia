@@ -414,13 +414,17 @@ pub async fn mark_played(state: &AppState, id: i64) -> Result<(), AppError> {
 /// make the row conditional on the server being up.
 pub async fn play_station(state: &AppState, id: i64) -> Result<(), AppError> {
     ensure_enabled(state)?;
-    let station = get_station(state, id).await?;
+    let mut station = get_station(state, id).await?;
     // Ahead of the count, unlike an unreachable stream: a station that is down today is exactly
     // the one to find again, where a segmented one can never play at all and does not belong in a
     // list of what to go back to.
     ensure_playable(station.hls)?;
-    let now_playing = RadioNowPlaying::from(&station);
     mark_played(state, id).await?;
+    // The row was read before the count went in, and this play is one the Now-Playing surfaces
+    // should already be stating. `mark_played` is `play_count + 1`, so this is the new value
+    // rather than a guess at it.
+    station.play_count += 1;
+    let now_playing = std::sync::Arc::new(RadioNowPlaying::from(&station));
     // Every play passes through here, whichever surface started it, so the directory's own
     // count is reported once and in one place rather than at each caller.
     spawn_click(state, station.station_uuid.as_deref());

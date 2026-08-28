@@ -100,14 +100,14 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         let s = state.clone();
         let ru = radio_ui.clone();
         let weak = weak.clone();
-        g.on_vote(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            let Some(station) = detail::open_station_ref(&ui, &ru) else {
-                return;
-            };
-            if station.uuid.is_empty() {
+        g.on_vote(move |uuid, station_id| {
+            if uuid.is_empty() {
                 return;
             }
+            let station = detail::StationRef {
+                id: i64::from(station_id),
+                uuid: uuid.to_string(),
+            };
             let (s, ru, weak) = (s.clone(), ru.clone(), weak.clone());
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::radio::vote(&s, &station.uuid).await {
@@ -116,24 +116,19 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
                 }
                 // Re-read rather than adding one locally: the server deduplicates, so a local
                 // bump would state a total the directory does not have. Against the station the
-                // click captured, the tab being free to move under a request in flight.
+                // click captured, the tab being free to move under a request in flight — and a
+                // no-op where no tab is holding it, which is every vote cast from Now Playing on
+                // a station whose page is not open.
                 detail::refresh_from_directory(&s, &ru, &weak, &station).await;
             });
         });
     }
 
-    {
-        let ru = radio_ui.clone();
-        let weak = weak.clone();
-        g.on_copy_stream_url(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            // Slint's `TextInput` owns the clipboard write; the body mounts a zero-sized one over
-            // `detail-stream-url` and calls `select-all()` / `copy()`. Nothing is owed here but
-            // the log line that says a station's URL was taken — and not the URL itself, which a
-            // station can carry a session token in.
-            if let Some(station) = detail::open_station_ref(&ui, &ru) {
-                log::debug!("radio: stream URL copied for station {}", station.id);
-            }
-        });
-    }
+    // Slint's `TextInput` owns the clipboard write; `StationFacts` mounts a zero-sized one over
+    // the URL it draws and calls `select-all()` / `copy()`. Nothing is owed here but the log line
+    // that says a station's URL was taken — and not the URL itself, which a station can carry a
+    // session token in.
+    g.on_copy_stream_url(|station_id| {
+        log::debug!("radio: stream URL copied for station {station_id}");
+    });
 }

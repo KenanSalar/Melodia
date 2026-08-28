@@ -483,15 +483,9 @@ async fn execute_empty_actions_is_noop() -> Result<(), AppError> {
 /// Tune the fixture's state to a station and hand back the session generation.
 fn tune_in(player_state: &PlayerStateHandle) -> u64 {
     let mut state = crate::player::state::lock_state(player_state);
-    let (generation, _actions) =
-        state.build_station_connecting_actions(crate::player::types::RadioNowPlaying {
-            station_id: 42,
-            name: "Example FM".to_owned(),
-            stream_url: "http://example.test/live.mp3".to_owned(),
-            artwork_path: None,
-            live_title: None,
-            buffering: false,
-        });
+    let (generation, _actions) = state.build_station_connecting_actions(
+        crate::player::tests::helpers::test_station("Example FM"),
+    );
     generation
 }
 

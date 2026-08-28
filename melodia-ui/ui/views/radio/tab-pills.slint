@@ -199,7 +199,9 @@ export component RadioTabPills inherits Rectangle {
                 icon: "thumb_up";
                 icon-size: 16px;
                 text: @tr("Vote");
-                clicked => { Radio.vote(); }
+                clicked => {
+                    Radio.vote(Radio.detail-station.uuid, Radio.detail-station.id);
+                }
             }
 
             if Radio.detail-votable && Radio.detail-station.editable: PillDivider { }
