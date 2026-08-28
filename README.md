@@ -379,7 +379,7 @@ Melodia stores its data under the OS application-data directory
 | `melodia.db` | SQLite music library (WAL + FTS5) |
 | `settings.json` | App/user preferences (theme, locale, playback, window geometry) |
 | `views.json` | Per-view UI state (column widths, sort, browse path and view mode, open detail, active tab) |
-| `queue.json` | Persisted play queue |
+| `queue.json` | Persisted play queue, and the radio station tuned over it |
 | `search_history.json` | Recent search terms (capped at 10) |
 | `scrobble_credentials.json` | Last.fm session key + ListenBrainz token (`0600` on Unix) |
 | `scrobble_queue.json` | Durable offline scrobble/love queue |

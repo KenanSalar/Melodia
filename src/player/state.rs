@@ -699,11 +699,23 @@ impl PlayerState {
         self.pause_after_current_track = false;
 
         let mut actions = vec![PlayerAction::Stop { fade_ms: 0 }];
-        if (self.playback_speed - 1.0).abs() > f64::EPSILON {
-            self.playback_speed = 1.0;
-            actions.push(PlayerAction::SetSpeed(1.0));
-        }
+        actions.extend(self.pin_speed_for_station());
         (self.radio_generation, actions)
+    }
+
+    /// Put the deck back on 1.0 for a station that is about to sit on it, and hand back the
+    /// action that lands it on rodio.
+    ///
+    /// Shared with [`restore_station`], the one other way a station reaches the deck, because the
+    /// state and the backend have to move together: skip the action and a stream opens against a
+    /// deck still resampling, skip the field and the disabled speed row keeps quoting a rate
+    /// nothing runs at.
+    fn pin_speed_for_station(&mut self) -> Option<PlayerAction> {
+        if (self.playback_speed - 1.0).abs() <= f64::EPSILON {
+            return None;
+        }
+        self.playback_speed = 1.0;
+        Some(PlayerAction::SetSpeed(1.0))
     }
 
     /// The stream opened: start it, unless the user moved on while it was connecting.
@@ -826,16 +838,23 @@ pub fn stop_end_of_queue(state: &mut PlayerState) -> Vec<PlayerAction> {
 }
 
 /// Resume playback from a Stopped state. Replays the current track from the saved position.
-/// Returns empty vec if no track is loaded or status is not Stopped.
+/// Returns empty vec if status is not Stopped, or if neither the deck nor the queue holds a track.
+///
+/// **The queue is the fallback because stopping a station leaves no `current_track`** — a station
+/// clears it on the way in and `build_stop_actions` forgets the station rather than pausing it, so
+/// without this the play button is inert over a queue that is still fully seated. That is the
+/// library D9 promised to hand back, and there is no position to resume from: the station zeroed it.
 pub fn resume_from_stopped(state: &mut PlayerState) -> Vec<PlayerAction> {
     if state.status != PlaybackStatus::Stopped {
         return vec![];
     }
     if let Some(track) = state.current_track.clone() {
         let resume_pos = (state.position_ms > 0).then_some(state.position_ms);
-        play_track_inner(state, track, resume_pos)
-    } else {
-        vec![]
+        return play_track_inner(state, track, resume_pos);
+    }
+    match state.queue.get_current().cloned() {
+        Some(track) => play_track_inner(state, track, None),
+        None => vec![],
     }
 }
 
@@ -1004,12 +1023,19 @@ pub fn restore_queue(
 /// `library::playback::player_play` re-opens from it. The track fields go back to what
 /// [`PlayerState::build_station_connecting_actions`] leaves them, the two sources being mutually
 /// exclusive everywhere that reads them.
-pub fn restore_station(state: &mut PlayerState, station: Arc<RadioNowPlaying>) {
+///
+/// Returns actions, so the caller owes an `emit_and_execute`: the speed pin is a backend write,
+/// and boot is the one place a station can arrive over a rate `settings.json` restored.
+pub fn restore_station(
+    state: &mut PlayerState,
+    station: Arc<RadioNowPlaying>,
+) -> Vec<PlayerAction> {
     state.radio = Some(station);
     state.status = PlaybackStatus::Paused;
     state.current_track = None;
     state.duration_ms = 0;
     state.position_ms = 0;
+    state.pin_speed_for_station().into_iter().collect()
 }
 
 /// Widen a u64 millisecond position to f64 for ratio math. Audio durations

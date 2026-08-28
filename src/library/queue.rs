@@ -304,7 +304,9 @@ pub async fn restore_persisted_playback(state: &AppState) -> AppResult<()> {
         .await
         .map_err(|e| AppError::Settings(format!("restore_persisted_playback join: {e}")))??;
 
-    with_state_emit(&state.player_state, &state.sinks, |s| {
+    // `emit_and_execute` rather than a bare emit because a seated station may owe rodio a speed
+    // reset: `settings.json` hydrates the speed ahead of this and a station is pinned at 1.0.
+    emit_and_execute(&*state.rodio, &state.db, &state.player_state, &state.sinks, |s| {
         if let Some(p) = persisted.as_ref() {
             restore_queue(s, summaries, &p.queue);
         }
@@ -315,8 +317,9 @@ pub async fn restore_persisted_playback(state: &AppState) -> AppResult<()> {
         } else {
             settings_shuffle
         };
-        if let Some(station) = station {
-            restore_station(s, station);
+        match station {
+            Some(station) => restore_station(s, station),
+            None => vec![],
         }
     });
 

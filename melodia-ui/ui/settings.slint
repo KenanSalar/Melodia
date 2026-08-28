@@ -81,7 +81,7 @@ export global Settings {
     callback play-button-animation-changed(int);
 
     // Persist-only — no runtime side effect. `main.rs` consults the flag once at the
-    // next launch, after `restore_persisted_queue`.
+    // next launch, after `restore_persisted_playback`.
     in-out property <bool> resume-on-startup: false;
     callback resume-on-startup-changed(bool);
 
