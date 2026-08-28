@@ -171,7 +171,19 @@ fn audio_rendition(list: &str, base: &Url) -> Option<Url> {
     if !is_audio {
         return None;
     }
-    base.join(uri?).ok()
+    joined(base, uri?)
+}
+
+/// A tag's `URI` resolved against the playlist carrying it, refusing a blank one.
+///
+/// An empty `URI` is not the same as no `URI`: joined, it resolves to that playlist's own address.
+/// A rendition group then points back at the master it came from and beats every video rung in the
+/// pick, and an `EXT-X-MAP` makes the playlist text itself the first thing the demuxer is handed.
+fn joined(base: &Url, uri: &str) -> Option<Url> {
+    if uri.is_empty() {
+        return None;
+    }
+    base.join(uri).ok()
 }
 
 /// Split an attribute list on the commas that are not inside a quoted value, which is the one
@@ -228,7 +240,7 @@ fn parse_media(body: &str, base: &Url) -> Result<MediaPlaylist, AppError> {
             // together to mean anything, and no station in the directory sends one.
             init_segment = attributes(attrs)
                 .find(|(name, _)| *name == "URI")
-                .and_then(|(_, uri)| base.join(uri).ok());
+                .and_then(|(_, uri)| joined(base, uri));
         } else if line == ENDLIST_TAG {
             ended = true;
         } else if !line.starts_with('#')

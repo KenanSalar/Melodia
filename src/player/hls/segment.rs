@@ -166,7 +166,7 @@ fn find_audio_pid(segment: &[u8]) -> Option<u16> {
     let mut maps = packets(segment)
         .filter(|packet| program_pids.contains(&pid(packet)))
         .filter_map(psi_section)
-        .filter(|section| section_body(section, TABLE_ID_PMT).is_some())
+        .filter_map(|section| section_body(section, TABLE_ID_PMT))
         .peekable();
 
     // Keyed on a map having *arrived*, not on one having named something: the scan is for tables
@@ -193,8 +193,9 @@ fn program_map_pids(segment: &[u8]) -> Vec<u16> {
         .unwrap_or_default()
 }
 
-fn audio_pid_from_pmt(section: &[u8]) -> Option<u16> {
-    let body = section_body(section, TABLE_ID_PMT)?;
+/// The first elementary pid a program map names with a stream type we have a decoder for. Takes
+/// the section's body, [`find_audio_pid`] having read the header off to recognise the table at all.
+fn audio_pid_from_pmt(body: &[u8]) -> Option<u16> {
     // Clock reference pid, then a descriptor block sized by its own 12-bit length.
     let program_info_len = (usize::from(body.get(2)? & 0x0F) << 8) | usize::from(*body.get(3)?);
     let mut cursor = 4 + program_info_len;

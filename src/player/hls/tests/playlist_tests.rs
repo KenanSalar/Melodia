@@ -168,6 +168,17 @@ fn a_fragmented_playlist_carries_its_init_segment() -> Result<(), AppError> {
         1,
         "the init is sent once, ahead of the first segment, and is not one"
     );
+
+    // Blank, a bare join resolves to the playlist itself, and the first thing the demuxer reads is
+    // the `#EXTM3U` above these lines.
+    let blank = media(
+        "#EXTM3U\n\
+         #EXT-X-TARGETDURATION:4\n\
+         #EXT-X-MAP:URI=\"\"\n\
+         #EXTINF:4.0,\n\
+         seg-1.m4s\n",
+    )?;
+    assert!(blank.init_segment.is_none(), "an `EXT-X-MAP` naming nothing names no init segment");
     Ok(())
 }
 
@@ -248,6 +259,7 @@ fn an_audio_rendition_group_is_a_rendition_and_the_other_kinds_are_not() -> Resu
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"English\",DEFAULT=YES,URI=\"audio.m3u8\"
 #EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"s\",NAME=\"English\",URI=\"subs.m3u8\"
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"b\",NAME=\"Muxed\"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"c\",NAME=\"Blank\",URI=\"\"
 #EXT-X-STREAM-INF:BANDWIDTH=2400000,CODECS=\"mp4a.40.2,avc1.4d401f\",AUDIO=\"a\"
 video.m3u8
 ";
@@ -258,10 +270,12 @@ video.m3u8
         .map(|variant| variant.url.as_str())
         .collect();
 
+    // The blank one is the case a bare `join` gets wrong rather than merely skips: it resolves to
+    // the master itself, and being last it also wins a tie among bandwidth-less renditions.
     assert_eq!(
         audio,
         ["https://example.invalid/live/audio.m3u8"],
-        "subtitles are not audio, and an audio group with no `URI` is muxed into the rungs"
+        "subtitles are not audio, and an audio group naming no playlist is muxed into the rungs"
     );
 
     let Some(picked) = pick_variant(variants) else {

@@ -363,9 +363,9 @@ export struct NotificationRow {
 // runs to a dozen entries, so Rust trims and joins the first few rather than the card chunking a
 // string it cannot split.
 //
-// So is `codec`, and that is where the segmented flag went: it used to cross as an `hls` bool for a
-// warning badge, and segmented stations play, so the one thing left that reads it is the word Rust
-// puts in this field for a station whose own codec the directory could not name.
+// So is `codec`, which is also the only thing here that still says a station is segmented: Rust
+// writes the word `HLS` into it for one whose own format the directory could not name. There is no
+// `hls` bool beside it, and nothing draws a badge off one, because those stations play.
 export struct RadioStationRow {
     id: int,
     uuid: string,

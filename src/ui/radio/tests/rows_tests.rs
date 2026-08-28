@@ -115,6 +115,23 @@ fn a_browsed_station_reports_no_plays_of_its_own() {
     assert_eq!(to_slint_radio_station_row(&browsed(4_213), false, None).play_count, 0);
 }
 
+/// Every shape a segmented station arrives in with nothing to call its format, and the two it does
+/// not. A blank codec is the fragmented-MP4 case: there is no elementary stream this end can name,
+/// so the card would otherwise draw an empty slot where the chip beside it reads `HLS`.
+#[test]
+fn a_segmented_station_with_no_format_of_its_own_is_drawn_as_hls() {
+    assert_eq!(display_codec("", true), facets::SEGMENTED_CODEC_LABEL);
+    assert_eq!(display_codec("UNKNOWN", true), facets::SEGMENTED_CODEC_LABEL);
+    assert_eq!(display_codec("unknown,H.264", true), facets::SEGMENTED_CODEC_LABEL);
+
+    assert_eq!(display_codec("", false), "", "a direct mount that named nothing says nothing");
+    assert_eq!(
+        display_codec("AAC", true),
+        "AAC",
+        "the bucket is generalised on the chip, never over a station that named its own format"
+    );
+}
+
 /// Read back through a handle taken *before* the call, which is what tells a patch from a write:
 /// a `set_vec` installs a new model and leaves this one holding what it held.
 #[test]

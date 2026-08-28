@@ -37,6 +37,15 @@ const SEGMENT_TIMEOUT: Duration = Duration::from_secs(20);
 /// which has the backoff and the budget that decide when to tell the user.
 const PLAYLIST_FAILURE_BUDGET: u32 = 5;
 
+/// Consecutive reloads bringing nothing new before the stream is given up on.
+///
+/// A playlist that answers but stops advancing is invisible to [`PLAYLIST_FAILURE_BUDGET`], and it
+/// costs more than a dead one: the reader parks on an empty queue, the ring dries, and nothing ends
+/// the source, so the reconnect that would recover it never runs. Counted in the half-period
+/// reloads a caught-up client is already making, which puts this at six target durations with
+/// nothing new; [`LIVE_EDGE_SEGMENTS`] is still playing through the first of them.
+const SEGMENT_STALL_BUDGET: u32 = 12;
+
 /// An opened HLS stream, and what its playlist said about itself.
 pub struct HlsStream {
     pub reader: HlsReader,
@@ -138,6 +147,7 @@ pub async fn open(client: &reqwest::Client, url: &Url, body: &str) -> Result<Hls
                 .saturating_add(u64::try_from(skipped).unwrap_or(0))
                 .saturating_add(1),
             refresh: resolved.playlist.target_duration,
+            stalled: 0,
             chunks: sender,
         }
         .run(),
@@ -210,6 +220,8 @@ struct Scheduler {
     /// is a stream we fell behind, and the gap is skipped rather than caught up on.
     next_sequence: u64,
     refresh: Duration,
+    /// Reloads since the last one that brought audio, against [`SEGMENT_STALL_BUDGET`].
+    stalled: u32,
     chunks: mpsc::Sender<Vec<u8>>,
 }
 
@@ -248,6 +260,10 @@ impl Scheduler {
             if !self.drain(&playlist).await {
                 return;
             }
+            if self.stalled >= SEGMENT_STALL_BUDGET {
+                log::warn!("radio: the station stopped sending audio");
+                return;
+            }
             if playlist.ended {
                 return;
             }
@@ -283,13 +299,15 @@ impl Scheduler {
             sequence = sequence.saturating_add(1);
         }
 
-        // Half a period when nothing was new, which is what the spec asks of a client that has
-        // caught up with a playlist still being written.
-        self.refresh = if appended {
-            playlist.target_duration
+        if appended {
+            self.stalled = 0;
+            self.refresh = playlist.target_duration;
         } else {
-            playlist.target_duration / 2
-        };
+            self.stalled += 1;
+            // Half a period, which is what the spec asks of a client that has caught up with a
+            // playlist still being written.
+            self.refresh = playlist.target_duration / 2;
+        }
         true
     }
 }

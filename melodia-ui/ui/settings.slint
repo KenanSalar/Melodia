@@ -151,8 +151,8 @@ export global Settings {
     // is what makes "off" mean no traffic rather than a hidden row.
     in-out property <bool> radio-enabled: false;
     callback radio-enabled-changed(bool);
-    // Both sub-toggles declare their live default here, and only the click one differs from the
-    // master's cautious `false` — it describes what the feature does rather than whether it runs.
+    // Both sub-toggles declare their live default here. Only the click one differs from the
+    // master's cautious `false`, describing what the feature does rather than whether it runs.
     // Nothing in Slint reads either: the segment filter runs in `library::radio::search` and the
     // click on the play path, both off Rust shadows, so these are the control surface and not the
     // answer.
