@@ -30,7 +30,7 @@ exclude = ["winit"]
 # Inherited by both packages, so `melodia-ui` can't drift from the app. The
 # three toolchain-less scrapes (`release.yml`, `build-rpm.sh`,
 # `build-appimage.sh`) anchor on this table by name, not by position.
-version = "0.11.0"
+version = "0.12.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
@@ -207,6 +207,10 @@ symphonia = { version = "0.6.1", default-features = false, features = [
     # to guess wrong. `aac` is what carries the ADTS demuxer.
     "aac",
     "flac",
+    # Fragmented MP4, which is what a segmented station serves when it is not MPEG-TS. Only
+    # reachable with the playlist's own init segment spliced in front — a media segment opens
+    # with `styp`/`moof` and this demuxer requires `ftyp` then `moov`, which the init supplies.
+    "isomp4",
     "mpa",
     "ogg",
     "vorbis",

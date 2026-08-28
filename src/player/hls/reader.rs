@@ -108,6 +108,12 @@ pub async fn open(client: &reqwest::Client, url: &Url, body: &str) -> Result<Hls
 
     let mut segments = SegmentReader::default();
     let mut primed = Vec::new();
+    // Ahead of the first segment and only here: a fragmented stream's `ftyp`/`moov` is what the
+    // demuxer probes, and the fragments behind it are unreadable on their own. A reconnect runs
+    // this same path, so it arrives again with the fresh scheduler that needs it.
+    if let Some(init) = &resolved.playlist.init_segment {
+        segments.append(&fetch_segment(client, init).await?, &mut primed);
+    }
     segments.append(&fetch_segment(client, first).await?, &mut primed);
     if primed.is_empty() {
         return Err(AppError::network_msg("The station's stream carries no audio"));

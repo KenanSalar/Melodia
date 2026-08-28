@@ -52,9 +52,16 @@ impl SegmentReader {
     /// live stream is a gap, and the next one usually plays.
     pub fn append(&mut self, segment: &[u8], out: &mut Vec<u8>) {
         let start = out.len();
-        match packet_offset(segment) {
-            Some(offset) => self.append_transport_stream(&segment[offset..], out),
-            None => out.extend_from_slice(strip_id3(segment)),
+        // ISO-BMFF is asked about first, and by its box type rather than by elimination: a
+        // fragment is already the framing its demuxer wants, so unwrapping it is exactly wrong,
+        // and three sync bytes 188 apart are not impossible inside one.
+        if is_iso_bmff(segment) {
+            out.extend_from_slice(segment);
+        } else {
+            match packet_offset(segment) {
+                Some(offset) => self.append_transport_stream(&segment[offset..], out),
+                None => out.extend_from_slice(strip_id3(segment)),
+            }
         }
         if self.codec.is_empty() {
             self.codec = codec_of(&out[start..]);
@@ -91,6 +98,16 @@ impl SegmentReader {
             }
         }
     }
+}
+
+/// The box types a segment of a fragmented MP4 stream can open with.
+///
+/// `ftyp`/`moov` is the init segment; the media segments open with one of the rest. The type sits
+/// at offset 4, behind the box's own length.
+const ISO_BMFF_BOXES: [&[u8; 4]; 6] = [b"ftyp", b"styp", b"moof", b"moov", b"sidx", b"emsg"];
+
+fn is_iso_bmff(segment: &[u8]) -> bool {
+    segment.get(4..8).is_some_and(|kind| ISO_BMFF_BOXES.iter().any(|known| *known == kind))
 }
 
 /// Where the packet grid starts, or `None` for a segment that is not transport-stream framed.

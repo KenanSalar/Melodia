@@ -45,6 +45,10 @@ pub struct MediaPlaylist {
     /// The sequence number of `segments[0]`. Everything after it counts up by one.
     pub media_sequence: u64,
     pub segments: Vec<Url>,
+    /// The header a fragmented-MP4 stream's segments are meaningless without, and `None` for the
+    /// two shapes that carry their own framing. It is not a segment: it is sent once, ahead of the
+    /// first one, and never counts toward [`Self::media_sequence`].
+    pub init_segment: Option<Url>,
     /// A playlist that will not grow again, which for a live station never happens.
     pub ended: bool,
 }
@@ -73,13 +77,18 @@ pub fn parse(body: &str, base: &Url) -> Result<Playlist, AppError> {
     }
 }
 
-/// The rendition to play: an audio-only one where the master offers any, and the richest of
-/// whatever is left.
+/// The rendition to play, which is the richest audio-only one a master offers.
+///
+/// **Where every rendition carries a picture, the pick inverts to the poorest**, and the asymmetry
+/// is the whole point: those masters are television simulcasts whose ladder runs from a few hundred
+/// kbps to several Mbps for one audio track that does not change across the rungs. Taking the
+/// richest would spend megabits a second on a picture nothing here draws.
 pub fn pick_variant(mut variants: Vec<Variant>) -> Option<Variant> {
     if variants.iter().any(|variant| !variant.has_video) {
         variants.retain(|variant| !variant.has_video);
+        return variants.into_iter().max_by_key(|variant| variant.bandwidth);
     }
-    variants.into_iter().max_by_key(|variant| variant.bandwidth)
+    variants.into_iter().min_by_key(|variant| variant.bandwidth)
 }
 
 fn parse_variants(body: &str, base: &Url) -> Vec<Variant> {
@@ -144,6 +153,7 @@ fn parse_media(body: &str, base: &Url) -> Result<MediaPlaylist, AppError> {
     let mut target_duration = None;
     let mut media_sequence = 0;
     let mut segments = Vec::new();
+    let mut init_segment = None;
     let mut ended = false;
 
     for line in lines(body) {
@@ -164,12 +174,12 @@ fn parse_media(body: &str, base: &Url) -> Result<MediaPlaylist, AppError> {
                     "This station's stream is encrypted and Melodia cannot play it",
                 ));
             }
-        } else if line.starts_with(MAP_TAG) {
-            // Fragmented MP4. The demuxer for it is not in the stream path's feature set, and a
-            // bare `.m4s` could not be opened on its own even if it were.
-            return Err(AppError::network_msg(
-                "This station's stream uses a segment format Melodia cannot read yet",
-            ));
+        } else if let Some(attrs) = line.strip_prefix(MAP_TAG) {
+            // A `BYTERANGE` on the init is not honoured: the two would have to be requested
+            // together to mean anything, and no station in the directory sends one.
+            init_segment = attributes(attrs)
+                .find(|(name, _)| *name == "URI")
+                .and_then(|(_, uri)| base.join(uri).ok());
         } else if line == ENDLIST_TAG {
             ended = true;
         } else if !line.starts_with('#')
@@ -186,6 +196,7 @@ fn parse_media(body: &str, base: &Url) -> Result<MediaPlaylist, AppError> {
         target_duration: Duration::from_secs_f32(target_duration),
         media_sequence,
         segments,
+        init_segment,
         ended,
     })
 }

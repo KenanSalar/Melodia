@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "Melodia"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "async-compat",
  "biquad",
@@ -3708,7 +3708,7 @@ checksum = "0695a693e38d35838dd34bc3ab19911395f6837ccf55c7271189cfb12cb8b57f"
 
 [[package]]
 name = "melodia-ui"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "slint",
  "slint-build",
@@ -6387,7 +6387,7 @@ dependencies = [
  "symphonia-codec-vorbis 0.5.5",
  "symphonia-core 0.5.5",
  "symphonia-format-caf",
- "symphonia-format-isomp4",
+ "symphonia-format-isomp4 0.5.5",
  "symphonia-format-mkv",
  "symphonia-format-ogg 0.5.5",
  "symphonia-format-riff",
@@ -6406,6 +6406,7 @@ dependencies = [
  "symphonia-codec-aac 0.6.1",
  "symphonia-codec-vorbis 0.6.1",
  "symphonia-core 0.6.1",
+ "symphonia-format-isomp4 0.6.1",
  "symphonia-format-ogg 0.6.1",
  "symphonia-metadata 0.6.1",
 ]
@@ -6592,6 +6593,18 @@ dependencies = [
  "symphonia-core 0.5.5",
  "symphonia-metadata 0.5.5",
  "symphonia-utils-xiph",
+]
+
+[[package]]
+name = "symphonia-format-isomp4"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e681a70e1870d34e02abf1dbc51e4267c3f1827801474e8870be8c689fc4dc3"
+dependencies = [
+ "log",
+ "symphonia-common",
+ "symphonia-core 0.6.1",
+ "symphonia-metadata 0.6.1",
 ]
 
 [[package]]
