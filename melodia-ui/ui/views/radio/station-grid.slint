@@ -109,7 +109,6 @@ export component StationGrid inherits Rectangle {
                     editable: root.manageable && station.editable;
                     removable: root.manageable;
                     homepage-known: station.homepage != "";
-                    unplayable: station.hls;
                     play-count: root.show-play-count ? station.play_count : 0;
                     clicked => { root.station-clicked(station); }
                     play-clicked => { root.play-clicked(station); }

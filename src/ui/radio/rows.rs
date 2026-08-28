@@ -12,7 +12,7 @@ use slint::{Model, SharedString, VecModel};
 use crate::entities::radio::{DirectoryStation, Facet, RadioStation};
 use crate::{RadioFacetRow, RadioStationGridRow, RadioStationRow};
 
-use super::identity;
+use super::{facets, identity};
 
 /// How many of a station's tags a card shows.
 ///
@@ -124,7 +124,7 @@ pub fn to_slint_radio_station_row(
         artwork_path: logo.map(SharedString::from).unwrap_or_default(),
         tags: SharedString::from(display_tags(&station.tags)),
         country: SharedString::from(&station.country),
-        codec: SharedString::from(&station.codec),
+        codec: SharedString::from(display_codec(&station.codec, station.hls)),
         bitrate: station.bitrate,
         hls: station.hls,
         is_favorite,
@@ -152,7 +152,7 @@ pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
         artwork_path: station.artwork_path.as_deref().map(SharedString::from).unwrap_or_default(),
         tags: SharedString::from(display_tags(station.genre().unwrap_or_default())),
         country: station.country_name().map(SharedString::from).unwrap_or_default(),
-        codec: SharedString::from(&station.codec),
+        codec: SharedString::from(display_codec(&station.codec, station.hls)),
         bitrate: station.bitrate,
         hls: station.hls,
         is_favorite: station.is_favorite,
@@ -164,10 +164,14 @@ pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
 }
 
 /// One facet-list entry behind a filter chip.
-pub fn to_slint_facet_row(facet: &Facet) -> RadioFacetRow {
+///
+/// The chip decides how the value is drawn and what rides back under it, which is
+/// [`facets::drawn_as`]'s job: for a codec the two differ.
+pub fn to_slint_facet_row(chip: Option<facets::ChipFilter>, facet: &Facet) -> RadioFacetRow {
+    let (label, code) = facets::drawn_as(chip, facet);
     RadioFacetRow {
-        name: SharedString::from(&facet.name),
-        code: facet.code.as_deref().map(SharedString::from).unwrap_or_default(),
+        name: SharedString::from(label.as_ref()),
+        code: SharedString::from(code),
         station_count: i32::try_from(facet.station_count).unwrap_or(i32::MAX),
     }
 }
@@ -182,6 +186,25 @@ pub fn split_tags(raw: &str) -> Vec<String> {
         .take(TAG_DISPLAY_LIMIT)
         .map(str::to_owned)
         .collect()
+}
+
+/// The format a station's own row can state, which for a segmented one is not what the directory
+/// wrote.
+///
+/// The chip generalises the whole bucket to [`facets::SEGMENTED_CODEC_LABEL`] because nearly all of
+/// it is segmented; a row does not have to guess, because it carries the `hls` flag the checker's
+/// `UNKNOWN` was missing. So the ~2% of that bucket which is *not* segmented keeps the directory's
+/// own word here, under a chip that reads `HLS`.
+fn display_codec(codec: &str, hls: bool) -> &str {
+    let audio_unidentified = codec
+        .split(',')
+        .next()
+        .is_some_and(|audio| audio.eq_ignore_ascii_case(facets::UNKNOWN_CODEC));
+    if hls && audio_unidentified {
+        facets::SEGMENTED_CODEC_LABEL
+    } else {
+        codec
+    }
 }
 
 /// The directory's comma-separated tag field as one display line.

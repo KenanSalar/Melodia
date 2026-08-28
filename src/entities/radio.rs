@@ -61,8 +61,9 @@ pub struct RadioStation {
     /// only: it is zero on a large share of live stations, so nothing may divide
     /// by it without a fallback.
     pub bitrate: i32,
-    /// Segmented stream. Unplayable until Symphonia grows an MPEG-TS demuxer,
-    /// and stored because a favorited station has left the directory behind.
+    /// Segmented stream, played through `player::hls`. Stored because a
+    /// favorited station has left the directory behind, and because the one
+    /// setting still keyed to it filters directory pages by it.
     pub hls: bool,
     pub is_favorite: bool,
     #[serde(default, skip_serializing)]

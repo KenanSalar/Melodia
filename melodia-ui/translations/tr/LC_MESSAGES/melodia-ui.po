@@ -1738,11 +1738,11 @@ msgid "Browse and play live stations from radio-browser.info"
 msgstr "radio-browser.info üzerindeki canlı istasyonlara göz at ve dinle"
 
 # The Settings sub-rows, shown only while the master switch is on.
-msgid "Hide unplayable stations"
-msgstr "Çalınamayan istasyonları gizle"
+msgid "Hide segmented stations"
+msgstr "Parçalı istasyonları gizle"
 
-msgid "Segmented (HLS) streams are listed but cannot play yet"
-msgstr "Parçalı (HLS) yayınlar listelenir ama henüz çalınamaz"
+msgid "Segmented (HLS) streams play, but take longer to start"
+msgstr "Parçalı (HLS) yayınlar çalınır ama başlaması daha uzun sürer"
 
 msgid "Report plays to the directory"
 msgstr "Çalmaları dizine bildir"
@@ -1919,9 +1919,6 @@ msgid "{n} vote"
 msgid_plural "{n} votes"
 msgstr[0] "{n} oy"
 msgstr[1] "{n} oy"
-
-msgid "This station streams in a segmented format Melodia can't play yet."
-msgstr "Bu istasyon, Melodia'nın henüz çalamadığı bölümlenmiş bir biçimde yayın yapıyor."
 
 msgid "The directory reached this station on its last check."
 msgstr "Dizin son denetiminde bu istasyona ulaştı."

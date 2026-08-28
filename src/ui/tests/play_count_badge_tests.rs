@@ -18,9 +18,8 @@ const CARDS: [(&str, &str); 2] = [
     ("station-card.slint", STATION_CARD),
 ];
 
-/// The pill's own markup, as only the leaf may spell it. `border-color` rather than the fill:
-/// `Theme.crust.with-alpha(0.85)` is also the station card's unplayable badge, so a copy would
-/// have to be told apart from a neighbour that legitimately shares its colour.
+/// The pill's own markup, as only the leaf may spell it. `border-color` rather than the fill,
+/// which is a colour other overlays on the same tile legitimately share.
 const PILL_MARKUP: &str = "border-color: Theme.surface2";
 
 #[test]
@@ -65,17 +64,14 @@ fn only_recently_played_turns_the_station_badge_on() {
     );
 }
 
-/// The two badges share the tile's top-left corner and both can be true at once: `hls` is rewritten
-/// wholesale by the directory's upsert, so a station played while it was streamable keeps its count
-/// and gains the warning on its next re-import. Reverting the offset stacks them, and only on a row
-/// that has to have been played *and* since gone segmented — invisible in review, and invisible in
-/// use until it isn't.
+/// The count now has the tile's top-left to itself: segmented stations play, so the warning badge
+/// that used to share the corner is gone along with the gate behind it.
 #[test]
-fn the_unplayable_warning_yields_the_corner_to_a_count() {
+fn nothing_else_claims_the_count_badge_corner() {
     let code = strip_line_comments(STATION_CARD);
     assert!(
-        code.contains("x: 2 * Theme.pad-sm + (root.play-count > 0 ? plays.width + Theme.pad-xs"),
-        "`station-card.slint`'s unplayable badge must step aside for the count badge — squared \
-         onto the same `x` the two paint over each other"
+        !code.contains("unplayable"),
+        "`station-card.slint` still carries the unplayable badge, which no longer has a gate \
+         behind it and would paint over the count"
     );
 }

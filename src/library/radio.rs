@@ -231,8 +231,9 @@ pub async fn add_custom_station(
         language: String::new(),
         codec: facts.codec.clone(),
         bitrate: facts.bitrate,
-        // Nothing segmented survives the probe, so this is a fact rather than an assumption.
-        hls: false,
+        // Off the probe rather than assumed: a segment playlist now opens like any other mount,
+        // so whether this one was segmented is something only the connect knows.
+        hls: facts.hls,
     };
 
     let saved = save_station(state, &station).await?;
@@ -330,20 +331,6 @@ fn ensure_editable(station: &radio::RadioStation) -> Result<(), AppError> {
     Err(AppError::Validation("Only a station you added by URL can be edited".to_owned()))
 }
 
-/// Refuse a segmented stream, whichever surface asked.
-///
-/// Symphonia has no MPEG-TS demuxer, so the card's badge is the honest half and this is the other.
-/// Both play doors take it: Browse reaches the decoder by row, the kept tabs by id, and a refusal
-/// on one of them only is a refusal a stale row walks around.
-fn ensure_playable(hls: bool) -> Result<(), AppError> {
-    if !hls {
-        return Ok(());
-    }
-    Err(AppError::Validation(
-        "This station streams in a segmented format Melodia cannot play yet".to_owned(),
-    ))
-}
-
 /// Rewrite a hand-typed station's name and URL.
 ///
 /// The probe runs only when the URL actually moved, so renaming a station that happens to be off
@@ -415,10 +402,6 @@ pub async fn mark_played(state: &AppState, id: i64) -> Result<(), AppError> {
 pub async fn play_station(state: &AppState, id: i64) -> Result<(), AppError> {
     ensure_enabled(state)?;
     let mut station = get_station(state, id).await?;
-    // Ahead of the count, unlike an unreachable stream: a station that is down today is exactly
-    // the one to find again, where a segmented one can never play at all and does not belong in a
-    // list of what to go back to.
-    ensure_playable(station.hls)?;
     mark_played(state, id).await?;
     // The row was read before the count went in, and this play is one the Now-Playing surfaces
     // should already be stating. `mark_played` is `play_count + 1`, so this is the new value
@@ -490,16 +473,12 @@ pub async fn set_directory_favorite(
 }
 
 /// Tune to a browsed station, keeping it first.
-///
-/// [`ensure_playable`] runs before the row is written rather than inside [`play_station`], so a
-/// click that cannot succeed also does not leave a station behind.
 pub async fn play_directory_station(
     state: &AppState,
     station: &radio::DirectoryStation,
     logo: Option<&str>,
 ) -> Result<(), AppError> {
     ensure_enabled(state)?;
-    ensure_playable(station.hls)?;
     let saved = keep_station(state, station, logo).await?;
     play_station(state, saved.id).await
 }
@@ -827,7 +806,7 @@ pub async fn search(
     search: &radio::StationSearch,
 ) -> Result<radio::StationPage, AppError> {
     let mut page = radio_browser::search(directory_client(state)?, search).await?;
-    hide_hls(&mut page, state.radio_hide_hls());
+    hide_hls(&mut page, state.radio_hide_segmented());
     Ok(page)
 }
 
@@ -874,7 +853,38 @@ pub async fn facets(
     state: &AppState,
     kind: radio::FacetKind,
 ) -> Result<Arc<[radio::Facet]>, AppError> {
-    radio_browser::facets(directory_client(state)?, kind).await
+    let facets = radio_browser::facets(directory_client(state)?, kind).await?;
+    Ok(hide_segmented_codecs(facets, kind, state.radio_hide_segmented()))
+}
+
+/// Drop the codecs that only ever name a segmented stream, if the user has those hidden.
+///
+/// [`hide_hls`]'s counterpart on the chip. The directory counts every station its checker saw, so
+/// a Format list built from those counts otherwise offers filters whose entire result the page
+/// thins away: `UNKNOWN` is what the checker writes when it could not read a playlist at all, and
+/// a comma means it found a picture track beside the audio.
+///
+/// Filtered here rather than in `radio_browser`, whose cell holds one list per session and must
+/// not bake a setting into it, and the input is handed back untouched for every other kind: the
+/// tag list runs to tens of thousands of entries and this is called on every chip open.
+fn hide_segmented_codecs(
+    facets: Arc<[radio::Facet]>,
+    kind: radio::FacetKind,
+    hide: bool,
+) -> Arc<[radio::Facet]> {
+    if !hide || kind != radio::FacetKind::Codecs {
+        return facets;
+    }
+    facets.iter().filter(|facet| !names_segmented(&facet.name)).cloned().collect()
+}
+
+/// Codec names the directory only ever writes for a stream nothing can play as one continuous
+/// mount. `MP4` is spelled out because it is a container rather than a codec and every station
+/// under it is flagged segmented.
+fn names_segmented(codec: &str) -> bool {
+    codec.contains(',')
+        || codec.eq_ignore_ascii_case("UNKNOWN")
+        || codec.eq_ignore_ascii_case("MP4")
 }
 
 #[cfg(test)]

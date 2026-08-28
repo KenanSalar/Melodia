@@ -18,7 +18,7 @@ use crate::{AppWindow, Settings, library};
 pub fn install_radio(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Settings>();
     g.set_radio_enabled(state.radio_enabled());
-    g.set_radio_hide_hls(state.radio_hide_hls());
+    g.set_radio_hide_segmented(state.radio_hide_segmented());
     g.set_radio_send_clicks(state.radio_send_clicks());
 
     {
@@ -39,12 +39,20 @@ pub fn install_radio(ui: &AppWindow, state: &AppState) {
         // No refetch behind it: the filter applies to the next page rather than re-thinning
         // the one on screen, so a flip mid-browse takes effect at the next search or
         // load-more. Re-running the query here would discard the user's paging to change
-        // what is at worst a few disabled cards.
+        // which stations are offered, not whether any of them play.
+        //
+        // The chip lists are dropped rather than left, because `FacetIndex::prime` skips a list
+        // it already holds: without this the Format chip would keep offering the pre-flip set for
+        // the rest of the session.
         let s = state.clone();
-        g.on_radio_hide_hls_changed(move |hide| {
-            s.set_radio_hide_hls(hide);
-            s.persist_blocking("set_radio_hide_hls", move |st| {
-                library::settings::set_radio_hide_hls(st, hide)
+        let weak = ui.as_weak();
+        g.on_radio_hide_segmented_changed(move |hide| {
+            s.set_radio_hide_segmented(hide);
+            if let Some(app) = weak.upgrade() {
+                crate::ui::radio::forget_facets(&app, &s);
+            }
+            s.persist_blocking("set_radio_hide_segmented", move |st| {
+                library::settings::set_radio_hide_segmented(st, hide)
             });
         });
     }

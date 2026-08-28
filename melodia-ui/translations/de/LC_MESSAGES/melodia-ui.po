@@ -1738,11 +1738,11 @@ msgid "Browse and play live stations from radio-browser.info"
 msgstr "Livesender von radio-browser.info durchsuchen und abspielen"
 
 # The Settings sub-rows, shown only while the master switch is on.
-msgid "Hide unplayable stations"
-msgstr "Nicht abspielbare Sender ausblenden"
+msgid "Hide segmented stations"
+msgstr "Segmentierte Sender ausblenden"
 
-msgid "Segmented (HLS) streams are listed but cannot play yet"
-msgstr "Segmentierte (HLS-)Streams werden aufgeführt, lassen sich aber noch nicht abspielen"
+msgid "Segmented (HLS) streams play, but take longer to start"
+msgstr "Segmentierte (HLS-)Streams lassen sich abspielen, starten aber langsamer"
 
 msgid "Report plays to the directory"
 msgstr "Wiedergaben an das Verzeichnis melden"
@@ -1917,9 +1917,6 @@ msgid "{n} vote"
 msgid_plural "{n} votes"
 msgstr[0] "{n} Stimme"
 msgstr[1] "{n} Stimmen"
-
-msgid "This station streams in a segmented format Melodia can't play yet."
-msgstr "Dieser Sender überträgt in einem segmentierten Format, das Melodia noch nicht abspielen kann."
 
 msgid "The directory reached this station on its last check."
 msgstr "Das Verzeichnis hat diesen Sender bei der letzten Prüfung erreicht."

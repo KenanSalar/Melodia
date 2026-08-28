@@ -14,9 +14,9 @@ pub fn set_radio_enabled(state: &AppState, enabled: bool) -> Result<(), AppError
 }
 
 /// Persist whether directory results hide segmented stations.
-pub fn set_radio_hide_hls(state: &AppState, hide: bool) -> Result<(), AppError> {
+pub fn set_radio_hide_segmented(state: &AppState, hide: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
-        settings.radio.radio_hide_hls = hide;
+        settings.radio.radio_hide_segmented = hide;
     })
 }
 

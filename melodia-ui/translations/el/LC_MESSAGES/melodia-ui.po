@@ -1736,11 +1736,11 @@ msgid "Browse and play live stations from radio-browser.info"
 msgstr "Περιήγηση και αναπαραγωγή ζωντανών σταθμών από το radio-browser.info"
 
 # The Settings sub-rows, shown only while the master switch is on.
-msgid "Hide unplayable stations"
-msgstr "Απόκρυψη μη αναπαραγώγιμων σταθμών"
+msgid "Hide segmented stations"
+msgstr "Απόκρυψη τμηματοποιημένων σταθμών"
 
-msgid "Segmented (HLS) streams are listed but cannot play yet"
-msgstr "Οι τμηματοποιημένες ροές (HLS) εμφανίζονται αλλά δεν αναπαράγονται ακόμη"
+msgid "Segmented (HLS) streams play, but take longer to start"
+msgstr "Οι τμηματοποιημένες ροές (HLS) αναπαράγονται, αλλά αργούν να ξεκινήσουν"
 
 msgid "Report plays to the directory"
 msgstr "Αναφορά αναπαραγωγών στον κατάλογο"
@@ -1915,9 +1915,6 @@ msgid "{n} vote"
 msgid_plural "{n} votes"
 msgstr[0] "{n} ψήφος"
 msgstr[1] "{n} ψήφοι"
-
-msgid "This station streams in a segmented format Melodia can't play yet."
-msgstr "Αυτός ο σταθμός μεταδίδει σε τμηματική μορφή που το Melodia δεν μπορεί ακόμη να αναπαράγει."
 
 msgid "The directory reached this station on its last check."
 msgstr "Ο κατάλογος προσέγγισε αυτόν τον σταθμό στον τελευταίο έλεγχο."

@@ -75,15 +75,6 @@ export component RadioStationDetail inherits Rectangle {
                     padding-right: Theme.scrollbar-slot;
                     alignment: start;
 
-                    // Why there is no Play control. D13's whole point is that a segmented station
-                    // is listed and labelled rather than hidden, and this is the surface with
-                    // room to say why.
-                    if Radio.detail-station.hls: StatusLine {
-                        icon: "error";
-                        tint: Theme.yellow;
-                        text: @tr("This station streams in a segmented format Melodia can't play yet.");
-                    }
-
                     // What the directory's own reachability check last said. Shown only once an
                     // answer has arrived: "we asked and it failed" and "nobody has asked" are
                     // different, and only the first is worth printing.

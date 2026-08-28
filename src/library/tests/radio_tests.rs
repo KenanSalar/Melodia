@@ -1,8 +1,11 @@
-use crate::entities::radio::{DirectoryStation, RadioStation, StationPage};
+use std::sync::Arc;
+
+use crate::entities::radio::{DirectoryStation, Facet, FacetKind, RadioStation, StationPage};
 use crate::error::AppError;
 
 use super::{
-    ensure_editable, ensure_playable, hide_hls, is_listed, resolve_station_name, website_url,
+    ensure_editable, hide_hls, hide_segmented_codecs, is_listed, names_segmented,
+    resolve_station_name, website_url,
 };
 
 /// One directory row, segmented or not. Spelled out rather than defaulted: `DirectoryStation` has
@@ -134,31 +137,46 @@ fn only_a_hand_typed_station_can_be_edited() {
     );
 }
 
-/// Both play doors take the same gate. A segmented station can be starred out of Browse, so it
-/// reaches the kept tabs and is playable there by id — where the browsed refusal, being on the
-/// other door, says nothing at all. The card hides its play button either way; this is the half
-/// that holds when something else asks.
+/// The Format chip is built from counts the directory took before the page filter ran, so a codec
+/// whose stations are all segmented offers a filter that returns an empty grid.
 #[test]
-fn a_segmented_station_is_refused_at_either_play_door() {
-    assert!(ensure_playable(false).is_ok());
-    assert!(
-        matches!(ensure_playable(true), Err(AppError::Validation(_))),
-        "Symphonia has no MPEG-TS demuxer, so this is a refusal rather than a decode failure"
-    );
+fn hiding_segmented_stations_drops_the_codecs_only_they_use() {
+    let facets: Arc<[Facet]> = ["MP3", "AAC+", "UNKNOWN", "OGG", "AAC,H.264", "MP4", "FLV"]
+        .iter()
+        .map(|name| Facet {
+            code: None,
+            name: (*name).to_owned(),
+            station_count: 1,
+        })
+        .collect();
 
-    let source = include_str!("../radio.rs");
-    for door in [
-        "pub async fn play_station",
-        "pub async fn play_directory_station",
+    let kept = hide_segmented_codecs(Arc::clone(&facets), FacetKind::Codecs, true);
+    let names: Vec<&str> = kept.iter().map(|facet| facet.name.as_str()).collect();
+    assert_eq!(names, ["MP3", "AAC+", "OGG", "FLV"]);
+
+    assert!(
+        names_segmented("UNKNOWN,H.264") && !names_segmented("FLAC"),
+        "a comma means a picture track beside the audio; `FLAC` is a mount like any other"
+    );
+}
+
+/// The tag list runs to tens of thousands of entries and this is called on every chip open, so
+/// every other kind has to come back as the same allocation rather than a rebuilt one.
+#[test]
+fn no_other_facet_list_is_rebuilt() {
+    let facets: Arc<[Facet]> = Arc::from(vec![Facet {
+        code: None,
+        name: "UNKNOWN".to_owned(),
+        station_count: 1,
+    }]);
+
+    for (kind, hide) in [
+        (FacetKind::Tags, true),
+        (FacetKind::Countries, true),
+        (FacetKind::Codecs, false),
     ] {
-        let body = source
-            .split_once(door)
-            .and_then(|(_, rest)| rest.split_once("\n}\n"))
-            .map_or("", |(body, _)| body);
-        assert!(
-            body.contains("ensure_playable("),
-            "`{door}` reaches the decoder and must go through the gate"
-        );
+        let kept = hide_segmented_codecs(Arc::clone(&facets), kind, hide);
+        assert!(Arc::ptr_eq(&facets, &kept), "{kind:?} with hide={hide} was rebuilt");
     }
 }
 

@@ -110,12 +110,15 @@ fn best_match(
         .map(|facet| (needle.equals(&facet.name), facet))
         .max_by(|a, b| a.0.cmp(&b.0).then(a.1.station_count.cmp(&b.1.station_count)))
         .map(|(exact, facet)| {
+            // Through the same pair a picker row carries, so a scope taken from a pill and one
+            // taken from the chip send the directory the same value under the same label.
+            let (label, code) = facets::drawn_as(Some(chip), facet);
             (
                 exact,
                 Suggestion {
                     chip,
-                    name: facet.name.clone(),
-                    code: facet.code.clone().unwrap_or_default(),
+                    name: label.into_owned(),
+                    code: code.to_owned(),
                     count: Some(facet.station_count),
                 },
             )

@@ -22,8 +22,8 @@
 -- of "Radio 10", which ORDER BY name does not.
 --
 -- hls is stored rather than re-read from the directory because a favorited HLS
--- station has left the directory behind. Symphonia has no MPEG-TS demuxer, so
--- this column is the only thing left that can say the stream is unplayable.
+-- station has left the directory behind. The stream plays either way; the column
+-- is what the one setting that filters those pages reads.
 --
 -- country sits beside country_code because they answer different questions: the
 -- code is what the search endpoint filters on, the name is what a card shows.

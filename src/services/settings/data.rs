@@ -375,11 +375,17 @@ impl Default for DiscordFlags {
 #[serde(default)]
 pub struct RadioFlags {
     pub radio_enabled: bool,
-    /// Whether to drop segmented stations from directory results. On by
-    /// default because nothing can play one until Symphonia grows an MPEG-TS
-    /// demuxer, and a grid of stations that fail at the click is worse than a
-    /// shorter grid.
-    pub radio_hide_hls: bool,
+    /// Whether to drop segmented stations from directory results.
+    ///
+    /// Off by default: they play. It survives its own obsolescence because a
+    /// segment playlist still starts several seconds slower than a direct
+    /// mount, which is a reason to skip them and not one to hide the choice.
+    ///
+    /// **Renamed rather than re-defaulted.** The key it replaced shipped
+    /// defaulting to `true`, so every install that has ever written this file
+    /// carries that value; flipping the default alone would reach nobody who
+    /// already had it.
+    pub radio_hide_segmented: bool,
     /// Whether playing a station tells the directory so.
     ///
     /// Opt-out rather than opt-in: the click is what popularity ordering is
@@ -392,7 +398,7 @@ impl Default for RadioFlags {
     fn default() -> Self {
         Self {
             radio_enabled: false,
-            radio_hide_hls: true,
+            radio_hide_segmented: false,
             radio_send_clicks: true,
         }
     }

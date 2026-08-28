@@ -1,7 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { ArtworkImage } from "../../components/artwork-image.slint";
 import { IconButton } from "../../components/icon-button.slint";
-import { MaterialIcon } from "../../components/material-icon.slint";
 import { PlayCountBadge } from "../../components/grid/play-count-badge.slint";
 
 // One station, as all three Radio tabs draw it. `EntityCard`'s shape rather than `EntityCard`
@@ -33,9 +32,6 @@ export component StationCard inherits Rectangle {
     in property <bool> editable;
     in property <bool> removable;
     in property <bool> homepage-known;
-    // Segmented stream: listed rather than hidden (the directory row says so), and inert. The
-    // badge is what stops the refusal arriving at the moment of a click.
-    in property <bool> unplayable;
     // Recently Played only, where it is what tells a station listened to daily from one played
     // once by accident. `0` everywhere else draws nothing.
     in property <int> play-count: 0;
@@ -141,10 +137,7 @@ export component StationCard inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: pointer;
-        // **Ungated, and it used to be the opposite.** The body's click was the play, so an
-        // unplayable station had to swallow it rather than let the facade refuse something
-        // nothing on screen said would fail; now it opens the station's page, which is where a
-        // segmented stream can say in words what the badge only marks.
+        // The body opens the station's page; the play button in the corner is what tunes in.
         clicked => { root.clicked(); }
     }
 
@@ -203,10 +196,8 @@ export component StationCard inherits Rectangle {
 
         // **Above the link, and in its slot when the station has no site**: the right edge is a
         // stack off the bottom, so a control left hovering over a gap reads as a sibling that
-        // failed to draw. Gated where the page's Play pill is, a segmented stream having nothing
-        // to press — the badge in the opposite corner is what says so.
+        // failed to draw.
         play_btn := IconButton {
-            visible: !root.unplayable;
             x: parent.width - self.width - Theme.pad-sm;
             y: home_btn.y - (root.homepage-known ? self.height + Theme.pad-xs : 0px);
             icon: "play_arrow";
@@ -250,30 +241,9 @@ export component StationCard inherits Rectangle {
     }
 
     // Top-left of the tile, clear of the hover trio. Non-interactive, so card clicks pass through.
-    plays := PlayCountBadge {
+    PlayCountBadge {
         x: 2 * Theme.pad-sm;
         y: 2 * Theme.pad-sm;
         count: root.play-count;
-    }
-
-    // The same corner, and unlike `EntityCard`'s pair these two can both be true: a re-import
-    // rewrites `hls` wholesale, so a station played while it was streamable keeps its count and
-    // gains the warning. The count holds the corner, being the one Recently Played is about.
-    Rectangle {
-        visible: root.unplayable;
-        x: 2 * Theme.pad-sm + (root.play-count > 0 ? plays.width + Theme.pad-xs : 0px);
-        y: 2 * Theme.pad-sm;
-        width: 28px;
-        height: 28px;
-        border-radius: self.height / 2;
-        background: Theme.crust.with-alpha(0.85);
-        MaterialIcon {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            name: "error";
-            icon-size: 18px;
-            icon-color: Theme.yellow;
-            filled: true;
-        }
     }
 }

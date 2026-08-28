@@ -180,16 +180,13 @@ export component RadioTabPills inherits Rectangle {
         // One mount for all three tabs: what is on the page is decided by the station, so
         // Recently Played's page is Favorites' page is Browse's.
         if Radio.detail-open: ActionPill {
-            // Gone rather than disabled for a segmented stream — `PillButton` has no disabled
-            // state, and the page says in words why there is nothing to press.
-            if !Radio.detail-station.hls: PillButton {
+            PillButton {
                 icon: "play_arrow";
                 icon-filled: true;
                 text: @tr("Play");
                 clicked => { Radio.play-station(Radio.detail-station); }
             }
-            if !Radio.detail-station.hls && (Radio.detail-votable
-                || Radio.detail-station.editable): PillDivider { }
+            if Radio.detail-votable || Radio.detail-station.editable: PillDivider { }
 
             // **Labelled, and no tooltip with it.** Three segments fit the slot, and a label a
             // reader can weigh at a glance beats a glyph they have to hover to identify — which

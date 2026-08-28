@@ -31,6 +31,7 @@ use stream_download::{Settings, StreamDownload};
 use crate::error::AppError;
 use crate::services::describe;
 
+use super::hls;
 use super::prebuffer::{PrebufferSource, RingWriter, StreamShared};
 use super::stream_decode::{LiveSource, StreamDecoder};
 
@@ -163,6 +164,9 @@ pub struct StationFacts {
     pub codec: String,
     /// Advertised kbps, `0` where the server does not say. Same display hint as the directory's.
     pub bitrate: i32,
+    /// Whether what answered was a segment playlist rather than one endless response. Carried so a
+    /// hand-typed station records the same fact the directory's own `hls` column states.
+    pub hls: bool,
 }
 
 /// What was actually behind a URL. A mount with no extension can only be told apart from a pointer
@@ -171,6 +175,32 @@ pub struct StationFacts {
 enum Opened {
     Audio(Box<OpenedStream>),
     Playlist,
+}
+
+/// What a playlist body turned out to name.
+enum Followed {
+    /// A segment playlist, already opened: the playlist *is* the station, and there is no further
+    /// URL to chase.
+    Segments(Box<OpenedStream>),
+    /// A pointer at one audio mount.
+    Mount(Url),
+}
+
+/// How the feed thread gets back to a station whose stream ended.
+#[derive(Clone, Copy)]
+enum Reopen {
+    /// Re-open the audio mount, which is what the first connect resolved to.
+    Mount,
+    /// Re-fetch the segment playlist and start a fresh scheduler behind it. A segmented station
+    /// has no single mount to return to, so its playlist URL is what gets carried.
+    Segments,
+}
+
+/// A station opened and ready to be fed, with what a reconnect would need to find it again.
+struct Resolved {
+    opened: OpenedStream,
+    url: Url,
+    reopen: Reopen,
 }
 
 /// A live stream staged and ready to be appended to a deck.
@@ -197,7 +227,11 @@ impl PreparedStream {
 pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream, AppError> {
     let url = Url::parse(url).map_err(|e| AppError::network("Invalid station URL", e))?;
     let shared = StreamShared::new();
-    let (opened, resolved) = connect_following_playlist(client, url, &shared).await?;
+    let Resolved {
+        opened,
+        url,
+        reopen,
+    } = connect_following_playlist(client, url, &shared).await?;
 
     let (source, writer) =
         PrebufferSource::new(shared.clone(), opened.channels, opened.sample_rate);
@@ -206,7 +240,8 @@ pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream,
         writer,
         shared: shared.clone(),
         client: client.clone(),
-        url: resolved,
+        url,
+        reopen,
         channels: opened.channels,
         sample_rate: opened.sample_rate,
         runtime: tokio::runtime::Handle::current(),
@@ -219,63 +254,124 @@ pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream,
 ///
 /// The same path [`open`] takes minus the ring and the thread, which is what makes it a real
 /// answer rather than a reachability check: the playlist indirection is followed, the response is
-/// buffered, and Symphonia probes the container — so a mount that is a web page, a segmented HLS
-/// playlist or a codec with no decoder is refused **here**, when the user is looking at a dialog,
-/// rather than at the moment they click play. Dropping the returned stream closes the socket.
+/// buffered, and Symphonia probes the container — so a mount that is a web page, an encrypted
+/// segment playlist or a codec with no decoder is refused **here**, when the user is looking at a
+/// dialog, rather than at the moment they click play. Dropping the returned stream closes the
+/// socket.
 ///
 /// The station's own headers come back with it, so a hand-typed URL can name itself.
 pub async fn probe(client: &reqwest::Client, url: &str) -> Result<StationFacts, AppError> {
     let url = Url::parse(url).map_err(|e| AppError::network("Invalid station URL", e))?;
     // Throwaway: the title callback writes into it and nothing ever reads it back.
     let shared = StreamShared::new();
-    let (opened, _resolved) = connect_following_playlist(client, url, &shared).await?;
-    Ok(opened.facts)
+    Ok(connect_following_playlist(client, url, &shared).await?.opened.facts)
 }
 
 /// Open `url`, and if what came back is a playlist rather than audio, follow it once.
 ///
-/// Returns the resolved URL alongside the stream so the feed thread reconnects to the audio mount
-/// rather than re-fetching the pointer.
+/// Returns whatever a reconnect would need to find the station again: the audio mount for an
+/// ordinary stream, and the playlist itself for a segmented one, which has no single mount.
 async fn connect_following_playlist(
     client: &reqwest::Client,
     url: Url,
     shared: &Arc<StreamShared>,
-) -> Result<(OpenedStream, Url), AppError> {
+) -> Result<Resolved, AppError> {
     // Extension first: a hand-typed `.pls` is worth spotting before opening a stream we would only
     // throw away, and it is the shape most custom stations arrive in.
     let url = if is_playlist_url(&url) {
-        follow_playlist(client, &url).await?
+        match follow_playlist(client, &url).await? {
+            Followed::Segments(opened) => {
+                return Ok(Resolved {
+                    opened: *opened,
+                    url,
+                    reopen: Reopen::Segments,
+                });
+            }
+            Followed::Mount(mount) => mount,
+        }
     } else {
         url
     };
 
     match connect(client, &url, shared).await? {
-        Opened::Audio(opened) => Ok((*opened, url)),
+        Opened::Audio(opened) => Ok(Resolved {
+            opened: *opened,
+            url,
+            reopen: Reopen::Mount,
+        }),
         // An extensionless mount that turned out to be a pointer. Depth stays at one: what it
         // names is opened as audio or not at all.
-        Opened::Playlist => {
-            let followed = follow_playlist(client, &url).await?;
-            match connect(client, &followed, shared).await? {
-                Opened::Audio(opened) => Ok((*opened, followed)),
+        Opened::Playlist => match follow_playlist(client, &url).await? {
+            Followed::Segments(opened) => Ok(Resolved {
+                opened: *opened,
+                url,
+                reopen: Reopen::Segments,
+            }),
+            Followed::Mount(mount) => match connect(client, &mount, shared).await? {
+                Opened::Audio(opened) => Ok(Resolved {
+                    opened: *opened,
+                    url: mount,
+                    reopen: Reopen::Mount,
+                }),
                 Opened::Playlist => {
                     Err(AppError::network_msg("Station playlist points at another playlist"))
                 }
+            },
+        },
+    }
+}
+
+/// Re-open a station the feed thread has lost, by whichever route it arrived on.
+async fn reopen(
+    client: &reqwest::Client,
+    url: &Url,
+    shared: &Arc<StreamShared>,
+    how: Reopen,
+) -> Result<OpenedStream, AppError> {
+    match how {
+        Reopen::Mount => match connect(client, url, shared).await? {
+            Opened::Audio(opened) => Ok(*opened),
+            Opened::Playlist => {
+                Err(AppError::network_msg("Station stream URL now returns a playlist"))
             }
+        },
+        Reopen::Segments => {
+            let body = fetch_capped(client, url).await?;
+            open_segments(client, url, &body).await
         }
     }
 }
 
-/// [`connect`] for a URL already known to be audio, which is every reconnect: the feed thread only
-/// ever re-opens the mount the first connect resolved to.
-async fn connect_audio(
+/// Open a segment playlist as a stream, which is the whole of [`hls`]'s job plus the probe.
+///
+/// No `shared`: HLS carries no ICY metadata, so nothing here has a title to publish.
+async fn open_segments(
     client: &reqwest::Client,
     url: &Url,
-    shared: &Arc<StreamShared>,
+    body: &str,
 ) -> Result<OpenedStream, AppError> {
-    match connect(client, url, shared).await? {
-        Opened::Audio(opened) => Ok(*opened),
-        Opened::Playlist => Err(AppError::network_msg("Station stream URL now returns a playlist")),
-    }
+    let stream = hls::open(client, url, body).await?;
+    let facts = StationFacts {
+        codec: stream.codec.to_owned(),
+        bitrate: stream.bitrate_kbps,
+        hls: true,
+        ..StationFacts::default()
+    };
+
+    // On the blocking pool for the reason `connect` spells out: the probe reads, and this reader's
+    // read parks until the scheduler behind it delivers, which needs a worker free to run on.
+    let decoder = tokio::task::spawn_blocking(move || {
+        StreamDecoder::open(Box::new(LiveSource(stream.reader)), None)
+    })
+    .await
+    .map_err(AppError::io_source)??;
+
+    Ok(OpenedStream {
+        channels: decoder.channels(),
+        sample_rate: decoder.sample_rate(),
+        decoder,
+        facts,
+    })
 }
 
 /// Open one URL: response, ICY headers, bounded download buffer, metadata reader, decoder.
@@ -301,6 +397,7 @@ async fn connect(
         logo_url: non_blank(icy.logo_url()),
         codec: codec_from_mime(mime.as_deref()).to_owned(),
         bitrate: icy.bitrate().and_then(|kbps| i32::try_from(kbps).ok()).unwrap_or_default(),
+        hls: false,
     };
 
     let storage = BoundedStorageProvider::new(MemoryStorageProvider, DOWNLOAD_BUFFER_BYTES);
@@ -383,19 +480,29 @@ fn prefetch_bytes(bitrate_kbps: Option<u32>) -> u64 {
     (bytes_per_second * PREFETCH_SECONDS).clamp(PREFETCH_MIN_BYTES, PREFETCH_MAX_BYTES)
 }
 
-/// Fetch a playlist and return the first stream URL it names.
-async fn follow_playlist(client: &reqwest::Client, url: &Url) -> Result<Url, AppError> {
+/// Fetch a playlist and work out what it is: a station in its own right, or a pointer at one.
+///
+/// The HLS check comes first because the two overlap on the wire — a segment playlist is also a
+/// valid Extended M3U, and read as a pointer its first segment opens, plays for a few seconds and
+/// stops.
+async fn follow_playlist(client: &reqwest::Client, url: &Url) -> Result<Followed, AppError> {
     let body = fetch_capped(client, url).await?;
+    if hls::playlist::is_hls(&body) {
+        return Ok(Followed::Segments(Box::new(open_segments(client, url, &body).await?)));
+    }
+
     let target = first_stream_url(&body)
         .ok_or_else(|| AppError::network_msg("Station playlist named no stream URL"))?;
-    Url::parse(&target).map_err(|e| AppError::network("Station playlist named an invalid URL", e))
+    let mount = Url::parse(&target)
+        .map_err(|e| AppError::network("Station playlist named an invalid URL", e))?;
+    Ok(Followed::Mount(mount))
 }
 
 /// Read at most [`PLAYLIST_MAX_BYTES`] of `url` as text.
 ///
 /// Streamed rather than `bytes()`-ed so a server that lies about (or omits) its content length
 /// cannot make this allocate without bound.
-async fn fetch_capped(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
+pub(super) async fn fetch_capped(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
     let response = client
         .get(url.clone())
         .timeout(PLAYLIST_TIMEOUT)
@@ -514,9 +621,10 @@ struct FeedContext {
     writer: RingWriter,
     shared: Arc<StreamShared>,
     client: reqwest::Client,
-    /// The audio mount, already followed past any playlist. Reconnects go here, not to whatever
-    /// the user originally typed.
+    /// Where a reconnect goes, not whatever the user originally typed: the audio mount for an
+    /// ordinary stream, the segment playlist for a segmented one.
     url: Url,
+    reopen: Reopen,
     channels: ChannelCount,
     sample_rate: SampleRate,
     runtime: tokio::runtime::Handle,
@@ -566,7 +674,7 @@ fn feed_loop(mut ctx: FeedContext) {
             return;
         }
 
-        match ctx.runtime.block_on(connect_audio(&ctx.client, &ctx.url, &ctx.shared)) {
+        match ctx.runtime.block_on(reopen(&ctx.client, &ctx.url, &ctx.shared, ctx.reopen)) {
             Ok(opened)
                 if opened.channels == ctx.channels && opened.sample_rate == ctx.sample_rate =>
             {

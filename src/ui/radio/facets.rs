@@ -12,6 +12,7 @@
 //! Country and moves to Language before the first answer arrives must not get a country list under
 //! the language label.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use slint::ComponentHandle;
@@ -269,18 +270,68 @@ pub fn filter(ui: &AppWindow, radio_ui: &Arc<RadioUi>, needle: &str) {
 pub(super) const UNFILTERED_ROW_CAP: usize = 500;
 
 fn write_filtered(g: &Radio<'_>, facets: &[Facet], needle: &str) {
+    // Off the global rather than threaded in: the picker only ever draws the chip it is showing,
+    // and both callers have already made `facet-shown` that chip.
+    let chip = chip_from_index(g, g.get_facet_shown());
     let folded = row_match::fold_needle(needle);
     let matches = facets.iter().filter(|facet| folded.contains(&facet.name));
+    let row = |facet: &Facet| rows::to_slint_facet_row(chip, facet);
 
     // `Needle::contains` answers true for an empty needle, so the filter above is
     // already the identity there and the cap is the whole difference. Gated on the
     // *folded* needle, since a box holding only spaces narrows nothing either.
     let facet_rows: Vec<_> = if folded.is_empty() {
-        matches.take(UNFILTERED_ROW_CAP).map(rows::to_slint_facet_row).collect()
+        matches.take(UNFILTERED_ROW_CAP).map(row).collect()
     } else {
-        matches.map(rows::to_slint_facet_row).collect()
+        matches.map(row).collect()
     };
     write_grid(&g.get_facet_options(), facet_rows, "radio::facets");
+}
+
+/// The value the directory sent, as the pair a row carries: what to draw, and what to send back.
+///
+/// **They differ only for codecs.** The value the search parameter takes rides in `code` — the
+/// slot a country already uses for exactly this reason — so nothing below the row boundary ever
+/// sees the label. [`apply_pick`] is the other half.
+pub(super) fn drawn_as(chip: Option<ChipFilter>, facet: &Facet) -> (Cow<'_, str>, &str) {
+    if chip != Some(ChipFilter::Codec) {
+        return (Cow::Borrowed(&facet.name), facet.code.as_deref().unwrap_or_default());
+    }
+    (codec_label(&facet.name), &facet.name)
+}
+
+/// The directory's non-answer: what its checker records when it could not identify a stream.
+pub(super) const UNKNOWN_CODEC: &str = "UNKNOWN";
+
+/// What that bucket actually holds, and the name the chip offers it under.
+///
+/// The checker probes a byte stream and a playlist is not one, so it fails on precisely the
+/// segmented stations: measured across the bucket, under two per cent of it is anything else, and
+/// most of that remainder answers with nothing playable. Naming a *filter* for what it holds beats
+/// naming it for what the directory could not work out, which reads beside `MP3` and `AAC+` as a
+/// value that failed to load. Per station the generalisation is unnecessary and is not made —
+/// [`super::rows::display_codec`] has the row's own `hls` flag to go on.
+pub(super) const SEGMENTED_CODEC_LABEL: &str = "HLS";
+
+/// Borrowed for every real format, so only the handful of entries that need rewriting allocate.
+fn codec_label(codec: &str) -> Cow<'_, str> {
+    if !codec.contains(',') && !codec.eq_ignore_ascii_case(UNKNOWN_CODEC) {
+        return Cow::Borrowed(codec);
+    }
+    // A comma means the checker found a picture track beside the audio, and the directory writes
+    // the pair with no space.
+    let spelled: Vec<&str> = codec
+        .split(',')
+        .map(str::trim)
+        .map(|part| {
+            if part.eq_ignore_ascii_case(UNKNOWN_CODEC) {
+                SEGMENTED_CODEC_LABEL
+            } else {
+                part
+            }
+        })
+        .collect();
+    Cow::Owned(spelled.join(", "))
 }
 
 /// Set or clear one chip's filter, and re-query if that moved anything.
@@ -341,7 +392,12 @@ pub(super) fn apply_pick(chip: ChipFilter, name: &str, code: &str, search: &mut 
                 vec![name.to_owned()]
             };
         }
-        ChipFilter::Codec => name.clone_into(&mut search.codec),
+        // The label is what a row hands back, so the value the parameter takes rides in `code` —
+        // see [`drawn_as`]. Empty on both is the clear, which either branch spells the same way.
+        ChipFilter::Codec => {
+            let wire = if code.is_empty() { name } else { code };
+            wire.clone_into(&mut search.codec);
+        }
         ChipFilter::BitrateMin => search.bitrate_min = bitrate_floor(code),
     }
 }

@@ -128,6 +128,19 @@ pub fn disable(ui: &AppWindow, state: &AppState) {
     }
 }
 
+/// Drop the cached facet lists, so the chips rebuild against a setting that just changed.
+///
+/// Nothing else re-asks inside one session: the section's prime skips a list already held, and the
+/// picker skips the fetch for a chip whose list is still in hand. Parking `facet-shown` is what
+/// takes away that second shortcut.
+pub fn forget_facets(ui: &AppWindow, state: &AppState) {
+    if let Some(radio_ui) = state.ui_handles.radio.lock().clone() {
+        *radio_ui.facet_index.lock() = facets::FacetIndex::default();
+        radio_ui.facet_list.lock().take();
+    }
+    ui.global::<Radio>().set_facet_shown(-1);
+}
+
 /// Wire every `Radio.*` callback and hand back the page's handle.
 ///
 /// Returned for the cover retune alone: every wired closure clones its own strong `Arc`, so the

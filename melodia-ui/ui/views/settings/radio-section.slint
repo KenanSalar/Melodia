@@ -25,8 +25,8 @@ export component RadioSection inherits Rectangle {
         @tr("Internet radio"),
         @tr("Browse and play live stations from radio-browser.info"));
     property <bool> show-hls: row-visible(
-        @tr("Hide unplayable stations"),
-        @tr("Segmented (HLS) streams are listed but cannot play yet"));
+        @tr("Hide segmented stations"),
+        @tr("Segmented (HLS) streams play, but take longer to start"));
     property <bool> show-clicks: row-visible(
         @tr("Report plays to the directory"),
         @tr("An anonymous count is what orders stations by popularity"));
@@ -51,11 +51,11 @@ export component RadioSection inherits Rectangle {
         // card's column (slint#7377), which is the shape the crossfade rows take too.
         if Settings.radio-enabled && root.show-hls: SettingRow {
             icon: "visibility";
-            label: @tr("Hide unplayable stations");
-            description: @tr("Segmented (HLS) streams are listed but cannot play yet");
+            label: @tr("Hide segmented stations");
+            description: @tr("Segmented (HLS) streams play, but take longer to start");
             ToggleSwitch {
-                checked <=> Settings.radio-hide-hls;
-                toggled(v) => { Settings.radio-hide-hls-changed(v); }
+                checked <=> Settings.radio-hide-segmented;
+                toggled(v) => { Settings.radio-hide-segmented-changed(v); }
             }
         }
 

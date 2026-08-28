@@ -109,7 +109,7 @@ pub struct AppState {
     /// Whether directory results drop segmented stations, on the same terms as
     /// [`Self::radio_enabled`]: `library::radio::search` reads it per page, on a
     /// worker.
-    radio_hide_hls: Arc<AtomicBool>,
+    radio_hide_segmented: Arc<AtomicBool>,
     /// Whether playing a station reports a click back to the directory. Read on
     /// the play path, which is already on a worker.
     radio_send_clicks: Arc<AtomicBool>,
@@ -262,7 +262,7 @@ impl AppState {
             scrobble,
             discord,
             radio_enabled: Arc::new(AtomicBool::new(settings.radio.radio_enabled)),
-            radio_hide_hls: Arc::new(AtomicBool::new(settings.radio.radio_hide_hls)),
+            radio_hide_segmented: Arc::new(AtomicBool::new(settings.radio.radio_hide_segmented)),
             radio_send_clicks: Arc::new(AtomicBool::new(settings.radio.radio_send_clicks)),
             media_controls: Some(mc_handle),
             http_client,
@@ -341,12 +341,12 @@ impl AppState {
 
     /// Whether a directory page drops its segmented stations before the grid
     /// sees it.
-    pub fn radio_hide_hls(&self) -> bool {
-        self.radio_hide_hls.load(Ordering::Relaxed)
+    pub fn radio_hide_segmented(&self) -> bool {
+        self.radio_hide_segmented.load(Ordering::Relaxed)
     }
 
-    pub fn set_radio_hide_hls(&self, hide: bool) {
-        self.radio_hide_hls.store(hide, Ordering::Relaxed);
+    pub fn set_radio_hide_segmented(&self, hide: bool) {
+        self.radio_hide_segmented.store(hide, Ordering::Relaxed);
     }
 
     /// Whether tuning in tells the directory so.
