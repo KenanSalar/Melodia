@@ -91,13 +91,17 @@ impl NowPlayingSource {
     /// Project a published view model, or `None` when nothing is on the deck.
     pub(super) fn from_vm(vm: &PlayerViewModelLight) -> Option<Self> {
         let source = vm.source()?;
+        // The row comes off the same arm as the key rather than off `vm` beside it: `source` has
+        // already settled which half wins, and reading `current_track` independently is what would
+        // hand the chips a `tracks` row under a station.
+        let (key, track) = match source.id {
+            SourceId::Track(id) => (SourceKey::Track(id), vm.current_track.clone()),
+            SourceId::Station(stream_url) => (SourceKey::Station(stream_url.to_owned()), None),
+        };
         Some(Self {
-            key: match source.id {
-                SourceId::Track(id) => SourceKey::Track(id),
-                SourceId::Station(stream_url) => SourceKey::Station(stream_url.to_owned()),
-            },
+            key,
+            track,
             artwork_path: source.artwork_path.map(str::to_owned),
-            track: vm.current_track.clone(),
         })
     }
 }

@@ -247,7 +247,12 @@ export component NowPlayingView inherits Rectangle {
                         x: (parent.width - self.width) / 2;
                         y: 0px;
                         artwork-path: Player.vm.radio.artwork_path;
-                        cover: Player.np-station-logo;
+                        // The row tier until the detail decode lands, the miniplayer's ternary.
+                        // The subscriber empties the large slot the moment the source moves, so
+                        // an empty one is a decode still out rather than a station with no logo.
+                        cover: Player.np-station-logo.width > 0
+                            ? Player.np-station-logo
+                            : Player.vm.radio.logo_img;
                         native-size: Player.np-station-logo-size * 1px;
                         fallback-text: Player.vm.radio.monogram;
                         fallback-icon: "radio";

@@ -19,7 +19,7 @@ use crate::media::cover_thumbs::CoverThumbs;
 use crate::player::event_sink::PlayerSinks;
 use crate::player::state::{PlayerViewModelLight, PositionTick, QueueViewModel};
 use crate::player::types::RadioNowPlaying;
-use crate::ui::util::len_as_i32;
+use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{AppWindow, Player, PlayerVm, QueueVm, RadioVm, TrackSummaryRow};
 
 /// Subscribe to the lightweight player `ViewModel` (status, current track,
@@ -186,12 +186,12 @@ pub fn spawn_position_subscriber(
 pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSummaryRow {
     let cover_img = cover_thumbs.get_cached_opt(t.artwork_path.as_deref());
     TrackSummaryRow {
-        id: clamp_to_i32(u64::try_from(t.id).unwrap_or(0)),
+        id: clamp_i64_to_i32(t.id),
         file_path: SharedString::from(t.file_path.as_str()),
         title: SharedString::from(t.title.as_str()),
         artist: SharedString::from(t.artist.as_deref().unwrap_or("")),
         album: SharedString::from(t.album.as_deref().unwrap_or("")),
-        duration_ms: clamp_to_i32(u64::try_from(t.duration_ms.max(0)).unwrap_or(0)),
+        duration_ms: clamp_i64_to_i32(t.duration_ms.max(0)),
         artwork_path: SharedString::from(t.artwork_path.as_deref().unwrap_or("")),
         cover_img,
         is_favorite: t.is_favorite,
@@ -232,7 +232,7 @@ fn reuse_or_warm(
 fn to_slint_radio_vm(station: &RadioNowPlaying, cover_thumbs: &CoverThumbs) -> RadioVm {
     let tile = crate::ui::radio::station_tile(&station.name);
     RadioVm {
-        station_id: i32::try_from(station.station_id).unwrap_or(i32::MAX),
+        station_id: clamp_i64_to_i32(station.station_id),
         uuid: opt_shared(station.station_uuid.as_deref()),
         name: SharedString::from(station.name.as_str()),
         live_title: SharedString::from(station.live_title.as_deref().unwrap_or("")),

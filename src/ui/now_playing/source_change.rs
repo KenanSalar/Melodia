@@ -77,6 +77,14 @@ pub(super) fn spawn_source_change_subscriber(
             last_key = new_source.as_ref().map(|s| s.key.clone());
             // Regardless of visibility, so a later open can seed the artwork from it.
             np_state.current_source.borrow_mut().clone_from(&new_source);
+            // The logo is written on the far side of a decode, so until then it describes the
+            // *outgoing* station under a name and facts that have already moved. Dropped the
+            // moment it stops being true, which leaves the row tier drawing in the gap.
+            if let Some(ui) = weak.upgrade() {
+                let player = ui.global::<Player>();
+                player.set_np_station_logo(Image::default());
+                player.set_np_station_logo_size(0);
+            }
             // The decode, blur and metadata read only produce something on screen while
             // a surface renders them — the full view, or the square miniplayer, whose
             // artwork reads the same dual slot. Otherwise `wire_now_playing_open` or
