@@ -45,6 +45,12 @@ impl_detail_view_helpers!(artwork_only Radio);
 /// Both halves, because neither is enough on its own: a browsed station has no `id` and a
 /// hand-typed one has no `uuid`. `id == 0` is the split every other station call site already
 /// spells, and it decides which cache answers.
+///
+/// **The two id-only ways in name kept stations, and a kept station resolves by id.** The boot
+/// restore and the Mouse-4/5 replay have nothing else to build a ref from. A browsed open is the
+/// other way round: the uuid is the only handle its cache has. Either way [`open_station_with`]
+/// completes the ref off whatever resolved, above every reader of the uuid: the vote pill,
+/// [`refresh_from_directory`], and the seat the two of them are found by.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StationRef {
     pub id: i64,
@@ -154,6 +160,15 @@ enum StationSource {
 }
 
 impl StationSource {
+    /// The directory's own id, empty for a station the user typed in. That emptiness is the right
+    /// answer rather than a gap: there is no directory entry to vote on or to refresh against.
+    fn uuid(&self) -> &str {
+        match self {
+            Self::Kept(station) => station.station_uuid.as_deref().unwrap_or_default(),
+            Self::Browsed(station, _) => &station.station_uuid,
+        }
+    }
+
     fn stream_url(&self) -> &str {
         match self {
             Self::Kept(station) => &station.stream_url,
@@ -240,6 +255,13 @@ where
     F: FnOnce(&AppWindow) + Send + 'static,
 {
     let source = resolve(state, radio_ui, &station).await?;
+    // Completed off whatever resolved: two of the three ways in know only the id, and an empty
+    // uuid here silently costs the vote pill, the directory refresh behind it, and the seat
+    // equality a later vote is found by.
+    let station = StationRef {
+        id: station.id,
+        uuid: source.uuid().to_owned(),
+    };
     let facts = source.facts();
     let votes = source.votes();
     let pair =
@@ -697,6 +719,8 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, radio_ui: &Ar
 
     let (state, radio_ui, weak) = (state.clone(), radio_ui.clone(), ui.as_weak());
     state.runtime.clone().spawn(async move {
+        // Id-only: `views.json` names nothing else, and `open_station_with` fills the uuid in off
+        // the row it resolves.
         let station = StationRef {
             id,
             uuid: String::new(),
@@ -721,3 +745,7 @@ fn logo_size(pair: &DetailPair) -> i32 {
         .as_ref()
         .map_or(0, |cover| clamp_i64_to_i32(i64::from(cover.width().min(cover.height()))))
 }
+
+#[cfg(test)]
+#[path = "tests/detail_tests.rs"]
+mod tests;

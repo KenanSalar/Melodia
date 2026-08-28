@@ -271,6 +271,42 @@ pub(crate) fn block_body(src: &str, open: usize) -> Option<&str> {
     None
 }
 
+/// A wrapped condition joined back onto the `if` it belongs to, so a per-line walk sees one
+/// statement.
+///
+/// Slint has no formatter of its own and a branch head carrying more than its own term wraps.
+/// A test that only reads first lines counts a wrapped branch as absent, which is the loudest
+/// possible way to be wrong about a file that builds.
+fn fold_continuations(src: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    for line in src.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("&&") || trimmed.starts_with("||") {
+            out.push(' ');
+            out.push_str(trimmed);
+        } else {
+            out.push('\n');
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// The `ViewTransition` body branches `global`'s tabbed page mounts, one line each.
+///
+/// Comments dropped and continuations folded first, and both terms required: the sheet reads
+/// `tab-idx` again for the count line, the placeholder and the pill row, and none of those is a
+/// sub-view. Two pins ask about the same branches for different reasons, so the preprocessing is
+/// here rather than at either of them, where the pair would be free to drift apart.
+pub(crate) fn tab_body_branches(sheet: &str, global: &str) -> Vec<String> {
+    let tab_term = format!("{global}.tab-idx == {global}.tab-");
+    fold_continuations(&strip_line_comments(sheet))
+        .lines()
+        .filter(|line| line.contains(&tab_term) && line.contains(": ViewTransition {"))
+        .map(str::to_owned)
+        .collect()
+}
+
 /// Runs of whitespace collapsed to one space, so a pin reads a token sequence rather than one
 /// file's indentation. Pair it with [`strip_line_comments`] — this joins lines, so a trailing
 /// comment would otherwise run into the code after it.

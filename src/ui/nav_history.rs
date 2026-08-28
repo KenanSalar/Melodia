@@ -422,8 +422,8 @@ fn spawn_open_detail(
             land_pending(pending, state, &fallback);
             return;
         };
-        // Only a kept station is ever recorded, so the uuid is the row's to look up and this
-        // one is left empty — `StationRef::is_kept` splits on the id.
+        // Only a kept station is ever recorded, so the id is the whole handle: `StationRef::is_kept`
+        // splits on it, and `open_station_with` fills the uuid in off the row it resolves.
         let station = crate::ui::radio::StationRef {
             id,
             uuid: String::new(),
