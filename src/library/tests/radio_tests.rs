@@ -4,7 +4,7 @@ use crate::entities::radio::{DirectoryStation, Facet, FacetKind, RadioStation, S
 use crate::error::AppError;
 
 use super::{
-    ensure_editable, hide_hls, hide_segmented_codecs, is_listed, names_segmented,
+    ensure_editable, hide_segmented, hide_segmented_codecs, is_listed, names_segmented,
     resolve_station_name, website_url,
 };
 
@@ -41,7 +41,7 @@ fn mixed_page() -> StationPage {
 #[test]
 fn hiding_segmented_stations_drops_them_and_keeps_the_rest() {
     let mut page = mixed_page();
-    hide_hls(&mut page, true);
+    hide_segmented(&mut page, true);
 
     let kept: Vec<&str> = page.stations.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(kept, ["a", "c"]);
@@ -52,21 +52,21 @@ fn hiding_segmented_stations_drops_them_and_keeps_the_rest() {
 #[test]
 fn hiding_segmented_stations_leaves_the_paging_flag_alone() {
     let mut page = mixed_page();
-    hide_hls(&mut page, true);
+    hide_segmented(&mut page, true);
     assert!(page.has_more, "the drop is the client's, and `has_more` is the directory's answer");
 
     let mut ended = StationPage {
         has_more: false,
         ..mixed_page()
     };
-    hide_hls(&mut ended, true);
+    hide_segmented(&mut ended, true);
     assert!(!ended.has_more, "and it must not be invented either");
 }
 
 #[test]
 fn leaving_them_shown_changes_nothing() {
     let mut page = mixed_page();
-    hide_hls(&mut page, false);
+    hide_segmented(&mut page, false);
     assert_eq!(page, mixed_page());
 }
 

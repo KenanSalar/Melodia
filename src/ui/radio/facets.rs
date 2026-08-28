@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::entities::radio::{Facet, FacetKind, StationSearch};
+use crate::entities::radio::{Facet, FacetKind, StationSearch, UNKNOWN_CODEC};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::grid_rows::write_grid;
@@ -274,7 +274,7 @@ fn write_filtered(g: &Radio<'_>, facets: &[Facet], needle: &str) {
     // and both callers have already made `facet-shown` that chip.
     let chip = chip_from_index(g, g.get_facet_shown());
     let folded = row_match::fold_needle(needle);
-    let matches = facets.iter().filter(|facet| folded.contains(&facet.name));
+    let matches = facets.iter().filter(|facet| matches_needle(chip, facet, &folded));
     let row = |facet: &Facet| rows::to_slint_facet_row(chip, facet);
 
     // `Needle::contains` answers true for an empty needle, so the filter above is
@@ -300,10 +300,39 @@ pub(super) fn drawn_as(chip: Option<ChipFilter>, facet: &Facet) -> (Cow<'_, str>
     (codec_label(&facet.name), &facet.name)
 }
 
-/// The directory's non-answer: what its checker records when it could not identify a stream.
-pub(super) const UNKNOWN_CODEC: &str = "UNKNOWN";
+/// The label a chip rewrote, or `None` where the drawn spelling *is* the value the directory sent.
+///
+/// Both filter passes test it beside `facet.name`, and neither can drop it: matching the raw value
+/// alone hid the row that says `HLS` from anyone who typed it, and surfaced it for `UNKNOWN`, which
+/// is a word on screen nowhere.
+fn rewritten_label(chip: Option<ChipFilter>, facet: &Facet) -> Option<Cow<'_, str>> {
+    match drawn_as(chip, facet).0 {
+        Cow::Borrowed(_) => None,
+        owned @ Cow::Owned(_) => Some(owned),
+    }
+}
 
-/// What that bucket actually holds, and the name the chip offers it under.
+/// Whether `needle` matches this facet, on either spelling.
+pub(super) fn matches_needle(
+    chip: Option<ChipFilter>,
+    facet: &Facet,
+    needle: &row_match::Needle,
+) -> bool {
+    needle.contains(&facet.name)
+        || rewritten_label(chip, facet).is_some_and(|label| needle.contains(&label))
+}
+
+/// Whether `needle` *is* this facet, on either spelling. The suggestion ranking's exactness term.
+pub(super) fn equals_needle(
+    chip: Option<ChipFilter>,
+    facet: &Facet,
+    needle: &row_match::Needle,
+) -> bool {
+    needle.equals(&facet.name)
+        || rewritten_label(chip, facet).is_some_and(|label| needle.equals(&label))
+}
+
+/// What the [`UNKNOWN_CODEC`] bucket actually holds, and the name the chip offers it under.
 ///
 /// The checker probes a byte stream and a playlist is not one, so it fails on precisely the
 /// segmented stations: measured across the bucket, under two per cent of it is anything else, and

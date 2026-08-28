@@ -237,6 +237,12 @@ demuxer, so an HLS station cannot play today. The directory row carries `hls: 0|
 the card can say so plainly instead of the station failing at the moment of a click. A
 filter defaults to hiding them, with a toggle.
 
+> **Superseded.** Segmented stations play: `src/player/hls/` reassembles the segments and
+> `stream_decode` probes the result the way it probes a mount, so no MPEG-TS demuxer was ever
+> the thing standing in the way. The badge and the play gate are gone, the filter defaults off
+> and is named for what it drops rather than for what it claimed about it, and the `hls` column
+> survives as that filter's input. Everything below that reads D13 as live is history.
+
 **D14. The Radio Browser client is a service, and the UI's only door is `library::radio`.**
 `src/ui/` reaching `crate::database` directly is already forbidden and the same logic
 applies to a network directory: one facade in `library/` fronts both the local table and
@@ -921,7 +927,7 @@ they cost:
   guard, one fetching only when nothing is loaded and the other warming only when something
   is, so the enter never asks which case it is in.
 - **No HLS filter chip.** D13 put the toggle on the chip strip beside the five facets; it is
-  a Settings row instead, because `radio_hide_hls` is one flag and two controls for it would
+  a Settings row instead, because `radio_hide_segmented` is one flag and two controls for it would
   be two places to disagree. It also belongs with the master switch it qualifies rather than
   with the filters, which are all query parameters where this one is a client-side drop.
 - **Load-more is a footer pill below the grid, not a row inside the list.** A sentinel row
@@ -941,7 +947,7 @@ moved), full `cargo test` (1897 lib + 4 binary + 13 integration, green) and
 `scripts/check-icons.py`. **Seventeen unit tests and one integration test were added after
 the manual pass**, which is what six of the cross-cutting boxes above are now ticked on:
 `has_more` off the raw response length, the HLS retain leaving it alone, `station_logo`'s
-three guards, the facet code-vs-name split, the `radio_hide_hls` / `radio_send_clicks` round
+three guards, the facet code-vs-name split, the `radio_hide_segmented` / `radio_send_clicks` round
 trip, and a source walk holding the decoder probe inside `spawn_blocking`. The integration
 test is `tests/stream_rate.rs`, which plays two `PrebufferSource`s at different rates through
 one rodio `Player` on a device-free mixer and reads the rate back off a square wave. That is
@@ -1319,10 +1325,13 @@ check on the first attempt, which is the reason the cursor test looks the way it
 
 ## Deferred, with reasons
 
-- **HLS stations.** Symphonia has no MPEG-TS demuxer, so segments would need a demuxer
+- **HLS stations.** ~~Symphonia has no MPEG-TS demuxer, so segments would need a demuxer
   written or vendored before a single station played. Segment playlists carrying bare
   ADTS AAC would work with a much smaller HLS client, so a partial implementation is
-  possible later; D13 keeps the door open by labelling rather than hiding.
+  possible later; D13 keeps the door open by labelling rather than hiding.~~ **Shipped.** The
+  "much smaller HLS client" turned out to cover every shape a station serves, transport streams
+  included: an audio-only stream is already ADTS AAC or MPEG audio behind transport and PES
+  framing, so what was owed was a depacketiser and not a demuxer.
 - **Recording.** Shortwave and RadioDroid both have it and it is genuinely useful, but it
   needs a segmentation heuristic over ICY title changes, an output encoder, a storage
   policy and a legal note. It is its own issue.
@@ -1376,10 +1385,11 @@ sets: the code is the consequence, not the argument.
   is a structural constraint on the whole player, it is *why* `prebuffer` exists, and it is
   already summarised in `src/player/CLAUDE.md` in a form that would want to cite an ADR rather
   than re-argue it.
-- **D13 — HLS stations are carried as unplayable rather than dropped, and the shipped filter hides
-  them anyway.** Both halves or neither: carrying them is what keeps the badge and the toggle
-  possible at all, and the default is still to hide. Stated as the first half alone it reads as a
-  promise the app does not keep, which is how the README came to describe the toggle backwards.
+- ~~**D13 — HLS stations are carried as unplayable rather than dropped, and the shipped filter
+  hides them anyway.**~~ Superseded before it became an ADR, and the way it went is the argument
+  against writing one: the decision rested on a capability claim ("no MPEG-TS demuxer") that was
+  never the real constraint, and an ADR would have carried that claim forward under its own
+  authority. What outlived it is the README warning above, which recurred anyway.
 - **D15 — the feature ships off, and the guard lives at the facade rather than at the UI.**
   Pairs with the shipped product description, which is the actual reason for the default and is
   itself the two-copies failure this feature already paid for once.

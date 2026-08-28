@@ -105,9 +105,9 @@ fn best_match(
     facets
         .iter()
         .filter(|facet| !facet.name.is_empty() && facet.station_count > 0)
-        .filter(|facet| needle.contains(&facet.name))
+        .filter(|facet| facets::matches_needle(Some(chip), facet, needle))
         .filter(|facet| !already_filtered_by(chip, facet, active))
-        .map(|facet| (needle.equals(&facet.name), facet))
+        .map(|facet| (facets::equals_needle(Some(chip), facet, needle), facet))
         .max_by(|a, b| a.0.cmp(&b.0).then(a.1.station_count.cmp(&b.1.station_count)))
         .map(|(exact, facet)| {
             // Through the same pair a picker row carries, so a scope taken from a pill and one
@@ -140,6 +140,7 @@ fn already_filtered_by(chip: ChipFilter, facet: &Facet, active: &StationSearch) 
         }
         ChipFilter::Language => facet.name == active.language,
         ChipFilter::Tag => active.tags.contains(&facet.name),
+        // The name, not the label, `drawn_as` being what puts the raw value in the pill's `code`.
         ChipFilter::Codec => facet.name == active.codec,
         // No list feeds it, so it is never reached from here.
         ChipFilter::BitrateMin => false,

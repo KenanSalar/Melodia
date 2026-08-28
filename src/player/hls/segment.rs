@@ -1,12 +1,15 @@
-//! Getting the audio elementary stream out of a segment, whichever of the two shapes it arrives in.
+//! Getting the audio out of a segment, whichever of the three shapes it arrives in.
 //!
-//! **This is a depacketiser, not a demuxer.** Audio-only MPEG-TS carries one elementary stream
-//! that is already ADTS AAC or MPEG audio, so recovering it is a matter of dropping the transport
-//! and PES framing around it. What comes out the far end is a container Symphonia reads today,
-//! which is why HLS needs no demuxer nobody has written.
+//! **For two of them this is a depacketiser, not a demuxer.** Audio-only MPEG-TS carries one
+//! elementary stream that is already ADTS AAC or MPEG audio, so recovering it is a matter of
+//! dropping the transport and PES framing around it, and packed audio is that stream already,
+//! behind a tag or two. What comes out is a container Symphonia reads today, which is why HLS
+//! needs no demuxer nobody has written. The third, ISO-BMFF, is handed on untouched: a fragment is
+//! already the framing its own demuxer wants.
 //!
-//! Segment boundaries are not smoothed over here and do not need to be: `AdtsReader` scans for its
-//! sync word on every packet, so a splice costs at most the frame it lands in.
+//! Segment boundaries are not smoothed over here and do not need to be. `AdtsReader` scans for its
+//! sync word on every packet, so a splice there costs at most the frame it lands in, and a
+//! fragment splices on a box boundary, which is where the reader behind it looks for the next one.
 
 /// Transport packets are a fixed 188 bytes and each begins with this byte.
 const TS_PACKET_LEN: usize = 188;
@@ -160,12 +163,19 @@ fn psi_section(packet: &[u8]) -> Option<&[u8]> {
 /// dozen bytes and fit with room to spare, and a server that split one falls back to the PES scan.
 fn find_audio_pid(segment: &[u8]) -> Option<u16> {
     let program_pids = program_map_pids(segment);
-    let from_tables = packets(segment)
+    let mut maps = packets(segment)
         .filter(|packet| program_pids.contains(&pid(packet)))
         .filter_map(psi_section)
-        .find_map(audio_pid_from_pmt);
+        .filter(|section| section_body(section, TABLE_ID_PMT).is_some())
+        .peekable();
 
-    from_tables.or_else(|| first_audio_pes_pid(segment))
+    // Keyed on a map having *arrived*, not on one having named something: the scan is for tables
+    // that never came, and letting it override a readable map is how a stream whose only audio is
+    // a type [`AUDIO_STREAM_TYPES`] leaves out reaches a probe that can only fail on it.
+    if maps.peek().is_none() {
+        return first_audio_pes_pid(segment);
+    }
+    maps.find_map(audio_pid_from_pmt)
 }
 
 fn program_map_pids(segment: &[u8]) -> Vec<u16> {
@@ -274,3 +284,7 @@ fn codec_of(stream: &[u8]) -> &'static str {
         _ => "",
     }
 }
+
+#[cfg(test)]
+#[path = "tests/segment_tests.rs"]
+mod tests;

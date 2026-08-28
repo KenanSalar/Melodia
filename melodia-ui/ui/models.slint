@@ -362,6 +362,10 @@ export struct NotificationRow {
 // `tags` arrives display-ready: the directory's raw field is a free-form comma-separated list that
 // runs to a dozen entries, so Rust trims and joins the first few rather than the card chunking a
 // string it cannot split.
+//
+// So is `codec`, and that is where the segmented flag went: it used to cross as an `hls` bool for a
+// warning badge, and segmented stations play, so the one thing left that reads it is the word Rust
+// puts in this field for a station whose own codec the directory could not name.
 export struct RadioStationRow {
     id: int,
     uuid: string,
@@ -380,7 +384,6 @@ export struct RadioStationRow {
     country: string,
     codec: string,
     bitrate: int,          // 0 = the directory doesn't know
-    hls: bool,
     is_favorite: bool,
     // `0` for a browsed station, which has no row to have been played on. Only Recently Played
     // asks for it, so the badge stays off the two tabs that would carry one on every card.

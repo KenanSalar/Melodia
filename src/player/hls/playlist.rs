@@ -15,6 +15,9 @@ use crate::error::AppError;
 const TARGET_DURATION_TAG: &str = "#EXT-X-TARGETDURATION:";
 /// Mandatory in a master playlist. The variant's URI is the next line that is not a tag.
 const STREAM_INF_TAG: &str = "#EXT-X-STREAM-INF:";
+/// A rendition group. The audio one carries its playlist in an attribute rather than on the next
+/// line, which is what makes it reachable without opening a rung of the video ladder beside it.
+const MEDIA_TAG: &str = "#EXT-X-MEDIA:";
 const MEDIA_SEQUENCE_TAG: &str = "#EXT-X-MEDIA-SEQUENCE:";
 const KEY_TAG: &str = "#EXT-X-KEY:";
 const MAP_TAG: &str = "#EXT-X-MAP:";
@@ -28,12 +31,14 @@ const NO_ENCRYPTION: &str = "NONE";
 const MIN_TARGET_SECS: f32 = 1.0;
 const MAX_TARGET_SECS: f32 = 30.0;
 
-/// A rendition named by a master playlist.
+/// A rendition named by a master playlist: a rung of the variant ladder, or the playlist an audio
+/// rendition group points at.
 pub struct Variant {
     pub url: Url,
-    /// Peak bits per second the master claims, `0` where it named none.
+    /// Peak bits per second the master claims, and `0` where it named none, which a rendition
+    /// group never does: it sits on no ladder to place itself on.
     pub bandwidth: u64,
-    /// Whether `CODECS` names a picture track, which for a radio station means a simulcast whose
+    /// Whether this rendition carries a picture, which for a radio station means a simulcast whose
     /// audio would cost a video stream to reach.
     pub has_video: bool,
 }
@@ -69,7 +74,7 @@ pub fn is_hls(body: &str) -> bool {
 
 /// Parse `body`, resolving every URI it names against `base`.
 pub fn parse(body: &str, base: &Url) -> Result<Playlist, AppError> {
-    let variants = parse_variants(body, base);
+    let variants = parse_renditions(body, base);
     if variants.is_empty() {
         parse_media(body, base).map(Playlist::Media)
     } else {
@@ -79,25 +84,44 @@ pub fn parse(body: &str, base: &Url) -> Result<Playlist, AppError> {
 
 /// The rendition to play, which is the richest audio-only one a master offers.
 ///
+/// An audio rendition group is one of those, and on a television simulcast it is the only one: the
+/// ladder there is video the whole way up and the group is where the single audio track is named.
+/// It states no `BANDWIDTH`, so it loses to any audio-only rung that states one, which is the right
+/// way round.
+///
 /// **Where every rendition carries a picture, the pick inverts to the poorest**, and the asymmetry
-/// is the whole point: those masters are television simulcasts whose ladder runs from a few hundred
-/// kbps to several Mbps for one audio track that does not change across the rungs. Taking the
-/// richest would spend megabits a second on a picture nothing here draws.
+/// is the whole point: that ladder runs from a few hundred kbps to several Mbps for one audio track
+/// that does not change across the rungs, so taking the richest would spend megabits a second on a
+/// picture nothing here draws.
 pub fn pick_variant(mut variants: Vec<Variant>) -> Option<Variant> {
     if variants.iter().any(|variant| !variant.has_video) {
         variants.retain(|variant| !variant.has_video);
         return variants.into_iter().max_by_key(|variant| variant.bandwidth);
     }
+    // A rung that stated no `BANDWIDTH` reads as zero, and under a poorest-wins pick zero is what
+    // always wins. The attribute is mandatory, so passing over those is a judgement about a
+    // malformed master rather than a policy about ladders.
+    if variants.iter().any(|variant| variant.bandwidth > 0) {
+        variants.retain(|variant| variant.bandwidth > 0);
+    }
     variants.into_iter().min_by_key(|variant| variant.bandwidth)
 }
 
-fn parse_variants(body: &str, base: &Url) -> Vec<Variant> {
+fn parse_renditions(body: &str, base: &Url) -> Vec<Variant> {
     let mut variants = Vec::new();
     let mut pending: Option<(u64, bool)> = None;
 
     for line in lines(body) {
         if let Some(list) = line.strip_prefix(STREAM_INF_TAG) {
             pending = Some(stream_inf(list));
+        } else if let Some(list) = line.strip_prefix(MEDIA_TAG) {
+            if let Some(url) = audio_rendition(list, base) {
+                variants.push(Variant {
+                    url,
+                    bandwidth: 0,
+                    has_video: false,
+                });
+            }
         } else if !line.starts_with('#')
             && let Some((bandwidth, has_video)) = pending.take()
             && let Ok(url) = base.join(line)
@@ -112,19 +136,42 @@ fn parse_variants(body: &str, base: &Url) -> Vec<Variant> {
     variants
 }
 
-/// The two attributes the variant pick reads: everything else a master carries describes a
-/// picture we are not going to draw.
+/// The attributes the variant pick reads: everything else a master carries describes a picture we
+/// are not going to draw.
+///
+/// Three of them answer the same question because `CODECS` is only a *should*, and a master that
+/// omits it while sizing its rungs in pixels is common enough that reading it alone leaves the
+/// simulcast ladder looking like a row of audio streams.
 fn stream_inf(list: &str) -> (u64, bool) {
     let mut bandwidth = 0;
     let mut has_video = false;
     for (name, value) in attributes(list) {
         match name {
             "BANDWIDTH" => bandwidth = value.parse().unwrap_or(0),
-            "CODECS" => has_video = names_video(value),
+            "CODECS" => has_video |= names_video(value),
+            "RESOLUTION" | "VIDEO" => has_video |= !value.is_empty(),
             _ => {}
         }
     }
     (bandwidth, has_video)
+}
+
+/// The playlist an audio rendition group names, or `None` for every other kind of group and for
+/// audio the master muxes into its rungs rather than carrying apart from them.
+fn audio_rendition(list: &str, base: &Url) -> Option<Url> {
+    let mut is_audio = false;
+    let mut uri = None;
+    for (name, value) in attributes(list) {
+        match name {
+            "TYPE" => is_audio = value.eq_ignore_ascii_case("AUDIO"),
+            "URI" => uri = Some(value),
+            _ => {}
+        }
+    }
+    if !is_audio {
+        return None;
+    }
+    base.join(uri?).ok()
 }
 
 /// Split an attribute list on the commas that are not inside a quoted value, which is the one
@@ -142,7 +189,9 @@ fn attributes(list: &str) -> impl Iterator<Item = (&str, &str)> {
 }
 
 fn names_video(codecs: &str) -> bool {
-    const VIDEO_PREFIXES: [&str; 4] = ["avc1", "avc3", "hvc1", "hev1"];
+    const VIDEO_PREFIXES: [&str; 8] = [
+        "avc1", "avc3", "hvc1", "hev1", "dvh1", "dvhe", "av01", "vp09",
+    ];
     codecs
         .split(',')
         .map(str::trim)
@@ -216,3 +265,7 @@ fn lines(body: &str) -> impl Iterator<Item = &str> {
         .map(str::trim)
         .filter(|line| !line.is_empty())
 }
+
+#[cfg(test)]
+#[path = "tests/playlist_tests.rs"]
+mod tests;

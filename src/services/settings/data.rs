@@ -368,9 +368,10 @@ impl Default for DiscordFlags {
 /// boot — every reader of all three is either on a tokio worker or in the boot
 /// path, where a settings read is disk I/O for one bool.
 ///
-/// Only the master switch is off by default, so this cannot take the derive: the
-/// two sub-toggles configure a feature the user has already turned on, and both
-/// describe what it does rather than whether it runs.
+/// Click reporting is the one field the derive would get wrong, so the `Default`
+/// below is written by hand: it describes what the feature does rather than
+/// whether it runs, and `false` there ships a directory nobody's plays are
+/// counted for.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RadioFlags {

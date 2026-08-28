@@ -24,14 +24,14 @@ export component RadioSection inherits Rectangle {
     property <bool> show-radio: row-visible(
         @tr("Internet radio"),
         @tr("Browse and play live stations from radio-browser.info"));
-    property <bool> show-hls: row-visible(
+    property <bool> show-segmented: row-visible(
         @tr("Hide segmented stations"),
         @tr("Segmented (HLS) streams play, but take longer to start"));
     property <bool> show-clicks: row-visible(
         @tr("Report plays to the directory"),
         @tr("An anonymous count is what orders stations by popularity"));
 
-    out property <bool> has-matches: show-radio || (Settings.radio-enabled && (show-hls || show-clicks));
+    out property <bool> has-matches: show-radio || (Settings.radio-enabled && (show-segmented || show-clicks));
 
     VerticalLayout {
     if has-matches: SectionCard {
@@ -49,7 +49,7 @@ export component RadioSection inherits Rectangle {
 
         // Behind an `if`, never `visible: false` — a hidden child still claims its slot in the
         // card's column (slint#7377), which is the shape the crossfade rows take too.
-        if Settings.radio-enabled && root.show-hls: SettingRow {
+        if Settings.radio-enabled && root.show-segmented: SettingRow {
             icon: "visibility";
             label: @tr("Hide segmented stations");
             description: @tr("Segmented (HLS) streams play, but take longer to start");

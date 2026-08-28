@@ -231,6 +231,15 @@ pub struct StationEdit {
     pub bitrate: i32,
 }
 
+/// What the directory's checker writes into [`DirectoryStation::codec`] when it could not identify
+/// a stream at all.
+///
+/// Here rather than beside either reader because both layers name it and neither may name the
+/// other: `library::radio` drops the facet, `ui::radio` draws what is left of it under a word a
+/// user would recognise, and the two agreeing is what keeps a filter from hiding a bucket the chip
+/// still offers.
+pub const UNKNOWN_CODEC: &str = "UNKNOWN";
+
 /// A station as the directory describes it, before it is anybody's row.
 ///
 /// Separate from [`RadioStation`] rather than a half-filled one because the two
@@ -309,7 +318,7 @@ impl DirectoryStation {
 /// The two travel together because `has_more` cannot be recovered from
 /// `stations` once the page has been filtered: rows are dropped on the way out
 /// of the client ([`DirectoryStation::is_usable`]) and again at the facade (the
-/// HLS setting), so a short page is as often a filtered full one as a genuine
+/// segmented filter), so a short page is as often a filtered full one as a genuine
 /// end. Read off the kept length, paging stops on the first page a filter
 /// thinned.
 #[derive(Clone, Debug, Default, PartialEq)]

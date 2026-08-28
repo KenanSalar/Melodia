@@ -9,7 +9,7 @@
 
 use slint::{Model, SharedString, VecModel};
 
-use crate::entities::radio::{DirectoryStation, Facet, RadioStation};
+use crate::entities::radio::{DirectoryStation, Facet, RadioStation, UNKNOWN_CODEC};
 use crate::{RadioFacetRow, RadioStationGridRow, RadioStationRow};
 
 use super::{facets, identity};
@@ -126,7 +126,6 @@ pub fn to_slint_radio_station_row(
         country: SharedString::from(&station.country),
         codec: SharedString::from(display_codec(&station.codec, station.hls)),
         bitrate: station.bitrate,
-        hls: station.hls,
         is_favorite,
         // Nothing has been played from the directory: a play writes the row first.
         play_count: 0,
@@ -154,7 +153,6 @@ pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
         country: station.country_name().map(SharedString::from).unwrap_or_default(),
         codec: SharedString::from(display_codec(&station.codec, station.hls)),
         bitrate: station.bitrate,
-        hls: station.hls,
         is_favorite: station.is_favorite,
         play_count: station.play_count,
         tile_color_1: tile.color_1,
@@ -195,11 +193,15 @@ pub fn split_tags(raw: &str) -> Vec<String> {
 /// it is segmented; a row does not have to guess, because it carries the `hls` flag the checker's
 /// `UNKNOWN` was missing. So the ~2% of that bucket which is *not* segmented keeps the directory's
 /// own word here, under a chip that reads `HLS`.
+///
+/// A blank codec is the same case reached from the other side: a hand-typed segmented station is
+/// described by the segments themselves, and a fragmented-MP4 one carries no elementary stream
+/// this end can name.
 fn display_codec(codec: &str, hls: bool) -> &str {
     let audio_unidentified = codec
         .split(',')
         .next()
-        .is_some_and(|audio| audio.eq_ignore_ascii_case(facets::UNKNOWN_CODEC));
+        .is_some_and(|audio| audio.is_empty() || audio.eq_ignore_ascii_case(UNKNOWN_CODEC));
     if hls && audio_unidentified {
         facets::SEGMENTED_CODEC_LABEL
     } else {

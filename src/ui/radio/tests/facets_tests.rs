@@ -51,6 +51,7 @@ fn a_country_filters_by_code_and_the_rest_by_name() {
             ..StationSearch::default()
         }
     );
+    // The codeless fallback: a caller with only a label to hand over sends it as the value.
     assert_eq!(
         picked(ChipFilter::Codec, "AAC", ""),
         StationSearch {
@@ -58,6 +59,57 @@ fn a_country_filters_by_code_and_the_rest_by_name() {
             ..StationSearch::default()
         }
     );
+}
+
+/// The pair a live codec row actually carries, which is the one the fallback above is not.
+///
+/// `drawn_as` never hands a codec row an empty `code`, so the arm the shipped path takes is the
+/// other one: revert `apply_pick` to writing the name and every assertion above still passes while
+/// the endpoint is sent a word it has never heard of.
+#[test]
+fn a_codec_pick_sends_the_directorys_own_word_rather_than_the_label() {
+    assert_eq!(
+        picked(ChipFilter::Codec, SEGMENTED_CODEC_LABEL, UNKNOWN_CODEC),
+        StationSearch {
+            codec: UNKNOWN_CODEC.to_owned(),
+            ..StationSearch::default()
+        }
+    );
+}
+
+/// A row has to be findable by the word it draws, and by nothing it does not.
+///
+/// Both filter passes started out matching `facet.name` alone, which for a codec is not what is on
+/// screen: the bucket the directory calls `UNKNOWN` is drawn as `HLS`, so typing the label hid the
+/// row spelling it while `unknown`, a word on screen nowhere, surfaced it.
+#[test]
+fn a_codec_row_is_found_by_the_word_it_draws() {
+    let chip = Some(ChipFilter::Codec);
+    let facet = |name: &str| Facet {
+        name: name.to_owned(),
+        code: None,
+        station_count: 1,
+    };
+    let found =
+        |facet: &Facet, needle: &str| matches_needle(chip, facet, &row_match::fold_needle(needle));
+
+    let rewritten = facet(UNKNOWN_CODEC);
+    for needle in [SEGMENTED_CODEC_LABEL, "hls", "HL", UNKNOWN_CODEC] {
+        assert!(found(&rewritten, needle), "the `HLS` row is dropped for `{needle}`");
+    }
+    assert!(
+        equals_needle(chip, &rewritten, &row_match::fold_needle("hls")),
+        "a needle spelling the whole label is exact, which is what ranks one pill over another"
+    );
+
+    // The directory writes a comma pair with no space and the label spaces it out, so neither
+    // spelling is a substring of the other.
+    assert!(found(&facet("UNKNOWN,H.264"), "hls"), "a comma pair is drawn as `HLS, …` and lost");
+
+    // And only a rewritten label is tested twice: a real format gains no match it did not have.
+    let plain = facet("MP3");
+    assert!(found(&plain, "mp"));
+    assert!(!found(&plain, "hls"), "`MP3` matched a label it never draws");
 }
 
 /// Clearing is the same edit with an empty value, so it has to land on the same field the set did.

@@ -806,7 +806,7 @@ pub async fn search(
     search: &radio::StationSearch,
 ) -> Result<radio::StationPage, AppError> {
     let mut page = radio_browser::search(directory_client(state)?, search).await?;
-    hide_hls(&mut page, state.radio_hide_segmented());
+    hide_segmented(&mut page, state.radio_hide_segmented());
     Ok(page)
 }
 
@@ -816,7 +816,7 @@ pub async fn search(
 /// the page without touching [`radio::StationPage::has_more`], which the client already read off
 /// the raw response: these rows were served and counted, and paging has to step over them rather
 /// than stop at them.
-fn hide_hls(page: &mut radio::StationPage, hide: bool) {
+fn hide_segmented(page: &mut radio::StationPage, hide: bool) {
     if hide {
         page.stations.retain(|station| !station.hls);
     }
@@ -859,10 +859,10 @@ pub async fn facets(
 
 /// Drop the codecs that only ever name a segmented stream, if the user has those hidden.
 ///
-/// [`hide_hls`]'s counterpart on the chip. The directory counts every station its checker saw, so
-/// a Format list built from those counts otherwise offers filters whose entire result the page
-/// thins away: `UNKNOWN` is what the checker writes when it could not read a playlist at all, and
-/// a comma means it found a picture track beside the audio.
+/// [`hide_segmented`]'s counterpart on the chip. The directory counts every station its checker
+/// saw, so a Format list built from those counts otherwise offers filters whose entire result the
+/// page thins away: `UNKNOWN` is what the checker writes when it could not read a playlist at all,
+/// and a comma means it found a picture track beside the audio.
 ///
 /// Filtered here rather than in `radio_browser`, whose cell holds one list per session and must
 /// not bake a setting into it, and the input is handed back untouched for every other kind: the
@@ -883,7 +883,7 @@ fn hide_segmented_codecs(
 /// under it is flagged segmented.
 fn names_segmented(codec: &str) -> bool {
     codec.contains(',')
-        || codec.eq_ignore_ascii_case("UNKNOWN")
+        || codec.eq_ignore_ascii_case(radio::UNKNOWN_CODEC)
         || codec.eq_ignore_ascii_case("MP4")
 }
 

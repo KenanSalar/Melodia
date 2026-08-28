@@ -130,7 +130,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Live track titles read off the stream reach the player bar, the full Now Playing view, your desktop's media controls and Discord presence exactly as a local track's tags do. A **LIVE** badge stands where the progress bar would be, and buffering and reconnection are handled underneath without the station dropping off the deck. The station you were listening to is still there after a restart
 - Station logos are fetched and cached locally; a station with none gets a tile derived from its own name rather than one shared icon
 - Import and export your stations as a plain playlist file, so they survive a database reset and move between machines
-- Stations that stream over **HLS are hidden from results by default**, Melodia having no HLS decoder yet. They are still carried rather than filtered away upstream, so turning off *Hide unplayable stations* lists them with a badge saying as much instead of leaving you to find out at the click
+- **Segmented (HLS) stations play like any other**, whether the station serves transport streams or fragmented MP4: Melodia assembles the segments back into one stream and keeps fetching ahead of the decoder. They take a few seconds longer to start than a direct mount, which is the whole of what *Hide segmented stations* is for; it is off by default, since they play
 
 ### Themes
 Six theme families, each with light and dark variants and configurable accent colors:

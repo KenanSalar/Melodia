@@ -10,9 +10,11 @@
 //! a segment and a decoder is framing, not a format nobody has written. `segment` takes that
 //! framing off; the bytes underneath are ones the stream path already reads.
 //!
-//! Two things a station may still serve that this refuses at the playlist, both rejected with a
-//! reason rather than silently mishandled: encrypted segments, and fragmented MP4, whose demuxer
-//! is not in the stream path's feature set and could not open a bare segment if it were.
+//! Encrypted segments are the one thing a station may serve that this refuses, and it refuses at
+//! the playlist with a reason rather than mishandling them quietly. Fragmented MP4 is not the
+//! second any more: `playlist` reads the `EXT-X-MAP` header out and `reader` splices it in front
+//! of the first segment, which is the whole of what its own demuxer wants and the whole of what a
+//! bare `.m4s` cannot supply.
 
 pub mod playlist;
 mod reader;
