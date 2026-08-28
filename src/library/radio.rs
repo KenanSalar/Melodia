@@ -431,6 +431,27 @@ pub async fn play_station(state: &AppState, id: i64) -> Result<(), AppError> {
     playback::player_play_station(&state.playback_ctx(), &now_playing).await
 }
 
+/// The station a restart should put back on the deck, or nothing.
+///
+/// Guarded like a play rather than like a getter: what comes back goes on a Now-Playing surface
+/// with a button that opens a socket, which is what D15's switch is about.
+///
+/// Silent on every miss — radio switched off since, or a row removed from both tabs and swept.
+/// Nothing has been asked for at this point in the boot, so there is nothing to report to
+/// somebody who may not have been thinking about the station at all.
+pub async fn station_to_restore(state: &AppState, id: i64) -> Option<Arc<RadioNowPlaying>> {
+    if !state.radio_enabled() {
+        return None;
+    }
+    match get_station(state, id).await {
+        Ok(station) => Some(Arc::new(RadioNowPlaying::from(&station))),
+        Err(e) => {
+            log::debug!("radio: not restoring station {id}: {}", crate::services::describe(&e));
+            None
+        }
+    }
+}
+
 /// Write a browsed station into the table, which is what makes it the user's.
 ///
 /// Directory results are otherwise never persisted (D3), so this is the crossing, and both of

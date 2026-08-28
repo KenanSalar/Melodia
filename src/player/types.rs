@@ -120,6 +120,24 @@ pub struct PersistableQueue {
     pub current_index: i32,
 }
 
+/// What `queue.json` holds: the queue, and the station tuned over it.
+///
+/// The two are not alternatives. A station leaves the queue untouched underneath it (D9), so a
+/// restart puts back both and a stop hands the library back exactly as one mid-session does.
+///
+/// **Flattened, so the file keeps the shape it has already shipped** — a `queue.json` written
+/// before the station rode along still parses, and restores no station.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PersistedPlayback {
+    #[serde(flatten)]
+    pub queue: PersistableQueue,
+    /// The station on the deck, by row id, which is what the restore looks back up. `None` for a
+    /// track, and for a station with no row of its own — [`RadioNowPlaying::station_id`] is `0`
+    /// there, and nothing could be fetched with it.
+    #[serde(default)]
+    pub station_id: Option<i64>,
+}
+
 #[cfg(test)]
 #[path = "tests/types_tests.rs"]
 mod tests;

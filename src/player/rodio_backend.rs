@@ -9,7 +9,6 @@ use parking_lot::Mutex;
 use rodio::mixer::Mixer;
 use rodio::{Decoder, Player, Source};
 
-use crate::config::Paths;
 use crate::error::AppError;
 
 use super::crossfade::{self, CrossfadeShared};
@@ -18,7 +17,6 @@ use super::equalizer::{self, EqShared, EqSource};
 use super::prebuffer::StreamShared;
 use super::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 use super::stream_source::PreparedStream;
-use super::types::PersistableQueue;
 use super::visualizer::{VisualizerShared, VisualizerTap};
 
 /// Audio playback operations, so tests can stand a mock in for `RodioPlayer`.
@@ -930,15 +928,6 @@ fn decode_file(path: &str) -> Result<Decoder<BufReader<File>>, AppError> {
     }
 
     builder.build().map_err(|e| AppError::Player(format!("Decode error for {path}: {e}")))
-}
-
-/// Load the persisted queue synchronously, for boot.
-pub fn load_queue_from_disk_sync(paths: &Paths) -> Option<PersistableQueue> {
-    if !paths.queue_path.exists() {
-        return None;
-    }
-    let json = std::fs::read_to_string(&paths.queue_path).ok()?;
-    serde_json::from_str(&json).ok()
 }
 
 #[cfg(test)]

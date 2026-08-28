@@ -11,7 +11,9 @@ use super::queue::QueueState;
 use super::replaygain::TrackReplayGain;
 use crate::entities::track::TrackSummary;
 
-use super::types::{PersistableQueue, PlaybackStatus, RadioNowPlaying, RepeatMode};
+use super::types::{
+    PersistableQueue, PersistedPlayback, PlaybackStatus, RadioNowPlaying, RepeatMode,
+};
 
 /// Restart-from-beginning threshold for Previous command (ms).
 pub const RESTART_THRESHOLD_MS: u64 = 3000;
@@ -381,6 +383,18 @@ impl PlayerState {
             repeat_mode: self.queue.repeat_mode,
             has_next: self.has_next(),
             has_previous: self.has_previous(),
+        }
+    }
+
+    /// The snapshot `queue.json` holds, for the two save sites to write.
+    ///
+    /// Takes the whole state rather than the queue alone because a station rides beside the
+    /// queue rather than in it, and both come back together at boot.
+    pub fn to_persisted(&self) -> PersistedPlayback {
+        PersistedPlayback {
+            queue: self.queue.to_persistable(),
+            // A station with no row cannot be looked back up, so there is nothing to write down.
+            station_id: self.radio.as_ref().map(|r| r.station_id).filter(|id| *id != 0),
         }
     }
 
@@ -958,7 +972,7 @@ pub fn sync_track_summaries<S: std::hash::BuildHasher>(
 }
 
 /// Restore queue from persisted data. Called at startup via
-/// `library::queue::restore_persisted_queue`.
+/// `library::queue::restore_persisted_playback`.
 ///
 /// `shuffle_enabled` and `repeat_mode` are user preferences and live in
 /// `settings.json`, not `queue.json` — the caller is responsible for
@@ -980,6 +994,22 @@ pub fn restore_queue(
         state.position_ms = u64::try_from(track.last_position.max(0)).unwrap_or(0);
         state.current_track = Some(track);
     }
+}
+
+/// Put the station the last session was tuned to back on the deck, over the queue
+/// [`restore_queue`] has already restored. Called from the same startup path.
+///
+/// `Paused` because that is already the one status holding a station with no connection —
+/// pausing one drops its socket, so a restart is the same shape, and
+/// `library::playback::player_play` re-opens from it. The track fields go back to what
+/// [`PlayerState::build_station_connecting_actions`] leaves them, the two sources being mutually
+/// exclusive everywhere that reads them.
+pub fn restore_station(state: &mut PlayerState, station: Arc<RadioNowPlaying>) {
+    state.radio = Some(station);
+    state.status = PlaybackStatus::Paused;
+    state.current_track = None;
+    state.duration_ms = 0;
+    state.position_ms = 0;
 }
 
 /// Widen a u64 millisecond position to f64 for ratio math. Audio durations

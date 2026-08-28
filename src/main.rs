@@ -177,7 +177,7 @@ fn main() -> AppResult<()> {
 
     let spawner = tasks::TaskSpawner::from_state(&state);
     boot::tasks::spawn_background_tasks(&spawner, &state, channels);
-    boot::tasks::restore_persisted_queue(&runtime, &state);
+    boot::tasks::restore_persisted_playback(&runtime, &state);
 
     // Read `settings.json` and `views.json` once and reuse them everywhere.
     let startup_settings: Option<services::settings::SettingsData> =

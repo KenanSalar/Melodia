@@ -422,8 +422,8 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             }
 
             // Periodic save (every 60 playing ticks ~= 30s). Snapshots the
-            // current track id + position and the queue, then awaits the DB
-            // and FS writes inline — the monitor task itself is tracked by
+            // current track id + position and what `queue.json` holds, then
+            // awaits the DB and FS writes inline — the monitor task itself is tracked by
             // `tracker`, so an in-flight save completes before shutdown wins
             // on the next select.
             save_tick_counter = (save_tick_counter + 1) % 60;
@@ -431,7 +431,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 let (track_data, persistable) = {
                     let state = lock_state(&player_state);
                     let td = state.current_track.as_ref().map(|t| (t.id, state.position_ms));
-                    (td, state.queue.to_persistable())
+                    (td, state.to_persisted())
                 };
                 if let Some((track_id, position_ms)) = track_data
                     && let Err(e) = queries::track::update_last_position(

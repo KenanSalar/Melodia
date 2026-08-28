@@ -39,7 +39,7 @@ pub fn set_play_button_animation(state: &AppState, mode: String) -> Result<(), A
 
 /// Persist the user toggle for "Resume on Startup". No runtime side
 /// effect at toggle time — the flag is consulted once, at the next
-/// `main.rs` startup after `restore_persisted_queue`, so a single-phase
+/// `main.rs` startup after `restore_persisted_playback`, so a single-phase
 /// disk write is all that's needed. The on-disk default is `false`
 /// (`PlaybackFlags::default()` in `src/services/settings/data.rs`), so
 /// first-launch users land with auto-resume off.

@@ -380,13 +380,15 @@ The things that are silent when missed. Each is checked off in the phase that ow
 - [x] Counts hold `UNFETCHED_COUNT` until fetched, and the section leave puts them back.
       Amended in Phase 6 and argued there: the leave keeps the loaded page and hands back
       only the logo tier, so there is nothing cleared for a rewind to describe.
-- [ ] The band's `hero-t` is **written** from `changed detail-open` and only seeded by its
+- [x] The band's `hero-t` is **written** from `changed detail-open` and only seeded by its
       binding, so a page entered with a detail already open lands at hero height.
-- [ ] The hero's facts outlive the detail id: teardown rides `hero-collapsed()`, not the
+- [x] The hero's facts outlive the detail id: teardown rides `hero-collapsed()`, not the
       id going away, or the band paints an empty hero through the whole collapse.
-- [ ] A drill-in lands its navigation inside `open_*_with`'s `on_applied` hook, never up
+- [x] A drill-in lands its navigation inside `open_*_with`'s `on_applied` hook, never up
       front, so the id and the navigation arrive in the same tick.
-- [ ] `last_detail_ids` is written only for a station with a row (D6).
+- [x] `last_detail_ids` is written only for a station with a row (D6). `persist_seat` asks
+      `station.is_kept()`, and the deck's own restore takes the same shape one phase later:
+      `queue.json` keeps a station id only where there is a row to look it back up in.
 - [x] The disabled guard is in `library::radio`, not only in the UI, and a grep for the
       Radio Browser client outside that facade returns nothing (D15). A build failure
       rather than a review item since Phase 6:
@@ -1151,10 +1153,16 @@ instead, and a 32 px favicon produces the inset card rather than a blurry tile.
 
 ---
 
-## Phase 9: Now Playing and the OS
+## Phase 9: Now Playing and the OS ✅ landed
 
 **Goal.** A playing station looks and behaves like a first-class source everywhere the app
 already shows one.
+
+Shipped: `player::now_playing::SourceSummary`, the one ladder MPRIS, the tray, the Discord
+card and the Slint bridge all read, with `Player.source-{title,subtitle,tertiary}` as its
+deliberate second spelling for the catalogues; the LIVE pill in the seek bar's slot;
+`ui::radio::history` behind both the Now Playing view and the station page; and the restart
+restore below.
 
 1. Now Playing bar and full view: station logo, station name, the live title from ICY, a
    LIVE badge in place of the progress bar, elapsed listening time, and the buffering
@@ -1176,11 +1184,23 @@ already shows one.
    since the ICY watch channel already carries every change, and it is the one feature the
    radio-first apps have that a library player can add for almost nothing. Capped, and
    dropped on station change.
+7. **The tuned station survives a restart**, which the section did not first draft and
+   which is the last thing a track had and a station did not. `queue.json` holds the
+   station's row id *beside* the queue rather than in it, so D9 still holds: both come back,
+   and a stop hands the library back where it was. The id is rehydrated through the row, so a
+   rename or a repaired logo comes back current and a station removed from both tabs does not
+   come back at all. It seats as `Paused`, already the one status holding a station with no
+   connection, so the play button re-opens it through the Phase 3 path and the pill reads
+   `Paused` with no new arm. Radio switched off skips the restore, the guard living in
+   `library::radio` with the rest of D15's.
 
-**Gates.** Same three.
+**Gates run:** fmt, `clippy -p Melodia --all-targets --locked -- -D warnings` (Rust only;
+no `.slint` moved, every surface already keying off `has_station`) and full `cargo test`
+(2032 lib + 4 binary + 13 integration, green).
 
-**Done when.** The tray, the media keys and the OS media popup all show the live title,
-and nothing in the transport lies about what it can do.
+**Done when.** ✅ The tray, the media keys and the OS media popup all show the live title,
+nothing in the transport lies about what it can do, and the station you were listening to is
+still in the bar after a restart.
 
 ---
 

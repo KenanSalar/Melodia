@@ -304,7 +304,7 @@ pub fn install_library_settings_and_friends(
 }
 
 /// Push the current `PlayerState` into `Player.vm` / `Player.queue` so the
-/// now-playing bar shows the persisted last-played track on launch.
+/// now-playing bar shows the persisted last-played source on launch.
 pub fn seed_initial_view_model(
     app: &AppWindow,
     state: &AppState,
@@ -340,15 +340,21 @@ pub fn seed_initial_view_model(
 
     // The row tier is empty this early, so the seed above is guaranteed to be the cache-only
     // lookup's miss — and no `view_model` push is owed on a restored-but-paused session, so
-    // nothing else would ever fill it.
-    // Track only: nothing persists a tuned station across a restart, so the radio half of the
-    // seeded view model is always empty here.
+    // nothing else would ever fill it. Both slots unconditionally: the restore seats a track or a
+    // station and never both, and an empty path is a no-op inside.
     ui::shell::bridge::warm_vm_cover(
         app.as_weak(),
         &state.runtime,
         cover_thumbs,
         light.current_track.as_ref().and_then(|t| t.artwork_path.clone()).unwrap_or_default(),
         ui::shell::bridge::VmCoverSlot::Track,
+    );
+    ui::shell::bridge::warm_vm_cover(
+        app.as_weak(),
+        &state.runtime,
+        cover_thumbs,
+        light.radio.as_ref().and_then(|r| r.artwork_path.clone()).unwrap_or_default(),
+        ui::shell::bridge::VmCoverSlot::Station,
     );
 }
 
