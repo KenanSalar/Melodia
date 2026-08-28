@@ -262,7 +262,7 @@ fn a_multi_coloured_cover_keeps_its_colours_apart() {
         let nearest = painted
             .iter()
             .map(|tint| hue_gap(hct_of(tint.rgb).get_hue(), hct_of(seed).get_hue()))
-            .fold(f64::INFINITY, f64::min);
+            .fold(f64::MAX, f64::min);
         assert!(nearest < 10.0, "seed {seed:#08x} has no wash within {nearest}° of it");
     }
 

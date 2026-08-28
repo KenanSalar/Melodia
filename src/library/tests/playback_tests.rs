@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use super::resolve_start_slot;
+use super::{needs_station_reopen, resolve_start_slot};
 use crate::entities::track::TrackSummary;
 use crate::player::state::{
     MAX_VOLUME, PlayerAction, PlayerState, RESTART_THRESHOLD_MS, play_track_inner,
     resume_from_stopped,
 };
-use crate::player::types::{PlaybackStatus, RepeatMode};
+use crate::player::types::{PlaybackStatus, RadioNowPlaying, RepeatMode};
 
 fn make_summary(id: i64, duration_ms: i64) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {
@@ -500,4 +500,57 @@ fn toggle_from_stopped_without_track_is_noop() {
     let actions = toggle(&mut state);
     assert_eq!(state.status, PlaybackStatus::Stopped);
     assert!(actions.is_empty());
+}
+
+// --- radio transport routing -----------------------------------------------
+
+fn station() -> std::sync::Arc<RadioNowPlaying> {
+    crate::player::tests::helpers::test_station("Example FM")
+}
+
+fn tuned_in() -> PlayerState {
+    let mut state = state_with_queue(2);
+    let (generation, _actions) = state.build_station_connecting_actions(station());
+    let _started = state.build_station_connected_actions(generation);
+    state
+}
+
+/// Pausing a station drops its connection, so the play half of a toggle is a fresh open rather
+/// than a `Resume` — a network round trip the state machine cannot do under its lock. This
+/// predicate is what routes it, shared with `player_play` so the two can't disagree.
+#[test]
+fn only_a_paused_station_routes_to_a_reopen() {
+    assert!(needs_station_reopen(PlaybackStatus::Paused, true));
+    assert!(!needs_station_reopen(PlaybackStatus::Playing, true), "already connected");
+    assert!(!needs_station_reopen(PlaybackStatus::Loading, true), "already connecting");
+    assert!(!needs_station_reopen(PlaybackStatus::Stopped, true), "a stop forgets the station");
+    assert!(!needs_station_reopen(PlaybackStatus::Paused, false), "a paused track just resumes");
+}
+
+#[test]
+fn toggling_a_playing_station_pauses_it_by_dropping_the_connection() {
+    let mut state = tuned_in();
+    assert!(!needs_station_reopen(state.status, state.radio.is_some()));
+
+    let actions = toggle(&mut state);
+
+    assert_eq!(state.status, PlaybackStatus::Paused);
+    assert!(matches!(actions.as_slice(), [PlayerAction::Stop { fade_ms: 250 }]));
+    assert!(state.radio.is_some(), "the station stays on screen");
+    assert!(needs_station_reopen(state.status, state.radio.is_some()), "and play re-opens it");
+}
+
+/// A connect that is still in flight is cancelled rather than resumed: the session generation moves,
+/// so the stream it opens is refused when it arrives.
+#[test]
+fn toggling_a_connecting_station_cancels_the_connect() {
+    let mut state = state_with_queue(2);
+    let (generation, _actions) = state.build_station_connecting_actions(station());
+    assert_eq!(state.status, PlaybackStatus::Loading);
+
+    let actions = toggle(&mut state);
+
+    assert_eq!(state.status, PlaybackStatus::Paused);
+    assert!(matches!(actions.as_slice(), [PlayerAction::Stop { .. }]));
+    assert_eq!(state.build_station_connected_actions(generation), vec![]);
 }

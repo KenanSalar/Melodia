@@ -31,6 +31,7 @@ use slint::{Model, ModelRc, VecModel};
 use crate::state::AppState;
 use crate::ui::playlists::PlaylistsUi;
 use crate::ui::shell::notifications::NotificationsUi;
+use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Dialog};
 
 /// Wire the `Playlists.*` import/export callbacks. Call once after both the
@@ -120,7 +121,7 @@ fn refresh_add_selection_meta(dlg: &Dialog) {
             selected += 1;
         }
     }
-    dlg.set_add_selected_count(clamp_usize(selected));
+    dlg.set_add_selected_count(len_as_i32(selected));
     dlg.set_add_select_all(enabled > 0 && selected == enabled);
 }
 
@@ -130,14 +131,6 @@ fn refresh_export_selection_meta(dlg: &Dialog) {
     let model = dlg.get_export_pick_rows();
     let total = model.row_count();
     let selected = model.iter().filter(|r| r.selected).count();
-    dlg.set_export_selected_count(clamp_usize(selected));
+    dlg.set_export_selected_count(len_as_i32(selected));
     dlg.set_export_select_all(total > 0 && selected == total);
-}
-
-fn clamp_u32(n: u32) -> i32 {
-    i32::try_from(n).unwrap_or(i32::MAX)
-}
-
-fn clamp_usize(n: usize) -> i32 {
-    i32::try_from(n).unwrap_or(i32::MAX)
 }

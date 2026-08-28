@@ -1,0 +1,123 @@
+import { Theme } from "../../theme.slint";
+import { RadioStationGridRow } from "../../models.slint";
+import { Radio } from "../../globals/radio.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { StationGrid } from "station-grid.slint";
+
+// Both local tabs: the stations the user kept, and the ones they played. One component for the
+// same reason `ui::radio::kept` is one module — they are one list at two filters, and what differs
+// is the model, the count and the copy on the empty state. The remove dialog in particular is what
+// a second file loses: eight lines of `Dialog` fields nothing would report having drifted.
+//
+// **The scroller is here, not on the page**, as on Browse and for the same reason.
+export component KeptStationsTab inherits Rectangle {
+    in property <length> card-w;
+    in property <length> card-h;
+    in property <length> row-h;
+    in property <length> gap;
+
+    in property <[RadioStationGridRow]> rows;
+    // Pre-filter, which is what separates the two states below: nothing kept at all against a box
+    // that matched none of what is. `-1` until the fetch lands, and an empty state over a list
+    // nobody has asked for yet claims something untrue for the length of the query.
+    in property <int> count: -1;
+
+    // The tab's own half of the empty state. The no-matches state below is shared, the box being
+    // a filter on either tab.
+    in property <string> empty-icon;
+    in property <string> empty-title;
+    in property <string> empty-body;
+
+    property <bool> is-empty: root.count == 0;
+    property <bool> no-matches: root.count > 0 && root.rows.length == 0;
+
+    // Which of the two this mount is. Off the live tab rather than a property the page passes,
+    // since only one of the two is ever mounted and the page already spells the same test to
+    // mount it.
+    property <bool> is-recent: Radio.tab-idx == Radio.tab-recent;
+
+    VerticalLayout {
+        padding-top: Theme.pad-md;
+
+        body := Rectangle {
+            vertical-stretch: 1;
+
+            grid := StationGrid {
+                width: 100%;
+                height: 100%;
+                rows: root.rows;
+                card-width: root.card-w;
+                card-height: root.card-h;
+                row-height: root.row-h;
+                gap: root.gap;
+                manageable: true;
+                // Recently Played mixes starred and unstarred stations, so the mark still says
+                // something there; on Favorites it would be on every card.
+                star-marks-kept: root.is-recent;
+                // Same split: every Favorites card would carry a badge, where here it ranks a list
+                // the user built by listening.
+                show-play-count: root.is-recent;
+                covers-generation: Radio.covers-generation;
+                logo-decode-size: Radio.logo-decode-size;
+                request-logo(p, g) => { Radio.request-logo(p, g) }
+                station-clicked(s) => { Radio.open-station(s); }
+                play-clicked(s) => { Radio.play-station(s); }
+                favorite-clicked(s) => { Radio.toggle-favorite(s); }
+                homepage-clicked(s) => { Radio.open-homepage(s.homepage); }
+                edit-clicked(s) => { Radio.edit-station(s); }
+                // Chrome inline so `@tr` applies and so the message can name the station. The
+                // kind is what carries the tab to the dispatcher, so removal means the list the
+                // card was actually on rather than whichever is mounted when the confirm lands.
+                //
+                // **The copy names the list, except where the list is the whole of what the row
+                // is.** A hand-typed station has no uuid, so no page can name it and the card
+                // offers it no star; leaving Favorites is leaving everything, history included,
+                // and `is_listed` deletes it. That is the one deletion the card can see the
+                // condition for, and understating it is a destructive action with no undo.
+                remove-clicked(s) => {
+                    Dialog.title = root.is-recent
+                        ? @tr("Remove from Recently Played?")
+                        : @tr("Remove from favorites?");
+                    Dialog.message = root.is-recent
+                        ? @tr("\"{}\" will be removed from Recently Played.", s.name)
+                        : s.uuid == ""
+                            ? @tr("\"{}\" will be removed from your stations, along with its play history.", s.name)
+                            : @tr("\"{}\" will be removed from your favorites.", s.name);
+                    Dialog.confirm-label = @tr("Remove");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = true;
+                    Dialog.kind = root.is-recent ? "remove-from-recent" : "remove-from-favorites";
+                    Dialog.target-id = s.id;
+                    Dialog.open = true;
+                }
+            }
+
+            if root.is-empty: GridEmptyState {
+                icon: root.empty-icon;
+                title: root.empty-title;
+                body: root.empty-body;
+            }
+
+            // Browse's own pair, reused verbatim: the box is a filter, so "clear a filter" is
+            // exactly the way out of this state here too.
+            if root.no-matches: GridEmptyState {
+                icon: "search_off";
+                title: @tr("No stations matched");
+                body: @tr("Try a different name, or clear a filter.");
+            }
+
+            OverlayScrollbar {
+                horizontal: false;
+                x: parent.width - self.width;
+                width: 10px;
+                height: 100%;
+                visible-size: grid.v-visible-height;
+                content-size: grid.v-viewport-height;
+                offset: grid.v-offset;
+                scroll-to(o) => { grid.set-v-offset(o); }
+            }
+        }
+    }
+}

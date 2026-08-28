@@ -7,7 +7,7 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, VecModel};
 
-use super::track_change::apply_track_change;
+use super::source_change::apply_source_change;
 use super::{NowPlayingState, UP_NEXT_N, current_track_id};
 use crate::player::state::QueueViewModel;
 use crate::state::AppState;
@@ -148,19 +148,19 @@ pub(super) fn wire_now_playing_open(
 
         seed_from_stash(&ui, &up_next_model, &np_state);
 
-        // Artwork and chips, but only when the track differs from what is already in
+        // Artwork and chips, but only when the source differs from what is already in
         // the `Player` global — a close and re-open with no change between needs no
         // decode. `animate = false`: the cover should already be there when the view
         // appears, not cross-fade in.
-        let current_track = np_state.current_track.borrow().clone();
-        let current_id = current_track.as_ref().map(|t| t.id);
-        if current_id != np_state.applied_track_id.get() {
+        let current_source = np_state.current_source.borrow().clone();
+        let current_key = current_source.as_ref().map(|s| s.key.clone());
+        if current_key != *np_state.applied_source.borrow() {
             let weak = weak.clone();
             let state = state.clone();
             let np_artwork = np_artwork.clone();
             let np_state = np_state.clone();
             let res = slint::spawn_local(Compat::new(async move {
-                apply_track_change(&weak, &state, &np_artwork, &np_state, current_track, false)
+                apply_source_change(&weak, &state, &np_artwork, &np_state, current_source, false)
                     .await;
             }));
             if let Err(e) = res {

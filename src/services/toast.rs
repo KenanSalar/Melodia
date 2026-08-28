@@ -20,8 +20,8 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 /// importing UI types and the consumer maps each kind to a translated string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToastKind {
-    /// A track failed to decode or open. The music stopping is otherwise invisible, so
-    /// this is always surfaced.
+    /// A track failed to decode or open, or a radio station could not be reached or stopped
+    /// broadcasting. The music stopping is otherwise invisible, so this is always surfaced.
     PlaybackFailed,
     /// A user-initiated backend operation failed — folder scan, file import, settings
     /// save.
@@ -29,6 +29,11 @@ pub enum ToastKind {
     /// A user-initiated `MusicBrainz` auto-tag sweep finished. Informational (how many
     /// tracks were tagged) rather than a failure, so it auto-dismisses.
     MbidTagging,
+    /// A vote for a radio station did not reach the directory, most often because it was
+    /// cast again inside the ten minutes the server deduplicates over. Surfaced rather
+    /// than logged because a vote happens only when somebody presses a button that says
+    /// so, and a control that quietly does nothing is worse than one that says why.
+    RadioVote,
     /// The retroactive loved-tracks backfill queued existing favorites after a love
     /// toggle or a connect. Informational, auto-dismissing.
     LoveSync,

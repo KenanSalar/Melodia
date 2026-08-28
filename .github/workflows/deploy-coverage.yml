@@ -9,9 +9,9 @@ name: Deploy Coverage
 # `workflow_dispatch` takes a ref, so the Run workflow dropdown picks what gets
 # measured and runs THAT branch's copy of this file. Two constraints on it: the
 # button exists only because this workflow is on the default branch, and `deploy`
-# is gated by the `github-pages` environment, whose branch policy allows `dev`
-# and `main` only. Anywhere else builds and uploads, then fails at the publish —
-# widen the policy rather than expecting a third branch to deploy.
+# is gated by the `github-pages` environment, whose branch policy allows `main`
+# only. Anywhere else builds and uploads, then fails at the publish — widen the
+# policy rather than expecting a second branch to deploy.
 on:
   workflow_dispatch:
 

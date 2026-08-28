@@ -6,6 +6,48 @@ export global Player {
     in-out property <PlayerVm> vm;
     in-out property <QueueVm> queue;
 
+    // The two label lines every Now-Playing surface draws, derived once here rather than as a
+    // ternary at each of the four (bar, full view, and both miniplayer variants). The ladder is
+    // the same one `player::now_playing::SourceSummary` hands the OS surfaces, and it has to be
+    // spelled again in Slint because only `@tr` at a literal reaches the catalogues.
+    //
+    // **The song leads and the station follows**, so the station is on screen either way: as the
+    // subtitle once something is announced, and as the title until then. In that second case the
+    // subtitle falls through to the station's genres rather than standing empty — the line is
+    // there whatever happens, so it may as well say something, and a genre under a station name
+    // reads the way an artist under a title does.
+    //
+    // The LRM forces an LTR base direction so `elide` renders its `…` at the right edge for RTL
+    // scripts too; see the title-cell note in `track-list-row.slint`.
+    out property <string> source-title: root.vm.has_station
+        ? "‎" + (root.vm.radio.live_title == "" ? root.vm.radio.name : root.vm.radio.live_title)
+        : (root.vm.has_track ? "‎" + root.vm.track.title : @tr("No track playing"));
+
+    out property <string> source-subtitle: root.vm.has_station
+        ? "‎" + (root.vm.radio.live_title == "" ? root.vm.radio.tags : root.vm.radio.name)
+        : (root.vm.has_track
+            ? "‎" + (root.vm.track.artist == "" ? @tr("Unknown artist") : root.vm.track.artist)
+            : "—");
+
+    // The third line: an album for a track, the station's country for a stream. **Empty rather
+    // than LRM-prefixed when there is nothing**, so a host can gate its `Text` on `!= ""` without
+    // a second property to ask.
+    out property <string> source-tertiary: root.vm.has_station
+        ? (root.vm.radio.country == "" ? "" : "‎" + root.vm.radio.country)
+        : (root.vm.has_track && root.vm.track.album != "" ? "‎" + root.vm.track.album : "");
+
+    // What the station pill says, in the slot a track's seek bar occupies. Four states, one
+    // pill: `loading` is the initial connect *and* the re-open a play on a paused station is,
+    // which is what keeps that from reading as a resume; `paused` has no connection left to be
+    // live over, `build_pause_actions` dropping it rather than holding a socket the server would
+    // back-pressure; `buffering` is a starved ring beside a still-`playing` status, so a dip
+    // never looks like a stop.
+    out property <string> live-label: root.vm.status == "loading"
+        ? @tr("Connecting…")
+        : (root.vm.status == "paused"
+            ? @tr("Paused")
+            : (root.vm.radio.buffering ? @tr("Buffering…") : @tr("LIVE")));
+
     // Standalone rather than fields of `vm`, so the 500 ms monitor publish only invalidates
     // the bindings that read them — see `PlayerVm` in `models.slint`.
     in-out property <int> position-ms;
@@ -32,6 +74,16 @@ export global Player {
     in-out property <image> np-cover-b;
     in-out property <bool> np-cover-use-a: true;
     in-out property <bool> np-cover-has-image: false;
+
+    // The full view's station logo, at the same tier as the pair above but deliberately not in
+    // it: that pair is the *track's* cross-fade, and a station change is a deliberate act with
+    // nothing to cross-fade between. Empty (`width == 0`) with no logo, which is what puts the
+    // tile on its monogram.
+    in-out property <image> np-station-logo;
+    // The decoded logo's own smallest side, `Radio.detail-logo-size`'s twin. A station logo is
+    // routinely a favicon, so the tile needs it to know whether to draw an inset card instead of
+    // magnifying a 32 px source across 384.
+    in-out property <int> np-station-logo-size: 0;
 
     // Replaced wholesale by the subscriber; `track_id` is what lets the view drop a stale push
     // landing after a rapid track change.

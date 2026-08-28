@@ -54,9 +54,12 @@ export component UpdateSection inherits Rectangle {
     property <bool> show-package-managed: MelodiaUpdater.system-managed
         && row-visible(@tr("Updates managed by your package manager"), pkg-manager-hint);
 
-    out property <bool> has-matches:
-        show-software || show-up-to-date || show-restart
-        || show-update-available || show-error || show-package-managed;
+    // Gated as a whole rather than per row: an unsupported build has no state worth a card, and
+    // routing it through `has-matches` is also what keeps a search for "update" from landing on
+    // an empty one.
+    out property <bool> has-matches: MelodiaUpdater.updates-supported
+        && (show-software || show-up-to-date || show-restart
+            || show-update-available || show-error || show-package-managed);
 
     // Wrapper so the root's preferred-height tracks the card's natural height —
     // see `language-section.slint`.

@@ -10,6 +10,8 @@ pub mod dwm_titlebar;
 pub mod logging;
 pub mod material_you;
 pub mod media_controls;
+pub mod radio_blocklist;
+pub mod radio_browser;
 pub mod scrobble;
 pub mod search_history;
 pub mod settings;
@@ -153,6 +155,28 @@ fn undeleted_exe(exe: PathBuf, exists: impl Fn(&Path) -> bool) -> PathBuf {
         return exe;
     }
     base
+}
+
+/// Whether the running binary came out of the source tree rather than an install.
+///
+/// A `cfg!(debug_assertions)` alone would miss `cargo build --release`, which is a real way to run
+/// this tree and produces a binary indistinguishable from a shipped one except for where it sits —
+/// hence the second, path-shaped answer.
+///
+/// The raw `std::env::current_exe()` is deliberate where [`current_exe`] is otherwise the rule: the
+/// `" (deleted)"` marker lands on the file name, which nothing below looks at.
+#[must_use]
+pub fn is_dev_build() -> bool {
+    if cfg!(debug_assertions) {
+        return true;
+    }
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    // .../target/<profile>/<binary>  →  parent = <profile>, grandparent = target
+    exe.parent()
+        .and_then(Path::parent)
+        .is_some_and(|p| p.file_name().is_some_and(|n| n == "target"))
 }
 
 /// Replace the user's home directory with `~` throughout `text`.

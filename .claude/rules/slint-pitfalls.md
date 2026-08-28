@@ -365,7 +365,9 @@ this file is what builds, looks right, and is wrong.
 
 - **Flash-free image cross-fade = two slots, never cleared.** Two stacked `Image`s + `use-a` bool;
   Rust writes the new image into the *inactive* slot then flips the bool so both `opacity`
-  animate. Slot `source` is never reset — the outgoing layer stays painted for the fade.
+  animate. Slot `source` is never reset — the outgoing layer stays painted for the fade. Clearing
+  a pair is only ever right where nothing fades *into* the new source and no mounted element reads
+  it; `ui::now_playing::source_change` is the one such site, and argues it there.
 
 - **A rounded `clip: true` (or a `border`) on an element that *contains text/children* blurs +
   upscales that subtree on HiDPI.** FemtoVG renders it into an offscreen texture at logical size,

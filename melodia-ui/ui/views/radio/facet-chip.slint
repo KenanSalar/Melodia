@@ -1,0 +1,235 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { RadioFacetRow } from "../../models.slint";
+import { FocusLossWatcher } from "../../components/focus-loss-watcher.slint";
+import { MaterialIcon } from "../../components/material-icon.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { PopupSurface } from "../../components/popup-surface.slint";
+import { SearchBar } from "../../components/search-bar.slint";
+
+// One option row in the picker. Unexported — useful nowhere else.
+component FacetOption inherits Rectangle {
+    in property <string> label;
+    in property <int> count;
+    in property <bool> active;
+
+    callback clicked();
+
+    height: 34px;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover ? Theme.surface1 : transparent;
+    animate background { duration: 100ms; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        // The row's own inset plus the scrollbar's lane: flush against the bar, the count's last
+        // pixels sit under a `TouchArea` that eats the click landing on them.
+        padding-right: Theme.pad-sm + Theme.scrollbar-slot;
+        spacing: Theme.pad-sm;
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: "‎" + root.label;
+                color: root.active ? Theme.accent : Theme.text;
+                font-size: Theme.font-size-md;
+                overflow: elide;
+            }
+        }
+        // The bitrate floors are ours rather than the directory's, so they arrive with no count at
+        // all. Suppressed here rather than at that mount, and an `if` rather than `visible` — a
+        // hidden child still claims the row's spacing.
+        if root.count > 0: VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Text {
+                text: root.count;
+                color: Theme.overlay1;
+                font-size: Theme.font-size-sm;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// One filter chip over the Browse grid, and the picker behind it.
+//
+// Five mounts, four of them over a directory facet list Rust fetches on first open and one — the
+// minimum bitrate — over a fixed list the host hands in. That is what the `[RadioFacetRow]` input
+// is for: the component knows nothing about where its options came from, so the bitrate chip needs
+// no second component and no fetch.
+//
+// The needle goes to Rust rather than filtering here, because Slint rejects an inline
+// `for … : if …` and a country list runs to a few hundred entries.
+export component FacetChip inherits Rectangle {
+    in property <int> kind;
+    // The chip's own name, shown while nothing is picked.
+    in property <string> label;
+    // The picked entry's display name. Empty means nothing is picked.
+    in property <string> value;
+    in property <[RadioFacetRow]> options;
+    in property <bool> loading: false;
+    // The four directory facets need a needle; the bitrate list is five entries and does not.
+    in property <bool> searchable: true;
+    // Reset by Rust on `opened`, beside the model it narrows: the two have to move together.
+    in-out property <string> needle;
+
+    callback opened(int /*kind*/);
+    callback needle-edited(string);
+    callback picked(int /*kind*/, string /*name*/, string /*code*/);
+    callback cleared(int /*kind*/);
+
+    property <bool> is-set: root.value != "";
+    // Spelled once because the filter box's slot is this number less the surface's padding, and a
+    // hand-derived second copy is what left the box floating in a gutter.
+    property <length> popup-w: 320px;
+
+    height: 32px;
+    // **Never a bound `width`** — a root's is reported as both `min` and `max`, so five chips of
+    // locale-sized labels would become a floor under the window's own resize. Spelled as the
+    // split instead: no floor, content width where there is room, and the label elides below it.
+    min-width: 0px;
+    preferred-width: chip.preferred-width;
+    max-width: chip.preferred-width;
+
+    chip := Rectangle {
+        height: 100%;
+        border-radius: self.height / 2;
+        background: root.is-set
+            ? Theme.accent
+            : (touch.has-hover ? Theme.surface2 : Theme.surface1);
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        HorizontalLayout {
+            padding-left: Theme.pad-md;
+            padding-right: Theme.pad-sm;
+            spacing: 2px;
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.is-set ? root.value : root.label;
+                    color: root.is-set ? Theme.accent-text : Theme.text;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    // A set chip offers the clear; an unset one says it opens something.
+                    name: root.is-set ? "close" : "expand_more";
+                    icon-size: 18px;
+                    icon-color: root.is-set ? Theme.accent-text : Theme.text;
+                }
+            }
+        }
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                if (root.is-set) {
+                    root.cleared(root.kind);
+                } else {
+                    root.opened(root.kind);
+                    popup.show();
+                }
+            }
+        }
+    }
+
+    popup := PopupWindow {
+        // Always under the chip; flipping above near the viewport's bottom edge is polish nobody
+        // has asked for yet. Both dimensions are spelled because the body scrolls — a popup sized
+        // by its content would grow to the whole list.
+        //
+        // **Trailing edges aligned rather than leading ones.** The strip sits at the band's right,
+        // where a left-anchored picker runs past the window and `place_popup` clamps it flush to
+        // that edge, gutterless and no longer under the chip that opened it. The room is to the
+        // left, and `ColumnTogglePopup` answers the same clamp the same way.
+        x: root.width - self.width;
+        y: chip.height + 4px;
+        width: root.popup-w;
+        height: 380px;
+        // The rows need their own handlers to run before it closes, so they close it themselves.
+        close-policy: close-on-click-outside;
+
+        FocusLossWatcher {
+            close => { popup.close(); }
+        }
+
+        PopupSurface {
+            width: 100%;
+            height: 100%;
+
+            VerticalLayout {
+                padding: Theme.pad-xs;
+                spacing: Theme.pad-xs;
+
+                if root.searchable: SearchBar {
+                    inset: true;
+                    input-width: root.popup-w - 2 * Theme.pad-xs;
+                    placeholder: @tr("Filter…");
+                    text <=> root.needle;
+                    edited(t) => { root.needle-edited(t); }
+                }
+
+                Rectangle {
+                    vertical-stretch: 1;
+
+                    if root.loading: Text {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        text: @tr("Loading…");
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                    }
+
+                    if !root.loading && root.options.length == 0: Text {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        text: @tr("Nothing to pick from");
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        overflow: elide;
+                        width: parent.width - 2 * Theme.pad-md;
+                        horizontal-alignment: center;
+                    }
+
+                    list := ListView {
+                        width: 100%;
+                        height: 100%;
+                        vertical-scrollbar-policy: always-off;
+                        horizontal-scrollbar-policy: always-off;
+
+                        for option in root.options: FacetOption {
+                            label: option.name;
+                            count: option.station_count;
+                            active: option.name == root.value;
+                            clicked => {
+                                root.picked(root.kind, option.name, option.code);
+                                popup.close();
+                            }
+                        }
+                    }
+
+                    OverlayScrollbar {
+                        horizontal: false;
+                        x: parent.width - self.width;
+                        width: Theme.scrollbar-slot;
+                        height: 100%;
+                        visible-size: list.visible-height;
+                        content-size: list.viewport-height;
+                        offset: -list.viewport-y;
+                        scroll-to(o) => { list.viewport-y = -o; }
+                    }
+                }
+            }
+        }
+    }
+}

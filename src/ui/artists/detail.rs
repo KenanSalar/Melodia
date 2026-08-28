@@ -352,15 +352,22 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, artists_ui: &
     }) else {
         return;
     };
+    // Synchronously, so it is up before `app.show()` — see `AlbumDetail.restoring`.
+    ui.global::<ArtistDetail>().set_restoring(true);
     let s = state.clone();
     let au = artists_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
         // Below = first-launch fade-up, not a drill-in slide: the user didn't navigate, this is
         // restoring their last view.
-        if let Err(e) = open_artist(&s, &au, weak, id, NavEnterFrom::Below).await {
+        if let Err(e) = open_artist(&s, &au, weak.clone(), id, NavEnterFrom::Below).await {
             log::warn!("artists::seed_detail_from_settings open_artist({id}): {e}");
         }
+        // Lowered however it went, and behind `open_artist`'s own hop so the id is already in: an
+        // artist gone since the last session owes the grid back rather than an empty body.
+        let _ = weak.upgrade_in_event_loop(|ui| {
+            ui.global::<ArtistDetail>().set_restoring(false);
+        });
     });
 }
 

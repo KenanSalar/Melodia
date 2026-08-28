@@ -1,0 +1,148 @@
+import { Theme } from "../../theme.slint";
+import { Radio } from "../../globals/radio.slint";
+import { ActionPill, PillButton } from "../../components/action-pill.slint";
+import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { StationGrid } from "station-grid.slint";
+import { SuggestionPill } from "suggestion-pill.slint";
+
+// The worldwide directory: a virtualized station grid with the load-more pill floating over its
+// foot. The filters that drive it are pills in the band, with the rest of the page's controls.
+//
+// **The scroller is here, not on the page.** Every tabbed page in the tree puts it in the tab
+// body, and a page-level `ScrollView` above a virtualized `ListView` is the nested-scroller pitfall.
+//
+// **Nothing insets under that pill**, so the last cards pass behind it at full scroll. Search's
+// mirror image reserves the band it floats in, which a `ListView` cannot do: its viewport height is
+// the mean of the delegates currently instantiated times the row count, so a taller final row would
+// move the scroll extent as it came into view.
+//
+// **It is not a row at the end of the list either.** Reaching the list's end from inside the
+// virtualization means a `changed` handler on a layout property inside the scroller, which is the
+// change-tracker hazard; a pinned pill says the same thing and cannot panic.
+export component RadioBrowseTab inherits Rectangle {
+    in property <length> card-w;
+    in property <length> card-h;
+    in property <length> row-h;
+    in property <length> gap;
+
+    // Nothing loaded and nothing in flight and no failure: the query genuinely matched nothing.
+    property <bool> is-empty: !Radio.browse-loading
+        && !Radio.browse-failed
+        && Radio.browse-rows.length == 0;
+
+    // The pill's own 32 px with `pad-md` of clearance above and below, so it lands where the
+    // footer row it replaced used to draw it. Summed rather than spelled: the padding below is the
+    // same token, and a literal drifts from it the first time the token is tuned.
+    private property <length> pill-band: 32px + 2 * Theme.pad-md;
+
+    VerticalLayout {
+        padding-top: Theme.pad-md;
+
+        // What the needle could mean besides a station name. Above the grid rather than inside the
+        // empty state, because the most useful case is a name search that found *some* stations and
+        // is still not what was meant — a handful are *named* `turkish` where hundreds broadcast in
+        // it.
+        //
+        // Rust caps the row at what one line holds, so there is no wrap to measure here.
+        if Radio.suggestions.length > 0: HorizontalLayout {
+            // The grid insets its own rows by `gap`, so the first pill lands on the first card's
+            // left edge rather than a token's worth away from it.
+            padding-left: root.gap;
+            padding-right: root.gap;
+            padding-bottom: Theme.pad-md;
+            spacing: Theme.pad-sm;
+            alignment: start;
+
+            for suggestion in Radio.suggestions: SuggestionPill {
+                data: suggestion;
+                picked => {
+                    Radio.suggestion-picked(suggestion.kind, suggestion.name, suggestion.code);
+                }
+            }
+        }
+
+        body := Rectangle {
+            vertical-stretch: 1;
+
+            grid := StationGrid {
+                width: 100%;
+                height: 100%;
+                rows: Radio.browse-rows;
+                card-width: root.card-w;
+                card-height: root.card-h;
+                row-height: root.row-h;
+                gap: root.gap;
+                covers-generation: Radio.covers-generation;
+                logo-decode-size: Radio.logo-decode-size;
+                request-logo(p, g) => { Radio.request-logo(p, g) }
+                station-clicked(s) => { Radio.open-station(s); }
+                play-clicked(s) => { Radio.play-station(s); }
+                favorite-clicked(s) => { Radio.toggle-favorite(s); }
+                homepage-clicked(s) => { Radio.open-homepage(s.homepage); }
+            }
+
+            // The first page, which is the one state with nothing on screen to keep company.
+            if Radio.browse-loading && Radio.browse-rows.length == 0: GridEmptyState {
+                icon: "travel_explore";
+                title: @tr("Searching the directory…");
+                body: @tr("Stations are coming from radio-browser.info.");
+            }
+
+            // A directory that cannot be reached is a normal condition rather than a bug, so it
+            // says so plainly and offers the retry rather than leaving an empty grid.
+            //
+            // **Only with nothing loaded.** A load-more that fails on page four has 150 stations
+            // on screen, and a panel over them would read as having lost them; there the pill is
+            // still up and clicking it again is the retry.
+            if Radio.browse-failed && Radio.browse-rows.length == 0: GridEmptyState {
+                icon: "error";
+                title: @tr("The station directory is unreachable");
+                body: @tr("Check your connection and try again.");
+                action-label: @tr("Try again");
+                action-icon: "refresh";
+                action-clicked => { Radio.retry(); }
+            }
+
+            if root.is-empty: GridEmptyState {
+                icon: "search_off";
+                title: @tr("No stations matched");
+                body: @tr("Try a different name, or clear a filter.");
+            }
+
+            OverlayScrollbar {
+                horizontal: false;
+                x: parent.width - self.width;
+                width: 10px;
+                height: 100%;
+                visible-size: grid.v-visible-height;
+                content-size: grid.v-viewport-height;
+                offset: grid.v-offset;
+                scroll-to(o) => { grid.set-v-offset(o); }
+            }
+        }
+    }
+
+    // **Out of the flow, not a row in the column.** As a footer it clipped the grid at its floor
+    // and left a full-width band nothing could be clicked in. Floating, the cards run under it and
+    // only the pill takes the hit test; declared last so it paints over the grid and the scrollbar,
+    // and the height is pinned because a layout child of a plain Rectangle otherwise fills the view
+    // and centres the pill down the middle of it.
+    //
+    // Only where there is more to ask for. A second click while a request is out needs no guard
+    // here: `BrowseState::begin` refuses an append that is already in flight.
+    if Radio.browse-has-more && Radio.browse-rows.length > 0: HorizontalLayout {
+        y: root.height - root.pill-band;
+        height: root.pill-band;
+        padding: Theme.pad-md;
+        alignment: center;
+
+        ActionPill {
+            PillButton {
+                text: Radio.browse-loading ? @tr("Loading…") : @tr("Load more stations");
+                icon: Radio.browse-loading ? "" : "expand_more";
+                clicked => { Radio.load-more(); }
+            }
+        }
+    }
+}

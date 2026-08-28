@@ -915,13 +915,15 @@ fn the_strip_spaces_its_rows_tighter_than_its_chips() {
 /// It sits on a row of its own, forced rather than chosen: the band's search box is up
 /// in the tab row, so the line costs its full box plus a gap out of a meta column
 /// bounded by `Theme.hero-artwork` less the pill band. What that buys back is that there
-/// is exactly one of it. Two things stay pinned: the size, `HERO_MAX_ROWS`' slack being
-/// measured against what the title block spends, and that the line collapses when empty,
-/// an always-mounted row spending it on the four heroes that state nothing there.
+/// is exactly one of it. Three things stay pinned: the size, `HERO_MAX_ROWS`' slack being
+/// measured against what the title block spends; that the line collapses when empty, an
+/// always-mounted row spending it on the four heroes that state nothing there; and the
+/// optical inset, whose wrapper reads as redundant to anyone reaching for the `Text` inside
+/// it.
 #[test]
 fn the_subtitled_heroes_share_one_collapsing_line() {
     const SHEET: &str = include_str!("../../../melodia-ui/ui/views/my-library-view.slint");
-    const SUBTITLE: &str = "if root.subtitle != \"\": Text {";
+    const SUBTITLE: &str = "if root.subtitle != \"\": HorizontalLayout {";
 
     let band = HERO_VIEWS
         .iter()
@@ -953,6 +955,14 @@ fn the_subtitled_heroes_share_one_collapsing_line() {
         block.contains("font-size: Theme.font-size-md;"),
         "the band's second line must stay at `font-size-md` — the meta column is bounded by the \
          hero tile, and a larger line spends the slack `HERO_MAX_ROWS` is measured against"
+    );
+    assert!(
+        block.contains("padding-left:"),
+        "the subtitle row must keep its optical inset. The wrapper exists only to carry it, so \
+         folding it back to a bare `Text` reads as a simplification and silently puts the line \
+         back on the title's *layout* edge, which is not the title's ink edge — the two run at \
+         different sizes and weights, so their side bearings differ. Not an `x` on the `Text`: a \
+         layout child that binds one is dropped from its parent's layout info"
     );
 
     // The two facts that reach it. The band is data-agnostic, so which entity

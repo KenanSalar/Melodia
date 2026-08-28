@@ -1188,3 +1188,272 @@ fn every_player_action_names_what_it_did() {
         }
     }
 }
+
+// --- The radio arm ---------------------------------------------------------
+//
+// A live stream is the one source with no track behind it, so every transport builder above has a
+// branch for it. What these pin is that the branch is taken *and* that the queue underneath comes
+// through untouched: stopping a station is supposed to hand the library back exactly as it was.
+
+use crate::player::tests::helpers::test_station as station;
+
+/// A player mid-album, so every "the queue is untouched" assertion has something to be about.
+fn playing_a_queue() -> PlayerState {
+    let mut state = PlayerState::default();
+    state.queue.add_tracks(vec![
+        make_summary(1, "One", 180_000),
+        make_summary(2, "Two", 180_000),
+    ]);
+    state.queue.current_index = Some(0);
+    let track = make_summary(1, "One", 180_000);
+    let _actions = play_track_inner(&mut state, track, Some(30_000));
+    state
+}
+
+fn tuned_in() -> (PlayerState, u64) {
+    let mut state = playing_a_queue();
+    let (generation, _actions) = state.build_station_connecting_actions(station("Example FM"));
+    (state, generation)
+}
+
+#[test]
+fn connecting_to_a_station_clears_the_decks_and_leaves_the_queue_alone() {
+    let mut state = playing_a_queue();
+    let queue_before = state.queue.to_persistable();
+
+    let (_generation, actions) = state.build_station_connecting_actions(station("Example FM"));
+
+    assert_eq!(actions.first(), Some(&PlayerAction::Stop { fade_ms: 0 }));
+    assert_eq!(state.status, PlaybackStatus::Loading);
+    assert_eq!(state.radio.as_ref().map(|r| r.name.as_str()), Some("Example FM"));
+    assert!(state.current_track.is_none(), "a station is not a track");
+    assert_eq!(state.duration_ms, 0);
+    assert_eq!(state.position_ms, 0);
+    assert_eq!(state.queue.to_persistable(), queue_before, "the queue must survive verbatim");
+}
+
+/// D11: rodio implements speed by reporting a multiplied sample rate, which starves a real-time
+/// source. Resetting the state alongside the deck is what keeps the transport honest about it.
+#[test]
+fn connecting_to_a_station_resets_playback_speed() {
+    let mut state = playing_a_queue();
+    let _speed = state.build_set_speed_actions(1.5);
+
+    let (_generation, actions) = state.build_station_connecting_actions(station("Example FM"));
+
+    assert!((state.playback_speed - 1.0).abs() < f64::EPSILON);
+    assert!(actions.contains(&PlayerAction::SetSpeed(1.0)));
+    // After the stop, so it lands on emptied decks and skips the re-anchoring seek.
+    assert_eq!(actions.first(), Some(&PlayerAction::Stop { fade_ms: 0 }));
+}
+
+#[test]
+fn a_station_already_at_unity_speed_emits_no_speed_action() {
+    let mut state = playing_a_queue();
+
+    let (_generation, actions) = state.build_station_connecting_actions(station("Example FM"));
+
+    assert_eq!(actions, vec![PlayerAction::Stop { fade_ms: 0 }]);
+}
+
+#[test]
+fn a_connected_station_starts_the_staged_stream() {
+    let (mut state, generation) = tuned_in();
+
+    let actions = state.build_station_connected_actions(generation);
+
+    assert_eq!(state.status, PlaybackStatus::Playing);
+    assert_eq!(
+        actions,
+        vec![PlayerAction::PlayStream {
+            generation,
+            volume: 1.0,
+        }]
+    );
+}
+
+/// An open takes seconds and a click takes none, so a stream that arrives after the user moved on
+/// must not start playing over whatever they moved to.
+#[test]
+fn a_stream_that_finished_connecting_too_late_is_refused() {
+    let (mut state, stale) = tuned_in();
+    let (fresh, _actions) = state.build_station_connecting_actions(station("Other FM"));
+    assert_ne!(stale, fresh);
+
+    assert_eq!(state.build_station_connected_actions(stale), vec![]);
+    assert_eq!(state.status, PlaybackStatus::Loading, "the newer station keeps connecting");
+    assert_eq!(state.radio.as_ref().map(|r| r.name.as_str()), Some("Other FM"));
+}
+
+#[test]
+fn a_failed_connect_forgets_the_station() {
+    let (mut state, generation) = tuned_in();
+
+    let actions = state.build_station_failed_actions(generation);
+
+    assert_eq!(actions, vec![PlayerAction::Stop { fade_ms: 0 }]);
+    assert_eq!(state.status, PlaybackStatus::Stopped);
+    assert!(state.radio.is_none());
+}
+
+#[test]
+fn a_failure_report_from_a_superseded_session_is_ignored() {
+    let (mut state, stale) = tuned_in();
+    let (_fresh, _actions) = state.build_station_connecting_actions(station("Other FM"));
+
+    assert_eq!(state.build_station_failed_actions(stale), vec![]);
+    assert!(state.radio.is_some(), "the newer station must survive the older one's failure");
+}
+
+/// S4: `stream-download` back-pressures its writer when the reader falls behind, so a held-open
+/// socket would come back playing stale audio. Pause drops the connection and keeps the station.
+#[test]
+fn pausing_a_station_drops_the_connection_but_keeps_the_station() {
+    let (mut state, generation) = tuned_in();
+    let _started = state.build_station_connected_actions(generation);
+
+    let actions = state.build_pause_actions(250);
+
+    assert_eq!(actions, vec![PlayerAction::Stop { fade_ms: 250 }]);
+    assert_eq!(state.status, PlaybackStatus::Paused);
+    assert!(state.radio.is_some(), "the station stays on screen with a play button");
+    assert_ne!(state.radio_generation, generation, "and its connection is invalidated");
+}
+
+#[test]
+fn stopping_a_station_forgets_it_and_hands_the_queue_back() {
+    let (mut state, generation) = tuned_in();
+    let _started = state.build_station_connected_actions(generation);
+    let queue_before = state.queue.to_persistable();
+
+    let actions = state.build_stop_actions(0);
+
+    assert_eq!(actions, vec![PlayerAction::Stop { fade_ms: 0 }]);
+    assert_eq!(state.status, PlaybackStatus::Stopped);
+    assert!(state.radio.is_none());
+    assert_eq!(state.queue.to_persistable(), queue_before);
+}
+
+/// The deck draining means the feed thread spent its reconnect budget. Advancing the queue there
+/// would be a silent change of source, from a station to whatever the library was last on.
+#[test]
+fn a_station_going_off_air_stops_rather_than_advancing_the_queue() {
+    let (mut state, generation) = tuned_in();
+    let _started = state.build_station_connected_actions(generation);
+    let queue_before = state.queue.to_persistable();
+
+    let actions = state.build_end_of_stream_actions();
+
+    assert_eq!(actions, vec![PlayerAction::Stop { fade_ms: 0 }]);
+    assert_eq!(state.status, PlaybackStatus::Stopped);
+    assert!(state.radio.is_none());
+    assert_eq!(state.queue.to_persistable(), queue_before, "the queue must not advance");
+}
+
+#[test]
+fn the_transport_refuses_everything_a_live_source_cannot_do() {
+    let (mut state, generation) = tuned_in();
+    let _started = state.build_station_connected_actions(generation);
+    let queue_before = state.queue.to_persistable();
+
+    assert_eq!(state.build_next_actions(), vec![], "a station has no next");
+    assert_eq!(state.build_previous_actions(), vec![], "a station has no previous");
+    assert_eq!(state.build_seek_actions(30_000), vec![], "a station has no timeline");
+    assert_eq!(state.build_set_speed_actions(1.5), vec![], "a station cannot be resampled");
+    assert_eq!(state.build_play_actions(), vec![], "resuming a station is a fresh open");
+
+    assert_eq!(state.position_ms, 0, "the refused seek must not move the position");
+    assert!((state.playback_speed - 1.0).abs() < f64::EPSILON);
+    assert_eq!(state.queue.to_persistable(), queue_before);
+}
+
+#[test]
+fn a_station_reports_no_next_or_previous() {
+    let (mut state, generation) = tuned_in();
+    assert!(state.queue.peek_next().is_some(), "the queue underneath still has one");
+
+    let vm = state.to_view_model_light();
+    assert!(!vm.has_next);
+    assert!(!vm.has_previous);
+
+    let _started = state.build_station_connected_actions(generation);
+    let vm = state.to_view_model_light();
+    assert!(!vm.has_next);
+    assert!(!vm.has_previous);
+}
+
+#[test]
+fn the_view_model_carries_the_station_instead_of_a_track() {
+    let (mut state, generation) = tuned_in();
+    let _started = state.build_station_connected_actions(generation);
+    if let Some(radio) = state.radio.as_mut() {
+        let radio = std::sync::Arc::make_mut(radio);
+        radio.live_title = Some("Artist - Track".to_owned());
+        radio.buffering = true;
+    }
+
+    let vm = state.to_view_model_light();
+
+    assert_eq!(vm.status, "playing", "a buffering station has not stopped");
+    assert!(vm.current_track.is_none());
+    assert_eq!(vm.duration_ms, 0);
+    assert!((vm.progress_percent - 0.0).abs() < f64::EPSILON);
+    let radio = vm.radio.as_ref();
+    assert_eq!(radio.map(|r| r.name.as_str()), Some("Example FM"));
+    assert_eq!(radio.and_then(|r| r.live_title.as_deref()), Some("Artist - Track"));
+    assert_eq!(radio.map(|r| r.buffering), Some(true));
+}
+
+/// The one thing that must never reach the log: a stream URL can carry a session token, and this
+/// line goes into the tail users attach to public issues.
+#[test]
+fn the_play_stream_action_never_renders_a_url() {
+    let rendered = PlayerAction::PlayStream {
+        generation: 7,
+        volume: 1.0,
+    }
+    .to_string();
+
+    assert!(rendered.contains('7'), "{rendered:?} should name the session it belongs to");
+    assert!(!rendered.contains("http"), "{rendered:?} must not carry the stream URL");
+}
+
+/// A track and a station are one deck's worth of source, so starting one has to end the other.
+/// Left standing, `radio` makes every transport builder below read the *track* as a live source,
+/// and the session guard still passes for a connect the pick was supposed to have cancelled.
+#[test]
+fn starting_a_track_ends_the_station_it_replaces() {
+    let (mut state, connecting) = tuned_in();
+
+    let _actions = play_track_inner(&mut state, make_summary(2, "Two", 180_000), None);
+
+    assert!(state.radio.is_none(), "a track and a station cannot both be the source");
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(2));
+    assert_eq!(
+        state.build_station_connected_actions(connecting),
+        vec![],
+        "the connect still in flight must not start over the track that replaced it"
+    );
+}
+
+/// The other half: every builder the radio arm refuses has to answer normally again.
+#[test]
+fn the_transport_is_a_tracks_again_once_one_replaces_the_station() {
+    let (mut state, generation) = tuned_in();
+    let _started = state.build_station_connected_actions(generation);
+
+    let _actions = play_track_inner(&mut state, make_summary(1, "One", 180_000), None);
+
+    let vm = state.to_view_model_light();
+    assert!(vm.radio.is_none());
+    assert!(vm.has_next, "the queue underneath is reachable again");
+
+    assert_eq!(
+        state.build_seek_actions(30_000),
+        vec![PlayerAction::Seek {
+            position_ms: 30_000
+        }]
+    );
+    assert_eq!(state.build_pause_actions(250), vec![PlayerAction::Pause { fade_ms: 250 }]);
+    assert_eq!(state.status, PlaybackStatus::Paused, "pausing a track is not a stop");
+}

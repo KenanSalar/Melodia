@@ -5,17 +5,18 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use rodio::mixer::Mixer;
 use rodio::{Decoder, Player, Source};
 
-use crate::config::Paths;
 use crate::error::AppError;
 
 use super::crossfade::{self, CrossfadeShared};
 use super::decks::{Deck, Decks, DeferredOp, lock_decks};
 use super::equalizer::{self, EqShared, EqSource};
+use super::prebuffer::StreamShared;
 use super::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
-use super::types::PersistableQueue;
+use super::stream_source::PreparedStream;
 use super::visualizer::{VisualizerShared, VisualizerTap};
 
 /// Audio playback operations, so tests can stand a mock in for `RodioPlayer`.
@@ -50,6 +51,13 @@ pub trait PlayerBackend: Send + Sync {
     fn set_volume(&self, volume: f64);
     fn set_speed(&self, speed: f64);
     fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain);
+    /// Start the live stream staged under `generation`, hard-cutting whatever was playing.
+    ///
+    /// Takes no path and no `ReplayGain`: the stream was opened asynchronously long before this
+    /// runs (a socket has no business on the action executor's thread), and a live source carries
+    /// no per-track tags to bake. Fails when nothing is staged under that generation, which is how
+    /// a station superseded mid-connect is refused rather than played late.
+    fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError>;
 }
 
 /// Blanket impl so an `Arc<RodioPlayer>` is itself a backend.
@@ -101,6 +109,9 @@ where
     fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
         (**self).preload_gapless(file_path, baked_rg);
     }
+    fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError> {
+        (**self).play_stream(generation, volume)
+    }
 }
 
 impl PlayerBackend for RodioPlayer {
@@ -147,6 +158,9 @@ impl PlayerBackend for RodioPlayer {
     }
     fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
         self.preload_gapless(file_path, baked_rg);
+    }
+    fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError> {
+        self.play_stream(generation, volume)
     }
 }
 
@@ -237,6 +251,19 @@ pub struct RodioPlayer {
     // seeded at boot: it stays disarmed (a no-op) until the Now-Playing view is
     // on screen, so the audio thread never fills a ring nobody reads.
     viz: Arc<VisualizerShared>,
+    // A live stream opened asynchronously and waiting for its `PlayStream` action, tagged with the
+    // station generation it was opened for. Staged rather than carried on the action because
+    // `PlayerAction` is plain `Clone + PartialEq` data and a decoder is neither — the same reason
+    // `preload_gapless` takes its decode through a side channel. Dropping a superseded stage
+    // closes its connection, so a station started while another was still connecting cancels the
+    // loser for free.
+    staged_stream: Mutex<Option<(u64, PreparedStream)>>,
+    // The cell the playing stream publishes buffering and live titles through, or `None` when the
+    // source is a local file. Doubles as the monitor's "is this a station?" test, which is why it
+    // lives here rather than being re-read off `PlayerState`. `Arc` for the reason
+    // `gapless_pending` is one: the deferred clear of a faded stop has to drop this alongside the
+    // deck contents it removes.
+    live_stream: Arc<Mutex<Option<Arc<StreamShared>>>>,
     // Only ever schedules the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
 }
@@ -252,6 +279,8 @@ impl RodioPlayer {
             rg: ReplayGainShared::new(),
             xf: CrossfadeShared::new(),
             viz: VisualizerShared::new(false),
+            staged_stream: Mutex::new(None),
+            live_stream: Arc::new(Mutex::new(None)),
             runtime,
         }
     }
@@ -269,6 +298,7 @@ impl RodioPlayer {
         let decks = self.decks.clone();
         let deck_epoch = self.deck_epoch.clone();
         let gapless_pending = self.gapless_pending.clone();
+        let live_stream = self.live_stream.clone();
         self.runtime.spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
             let guard = lock_decks(&decks);
@@ -288,6 +318,9 @@ impl RodioPlayer {
                 DeferredOp::ClearAll => {
                     guard.clear_all();
                     gapless_pending.store(false, Ordering::Release);
+                    // The faded half of a stop, so it drops the live-stream cell alongside the
+                    // source it removes — the same pairing the flag above gets.
+                    *live_stream.lock() = None;
                 }
             }
         });
@@ -353,6 +386,7 @@ impl RodioPlayer {
         let decoded = decode_file(file_path)?;
 
         self.bump_epoch();
+        self.clear_live_stream();
         let mut decks = self.lock_decks();
         // Backstop for the gapless race: `preload_gapless` sets the flag under
         // this same lock, so a preload that landed during the decode is visible
@@ -383,6 +417,79 @@ impl RodioPlayer {
         Ok(())
     }
 
+    /// Playback speed while a station plays.
+    ///
+    /// rodio implements speed by reporting a multiplied sample rate upward, which against a source
+    /// arriving at a fixed real-time rate drifts the ring until it starves. Pinned rather than
+    /// merely ignored, so what the deck runs at and what the transport claims stay the same
+    /// number — [`super::state::PlayerState::build_station_connecting_actions`] resets the state
+    /// side to match.
+    const STREAM_SPEED: f64 = 1.0;
+
+    /// Park an opened live stream for the `PlayStream` action that follows it.
+    ///
+    /// Replacing an unclaimed stage drops it, and dropping it closes its connection — which is how
+    /// a station started while another was still connecting cancels the loser.
+    pub fn stage_stream(&self, generation: u64, prepared: PreparedStream) {
+        *self.staged_stream.lock() = Some((generation, prepared));
+    }
+
+    /// Drop the stage if it is still the one opened for `generation`.
+    ///
+    /// The transport can end a station's session between the open being started and finishing, and
+    /// the state machine then refuses the `PlayStream` that would have claimed it. Without this the
+    /// connection would stay open until some later station happened to stage over it.
+    pub fn discard_staged_stream(&self, generation: u64) {
+        let mut staged = self.staged_stream.lock();
+        if staged.as_ref().is_some_and(|(staged_generation, _)| *staged_generation == generation) {
+            *staged = None;
+        }
+    }
+
+    /// The cell a playing station publishes buffering and live titles through, or `None` when the
+    /// source is a local file. Also the playback monitor's test for which kind of source is on the
+    /// deck.
+    pub fn stream_shared(&self) -> Option<Arc<StreamShared>> {
+        self.live_stream.lock().clone()
+    }
+
+    fn clear_live_stream(&self) {
+        *self.live_stream.lock() = None;
+    }
+
+    /// Start the stream staged under `generation`, hard-cutting whatever was playing.
+    ///
+    /// Always a hard cut: a crossfade ramps between two *tracks*, and there is nothing worth
+    /// overlapping a station's first second of buffering with. The `ReplayGain` handed to
+    /// `build_source` is unity for the same reason the plan gives — a live stream carries no
+    /// per-track tags to bake.
+    pub fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError> {
+        // Matched before it is taken: a stage belonging to some other session belongs to a *newer*
+        // one, and taking it to refuse it would close the connection that session is waiting on.
+        let mut staged = self.staged_stream.lock();
+        let claimed = staged
+            .take_if(|(staged_generation, _)| *staged_generation == generation)
+            .map(|(_, prepared)| prepared);
+        drop(staged);
+
+        let Some(prepared) = claimed else {
+            return Err(AppError::Player("No radio stream is staged for this station".to_owned()));
+        };
+        let (source, shared) = prepared.into_parts();
+
+        // Published before the deck work rather than after, so the monitor can never see a station
+        // playing with no cell to read its buffering state from.
+        *self.live_stream.lock() = Some(shared);
+        self.bump_epoch();
+        let decks = self.lock_decks();
+        decks.cut_to(volume, Self::STREAM_SPEED, |deck| {
+            self.build_source(source, TrackReplayGain::default(), deck)
+        });
+        self.crossfade_armed.store(false, Ordering::Release);
+        self.gapless_pending.store(false, Ordering::Release);
+        Ok(())
+    }
+
     /// Start `file_path` on the idle deck and cross-fade over `fade_ms` media
     /// milliseconds. The outgoing source ends itself when its ramp lands
     /// (`end_on_complete`), draining that deck — which is how
@@ -403,6 +510,7 @@ impl RodioPlayer {
         let decoded = decode_file(file_path)?;
 
         self.bump_epoch();
+        self.clear_live_stream();
         let mut decks = self.lock_decks();
         // A staged gapless source sits on the *active* deck and inherits its
         // fade cell, so it would fade out alongside the track it was meant to
@@ -420,23 +528,27 @@ impl RodioPlayer {
         Ok(())
     }
 
-    /// Wrap a decoded track in the source the decks play: the graphic EQ, this
-    /// track's baked `ReplayGain` and `deck`'s ramp cell, under a visualizer tap
-    /// writing into `deck`'s own ring.
+    /// Wrap an audio source in what the decks actually play: the graphic EQ, this track's baked
+    /// `ReplayGain` and `deck`'s ramp cell, under a visualizer tap writing into `deck`'s own ring.
     ///
-    /// Always called with the deck the source is about to be appended to — see
-    /// [`super::decks`] for why the two can't be split. Building the tap also
-    /// *claims* that ring for the life of the value and stamps its history away
-    /// if the deck was idle, both only correct for a source about to play, so
-    /// don't build one anywhere it might be held or discarded instead.
-    fn build_source(
+    /// Generic over the source rather than over a reader, because a live stream reaches here as a
+    /// [`super::prebuffer::PrebufferSource`] and a file as a `Decoder` — the ring sits between the
+    /// stream's decoder and the DSP chain, so the two only meet at `Source`. Everything downstream
+    /// is identical, which is the point: the EQ, the limiter and the visualizer work on a station
+    /// with no code of their own.
+    ///
+    /// Always called with the deck the source is about to be appended to — see [`super::decks`]
+    /// for why the two can't be split. Building the tap also *claims* that ring for the life of
+    /// the value and stamps its history away if the deck was idle, both only correct for a source
+    /// about to play, so don't build one anywhere it might be held or discarded instead.
+    fn build_source<S: Source + Send + 'static>(
         &self,
-        decoded: Decoder<BufReader<File>>,
+        input: S,
         baked_rg: TrackReplayGain,
         deck: &Deck,
-    ) -> VisualizerTap<EqSource<Decoder<BufReader<File>>>> {
+    ) -> VisualizerTap<EqSource<S>> {
         VisualizerTap::new(
-            EqSource::new(decoded, self.eq.clone(), self.rg.clone(), baked_rg, deck.fade.clone()),
+            EqSource::new(input, self.eq.clone(), self.rg.clone(), baked_rg, deck.fade.clone()),
             &self.viz,
             deck.viz_slot,
         )
@@ -548,6 +660,9 @@ impl RodioPlayer {
     pub fn stop(&self) {
         self.bump_epoch();
         self.crossfade_armed.store(false, Ordering::Release);
+        // Clearing the decks drops a live stream's source, whose `Drop` is what tells its feed
+        // thread to close the connection; this only stops anyone still reading the cell.
+        self.clear_live_stream();
         let decks = self.lock_decks();
         decks.clear_all();
         self.gapless_pending.store(false, Ordering::Release);
@@ -813,15 +928,6 @@ fn decode_file(path: &str) -> Result<Decoder<BufReader<File>>, AppError> {
     }
 
     builder.build().map_err(|e| AppError::Player(format!("Decode error for {path}: {e}")))
-}
-
-/// Load the persisted queue synchronously, for boot.
-pub fn load_queue_from_disk_sync(paths: &Paths) -> Option<PersistableQueue> {
-    if !paths.queue_path.exists() {
-        return None;
-    }
-    let json = std::fs::read_to_string(&paths.queue_path).ok()?;
-    serde_json::from_str(&json).ok()
 }
 
 #[cfg(test)]

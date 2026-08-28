@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
-import { Tooltip } from "tooltip.slint";
+import { Tooltip, TooltipSide } from "tooltip.slint";
 
 // Generic icon-only button with hover/pressed/active visual states.
 export component IconButton inherits Rectangle {
@@ -24,6 +24,9 @@ export component IconButton inherits Rectangle {
     // the glyph on hover, as a destructive action does.
     in property <brush> hover-fg: root.idle-fg;
     in property <string> tooltip-text: "";
+    // For a button sitting against the edge of something that clips: the pill is centred on the
+    // host and runs well past it either way, so a scroller's own viewport cuts it.
+    in property <TooltipSide> tooltip-side: TooltipSide.above;
     // Falls through to `Tooltip.force-shown` — a keyboard volume change uses it.
     in property <bool> force-tooltip: false;
     // Scales the inner disc while held, snapping back on the play button's overshoot
@@ -107,6 +110,10 @@ export component IconButton inherits Rectangle {
         text: root.tooltip-text;
         hovered: touch.has-hover;
         host-width: root.width;
+        // Read by every side but `above`, which is why it went missing for as long as that was
+        // the only one reachable from here.
+        host-height: root.height;
+        side: root.tooltip-side;
         force-shown: root.force-tooltip;
     }
 

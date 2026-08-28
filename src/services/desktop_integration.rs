@@ -68,7 +68,7 @@ pub fn refresh_user_install() -> AppResult<()> {
     // Under `cargo run` the binary sits in `target/{debug,release}/`, and a
     // `.desktop` pointing `Exec=` there would hijack the installed entry. No
     // installed tarball / RPM / DEB binary matches.
-    if is_dev_build() {
+    if super::is_dev_build() {
         log::info!(
             "desktop_integration: skipping — running a development build \
              (would clobber the installed .desktop Exec= path)"
@@ -146,22 +146,6 @@ pub fn refresh_user_install() -> AppResult<()> {
         log::info!("desktop_integration: on-disk copies match compiled-in payloads");
     }
     Ok(())
-}
-
-/// True when the running binary is a development build — either compiled
-/// with debug assertions, or located inside a Cargo `target/{debug,release}`
-/// directory (covers `cargo run --release`).
-fn is_dev_build() -> bool {
-    if cfg!(debug_assertions) {
-        return true;
-    }
-    let Ok(exe) = std::env::current_exe() else {
-        return false;
-    };
-    // .../target/<profile>/<binary>  →  parent = <profile>, grandparent = target
-    exe.parent()
-        .and_then(Path::parent)
-        .is_some_and(|p| p.file_name().is_some_and(|n| n == "target"))
 }
 
 /// Substitute `@EXEC@` in the template with the binary's absolute path, quoted

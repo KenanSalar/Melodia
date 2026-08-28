@@ -359,6 +359,52 @@ impl Default for DiscordFlags {
     }
 }
 
+/// The Radio section's master switch, off by default. An upgrade has to be silent
+/// for an install that never asked for a network feature, which is the reason
+/// `discord_rpc_enabled` ships off and what the shipped package description
+/// promises of every online feature.
+///
+/// The live answers are the shadows on [`crate::state::AppState`] this seeds at
+/// boot — every reader of all three is either on a tokio worker or in the boot
+/// path, where a settings read is disk I/O for one bool.
+///
+/// Click reporting is the one field the derive would get wrong, so the `Default`
+/// below is written by hand: it describes what the feature does rather than
+/// whether it runs, and `false` there ships a directory nobody's plays are
+/// counted for.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RadioFlags {
+    pub radio_enabled: bool,
+    /// Whether to drop segmented stations from directory results.
+    ///
+    /// Off by default: they play. It survives its own obsolescence because a
+    /// segment playlist still starts several seconds slower than a direct
+    /// mount, which is a reason to skip them and not one to hide the choice.
+    ///
+    /// **Renamed rather than re-defaulted.** The key it replaced shipped
+    /// defaulting to `true`, so every install that has ever written this file
+    /// carries that value; flipping the default alone would reach nobody who
+    /// already had it.
+    pub radio_hide_segmented: bool,
+    /// Whether playing a station tells the directory so.
+    ///
+    /// Opt-out rather than opt-in: the click is what popularity ordering is
+    /// built from, so a user who leaves it on is paying for the ordering every
+    /// other user browses by. It carries no identity beyond the request itself.
+    pub radio_send_clicks: bool,
+}
+
+impl Default for RadioFlags {
+    fn default() -> Self {
+        Self {
+            radio_enabled: false,
+            radio_hide_segmented: false,
+            radio_send_clicks: true,
+        }
+    }
+}
+
 /// Library-management toggles.
 ///
 /// `folder_watching_enabled` is the one default-on switch: every consumer
@@ -587,6 +633,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub discord: DiscordFlags,
     #[serde(flatten)]
+    pub radio: RadioFlags,
+    #[serde(flatten)]
     pub library: LibraryFlags,
     #[serde(flatten)]
     pub layout: LayoutFlags,
@@ -632,6 +680,7 @@ impl Default for SettingsData {
             tray: TrayFlags::default(),
             scrobble: ScrobbleFlags::default(),
             discord: DiscordFlags::default(),
+            radio: RadioFlags::default(),
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
             motion: MotionFlags::default(),

@@ -124,8 +124,8 @@ fn a_needle_with_a_non_digit_never_reaches_the_year() {
     // The guard that keeps the ordinary text query off the formatting path.
     // "199x" can't name a year, so a row whose only candidate is one misses.
     let row = mk("Track", None, None, None, Some(1998));
-    assert!(!fold_needle("199x").matches_year(row.year));
-    assert!(!fold_needle("").matches_year(row.year));
+    assert!(!fold_needle("199x").matches_number(row.year));
+    assert!(!fold_needle("").matches_number(row.year));
 }
 
 #[test]

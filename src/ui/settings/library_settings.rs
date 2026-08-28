@@ -14,6 +14,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
 use crate::library;
 use crate::state::AppState;
+use crate::ui::util::{clamp_i64_to_i32, count_as_i32};
 use crate::{AppWindow, Dialog, FolderListRow, LibrarySettings};
 
 /// Wire up the `LibrarySettings` global: initial folder fetch +
@@ -51,8 +52,8 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
                 let g = ui.global::<LibrarySettings>();
                 if let Some(tick) = snapshot {
                     g.set_scanning(true);
-                    g.set_scanned_count(clamp_to_i32(u64::from(tick.scanned)));
-                    g.set_total_count(clamp_to_i32(u64::from(tick.total)));
+                    g.set_scanned_count(count_as_i32(tick.scanned));
+                    g.set_total_count(count_as_i32(tick.total));
                     g.set_scan_progress(progress_fraction(tick.scanned, tick.total));
                     g.set_scanning_file(SharedString::from(tick.current_file.as_str()));
                 } else {
@@ -103,7 +104,7 @@ pub async fn refresh_folders(ui: Weak<AppWindow>, state: AppState) {
     let rows: Vec<FolderListRow> = folders
         .iter()
         .map(|f| FolderListRow {
-            id: clamp_to_i32_signed(f.id),
+            id: clamp_i64_to_i32(f.id),
             path: SharedString::from(f.path.as_str()),
             last_scanned: SharedString::from(format_last_scanned(f.last_scanned.as_deref())),
         })
@@ -159,14 +160,6 @@ pub fn format_last_scanned(stamp: Option<&str>) -> String {
 
 fn plural(n: i64) -> &'static str {
     if n == 1 { "" } else { "s" }
-}
-
-fn clamp_to_i32(v: u64) -> i32 {
-    i32::try_from(v).unwrap_or(i32::MAX)
-}
-
-fn clamp_to_i32_signed(v: i64) -> i32 {
-    i32::try_from(v).unwrap_or(i32::MAX)
 }
 
 #[allow(

@@ -32,13 +32,20 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   spawned beside `retroactive_hash`). It deletes by reference rather than by refcount — artwork is
   shared, so no per-track delete can safely unlink a file, and a sweep cannot undercount because it
   never counts. Two gates, both required: the name has to parse back into the scheme
-  `media::artwork` writes, and nothing in the reference set may name it. **That set is four
-  columns** — `tracks.artwork_path`, `albums.artwork_path`, `artists.image_path` and
-  **`playlists.thumbnail_path`**, the last carrying composites reachable through no other row, so a
-  three-column union blanks every custom playlist mosaic. A one-hour grace window covers the file a
-  tag edit or scan worker has written but not yet committed a row for. `queries::artwork` owns both
-  the read side and the four `UPDATE`s the renormalize pass re-points with, pinned against one
-  column ledger — a missing column is silent one way and destructive the other.
+  `media::artwork` writes, and nothing in the reference set may name it. **That set is six
+  columns** — `tracks.artwork_path`, `albums.artwork_path`, `artists.image_path`,
+  **`playlists.thumbnail_path`**, **`radio_stations.artwork_path`** and
+  **`radio_logo_answers.artwork_path`**. The last three are the ones that bite, each reachable
+  through no other row: dropping the playlist arm blanks every custom mosaic, and dropping either
+  radio arm deletes a station logo that came off a third-party host and can never be re-derived.
+  The logo-answers arm is the one entry that is not a row the user owns — a browsed station's logo
+  is held alive by its cache row alone, so the sweep has to see it or the cache is left naming a
+  file the sweep just deleted. That also fixes an order: `tasks::radio_logo_cache` drops expired
+  rows *before* the sweep runs, or every one of them still counts as referenced and the store
+  never shrinks. A one-hour grace window covers the file a tag edit or scan worker has
+  written but not yet committed a row for. `queries::artwork` owns both the read side and the
+  `UPDATE`s the renormalize pass re-points with, pinned against one column ledger — a missing
+  column is silent one way and destructive the other.
 
 - **`stats_changed_tx` vs `library_changed_tx`.** Play-count flushes bump the stats channel only;
   its two subscribers are Favorites (hero mosaic + Most Played rank by `play_count`) and

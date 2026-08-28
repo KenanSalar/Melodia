@@ -30,6 +30,9 @@ export global MelodiaUpdater {
     // A read-only install path (RPM / MSI / Homebrew): the section trades Download and Skip for a
     // hint pointing at the package manager. Seeded once at startup.
     in property <bool> system-managed;
+    // False on a source build, where there is no update to offer at all — the section doesn't draw
+    // and stops matching the settings search. Defaults true so a Slint-only preview keeps it.
+    in property <bool> updates-supported: true;
     // Picks that hint string: "linux" | "windows" | "macos", off `cfg!(target_os)` at startup. A
     // string rather than an enum keeps the Slint side free of conditional compilation and lets the
     // hint resolve inline, so it re-translates on a locale switch.

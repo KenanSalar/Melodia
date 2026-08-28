@@ -35,7 +35,7 @@ paths:
 
 ### Format Probing
 
-- Always provide a `Hint` with the file extension for reliable format detection
+- **A `Hint` does not steer 0.5's probe** — `Probe::format` takes it as `_hint` and resolves the format by matching a two-byte marker, scoring still a `TODO`. Pass one anyway (it costs a line and 0.6 keeps the parameter), but never rely on it to break a tie: a container whose marker isn't registered is one the probe will mis-assign, silently and to whichever reader matches first. **This tree carries two Symphonia majors for that reason** — rodio's 0.5 for local files, where the extension is known and the formats are well-marked, and 0.6 in `player::stream_decode` for live streams, where neither holds. Read that module before touching either.
 - Use `MediaSourceStream` (not `BufReader`) — it provides optimized buffering for multimedia I/O
 - Search for the first audio track explicitly — default track may be video in container formats
 

@@ -22,7 +22,7 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
     let (track_data, persistable, volume, is_muted) = {
         let s = lock_state(&state.player_state);
         let td = s.current_track.as_ref().map(|t| (t.id, s.position_ms));
-        (td, s.queue.to_persistable(), s.volume, s.is_muted)
+        (td, s.to_persisted(), s.volume, s.is_muted)
     };
 
     // `Nav.sidebar-width` always holds the expanded-mode width; collapsed

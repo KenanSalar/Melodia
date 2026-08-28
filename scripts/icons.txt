@@ -20,6 +20,7 @@ chevron_right
 clear_all
 close
 colorize
+content_copy
 create_new_folder
 crop_square
 delete
@@ -33,6 +34,7 @@ expand_less
 expand_more
 favorite
 favorite_border
+filter_alt
 filter_none
 folder
 folder_off
@@ -64,6 +66,7 @@ playlist_remove
 push_pin
 queue_music
 queue_play_next
+radio
 refresh
 remove
 repeat
@@ -76,15 +79,18 @@ settings
 shield
 show_chart
 shuffle
+sort
 speed
 star
 star_border
 swap_horiz
 system_update
 theater_comedy
+thumb_up
 title
 tonality
 translate
+travel_explore
 tune
 upload
 view_list

@@ -1,5 +1,5 @@
 import { Theme } from "../../theme.slint";
-import { SmartEditor, TagEditor, ScrobbleUi } from "../../globals/dialog-forms.slint";
+import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "../../globals/dialog-forms.slint";
 import { Dialog as DialogGlobal } from "../../globals/dialog.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
@@ -11,6 +11,7 @@ import { SmartPlaylistEditorBody } from "smart-playlist-editor-body.slint";
 import { TagEditorBody } from "tag-editor-body.slint";
 import { ScrobbleLastfmBody } from "scrobble-lastfm-body.slint";
 import { ScrobbleListenbrainzBody } from "scrobble-listenbrainz-body.slint";
+import { AddStationBody } from "add-station-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
@@ -83,6 +84,8 @@ export component DialogOverlay inherits Rectangle {
             : DialogGlobal.kind == "edit-tags" ? 720px
             : DialogGlobal.kind == "scrobble-lastfm-login" ? 460px
             : DialogGlobal.kind == "scrobble-listenbrainz-login" ? 460px
+            : DialogGlobal.kind == "add-station" ? 480px
+            : DialogGlobal.kind == "edit-station" ? 480px
             : 540px;
         // Confirmation kinds only; a form or picker kind keeps the title-only header.
         // Mapped by kind, so a caller doesn't have to set an extra field, and its tile
@@ -92,6 +95,8 @@ export component DialogOverlay inherits Rectangle {
             DialogGlobal.kind == "remove-playlist-selected" ? "playlist_remove" :
             DialogGlobal.kind == "remove-queue-selected" ? "playlist_remove" :
             DialogGlobal.kind == "remove-folder" ? "folder_off" :
+            DialogGlobal.kind == "remove-from-favorites"
+                || DialogGlobal.kind == "remove-from-recent" ? "delete" :
             DialogGlobal.kind == "clear-queue" ? "clear_all" :
             // One arm for all three restart flows rather than three lines; the tray one had no
             // entry at all and rendered with no tile.
@@ -102,7 +107,18 @@ export component DialogOverlay inherits Rectangle {
         width: min(self.max-w, max(360px, parent.width - 96px));
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2 + (1.0 - root.card-t) * 12px;
-        height: layout.preferred-height;
+        // The width clamp's twin, and the card is centred, so an uncapped one runs off *both*
+        // edges of a short window rather than overflowing downward where a scroll would find it.
+        //
+        // **Only a kind whose body scrolls may be capped.** Nothing here clips — a rounded clip
+        // over text costs an upscaled layer — so a body squeezed below what its children need
+        // paints the remainder, action buttons included, outside the card and onto the backdrop.
+        // A kind joining this list owes a scroller; `AddStationBody` is the worked example.
+        property <bool> body-scrolls:
+            DialogGlobal.kind == "add-station" || DialogGlobal.kind == "edit-station";
+        height: card.body-scrolls
+            ? min(layout.preferred-height, max(240px, parent.height - 96px))
+            : layout.preferred-height;
         background: Theme.surface0;
         // `Tooltip`'s chrome, and for its reason: a transient surface floating over the
         // app has to state its own edge. **Not `Theme.border`** — all four Catppuccin
@@ -245,6 +261,11 @@ export component DialogOverlay inherits Rectangle {
             if DialogGlobal.kind == "scrobble-lastfm-login": ScrobbleLastfmBody { }
             if DialogGlobal.kind == "scrobble-listenbrainz-login": ScrobbleListenbrainzBody { }
 
+            // Both kinds share one body; the dialog stays open across the probe and Rust closes
+            // it, the same round-trip shape as the two logins above.
+            if DialogGlobal.kind == "add-station"
+                || DialogGlobal.kind == "edit-station": AddStationBody { }
+
             HorizontalLayout {
                 alignment: end;
                 spacing: Theme.pad-sm;
@@ -299,13 +320,19 @@ export component DialogOverlay inherits Rectangle {
                             || (ScrobbleUi.lb-token != "" && !ScrobbleUi.busy))
                         // Last.fm: just gate on the in-flight request.
                         && (DialogGlobal.kind != "scrobble-lastfm-login"
-                            || !ScrobbleUi.busy);
+                            || !ScrobbleUi.busy)
+                        // A station needs a URL; the name is optional and fills itself in.
+                        && ((DialogGlobal.kind != "add-station"
+                                && DialogGlobal.kind != "edit-station")
+                            || (RadioForm.url != "" && !RadioForm.busy));
                     clicked => {
                         DialogGlobal.accepted();
-                        // The login kinds stay open across their round-trip and Rust
-                        // closes them; everything else closes on confirm.
+                        // The kinds that make a request stay open across it and Rust closes
+                        // them; everything else closes on confirm.
                         if (DialogGlobal.kind != "scrobble-lastfm-login"
-                                && DialogGlobal.kind != "scrobble-listenbrainz-login") {
+                                && DialogGlobal.kind != "scrobble-listenbrainz-login"
+                                && DialogGlobal.kind != "add-station"
+                                && DialogGlobal.kind != "edit-station") {
                             DialogGlobal.open = false;
                         }
                     }

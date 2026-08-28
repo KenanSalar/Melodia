@@ -1,0 +1,128 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { Radio } from "../../globals/radio.slint";
+import { MaterialIcon } from "../../components/material-icon.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { StationFacts, StationHistory } from "../../components/station-facts.slint";
+
+// A tinted glyph and a sentence. Two of these sit above the facts and say different things, and
+// both are notes about the station rather than controls, so neither is a pill.
+component StatusLine inherits HorizontalLayout {
+    in property <string> icon;
+    in property <brush> tint;
+    in property <string> text;
+
+    alignment: start;
+    spacing: Theme.pad-xs;
+    vertical-stretch: 0;
+
+    MaterialIcon {
+        name: root.icon;
+        icon-size: 16px;
+        icon-color: root.tint;
+    }
+    // The glyph sits in a collapsed em-box and the text in a line box, so the two need a
+    // centring wrapper to share a baseline.
+    VerticalLayout {
+        alignment: center;
+        Text {
+            text: root.text;
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            overflow: elide;
+        }
+    }
+}
+
+// One station's page, under the band it morphed into that station's hero.
+//
+// **The band owns the title, the artwork, the chips and every action**; this file owns the facts.
+// That split is what both radio players with a station page settle on — Shortwave's dialog and
+// RadioDroid's detail are each a labelled list — and it is why nothing here grows a header of its
+// own, which `ui::hero_chips::tests` walks every band host for.
+//
+// **No empty state.** The song history is a section that exists only once the station has
+// announced something, so a station that has never played shows its facts rather than a page
+// apologising for having no songs.
+export component RadioStationDetail inherits Rectangle {
+    // A click anywhere the rows don't claim gives the band's box up. Harmless while the box is
+    // hidden over this page, and correct on the frame it comes back.
+    TouchArea {
+        clicked => { Radio.blur-search-tick += 1; }
+    }
+
+    VerticalLayout {
+        // Left, right and top only — a bottom pad here sits *outside* the scroller's viewport and
+        // reads as a dead strip rather than as breathing room.
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-lg;
+
+        body := Rectangle {
+            vertical-stretch: 1;
+
+            // One scroller for the whole page. The history is capped by the ring that fills it,
+            // so there is nothing here to virtualize and no second scroller to nest.
+            sv := ScrollView {
+                width: 100%;
+                height: 100%;
+                horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy: always-off;
+                viewport-width: self.width;
+
+                VerticalLayout {
+                    spacing: Theme.pad-md;
+                    padding-right: Theme.scrollbar-slot;
+                    alignment: start;
+
+                    // What the directory's own reachability check last said. Shown only once an
+                    // answer has arrived: "we asked and it failed" and "nobody has asked" are
+                    // different, and only the first is worth printing.
+                    if Radio.detail-check-known: StatusLine {
+                        icon: Radio.detail-check-ok ? "check_circle" : "error";
+                        tint: Radio.detail-check-ok ? Theme.green : Theme.yellow;
+                        text: Radio.detail-check-ok
+                            ? @tr("The directory reached this station on its last check.")
+                            : @tr("The directory could not reach this station on its last check.");
+                    }
+
+                    // The `pad-md` above separates this page's *sections*; the rows inside each
+                    // take their own pitch, which is `StationFacts`'s business rather than this
+                    // file's.
+                    StationFacts {
+                        stream-url: Radio.detail-stream-url;
+                        homepage: Radio.detail-station.homepage;
+                        codec: Radio.detail-station.codec;
+                        bitrate: Radio.detail-station.bitrate;
+                        // Only this surface has a directory refresh behind it, so it is the only
+                        // one that can state a vote count.
+                        votes: Radio.detail-votes;
+                        play-count: Radio.detail-station.play_count;
+                        stream-url-copied => { Radio.copy-stream-url(Radio.detail-station.id); }
+                        open-homepage(url) => { Radio.open-homepage(url); }
+                    }
+
+                    // **Mounted only when it has something**, which is what retires the empty
+                    // state: a station that has never played shows the facts above and nothing
+                    // where this would be. Neither radio player with a station page carries a
+                    // song list on it at all; this is the one thing Melodia adds, so it earns its
+                    // place by never being in the way.
+                    if Radio.detail-station-is-playing && Radio.history-rows.length > 0: StationHistory {
+                        rows: Radio.history-rows;
+                    }
+                }
+            }
+
+            OverlayScrollbar {
+                horizontal: false;
+                x: parent.width - self.width;
+                width: 10px;
+                height: 100%;
+                visible-size: sv.visible-height;
+                content-size: sv.viewport-height;
+                offset: -sv.viewport-y;
+                scroll-to(o) => { sv.viewport-y = -o; }
+            }
+        }
+    }
+}

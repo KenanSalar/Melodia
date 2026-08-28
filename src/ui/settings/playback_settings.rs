@@ -7,7 +7,7 @@
 //! - **Play-button animation** needs no runtime mirror — `PlayButton` binds its overlays
 //!   to the Slint global, so the chip click repaints reactively.
 //! - **Resume on startup** has no runtime side effect at all; the flag is consulted
-//!   once, by `main.rs` after `restore_persisted_queue`.
+//!   once, by `main.rs` after `restore_persisted_playback`.
 //! - **The crossfade duration slider** splits `changed` (live, no disk) from `committed`
 //!   (drag release, persists), as `set-volume` / `commit-volume` do.
 //!

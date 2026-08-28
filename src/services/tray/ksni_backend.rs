@@ -21,8 +21,13 @@ struct MelodiaTray {
 impl MelodiaTray {
     /// Build one menu row that emits `action` on click.
     fn action_item(label: &str, action: TrayAction) -> MenuItem<Self> {
+        Self::action_item_enabled(label, action, true)
+    }
+
+    fn action_item_enabled(label: &str, action: TrayAction, enabled: bool) -> MenuItem<Self> {
         StandardItem {
             label: label.to_owned(),
+            enabled,
             activate: Box::new(move |t: &mut Self| {
                 if let Err(e) = t.action_tx.try_send(action) {
                     log::warn!("tray: dropped {action:?} (channel full): {e}");
@@ -74,8 +79,8 @@ impl ksni::Tray for MelodiaTray {
             .into(),
             MenuItem::Separator,
             Self::action_item(self.snapshot.play_pause_label(), TrayAction::PlayPause),
-            Self::action_item("Next", TrayAction::Next),
-            Self::action_item("Previous", TrayAction::Previous),
+            Self::action_item_enabled("Next", TrayAction::Next, self.snapshot.has_next),
+            Self::action_item_enabled("Previous", TrayAction::Previous, self.snapshot.has_previous),
             MenuItem::Separator,
             Self::action_item("Show / Hide Window", TrayAction::ShowHideWindow),
             Self::action_item("Quit Melodia", TrayAction::Quit),

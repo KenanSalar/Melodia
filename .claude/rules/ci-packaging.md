@@ -18,12 +18,12 @@ paths:
 
 # CI and packaging
 
-The release matrix itself is `.claude/rules/updater.md`; this is the gate around it and the
-obligations every artifact carries.
+The release matrix itself is `.claude/rules/updater.md` and the procedure that fires it is
+`docs/RELEASING.md`; this is the gate around both and the obligations every artifact carries.
 
 ## The PR gate
 
-`pr-validation.yml`, on PRs into `dev`: `changes` (skip matrix) → `audit` ∥ `fmt` ∥ `clippy` ∥
+`pr-validation.yml`, on PRs into `main`: `changes` (skip matrix) → `audit` ∥ `fmt` ∥ `clippy` ∥
 `test`. `clippy` is one step (`--all-targets --locked -- -D warnings`, both packages); `test` is
 plain `cargo test --locked`. All four hang off `changes` alone — chaining `test` behind `clippy`
 made the gate's wall clock their sum, and what waits on it is a person deciding whether to merge.
@@ -51,10 +51,13 @@ results. No coverage on this path.
   twice and is given **no** `paths_filter`, so the two can't drift into a stale pass.
 
 - **`.github/` is excluded per-file, never as `.github/**`.** `deploy-coverage`,
-  `enforce-pr-source`, `refresh-manifest` and `ISSUE_TEMPLATE/` compile nothing and nothing reads
-  them, so each is named (`pull_request_template.md` rides the `*.md` line). The four exercised
-  paths stay in: `.github/actions/{linux-system-deps,cargo-audit}`, `pr-validation.yml` itself, and
+  `refresh-manifest`, `FUNDING.yml` and `ISSUE_TEMPLATE/` compile nothing and nothing reads them,
+  so each is named (`pull_request_template.md` rides the `*.md` line). Four exercised paths stay
+  in: `.github/actions/{linux-system-deps,cargo-audit}`, `pr-validation.yml` itself, and
   `release.yml` — which compiles nothing but **is read by `test`** (the licence pins below).
+  `CODEOWNERS` stays in as well and is exercised by nothing, so a PR touching only it pays the
+  full gate; it governs who may approve a workflow change, and a control of that reach failing
+  closed is worth one wasted run.
   Excluding a composite lands a broken provisioning step green; excluding `pr-validation.yml` lets
   a change to the clippy invocation, the job list or the `results` array merge without the jobs it
   governs ever running. Anything new under `.github/` runs everything by default — an exclusion is
@@ -96,8 +99,7 @@ results. No coverage on this path.
   dispatch takes a ref**, so the dropdown picks what gets measured and runs that branch's copy; the
   button exists only because the workflow sits on `main`. Two one-time settings: **Pages enabled**
   (Source = GitHub Actions) **and** the **`github-pages` environment's** branch allowlist,
-  currently `dev` and `main` — dispatching from elsewhere builds and uploads, then fails at
-  `deploy`.
+  currently `main` alone — dispatching from elsewhere builds and uploads, then fails at `deploy`.
 
 - **Every action is SHA-pinned** with a trailing `# vX.Y.Z` comment — no floating tags, no
   `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` (every pin resolves to `node24` or a composite over one);

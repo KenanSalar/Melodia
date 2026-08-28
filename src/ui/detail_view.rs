@@ -11,7 +11,9 @@
 /// `artwork $Global` is a detail view with a cover / hero-blur header and emits both;
 /// `curated $Global, $Ui, $publish_chips` is one of the two curated pages, whose track model is
 /// its own tabbed cache's and whose banner is a composed collage;
-/// `no_artwork $Global` is the procedural `GenreDetail` and emits only the model swap.
+/// `no_artwork $Global` is the procedural `GenreDetail` and emits only the model swap;
+/// `artwork_only $Global` is the station detail, which has a hero and a list of bare titles
+/// rather than a `TrackList`, so the model swap has nothing to swap.
 macro_rules! impl_detail_view_helpers {
     (artwork $Global:ty) => {
         impl_detail_view_helpers!(@tracks_model $Global);
@@ -103,6 +105,9 @@ macro_rules! impl_detail_view_helpers {
     };
     (no_artwork $Global:ty) => {
         impl_detail_view_helpers!(@tracks_model $Global);
+    };
+    (artwork_only $Global:ty) => {
+        impl_detail_view_helpers!(@artwork $Global);
     };
     (@tracks_model $Global:ty) => {
         /// Swap the detail global's `tracks` `VecModel` contents in place, falling back

@@ -61,15 +61,19 @@ pub fn spawn_background_tasks(
     }
 }
 
-/// Restore the persisted queue from disk (best-effort; missing file is OK).
-pub fn restore_persisted_queue(runtime: &tokio::runtime::Runtime, state: &AppState) {
-    if let Err(e) = runtime.block_on(library::queue::restore_persisted_queue(state)) {
-        log::warn!("Failed to restore persisted queue: {e}");
+/// Restore the persisted queue and the station over it from disk (best-effort; missing file is OK).
+pub fn restore_persisted_playback(runtime: &tokio::runtime::Runtime, state: &AppState) {
+    if let Err(e) = runtime.block_on(library::queue::restore_persisted_playback(state)) {
+        log::warn!("Failed to restore persisted playback: {e}");
     }
 }
 
-/// With "Resume on Startup" on and a restored current track, play here so the
+/// With "Resume on Startup" on and a restored source, play here so the
 /// first frame paints `Playing` and rodio is already decoding.
+///
+/// A restored station goes through the same call and comes back the way it went away — as a
+/// re-open, since `player_play` routes a paused station to `resume_station`. That one is a
+/// network round trip rather than a decode, so the first frame paints `Connecting…` instead.
 pub fn maybe_resume_on_startup(
     state: &AppState,
     startup_settings: Option<&services::settings::SettingsData>,
@@ -80,15 +84,18 @@ pub fn maybe_resume_on_startup(
     }
     // Bind the bool out so the guard drops *before* `player_play()`, which
     // re-enters the same lock through `with_state_emit`.
-    let has_track = melodia::player::state::lock_state(&state.player_state).current_track.is_some();
-    if has_track && let Err(e) = library::playback::player_play(&state.playback_ctx()) {
+    let has_source = {
+        let s = melodia::player::state::lock_state(&state.player_state);
+        s.current_track.is_some() || s.radio.is_some()
+    };
+    if has_source && let Err(e) = library::playback::player_play(&state.playback_ctx()) {
         log::warn!("resume_on_startup: player_play failed: {e}");
     }
 }
 
 /// Play the files this launch was handed on the command line.
 ///
-/// After [`restore_persisted_queue`] so an opened track wins over the queue the
+/// After [`restore_persisted_playback`] so an opened track wins over what the
 /// last session left; `main()` skips [`maybe_resume_on_startup`] when there are
 /// files, resuming being visible for the moment it takes this to replace it.
 /// Synchronous like the restore — the first frame should paint what was

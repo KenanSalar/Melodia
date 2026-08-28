@@ -1,6 +1,6 @@
 <!--
-Pull requests target `dev`, not `main`. PRs into `main` come only from `dev`
-or a `hotfix/*` branch, and CI enforces it.
+Pull requests target `main`. Releases are pushed tags, not merges, so nothing
+here ships until a `v*.*.*` tag says so.
 -->
 
 ## Summary
@@ -11,8 +11,8 @@ or a `hotfix/*` branch, and CI enforces it.
 
 <!--
 Link the issue from the sidebar ("Development"), not with a closing keyword.
-GitHub only interprets `Fixes #N` on PRs targeting the default branch, so it
-does nothing on a PR into `dev`. Reference it here for context instead:
+The link is set once on the branch and survives every reword of this body, and
+it is what closes the issue on merge. Reference it here for context instead:
 -->
 
 Part of #

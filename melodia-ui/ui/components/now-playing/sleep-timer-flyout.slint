@@ -51,6 +51,8 @@ export component SleepTimerFlyout inherits PopupSurface {
     in property <int> active-total-seconds;
     // True while "End of current track" mode is armed (from the backend VM).
     in property <bool> track-end-active;
+    // True while the source has no track end to stop at, which today means a station.
+    in property <bool> track-end-unavailable;
     callback pick(int);          // preset value: 0 off / minutes / -1 end-of-track
     callback start-custom(int);  // custom duration in seconds
 
@@ -103,6 +105,10 @@ export component SleepTimerFlyout inherits PopupSurface {
             active: p.value == -1
                 ? root.track-end-active
                 : (p.value * 60 == root.active-total-seconds && !root.track-end-active);
+            // A live stream has no track end to stop at. Dimmed in place rather than dropped:
+            // the host sizes the popup off this list's length, so a row that comes and goes
+            // moves the geometry under the pointer. `library::playback` refuses the arm anyway.
+            option-enabled: p.value != -1 || !root.track-end-unavailable;
             clicked => { root.pick(p.value); }
         }
 

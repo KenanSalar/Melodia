@@ -371,15 +371,22 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, genres_ui: &A
     }) else {
         return;
     };
+    // Synchronously, so it is up before `app.show()` — see `AlbumDetail.restoring`.
+    ui.global::<GenreDetail>().set_restoring(true);
     let s = state.clone();
     let gu = genres_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
         // Below = first-launch fade-up, not a drill-in slide: the user didn't navigate, this is
         // restoring their last view.
-        if let Err(e) = open_genre(&s, &gu, weak, id, NavEnterFrom::Below).await {
+        if let Err(e) = open_genre(&s, &gu, weak.clone(), id, NavEnterFrom::Below).await {
             log::warn!("genres::seed_detail_from_settings open_genre({id}): {e}");
         }
+        // Lowered however it went, and behind `open_genre`'s own hop so the id is already in: a
+        // genre gone since the last session owes the grid back rather than an empty body.
+        let _ = weak.upgrade_in_event_loop(|ui| {
+            ui.global::<GenreDetail>().set_restoring(false);
+        });
     });
 }
 

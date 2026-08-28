@@ -9,6 +9,7 @@
 //! - [`view`]: locale, overflow buttons, and per-view UI state — column
 //!   visibility / widths, sort, browse path, nav index, detail ids,
 //!   section-collapse toggles — plus the `snap_to_preset` helper.
+//! - [`radio`]: the Radio section's master switch and its two sub-toggles.
 //! - [`folders`]: library folder CRUD, watcher toggle, and `scan_folder*`.
 //! - [`diagnostics`]: the Verbose Logging switch.
 //! - [`motion`]: the Skip Startup Animation switch.
@@ -29,6 +30,7 @@ pub mod equalizer;
 pub mod folders;
 pub mod motion;
 pub mod playback;
+pub mod radio;
 pub mod replaygain;
 pub mod scrobble;
 pub mod support;
@@ -57,6 +59,7 @@ pub use motion::set_skip_startup_animation;
 pub use playback::{
     set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
 };
+pub use radio::{set_radio_enabled, set_radio_hide_segmented, set_radio_send_clicks};
 pub use replaygain::{
     set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
     set_replaygain_prevent_clipping,
@@ -74,8 +77,8 @@ pub use updates::{
 pub use view::{
     get_view_sort, set_artist_albums_collapsed, set_browse_path, set_browse_view_mode,
     set_favorites_tab, set_last_detail_id, set_last_nav_index, set_locale, set_my_library_tab,
-    set_overflow_button, set_recently_played_tab, set_settings_tab, set_view_sort, snap_to_preset,
-    update_view_columns,
+    set_overflow_button, set_radio_tab, set_recently_played_tab, set_settings_tab, set_view_sort,
+    snap_to_preset, update_view_columns,
 };
 pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 

@@ -45,6 +45,9 @@ component ColorDot inherits Rectangle {
         text: root.label;
         hovered: touch.has-hover;
         host-width: parent.width;
+        // `below` clears by this, so without it the pill lands one `gap` off the dot's own
+        // top rather than under it.
+        host-height: parent.height;
         side: root.tip-side;
     }
 

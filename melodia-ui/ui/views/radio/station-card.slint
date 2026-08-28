@@ -1,0 +1,249 @@
+import { Theme } from "../../theme.slint";
+import { ArtworkImage } from "../../components/artwork-image.slint";
+import { IconButton } from "../../components/icon-button.slint";
+import { PlayCountBadge } from "../../components/grid/play-count-badge.slint";
+
+// One station, as all three Radio tabs draw it. `EntityCard`'s shape rather than `EntityCard`
+// itself: what a station card carries under the tile is three lines rather than two, and its hover
+// controls are play / star / homepage plus the two the kept tabs add, where that one's are the
+// Playlists grid's CRUD. Composed from the same leaves, so nothing about the tile, the glyph
+// fallback or the hover zoom is restated here.
+//
+// **The tags line is a string, not a chip strip.** `MetaChipStrip` carries a `changed` tracker over
+// a layout property, and a tracker inside a `ListView` delegate outlives the delegate the
+// virtualization destroys. Rust hands the line over already trimmed and joined.
+export component StationCard inherits Rectangle {
+    in property <string> artwork-path;
+    in property <image> cover;
+    in property <string> name;
+    in property <string> meta;
+    in property <string> tags;
+    // The logo-less tile's two stops and its lettering, hashed off the name in `ui::radio::rows`.
+    in property <color> tile-color-1;
+    in property <color> tile-color-2;
+    in property <string> monogram;
+    in property <bool> is-favorite;
+    // A station typed in by hand has no star: un-starring it would drop it from the only list
+    // that shows it, leaving a row nothing can reach. Remove is its affordance instead.
+    in property <bool> starrable: true;
+    // Whether being a favorite is worth marking on this list. False where the list *is* the
+    // favorites, so the mark answers nothing — see the button.
+    in property <bool> star-marks-kept: true;
+    in property <bool> editable;
+    in property <bool> removable;
+    in property <bool> homepage-known;
+    // Recently Played only, where it is what tells a station listened to daily from one played
+    // once by accident. `0` everywhere else draws nothing.
+    in property <int> play-count: 0;
+
+    in property <length> card-width: 180px;
+    // The square tile plus three text lines, where an entity card of the same width carries two.
+    in property <length> card-height: 246px;
+    // `Radio.logo-decode-size`, drilled like `covers-generation` — this file imports no global.
+    in property <int> logo-decode-size;
+
+    // What the stored logo would draw at 1:1 here. The tier decodes to `logo-decode-size` physical
+    // pixels across this tile and never pads a small source up, so the source's own width is the
+    // fraction of the tile it can cover — scale-free, both numbers being physical. What
+    // `ArtworkImage` does with it, and the budget it does it against, is the tile's own.
+    property <length> logo-native-size: root.logo-decode-size > 0
+        ? root.tile-size * root.cover.width / root.logo-decode-size
+        : root.tile-size;
+
+    callback clicked();
+    callback play-clicked();
+    callback favorite-clicked();
+    callback homepage-clicked();
+    callback edit-clicked();
+    callback remove-clicked();
+
+    // **Every hover-driven binding reads this, not `touch.has-hover`.** A higher-z `TouchArea`
+    // captures the pointer, so hovering any nested button flips that false and the fill, the zoom
+    // and the overlay would all drop out while the user is aiming at one.
+    property <bool> card-hovered: touch.has-hover
+        || fav_btn.has-hover
+        || play_btn.has-hover
+        || home_btn.has-hover
+        || edit_btn.has-hover
+        || remove_btn.has-hover;
+
+    property <length> tile-size: root.card-width - 2 * Theme.pad-sm;
+
+    width: card-width;
+    height: card-height;
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: Theme.radius-md;
+        background: root.card-hovered ? Theme.surface0 : transparent;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        VerticalLayout {
+            padding: Theme.pad-sm;
+            spacing: Theme.pad-sm;
+
+            ArtworkImage {
+                artwork-path: root.artwork-path;
+                cover: root.cover;
+                tile-size: root.tile-size;
+                tile-radius: Theme.radius-md;
+                cover-scale: root.card-hovered ? 1.04 : 1.0;
+                // A favicon is small by trade, so a good share of the directory has a logo that
+                // cannot cross the tile without going soft. Those float at a size that stays
+                // sharp, over the same gradient a station with no logo at all gets.
+                native-size: root.logo-native-size;
+                // A station whose logo is missing, dead, or too small to draw gets its own two
+                // stops and its initials instead — a third of a directory page has no logo field
+                // at all, and one repeated glyph across them is what makes Browse read as a grid
+                // of icons rather than of stations. `ui::radio::identity` keeps the stops deep
+                // enough that this one ink is legible on every station.
+                tile-bg: @linear-gradient(135deg, root.tile-color-1, root.tile-color-2);
+                tile-icon-color: #ffffff.transparentize(0.1);
+                fallback-text: root.monogram;
+                // Still the last resort, for a name with no letters to take initials from.
+                fallback-icon: "radio";
+            }
+
+            VerticalLayout {
+                spacing: 2px;
+                // The LRM keeps mixed-script names from drifting, as in the rows.
+                Text {
+                    text: "‎" + root.name;
+                    color: Theme.text;
+                    font-size: Theme.font-size-md;
+                    font-weight: 600;
+                    overflow: elide;
+                }
+                Text {
+                    text: "‎" + root.meta;
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                    visible: root.meta != "";
+                }
+                Text {
+                    text: "‎" + root.tags;
+                    color: Theme.overlay1;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                    visible: root.tags != "";
+                }
+            }
+
+            Rectangle { vertical-stretch: 1; }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        // The body opens the station's page; the play button in the corner is what tunes in.
+        clicked => { root.clicked(); }
+    }
+
+    // **After `touch`**, so the nested buttons consume their own clicks before the card's own
+    // action fires, and matched to the artwork square so the icons frame the tile.
+    //
+    // **Always mounted rather than behind an `if`**, so the root can read each button's
+    // `has-hover`. `visible` propagates to children, so a hidden one is not hit-tested either.
+    Rectangle {
+        x: Theme.pad-sm;
+        y: Theme.pad-sm;
+        width: root.tile-size;
+        height: root.tile-size;
+
+        // **The centre stays clear, and that is the part worth keeping.** The play control used
+        // to be a 48 px disc in the middle of the tile, which is exactly where a body click lands,
+        // so the card played instead of opening for anyone who aimed at the artwork. It is a
+        // corner control now like every other card's in the tree
+        // (`components/grid/entity-card.slint`), so both actions are reachable and neither is in
+        // the other's way.
+
+        // **Stays up when the station is starred**, unlike the rest of the overlay: the star is a
+        // fact about the row and not an affordance, so a grid of results has to show which of them
+        // are already kept without being hovered one at a time. That is Browse, and it is Recently
+        // Played too — a station played out of Browse is kept without being starred, so the two
+        // are mixed there as well. On Favorites every row is starred, where the same mark says
+        // nothing and reads as chrome on every card.
+        fav_btn := IconButton {
+            visible: root.starrable;
+            x: parent.width - self.width - Theme.pad-sm;
+            y: Theme.pad-sm;
+            icon: root.is-favorite ? "favorite" : "favorite_border";
+            icon-size: 18px;
+            diameter: 30px;
+            filled: root.is-favorite;
+            idle-bg: Theme.floating-chrome-bg;
+            idle-fg: root.is-favorite ? Theme.red : Theme.text;
+            hover-fg: Theme.red;
+            opacity: root.card-hovered || (root.is-favorite && root.star-marks-kept) ? 1.0 : 0.0;
+            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            clicked => { root.favorite-clicked(); }
+        }
+
+        home_btn := IconButton {
+            visible: root.homepage-known;
+            x: parent.width - self.width - Theme.pad-sm;
+            y: parent.height - self.height - Theme.pad-sm;
+            icon: "link";
+            icon-size: 18px;
+            diameter: 30px;
+            idle-bg: Theme.floating-chrome-bg;
+            opacity: root.card-hovered ? 1.0 : 0.0;
+            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            clicked => { root.homepage-clicked(); }
+        }
+
+        // **Above the link, and in its slot when the station has no site**: the right edge is a
+        // stack off the bottom, so a control left hovering over a gap reads as a sibling that
+        // failed to draw.
+        play_btn := IconButton {
+            x: parent.width - self.width - Theme.pad-sm;
+            y: home_btn.y - (root.homepage-known ? self.height + Theme.pad-xs : 0px);
+            icon: "play_arrow";
+            icon-size: 18px;
+            diameter: 30px;
+            filled: true;
+            idle-bg: Theme.floating-chrome-bg;
+            opacity: root.card-hovered ? 1.0 : 0.0;
+            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            clicked => { root.play-clicked(); }
+        }
+
+        // Bottom-left, opposite the homepage link: the two that change the row rather than
+        // following it. Only the kept tabs mount them, so Browse looks exactly as it did.
+        remove_btn := IconButton {
+            visible: root.removable;
+            x: Theme.pad-sm;
+            y: parent.height - self.height - Theme.pad-sm;
+            icon: "delete";
+            icon-size: 18px;
+            diameter: 30px;
+            idle-bg: Theme.floating-chrome-bg;
+            hover-fg: Theme.danger;
+            opacity: root.card-hovered ? 1.0 : 0.0;
+            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            clicked => { root.remove-clicked(); }
+        }
+
+        edit_btn := IconButton {
+            visible: root.editable;
+            x: Theme.pad-sm + remove_btn.width + Theme.pad-xs;
+            y: parent.height - self.height - Theme.pad-sm;
+            icon: "edit";
+            icon-size: 18px;
+            diameter: 30px;
+            idle-bg: Theme.floating-chrome-bg;
+            opacity: root.card-hovered ? 1.0 : 0.0;
+            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            clicked => { root.edit-clicked(); }
+        }
+    }
+
+    // Top-left of the tile, clear of the hover trio. Non-interactive, so card clicks pass through.
+    PlayCountBadge {
+        x: 2 * Theme.pad-sm;
+        y: 2 * Theme.pad-sm;
+        count: root.play-count;
+    }
+}

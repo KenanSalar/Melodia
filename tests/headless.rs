@@ -2,10 +2,12 @@
 //! fixture audio file via the library API, and assert the row lands in the DB.
 //!
 //! Notes:
-//! - Roots `Paths` in the tempdir through `Paths::rooted_at`. Redirecting
-//!   `dirs::data_dir()` with `XDG_DATA_HOME` would also cover that lookup and
-//!   the `Melodia` join `resolve` adds on top, at the price of a process-global
-//!   mutation this binary would need `unsafe` for.
+//! - Roots `Paths` in the tempdir through `Paths::rooted_at`, which derives every
+//!   path from a root it is handed. What that leaves uncovered is `resolve`'s
+//!   choice of root, and steering that means `MELODIA_DATA_DIR` or
+//!   `XDG_DATA_HOME`, a process-global mutation this binary would need `unsafe`
+//!   for. `src/tests/config_tests.rs` drives the choice under the env lock
+//!   instead.
 //! - `AppState::init` opens the default audio device (rodio); machines without
 //!   audio will fail here. CI points ALSA's default PCM at the userspace `null`
 //!   device (see the `test` job in `.github/workflows/pr-validation.yml`), so
@@ -28,10 +30,7 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
     let (state, _channels) = AppState::init(paths, runtime).await?;
 
     let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    assert!(
-        fixtures.join("silence-1s.flac").exists(),
-        "fixture missing — regenerate with ffmpeg (see § J in BACKEND_PORT.md)"
-    );
+    assert!(fixtures.join("silence-1s.flac").exists(), "fixture missing — regenerate with ffmpeg");
 
     let folder =
         library::settings::add_folder(&state, fixtures.to_string_lossy().into_owned()).await?;

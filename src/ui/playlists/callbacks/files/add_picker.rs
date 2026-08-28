@@ -8,13 +8,12 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Model};
 
-use super::{
-    add_pick_disabled, clamp_usize, refresh_add_selection_meta, set_all_picks, toggle_pick,
-};
+use super::{add_pick_disabled, refresh_add_selection_meta, set_all_picks, toggle_pick};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
+use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Dialog, PlaylistPickRow as UiPlaylistPickRow, Playlists, Settings};
 
 pub(super) fn wire(
@@ -129,8 +128,8 @@ pub(super) fn wire(
                 notifications.show_auto_dismiss(
                     NotificationParams::plain(
                         variant,
-                        settings.invoke_add_to_playlist_title(clamp_usize(ok)),
-                        settings.invoke_add_to_playlist_message(clamp_usize(track_count)),
+                        settings.invoke_add_to_playlist_title(len_as_i32(ok)),
+                        settings.invoke_add_to_playlist_message(len_as_i32(track_count)),
                     ),
                     TOAST_AUTO_DISMISS_MS,
                 );

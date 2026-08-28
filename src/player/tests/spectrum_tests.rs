@@ -5,6 +5,7 @@ use std::cell::Cell;
 use super::*;
 use crate::player::dsp::{VISUALIZER_DECAY, db_to_linear};
 use crate::player::tests::helpers::{assert_approx as approx, fill_sine};
+use crate::test_support::UNBOUNDED;
 
 // --- helpers -----------------------------------------------------------------
 
@@ -140,7 +141,7 @@ fn the_cap_yields_to_nyquist_on_a_low_rate_file() {
 #[test]
 fn a_nonsense_sample_rate_yields_no_edges() {
     // The last of these is a rate whose Nyquist is below the band floor.
-    for rate in [0.0, -44_100.0, f32::NAN, f32::INFINITY, 80.0] {
+    for rate in [0.0, -44_100.0, f32::NAN, UNBOUNDED, 80.0] {
         assert!(band_edges(NUM_BANDS, FFT_SIZE, rate).is_empty(), "rate {rate}");
     }
     assert!(band_edges(0, FFT_SIZE, 44_100.0).is_empty());

@@ -1,16 +1,19 @@
 import { Theme } from "../../../theme.slint";
 import { SettingsPage } from "../../../globals/settings-page.slint";
+import { RadioSection } from "../radio-section.slint";
 import { ScrobblingSection } from "../scrobbling-section.slint";
 import { DiscordSection } from "../discord-section.slint";
 
-// The outside accounts Melodia talks to: the two scrobbling services — with
-// MusicBrainz ID tagging riding on one of them — and Discord Rich Presence.
+// The outside services Melodia talks to: the radio directory, which is the one here that
+// needs no account, the two scrobbling ones — with MusicBrainz ID tagging riding on one of
+// them — and Discord Rich Presence.
 export component ServicesPage inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    out property <bool> has-matches: scrobbling.has-matches || discord.has-matches;
+    out property <bool> has-matches: radio.has-matches || scrobbling.has-matches
+        || discord.has-matches;
 
     // See `library-page.slint` for why the cards live in columns that place
     // themselves.
@@ -22,6 +25,7 @@ export component ServicesPage inherits Rectangle {
             alignment: start;
             spacing: Theme.pad-lg;
 
+            radio := RadioSection { tab-name: @tr("Services"); }
             scrobbling := ScrobblingSection { tab-name: @tr("Services"); }
         }
 

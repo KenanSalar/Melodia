@@ -13,7 +13,7 @@ import { Albums, AlbumDetail } from "globals/albums.slint";
 import { Artists, ArtistDetail } from "globals/artists.slint";
 import { Equalizer, ReplayGain, Visualizer } from "globals/audio.slint";
 import { Favorites, RecentlyPlayed } from "globals/curated.slint";
-import { SmartEditor, TagEditor, ScrobbleUi } from "globals/dialog-forms.slint";
+import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "globals/dialog-forms.slint";
 import { Dialog } from "globals/dialog.slint";
 import { Genres, GenreDetail } from "globals/genres.slint";
 import { HeroBackdrop } from "globals/hero-backdrop.slint";
@@ -24,6 +24,7 @@ import { Nav, NavEnterFrom } from "globals/nav.slint";
 import { Player } from "globals/player.slint";
 import { Playlists, PlaylistDetail } from "globals/playlists.slint";
 import { Queue, NowPlaying } from "globals/queue.slint";
+import { Radio } from "globals/radio.slint";
 import { Search } from "globals/search.slint";
 import { SettingsPage } from "globals/settings-page.slint";
 import { WindowChrome, MiniPlayer, CompositeScroll, PopupHighlight } from "globals/shell.slint";
@@ -42,6 +43,7 @@ import { PlaceholderView } from "views/placeholder-view.slint";
 import { MyLibraryView } from "views/my-library-view.slint";
 import { FavoritesView } from "views/favorites-view.slint";
 import { RecentlyPlayedView } from "views/recently-played-view.slint";
+import { RadioView } from "views/radio-view.slint";
 import { BrowseView } from "views/browse-view.slint";
 import { SearchView } from "views/search-view.slint";
 import { SettingsView } from "views/settings-view.slint";
@@ -58,7 +60,7 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
+    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers, Radio, RadioForm,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
@@ -101,6 +103,7 @@ export component AppWindow inherits Window {
         if (idx == 3) { return @tr("My Library"); }
         if (idx == 8) { return @tr("Recently Played"); }
         if (idx == 9) { return @tr("Settings"); }
+        if (idx == 10) { return @tr("Radio"); }
         // App name (proper noun) — never translated.
         return "Melodia";
     }
@@ -306,6 +309,16 @@ export component AppWindow inherits Window {
         active-changed(active) => { RecentlyPlayed.section-active-changed(active); }
     }
 
+    // Radio. **One gate for all three tabs**, the Favorites / Recently Played shape rather than My
+    // Library's per-tab set: those five were five sidebar sections with five hooks, where these
+    // three share a handle. It also has to be one — a per-tab gate makes a tab flip a section
+    // leave, and Browse holds a directory answer this session paid a network round trip for.
+    SectionActiveGate {
+        index: 10;
+        mini-active: mini-switch.active;
+        active-changed(active) => { Radio.section-active-changed(active); }
+    }
+
     // Outer mantle shell. With a transparent Window background this rounded Rectangle *is* the
     // visible window outline, and `clip: true` masks anything a child paints outside it.
     // Native-frame or maximized drops the radius to 0 and stays full-bleed; the panel still rounds.
@@ -429,13 +442,25 @@ export component AppWindow inherits Window {
                             enter-from: Nav.pending-enter-from;
                             SettingsView { width: 100%; height: 100%; }
                         }
+                        // Gated with the sidebar row, so the switch mounts and unmounts the
+                        // section with no restart. The fall-through below keeps its plain
+                        // `!= 10`: the row goes, and `ui::radio::disable` sweeps the nav history
+                        // and folds the live index, so nothing selects 10 with the switch off.
+                        if !Nav.now-playing-open && Settings.radio-enabled
+                            && Nav.selected-index == 10: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            RadioView { width: 100%; height: 100%; }
+                        }
                         if !Nav.now-playing-open
                             && Nav.selected-index != 0
                             && Nav.selected-index != 1
                             && Nav.selected-index != 2
                             && Nav.selected-index != 3
                             && Nav.selected-index != 8
-                            && Nav.selected-index != 9: ViewTransition {
+                            && Nav.selected-index != 9
+                            && Nav.selected-index != 10: ViewTransition {
                             width: parent.width;
                             height: parent.height;
                             enter-from: Nav.pending-enter-from;

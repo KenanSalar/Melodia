@@ -38,11 +38,13 @@ use crate::ui::chips;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi, NAV_FAVORITES};
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::my_library::{MyLibraryTab, NAV_MY_LIBRARY, tab_from_index};
+use crate::ui::radio::NAV_RADIO;
 use crate::ui::recently_played::{NAV_RECENTLY_PLAYED, RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::tracks::format_duration_ms;
 use crate::ui::util::len_as_i32;
 use crate::{
     AlbumDetail, AppWindow, ArtistDetail, GenreDetail, HeroChips, MyLibrary, Nav, PlaylistDetail,
+    Radio,
 };
 
 /// How many rows a hero band gives its chips before dropping the rest.
@@ -51,11 +53,9 @@ use crate::{
 /// hero's trailing spacer already leaves. A third overruns the tile on all six and pushes
 /// the action pill out of the banner — unlike the Now Playing strip, which passes `None`.
 ///
-/// What makes the second row fit on the two heroes carrying a subtitle (Album's artist,
-/// Playlist's description) is that the line sits *under the title, inside the title row*,
-/// where the `SearchBar` beside it has already claimed the height. Moving either onto a
-/// row of its own is what breaks this, not the row count — and it makes
-/// `Theme.hero-title-size` and `font-size-md` a pair, raising either spending the slack.
+/// The slack is what the title block leaves, so on the two heroes carrying a subtitle
+/// (Album's artist, Playlist's description) `Theme.hero-title-size` and `font-size-md` are a
+/// pair: raising either spends it.
 const HERO_MAX_ROWS: usize = 2;
 
 /// The translated labels a builder needs. A trait rather than the global directly, so the
@@ -130,6 +130,12 @@ pub enum ChipOwner {
     Playlist(i64),
     Favorites,
     RecentlyPlayed,
+    /// The station detail, and the one owner carrying no id. It cannot: a browsed station
+    /// has no database row, so every one of them would record `Station(0)` and a hand-off
+    /// between two of them would read as the same banner. Nothing is lost — Radio has one
+    /// detail and every open republishes, so the worst a collapsed owner costs is a clear
+    /// that didn't need to happen.
+    Station,
 }
 
 /// The published chips, who published them, and the width they were chunked against.
@@ -250,6 +256,11 @@ fn band_owner(ui: &AppWindow) -> Option<ChipOwner> {
     if nav == NAV_RECENTLY_PLAYED {
         return Some(ChipOwner::RecentlyPlayed);
     }
+    if nav == NAV_RADIO {
+        // Unlike the two curated pages, this band has an idle state: with no detail open
+        // the Radio band states a count and no chips at all.
+        return ui.global::<Radio>().get_detail_open().then_some(ChipOwner::Station);
+    }
     if nav != NAV_MY_LIBRARY {
         return None;
     }
@@ -292,6 +303,13 @@ fn is_open(ui: &AppWindow, owner: ChipOwner) -> bool {
         ChipOwner::Artist(id) => i64::from(ui.global::<ArtistDetail>().get_artist_id()) == id,
         ChipOwner::Genre(id) => i64::from(ui.global::<GenreDetail>().get_genre_id()) == id,
         ChipOwner::Playlist(id) => i64::from(ui.global::<PlaylistDetail>().get_playlist_id()) == id,
+        // Nav too, where the four need none: their page-level teardown clears unconditionally, so
+        // `is_open` is only ever asked while My Library is on screen, and Radio's leave hands its
+        // hero back through the same macro a close takes while the page is still seated.
+        ChipOwner::Station => {
+            ui.global::<Nav>().get_selected_index() == NAV_RADIO
+                && ui.global::<Radio>().get_detail_open()
+        }
         ChipOwner::Favorites | ChipOwner::RecentlyPlayed => false,
     }
 }
@@ -356,6 +374,31 @@ pub fn publish_playlist(
 ) {
     let chips = playlist_chips(&ui.global::<HeroChips>(), playlist, fold);
     publish(ui, ChipOwner::Playlist(playlist.id), chips, section_active);
+}
+
+/// The station hero's facts, gathered rather than read off one entity: a station opened from
+/// Browse and one opened from a kept tab come from different types, and the directory refresh
+/// behind the open fills the `state` in.
+///
+/// **What the station *is*, and nothing about how it works.** The codec, the bitrate, the votes
+/// and the stream URL are rows on the page below rather than chips up here, so no fact is stated
+/// twice — the band is the glance, the body is the reference. Both radio players with a station
+/// page put that second set in a list.
+///
+/// **No country either, for the same rule one line up**: it is the band's own subtitle, off the
+/// same resolver the chip took it from, so a chip of it printed the line above twice. The state
+/// stays — it names somewhere the subtitle doesn't.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StationFacts {
+    /// Already split and capped by the caller, which is where the tag-display policy lives —
+    /// this module decides layout, not how many genres are worth naming.
+    pub tags: Vec<String>,
+    pub state: String,
+    pub language: String,
+}
+
+pub fn publish_station(ui: &AppWindow, facts: &StationFacts, section_active: bool) {
+    publish(ui, ChipOwner::Station, station_chips(facts), section_active);
 }
 
 /// Favorites is assembled from three fetches, so it takes the handle and gathers rather
@@ -436,6 +479,24 @@ fn album_chips(
     if let Some(genre) = genre {
         out.push(SharedString::from(genre));
     }
+    out
+}
+
+/// **Tags last, for `album_chips`' reason**: they say what a station plays rather than where it
+/// is, so on a band narrow enough to drop a row they are what should go before the state does.
+/// Every field is omitted when blank — the directory leaves most of them blank on some station or
+/// other, and a hand-typed one arrives with almost nothing.
+///
+/// Takes no labels: every chip here is a name the directory supplied, so there is nothing to
+/// translate and nothing to pluralize.
+fn station_chips(facts: &StationFacts) -> Vec<SharedString> {
+    let mut out = Vec::with_capacity(2 + facts.tags.len());
+    for field in [&facts.state, &facts.language] {
+        if !field.is_empty() {
+            out.push(SharedString::from(field.as_str()));
+        }
+    }
+    out.extend(facts.tags.iter().map(|tag| SharedString::from(tag.as_str())));
     out
 }
 

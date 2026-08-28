@@ -306,7 +306,7 @@ async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result
     // `composer` has no slot on `TrackListRow`, and `file_name` is left out
     // deliberately — the tiebreaker weight that keeps a filename echo below
     // the tags it repeats has no equivalent in an unranked substring filter.
-    // `year` is an integer that joins the match through `row_match::Needle::matches_year`
+    // `year` is an integer that joins the match through `row_match::Needle::matches_number`
     // instead of the text list.
     const NOT_TEXT_SEARCHED: [&str; 3] = ["composer", "file_name", "year"];
 

@@ -1,0 +1,73 @@
+import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+
+// The switch that mounts or removes the whole Radio section, and the two rows that configure it
+// once it is on. The master row's description names radio-browser.info because a user deciding to
+// stay local is entitled to know who would be contacted. Search visibility follows
+// `discord-section.slint`.
+export component RadioSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> tab-name;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.tab-name, @tr("Radio"),
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    property <bool> show-radio: row-visible(
+        @tr("Internet radio"),
+        @tr("Browse and play live stations from radio-browser.info"));
+    property <bool> show-segmented: row-visible(
+        @tr("Hide segmented stations"),
+        @tr("Segmented (HLS) streams play, but take longer to start"));
+    property <bool> show-clicks: row-visible(
+        @tr("Report plays to the directory"),
+        @tr("An anonymous count is what orders stations by popularity"));
+
+    out property <bool> has-matches: show-radio || (Settings.radio-enabled && (show-segmented || show-clicks));
+
+    VerticalLayout {
+    if has-matches: SectionCard {
+        title: @tr("Radio");
+
+        if root.show-radio: SettingRow {
+            icon: "radio";
+            label: @tr("Internet radio");
+            description: @tr("Browse and play live stations from radio-browser.info");
+            ToggleSwitch {
+                checked <=> Settings.radio-enabled;
+                toggled(v) => { Settings.radio-enabled-changed(v); }
+            }
+        }
+
+        // Behind an `if`, never `visible: false` — a hidden child still claims its slot in the
+        // card's column (slint#7377), which is the shape the crossfade rows take too.
+        if Settings.radio-enabled && root.show-segmented: SettingRow {
+            icon: "visibility";
+            label: @tr("Hide segmented stations");
+            description: @tr("Segmented (HLS) streams play, but take longer to start");
+            ToggleSwitch {
+                checked <=> Settings.radio-hide-segmented;
+                toggled(v) => { Settings.radio-hide-segmented-changed(v); }
+            }
+        }
+
+        if Settings.radio-enabled && root.show-clicks: SettingRow {
+            icon: "bar_chart";
+            label: @tr("Report plays to the directory");
+            description: @tr("An anonymous count is what orders stations by popularity");
+            ToggleSwitch {
+                checked <=> Settings.radio-send-clicks;
+                toggled(v) => { Settings.radio-send-clicks-changed(v); }
+            }
+        }
+    }
+    }
+}

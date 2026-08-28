@@ -69,8 +69,8 @@ pub fn install_backdrop_dither(app: &AppWindow) {
 }
 
 /// The per-view handles `install_views` hands back for the wiring `main()` still
-/// owns: the initial fetches, the playlist import/export pills (which need the
-/// notifications stack), and the `cover_thumbs` consumers.
+/// owns: the initial fetches, the playlist and station import/export pills
+/// (which need the notifications stack), and the `cover_thumbs` consumers.
 ///
 /// Only handles a *caller* reads live here. `BrowseUi` / `FavoritesUi` /
 /// `RecentlyPlayedUi` / `SearchUi` deliberately don't: every wired closure
@@ -84,6 +84,7 @@ pub struct UiHandles {
     pub artists_ui: Arc<ui::artists::ArtistsUi>,
     pub genres_ui: Arc<ui::genres::GenresUi>,
     pub playlists_ui: Arc<ui::playlists::PlaylistsUi>,
+    pub radio_ui: Arc<ui::radio::RadioUi>,
 }
 
 /// Resolve every `TrackListRowItem` thumbnail — all track tables, all views —
@@ -120,15 +121,21 @@ pub fn install_views(
     // `.claude/rules/ui-patterns.md` for what that costs.
     //
     // The Favorites *tab* seeds down beside the detail views instead, needing
-    // the `favorites_ui` handle; My Library's needs none.
+    // the `favorites_ui` handle; My Library's and Radio's need none.
     if let Some(vs) = startup_view_state {
         // 4–7 were Albums / Artists / Genres / Playlists — a `views.json`
         // written by a released build still holds them, and they route nowhere.
-        let idx = ui::my_library::fold_retired_nav_index(vs.last_nav_index);
-        if (0..=9).contains(&idx) {
+        // 10 routes only while Radio is switched on, so the two folds compose:
+        // they answer different questions and neither belongs inside the other.
+        let idx = ui::radio::fold_disabled_nav_index(
+            ui::my_library::fold_retired_nav_index(vs.last_nav_index),
+            state.radio_enabled(),
+        );
+        if (0..=services::view_state::MAX_NAV_INDEX).contains(&idx) {
             app.global::<Nav>().set_selected_index(idx);
         }
         ui::my_library::seed_tab(app, vs.my_library_tab);
+        ui::radio::seed_tab(app, vs.radio_tab);
     }
 
     ui::callbacks::wire_all(app, state);
@@ -159,6 +166,7 @@ pub fn install_views(
     let playlists_ui = ui::playlists::install(cx);
     let favorites_ui = ui::favorites::install(cx, &artists_ui);
     let recently_played_ui = ui::recently_played::install(cx);
+    let radio_ui = ui::radio::install(cx);
     // Bound under an underscore rather than dropped at the semicolon, so the
     // keepalive note on `UiHandles` has something to attach to.
     let _search_ui = ui::search::install(cx, &albums_ui, &artists_ui);
@@ -173,8 +181,9 @@ pub fn install_views(
     *state.ui_handles.artists.lock() = Some(artists_ui.clone());
     *state.ui_handles.genres.lock() = Some(genres_ui.clone());
     *state.ui_handles.playlists.lock() = Some(playlists_ui.clone());
+    *state.ui_handles.radio.lock() = Some(radio_ui.clone());
 
-    // The four persisted-detail reopens stay adjacent here rather than folding
+    // The five persisted-detail reopens stay adjacent here rather than folding
     // into each slice's `install`, because the history seed below depends on
     // none of them having landed yet. The tabbed pages' tab seeds *did* fold
     // in, their handle being the receiver.
@@ -182,6 +191,7 @@ pub fn install_views(
     ui::artists::seed_detail_from_settings(app, state, &artists_ui);
     ui::genres::seed_detail_from_settings(app, state, &genres_ui);
     ui::playlists::seed_detail_from_settings(app, state, &playlists_ui);
+    ui::radio::seed_detail_from_settings(app, state, &radio_ui);
 
     // Seed the nav-history with the boot view, so Mouse-4 has a target after the
     // first sidebar click — otherwise a boot landing on a section with no
@@ -221,6 +231,7 @@ pub fn install_views(
     let (tune_albums, tune_artists) = (albums_ui.clone(), artists_ui.clone());
     let (tune_playlists, tune_favorites) = (playlists_ui.clone(), favorites_ui.clone());
     let (tune_recent, tune_browse) = (recently_played_ui.clone(), browse_ui.clone());
+    let tune_radio = radio_ui.clone();
     let tune_rows = cover_thumbs.clone();
     let weak = app.as_weak();
     let retune = move || {
@@ -231,6 +242,7 @@ pub fn install_views(
         ui::favorites::tune_cache_for_display(&app, &tune_favorites);
         ui::recently_played::tune_cache_for_display(&app, &tune_recent);
         ui::browse::tune_cache_for_display(&app, &tune_browse);
+        ui::radio::tune_cache_for_display(&app, &tune_radio);
         // The row tier belongs to no view, so it has no
         // `tune_cache_for_display` — but it owes the same post-show read.
         tune_rows.set_thumb_size(media::cover_thumbs::row_cover_size(f64::from(
@@ -256,6 +268,7 @@ pub fn install_views(
         artists_ui,
         genres_ui,
         playlists_ui,
+        radio_ui,
     }
 }
 
@@ -276,6 +289,7 @@ pub fn install_library_settings_and_friends(
     ui::sleep_timer::install_sleep_timer(app, state);
     ui::settings::scrobbling_settings::install_scrobbling(app, state);
     ui::settings::discord_settings::install_discord(app, state);
+    ui::settings::radio_settings::install_radio(app, state);
     let notifications = ui::shell::notifications::install(app);
     ui::settings::file_watching::install(app, state, &notifications);
     ui::settings::updater_settings::install(app, state);
@@ -290,7 +304,7 @@ pub fn install_library_settings_and_friends(
 }
 
 /// Push the current `PlayerState` into `Player.vm` / `Player.queue` so the
-/// now-playing bar shows the persisted last-played track on launch.
+/// now-playing bar shows the persisted last-played source on launch.
 pub fn seed_initial_view_model(
     app: &AppWindow,
     state: &AppState,
@@ -326,12 +340,21 @@ pub fn seed_initial_view_model(
 
     // The row tier is empty this early, so the seed above is guaranteed to be the cache-only
     // lookup's miss — and no `view_model` push is owed on a restored-but-paused session, so
-    // nothing else would ever fill it.
+    // nothing else would ever fill it. Both slots unconditionally: the restore seats a track or a
+    // station and never both, and an empty path is a no-op inside.
     ui::shell::bridge::warm_vm_cover(
         app.as_weak(),
         &state.runtime,
         cover_thumbs,
         light.current_track.as_ref().and_then(|t| t.artwork_path.clone()).unwrap_or_default(),
+        ui::shell::bridge::VmCoverSlot::Track,
+    );
+    ui::shell::bridge::warm_vm_cover(
+        app.as_weak(),
+        &state.runtime,
+        cover_thumbs,
+        light.radio.as_ref().and_then(|r| r.artwork_path.clone()).unwrap_or_default(),
+        ui::shell::bridge::VmCoverSlot::Station,
     );
 }
 
@@ -661,6 +684,20 @@ pub fn install_toast_bridge(
                             message: detail.into(),
                             action_label: slint::SharedString::default(),
                             action_kind: "info".into(),
+                        },
+                        6000,
+                    );
+                }
+                // A vote the directory would not take. Auto-dismissing: nothing is broken
+                // and there is nothing for the user to do about it.
+                ToastKind::RadioVote => {
+                    notifications.show_auto_dismiss(
+                        NotificationParams {
+                            variant: "warning".into(),
+                            title: g.invoke_toast_radio_vote_title(),
+                            message: detail.into(),
+                            action_label: slint::SharedString::default(),
+                            action_kind: "warning".into(),
                         },
                         6000,
                     );

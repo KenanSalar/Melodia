@@ -11,13 +11,13 @@
 pub(in crate::ui) mod macros;
 
 pub(in crate::ui) mod cross_tab_nav;
+pub(in crate::ui) mod index_persist;
 mod library_settings;
 mod now_playing;
 mod tags;
 mod updater;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI32, Ordering};
 
 use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
@@ -27,6 +27,7 @@ use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::{AppWindow, Nav, Player};
 
+use index_persist::IndexPersist;
 use macros::{spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
 
 pub use cross_tab_nav::wire_cross_tab_nav;
@@ -159,23 +160,6 @@ pub(super) fn persisted_sort(state: &AppState, view_id: &str) -> Option<(String,
     library::settings::get_view_sort(state, view_id).map(|s| (s.field, s.dir.as_str()))
 }
 
-/// Shadow of `views.json`'s `last_nav_index` plus the lock its writes serialize on.
-///
-/// `Nav.persist-selected-index` can fire twice in one tick — `nav_history::replay` closes
-/// the departing detail first, and a close restores a cross-section origin — and two
-/// `spawn_blocking` writes have no ordering, so the origin can land last. `writer` supplies
-/// that ordering and `latest` lets a task holding it drop a superseded write; **the load
-/// has to sit under `writer`**, or both tasks pass the check and race.
-///
-/// Two fields rather than a `Mutex<i32>`, so the UI thread publishes with a store instead
-/// of blocking on a guard held across file I/O.
-struct NavIndexPersist {
-    /// Published on the UI thread before each spawn; read by writers under `writer`.
-    latest: AtomicI32,
-    /// Held by the disk writers for the length of the write.
-    writer: parking_lot::Mutex<()>,
-}
-
 /// Wire every Slint `Player.*` callback to its `library::*` counterpart.
 /// Call once after constructing `AppWindow`.
 pub fn wire_all(ui: &AppWindow, state: &AppState) {
@@ -272,30 +256,24 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     {
         let s = state.clone();
         let ui_weak = ui_weak.clone();
-        let persist = Arc::new(NavIndexPersist {
-            latest: AtomicI32::new(ui.global::<Nav>().get_selected_index()),
-            writer: parking_lot::Mutex::new(()),
-        });
+        // `Nav.persist-selected-index` can fire twice in one tick — `nav_history::replay`
+        // closes the departing detail first, and a close restores a cross-section origin.
+        let persist = Arc::new(IndexPersist::new(nav.get_selected_index()));
         nav.on_persist_selected_index(move |idx| {
             if let Some(ui) = ui_weak.upgrade() {
                 crate::ui::nav_history::record_current(&s, &ui);
             }
-            // Ahead of the spawn — a queued write has to be able to see it.
-            persist.latest.store(idx, Ordering::Release);
+            persist.publish(idx);
             // Spelled out rather than through `spawn_blocking_logged!`, which takes a
             // string *literal*: a failure has to name the section it dropped.
             let s_disk = s.clone();
             let persist = Arc::clone(&persist);
             s.runtime.spawn_blocking(move || {
-                // Lock first: dropping a superseded write is only sound inside the
-                // section that performs the write.
-                let _write = persist.writer.lock();
-                if persist.latest.load(Ordering::Acquire) != idx {
-                    return;
-                }
-                if let Err(e) = library::settings::set_last_nav_index(&s_disk, idx) {
-                    log::warn!("nav: set_last_nav_index({idx}): {e}");
-                }
+                persist.write_if_current(idx, || {
+                    if let Err(e) = library::settings::set_last_nav_index(&s_disk, idx) {
+                        log::warn!("nav: set_last_nav_index({idx}): {e}");
+                    }
+                });
             });
         });
     }
@@ -323,5 +301,5 @@ mod tests;
 // helpers reach `super::` for the fns they exercise, and nesting moves that one level
 // away from this file.
 #[cfg(test)]
-#[path = "tests/nav_persist_tests.rs"]
-mod nav_persist_tests;
+#[path = "tests/index_persist_tests.rs"]
+mod index_persist_tests;

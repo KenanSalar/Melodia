@@ -110,15 +110,13 @@ fn an_unresolvable_marker_comes_back_verbatim() {
 const RAW_CALL: &str = "env::current_exe";
 
 /// The files that may spell it, and **how many times each**. A count rather than a file-level
-/// pass, because `desktop_integration` is exactly where a *second* raw call would be the bug this
-/// guards — it is the module that writes the `Exec=` line — so forgiving the whole file would
-/// pre-authorise the regression. Paths are relative to [`SRC_DIR`].
-const EXEMPT: [(&str, usize); 3] = [
-    // The helper itself.
-    ("services/mod.rs", 1),
-    // `is_dev_build`, the one sanctioned reader: it takes `parent()/parent()` and the marker
-    // lands on the file name, so it reaches nothing that fn looks at.
-    ("services/desktop_integration.rs", 1),
+/// pass: `services/mod.rs` holds both the helper and the one sanctioned raw reader, so forgiving
+/// the file would pre-authorise a third call written between them. Paths are relative to
+/// [`SRC_DIR`].
+const EXEMPT: [(&str, usize); 2] = [
+    // `current_exe` itself, plus `is_dev_build` — which takes `parent()/parent()`, so the marker
+    // lands on a file name it never looks at.
+    ("services/mod.rs", 2),
     // This pin, which has to spell the needle to grep for it.
     ("services/tests/mod_tests.rs", 1),
 ];

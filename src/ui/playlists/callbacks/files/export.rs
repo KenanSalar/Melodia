@@ -7,11 +7,12 @@ use std::rc::Rc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use super::{clamp_u32, refresh_export_selection_meta, set_all_picks, toggle_pick};
+use super::{refresh_export_selection_meta, set_all_picks, toggle_pick};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::file_dialog;
 use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
+use crate::ui::util::count_as_i32;
 use crate::{
     AppWindow, Dialog, PlaylistExportPickRow as UiPlaylistExportPickRow, Playlists, Settings,
 };
@@ -114,7 +115,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
                         notifications.show_auto_dismiss(
                             NotificationParams::plain(
                                 variant,
-                                settings.invoke_playlist_export_title(clamp_u32(res.exported)),
+                                settings.invoke_playlist_export_title(count_as_i32(res.exported)),
                                 settings.invoke_playlist_export_message(SharedString::from(
                                     res.folder.as_str(),
                                 )),

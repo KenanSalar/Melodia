@@ -1,0 +1,50 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// The play count, as every Most Played surface marks a card with it. Its own leaf rather than markup
+// on a card, because `StationCard` is not an `EntityCard` and a second host is exactly what turns a
+// shared element into a copy.
+//
+// Sized to its own content. Reading the row's `preferred-width` is a derivation, not a cycle: a
+// layout reports its children's intrinsic widths and never reads back the width it is handed.
+//
+// **The play glyph is a `MaterialIcon`, not a "▶" in the label.** A character Vazirmatn lacks pulls
+// a fallback font whose taller metrics define the line box, dropping the digits off the patched
+// centring — so the number and the glyph would sit at different heights.
+export component PlayCountBadge inherits Rectangle {
+    // An unplayed row stays bare, so the suppression is stated here rather than at every host.
+    in property <int> count: 0;
+
+    visible: root.count > 0;
+    height: 22px;
+    width: badge-row.preferred-width + 16px;
+    border-radius: self.height / 2;
+    background: Theme.crust.with-alpha(0.85);
+    border-width: 1px;
+    border-color: Theme.surface2;
+
+    badge-row := HorizontalLayout {
+        alignment: center;
+        spacing: 2px;
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.count;
+                color: Theme.text;
+                font-size: Theme.font-size-sm;
+                font-weight: 600;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: "play_arrow";
+                icon-size: 14px;
+                icon-color: Theme.text;
+                filled: true;
+            }
+        }
+    }
+}

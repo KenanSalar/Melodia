@@ -12,9 +12,12 @@ use crate::database::queries;
 use super::actions::emit_and_execute;
 use super::crossfade;
 use super::event_sink::PlayerSinks;
+use super::prebuffer::StreamShared;
 use super::replaygain::TrackReplayGain;
 use super::rodio_backend::{PlaybackCheck, RodioPlayer};
-use super::state::{PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state};
+use super::state::{
+    PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state, with_state_emit,
+};
 use super::types::PlaybackStatus;
 
 /// How often the monitor wakes: tight enough that gapless preload triggers and
@@ -85,6 +88,18 @@ pub fn evaluate_playing_tick(
         position_ms,
         duration_ms: state.duration_ms,
     };
+
+    // A live source has no track end, which is the only thing the two decisions below are about:
+    // a crossfade ramps between two tracks and a gapless preload stages the next one. The position
+    // published above is elapsed listening time, since the silence the prebuffer emits while
+    // starved still advances rodio's tracker.
+    if state.radio.is_some() {
+        return Some(PlayingTick {
+            tick,
+            late_preload: None,
+            crossfade: None,
+        });
+    }
 
     let next = state.queue.peek_next();
     let same_album = match (state.current_track.as_ref(), next) {
@@ -161,6 +176,57 @@ pub fn evaluate_playing_tick(
     })
 }
 
+/// Tell the user a station gave up, which is otherwise a silence with no explanation.
+///
+/// Named rather than described: the station is what they chose, and by the time this fires the
+/// state is about to forget it.
+fn notify_station_ended(player_state: &PlayerStateHandle) {
+    let station = lock_state(player_state).radio.as_ref().map(|r| r.name.clone());
+    if let Some(name) = station {
+        crate::services::toast::notify(crate::services::toast::ToastKind::PlaybackFailed, name);
+    }
+}
+
+/// Bring `PlayerState` back in line with what the live stream is actually doing, emitting only
+/// when something moved.
+///
+/// The buffering flag and the ICY title are the two things a station changes on its own, and both
+/// arrive on the feed thread with no way to reach the state lock from there. Polling them on the
+/// tick the monitor already runs is cheaper than a channel and a task per station; the change
+/// checks are what stop it republishing the view model twice a second for a station that is
+/// perfectly happy.
+fn reconcile_live_stream(
+    stream: &StreamShared,
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    last_title_generation: &mut u64,
+) {
+    let buffering = stream.is_buffering();
+    let title_generation = stream.title_generation();
+    let title_moved = title_generation != *last_title_generation;
+    let buffering_moved =
+        lock_state(player_state).radio.as_ref().is_some_and(|radio| radio.buffering != buffering);
+
+    if !title_moved && !buffering_moved {
+        return;
+    }
+    *last_title_generation = title_generation;
+    let title = title_moved.then(|| stream.title());
+
+    with_state_emit(player_state, sinks, |state| {
+        if let Some(radio) = state.radio.as_mut() {
+            // The one place the station is mutated in flight, so the `Arc`'s copy-on-write lands
+            // here: once a song, against a clone per emit if the struct were held inline.
+            let radio = std::sync::Arc::make_mut(radio);
+            radio.buffering = buffering;
+            if let Some(title) = title {
+                radio.live_title = title;
+            }
+        }
+        Vec::<PlayerAction>::new()
+    });
+}
+
 /// All long-lived handles the playback monitor needs to operate. Bundled
 /// so `spawn_playback_monitor` doesn't accumulate a long argument list as
 /// the monitor's responsibilities grow.
@@ -211,6 +277,10 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
         // sample of a freshly-started track).
         let mut last_published_second: u64 = u64::MAX;
 
+        // Last ICY title generation reconciled into `PlayerState`. Generations are process-wide
+        // tickets starting at 1, so this holds across stations and `0` means nothing seen yet.
+        let mut last_title_generation: u64 = 0;
+
         loop {
             tokio::select! {
                 biased;
@@ -258,6 +328,17 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     });
                 }
                 PlaybackCheck::EndOfStream => {
+                    // A station's deck drains for exactly one reason — its feed thread spent the
+                    // reconnect budget — and `is_finished` is that reason. Anything else is a deck
+                    // caught in the instant between `play_stream` publishing the cell and
+                    // appending the source, where an empty deck means "not yet", not "over".
+                    let live = rodio_player.stream_shared();
+                    if live.as_deref().is_some_and(|s| !s.is_finished()) {
+                        continue;
+                    }
+                    if live.is_some() {
+                        notify_station_ended(&player_state);
+                    }
                     // Advance the queue (or, if the sleep-timer's "End of current
                     // track" mode is armed, disarm it and stop instead). See
                     // `PlayerState::build_end_of_stream_actions`.
@@ -304,6 +385,15 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         let _ = position_tx.send(Some(tick.clone()));
                     }
 
+                    if let Some(stream) = rodio_player.stream_shared() {
+                        reconcile_live_stream(
+                            &stream,
+                            &player_state,
+                            &sinks,
+                            &mut last_title_generation,
+                        );
+                    }
+
                     if let Some(decision) = crossfade_now {
                         // Advance the queue and start the incoming track on the
                         // idle deck in one serialized step. `emit_and_execute`
@@ -332,8 +422,8 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             }
 
             // Periodic save (every 60 playing ticks ~= 30s). Snapshots the
-            // current track id + position and the queue, then awaits the DB
-            // and FS writes inline — the monitor task itself is tracked by
+            // current track id + position and what `queue.json` holds, then
+            // awaits the DB and FS writes inline — the monitor task itself is tracked by
             // `tracker`, so an in-flight save completes before shutdown wins
             // on the next select.
             save_tick_counter = (save_tick_counter + 1) % 60;
@@ -341,7 +431,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 let (track_data, persistable) = {
                     let state = lock_state(&player_state);
                     let td = state.current_track.as_ref().map(|t| (t.id, state.position_ms));
-                    (td, state.queue.to_persistable())
+                    (td, state.to_persisted())
                 };
                 if let Some((track_id, position_ms)) = track_data
                     && let Err(e) = queries::track::update_last_position(

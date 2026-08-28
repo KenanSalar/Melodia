@@ -35,6 +35,16 @@ pub use install::{download_and_install, prune_stale_staging};
 pub use state::UpdaterState;
 pub use system_install::is_system_install;
 
+/// Whether this build has an in-app updater at all.
+///
+/// A source build doesn't: `target/` belongs to cargo, so a swapped-in release is older than the
+/// tree above it and gone at the next build. Where [`is_system_install`] keeps the check and only
+/// trades the install button for a package-manager hint, this takes the whole section.
+#[must_use]
+pub fn is_available() -> bool {
+    !crate::services::is_dev_build()
+}
+
 /// `<install_target>.old` — the rollback copy [`install::swap_in_place`] retains on
 /// Linux atomic-swap installs (`AppImage` / tarball), so a failed post-swap smoke
 /// test can restore it before the user sees a broken installation and a successful
@@ -69,3 +79,7 @@ pub fn install_target() -> AppResult<PathBuf> {
     }
     Ok(crate::services::current_exe()?)
 }
+
+#[cfg(test)]
+#[path = "tests/availability_tests.rs"]
+mod tests;

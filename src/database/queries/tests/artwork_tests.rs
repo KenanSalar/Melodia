@@ -1,28 +1,39 @@
 //! The reference set the artwork sweep deletes against.
 //!
 //! A missing column here is not a compile error and not a wrong-looking result — it is a sweep
-//! that unlinks live artwork, so both halves are pinned: that the SQL names all four columns, and
-//! that the one reachable through no other column comes back.
+//! that unlinks live artwork, so both halves are pinned: that the SQL names every column, and that
+//! the ones reachable through no other column come back.
 
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::tests::helpers::{insert_test_track, setup_seeded_db};
+use crate::entities::radio;
 use crate::error::AppError;
 
 use super::{ARTWORK_COLUMNS, REFERENCED_PATHS, repoint_all};
+
+fn test_station() -> radio::NewRadioStation {
+    radio::NewRadioStation {
+        name: "Test Station".to_owned(),
+        stream_url: "http://example.invalid/stream".to_owned(),
+        ..Default::default()
+    }
+}
 
 /// Every column in the schema that stores a path into the artwork directories, restated
 /// independently of the production ledger so that dropping one from either side fails.
 ///
 /// Spelled as `(table, column)` so the walk can't be satisfied by a column name that happens to
 /// appear in another arm's text — `artwork_path` is on two tables.
-const EXPECTED_COLUMNS: [(&str, &str); 4] = [
+const EXPECTED_COLUMNS: [(&str, &str); 6] = [
     ("tracks", "artwork_path"),
     ("albums", "artwork_path"),
     ("artists", "image_path"),
     ("playlists", "thumbnail_path"),
+    ("radio_stations", "artwork_path"),
+    ("radio_logo_answers", "artwork_path"),
 ];
 
 /// The sweep keeps only what the reference query returns and the renormalize pass re-points only
@@ -57,7 +68,18 @@ async fn repointing_moves_every_artwork_column_at_once() -> Result<(), AppError>
     const NEW: &str = "/data/artwork/4cccaf4d4b4cea11.jpg";
 
     let db = setup_seeded_db().await?;
+    // The seed covers tracks, albums and artists only, and the assertions below need a row in
+    // every table the ledger names or `moved > 0` can't hold for the empty ones.
     queries::playlist::create_playlist(&db, "Mosaic", None).await?;
+    queries::radio::save_station(&db, &test_station()).await?;
+    queries::radio::record_logo_hit(
+        &db,
+        "https://example.invalid/logo.png",
+        OLD,
+        1_024,
+        "2026-08-24T00:00:00.000+00:00",
+    )
+    .await?;
 
     let mut tx = db.write().begin().await?;
     for (table, column) in EXPECTED_COLUMNS {
@@ -102,6 +124,27 @@ async fn a_composite_referenced_only_by_a_playlist_is_still_referenced() -> Resu
     assert!(
         referenced.contains("33fb807d1f1b7cbb.jpg"),
         "a composite reachable only through `playlists.thumbnail_path` must survive the sweep; \
+         got {referenced:?}"
+    );
+    Ok(())
+}
+
+/// The station sibling of the case above, and the sharper one: a logo came off a third-party host
+/// that is often dead by the time the sweep runs, so unlike every other arm of the union there is
+/// no re-scan that can put it back.
+#[tokio::test]
+async fn a_logo_referenced_only_by_a_station_is_still_referenced() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let logo = "/data/artwork/33fb807d1f1b7cbb.jpg";
+
+    let station = queries::radio::save_station(&db, &test_station()).await?;
+    queries::radio::set_artwork(&db, station.id, Some(logo)).await?;
+
+    let referenced = queries::artwork::referenced_filenames(&db).await?;
+
+    assert!(
+        referenced.contains("33fb807d1f1b7cbb.jpg"),
+        "a logo reachable only through `radio_stations.artwork_path` must survive the sweep; \
          got {referenced:?}"
     );
     Ok(())

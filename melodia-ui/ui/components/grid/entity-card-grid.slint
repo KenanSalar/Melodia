@@ -72,9 +72,7 @@ export component EntityCardGrid inherits Rectangle {
                     cover-scale-hover: entity.artwork_path == "" ? 1.15 : 1.04;
                     title: entity.title;
                     subtitle: entity.subtitle;
-                    badge-text: root.show-play-count && entity.play_count > 0
-                        ? entity.play_count
-                        : "";
+                    play-count: root.show-play-count ? entity.play_count : 0;
                     clicked => { root.row-clicked(entity.id); }
                 }
             }

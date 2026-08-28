@@ -262,3 +262,47 @@ fn the_last_track_neither_crossfades_nor_preloads() {
     assert_eq!(fade_ms(t.as_ref()), None);
     assert_eq!(staged(t.as_ref()), None);
 }
+
+// --- Live sources ----------------------------------------------------------
+
+/// A station playing over the same two-track queue, which stays untouched underneath it. Both
+/// decisions below are per-*track* transitions, so a queue with somewhere to go is exactly what
+/// makes the assertions mean something.
+fn playing_a_station() -> PlayerState {
+    let mut state = playing_state();
+    let (generation, _actions) = state.build_station_connecting_actions(
+        crate::player::tests::helpers::test_station("Example FM"),
+    );
+    let _started = state.build_station_connected_actions(generation);
+    state
+}
+
+/// A crossfade ramps between two tracks and a gapless preload stages the next one. A live source
+/// has neither a next nor an end, so both gates have to be answered before they are asked — the
+/// position would otherwise sit deep inside the trigger window of a duration that means nothing.
+#[test]
+fn a_live_source_neither_crossfades_nor_preloads() {
+    let mut state = playing_a_station();
+    let mut xf = crossfade_on(4_000);
+    xf.manual = true;
+
+    let out = tick(&mut state, backend(at_remaining(1_000), xf));
+
+    assert!(
+        out.as_ref().is_some_and(|t| t.crossfade.is_none()),
+        "a station has nothing to fade into"
+    );
+    assert_eq!(staged(out.as_ref()), None, "a station has nothing to stage behind it");
+}
+
+#[test]
+fn a_live_source_still_publishes_its_elapsed_time() {
+    let mut state = playing_a_station();
+
+    let out = tick(&mut state, backend(12_345, crossfade_off()));
+
+    assert_eq!(out.as_ref().map(|t| t.tick.position_ms), Some(12_345));
+    assert_eq!(state.position_ms, 12_345);
+    // Elapsed listening time, not a fraction of anything: a live stream has no length.
+    assert_eq!(out.as_ref().map(|t| t.tick.duration_ms), Some(0));
+}

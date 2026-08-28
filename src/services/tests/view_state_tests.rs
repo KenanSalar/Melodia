@@ -106,3 +106,61 @@ fn test_view_sort_in_view_state() -> Result<(), AppError> {
     assert!(matches!(albums_sort.dir, SortDir::Asc));
     Ok(())
 }
+
+/// **The persisted nav index has to survive a round trip at the top of its range**, and until
+/// Phase 4 of the radio work it did not: `set_last_nav_index` clamped writes to `0..=9` and
+/// `install_views` guarded reads with the same literal, so a Radio index was rewritten as Settings
+/// on the way out *and* dropped on the way in. Neither half is visible from the other, which is
+/// why both now read [`MAX_NAV_INDEX`] and why this pins the bound against the section that
+/// actually sits at the top of it.
+#[test]
+fn the_nav_bound_reaches_the_highest_section_that_routes() {
+    assert_eq!(
+        MAX_NAV_INDEX,
+        crate::ui::radio::NAV_RADIO,
+        "Radio is the highest index `nav.slint` routes, so the bound is its index — a section \
+         added above it moves both"
+    );
+}
+
+/// Both ends of that round trip must take the bound from [`MAX_NAV_INDEX`] rather than restate it.
+///
+/// A source read because the write needs an `AppState` and the read an `AppWindow`, and because
+/// what failed before was not the arithmetic but the *literal*: two sites agreeing on `9` for
+/// reasons neither could see.
+#[test]
+fn both_ends_of_the_round_trip_take_the_bound_from_one_const() {
+    const WRITE: &str = include_str!("../../library/settings/view.rs");
+    const READ: &str = include_str!("../../boot/ui_setup.rs");
+
+    let clamp = crate::test_support::strip_line_comments(WRITE)
+        .split_once("pub fn set_last_nav_index")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    assert!(!clamp.is_empty(), "`set_last_nav_index` moved, so this pin reads nothing");
+    assert!(
+        clamp.contains("view_state::MAX_NAV_INDEX"),
+        "the write clamp must bound against `MAX_NAV_INDEX`, never a literal"
+    );
+
+    let read = crate::test_support::strip_line_comments(READ);
+    assert!(
+        read.contains("(0..=services::view_state::MAX_NAV_INDEX).contains("),
+        "`install_views` must guard the persisted index against the same const the write clamps to"
+    );
+}
+
+/// A `views.json` naming Radio comes back naming Radio.
+#[test]
+fn the_top_of_the_range_survives_a_views_json_round_trip() -> Result<(), AppError> {
+    let vs = ViewStateData {
+        last_nav_index: MAX_NAV_INDEX,
+        radio_tab: 2,
+        ..ViewStateData::default()
+    };
+    let json = serde_json::to_string(&vs).map_err(|e| json_err(&e))?;
+    let back: ViewStateData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    assert_eq!(back.last_nav_index, MAX_NAV_INDEX);
+    assert_eq!(back.radio_tab, 2);
+    Ok(())
+}
