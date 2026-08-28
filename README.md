@@ -457,31 +457,8 @@ filter alone and says so in the log.
 
 ## Contributing
 
-Contributions are welcome. Before opening a pull request:
-
-- Run `cargo fmt --all`. CI checks it, and `rustfmt.toml` widens two sub-widths
-  so the formatter leaves the codebase's existing wrapping largely alone.
-- Run `cargo clippy --all-targets --locked -- -D warnings`. The lint
-  configuration is strict and `unwrap()` is denied in non-test code.
-- Run `cargo test --locked` and keep it green.
-- Run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once per clone, so
-  the tree-wide rustfmt commit stays out of `git blame`. GitHub's blame view
-  already honours the file.
-- Follow the existing [Conventional Commits](https://www.conventionalcommits.org/)
-  style used in the git history.
-- Open pull requests against the `main` branch. Releases are pushed tags, so a
-  merge ships nothing on its own; the procedure is
-  [`docs/RELEASING.md`](docs/RELEASING.md).
-- Fill in the pull request template. Link the issue from the PR's Development
-  sidebar rather than with `Fixes #N`; the link is set once on the branch and
-  survives every reword of the description.
-
-Every pull request runs the **PR Validation** workflow: a `cargo audit`
-advisory scan, a `cargo fmt` check, `clippy` (with `-D warnings`) and the full
-test suite. The `pr-validation` check must pass before merging.
-Documentation-only changes skip all four. Coverage is a separate manual run
-(**Actions → Deploy Coverage → Run workflow**) published to GitHub Pages at
-[kenansalar.github.io/Melodia](https://kenansalar.github.io/Melodia/).
+Contributions are welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the setup, the
+checks to run before pushing, and how pull requests are handled.
 
 ## Support
 
