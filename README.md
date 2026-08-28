@@ -122,6 +122,16 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Responsive mini-player: shrinking the window past a threshold collapses the full UI into a compact horizontal strip or a square widget (the square grows an up-next list when tall enough); restore the full window from the mini-player's expand button
 - Skippable startup animation: the view Melodia opens on fades and slides into place by default; a Motion switch under Settings ▸ Interface turns that off so the window comes up with the library already on screen, leaving navigation animated as usual
 
+### Internet Radio
+- **Off until you switch it on**, under Settings ▸ Services ▸ Radio. Nothing contacts the station directory until you do, so a Melodia you never enable it on stays exactly as local as it was. Turning it back off stops whatever station is playing and removes the section outright, while leaving your saved stations in place for whenever you turn it on again
+- Browse a worldwide directory (**radio-browser.info**, no account and no API key) by station name, narrowed by country, language, genre tag, codec or minimum bitrate and ordered by what people actually listen to. Type something that looks like a country, a language, a genre or a dial frequency and Melodia offers it as a one-click filter instead of searching for it as a name
+- Add your own stream URLs. Melodia connects once to confirm the stream really is audio it can decode and fills the station name in from the stream itself, so a mount that turns out to be a web page or a codec with no decoder is refused at the dialog rather than at the first click; `.pls`, `.m3u` and `.asx` pointers resolve to the audio behind them
+- Favorites and a Recently Played tab of their own, both filterable and sortable, and a station page carrying the logo, homepage, format, bitrate, vote count and the songs that station has announced this session
+- Live track titles read off the stream reach the player bar, the full Now Playing view, your desktop's media controls and Discord presence exactly as a local track's tags do. A **LIVE** badge stands where the progress bar would be, and buffering and reconnection are handled underneath without the station dropping off the deck. The station you were listening to is still there after a restart
+- Station logos are fetched and cached locally; a station with none gets a tile derived from its own name rather than one shared icon
+- Import and export your stations as a plain playlist file, so they survive a database reset and move between machines
+- Stations that stream over **HLS are hidden from results by default**, Melodia having no HLS decoder yet. They are still carried rather than filtered away upstream, so turning off *Hide unplayable stations* lists them with a badge saying as much instead of leaving you to find out at the click
+
 ### Themes
 Six theme families, each with light and dark variants and configurable accent colors:
 - **Catppuccin** (Latte, Frappé, Macchiato, Mocha)
@@ -326,6 +336,8 @@ cargo test                                     # run tests
 | Backend | Pure Rust: direct calls + tokio channels, no IPC |
 | Async runtime | [Tokio](https://tokio.rs/) |
 | Audio | [Rodio](https://github.com/RustAudio/rodio) + [Symphonia](https://github.com/pdeljanov/Symphonia) |
+| Radio streaming | [stream-download](https://crates.io/crates/stream-download) + [icy-metadata](https://crates.io/crates/icy-metadata), decoded by Symphonia |
+| Station directory | [radio-browser.info](https://www.radio-browser.info) (no account, CC0 data) |
 | Equalizer DSP | [biquad](https://crates.io/crates/biquad) (peaking-filter bands) |
 | Spectrum analysis | [`realfft`](https://crates.io/crates/realfft) (real-to-complex FFT) |
 | Media Controls | [Souvlaki](https://github.com/Sinono3/souvlaki) (MPRIS2, SMTC) |
@@ -355,10 +367,10 @@ src/
 ├── entities/    domain model types (track, album, artist, genre, playlist, …)
 ├── library/     playback, queue, tracks, albums, artists, genres, playlists, search, settings
 ├── media/       scanner, metadata, artwork, cover-thumbnail cache, folder watcher
-├── player/      playback state machine + dual-deck Rodio backend + graphic equalizer, ReplayGain, crossfade, spectrum & waveform DSP
+├── player/      playback state machine + dual-deck Rodio backend + graphic equalizer, ReplayGain, crossfade, spectrum & waveform DSP, live-stream decode and buffering
 ├── tasks/       background tasks (playback monitor, file events, queue prune, Material You)
 ├── themes/      pluggable theme registry
-├── services/    updater, desktop integration, system theme
+├── services/    updater, desktop integration, system theme, radio directory client
 ├── state/       AppState, error types
 └── ui/          Slint bridge, callbacks, view handles, models
 
@@ -386,7 +398,7 @@ Melodia stores its data under the OS application-data directory
 | `scrobble_mbid_attempted.json` | Tracks already looked up for a MusicBrainz ID, so they aren't re-queried |
 | `logs/` | Rolling log files and crash reports (see [Troubleshooting](#troubleshooting)) |
 | `backups/` | Database copies taken before each schema migration |
-| `artwork/`, `artists/` | Cached album and artist images |
+| `artwork/`, `artists/`, `radio-logos/` | Cached album, artist and radio-station images |
 
 Setting `MELODIA_DATA_DIR` moves the whole folder somewhere else, resolving a
 relative value against the working directory. A build run from the source tree

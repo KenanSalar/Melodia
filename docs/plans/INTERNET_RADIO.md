@@ -1,6 +1,11 @@
 # Internet Radio
 
-Working doc for [#29](https://github.com/KenanSalar/Melodia/issues/29). Delete when the feature ships.
+Working doc for [#29](https://github.com/KenanSalar/Melodia/issues/29). **Kept past the ship date
+on purpose**: the convention deletes a plan doc when its feature lands, and
+[#84](https://github.com/KenanSalar/Melodia/issues/84) exists because doing that sixteen times has
+taken the reasoning with it. The Decisions below are what #84 will harvest into `docs/adr/`; the
+candidate list is at the bottom, under "For #84". Delete this file once those ADRs are written,
+not before.
 
 Upstream facts verified **2026-08-20** against crate sources, the live API and this tree.
 Anything marked ⚠️ **re-verify** is expected to drift; check it on the day rather than
@@ -293,6 +298,17 @@ persisted `last_nav_index` of 10 is folded on read at the next boot, the way
 | `melodia-ui/ui/components/dialog/add-station-body.slint` | The add-by-URL dialog body |
 | `melodia-ui/ui/views/settings/radio-section.slint` | The Settings card: the master toggle and its sub-rows |
 | `.claude/rules/radio.md` | The contract, once it spans Rust, `.slint`, a migration and the packaging deps |
+
+**The table above is what was planned, and the slice outgrew it.** Left current rather than
+rewritten, since which files a phase *added* is recorded in each phase's own "Shipped" line and the
+gap between the two is the more useful record. What it never named: `src/ui/radio/`'s
+`browse`, `covers`, `facets`, `filter`, `history`, `identity`, `kept`, `logos`, `rows` and
+`suggest`; a `callbacks/` directory that is eight files today, Phase 6 having correctly recorded
+the three it split into and Phase 7 having added the rest;
+`src/player/stream_decode.rs`; `src/media/station_logo.rs`; `src/tasks/radio_logo_cache.rs`;
+`src/library/radio_files.rs`; the `radio_logo_answers` table in the migration; and
+`views/radio/{station-grid,facet-chip,tab-pills,suggestion-pill}.slint`. The Favorites tab body is
+`kept-stations-tab.slint`, serving two tabs rather than one.
 
 ### Edited files, and what each edit is
 
@@ -1204,9 +1220,13 @@ still in the bar after a restart.
 
 ---
 
-## Phase 10: Hardening and documentation
+## Phase 10: Hardening and documentation ✅ landed
 
 **Goal.** The feature stops being new.
+
+Shipped: the eight pins below, `.claude/rules/radio.md`, radio's homes in the root `CLAUDE.md`
+module map, the live-source half of `src/player/CLAUDE.md`, the README's `### Internet Radio`
+section, and the shipped product copy in both places that carry it.
 
 1. Tests, for what the UI phases add. **Phase 7 took its own half** — the tab-count pin, the
    grid-model walk, the kept sort and needle, the edit gate, the import parser, and the two
@@ -1248,7 +1268,52 @@ still in the bar after a restart.
    `packaging/com.github.kenansalar.melodia.metainfo.xml` both carry it. What is left here is
    re-reading it once the feature is whole.
 
-**Gates.** All three, plus a release build once.
+**Three of this section's six test items were already closed** by the phases that followed it, and
+saying so is the point: `radio_tab`'s clamp had `tab_count_matches_the_tabs_slint_declares` beside
+it, the source-size floor had `station_logo`'s three guards, and the catalogue walk covers radio
+automatically — it walks the whole `.slint` tree, so a radio msgid was pinned the moment it landed.
+What was actually open, and is now pinned:
+
+- **`NavHistory::forget_section`'s cursor arithmetic**, Phase 5's second owed pin. The first
+  attempt at it passed against a deliberately broken `forget_section`: with the cursor on the last
+  entry, the trailing `min(len - 1)` clamp lands on the right answer by itself, so the test had to
+  stand the cursor mid-history before it could see the subtraction at all.
+- **`fold_disabled_nav_index`**, both directions and both out-of-range ends.
+- **The nav index's own round trip** — that `MAX_NAV_INDEX` is `NAV_RADIO`, and that the write
+  clamp and the read guard both take the bound from that const rather than restating it. It
+  appeared in no test until now, which is what let two literal `9`s agree for a release.
+- **`persist_seat`'s `is_kept()` guard** (D6), plus `station_has_row`'s meaning of `id == 0`.
+- **`seed_tab` clamping against the global's `tab-count`**, the read side being the only clamp
+  there is: `set_radio_tab` deliberately writes what it is handed.
+- **`MIN_LOGO_DIM` against the tree that restates it.** This is the floor item from step 1, in the
+  form that actually bites: `source-artwork.slint` argues *from* the number that it needs no
+  `native-size`, so lowering the floor makes that argument false with nothing to say so.
+- **`identity::station_tile` and `StationHistory::note`**, both pure, both landed after this
+  section was drafted and neither previously tested.
+- **Every outbound call taking its client from behind the switch.** The corpus walk this section
+  asks for already existed and holds the *other* direction — nothing outside `library::radio`
+  names `radio_browser`. Nothing held that nothing *inside* it reached `state.http_client()`
+  directly, which is the half D15 actually promises. `http_client()` may now be named exactly once
+  in that file.
+
+**Four stale counts elsewhere, none of them radio's own**, found while checking what the docs
+already said and fixed here because leaving them is how the next one gets written on top:
+`SectionActiveGate` "mounts 9×" (ten since Phase 4), `views.json`'s "four active-tab indices"
+(five, and the same file said five thirty lines later), root `CLAUDE.md`'s "two things must stay in
+the root `build.rs`" (three), and — the one that mattered — `library-data.md`'s "that set is five
+columns" for the artwork sweep, where the ledger has held six since the logo cache landed and the
+paragraph's own closing clause is "a missing column is silent one way and destructive the other".
+
+**Step 8 was half true, and it was the unrecorded half that was wrong.** The AppStream XML was
+rewritten in Phase 5 as recorded; `Cargo.toml`'s `[package.metadata.deb] extended-description` was
+not, and still promised "no accounts, streaming or cloud". It was accurate on every release so far
+and would have gone out with the first `.deb` carrying radio, denying a feature that build has.
+Both now carry the same framing, and the AppStream `<summary>` and feature list name radio too.
+
+**Gates run:** fmt, `clippy --all-targets --locked -- -D warnings` at the root, full `cargo test`
+(2058 lib + 4 binary + 13 integration, green; **26 new**), `appstreamcli validate` on the edited
+metainfo, and a release build. Every new pin was mutation-checked — and one of them failed that
+check on the first attempt, which is the reason the cursor test looks the way it does.
 
 ---
 
@@ -1291,6 +1356,40 @@ Answer before Phase 6, not before Phase 1.
    consistency says drill. Radio-first apps split anyway: Shortwave opens a detail, Tuner
    plays. The play control did not stay where it was, though — the tile's centre is exactly
    where a body click lands, so it is a corner control beside the station's other three.
+
+---
+
+## For #84
+
+What an ADR pass should take out of this file before it is deleted. Each is a decision with no
+line of code that owns it, which is the test [#84](https://github.com/KenanSalar/Melodia/issues/84)
+sets: the code is the consequence, not the argument.
+
+- **D1 — the station directory is radio-browser.info.** The whole value is in the four
+  alternatives that lost (a bundled list, Icecast's own directory, URL entry only, and curation)
+  and in why each loses. The mirror-discovery half is thinner and dates faster; the ⚠️ note on it
+  is already half stale by its own terms.
+- **D2 — one SQLite table rather than a JSON file**, favorites, custom URLs and history being one
+  row at three points in its life. The migration header carries the schema reasoning and should
+  stay there; what the ADR owes is the table-versus-file choice above it.
+- **D8 — the network never touches the audio callback thread.** The strongest candidate here. It
+  is a structural constraint on the whole player, it is *why* `prebuffer` exists, and it is
+  already summarised in `src/player/CLAUDE.md` in a form that would want to cite an ADR rather
+  than re-argue it.
+- **D13 — HLS stations are carried as unplayable rather than dropped, and the shipped filter hides
+  them anyway.** Both halves or neither: carrying them is what keeps the badge and the toggle
+  possible at all, and the default is still to hide. Stated as the first half alone it reads as a
+  promise the app does not keep, which is how the README came to describe the toggle backwards.
+- **D15 — the feature ships off, and the guard lives at the facade rather than at the UI.**
+  Pairs with the shipped product description, which is the actual reason for the default and is
+  itself the two-copies failure this feature already paid for once.
+- **Worth carrying as one note rather than five**: the four stale counts Phase 10 found. Every one
+  was a number restated in prose beside code that had moved, and all four were fixed by a phase
+  that went looking for something else. That is an argument about where numbers may live, which is
+  #84's own subject.
+
+Not ADR material, and better left to die with this file: the phase ordering, the per-phase
+deviation lists, and the open questions, all four of which are answered inline.
 
 ---
 

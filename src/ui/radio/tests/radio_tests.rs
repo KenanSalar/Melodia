@@ -4,7 +4,8 @@
 //! that Rust cannot resolve, and a model the global declares that Rust never installs. Neither is
 //! a build failure and neither is visible in review.
 
-use super::RadioTab;
+use super::{NAV_RADIO, RadioTab, fold_disabled_nav_index};
+use crate::ui::my_library::NAV_MY_LIBRARY;
 
 const GLOBAL: &str = include_str!("../../../../melodia-ui/ui/globals/radio.slint");
 const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/radio-view.slint");
@@ -197,4 +198,48 @@ fn the_station_form_resets_every_property_it_declares() {
     let missing: Vec<&&str> =
         declared.iter().filter(|name| !reset.contains(&format!("root.{name} ="))).collect();
     assert!(missing.is_empty(), "reset() leaves these for the next dialog to inherit: {missing:?}");
+}
+
+/// **Nav 10 folds onto My Library only while the switch is off**, and only for nav 10.
+///
+/// The fold runs at boot against a persisted `views.json` and again live from
+/// [`super::disable`], and the two share this one function so they cannot disagree about
+/// where the user lands. Unfolded, a boot with radio off selects a router branch that is
+/// gated away and paints nothing at all — the `PlaceholderView` fall-through keeps a plain
+/// `!= 10` term, so there is not even a placeholder behind it.
+#[test]
+fn nav_ten_folds_onto_my_library_only_while_radio_is_off() {
+    assert_eq!(fold_disabled_nav_index(NAV_RADIO, false), NAV_MY_LIBRARY);
+    assert_eq!(fold_disabled_nav_index(NAV_RADIO, true), NAV_RADIO, "enabled, so it stays put");
+
+    for other in [0, 1, 2, 3, 8, 9] {
+        assert_eq!(fold_disabled_nav_index(other, false), other, "{other} is not radio's to fold");
+        assert_eq!(fold_disabled_nav_index(other, true), other);
+    }
+    // Out of range in either direction is the caller's problem, as it is for the retired fold.
+    assert_eq!(fold_disabled_nav_index(-1, false), -1);
+    assert_eq!(fold_disabled_nav_index(42, false), 42);
+}
+
+/// `seed_tab` is the only clamp on the persisted tab index — `library::settings::set_radio_tab`
+/// deliberately writes whatever it is handed — so a `views.json` naming a tab this build no
+/// longer has must be pulled back in on the way in, not on the way out.
+///
+/// A source read because the seed takes a live Slint global. What it holds is that the bound is
+/// `Radio.tab-count` read off the global rather than a Rust const beside it, which is the drift
+/// `tab_count_matches_the_tabs_slint_declares` above would then have nothing to compare.
+#[test]
+fn the_persisted_tab_is_clamped_against_the_count_the_global_declares() {
+    let source = include_str!("../tabs.rs");
+    let body = source
+        .split_once("pub fn seed_tab")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
+
+    assert!(!body.is_empty(), "`seed_tab` moved or changed shape, so this pin reads nothing");
+    assert!(
+        body.contains("clamp_tab(persisted_tab, g.get_tab_count())"),
+        "the persisted tab must be clamped through `ui::tab_bar::clamp_tab` against the \
+         global's own `tab-count`, not against a const restated here"
+    );
 }

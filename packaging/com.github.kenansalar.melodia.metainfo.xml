@@ -25,7 +25,7 @@
   <id>com.github.kenansalar.melodia</id>
 
   <name>Melodia</name>
-  <summary>Local music library player with gapless playback</summary>
+  <summary>Music library player with gapless playback and internet radio</summary>
 
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>AGPL-3.0-or-later</project_license>
@@ -53,6 +53,7 @@
       <li>Gapless playback via Rodio and Symphonia — MP3, FLAC, M4A/M4B (AAC and ALAC), Ogg Vorbis, WAV, AIFF/AIFF-C, Matroska and CAF</li>
       <li>Fast local SQLite library with full-text search</li>
       <li>Browse by album, artist, genre and playlist, with file drag-and-drop</li>
+      <li>Internet radio (off until you switch it on): a worldwide station directory, your own stream URLs, favorites and live track titles</li>
       <li>Pluggable themes, including system light/dark and Material You dynamic colour</li>
       <li>OS media-key and MPRIS integration</li>
     </ul>

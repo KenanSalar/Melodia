@@ -112,11 +112,12 @@ depends = "$auto, pkexec | policykit-1"
 recommends = "desktop-file-utils, hicolor-icon-theme"
 extended-description = """
 Melodia is a modern, local-first desktop music player with a Material
-3-inspired interface. Your music collection stays entirely on your own
-machine, with no accounts, streaming or cloud. It pairs a Slint user
-interface with a pure-Rust backend: gapless playback via Rodio and
-Symphonia (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis, WAV,
-AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
+3-inspired interface. Your music collection lives entirely on your own
+machine, and every online feature is a setting you control: scrobbling,
+Discord presence and internet radio all ship switched off. It pairs a
+Slint user interface with a pure-Rust backend: gapless playback via
+Rodio and Symphonia (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis,
+WAV, AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
 full-text search, browsing by album, artist, genre and playlist, OS
 media controls (MPRIS), and pluggable themes including system light/dark
 and Material You."""

@@ -306,3 +306,47 @@ fn a_station_takes_the_best_name_on_offer() {
          leave the row with no name at all"
     );
 }
+
+/// **"Off" means no traffic, and this file is the only place that can be true.**
+///
+/// D15's switch is enforced at the facade rather than at the sidebar row, because a row that
+/// disappears stops nothing a stale callback or an in-flight fetch has already started. What makes
+/// one guard enough is that every outbound call reaches its client through
+/// [`super::directory_client`], which is [`super::ensure_enabled`] plus the handle — so the check
+/// is unskippable rather than remembered per call site.
+///
+/// `services::radio_browser::tests::only_the_radio_facade_reaches_the_directory_client` holds the
+/// other direction, that nothing *outside* this module reaches the directory at all. Neither test
+/// covers the other's half: that one would pass with every call here on a raw client, and this one
+/// would pass with a second module fetching on its own.
+///
+/// A source walk because the alternative is asserting a network call did *not* happen, and the
+/// tree has no network tests.
+#[test]
+fn every_outbound_call_takes_its_client_from_behind_the_switch() {
+    const FACADE: &str = include_str!("../radio.rs");
+    let src = crate::test_support::strip_line_comments(FACADE);
+
+    // Receiver-agnostic: counting `state.http_client()` would leave a reach spelled off any other
+    // binding uncounted, which is the one thing this test is for.
+    let handles = src.matches(".http_client()").count();
+    assert_eq!(
+        handles, 1,
+        "`http_client()` may be named exactly once in `library::radio`, inside `directory_client` \
+         — every other reach past the guard is traffic a user who switched Radio off still pays"
+    );
+
+    let seam = src
+        .split_once("fn directory_client")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
+    assert!(!seam.is_empty(), "`directory_client` moved or changed shape");
+    assert!(
+        seam.contains("ensure_enabled(state)?"),
+        "the seam is only a seam while it asks `ensure_enabled` first"
+    );
+    assert!(
+        seam.contains("http_client()"),
+        "the one `http_client()` this test counts must be the one inside the seam"
+    );
+}

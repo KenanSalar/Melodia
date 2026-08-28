@@ -114,3 +114,30 @@ fn a_source_with_no_opaque_pixel_is_refused_rather_than_stored_untreated() -> Te
     );
     Ok(())
 }
+
+/// **The now-playing tile skips `native-size` because of this number**, so the argument for that
+/// omission lives in one tree and the number it rests on lives in another.
+///
+/// `source-artwork.slint` reasons that no source reaching it can be small enough for
+/// `ArtworkImage`'s inset arm to fire, since the floor is 32 px and the largest tile mounting it
+/// is 46. Lower the floor and that stops being true with nothing to say so: the tile would upscale
+/// a 16 px favicon across 46 px rather than insetting it, which is exactly the treatment the inset
+/// arm exists to give. Raise it past the tile and the comment merely reads oddly.
+#[test]
+fn the_slint_tile_that_skips_native_size_still_agrees_with_the_floor() {
+    const TILE: &str =
+        include_str!("../../../melodia-ui/ui/components/now-playing/source-artwork.slint");
+
+    assert!(
+        TILE.contains(&format!("`media::station_logo::MIN_LOGO_DIM` is {MIN_LOGO_DIM} px")),
+        "`source-artwork.slint` restates the floor to argue it needs no `native-size`; it is \
+         {MIN_LOGO_DIM} px here and the two have drifted"
+    );
+    // Stripped, or the comment making the argument satisfies the search for the binding it
+    // argues against.
+    assert!(
+        !crate::test_support::strip_line_comments(TILE).contains("native-size"),
+        "the argument stands or the binding does — if the tile now sets `native-size`, this pin \
+         and the comment above it are both stale"
+    );
+}

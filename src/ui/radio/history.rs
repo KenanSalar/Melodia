@@ -124,3 +124,7 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
         .set_history_rows(slint::ModelRc::new(slint::VecModel::from(titles)));
     detail::sync_history_seat(ui, radio_ui);
 }
+
+#[cfg(test)]
+#[path = "tests/history_tests.rs"]
+mod tests;

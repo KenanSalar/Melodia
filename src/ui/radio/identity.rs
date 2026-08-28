@@ -90,3 +90,7 @@ fn monogram(name: &str) -> String {
     };
     letters.to_uppercase()
 }
+
+#[cfg(test)]
+#[path = "tests/identity_tests.rs"]
+mod tests;

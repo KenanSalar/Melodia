@@ -38,7 +38,7 @@ pub fn tab_from_index(g: &Radio<'_>, idx: i32) -> RadioTab {
 }
 
 /// Whether the page is the section on screen — the wire-time seed for [`super::RadioUi`]'s
-/// `section` shadow. Deliberately blind to the tab: the page mounts one gate for both.
+/// `section` shadow. Deliberately blind to the tab: the page mounts one gate for all three.
 pub fn section_is_up(ui: &AppWindow) -> bool {
     ui.global::<Nav>().get_selected_index() == super::NAV_RADIO
 }

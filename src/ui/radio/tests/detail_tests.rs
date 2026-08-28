@@ -97,3 +97,45 @@ fn an_empty_uuid_is_what_closes_both_directory_gates() {
         "`refresh_from_directory` must bail on an absent uuid before it asks the directory"
     );
 }
+
+/// **`views.json` may name a station only where there is a row to look it back up in** (D6).
+///
+/// A browsed station is a directory answer that was never written down, so its `id` is `0` and
+/// the next launch has nothing to resolve. Persisted anyway, the restore either finds nothing and
+/// lands on the tab root the long way round, or — since ids are reused, the table carrying no
+/// `AUTOINCREMENT` — resolves onto whichever station later took that row.
+///
+/// The two halves are pinned separately because they fail differently: `station_has_row` is the
+/// meaning of `id == 0`, and the guard is `persist_seat` remembering to ask it.
+#[test]
+fn only_a_station_with_a_row_is_named_for_the_next_launch() {
+    assert!(!crate::ui::radio::station_has_row(0), "a browsed station has no row");
+    assert!(crate::ui::radio::station_has_row(1));
+
+    let browsed = super::StationRef {
+        id: 0,
+        uuid: "9cf9…".to_owned(),
+    };
+    let kept = super::StationRef {
+        id: 7,
+        uuid: String::new(),
+    };
+    assert!(!browsed.is_kept());
+    assert!(kept.is_kept(), "a hand-typed station is kept and carries no uuid at all");
+}
+
+#[test]
+fn the_seat_is_only_persisted_where_the_station_is_kept() {
+    let src = detail();
+    let body = src
+        .find("pub fn persist_seat")
+        .and_then(|at| src[at..].find("{\n").map(|rel| at + rel))
+        .and_then(|open| block_body(&src, open))
+        .unwrap_or_default();
+
+    assert!(!body.is_empty(), "`persist_seat` moved or changed shape, so this pin reads nothing");
+    assert!(
+        body.contains("is_kept().then_some(open.station.id)"),
+        "the id may only be persisted behind `is_kept()` — a browsed station's `0` names no row"
+    );
+}
