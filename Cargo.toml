@@ -30,7 +30,7 @@ exclude = ["winit"]
 # Inherited by both packages, so `melodia-ui` can't drift from the app. The
 # three toolchain-less scrapes (`release.yml`, `build-rpm.sh`,
 # `build-appimage.sh`) anchor on this table by name, not by position.
-version = "0.11.0"
+version = "0.12.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
@@ -112,11 +112,12 @@ depends = "$auto, pkexec | policykit-1"
 recommends = "desktop-file-utils, hicolor-icon-theme"
 extended-description = """
 Melodia is a modern, local-first desktop music player with a Material
-3-inspired interface. Your music collection stays entirely on your own
-machine, with no accounts, streaming or cloud. It pairs a Slint user
-interface with a pure-Rust backend: gapless playback via Rodio and
-Symphonia (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis, WAV,
-AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
+3-inspired interface. Your music collection lives entirely on your own
+machine, and every online feature is a setting you control: scrobbling,
+Discord presence and internet radio all ship switched off. It pairs a
+Slint user interface with a pure-Rust backend: gapless playback via
+Rodio and Symphonia (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis,
+WAV, AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
 full-text search, browsing by album, artist, genre and playlist, OS
 media controls (MPRIS), and pluggable themes including system light/dark
 and Material You."""
@@ -190,6 +191,33 @@ rodio = { version = "0.22.2", default-features = false, features = [
     "symphonia-alac",
     "symphonia-aiff",
 ] }
+# A live stream is decoded here rather than by `rodio::Decoder`, and **deliberately
+# against a newer Symphonia than the 0.5 rodio pins**. 0.5's probe picks a demuxer off
+# a two-byte marker with scoring still a TODO, and the only ADTS marker it knows is
+# `0xFFF1` — so a station sending MPEG-2 ADTS matches nothing, the search runs into the
+# payload, and a stray `0xFFFB` there hands an AAC stream to the MP3 demuxer, which then
+# never syncs. 0.6 scores candidates against the frames that follow and registers all
+# four ADTS sync words.
+#
+# The two majors coexist because they never meet: `player::prebuffer`'s ring is the seam,
+# and rodio is handed samples, not a decoder. Local files stay on rodio's own.
+symphonia = { version = "0.6.1", default-features = false, features = [
+    # What stations actually serve. Deliberately not `all-codecs`: every entry is another
+    # demuxer the probe has to consider, and a format nothing streams is only another way
+    # to guess wrong. `aac` is what carries the ADTS demuxer.
+    "aac",
+    "flac",
+    # Fragmented MP4, which is what a segmented station serves when it is not MPEG-TS. Only
+    # reachable with the playlist's own init segment spliced in front — a media segment opens
+    # with `styp`/`moof` and this demuxer requires `ftyp` then `moov`, which the init supplies.
+    "isomp4",
+    "mpa",
+    "ogg",
+    "vorbis",
+    # A mount that opens with an ID3v2 tag, which the probe chains past rather than
+    # mistaking for audio.
+    "id3v2",
+] }
 # Rodio 0.22 ships only low/high-pass BLT filters, so the graphic EQ cascades
 # this crate's `Type::PeakingEQ` `DirectForm1` filters instead. `DirectForm1`
 # keeps past inputs/outputs in its delay line, so a live coefficient swap (a
@@ -225,6 +253,9 @@ image = { version = "0.25.10", default-features = false, features = [
     "gif",
     "bmp",
     "tiff",
+    # The odd one out, and only `media::station_logo` produces it — a station's logo
+    # field is a favicon field. Argued at that module's `extension_for`.
+    "ico",
 ] }
 # Every cover the app draws is resized, most of them more than once, and
 # `image`'s own resamplers go through `get_pixel` — bounds-checked per output
@@ -267,8 +298,29 @@ serde_json = "1.0.151"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 dirs = "6.0.0"
 
-# HTTP (Deezer artist images, scrobbling)
+# HTTP (Deezer artist images, scrobbling, the radio directory and its streams)
 reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "query", "rustls", "stream"] }
+
+# `Read` + `Seek` over an HTTP response, backed by a circular buffer an endless
+# stream can't outgrow — what lets a radio station reach Symphonia at all, since
+# `Decoder` wants a seekable reader and a live mount is neither finite nor
+# rewindable.
+#
+# `default-features = false` is the load-bearing half. The default set carries
+# `reqwest/default-tls`, which is OpenSSL on Linux: it would resolve a second TLS
+# stack beside the `rustls` above and land in `cargo-deb`'s `$auto` dependency
+# set. `reqwest-rustls` already implies `reqwest`, which implies `http`, so the
+# one entry is the whole list. Turning defaults off also drops
+# `reqwest/system-proxy`, so this path ignores `HTTP_PROXY` where the shared
+# client honours it; restore it explicitly if that gap ever matters.
+stream-download = { version = "0.24.3", default-features = false, features = ["reqwest-rustls"] }
+
+# Icecast/SHOUTcast in-band metadata: the `Icy-MetaData` request header, the
+# `icy-*` response headers, and the reader that strips the interleaved metadata
+# blocks back out so the decoder sees audio only. Same author as
+# `stream-download` and designed to compose with it; its default feature set is
+# already `["reqwest"]`.
+icy-metadata = "0.6.0"
 
 # MD5 for Last.fm `api_sig` request signing (scrobbling). Last.fm mandates MD5;
 # not used for anything security-sensitive.
@@ -360,6 +412,13 @@ dunce = "1.0.5"
 # icon is created on the main thread and its menu events pumped from the winit
 # loop Slint owns. See `src/services/tray/`.
 tray-icon = { version = "0.24.2", default-features = false }
+
+# The build script hashes with the same primitive the crate looks up with, by
+# compiling the one shared file twice — see `src/services/radio_blocklist/source.rs`.
+# Pinned to the version the runtime dependency already carries, since two of them
+# would be two different hashes.
+[build-dependencies]
+blake3 = "1.8.5"
 
 # Embeds an `ICON` resource into Melodia.exe, so the taskbar, Alt-Tab thumbnail
 # and Explorer entry aren't the generic placeholder. A maintained fork of

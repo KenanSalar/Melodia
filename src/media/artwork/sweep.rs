@@ -96,7 +96,7 @@ pub fn collect_candidates(
 /// [`collect_candidates`] started.
 ///
 /// `referenced` holds bare filenames rather than paths, and is deliberately the union across
-/// *all four* columns rather than the one column that points into the store: the names are content
+/// *every* artwork column rather than the one that points into the store: the names are content
 /// hashes, so a cross-directory hit means the bytes are genuinely identical and keeping the file
 /// is the harmless direction. Over-keeping is a leak the next sweep collects; over-deleting is a
 /// cover gone until a re-scan.

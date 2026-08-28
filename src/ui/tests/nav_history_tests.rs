@@ -1,5 +1,6 @@
 use crate::ui::my_library::{NAV_MY_LIBRARY, NO_TAB};
 use crate::ui::nav_history::{NavEntry, NavHistory};
+use crate::ui::radio::NAV_RADIO;
 
 // `MyLibrary`'s `tab-*` values, restated here because a unit test has no `AppWindow` to
 // read them off. `ui::my_library::tests` pins the Slint side against the tab count.
@@ -11,6 +12,11 @@ const PLAYLISTS: i32 = 4;
 // Sections that carry no tabs, so no detail either.
 const FAVORITES: i32 = 2;
 const BROWSE: i32 = 1;
+
+// `Radio`'s `tab-*` values, restated for the same reason as My Library's above.
+// `ui::radio::tests` pins the Slint side against the tab count.
+const RADIO_BROWSE: i32 = 0;
+const RADIO_RECENT: i32 = 2;
 
 fn tab(tab: i32, detail: Option<i64>) -> NavEntry {
     NavEntry {
@@ -24,6 +30,16 @@ fn section(section: i32) -> NavEntry {
     NavEntry {
         section,
         tab: NO_TAB,
+        detail_id: None,
+    }
+}
+
+/// Radio is the one section `forget_section` is written for, and its entries carry a tab
+/// like My Library's — so two of them differ without a detail id between them.
+fn radio(tab: i32) -> NavEntry {
+    NavEntry {
+        section: NAV_RADIO,
+        tab,
         detail_id: None,
     }
 }
@@ -196,4 +212,83 @@ fn record_reports_whether_it_took_the_entry() {
     assert!(!h.record(tab(PLAYLISTS, None)), "a replay records nothing");
     h.set_suppress(false);
     assert!(h.record(tab(PLAYLISTS, None)), "and lands once the replay is done");
+}
+
+/// Switching Radio off drops its entries, and the cursor has to come back by however many
+/// of them sat behind it — otherwise the walk resumes pointing at whatever slid into the
+/// index it was holding, which is a different page than the one the user was on.
+///
+/// **The cursor is deliberately not at the tail here.** With it on the last entry the
+/// trailing `min(len - 1)` clamp lands on the right answer by itself, so a `forget` that
+/// dropped the subtraction entirely would still pass — which is the whole mutation this
+/// test exists to catch.
+#[test]
+fn forgetting_a_section_pulls_the_cursor_back_past_what_fell_before_it() {
+    let mut h = NavHistory::new();
+    h.record(section(BROWSE));
+    h.record(radio(RADIO_BROWSE));
+    h.record(section(FAVORITES));
+    h.record(radio(RADIO_RECENT));
+    h.record(tab(ALBUMS, None));
+    h.back();
+    h.back();
+    assert_eq!(h.cursor(), 2, "standing on Favorites, with two entries still ahead");
+
+    h.forget_section(NAV_RADIO);
+
+    assert_eq!(h.len(), 3, "both Radio entries go");
+    assert_eq!(h.cursor(), 1, "and the cursor comes back by the one that preceded it");
+    assert_eq!(h.current(), Some(section(FAVORITES)), "still on the page the user is standing on");
+    assert_eq!(h.back(), Some(section(BROWSE)));
+    assert_eq!(h.back(), None);
+    assert_eq!(h.forward(), Some(section(FAVORITES)));
+    assert_eq!(h.forward(), Some(tab(ALBUMS, None)), "the forward stack skips what was dropped");
+}
+
+/// Entries ahead of the cursor cost it nothing: the forward stack shortens, the user's
+/// own position does not move.
+#[test]
+fn forgetting_a_section_ahead_of_the_cursor_leaves_it_alone() {
+    let mut h = NavHistory::new();
+    h.record(section(BROWSE));
+    h.record(radio(RADIO_BROWSE));
+    h.back();
+    assert_eq!(h.cursor(), 0);
+
+    h.forget_section(NAV_RADIO);
+
+    assert_eq!(h.len(), 1);
+    assert_eq!(h.cursor(), 0);
+    assert_eq!(h.current(), Some(section(BROWSE)));
+    assert_eq!(h.forward(), None, "the entry it could have walked to is gone");
+}
+
+/// The edge the `min` clamp is for: a history that was nothing but Radio empties, and
+/// `entries.len() - 1` would underflow on the way to describing where the cursor lands.
+#[test]
+fn forgetting_the_only_section_present_empties_the_history() {
+    let mut h = NavHistory::new();
+    h.record(radio(RADIO_BROWSE));
+    h.record(radio(RADIO_RECENT));
+
+    h.forget_section(NAV_RADIO);
+
+    assert!(h.is_empty());
+    assert_eq!(h.cursor(), 0);
+    assert_eq!(h.current(), None, "a cursor over an empty history describes nothing");
+    assert_eq!(h.back(), None);
+    assert_eq!(h.forward(), None);
+}
+
+#[test]
+fn forgetting_a_section_that_never_recorded_changes_nothing() {
+    let mut h = NavHistory::new();
+    h.record(section(BROWSE));
+    h.record(tab(ALBUMS, Some(7)));
+
+    h.forget_section(NAV_RADIO);
+
+    assert_eq!(h.len(), 2);
+    assert_eq!(h.cursor(), 1);
+    assert_eq!(h.current(), Some(tab(ALBUMS, Some(7))));
 }

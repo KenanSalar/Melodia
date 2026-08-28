@@ -99,8 +99,13 @@ fn assemble(paths: &Paths, library: &LibraryFacts) -> String {
     format!(
         "Melodia diagnostics report\n\
          {facts}\
+         data dir  : {data_dir}\n\
          {library}{settings}{crashes}{logs}",
         facts = crash_report::system_facts(Local::now()),
+        // Its own line rather than left to the boot log below: that budget is spent from the
+        // tail, so the line naming the root drops out of exactly the long session worth
+        // reporting. Not in `system_facts`, which a crash report shares and which has no `Paths`.
+        data_dir = display_path(&paths.data_dir),
         library = library_block(library),
         settings = settings_block(paths),
         crashes = crash_block(&paths.logs_dir),

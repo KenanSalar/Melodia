@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::player::tests::helpers::assert_approx as approx;
+use crate::test_support::UNBOUNDED;
 
 const RATE: u32 = 44_100;
 /// A window generous enough for any rate these tests use, matching the ring the
@@ -211,7 +212,7 @@ fn a_nonsense_width_still_yields_drawable_columns() {
     assert_eq!(columns_for_width(0.0), MIN_COLUMNS);
     assert_eq!(columns_for_width(-50.0), MIN_COLUMNS);
     assert_eq!(columns_for_width(f32::NAN), MIN_COLUMNS);
-    assert_eq!(columns_for_width(f32::INFINITY), MIN_COLUMNS);
+    assert_eq!(columns_for_width(UNBOUNDED), MIN_COLUMNS);
 }
 
 // --- push_fixed --------------------------------------------------------------

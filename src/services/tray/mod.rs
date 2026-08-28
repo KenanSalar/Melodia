@@ -59,12 +59,17 @@ pub enum TrayAction {
 /// renders.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TraySnapshot {
-    /// Current track title, `None` when nothing is loaded.
+    /// What is playing: a track's title, or the song a station announced. `None` when nothing is
+    /// loaded.
     pub track_title: Option<String>,
-    /// Current track artist, `None` when unknown or nothing is loaded.
+    /// Who by: a track's artist, or the station's name. `None` when unknown or nothing is loaded.
     pub track_artist: Option<String>,
     /// `true` while playback status is "playing".
     pub is_playing: bool,
+    /// Whether the transport can move off the current source. Both are false for a live stream,
+    /// which has nowhere to skip to, and the menu rows follow rather than offering a no-op.
+    pub has_next: bool,
+    pub has_previous: bool,
 }
 
 impl TraySnapshot {

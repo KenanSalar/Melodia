@@ -3,8 +3,8 @@ use std::path::Path;
 use chrono::{Local, TimeZone};
 
 use super::{
-    FolderCounts, LibraryFacts, crash_block, head_of, library_block, log_section, settings_block,
-    suggested_file_name, tail_of,
+    FolderCounts, LibraryFacts, Paths, assemble, crash_block, head_of, library_block, log_section,
+    settings_block, suggested_file_name, tail_of,
 };
 use crate::error::AppError;
 use crate::test_support::{paths_in, reading_env, resolved_home};
@@ -231,6 +231,26 @@ fn the_unavailable_reason_is_redacted_like_everything_else() {
 
     assert!(!block.contains(&home), "home leaked: {block}");
     assert!(block.contains("~/.local/share/Melodia/logs"));
+}
+
+/// Which root the boot landed on is the one fact a reporter can't infer, `Melodia-dev` and
+/// `MELODIA_DATA_DIR` both moving it. It is also a path, so it owes the redaction every other one
+/// here goes through.
+#[test]
+fn the_report_names_the_data_root_and_redacts_it() {
+    let Some(home) = resolved_home() else {
+        return;
+    };
+    let paths = Paths::rooted_at(Path::new(&home).join("Melodia-dev"));
+    let facts = LibraryFacts {
+        tracks: None,
+        folders: None,
+    };
+
+    let report = reading_env(|| assemble(&paths, &facts));
+
+    assert!(report.contains("data dir  : ~"), "{report}");
+    assert!(!report.contains(&home), "home leaked: {report}");
 }
 
 /// The whole point of the allowlist: the block names the fields it was written

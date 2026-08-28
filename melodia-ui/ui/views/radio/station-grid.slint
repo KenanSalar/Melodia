@@ -1,0 +1,123 @@
+import { ListView } from "std-widgets.slint";
+import { RadioStationGridRow, RadioStationRow } from "../../models.slint";
+import { StationCard } from "station-card.slint";
+
+// Virtualized station grid, `EntityCardGrid`'s contract over `RadioStationGridRow`: Rust chunks the
+// flat list into rows of `columns` cards, so the inner `ListView` virtualizes by row, and the host
+// mounts the scrollbar so it can sit flush with the content-panel edge.
+//
+// Its own component rather than a mount of `EntityCardGrid`, because a station card is not an
+// entity card: it carries three text lines and its own set of hover controls. All three Radio tabs
+// mount this one, which is what keeps that from becoming three.
+export component StationGrid inherits Rectangle {
+    in property <[RadioStationGridRow]> rows;
+    in property <length> card-width: 180px;
+    // Taller than an entity card of the same width by the station card's third text line.
+    in property <length> card-height: 246px;
+    // The gap is baked into the slot height because a `ListView` lays its delegates back-to-back
+    // and has no `spacing`.
+    in property <length> row-height: 266px;
+    in property <length> gap: 20px;
+
+    // Read by the card's binding, which is the only thing that makes a landed decode repaint: a
+    // `pure` callback's result is cached until a dependency dirties, and at `0` the Rust side
+    // answers cache-only so a mount on a released tier queues nothing.
+    in property <int> covers-generation: 0;
+    pure callback request-logo(string /*artwork_path*/, int /*generation*/) -> image;
+
+    // `Radio.logo-decode-size`, passed on to the card that measures its logo against it.
+    in property <int> logo-decode-size;
+
+    // The kept tabs only. Browse leaves it false, so a directory row draws exactly as before.
+    in property <bool> manageable;
+
+    // Favorites turns this off, its rows being starred by definition. Defaulted on for the two
+    // lists that mix kept and unkept stations — see the card's star.
+    in property <bool> star-marks-kept: true;
+
+    // `EntityCardGrid`'s own opt-in, and off for the same reason: a badge on every card of a list
+    // that isn't ranked by it says nothing. Recently Played is the one tab that turns it on.
+    in property <bool> show-play-count: false;
+
+    callback station-clicked(RadioStationRow);
+    callback play-clicked(RadioStationRow);
+    callback favorite-clicked(RadioStationRow);
+    callback homepage-clicked(RadioStationRow);
+    callback edit-clicked(RadioStationRow);
+    callback remove-clicked(RadioStationRow);
+
+    // Same sign convention as `TrackList` and the entity grids — a positive `v-offset` is N px
+    // scrolled, where the inner `ListView` holds that as a non-positive `viewport-y`.
+    out property <length> v-visible-height: list.visible-height;
+    out property <length> v-viewport-height: list.viewport-height;
+    out property <length> v-offset: -list.viewport-y;
+    callback set-v-offset(length);
+    set-v-offset(o) => { list.viewport-y = -o; }
+
+    list := ListView {
+        vertical-scrollbar-policy: always-off;
+        horizontal-scrollbar-policy: always-off;
+        // **Opted out, because a card click and a drag-pan are one gesture and the pan wins by
+        // default.** `Flickable.interactive` defaults true, and past 8 px of travel inside 500 ms
+        // the flickable intercepts the grab and every item under it is sent a cancel — so a press
+        // that drifts that far never lands as a click. That reads as "sometimes it doesn't open",
+        // and it only ever happens on a grid long enough to flick. Nothing here wants
+        // drag-to-pan; the wheel still works, `!interactive` forwarding it unchanged.
+        mouse-drag-pan-enabled: false;
+
+        for grid-row in root.rows: Rectangle {
+            // A `ListView` delegate needs a fixed height or the virtualization math breaks.
+            min-height: root.row-height;
+            max-height: root.row-height;
+
+            HorizontalLayout {
+                padding-left: root.gap;
+                padding-right: root.gap;
+                spacing: root.gap;
+                alignment: start;
+
+                for station in grid-row.stations: StationCard {
+                    card-width: root.card-width;
+                    card-height: root.card-height;
+                    artwork-path: station.artwork_path;
+                    cover: root.request-logo(station.artwork_path, root.covers-generation);
+                    name: station.name;
+                    // Each separator hangs off what precedes it, so a station missing any of the
+                    // three does not lead with a middot. The directory is missing one often:
+                    // `bitrate` is `0` on a large share of live stations, the most-clicked in the
+                    // world included.
+                    meta: station.country
+                        + (station.country != "" && station.codec != "" ? " · " : "")
+                        + station.codec
+                        + ((station.country != "" || station.codec != "") && station.bitrate > 0
+                            ? " · " : "")
+                        + (station.bitrate > 0 ? @tr("{} kbps", station.bitrate) : "");
+                    tags: station.tags;
+                    logo-decode-size: root.logo-decode-size;
+                    tile-color-1: station.tile_color_1;
+                    tile-color-2: station.tile_color_2;
+                    monogram: station.monogram;
+                    is-favorite: station.is_favorite;
+                    // An empty uuid is a station the user typed in: there is nothing in the
+                    // directory to star it against, and Remove is what it has instead.
+                    starrable: station.uuid != "";
+                    star-marks-kept: root.star-marks-kept;
+                    // Both kinds, and the dialog decides what that means: a hand-typed station
+                    // gets its whole form, a directory one gets the website field alone. Gated on
+                    // the row rather than on the uuid, because a directory entry that already
+                    // names a site has nothing here for the user to set and everything to lose.
+                    editable: root.manageable && station.editable;
+                    removable: root.manageable;
+                    homepage-known: station.homepage != "";
+                    play-count: root.show-play-count ? station.play_count : 0;
+                    clicked => { root.station-clicked(station); }
+                    play-clicked => { root.play-clicked(station); }
+                    favorite-clicked => { root.favorite-clicked(station); }
+                    homepage-clicked => { root.homepage-clicked(station); }
+                    edit-clicked => { root.edit-clicked(station); }
+                    remove-clicked => { root.remove-clicked(station); }
+                }
+            }
+        }
+    }
+}

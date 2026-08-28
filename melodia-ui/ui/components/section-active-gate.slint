@@ -12,9 +12,15 @@ export component SectionActiveGate {
     // Passed in rather than read off the `MiniPlayer` global: the host derives it from the window
     // size a beat before the global is written, and the gate must not lag that.
     in property <bool> mini-active;
-    // A section built out of tabs answers a second question — is *this* tab mounted — leaving a
-    // tab having to be the same event as leaving the section. Such a section mounts one gate per
-    // tab; `-1` on both is "no tabs", which every other mount takes by omission.
+    // A section built out of tabs may answer a second question — is *this* tab mounted — so that
+    // leaving a tab is the same event as leaving the section. `-1` on both is "no tabs", which
+    // every other mount takes by omission.
+    //
+    // **Per-tab is My Library's shape, not the rule for a tabbed section.** Its five were five
+    // sidebar sections with five hooks, and it mounts five gates because that history is what a
+    // sixth would have to undo. Favorites, Recently Played and Radio each mount one for all their
+    // tabs, sharing a Rust handle. Radio has to: a tab leave there hands back a directory answer
+    // the session paid a network round trip for.
     in property <int> tab-index: -1;
     in property <int> current-tab: -1;
 

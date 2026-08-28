@@ -1,13 +1,19 @@
+import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Visualizer } from "../globals/audio.slint";
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
+import { Radio } from "../globals/radio.slint";
 import { IconButton } from "../components/icon-button.slint";
+import { ArtworkImage } from "../components/artwork-image.slint";
 import { AccentDiscButton } from "../components/now-playing/accent-disc-button.slint";
 import { MetaChipStrip } from "../components/meta-chip-strip.slint";
 import { StarRating } from "../components/star-rating.slint";
 import { NowPlayingCover } from "../components/now-playing/now-playing-cover.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
+import { StationFacts, StationHistory } from "../components/station-facts.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { TooltipSide } from "../components/tooltip.slint";
 import { NowPlayingViewMenu } from "../components/now-playing/view-menu.slint";
 import { VisualizerStrip } from "../components/now-playing/visualizer-strip.slint";
 import { AuroraBackdrop } from "../components/aurora-backdrop.slint";
@@ -130,7 +136,7 @@ export component NowPlayingView inherits Rectangle {
                 }
             }
 
-            VerticalLayout {
+            if !Player.vm.has_station: VerticalLayout {
                 alignment: center;
                 IconButton {
                     icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
@@ -149,6 +155,38 @@ export component NowPlayingView inherits Rectangle {
                     hover-fg: Player.np-accent-bright;
                     active-fg: Player.np-accent-bright;
                     clicked => { Player.toggle-favorite(); }
+                }
+            }
+
+            // **A station takes the vote in the heart's slot.** The favourite toggle acts on a
+            // `tracks` row a station has none of, so it could only ever sit there disabled; the
+            // vote is the one thing this header can offer that a stream actually answers.
+            //
+            // **Gone rather than disabled** where the directory does not know the station — a
+            // hand-typed one has no uuid to record a vote against — which is what the station
+            // page's own pill does with the same question. A permanently dead glyph is exactly
+            // what this replaced.
+            //
+            // Bare glyph and the same accent family as the heart: it is the same slot, not a new
+            // kind of control. Labelled on the station page, where three segments fit and a
+            // reader can weigh them; here there is room for one glyph, so it takes the tooltip.
+            if Player.vm.has_station && Player.vm.radio.uuid != "": VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: "thumb_up";
+                    diameter: 36px;
+                    icon-size: 22px;
+                    hover-bg: transparent;
+                    idle-fg: Player.np-accent-dim;
+                    hover-fg: Player.np-accent-bright;
+                    tooltip-text: @tr("Vote");
+                    // Left, for the station page's own reason: this row is the panel's top edge,
+                    // so an above-pill is cut off by it. The left arm centres vertically and
+                    // clears inward over the header's own spacer.
+                    tooltip-side: TooltipSide.left;
+                    clicked => {
+                        Radio.vote(Player.vm.radio.uuid, Player.vm.radio.station_id);
+                    }
                 }
             }
 
@@ -186,13 +224,42 @@ export component NowPlayingView inherits Rectangle {
                     preferred-height: root.cover-size;
                     max-height: root.cover-size;
 
-                    NowPlayingCover {
+                    if !Player.vm.has_station: NowPlayingCover {
                         // Square at whichever axis runs out first. The width term matters on a
                         // narrow window, where the Up Next column holds its floor and this one
                         // can end up narrower than the tile wants to be.
                         tile-size: min(parent.height, parent.width);
                         x: (parent.width - self.width) / 2;
                         y: 0px;
+                    }
+
+                    // **`ArtworkImage`, not `NowPlayingCover`.** That component is the *track*
+                    // cross-fade, and a station has nothing to cross-fade between; what it does
+                    // need is the inset card, the monogram and the `radio` glyph, all of which
+                    // the shared tile already owns. A station logo is routinely a favicon, so
+                    // without the inset a 32 px source is magnified across 384.
+                    //
+                    // Both arms spell `x` and `y`, which is what keeps this slot the artwork
+                    // column's only slack — see the shrink-pass note in `.claude/rules/visualizer.md`.
+                    if Player.vm.has_station: ArtworkImage {
+                        tile-size: min(parent.height, parent.width);
+                        tile-radius: Theme.radius-lg;
+                        x: (parent.width - self.width) / 2;
+                        y: 0px;
+                        artwork-path: Player.vm.radio.artwork_path;
+                        // The row tier until the detail decode lands, the miniplayer's ternary.
+                        // The subscriber empties the large slot the moment the source moves, so
+                        // an empty one is a decode still out rather than a station with no logo.
+                        cover: Player.np-station-logo.width > 0
+                            ? Player.np-station-logo
+                            : Player.vm.radio.logo_img;
+                        native-size: Player.np-station-logo-size * 1px;
+                        fallback-text: Player.vm.radio.monogram;
+                        fallback-icon: "radio";
+                        tile-bg: @linear-gradient(135deg,
+                            Player.vm.radio.tile_color_1,
+                            Player.vm.radio.tile_color_2);
+                        tile-icon-color: #ffffff.transparentize(0.1);
                     }
                 }
 
@@ -203,9 +270,7 @@ export component NowPlayingView inherits Rectangle {
                     // fixed brush lands light-on-light on a light theme. The album line takes the
                     // muted tier at reduced alpha — a three-line hierarchy, two solved tones.
                     Text {
-                        text: Player.vm.has_track
-                            ? "‎" + Player.vm.track.title
-                            : @tr("No track playing");
+                        text: Player.source-title;
                         color: Player.np-on-backdrop;
                         font-size: Theme.page-title-size;
                         font-weight: 600;
@@ -213,11 +278,7 @@ export component NowPlayingView inherits Rectangle {
                         overflow: elide;
                     }
                     Text {
-                        text: Player.vm.has_track
-                            ? "‎" + (Player.vm.track.artist == ""
-                                ? @tr("Unknown artist")
-                                : Player.vm.track.artist)
-                            : "—";
+                        text: Player.source-subtitle;
                         color: Player.np-on-backdrop-muted;
                         font-size: Theme.font-size-lg;
                         horizontal-alignment: center;
@@ -225,8 +286,8 @@ export component NowPlayingView inherits Rectangle {
                     }
                     // An `if` rather than `visible:` — a hidden child still claims its
                     // cell, so an album-less track reserved a full text line for nothing.
-                    if Player.vm.has_track && Player.vm.track.album != "": Text {
-                        text: "‎" + Player.vm.track.album;
+                    if Player.source-tertiary != "": Text {
+                        text: Player.source-tertiary;
                         color: Player.np-on-backdrop-muted.transparentize(0.25);
                         font-size: Theme.font-size-md;
                         horizontal-alignment: center;
@@ -271,7 +332,9 @@ export component NowPlayingView inherits Rectangle {
                 spacing: Theme.pad-sm;
 
                 Text {
-                    text: @tr("Up Next");
+                    // A station's queue is untouched underneath it but is not what comes next,
+                    // so this column states what the station *is* instead.
+                    text: Player.vm.has_station ? @tr("Station") : @tr("Up Next");
                     // Accent-tinted like the divider under it but solid: a heading carries it at
                     // full alpha where a hairline can't. The rows below keep the list palette.
                     color: Player.np-accent-bright;
@@ -286,9 +349,80 @@ export component NowPlayingView inherits Rectangle {
                 }
 
                 // The mini-player mounts the same component with `compact: true`.
-                UpNextList {
+                if !Player.vm.has_station: UpNextList {
                     vertical-stretch: 1;
                     compact: false;
+                }
+                // **The station page's own body, on this view's palette.** What a stream has
+                // instead of a queue is a description of itself, so the two surfaces state the
+                // same facts through the same component rather than one of them inventing a
+                // second answer. No Votes row: that number comes from a directory refresh the
+                // station page runs and this column has no reason to.
+                //
+                // One scroller for the pair — the history is capped by the ring that fills it, so
+                // there is nothing to virtualize and no second scroller to nest.
+                if Player.vm.has_station: Rectangle {
+                    vertical-stretch: 1;
+
+                    station-sv := ScrollView {
+                        width: 100%;
+                        height: 100%;
+                        horizontal-scrollbar-policy: always-off;
+                        vertical-scrollbar-policy: always-off;
+                        viewport-width: self.width;
+
+                        // The station page's shape: the scroller keeps the full width so the
+                        // wheel works over the bar's lane too, and the content insets instead.
+                        VerticalLayout {
+                            spacing: Theme.pad-md;
+                            padding-right: Theme.scrollbar-slot;
+                            alignment: start;
+
+                            StationFacts {
+                                stream-url: Player.vm.radio.stream_url;
+                                homepage: Player.vm.radio.homepage;
+                                codec: Player.vm.radio.codec;
+                                bitrate: Player.vm.radio.bitrate;
+                                play-count: Player.vm.radio.play_count;
+                                // The column is a third of the panel, so the label gutter gives
+                                // ground to the values — a stream URL needs what it can get.
+                                label-width: 80px;
+                                label-color: Player.np-on-backdrop-muted;
+                                value-color: Player.np-on-backdrop;
+                                action-idle-fg: Player.np-accent-dim;
+                                action-hover-fg: Player.np-accent-bright;
+                                action-hover-bg: Player.np-accent-pill;
+                                stream-url-copied => {
+                                    Radio.copy-stream-url(Player.vm.radio.station_id);
+                                }
+                                open-homepage(url) => { Radio.open-homepage(url); }
+                            }
+
+                            if Radio.history-rows.length > 0: StationHistory {
+                                rows: Radio.history-rows;
+                                heading-color: Player.np-on-backdrop-muted;
+                                row-color: Player.np-on-backdrop;
+                            }
+                        }
+                    }
+
+                    OverlayScrollbar {
+                        x: parent.width - self.width;
+                        y: 0;
+                        width: 10px;
+                        height: parent.height;
+                        visible-size: station-sv.visible-height;
+                        content-size: station-sv.viewport-height;
+                        offset: -station-sv.viewport-y;
+                        // The Up Next list's weights, so the two columns sit into the backdrop
+                        // the same way.
+                        track-color: Player.np-accent-bright;
+                        track-opacity: 0.25;
+                        track-opacity-active: 0.4;
+                        thumb-color: Player.np-accent-dim;
+                        thumb-active-color: Player.np-accent-bright.transparentize(0.2);
+                        scroll-to(o) => { station-sv.viewport-y = -o; }
+                    }
                 }
             }
         }

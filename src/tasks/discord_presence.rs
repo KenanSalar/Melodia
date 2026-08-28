@@ -180,6 +180,10 @@ impl Detector {
     /// Resolve the current track's cover URL, reusing the last one for the same
     /// track. Only a genuine track change (both tags present) hits the service —
     /// pause/resume/seek land on the `track.id` fast path with no lock or network.
+    ///
+    /// **A station has no `current_track`, so it bails here and keeps the app logo.** Deliberate:
+    /// its stored logo is a local path Discord's CDN cannot read, and the directory's favicon URL
+    /// points at arbitrary third-party hosts Discord rejects at will.
     async fn resolve_cover(&mut self, vm: Option<&PlayerViewModelLight>) -> Option<String> {
         let track = vm.and_then(|v| v.current_track.as_ref())?;
         if let Some((id, url)) = self.last_art.as_ref()

@@ -2,6 +2,7 @@ import { Theme } from "../../theme.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
+import { PlayCountBadge } from "play-count-badge.slint";
 
 // The card every grid and strip draws: a square artwork tile with an elided title and subtitle
 // beneath it, inside a hover-highlighted rounded surface. **The outer slot is a fixed size**, so
@@ -43,11 +44,9 @@ export component EntityCard inherits Rectangle {
     // A Material Symbols ligature, marking a smart playlist. Empty means no badge.
     in property <string> badge-icon: "";
 
-    // The play count on the Most Played surfaces. **It lives here rather than on a
-    // host**, so the horizontal strip and the vertical grid render the same badge
-    // instead of one growing a second copy. Shares the corner with `badge-icon`; no
-    // caller sets both.
-    in property <string> badge-text: "";
+    // The play count on the Most Played surfaces, drawn by the shared badge rather than
+    // by this card. Shares the corner with `badge-icon`; no caller sets both.
+    in property <int> play-count: 0;
 
     callback clicked();
     callback delete-clicked();
@@ -195,48 +194,10 @@ export component EntityCard inherits Rectangle {
         }
     }
 
-    // The same corner, sized to its own content. Reading the row's `preferred-width` is
-    // a derivation, not a cycle: a layout reports its children's intrinsic widths and
-    // never reads back the width it is handed.
-    //
-    // **The play glyph is a `MaterialIcon`, not a "▶" in the label.** A character
-    // Vazirmatn lacks pulls a fallback font whose taller metrics define the line box,
-    // dropping the digits off the patched centring — so the number and the glyph would
-    // sit at different heights.
-    Rectangle {
-        visible: root.badge-text != "";
+    // The same corner, hiding itself where the row has no plays behind it.
+    PlayCountBadge {
         x: 2 * Theme.pad-sm;
         y: 2 * Theme.pad-sm;
-        height: 22px;
-        width: badge-row.preferred-width + 16px;
-        border-radius: self.height / 2;
-        background: Theme.crust.with-alpha(0.85);
-        border-width: 1px;
-        border-color: Theme.surface2;
-
-        badge-row := HorizontalLayout {
-            alignment: center;
-            spacing: 2px;
-
-            VerticalLayout {
-                alignment: center;
-                Text {
-                    text: root.badge-text;
-                    color: Theme.text;
-                    font-size: Theme.font-size-sm;
-                    font-weight: 600;
-                }
-            }
-
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: "play_arrow";
-                    icon-size: 14px;
-                    icon-color: Theme.text;
-                    filled: true;
-                }
-            }
-        }
+        count: root.play-count;
     }
 }

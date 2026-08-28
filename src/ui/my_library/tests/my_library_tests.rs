@@ -865,8 +865,7 @@ const SORT_ROWS: [(&str, [&str; 3]); 3] = [
 #[test]
 fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     for (global, fields) in SORT_ROWS {
-        let arrays =
-            crate::test_support::sort_pill_row_arrays(PILLS, &format!("{global}.sort-field"));
+        let arrays = crate::test_support::sort_mount_arrays(PILLS, &format!("{global}.sort-field"));
         assert!(
             arrays.is_some(),
             "`tab-pills.slint` must mount a `SortPillRow` bound to {global}.sort-field",
@@ -979,7 +978,7 @@ fn the_retired_indices_fold_onto_the_page_that_absorbed_them() {
     for retired in 4..=7 {
         assert_eq!(fold_retired_nav_index(retired), NAV_MY_LIBRARY);
     }
-    for kept in [0, 1, 2, 3, 8, 9] {
+    for kept in [0, 1, 2, 3, 8, 9, 10] {
         assert_eq!(fold_retired_nav_index(kept), kept, "{kept} is a live index");
     }
     // Out of range in either direction is the caller's problem, not the fold's.
@@ -1041,6 +1040,11 @@ fn only_a_tab_pick_records_a_history_entry() {
 /// *synchronous* body carrying neither write.
 #[test]
 fn a_history_walk_lands_the_tab_beside_the_detail_id() {
+    /// The four My Library details plus Radio's station page, which is a walkable detail on
+    /// another section entirely — the one thing `spawn_open_detail` dispatches that isn't a tab
+    /// of this page.
+    const WALKABLE_DETAILS: usize = 5;
+
     let deferred = NAV_HISTORY
         .split_once("let pending = PendingNav {")
         .and_then(|(_, rest)| rest.split_once("\n    }\n"))
@@ -1071,6 +1075,7 @@ fn a_history_walk_lands_the_tab_beside_the_detail_id() {
         "open_artist_with(",
         "open_genre_with(",
         "open_playlist_with(",
+        "open_station_with(",
     ] {
         assert!(
             NAV_HISTORY.contains(open),
@@ -1084,12 +1089,12 @@ fn a_history_walk_lands_the_tab_beside_the_detail_id() {
     // the reachable case. Both spellings are pinned by role: the bail runs before the
     // spawn and reads the caller's `state`, the failure arm after it and reads the clone.
     for (spelling, role) in [
-        ("land_pending(pending, state, &fallback);", "the four missing-handle bails"),
-        ("land_pending(pending, &s, &fallback);", "the four failed opens"),
+        ("land_pending(pending, state, &fallback);", "the missing-handle bails"),
+        ("land_pending(pending, &s, &fallback);", "the failed opens"),
     ] {
         assert_eq!(
             NAV_HISTORY.matches(spelling).count(),
-            4,
+            WALKABLE_DETAILS,
             "{role} in `spawn_open_detail` must each land the pending navigation",
         );
     }

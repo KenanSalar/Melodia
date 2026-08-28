@@ -1,0 +1,213 @@
+import { Theme } from "../../theme.slint";
+import { Radio } from "../../globals/radio.slint";
+import { RadioForm } from "../../globals/dialog-forms.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { ActionPill, PillButton, PillDivider } from "../../components/action-pill.slint";
+import { SortMenuPopup } from "../../components/sort-menu-popup.slint";
+import { FacetChip } from "facet-chip.slint";
+
+// Every pill row the Radio band can show, mutually exclusive on the mounted tab and handed to
+// `LibraryTabBand` as its whole `@children`: Browse's filter chips, then Favorites' single chip of
+// add / import / export plus its sort picker. Recently Played has none, its order being the page.
+//
+// **The two tab rows gate on `!detail-open`**, describing the tab under a station page rather
+// than the page, and the station's own row takes the slot instead — which is where My Library
+// puts each of its four details' actions.
+//
+// **Favorites sorts through a popup rather than the usual `SortPillRow`.** Four fields spelled out
+// beside three operations mounted two chips at once, flush against each other under the
+// `spacing: 0px` below, and left the band no room for the count line it reserves against
+// `pills.width`.
+//
+// **Every row here is labelled, and none of them carries a tooltip.** A label is legible without
+// aiming at it, and a tooltip restating one is a second copy of the same string; icon-only is what
+// My Library's detail arms take because theirs run to fifteen segments, where the widest row here
+// is four. Nothing in this file needs the published-anchor treatment `MyLibraryTabPills` carries
+// for exactly one of its rows either — that is for a tooltip opening *downward* past the band's
+// edge, and `Tooltip`'s default side is `above`.
+export component RadioTabPills inherits Rectangle {
+    HorizontalLayout {
+        alignment: end;
+        // The rows are mutually exclusive, so any spacing here would read as a permanent inset on
+        // the tabs that mount nothing.
+        spacing: 0px;
+
+        // The Browse filters, in the band's slot rather than in the tab body: this is where the
+        // page's controls go and where a station detail's own will land. Country carries a code
+        // because `countrycode` is the search endpoint's one code-keyed parameter; the rest filter
+        // by name, and the bitrate chip's `code` is its own floor in kbps.
+        //
+        // Nested so the chips carry their own spacing, the outer row's `0px` being what keeps
+        // every other row flush with the band's edge.
+        if !Radio.detail-open && Radio.tab-idx == Radio.tab-browse: HorizontalLayout {
+            spacing: Theme.pad-sm;
+
+            FacetChip {
+                kind: Radio.facet-country;
+                label: @tr("Country");
+                value: Radio.pick-country;
+                options: Radio.facet-shown == Radio.facet-country ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-country && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            FacetChip {
+                kind: Radio.facet-language;
+                label: @tr("Language");
+                value: Radio.pick-language;
+                options: Radio.facet-shown == Radio.facet-language ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-language && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            FacetChip {
+                kind: Radio.facet-tag;
+                label: @tr("Genre");
+                value: Radio.pick-tag;
+                options: Radio.facet-shown == Radio.facet-tag ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-tag && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            FacetChip {
+                kind: Radio.facet-codec;
+                label: @tr("Format");
+                value: Radio.pick-codec;
+                options: Radio.facet-shown == Radio.facet-codec ? Radio.facet-options : [];
+                loading: Radio.facet-shown == Radio.facet-codec && Radio.facet-loading;
+                needle <=> Radio.facet-filter;
+                opened(k) => { Radio.request-facet(k); }
+                needle-edited(t) => { Radio.facet-filter-changed(t); }
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+
+            // Its options are a literal rather than a fetch: the floors are ours to choose, not
+            // the directory's to list. `code` is what the request carries, so it stays unlocalized
+            // while the label is not.
+            FacetChip {
+                kind: Radio.facet-bitrate;
+                label: @tr("Bitrate");
+                value: Radio.pick-bitrate-min > 0
+                    ? @tr("{} kbps and up", Radio.pick-bitrate-min)
+                    : "";
+                searchable: false;
+                options: [
+                    { name: @tr("{} kbps and up", 64), code: "64" },
+                    { name: @tr("{} kbps and up", 128), code: "128" },
+                    { name: @tr("{} kbps and up", 192), code: "192" },
+                    { name: @tr("{} kbps and up", 320), code: "320" },
+                ];
+                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+                cleared(k) => { Radio.clear-facet(k); }
+            }
+        }
+
+        if !Radio.detail-open && Radio.tab-idx == Radio.tab-favorites: ActionPill {
+            // Fills the Dialog inline rather than hopping through Rust: a synchronous
+            // `set_open(true)` mid-click-handler trips Slint's recursion guard.
+            PillButton {
+                icon: "add";
+                text: @tr("Add Station");
+                clicked => {
+                    // Reset here as well as at the teardown: the session's first open has had no
+                    // close before it, and the declared defaults are not the add form's.
+                    RadioForm.reset();
+                    Dialog.title = @tr("Add Station");
+                    Dialog.message = "";
+                    Dialog.confirm-label = @tr("Add");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.kind = "add-station";
+                    Dialog.target-id = -1;
+                    Dialog.open = true;
+                }
+            }
+
+            PillDivider { }
+
+            // Portable playlists, so a station list survives a database wipe and arrives from
+            // whatever the user was using before. Both are pure Rust flows over native pickers.
+            PillButton {
+                icon: "download";
+                text: @tr("Import");
+                clicked => { Radio.import-stations(); }
+            }
+
+            PillDivider { }
+
+            PillButton {
+                icon: "upload";
+                text: @tr("Export");
+                clicked => { Radio.export-stations(); }
+            }
+
+            PillDivider { }
+
+            SortMenuPopup {
+                labels: [@tr("Name"), @tr("Added"), @tr("Plays"), @tr("Last played")];
+                fields: ["name", "added", "plays", "played"];
+                sort-field: Radio.sort-field;
+                sort-dir: Radio.sort-dir;
+                request-sort(f) => { Radio.request-sort(f); }
+            }
+        }
+
+        // --- The station page -----------------------------------------------------------------
+        //
+        // Everything the page can *do*; everything it can *say* is a row in its body. Copy URL and
+        // Website went there with the facts they act on.
+        //
+        // **Starring and removing are the grid's, not the page's.** Every card already carries
+        // both, on the tab whose list the answer changes — un-starring from a page is a row
+        // leaving a list the page is not showing, and removing is a confirm about membership of a
+        // list you are not looking at. Keeping them here meant the same station offering the same
+        // two actions twice, and the trash needing to know which tab it was opened from to mean
+        // anything. All three of these act on the station itself.
+        //
+        // One mount for all three tabs: what is on the page is decided by the station, so
+        // Recently Played's page is Favorites' page is Browse's.
+        if Radio.detail-open: ActionPill {
+            PillButton {
+                icon: "play_arrow";
+                icon-filled: true;
+                text: @tr("Play");
+                clicked => { Radio.play-station(Radio.detail-station); }
+            }
+            if Radio.detail-votable || Radio.detail-station.editable: PillDivider { }
+
+            // **Labelled, and no tooltip with it.** Three segments fit the slot, and a label a
+            // reader can weigh at a glance beats a glyph they have to hover to identify — which
+            // is the trade the two tab rows above already make. A tooltip restating the label is
+            // a second copy of the same string.
+            if Radio.detail-votable: PillButton {
+                icon: "thumb_up";
+                icon-size: 16px;
+                text: @tr("Vote");
+                clicked => {
+                    Radio.vote(Radio.detail-station.uuid, Radio.detail-station.id);
+                }
+            }
+
+            if Radio.detail-votable && Radio.detail-station.editable: PillDivider { }
+
+            if Radio.detail-station.editable: PillButton {
+                icon: "edit";
+                text: @tr("Edit");
+                clicked => { Radio.edit-station(Radio.detail-station); }
+            }
+        }
+    }
+}

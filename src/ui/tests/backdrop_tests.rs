@@ -726,7 +726,7 @@ fn worst_composited_tone() -> f64 {
     (0..=100)
         .map(f64::from)
         .map(|luma| composited_tone(luma, scrim_alpha(luma)))
-        .fold(f64::NEG_INFINITY, f64::max)
+        .fold(f64::MIN, f64::max)
 }
 
 /// The frame before the solve lands is a real frame, and on the worst backdrop

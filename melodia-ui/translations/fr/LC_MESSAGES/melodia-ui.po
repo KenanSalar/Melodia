@@ -233,6 +233,10 @@ msgstr "Filtrer les pistes…"
 msgid "Columns"
 msgstr "Colonnes"
 
+# `SortMenuPopup`'s trigger, the pill-chrome twin of "Columns".
+msgid "Sort"
+msgstr "Trier"
+
 msgid "Card view"
 msgstr "Vue en cartes"
 
@@ -1570,8 +1574,8 @@ msgstr "Discord n'est pas en cours d'exécution"
 msgid "Show album artwork"
 msgstr "Afficher la pochette de l'album"
 
-msgid "Look up cover art online (via Deezer) to show on the card"
-msgstr "Rechercher la pochette en ligne (via Deezer) pour l'afficher sur la carte"
+msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
+msgstr "Rechercher la pochette en ligne (via Deezer ou iTunes) pour l'afficher sur la carte"
 
 msgid "Hide while paused"
 msgstr "Masquer en pause"
@@ -1696,3 +1700,257 @@ msgstr "Pas encore autorisé. Autorisez Melodia dans votre navigateur, puis cliq
 
 msgid "Couldn't save your credentials."
 msgstr "Impossible d'enregistrer vos identifiants."
+
+# ---- Radio -------------------------------------------------------------------
+
+# The sidebar row and the window title. The two tabs reuse "Browse" and "Favorites".
+msgid "Radio"
+msgstr "Radio"
+
+msgid "Search stations…"
+msgstr "Rechercher des stations…"
+
+msgid "Filter stations…"
+msgstr "Filtrer les stations…"
+
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} station"
+msgstr[1] "{n} stations"
+
+msgid "No stations kept yet"
+msgstr "Aucune station conservée pour l'instant"
+
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Ajoutez une station aux favoris depuis Parcourir, ou saisissez une URL."
+
+# The Settings card. The section title reuses "Radio" above.
+msgid "Internet radio"
+msgstr "Radio en ligne"
+
+msgid "Browse and play live stations from radio-browser.info"
+msgstr "Parcourez et écoutez des stations en direct depuis radio-browser.info"
+
+# The Settings sub-rows, shown only while the master switch is on.
+msgid "Hide segmented stations"
+msgstr "Masquer les stations segmentées"
+
+msgid "Segmented (HLS) streams play, but take longer to start"
+msgstr "Les flux segmentés (HLS) se lisent, mais démarrent plus lentement"
+
+msgid "Report plays to the directory"
+msgstr "Signaler les écoutes à l'annuaire"
+
+msgid "An anonymous count is what orders stations by popularity"
+msgstr "C'est un décompte anonyme qui classe les stations par popularité"
+
+# ---- Radio: Browse -----------------------------------------------------------
+# The filter chips. "Genre" and "Language" reuse the labels above.
+msgid "Country"
+msgstr "Pays"
+
+msgid "Format"
+msgstr "Format"
+
+msgid "{} kbps and up"
+msgstr "À partir de {} kbps"
+
+# The chip pickers.
+msgid "Filter…"
+msgstr "Filtrer…"
+
+msgid "Loading…"
+msgstr "Chargement…"
+
+msgid "Nothing to pick from"
+msgstr "Rien à choisir"
+
+msgid "Load more stations"
+msgstr "Charger plus de stations"
+
+# The three states of the station grid.
+msgid "Searching the directory…"
+msgstr "Recherche dans l'annuaire…"
+
+msgid "Stations are coming from radio-browser.info."
+msgstr "Les stations proviennent de radio-browser.info."
+
+msgid "The station directory is unreachable"
+msgstr "L'annuaire des stations est inaccessible"
+
+msgid "Check your connection and try again."
+msgstr "Vérifie ta connexion et réessaie."
+
+msgid "Try again"
+msgstr "Réessayer"
+
+msgid "No stations matched"
+msgstr "Aucune station trouvée"
+
+msgid "Try a different name, or clear a filter."
+msgstr "Essaie un autre nom ou retire un filtre."
+
+# The station card's meta line, beside country and codec.
+msgid "{} kbps"
+msgstr "{} kbps"
+
+# The Recently Played tab's empty state body; its title takes the library's "Nothing played yet".
+msgid "Stations you listen to show up here."
+msgstr "Les stations que vous écoutez apparaissent ici."
+
+# The Favorites tab's sort picker. Only "Added" is its own: "Name", "Plays" and "Last played" are
+# the library's entries above, one msgid being one string to gettext however many surfaces use it.
+msgid "Added"
+msgstr "Ajoutée"
+
+# The add / edit station dialog.
+msgid "Add Station"
+msgstr "Ajouter une station"
+
+msgid "Edit Station"
+msgstr "Modifier la station"
+
+msgid "Stream URL"
+msgstr "URL du flux"
+
+msgid "Name (optional)"
+msgstr "Nom (facultatif)"
+
+msgid "Leave blank to use the station's own name"
+msgstr "Laissez vide pour utiliser le nom de la station"
+
+msgid "Checking the stream…"
+msgstr "Vérification du flux…"
+
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "Impossible d'atteindre cette adresse. Vérifiez l'URL et votre connexion."
+
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "Cette adresse ne fournit pas d'audio que Melodia sait décoder."
+
+msgid "Couldn't save the station."
+msgstr "Impossible d'enregistrer la station."
+
+# The same dialog opened on a directory-owned station: whatever the directory left blank.
+msgid "Station Details"
+msgstr "Détails de la station"
+
+msgid "Logo URL"
+msgstr "URL du logo"
+
+msgid "Leave blank to look for a logo on the website above."
+msgstr "Laissez vide pour chercher un logo sur le site web ci-dessus."
+
+msgid "Jazz, Blues"
+msgstr "Jazz, Blues"
+
+msgid "Tunisia"
+msgstr "Tunisie"
+
+msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
+msgstr "L'annuaire possède le nom et le flux de cette station. Ce qu'il a laissé vide vous revient ; laissez un champ vide pour le retirer."
+
+msgid "Website"
+msgstr "Site web"
+
+msgid "That doesn't look like a web address. It should start with https://"
+msgstr "Cela ne ressemble pas à une adresse web. Elle doit commencer par https://"
+
+# The station card's destructive action, once per tab: the two lists are independent, so each
+# names only its own.
+msgid "Remove from favorites?"
+msgstr "Retirer des favoris ?"
+
+msgid "\"{}\" will be removed from your favorites."
+msgstr "« {} » sera retirée de vos favoris."
+
+# A hand-typed station: leaving Favorites is leaving everything, so this one names the deletion.
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "« {} » sera retirée de vos stations, ainsi que son historique d'écoute."
+
+msgid "Remove from Recently Played?"
+msgstr "Retirer des écoutés récemment ?"
+
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "« {} » sera retirée des écoutés récemment."
+
+# Station list import and export.
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "{n} station ajoutée"
+msgstr[1] "{n} stations ajoutées"
+
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} était déjà dans votre liste."
+msgstr[1] "{n} étaient déjà dans votre liste."
+
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "Aucune station n'a pu être lue dans les fichiers sélectionnés."
+
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "{n} station exportée"
+msgstr[1] "{n} stations exportées"
+
+msgid "Couldn't write the station list."
+msgstr "Impossible d'écrire la liste des stations."
+
+# --- The station page ---
+
+msgid "Vote"
+msgstr "Voter"
+
+msgid "Edit"
+msgstr "Modifier"
+
+msgid "Vote not counted"
+msgstr "Vote non comptabilisé"
+
+msgid "{n} vote"
+msgid_plural "{n} votes"
+msgstr[0] "{n} vote"
+msgstr[1] "{n} votes"
+
+msgid "The directory reached this station on its last check."
+msgstr "L'annuaire a joint cette station lors de sa dernière vérification."
+
+msgid "The directory could not reach this station on its last check."
+msgstr "L'annuaire n'a pas pu joindre cette station lors de sa dernière vérification."
+
+msgid "Stream"
+msgstr "Flux"
+
+msgid "Copy stream URL"
+msgstr "Copier l'URL du flux"
+
+msgid "Open in your browser"
+msgstr "Ouvrir dans le navigateur"
+
+msgid "Votes"
+msgstr "Votes"
+
+msgid "Recently played on this station"
+msgstr "Diffusé récemment sur cette station"
+
+# ---- Radio: a station on the transport ---------------------------------------
+
+# The badge where a track's seek bar goes. Keep it short and shouty — it is a pill.
+msgid "LIVE"
+msgstr "EN DIRECT"
+
+msgid "Buffering…"
+msgstr "Mise en mémoire tampon…"
+
+# Same pill, on a station the user paused. Pausing closes the connection, so this is a state and
+# not a hold; a transport verb like the Pause button's would read as the control it isn't.
+msgid "Paused"
+msgstr "En pause"
+
+# Heading over the Now Playing panel that replaces "Up Next" while a station plays. Names the
+# kind of thing the panel describes, so keep it as short as that one.
+msgid "Station"
+msgstr "Station"
+
+msgid "{}: {}"
+msgstr "{} : {}"

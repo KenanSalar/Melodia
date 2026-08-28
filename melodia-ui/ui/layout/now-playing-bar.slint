@@ -5,7 +5,8 @@ import { Queue } from "../globals/queue.slint";
 import { WindowChrome } from "../globals/shell.slint";
 import { Settings } from "../settings.slint";
 import { IconButton } from "../components/icon-button.slint";
-import { ArtworkImage } from "../components/artwork-image.slint";
+import { MetaChip } from "../components/meta-chip.slint";
+import { SourceArtwork } from "../components/now-playing/source-artwork.slint";
 import { SliderTrack } from "../components/slider-track.slint";
 import { VolumePopup } from "../components/now-playing/volume-popup.slint";
 import { OverflowMenu } from "../components/now-playing/overflow-menu.slint";
@@ -85,7 +86,11 @@ export component NowPlayingBar inherits Rectangle {
             // wrapper so the two contract together toward the cell's centre rather than both
             // anchoring left. **Only the factor is animated** — the cell re-clamps as `bar-w`
             // changes, so easing the derived sizes would wobble on every resize tick.
-            property <float> press-scale: track-info-touch.pressed && Player.vm.has_track
+            // A station is a source like any other here: the cell opens the full view for it too,
+            // so the affordance follows whichever half of the view model is filled.
+            property <bool> has-source: Player.vm.has_track || Player.vm.has_station;
+
+            property <float> press-scale: track-info-touch.pressed && track-info-cell.has-source
                 ? 0.99
                 : 1.0;
             animate press-scale {
@@ -103,7 +108,7 @@ export component NowPlayingBar inherits Rectangle {
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 border-radius: Theme.radius-md;
-                background: track-info-touch.has-hover && Player.vm.has_track
+                background: track-info-touch.has-hover && track-info-cell.has-source
                     ? Theme.accent.with-alpha(0.12)
                     : transparent;
                 animate background { duration: Theme.dur-fast; easing: ease-in-out; }
@@ -128,12 +133,10 @@ export component NowPlayingBar inherits Rectangle {
 
                     VerticalLayout {
                         alignment: center;
-                        ArtworkImage {
-                            artwork-path: Player.vm.track.artwork_path;
-                            cover: Player.vm.track.cover_img;
+                        SourceArtwork {
                             tile-size: clamp(root.bar-w * 0.07, 36px, 46px);
                             // The frame stays fixed; the cover scales within it.
-                            cover-scale: track-info-touch.has-hover && Player.vm.has_track
+                            cover-scale: track-info-touch.has-hover && track-info-cell.has-source
                                 ? 1.15
                                 : 1.0;
                         }
@@ -146,30 +149,25 @@ export component NowPlayingBar inherits Rectangle {
                         VerticalLayout {
                             spacing: 2px;
 
-                            // The LRM forces an LTR base direction, so elide renders its
-                            // `…` at the right edge for RTL scripts too — see the
-                            // title-cell note in `track-list-row.slint`.
+                            // Both lines come off `Player`, which owns the track-or-station
+                            // ladder and the LRM that keeps elide's `…` on the right edge for
+                            // RTL scripts.
                             Text {
-                                text: Player.vm.has_track
-                                    ? "‎" + Player.vm.track.title
-                                    : @tr("No track playing");
+                                text: Player.source-title;
                                 color: Theme.text;
                                 font-size: Theme.font-size-sm;
                                 font-weight: 500;
                                 overflow: elide;
                             }
                             Text {
-                                text: Player.vm.has_track
-                                    ? "‎" + (Player.vm.track.artist == ""
-                                        ? @tr("Unknown artist")
-                                        : Player.vm.track.artist)
-                                    : "—";
+                                text: Player.source-subtitle;
                                 color: Theme.text;
                                 font-size: 11px;
                                 overflow: elide;
                             }
                             Text {
-                                text: "‎" + Player.vm.track.album;
+                                // The album for a track, the station's country for a stream.
+                                text: Player.source-tertiary;
                                 // All three lines are `Theme.text`; size and weight are
                                 // what separate them. Artist and album were `subtext0`
                                 // and `overlay1` — the latter isn't even a text rung —
@@ -178,7 +176,7 @@ export component NowPlayingBar inherits Rectangle {
                                 color: Theme.text;
                                 font-size: 11px;
                                 overflow: elide;
-                                visible: Player.vm.has_track && Player.vm.track.album != "";
+                                visible: Player.source-tertiary != "";
                             }
                         }
                     }
@@ -186,8 +184,8 @@ export component NowPlayingBar inherits Rectangle {
             }
 
             track-info-touch := TouchArea {
-                mouse-cursor: Player.vm.has_track ? pointer : default;
-                enabled: Player.vm.has_track;
+                mouse-cursor: track-info-cell.has-source ? pointer : default;
+                enabled: track-info-cell.has-source;
                 // The edge is owed on the *close* half of this toggle: the view under
                 // Now Playing is a fresh `ViewTransition` mount, and left unwritten it
                 // enters from whatever the last drill or back put there. Set
@@ -262,7 +260,11 @@ export component NowPlayingBar inherits Rectangle {
             min-width: 140px;
             horizontal-stretch: 2;
 
-            HorizontalLayout {
+            // Two rows rather than one with the slider swapped out: the elapsed label reads
+            // `slider.dragging` and `slider.drag-value`, and an id declared inside an `if` is
+            // unreadable from outside it. Safe to branch — `SliderTrack` carries no `changed`
+            // handler, so dropping it strands no tracker.
+            if !Player.vm.has_station: HorizontalLayout {
                 spacing: Theme.pad-sm;
 
                 Text {
@@ -302,6 +304,32 @@ export component NowPlayingBar inherits Rectangle {
 
                 Text {
                     text: Theme.format-duration(Player.duration-ms);
+                    color: Theme.text;
+                    font-size: 11px;
+                    min-width: 40px;
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+                }
+            }
+
+            // A stream has no timeline to seek within, so there is no slider and no total. What
+            // the position still means is how long this connection has been running, which is
+            // worth stating; the pill beside it carries the connection's own state.
+            if Player.vm.has_station: HorizontalLayout {
+                spacing: Theme.pad-sm;
+                alignment: center;
+
+                VerticalLayout {
+                    alignment: center;
+                    MetaChip {
+                        text: Player.live-label;
+                        fill: Theme.accent.with-alpha(0.18);
+                        label-color: Theme.accent;
+                    }
+                }
+
+                Text {
+                    text: Theme.format-duration(Player.position-ms);
                     color: Theme.text;
                     font-size: 11px;
                     min-width: 40px;

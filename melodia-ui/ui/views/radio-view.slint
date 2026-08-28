@@ -1,0 +1,287 @@
+import { Radio } from "../globals/radio.slint";
+import { NavEnterFrom } from "../globals/nav.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+import { GridColumnsSync } from "../components/grid-columns-sync.slint";
+import { GridGeometry } from "../components/grid-geometry.slint";
+import { LibraryTabBand } from "../components/hero/library-tab-band.slint";
+import { TooltipFrame } from "../components/tooltip-frame.slint";
+import { ViewTransition } from "../components/view-transition.slint";
+import { RadioBrowseTab } from "radio/browse-tab.slint";
+import { KeptStationsTab } from "radio/kept-stations-tab.slint";
+import { RadioStationDetail } from "radio/station-detail.slint";
+import { RadioTabPills } from "radio/tab-pills.slint";
+
+// Radio: three tabs over the directory, the stations the user kept and the ones they played,
+// under the same `LibraryTabBand` My Library wears. The mount sheet and nothing else — the band
+// carries the tab bar, the filter box, the action pills and the count line; each tab body owns
+// whatever scroller it grows.
+//
+// **A station page is a fourth body branch, and it belongs to the tab it was opened from.**
+// `Radio.detail-open` is derived from the seat and the live tab, My Library's `album-open` shape,
+// so a tab pick unmounts the page without forgetting it and coming back re-mounts it.
+//
+// **The band's filter box goes away over a station page.** A station has no songs of its own to
+// narrow — its page is a list of facts about one stream — and a box that filters nothing is worse
+// than no box. The page's own actions take the band's pill slot instead, where every My Library
+// detail puts them.
+export component RadioView inherits Rectangle {
+    property <int> filter-tick-pending: 0;
+
+    // A click anywhere the band or a body doesn't claim gives the filter box up.
+    TouchArea {
+        clicked => { Radio.blur-search-tick += 1; }
+    }
+
+    // **One mount for three tabs, and only one of them is the network case.** On Browse a settled
+    // burst is a directory request, not a walk over rows already in hand, so it is the tree's only
+    // `trailing` mount — a value the user typed through is a request and a logo burst spent on a
+    // page nobody will look at — at an interval sized to a round trip. The two local tabs filter
+    // rows the session already holds and take the cadence every other box in the tree takes;
+    // `filter::dispatch` routes on the same `tab-idx`, so the pacing follows the destination.
+    FilterThrottle {
+        trailing: Radio.tab-idx == Radio.tab-browse;
+        interval: Radio.tab-idx == Radio.tab-browse ? 200ms : 130ms;
+        pending: root.filter-tick-pending;
+        fire() => { Radio.filter-changed(Radio.filter); }
+    }
+
+    // Every count holds `ui::tab_bar::UNFETCHED_COUNT` until fetched, hence the `>= 0` guard: a
+    // bare `-1` interpolates into the plural as "-1 stations". Resolved to one number first so the
+    // guard is written once rather than per tab.
+    property <int> mounted-count:
+        Radio.tab-idx == Radio.tab-browse ? Radio.browse-count
+        : Radio.tab-idx == Radio.tab-favorites ? Radio.favorites-count
+        : Radio.recent-count;
+    property <string> live-count: root.mounted-count >= 0
+        ? @tr("{n} station" | "{n} stations" % root.mounted-count)
+        : "";
+
+    // **The idle band's sentence, held across an open.** The band eases it out over the morph's
+    // first half, so a drill has to fade the sentence that was on screen; bound live it re-reads
+    // a count that can be mid-rewind, and the line blanks and repopulates inside the fade.
+    // Seeded by the binding and owned by `latch-count`, which is unguarded so `init` can take the
+    // binding over on a page mounting straight onto a grid — neither guard below fires there.
+    property <string> count-line: root.live-count;
+    function latch-count() {
+        self.count-line = root.live-count;
+    }
+    changed live-count => {
+        if (!Radio.detail-open) { root.latch-count(); }
+    }
+
+    // Arms the body's own cross-fade. `tab-anim-armed` is the band's answer for a tab move; a
+    // drill is not one, so the two openings and the tab picks both have to raise it.
+    property <bool> body-anim-armed: band.tab-anim-armed;
+    property <bool> watched-detail-open: Radio.detail-open;
+    changed watched-detail-open => {
+        root.body-anim-armed = true;
+        if (!Radio.detail-open) { root.latch-count(); }
+        // The box describes the song history now, or the tab under it again. Neither is what the
+        // user last typed into it.
+        Radio.detail-scope-changed();
+    }
+    // The mirror My Library needs for arrivals that aren't picks, which this page has for the
+    // first time: a Mouse-4/5 walk moves the tab with nobody touching the bar.
+    property <int> watched-tab-idx: Radio.tab-idx;
+    changed watched-tab-idx => {
+        root.body-anim-armed = true;
+        Radio.detail-scope-changed();
+    }
+
+    init => {
+        root.latch-count();
+    }
+
+    // One derivation for all three tabs — they draw the same card in the same grid. Measured off
+    // the body, whose width the layout fixes independently of the cards inside it, so a card
+    // sizing itself from it is a derivation and not a cycle.
+    //
+    // **The width pitch stays the shared default**, so a station row packs like an album row and
+    // the tier `grid_prewarm` derives from that same default covers the card this grid draws. The
+    // text height is the one thing Radio moves, its card carrying a third line.
+    property <length> grid-gap: 20px;
+
+    geom := GridGeometry {
+        avail-width: body.width;
+        gap: root.grid-gap;
+        card-text-h: 66px;
+    }
+
+    // One count for three grids: Rust re-chunks whichever tab is mounted, so the callback fires
+    // unconditionally and the branch that used to gate it lives on the Rust side instead.
+    GridColumnsSync {
+        computed-cols: geom.cols;
+        seed(c) => {
+            Radio.grid-columns = c;
+            Radio.columns-changed(c);
+        }
+    }
+
+    VerticalLayout {
+        band := LibraryTabBand {
+            // Inline literals: `@tr` folds msgids at codegen, so a Rust-seeded `[string]`
+            // renders untranslated. Order matches `Radio.tab-*`.
+            tab-labels: [@tr("Browse"), @tr("Favorites"), @tr("Recently Played")];
+            tab-icons: ["travel_explore", "favorite", "history"];
+            tab-idx <=> Radio.tab-idx;
+            tab-selected(i) => {
+                // **The box is reseated, not cleared**, and Rust does it inside `tab-changed`.
+                // A directory query carried into the kept list would silently hide rows, but
+                // blanking the box here would leave Browse's own query standing in Rust with
+                // nothing on screen saying what the grid is filtered by. Each tab's needle is
+                // its own, and the box says whichever one is mounted.
+                Radio.blur-search-tick += 1;
+                Radio.tab-changed(i);
+            }
+
+            filter <=> Radio.filter;
+            blur-tick: Radio.blur-search-tick;
+            search-edited(t) => { root.filter-tick-pending += 1; }
+
+            // The **latched** sentence, not the live one — see `live-count` for what a drill does
+            // to a line that re-reads the arriving tab mid-fade.
+            count-text: root.count-line;
+
+            // The box means different things on the two kinds of tab — a search sent to the
+            // directory against a filter over rows already here — so the placeholder says which.
+            // Over a station page there is no box to place a holder in.
+            search-shown: !Radio.detail-open;
+            filter-placeholder: Radio.tab-idx == Radio.tab-browse
+                ? @tr("Search stations…")
+                : @tr("Filter stations…");
+
+            detail-open: Radio.detail-open;
+            back-clicked => { Radio.close-detail(); }
+            hero-collapsed => { Radio.hero-collapsed(); }
+
+            title: Radio.detail-station.name;
+            // Where the station is, and failing that whose site it is. A hand-typed station often
+            // has neither, and an empty subtitle is a line the band simply doesn't draw.
+            subtitle: Radio.detail-station.country;
+
+            artwork-path: Radio.detail-station.artwork_path;
+            cover: Radio.cover;
+            // The card's own tile, so a station reads the same in the grid it was picked from and
+            // in the banner it opened into: its initials over the name-hashed gradient, and the
+            // glyph only for a name with no letters to take initials from.
+            fallback-text: Radio.detail-station.monogram;
+            fallback-icon: "radio";
+            tile-bg: @linear-gradient(135deg,
+                Radio.detail-station.tile_color_1,
+                Radio.detail-station.tile_color_2);
+            tile-icon-color: #ffffff.transparentize(0.1);
+            // The detail tier decodes at source size rather than to a fixed target, so the
+            // logo's own pixel count *is* its 1:1 size here, read at one device pixel per point.
+            // A favicon too small to stretch across a 232 px banner at 1× is too small at 2×, so
+            // the scale term would move no station across the line the tile draws.
+            native-size: Radio.detail-logo-size * 1px;
+
+            blur-a: Radio.blur-img-a;
+            blur-b: Radio.blur-img-b;
+            use-a: Radio.blur-use-a;
+            has-blur: Radio.has-blur;
+
+            RadioTabPills { }
+        }
+
+        body := Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            // `slide: !band.morphing` on every branch: it is what stops a body translating under
+            // a band that is itself moving, the two curves disagreeing enough that the sum
+            // briefly runs backwards.
+            //
+            // **The three tabs also gate on `!Radio.restoring`.** A boot that reopens a station
+            // has the tab index before it has the station, so without the term the grid paints
+            // for the length of that fetch and swaps.
+            if !Radio.detail-open && !Radio.restoring
+                && Radio.tab-idx == Radio.tab-browse: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: band.tab-enter-from;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
+                RadioBrowseTab {
+                    width: 100%;
+                    height: 100%;
+                    card-w: geom.card-w;
+                    card-h: geom.card-h;
+                    row-h: geom.row-h;
+                    gap: root.grid-gap;
+                }
+            }
+            if !Radio.detail-open && !Radio.restoring
+                && Radio.tab-idx == Radio.tab-favorites: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: band.tab-enter-from;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
+                // Everything starred out of Browse, plus everything typed in by hand — a custom
+                // station is starred on the way in, which is what lets one query answer the tab.
+                KeptStationsTab {
+                    width: 100%;
+                    height: 100%;
+                    card-w: geom.card-w;
+                    card-h: geom.card-h;
+                    row-h: geom.row-h;
+                    gap: root.grid-gap;
+                    rows: Radio.favorites-rows;
+                    count: Radio.favorites-count;
+                    empty-icon: "favorite";
+                    empty-title: @tr("No stations kept yet");
+                    empty-body: @tr("Star a station in Browse, or add one by URL.");
+                }
+            }
+            if !Radio.detail-open && !Radio.restoring
+                && Radio.tab-idx == Radio.tab-recent: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: band.tab-enter-from;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
+                // The wider set: anything with a play behind it, starred or not — which is the
+                // whole reason this is a tab rather than a sort of the one beside it.
+                KeptStationsTab {
+                    width: 100%;
+                    height: 100%;
+                    card-w: geom.card-w;
+                    card-h: geom.card-h;
+                    row-h: geom.row-h;
+                    gap: root.grid-gap;
+                    rows: Radio.recent-rows;
+                    count: Radio.recent-count;
+                    empty-icon: "history";
+                    empty-title: @tr("Nothing played yet");
+                    empty-body: @tr("Stations you listen to show up here.");
+                }
+            }
+
+            // A fixed `below`, not the band's direction: a drill is not a move along the tab bar,
+            // and the body holds still while the band morphs above it either way.
+            if Radio.detail-open: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
+                RadioStationDetail {
+                    width: 100%;
+                    height: 100%;
+                }
+            }
+        }
+    }
+
+    // On a layer of its own: the bar sits in the band, and Slint paints in declaration order, so
+    // anything the band owns is covered by the body underneath.
+    TooltipFrame {
+        x: band.absolute-position.x - root.absolute-position.x + band.tip-x;
+        y: band.absolute-position.y - root.absolute-position.y + band.tip-y;
+        width: band.tip-w;
+        height: band.tip-h;
+        label: band.tip-label;
+        shown: band.tip-visible;
+    }
+}

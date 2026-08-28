@@ -101,8 +101,8 @@ The other way paths arrive from outside, and the one that can arrive before ther
   order where `ImportFilesResult::track_ids` is partly `HashMap` order.
 
 - **A cold start with files skips resume-on-startup** — `open_startup_files` runs synchronously
-  after `restore_persisted_queue`, so resume would only be visible for the moment it takes them to
-  land. It is also **too early to toast**: that bridge installs with the UI and drops rather than
+  after `restore_persisted_playback`, so resume would only be visible for the moment it takes them
+  to land. It is also **too early to toast**: that bridge installs with the UI and drops rather than
   queues, so a cold-start failure can only log.
 
 - **A warm one raises through `tray_bridge::raise_window`**, the only thing that knows whether the

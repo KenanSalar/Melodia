@@ -5,7 +5,7 @@
 //! module is what keeps it the same answer. [`search_fields`] is the one definition of a
 //! row's searchable text, and [`fold_needle`] / [`push_folded`] fold case *and* accents,
 //! covering everything the `unicode61 remove_diacritics 2` tokenizer does. Years are the
-//! one deliberate divergence: [`Needle::matches_year`] is a substring where FTS prefixes.
+//! one deliberate divergence: [`Needle::matches_number`] is a substring where FTS prefixes.
 //!
 //! **A needle must be folded exactly once, by its owner, and [`Needle`] is what makes that
 //! a type rather than a comment.** The failure is silent in the worst way: the row side is
@@ -47,7 +47,7 @@ fn most_played_fields(t: &MostPlayedFavorite) -> [&str; 5] {
 
 /// Any field, or the year's decimal form, containing `needle`.
 fn any_field_matches(fields: &[&str; 5], year: Option<i32>, needle: &Needle) -> bool {
-    fields.iter().any(|f| needle.contains(f)) || needle.matches_year(year)
+    fields.iter().any(|f| needle.contains(f)) || needle.matches_number(year)
 }
 
 /// Folded substring match across a track row's five text fields and its year. An empty
@@ -101,8 +101,8 @@ pub struct Needle {
     /// What lets the substring check take the allocation-free byte path. Asked before the
     /// haystack, so a non-ASCII query short-circuits that scan.
     ascii: bool,
-    /// A non-empty run of ASCII digits — the only shape that can name a year, and so the
-    /// gate keeping an ordinary text query off [`Self::matches_year`].
+    /// A non-empty run of ASCII digits — the only shape that can name one of the integer
+    /// fields, and so the gate keeping an ordinary text query off both number predicates.
     digits: bool,
 }
 
@@ -182,18 +182,35 @@ impl Needle {
         fold(haystack).starts_with(&self.text)
     }
 
-    /// Substring match on a track's year in decimal, without formatting it onto the heap.
-    /// Substring rather than the FTS side's prefix: every other field in these boxes
+    /// Substring match on an integer field in decimal, without formatting it onto the
+    /// heap. Substring rather than the FTS side's prefix: every other field in these boxes
     /// matches mid-word (`hap` finds "Rhapsody"), so a prefix year is the odd one out.
-    pub fn matches_year(&self, year: Option<i32>) -> bool {
+    ///
+    /// `None` is a row that has no such number and matches nothing — which is what lets a
+    /// caller whose sentinel is `0` rather than absence hand over that decision here.
+    ///
+    /// Wrong for a field drawn from a short set of values — see [`Self::equals_number`].
+    pub fn matches_number(&self, value: Option<i32>) -> bool {
+        self.over_decimal(value, |decimal| decimal.contains(&self.text))
+    }
+
+    /// [`Self::matches_number`] on the whole number rather than a run inside it, for a
+    /// field drawn from a short ladder of values that share digits. The substring rule
+    /// that picks a decade out of the years picks most of a bitrate column here.
+    pub fn equals_number(&self, value: Option<i32>) -> bool {
+        self.over_decimal(value, |decimal| decimal == self.text)
+    }
+
+    /// The digit gate and the stack buffer both number predicates run on.
+    fn over_decimal(&self, value: Option<i32>, matches: impl FnOnce(&str) -> bool) -> bool {
         if !self.digits {
             return false;
         }
-        let Some(year) = year else {
+        let Some(value) = value else {
             return false;
         };
         let mut buf = [0u8; MAX_I32_DIGITS];
-        write_decimal(&mut buf, year).contains(&self.text)
+        matches(write_decimal(&mut buf, value))
     }
 }
 

@@ -41,7 +41,7 @@ pub struct ViewStateData {
     /// Artist Detail's Albums header toggle. `true` hides the scroller so the
     /// all-tracks list claims that space.
     pub artist_albums_collapsed: bool,
-    /// The four page tabs at last shutdown, each clamped against its own
+    /// The five page tabs at last shutdown, each clamped against its own
     /// global's `tab-count`.
     ///
     /// An index rather than a set of bools, and that is the rule rather than a
@@ -53,6 +53,7 @@ pub struct ViewStateData {
     pub favorites_tab: i32,
     pub recently_played_tab: i32,
     pub my_library_tab: i32,
+    pub radio_tab: i32,
 }
 
 impl Default for ViewStateData {
@@ -70,6 +71,7 @@ impl Default for ViewStateData {
             favorites_tab: 0,
             recently_played_tab: 0,
             my_library_tab: 0,
+            radio_tab: 0,
         }
     }
 }
@@ -79,6 +81,14 @@ impl Default for ViewStateData {
 fn default_last_nav_index() -> i32 {
     3
 }
+
+/// The highest index `nav.slint` routes. Bounds [`ViewStateData::last_nav_index`]
+/// at both ends of its round trip — the clamp in
+/// `library::settings::set_last_nav_index` and the guard in
+/// `boot::ui_setup::install_views` — and the two have to agree, a section written
+/// past the write's clamp and one dropped by the read's guard both landing the
+/// next boot somewhere else with nothing to say why.
+pub const MAX_NAV_INDEX: i32 = 10;
 
 pub fn read_view_state(paths: &Paths) -> AppResult<ViewStateData> {
     crate::services::load_json_or_default_sync(&paths.view_state_path)

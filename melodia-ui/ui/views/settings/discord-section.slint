@@ -58,7 +58,7 @@ export component DiscordSection inherits Rectangle {
         if root.show-discord && Settings.discord-rpc-enabled: SettingRow {
             icon: "image";
             label: @tr("Show album artwork");
-            description: @tr("Look up cover art online (via Deezer) to show on the card");
+            description: @tr("Look up cover art online (via Deezer or iTunes) to show on the card");
             ToggleSwitch {
                 checked <=> Settings.discord-rpc-artwork;
                 toggled(v) => { Settings.discord-rpc-artwork-changed(v); }

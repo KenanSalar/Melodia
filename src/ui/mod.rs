@@ -27,12 +27,14 @@ pub mod model_diff;
 pub mod model_patch;
 pub mod mosaic_hero;
 pub mod my_library;
+pub mod name_palette;
 pub mod nav_history;
 pub mod nav_transition;
 pub mod now_playing;
 pub mod now_playing_artwork;
 pub mod playlists;
 pub mod queue_sheet;
+pub mod radio;
 pub mod recently_played;
 pub mod replaygain;
 pub mod row_match;
@@ -77,6 +79,9 @@ pub mod window_chrome;
 #[path = "tests/aurora_backdrop_tests.rs"]
 mod aurora_backdrop_tests;
 #[cfg(test)]
+#[path = "tests/detail_restore_tests.rs"]
+mod detail_restore_tests;
+#[cfg(test)]
 #[path = "tests/hero_blur_backdrop_tests.rs"]
 mod hero_blur_backdrop_tests;
 #[cfg(test)]
@@ -94,6 +99,9 @@ mod nav_transition_tests;
 #[cfg(test)]
 #[path = "tests/placeholder_tests.rs"]
 mod placeholder_tests;
+#[cfg(test)]
+#[path = "tests/play_count_badge_tests.rs"]
+mod play_count_badge_tests;
 #[cfg(test)]
 #[path = "tests/scrollbar_tests.rs"]
 mod scrollbar_tests;

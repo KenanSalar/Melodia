@@ -157,6 +157,7 @@ export component OverflowMenu inherits Rectangle {
             height: root.sleep-flyout-h;
             active-total-seconds: Player.sleep-timer-total-seconds;
             track-end-active: Player.vm.sleep_at_track_end;
+            track-end-unavailable: Player.vm.has_station;
             pick(m) => {
                 Player.set-sleep-timer(m);
                 root.dismiss();
@@ -190,6 +191,11 @@ export component OverflowMenu inherits Rectangle {
                     trailing-text: root.current-speed-label();
                     trailing-icon: "chevron_left";
                     active: root.speed-flyout-open;
+                    // rodio implements speed by reporting a multiplied sample rate upward, which
+                    // against a fixed-rate live source drifts the buffer until it starves — so
+                    // `build_set_speed_actions` refuses it and a station runs pinned at 1.0.
+                    // This is that refusal made visible rather than silent.
+                    button-enabled: !Player.vm.has_station;
                     clicked => {
                         root.speed-flyout-open = !root.speed-flyout-open;
                         root.sleep-flyout-open = false;

@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use crate::config::Paths;
 use crate::database::queries;
 use crate::entities::track::TrackSummary;
 use crate::error::{AppError, AppResult};
 use crate::player::actions::emit_and_execute;
-use crate::player::rodio_backend::load_queue_from_disk_sync;
-use crate::player::state::{play_track_inner, restore_queue, with_state_emit};
-use crate::player::types::RepeatMode;
+use crate::player::state::{play_track_inner, restore_queue, restore_station, with_state_emit};
+use crate::player::types::{PersistedPlayback, RepeatMode};
 use crate::services::settings::{mutate_settings, mutate_settings_with};
 use crate::state::AppState;
 
@@ -246,19 +246,32 @@ fn persist_repeat(state: &AppState, mode: RepeatMode) {
     });
 }
 
-/// Startup restore: the persisted queue back into `PlayerState`, once, from
+/// Read `queue.json`. Best-effort: a missing or unparseable file restores nothing.
+fn load_persisted_playback(paths: &Paths) -> Option<PersistedPlayback> {
+    if !paths.queue_path.exists() {
+        return None;
+    }
+    let json = std::fs::read_to_string(&paths.queue_path).ok()?;
+    serde_json::from_str(&json).ok()
+}
+
+/// Startup restore: what the last session was playing back into `PlayerState`, once, from
 /// `boot::tasks`.
+///
+/// The queue and the station over it come back together, in that order — seating the station
+/// clears the `current_track` the queue restore just set, and the queue underneath is what a stop
+/// hands back (D9).
 ///
 /// `repeat_mode` and `shuffle_enabled` come from `settings.json`, not
 /// `queue.json`. A restored non-empty queue forces shuffle off (and syncs
 /// `settings.json` to match) because `original_order` isn't persisted — left on,
 /// "unshuffle" would be a no-op against an unknown original sequence.
-pub async fn restore_persisted_queue(state: &AppState) -> AppResult<()> {
-    let persistable = load_queue_from_disk_sync(&state.paths);
-    let (summaries, persistable) = match persistable {
+pub async fn restore_persisted_playback(state: &AppState) -> AppResult<()> {
+    let persisted = load_persisted_playback(&state.paths);
+    let (summaries, persisted) = match persisted {
         Some(p) => {
             let summaries: Vec<Arc<TrackSummary>> =
-                queries::track::get_track_summaries_by_ids(&state.db, &p.track_ids)
+                queries::track::get_track_summaries_by_ids(&state.db, &p.queue.track_ids)
                     .await?
                     .into_iter()
                     .map(Arc::new)
@@ -266,6 +279,11 @@ pub async fn restore_persisted_queue(state: &AppState) -> AppResult<()> {
             (summaries, Some(p))
         }
         None => (Vec::new(), None),
+    };
+
+    let station = match persisted.as_ref().and_then(|p| p.station_id) {
+        Some(id) => super::radio::station_to_restore(state, id).await,
+        None => None,
     };
 
     // One FS round-trip, all under the same `MUTATE_LOCK` so no writer
@@ -284,11 +302,13 @@ pub async fn restore_persisted_queue(state: &AppState) -> AppResult<()> {
             })
         })
         .await
-        .map_err(|e| AppError::Settings(format!("restore_persisted_queue join: {e}")))??;
+        .map_err(|e| AppError::Settings(format!("restore_persisted_playback join: {e}")))??;
 
-    with_state_emit(&state.player_state, &state.sinks, |s| {
-        if let Some(p) = persistable.as_ref() {
-            restore_queue(s, summaries, p);
+    // `emit_and_execute` rather than a bare emit because a seated station may owe rodio a speed
+    // reset: `settings.json` hydrates the speed ahead of this and a station is pinned at 1.0.
+    emit_and_execute(&*state.rodio, &state.db, &state.player_state, &state.sinks, |s| {
+        if let Some(p) = persisted.as_ref() {
+            restore_queue(s, summaries, &p.queue);
         }
         s.queue.repeat_mode = settings_repeat;
         // Force shuffle off when a non-empty queue is restored — see doc.
@@ -297,6 +317,10 @@ pub async fn restore_persisted_queue(state: &AppState) -> AppResult<()> {
         } else {
             settings_shuffle
         };
+        match station {
+            Some(station) => restore_station(s, station),
+            None => vec![],
+        }
     });
 
     Ok(())

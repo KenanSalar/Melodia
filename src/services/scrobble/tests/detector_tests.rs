@@ -45,6 +45,7 @@ fn vm(status: &'static str, current_track: Option<Arc<TrackSummary>>) -> PlayerV
         playback_speed: 1.0,
         gapless_enabled: false,
         sleep_at_track_end: false,
+        radio: None,
         has_next: false,
         has_previous: false,
     }

@@ -13,8 +13,12 @@ use crate::test_support::{binding_value as binding, strip_line_comments};
 
 const BAND: &str = include_str!("../../../melodia-ui/ui/components/hero/library-tab-band.slint");
 
-/// The band's only mount. Three of the pins below are about the seam rather than the
-/// component, and a band nobody feeds passes every check on its own source.
+/// The mount the seam pins are about. Three of the pins below check the host rather than
+/// the component, a band nobody feeds passing every check on its own source.
+///
+/// **Deliberately one sheet, not every host.** `radio-view.slint` mounts the band too and
+/// holds its hero half idle, so it satisfies none of the three by design; what those pins
+/// guard is a page whose details morph the band, which is the only page that has them.
 const SHEET: &str = include_str!("../../../melodia-ui/ui/views/my-library-view.slint");
 
 /// The band with its comments dropped, so prose about a fix can neither satisfy a pin nor

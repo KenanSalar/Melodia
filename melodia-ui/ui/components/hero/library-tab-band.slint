@@ -25,6 +25,9 @@ export component LibraryTabBand inherits Rectangle {
     in-out property <string> filter;
     in property <string> filter-placeholder;
     in property <int> blur-tick;
+    // Forwarded, not decided here: whether a page's content is something to narrow is the page's
+    // question. Radio hides it over a station, whose page is facts about one stream.
+    in property <bool> search-shown: true;
 
     // --- Idle ---------------------------------------------------------------
     //
@@ -45,6 +48,12 @@ export component LibraryTabBand inherits Rectangle {
     in property <image> cover;
     in property <bool> circular-artwork: false;
     in property <string> fallback-icon: "music-note";
+    // The station hero's two, both empty for the four library details and both there so a station
+    // reads the same in the banner as on the card it was picked from: its initials over the
+    // name-hashed tile, and a favicon-sized logo floated at a size that stays sharp rather than
+    // stretched across the square. `ArtworkImage` prefers the text and falls back to the glyph.
+    in property <string> fallback-text;
+    in property <length> native-size: 0px;
     // Genre Detail's name-hashed gradient overrides both. The defaults take the hero's own
     // `placeholder` tier, never `Theme.accent` — the tile sits *on* the hero, and only Rust knows
     // which backdrop is under it.
@@ -266,6 +275,7 @@ export component LibraryTabBand inherits Rectangle {
             filter <=> root.filter;
             filter-placeholder: root.filter-placeholder;
             blur-tick: root.blur-tick;
+            search-shown: root.search-shown;
 
             // **All four cross from a theme token to a solved hero tier.** `active-color` matters
             // most, driving the selected label, its FILL=1 icon and the underline from one input:
@@ -332,6 +342,8 @@ export component LibraryTabBand inherits Rectangle {
                         ? Theme.hero-artwork / 2
                         : Theme.radius-lg;
                     fallback-icon: root.fallback-icon;
+                    fallback-text: root.fallback-text;
+                    native-size: root.native-size;
                     tile-bg: root.tile-bg;
                     tile-icon-color: root.tile-icon-color;
                     // **The tile fades through the component, not under an `opacity` here.** Safe
@@ -387,13 +399,25 @@ export component LibraryTabBand inherits Rectangle {
                         }
                     }
 
-                    if root.subtitle != "": Text {
+                    // **Nudged right, because the two lines share a layout edge and not an ink
+                    // edge.** A glyph's left side bearing is blank built into the glyph and scales
+                    // with the size drawn at, so the title's first stem sits further in than the
+                    // subtitle's on most strings — 22 px SemiBold against 14 px Regular — and the
+                    // smaller line reads as hanging left of the larger. The correction is optical
+                    // and the exact amount is per-string, so this is a tune-by-eye number; a
+                    // padding rather than an `x`, a layout child that binds one being dropped from
+                    // its parent's layout info. Not the LRM, which is zero-advance in both faces.
+                    if root.subtitle != "": HorizontalLayout {
                         vertical-stretch: 0;
-                        text: "\u{200e}" + root.subtitle;
-                        color: HeroBackdrop.on-backdrop.transparentize(1.0 - root.hero-t);
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: left;
-                        overflow: elide;
+                        padding-left: 1px;
+
+                        Text {
+                            text: "\u{200e}" + root.subtitle;
+                            color: HeroBackdrop.on-backdrop.transparentize(1.0 - root.hero-t);
+                            font-size: Theme.font-size-md;
+                            horizontal-alignment: left;
+                            overflow: elide;
+                        }
                     }
                 }
 

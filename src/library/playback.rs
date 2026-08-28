@@ -4,7 +4,8 @@ use crate::database::queries;
 use crate::entities::track::TrackSummary;
 use crate::error::AppError;
 use crate::player::state::{lock_state, play_track_inner, with_state_emit};
-use crate::player::types::PlaybackStatus;
+use crate::player::stream_source;
+use crate::player::types::{PlaybackStatus, RadioNowPlaying};
 use crate::state::PlaybackContext;
 
 /// Which slot of `summaries` playback should start on.
@@ -86,17 +87,122 @@ pub async fn player_play_tracks(
 }
 
 pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {
+    if resume_station(ctx) {
+        return Ok(());
+    }
     ctx.emit_and_execute(crate::player::state::PlayerState::build_play_actions);
     Ok(())
 }
 
+/// Whether a play command has to re-open a station instead of resuming the deck.
+///
+/// `Paused` is the only state that holds a station without a connection: `Playing` and `Loading`
+/// already have one, and a stop forgets the station outright. Pure, so the routing can be pinned
+/// without a runtime, a backend or a socket.
+pub(crate) fn needs_station_reopen(status: PlaybackStatus, has_station: bool) -> bool {
+    has_station && status == PlaybackStatus::Paused
+}
+
+/// Re-open the station the player is paused on, if it is paused on one. `true` means it took over.
+///
+/// Pausing a station drops its connection (see `PlayerState::build_pause_actions`), so resuming is
+/// a fresh open rather than a `Resume` — which is a network round trip, and so cannot happen under
+/// the state lock the ordinary transport path runs in. Every caller of the transport commands is
+/// already inside `runtime.spawn`, the same assumption `execute_actions` makes for its play-count
+/// writes.
+///
+/// The predicate and the transition it authorises run in **one** emit: read apart from the
+/// transition, a `Stop` landing in the gap would be undone by the connect it had already decided
+/// to start, and the session guard past this point cannot see a station it put back itself.
+fn resume_station(ctx: &PlaybackContext) -> bool {
+    let mut resuming = None;
+    ctx.emit_and_execute(|s| {
+        if !needs_station_reopen(s.status, s.radio.is_some()) {
+            return vec![];
+        }
+        let Some(station) = s.radio.clone() else {
+            return vec![];
+        };
+        let (generation, actions) = s.build_station_connecting_actions(station.clone());
+        resuming = Some((generation, station));
+        actions
+    });
+
+    let Some((generation, station)) = resuming else {
+        return false;
+    };
+
+    let ctx = ctx.clone();
+    tokio::spawn(async move {
+        if let Err(e) = open_and_start_station(&ctx, &station, generation).await {
+            log::warn!("Could not resume {}: {}", station.name, crate::services::describe(&e));
+        }
+    });
+    true
+}
+
+/// Tune to `station`, stopping whatever was playing and leaving the queue untouched underneath.
+///
+/// Opening a stream is a network round trip, so this is split across two state transitions with an
+/// `.await` between them: the first clears the decks and shows the station as connecting, the
+/// second starts it. The generation returned by the first is what the second is checked against —
+/// a station the user has already moved off must not start playing seconds later.
+pub async fn player_play_station(
+    ctx: &PlaybackContext,
+    station: &Arc<RadioNowPlaying>,
+) -> Result<(), AppError> {
+    // The session number has to come back out of the emit, since only the state machine can
+    // allocate one atomically with the transition that starts it.
+    let mut generation = 0;
+    ctx.emit_and_execute(|s| {
+        let (session, actions) = s.build_station_connecting_actions(station.clone());
+        generation = session;
+        actions
+    });
+
+    open_and_start_station(ctx, station, generation).await
+}
+
+/// The network half of a tune, for a state machine already moved onto `generation`.
+///
+/// Split out so [`resume_station`] can take the connecting transition under the same emit as the
+/// predicate that authorised it, and still share everything past the `.await`.
+async fn open_and_start_station(
+    ctx: &PlaybackContext,
+    station: &Arc<RadioNowPlaying>,
+    generation: u64,
+) -> Result<(), AppError> {
+    let client = ctx.http.get_or_init(crate::services::build_http_client).clone();
+    let opened = stream_source::open(&client, &station.stream_url).await;
+
+    match opened {
+        Ok(prepared) => {
+            ctx.rodio.stage_stream(generation, prepared);
+            ctx.emit_and_execute(|s| s.build_station_connected_actions(generation));
+            // The session can have ended while the open was in flight, in which case the emit
+            // above declined and nothing claimed the stage. Closing it here rather than leaving it
+            // for the next station is what stops an abandoned connection outliving its station.
+            ctx.rodio.discard_staged_stream(generation);
+            Ok(())
+        }
+        Err(e) => {
+            ctx.emit_and_execute(|s| s.build_station_failed_actions(generation));
+            crate::services::toast::notify(
+                crate::services::toast::ToastKind::PlaybackFailed,
+                station.name.clone(),
+            );
+            Err(e)
+        }
+    }
+}
+
 /// Fade length for a transport pause or stop, or `0` when the setting is off.
 ///
-/// The three transport commands route through here — `player_pause`,
-/// `player_toggle_play_pause` and `player_stop` — so everything that reaches them
-/// fades: the UI buttons, the keyboard shortcuts, the OS media keys, the tray, and
-/// the sleep timer's expiry (which ends on `player_pause`, and where a fade-out is
-/// exactly what you want).
+/// The four transport commands route through here — `player_pause`,
+/// `player_toggle_play_pause`, `player_stop` and `player_stop_station` — so everything
+/// that reaches them fades: the UI buttons, the keyboard shortcuts, the OS media keys,
+/// the tray, the Radio switch, and the sleep timer's expiry (which ends on
+/// `player_pause`, and where a fade-out is exactly what you want).
 ///
 /// What must *not* fade is what the machine does for its own reasons, and those
 /// paths pass `0` directly rather than calling this: `stop_end_of_queue` (nothing
@@ -120,6 +226,9 @@ pub fn player_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
 /// the state lock so two near-simultaneous toggles (e.g. UI + media-key) can't
 /// race past each other.
 pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
+    if resume_station(ctx) {
+        return Ok(());
+    }
     let fade_ms = transport_fade_ms(ctx);
     ctx.emit_and_execute(move |s| match s.status {
         PlaybackStatus::Playing | PlaybackStatus::Loading => s.build_pause_actions(fade_ms),
@@ -133,6 +242,25 @@ pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
 pub fn player_stop(ctx: &PlaybackContext) -> Result<(), AppError> {
     let fade_ms = transport_fade_ms(ctx);
     ctx.emit_and_execute(move |s| s.build_stop_actions(fade_ms));
+    Ok(())
+}
+
+/// Stop a live stream and nothing else — what the Radio switch owes when it goes off.
+///
+/// The check is inside the state lock for the reason `player_toggle_play_pause`'s is: a
+/// read-then-stop pair would let a track start in between and stop *that* instead.
+/// `build_stop_actions` forgets the station and ends its session, so a connect still in
+/// flight can't land afterwards and the untouched queue is what the transport falls back
+/// to (D9).
+pub fn player_stop_station(ctx: &PlaybackContext) -> Result<(), AppError> {
+    let fade_ms = transport_fade_ms(ctx);
+    ctx.emit_and_execute(move |s| {
+        if s.radio.is_some() {
+            s.build_stop_actions(fade_ms)
+        } else {
+            Vec::new()
+        }
+    });
     Ok(())
 }
 
@@ -224,9 +352,14 @@ pub fn player_set_gapless(ctx: &PlaybackContext, enabled: bool) -> Result<(), Ap
 /// UI's `Player.vm.sleep_at_track_end` (and thus the overflow-menu sleep row)
 /// tracks the flag; the monitor disarms it when it fires, which re-emits and
 /// auto-clears the row.
+///
+/// **Refused while a station plays.** A live source has no track end, so the monitor would never
+/// fire the flag and the sleep row would sit reading "Track end" over a timer that can only be
+/// cancelled. The guard is here rather than at the one caller so no later caller can arm it, and
+/// so a grep can prove it; the flyout dims the row on top of this.
 pub fn player_set_pause_at_track_end(ctx: &PlaybackContext, armed: bool) -> Result<(), AppError> {
     with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
-        s.pause_after_current_track = armed;
+        s.pause_after_current_track = armed && s.radio.is_none();
     });
     Ok(())
 }

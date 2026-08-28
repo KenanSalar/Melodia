@@ -18,7 +18,7 @@ use super::*;
 use crate::error::AppError;
 use crate::media::artwork;
 use crate::media::metadata::{extract_metadata, read_tags};
-use crate::test_support::ASSETS_DIR;
+use crate::test_support::{ASSETS_DIR, UNBOUNDED};
 
 // ---------------------------------------------------------------- helpers
 
@@ -224,7 +224,7 @@ fn bpm_set_is_bounded_and_nan_safe() {
         (f64::NAN, "0"),
         (-5.0, "0"),
         (1e9, "1000"),
-        (f64::INFINITY, "1000"),
+        (f64::from(UNBOUNDED), "1000"),
     ] {
         let mut tag = Tag::new(TagType::Mp4Ilst);
         apply_edit(

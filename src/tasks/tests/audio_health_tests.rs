@@ -99,7 +99,7 @@ fn the_threshold_is_a_floor_and_the_spin_clears_it() {
 /// compiles, passes every other test in this file, and makes the first
 /// disconnect of a session the only one ever reported.
 ///
-/// Comments are stripped first, the `nav_persist_tests` reason: the prose around
+/// Comments are stripped first, the `index_persist_tests` reason: the prose around
 /// that call names both statements, so a raw search would be satisfied by the
 /// warning rather than by the code.
 #[test]

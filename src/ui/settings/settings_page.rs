@@ -5,11 +5,13 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::library;
 use crate::state::AppState;
+use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::row_match::{self, Needle};
 use crate::ui::tab_bar::clamp_tab;
 use crate::{AppWindow, SettingsPage};
@@ -118,17 +120,24 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     // macro's `view state:` line would say the same thing twice.
     let s = state.clone();
     let weak = ui.as_weak();
+    // Ordered: a bounce queues a value per pick and two blocking tasks have none of their
+    // own, so a reversed pair reopens the page on a tab the user only passed through.
+    let persist = Arc::new(IndexPersist::new(page.get_tab_idx()));
     page.on_tab_changed(move |tab| {
         // As on the two curated pages: a tab pick moves no nav index, so
         // `nav_history::record_current` never hears about it.
         if let Some(ui) = weak.upgrade() {
             crate::ui::view_tag::log_current(&ui);
         }
+        persist.publish(tab);
         let s_disk = s.clone();
+        let persist = Arc::clone(&persist);
         s.runtime.spawn_blocking(move || {
-            if let Err(e) = library::settings::set_settings_tab(&s_disk, tab) {
-                log::warn!("settings_page: set_settings_tab({tab}): {e}");
-            }
+            persist.write_if_current(tab, || {
+                if let Err(e) = library::settings::set_settings_tab(&s_disk, tab) {
+                    log::warn!("settings_page: set_settings_tab({tab}): {e}");
+                }
+            });
         });
     });
 }

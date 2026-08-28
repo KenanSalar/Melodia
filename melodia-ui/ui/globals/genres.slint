@@ -28,6 +28,8 @@ export global Genres {
 // gradient floor and scrim alone, which is what `has-blur: false` on that arm asks for.
 export global GenreDetail {
     in-out property <int> genre-id: -1;
+    // See `AlbumDetail.restoring`.
+    in-out property <bool> restoring: false;
     in-out property <GenreRow> genre;
     in-out property <[TrackListRow]> tracks;
 

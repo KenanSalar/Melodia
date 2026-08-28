@@ -15,6 +15,7 @@ fn tooltip_combines_title_and_artist() {
         track_title: Some("Clair de Lune".to_owned()),
         track_artist: Some("Debussy".to_owned()),
         is_playing: true,
+        ..Default::default()
     };
     assert_eq!(snap.tooltip(), "Clair de Lune — Debussy");
     assert_eq!(snap.menu_track_label(), "Clair de Lune");
@@ -26,6 +27,7 @@ fn tooltip_uses_title_only_when_artist_missing_or_empty() {
         track_title: Some("Untitled".to_owned()),
         track_artist: None,
         is_playing: false,
+        ..Default::default()
     };
     assert_eq!(no_artist.tooltip(), "Untitled");
 
@@ -33,6 +35,7 @@ fn tooltip_uses_title_only_when_artist_missing_or_empty() {
         track_title: Some("Untitled".to_owned()),
         track_artist: Some(String::new()),
         is_playing: false,
+        ..Default::default()
     };
     assert_eq!(empty_artist.tooltip(), "Untitled");
 }

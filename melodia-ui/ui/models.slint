@@ -165,9 +165,62 @@ export struct SmartRuleRow {
 // `Player.vm` and dirty-marked every binding reading *any* field — a recursive walk of the
 // dependency list twice a second, for as long as playback lasted. Kept out, a tick's dirty
 // set is the three readers that care.
+// The station on the deck, as every Now-Playing surface draws it. `PlayerVm`'s `track` half at
+// the same altitude, and mutually exclusive with it: `has_track` and `has_station` are never both
+// true, so a surface reads whichever says yes.
+//
+// **`stream_url` crosses here where `RadioStationRow` withholds it**, and the difference is a
+// surface rather than a rule: a row is one of hundreds on a grid and none of them show a URL,
+// where the Now Playing view states the playing station's the way the station page already does
+// through `Radio.detail-stream-url`. The rule itself is unchanged — a station can carry a session
+// token in its query string, so this may never be interpolated into a log line.
+//
+// The facts below `buffering` are what the Now Playing view's panel states. They ride the view
+// model rather than a second published description of the playing station, so the bar's country
+// line and that panel cannot disagree about what is on the deck.
+//
+// `monogram` and the two stops are what a logo-less station paints, and come from the same
+// `ui::radio::identity::station_tile` the grid card and the station hero take theirs from, so one
+// station cannot wear two different tiles on two pages.
+export struct RadioVm {
+    // `0` for a station the user has only browsed to, matching `RadioStationRow.id`.
+    station_id: int,
+    // The directory's own id, empty for a hand-typed station. What decides whether a surface can
+    // offer to vote: the directory has nothing to record a vote against otherwise.
+    uuid: string,
+    name: string,
+    // What the stream announced, or empty until it announces something — which for plenty of
+    // stations is never.
+    live_title: string,
+    artwork_path: string,
+    // The row tier's logo, on `TrackSummaryRow.cover_img`'s contract: empty (`width == 0`) until
+    // the decode lands, and the full view takes its own larger copy from `Player.np-station-logo`.
+    logo_img: image,
+    monogram: string,
+    tile_color_1: color,
+    tile_color_2: color,
+    // The stream is running on empty. Raised beside a `playing` status rather than instead of it,
+    // so a dip in the buffer never reads to the OS as a stop.
+    buffering: bool,
+
+    stream_url: string,
+    // The country's full name, empty where nobody has said. A hand-typed station has none: a
+    // stream announces no country and guessing from the host would be wrong more often than blank.
+    country: string,
+    // The directory's free-form genre list, already trimmed and joined by Rust.
+    tags: string,
+    homepage: string,
+    codec: string,
+    // Advertised kbps; `0` means the directory does not know, not that the station is silent.
+    bitrate: int,
+    play_count: int,
+}
+
 export struct PlayerVm {
     has_track: bool,
     track: TrackSummaryRow,
+    has_station: bool,
+    radio: RadioVm,
     status: string,
     is_playing: bool,
     volume: int,
@@ -295,4 +348,77 @@ export struct NotificationRow {
     message: string,
     action-label: string,
     action-kind: string,
+}
+
+// One radio station, as either tab of the Radio page draws it. **`id` is `0` for a station that
+// exists only in the directory**: results are never persisted, so a browsed row has no database id
+// until the user keeps or plays it, and that zero is what tells the two apart at every call site
+// that takes a whole row.
+//
+// `stream_url` is deliberately absent. Rust resolves a row back to its own cache by `uuid` or by
+// `id`, so the URL never has to cross into the UI layer, where the one thing that must never
+// happen to it is being interpolated into a log line.
+//
+// `tags` arrives display-ready: the directory's raw field is a free-form comma-separated list that
+// runs to a dozen entries, so Rust trims and joins the first few rather than the card chunking a
+// string it cannot split.
+//
+// So is `codec`, which is also the only thing here that still says a station is segmented: Rust
+// writes the word `HLS` into it for one whose own format the directory could not name. There is no
+// `hls` bool beside it, and nothing draws a badge off one, because those stations play.
+export struct RadioStationRow {
+    id: int,
+    uuid: string,
+    name: string,
+    // Whoever supplied it — the user's own answer wins over the directory's. `RadioStation::website`
+    // is the one place that order is decided.
+    homepage: string,
+    // Whether the card offers its pencil, which means different things to the two kinds. A
+    // hand-typed station is always editable, having no directory behind it to disagree with. A
+    // directory one is editable only while the directory named no site: that link is not the
+    // user's to overwrite, and an editor over it is one misclick from a typo replacing a correct
+    // address. What the pencil then opens is the dialog's own split.
+    editable: bool,
+    artwork_path: string,
+    tags: string,
+    country: string,
+    codec: string,
+    bitrate: int,          // 0 = the directory doesn't know
+    is_favorite: bool,
+    // `0` for a browsed station, which has no row to have been played on. Only Recently Played
+    // asks for it, so the badge stays off the two tabs that would carry one on every card.
+    play_count: int,
+    // What the card paints with no logo: two name-hashed stops and the station's initials over
+    // them. Carried per row like `GenreRow`'s pair, Slint having no hash to derive them with.
+    // Empty `monogram` is a name with no letters in it, and leaves the card on the glyph.
+    tile_color_1: color,
+    tile_color_2: color,
+    monogram: string,
+}
+
+export struct RadioStationGridRow {
+    stations: [RadioStationRow],
+}
+
+// One entry of a directory facet list behind a filter chip. `code` is only ever sent for
+// countries — `countrycode` is the search endpoint's sole code-keyed parameter, and a language,
+// tag or codec filters by `name`.
+export struct RadioFacetRow {
+    name: string,
+    code: string,
+    station_count: int,
+}
+
+// One scope the typed needle could be asking for, offered above the Browse grid. `kind` is the
+// chip it fills, in the same `Radio.facet-*` numbering a picker uses, so taking a suggestion and
+// picking from a chip are the same edit arriving two ways.
+//
+// `station_count` is `-1` where there is no count to state — a bitrate floor and a frequency are
+// read off the needle rather than matched against a fetched list, so nothing has counted them.
+// `0` is a real answer and would print as one.
+export struct RadioSuggestionRow {
+    kind: int,
+    name: string,
+    code: string,
+    station_count: int,
 }

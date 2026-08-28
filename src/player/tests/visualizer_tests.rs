@@ -6,6 +6,7 @@ use rodio::Source;
 
 use super::{RING_CAP, VisualizerShared, VisualizerTap};
 use crate::player::tests::helpers::{TestSource, bits};
+use crate::test_support::UNBOUNDED;
 
 // --- helpers ---------------------------------------------------------------
 
@@ -289,7 +290,7 @@ fn the_analysis_rate_is_zero_until_something_has_played() {
 fn a_nonsense_speed_leaves_the_analysis_rate_unscaled() {
     // Falling back to the unscaled rate misplaces the bands; falling through to
     // a rate of zero would blank the display entirely.
-    for speed in [0.0, -2.0, f64::NAN, f64::INFINITY] {
+    for speed in [0.0, -2.0, f64::NAN, f64::from(UNBOUNDED)] {
         let viz = VisualizerShared::new(true);
         viz.set_sample_rate(44_100);
         viz.set_speed(speed);

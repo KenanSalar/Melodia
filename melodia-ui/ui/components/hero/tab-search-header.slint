@@ -28,6 +28,12 @@ export component TabSearchHeader inherits HorizontalLayout {
     in-out property <string> filter;
     in property <string> filter-placeholder;
     in property <int> blur-tick;
+    // **Whether the row carries a box at all.** For a surface whose content is not a list of rows
+    // to narrow — Radio's station page is a set of facts about one stream — a box that filters
+    // nothing is worse than no box. Collapses the cell rather than unmounting it, for two reasons
+    // below: `search.min-w` has to stay readable, and the budget deliberately keeps reserving as
+    // though the box were there so the bar does not re-flow when it goes.
+    in property <bool> search-shown: true;
 
     // Taken from the host's mirror rather than measured — a live `root.width` read feeding a
     // child's size re-enters layout, and the host needs the mirror for its own geometry.
@@ -117,15 +123,34 @@ export component TabSearchHeader inherits HorizontalLayout {
 
     // Padded to the band the bar keeps clear for its divider, so the input centres on the
     // tab labels' line rather than on the row's.
-    VerticalLayout {
-        alignment: center;
-        padding-bottom: Theme.pad-sm;
-        search := SearchBar {
-            input-width: root.search-w;
-            text <=> root.filter;
-            placeholder: root.filter-placeholder;
-            blur-trigger: root.blur-tick;
-            edited(t) => { root.search-edited(t); }
+    //
+    // **Collapsed rather than unmounted when `search-shown` is false**, the shape
+    // `my-library/tab-pills.slint`'s Playlists cell takes: `Clip` swallows every event outside an
+    // empty rect, so the box is as unreachable as a dropped branch, while `search := ` stays
+    // readable from the budget above — an id declared inside an `if` is not. The three width
+    // constraints are spelled out because an explicit `min-width` is what *replaces* the
+    // constraint the bar's own bound width would otherwise merge in.
+    //
+    // **The budget above is deliberately not gated with it.** `search-w` still reserves, so
+    // `TabBar.avail-width` does not move and the bar does not play its 350 ms compact morph on a
+    // frame the box merely went away on. What is freed is dead strip at the row's trailing edge,
+    // which on the one host that hides it is under the action pills anyway.
+    Rectangle {
+        clip: true;
+        min-width: 0px;
+        preferred-width: root.search-shown ? search.preferred-width : 0px;
+        max-width: root.search-shown ? search.preferred-width : 0px;
+
+        VerticalLayout {
+            alignment: center;
+            padding-bottom: Theme.pad-sm;
+            search := SearchBar {
+                input-width: root.search-w;
+                text <=> root.filter;
+                placeholder: root.filter-placeholder;
+                blur-trigger: root.blur-tick;
+                edited(t) => { root.search-edited(t); }
+            }
         }
     }
 }

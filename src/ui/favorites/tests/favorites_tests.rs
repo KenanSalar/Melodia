@@ -208,7 +208,7 @@ fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     // the default is a defined order, not a no-op.
     const FIELDS: [&str; 2] = ["name", "favorite_count"];
 
-    let arrays = crate::test_support::sort_pill_row_arrays(VIEW, "Favorites.artist-sort-field");
+    let arrays = crate::test_support::sort_mount_arrays(VIEW, "Favorites.artist-sort-field");
     assert!(
         arrays.is_some(),
         "favorites-view.slint must mount a `SortPillRow` bound to \

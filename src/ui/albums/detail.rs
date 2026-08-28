@@ -385,15 +385,22 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &A
     }) else {
         return;
     };
+    // Synchronously, so it is up before `app.show()` — see `AlbumDetail.restoring`.
+    ui.global::<AlbumDetail>().set_restoring(true);
     let s = state.clone();
     let au = albums_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
         // `Below` is the first-launch fade-up rather than a drill-in slide —
         // nobody navigated, this is a restore.
-        if let Err(e) = open_album(&s, &au, weak, id, NavEnterFrom::Below).await {
+        if let Err(e) = open_album(&s, &au, weak.clone(), id, NavEnterFrom::Below).await {
             log::warn!("albums::seed_detail_from_settings open_album({id}): {e}");
         }
+        // Lowered however it went, and behind `open_album`'s own hop so the id is already in: an
+        // album gone since the last session owes the grid back rather than an empty body.
+        let _ = weak.upgrade_in_event_loop(|ui| {
+            ui.global::<AlbumDetail>().set_restoring(false);
+        });
     });
 }
 

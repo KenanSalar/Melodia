@@ -1,0 +1,226 @@
+import { Theme } from "../theme.slint";
+import { IconButton } from "./icon-button.slint";
+import { TooltipSide } from "./tooltip.slint";
+
+// What a station states about itself, drawn the same way wherever it appears: on its own page
+// under the band that morphed into its hero, and in the Now Playing view's right column, which
+// holds the queue for a track and has nothing to say about one for a stream.
+//
+// **Palette is every brush input's job.** The station page paints on ordinary chrome and takes the
+// defaults; Now Playing paints on the artwork backdrop and hands over its solved tier, where a
+// fixed theme brush lands light-on-light under a light variant. `MetaChip`'s idiom, and the same
+// reason: one component, two surfaces that solve their foreground differently.
+
+// One labelled fact, with an optional control on the value. Local rather than `SettingRow`, which
+// reads `SettingsPage.row-icon-w` and is Settings chrome.
+//
+// **Pinned to the list's row height, not sized from what it holds.** Two of these carry a 28 px
+// control and the rest carry one line box, so left to their content they stand at two different
+// heights and the column's rhythm breaks on exactly the rows the eye is drawn to. Every list in
+// the tree pins the pair instead (`components/track-list/track-list-row.slint`).
+component DetailRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    in property <length> label-width;
+    in property <brush> label-color;
+    in property <brush> value-color;
+    in property <string> action-icon;
+    in property <string> action-tooltip;
+    in property <brush> action-idle-fg;
+    in property <brush> action-hover-fg;
+    in property <brush> action-hover-bg;
+    callback action-clicked();
+
+    spacing: Theme.pad-md;
+    vertical-stretch: 0;
+    min-height: Theme.row-h-compact;
+    max-height: Theme.row-h-compact;
+
+    VerticalLayout {
+        alignment: center;
+        Text {
+            // Fixed, so the values line up down the column rather than tracking each label.
+            width: root.label-width;
+            text: root.label;
+            color: root.label-color;
+            font-size: Theme.font-size-sm;
+            overflow: elide;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        Text {
+            // The mark is what keeps a URL from re-ordering under a right-to-left UI locale: it
+            // is the station's text, not the interface's.
+            text: "\u{200e}" + root.value;
+            color: root.value-color;
+            font-size: Theme.font-size-md;
+            overflow: elide;
+        }
+    }
+    // **Left, where every other tooltip in the tree clears above.** The button is the row's
+    // trailing cell, so a pill centred on it runs past the scroller's right edge; and the first
+    // row sits at the scroller's *top* edge on a station carrying neither a format warning nor a
+    // directory verdict, which cuts an above-pill off entirely. The left arm centres vertically
+    // and clears inward, so both edges stop mattering.
+    if root.action-icon != "": IconButton {
+        icon: root.action-icon;
+        icon-size: 16px;
+        diameter: 28px;
+        idle-fg: root.action-idle-fg;
+        hover-fg: root.action-hover-fg;
+        hover-bg: root.action-hover-bg;
+        tooltip-text: root.action-tooltip;
+        tooltip-side: TooltipSide.left;
+        clicked => { root.action-clicked(); }
+    }
+}
+
+// The facts, each absent when the station carries nothing for it. A hand-typed station arrives
+// with almost none of them.
+//
+// **A `Rectangle`, not a layout**, so the zero-sized clipboard field can bind `x`/`y` and
+// contribute nothing: a layout child of zero size still claims the group's spacing, and
+// `visible: false` would still take a slot.
+export component StationFacts inherits Rectangle {
+    in property <string> stream-url;
+    in property <string> homepage;
+    in property <string> codec;
+    // `0` on a large share of live stations, where it means the directory does not know rather
+    // than that the station is silent.
+    in property <int> bitrate;
+    // Only the directory knows this, and only after a refresh — `< 0` is "nobody has said", which
+    // is what a surface with no refresh behind it passes.
+    in property <int> votes: -1;
+    in property <int> play-count;
+
+    // Narrower where the column is, so a stream URL keeps something to elide from.
+    in property <length> label-width: 128px;
+    in property <brush> label-color: Theme.subtext0;
+    in property <brush> value-color: Theme.text;
+    // `IconButton`'s own defaults, which the station page takes; Now Playing hands over the tier
+    // it solves against the artwork.
+    in property <brush> action-idle-fg: Theme.text;
+    in property <brush> action-hover-fg: root.action-idle-fg;
+    in property <brush> action-hover-bg: Theme.surface0;
+
+    // Fired after the URL is on the clipboard, for whatever the host wants to say about it.
+    callback stream-url-copied();
+    callback open-homepage(string);
+
+    // **The clipboard, and the whole of it.** Slint's `TextInput` carries `select-all()` and
+    // `copy()`; nothing else in the tree reaches a clipboard, and a dependency for one button is
+    // a poor trade against a zero-sized field.
+    url-field := TextInput {
+        x: 0;
+        y: 0;
+        width: 0px;
+        height: 0px;
+        text: root.stream-url;
+    }
+
+    // **A list, so it takes a row pitch and no gap between rows.** A host's section spacing
+    // handed to the rows as well spaces a labelled list like a set of unrelated blocks, and does
+    // it on top of heights that differ by whether a row happens to carry a control.
+    VerticalLayout {
+        vertical-stretch: 0;
+
+        DetailRow {
+            label: @tr("Stream");
+            value: root.stream-url;
+            action-icon: "content_copy";
+            action-tooltip: @tr("Copy stream URL");
+            action-clicked => {
+                url-field.select-all();
+                url-field.copy();
+                root.stream-url-copied();
+            }
+            label-width: root.label-width;
+            label-color: root.label-color;
+            value-color: root.value-color;
+            action-idle-fg: root.action-idle-fg;
+            action-hover-fg: root.action-hover-fg;
+            action-hover-bg: root.action-hover-bg;
+        }
+        if root.homepage != "": DetailRow {
+            label: @tr("Website");
+            value: root.homepage;
+            action-icon: "link";
+            action-tooltip: @tr("Open in your browser");
+            action-clicked => { root.open-homepage(root.homepage); }
+            label-width: root.label-width;
+            label-color: root.label-color;
+            value-color: root.value-color;
+            action-idle-fg: root.action-idle-fg;
+            action-hover-fg: root.action-hover-fg;
+            action-hover-bg: root.action-hover-bg;
+        }
+        if root.codec != "": DetailRow {
+            label: @tr("Format");
+            value: root.codec;
+            label-width: root.label-width;
+            label-color: root.label-color;
+            value-color: root.value-color;
+        }
+        if root.bitrate > 0: DetailRow {
+            label: @tr("Bitrate");
+            value: @tr("{} kbps", root.bitrate);
+            label-width: root.label-width;
+            label-color: root.label-color;
+            value-color: root.value-color;
+        }
+        if root.votes >= 0: DetailRow {
+            label: @tr("Votes");
+            value: @tr("{n} vote" | "{n} votes" % root.votes);
+            label-width: root.label-width;
+            label-color: root.label-color;
+            value-color: root.value-color;
+        }
+        if root.play-count > 0: DetailRow {
+            label: @tr("Plays");
+            value: @tr("{n} play" | "{n} plays" % root.play-count);
+            label-width: root.label-width;
+            label-color: root.label-color;
+            value-color: root.value-color;
+        }
+    }
+}
+
+// The titles the station has announced this session, newest first.
+//
+// **The heading takes a row at the same pitch rather than a margin of its own**, so it sits in the
+// rhythm of what it labels — `TrackListHeader`'s shape. One row is one line: a stream announces a
+// single free-form string, and there is nothing to split into title and artist without guessing at
+// a format every station writes differently.
+export component StationHistory inherits VerticalLayout {
+    in property <[string]> rows;
+    in property <brush> heading-color: Theme.subtext0;
+    in property <brush> row-color: Theme.text;
+
+    vertical-stretch: 0;
+
+    VerticalLayout {
+        alignment: center;
+        min-height: Theme.row-h-compact;
+        max-height: Theme.row-h-compact;
+        Text {
+            text: @tr("Recently played on this station");
+            color: root.heading-color;
+            font-size: Theme.font-size-sm;
+            font-weight: Theme.page-title-weight;
+            overflow: elide;
+        }
+    }
+    for title in root.rows: VerticalLayout {
+        alignment: center;
+        min-height: Theme.row-h-compact;
+        max-height: Theme.row-h-compact;
+        Text {
+            text: "\u{200e}" + title;
+            color: root.row-color;
+            font-size: Theme.font-size-md;
+            overflow: elide;
+        }
+    }
+}

@@ -46,6 +46,13 @@ pub fn len_as_i32(len: usize) -> i32 {
     i32::try_from(len).unwrap_or(i32::MAX)
 }
 
+/// Saturating `u32 → i32` for a tally on its way into a gettext plural. Same
+/// argument as [`len_as_i32`]; the input type is what differs, the counts that
+/// reach a toast being accumulated as `u32`.
+pub fn count_as_i32(n: u32) -> i32 {
+    i32::try_from(n).unwrap_or(i32::MAX)
+}
+
 #[cfg(test)]
 #[path = "tests/util_tests.rs"]
 mod tests;

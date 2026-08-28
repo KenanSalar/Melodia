@@ -35,6 +35,11 @@ export component SearchBar inherits Rectangle {
     property <length> natural-width:
         placeholder-text.preferred-width + root.chrome-overhead;
 
+    // Recessed into a surface rather than floating over content: the host's corner instead of a
+    // stadium, and no lift or swell — inside a popup there is nothing to be above. Fills, border
+    // tint, placeholder and icon are unchanged, so both shapes read as one control.
+    in property <bool> inset: false;
+
     // Slint has no click-outside behaviour for `TextInput`, so each increment fires
     // `clear-focus()` on the inner input.
     in property <int> blur-trigger: 0;
@@ -102,7 +107,7 @@ export component SearchBar inherits Rectangle {
     // Holds all the visible styling and scales from the *centre* by binding `x`/`y` to a half-delta
     // against the outer slot — Slint Rectangles have no scale transform.
     chrome := Rectangle {
-        property <float> focus-scale: input.has-focus ? 1.015 : 1.0;
+        property <float> focus-scale: input.has-focus && !root.inset ? 1.015 : 1.0;
         animate focus-scale { duration: Theme.dur-fast; easing: ease-in-out; }
 
         width: root.width * focus-scale;
@@ -118,14 +123,18 @@ export component SearchBar inherits Rectangle {
             : Theme.floating-chrome-bg;
         // The `ActionPill` outline at rest; focus lifts it with a glow and tints the
         // ring faintly toward the accent.
-        border-radius: self.height / 2;
+        border-radius: root.inset ? Theme.radius-md : self.height / 2;
         border-width: 1px;
         border-color: input.has-focus
             ? Theme.accent.with-alpha(0.18)
             : Theme.surface2;
-        drop-shadow-color: input.has-focus
-            ? Theme.crust.with-alpha(0.45)
-            : Theme.crust.with-alpha(0.15);
+        // An inset bar drops the shadow through the *colour*: the renderer bails on a transparent
+        // one, where a zeroed blur still paints an occluded rect under this fill's translucency.
+        drop-shadow-color: root.inset
+            ? transparent
+            : (input.has-focus
+                ? Theme.crust.with-alpha(0.45)
+                : Theme.crust.with-alpha(0.15));
         drop-shadow-blur: input.has-focus ? 16px : 2px;
         drop-shadow-offset-y: input.has-focus ? 4px : 1px;
         // **The ease belongs on the scale, not on the dimensions.** Animating a binding derived
@@ -133,7 +142,8 @@ export component SearchBar inherits Rectangle {
         // `x`/`y` derive from those. Second reason: `width` also multiplies `root.width`, which the
         // Settings header drives off the live window width, and Slint restarts an animated binding
         // on dependency *dirtiness* — so an eased `width` re-based on every event of a resize drag.
-        // `focus-scale` reads nothing but `has-focus`, so it only ever sees the toggle.
+        // `focus-scale` reads the focus flag and a mount-constant variant, so it only ever sees
+        // the toggle.
         animate background, border-color, drop-shadow-color,
                 drop-shadow-blur, drop-shadow-offset-y {
             duration: Theme.dur-fast;

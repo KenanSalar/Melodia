@@ -289,7 +289,7 @@ impl Limiter {
     }
 
     /// Target gain (linear, ≤ 1.0) for a peak magnitude — the soft-knee
-    /// limiter curve with an infinite ratio above the knee.
+    /// limiter curve with an unbounded ratio above the knee.
     fn target_gain(&self, peak: f32) -> f32 {
         // The curve is flat at unity below the knee, so quiet frames — the
         // overwhelmingly common case — skip the `log10`. `log10` is monotonic,

@@ -5,9 +5,11 @@
 //! Composition:
 //!
 //! - [`install`] runs once at boot. Seeds `Updater.current-version` from
-//!   `CARGO_PKG_VERSION`, `Updater.auto-check-enabled` from disk, and
+//!   `CARGO_PKG_VERSION`, `Updater.auto-check-enabled` from disk,
 //!   `Updater.system-managed` from the writability probe in
-//!   `services::updater::system_install`.
+//!   `services::updater::system_install`, and `Updater.updates-supported`
+//!   from `services::updater::is_available` — false on a source build,
+//!   which takes the whole section rather than trading its buttons.
 //! - [`install_event_subscriber`] hooks `event_rx` onto a UI-thread
 //!   `slint::spawn_local` loop that translates each `UpdaterEvent`
 //!   variant into a [`NotificationsUi::show`] call. Strings come from
@@ -21,7 +23,7 @@ use slint::{ComponentHandle, SharedString, Weak};
 use tokio::sync::watch;
 
 use crate::services::settings;
-use crate::services::updater::{UpdaterEvent, is_system_install};
+use crate::services::updater::{UpdaterEvent, is_available, is_system_install};
 use crate::state::AppState;
 use crate::ui::shell::notifications::{NotificationParams, NotificationsUi};
 use crate::{AppWindow, MelodiaUpdater, Settings};
@@ -35,6 +37,7 @@ use crate::{AppWindow, MelodiaUpdater, Settings};
 pub fn install(ui: &AppWindow, state: &AppState) {
     let updater = ui.global::<MelodiaUpdater>();
     updater.set_current_version(env!("CARGO_PKG_VERSION").into());
+    updater.set_updates_supported(is_available());
     updater.set_system_managed(is_system_install());
     updater.set_platform_kind(platform_kind().into());
 

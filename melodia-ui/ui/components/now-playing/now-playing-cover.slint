@@ -9,6 +9,9 @@ import { MaterialIcon } from "../material-icon.slint";
 // A slot's `source` is NEVER cleared, so the outgoing cover stays painted for
 // the whole fade rather than blinking to an empty frame. With no artwork both
 // slots fade to 0 and the placeholder comes in.
+//
+// The one exception is a move to a station, which this component is not mounted for and has
+// nothing to cross-fade into; `ui::now_playing::source_change` argues it where it makes it.
 export component NowPlayingCover inherits Rectangle {
     in property <length> tile-size;
 

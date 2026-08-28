@@ -134,6 +134,10 @@ fn main() -> AppResult<()> {
     // Before the runtime and before Slint, so boot panics are covered too.
     services::crash_report::install_hook(&paths.logs_dir);
     log::info!("Melodia starting");
+    // Which root this boot landed on is the one startup fact nothing downstream can infer: a dev
+    // build and `MELODIA_DATA_DIR` both move it. The diagnostics bundle carries it as a field of
+    // its own; this is the copy a live tail has.
+    log::info!("data directory: {}", services::redact_home(&paths.data_dir.to_string_lossy()));
     // The claim happened before there was anywhere to say this.
     if let Some(e) = unenforced_reason {
         log::warn!(
@@ -173,7 +177,7 @@ fn main() -> AppResult<()> {
 
     let spawner = tasks::TaskSpawner::from_state(&state);
     boot::tasks::spawn_background_tasks(&spawner, &state, channels);
-    boot::tasks::restore_persisted_queue(&runtime, &state);
+    boot::tasks::restore_persisted_playback(&runtime, &state);
 
     // Read `settings.json` and `views.json` once and reuse them everywhere.
     let startup_settings: Option<services::settings::SettingsData> =
@@ -247,9 +251,10 @@ fn main() -> AppResult<()> {
     let views = boot::ui_setup::install_views(&app, &state, startup_view_state.as_ref());
     let notifications = boot::ui_setup::install_library_settings_and_friends(&app, &state)?;
 
-    // These two wire here rather than inside their slices because their
+    // These three wire here rather than inside their slices because their
     // completion toasts need the `Rc<NotificationsUi>`.
     ui::playlists::wire_files(&app, &state, &views.playlists_ui, &notifications);
+    ui::radio::wire_files(&app, &state, &views.radio_ui, &notifications);
     ui::callbacks::wire_tags(&app, &state, &notifications);
 
     let appearance_handles = match ui::appearance::install(&app, &state) {
@@ -292,6 +297,11 @@ fn main() -> AppResult<()> {
         .map_err(|e| AppError::Window(format!("queue subscriber: {e}")))?;
     ui::shell::bridge::spawn_position_subscriber(weak.clone(), &state.position_tx)
         .map_err(|e| AppError::Window(format!("position subscriber: {e}")))?;
+    // Reads the same view model as the first of those, for the ICY titles a station announces.
+    // Beside them rather than inside `radio::install`, so every subscription to a player channel
+    // is spawned in one place.
+    ui::radio::install_history(weak.clone(), &views.radio_ui, &state.sinks)
+        .map_err(|e| AppError::Window(format!("station history subscriber: {e}")))?;
 
     match ui::queue_sheet::install(&app, &state) {
         Ok(h) => ui::window_chrome::set_queue_sheet_open(h.is_open),
@@ -359,12 +369,16 @@ fn main() -> AppResult<()> {
 
     let updater_settings_snapshot =
         startup_settings.as_ref().map(|s| s.updates.clone()).unwrap_or_default();
-    if updater_settings_snapshot.auto_check_enabled && !services::updater::is_system_install() {
+    if updater_settings_snapshot.auto_check_enabled
+        && services::updater::is_available()
+        && !services::updater::is_system_install()
+    {
         tasks::updater_daily::spawn(&spawner, state.clone(), weak.clone(), updater_event_tx);
     } else {
         log::info!(
-            "updater_daily: not spawning (auto_check_enabled={}, system_managed={})",
+            "updater_daily: not spawning (auto_check_enabled={}, available={}, system_managed={})",
             updater_settings_snapshot.auto_check_enabled,
+            services::updater::is_available(),
             services::updater::is_system_install()
         );
     }

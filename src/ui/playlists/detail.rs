@@ -471,15 +471,22 @@ pub fn seed_detail_from_settings(
     }) else {
         return;
     };
+    // Synchronously, so it is up before `app.show()` — see `PlaylistDetail.restoring`.
+    ui.global::<PlaylistDetail>().set_restoring(true);
     let s = state.clone();
     let pu = playlists_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
         // Below = first-launch fade-up, not a drill-in slide. The user
         // didn't navigate — we're just restoring their last view.
-        if let Err(e) = open_playlist(&s, &pu, weak, id, NavEnterFrom::Below).await {
+        if let Err(e) = open_playlist(&s, &pu, weak.clone(), id, NavEnterFrom::Below).await {
             log::warn!("playlists::seed_detail_from_settings open_playlist({id}): {e}");
         }
+        // Lowered however it went, and behind `open_playlist`'s own hop so the id is already in:
+        // a playlist deleted since the last session owes the grid back rather than an empty body.
+        let _ = weak.upgrade_in_event_loop(|ui| {
+            ui.global::<PlaylistDetail>().set_restoring(false);
+        });
     });
 }
 

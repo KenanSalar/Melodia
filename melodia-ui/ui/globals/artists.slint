@@ -28,6 +28,8 @@ export global Artists {
 // default sort is by album, so tracks group naturally.
 export global ArtistDetail {
     in-out property <int> artist-id: -1;
+    // See `AlbumDetail.restoring`.
+    in-out property <bool> restoring: false;
     in-out property <ArtistRow> artist;
     in-out property <[AlbumRow]> albums;
     in-out property <[TrackListRow]> tracks;

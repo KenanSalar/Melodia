@@ -238,6 +238,10 @@ msgstr "Parçaları filtrele…"
 msgid "Columns"
 msgstr "Sütunlar"
 
+# `SortMenuPopup`'s trigger, the pill-chrome twin of "Columns".
+msgid "Sort"
+msgstr "Sırala"
+
 msgid "Card view"
 msgstr "Kart görünümü"
 
@@ -1574,8 +1578,8 @@ msgstr "Discord çalışmıyor"
 msgid "Show album artwork"
 msgstr "Albüm kapağını göster"
 
-msgid "Look up cover art online (via Deezer) to show on the card"
-msgstr "Kartta göstermek için kapağı çevrimiçi ara (Deezer üzerinden)"
+msgid "Look up cover art online (via Deezer or iTunes) to show on the card"
+msgstr "Kartta göstermek için kapağı çevrimiçi ara (Deezer veya iTunes üzerinden)"
 
 msgid "Hide while paused"
 msgstr "Duraklatıldığında gizle"
@@ -1700,3 +1704,261 @@ msgstr "Henüz onaylanmadı. Melodia'yı tarayıcında onayla, sonra Bitir düğ
 
 msgid "Couldn't save your credentials."
 msgstr "Kimlik bilgilerin kaydedilemedi."
+
+# ---- Radio -------------------------------------------------------------------
+
+# The sidebar row and the window title. The two tabs reuse "Browse" and "Favorites".
+msgid "Radio"
+msgstr "Radyo"
+
+msgid "Search stations…"
+msgstr "İstasyon ara…"
+
+msgid "Filter stations…"
+msgstr "İstasyonları filtrele…"
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are identical —
+# the layout is kept because gettext needs both.
+msgid "{n} station"
+msgid_plural "{n} stations"
+msgstr[0] "{n} istasyon"
+msgstr[1] "{n} istasyon"
+
+msgid "No stations kept yet"
+msgstr "Henüz kayıtlı istasyon yok"
+
+msgid "Star a station in Browse, or add one by URL."
+msgstr "Gözat'ta bir istasyonu yıldızla ya da URL ile ekle."
+
+# The Settings card. The section title reuses "Radio" above.
+msgid "Internet radio"
+msgstr "İnternet radyosu"
+
+msgid "Browse and play live stations from radio-browser.info"
+msgstr "radio-browser.info üzerindeki canlı istasyonlara göz at ve dinle"
+
+# The Settings sub-rows, shown only while the master switch is on.
+msgid "Hide segmented stations"
+msgstr "Parçalı istasyonları gizle"
+
+msgid "Segmented (HLS) streams play, but take longer to start"
+msgstr "Parçalı (HLS) yayınlar çalınır ama başlaması daha uzun sürer"
+
+msgid "Report plays to the directory"
+msgstr "Çalmaları dizine bildir"
+
+msgid "An anonymous count is what orders stations by popularity"
+msgstr "İstasyonları popülerliğe göre sıralayan şey anonim bir sayımdır"
+
+# ---- Radio: Browse -----------------------------------------------------------
+# The filter chips. "Genre" and "Language" reuse the labels above.
+msgid "Country"
+msgstr "Ülke"
+
+msgid "Format"
+msgstr "Biçim"
+
+msgid "{} kbps and up"
+msgstr "{} kbps ve üzeri"
+
+# The chip pickers.
+msgid "Filter…"
+msgstr "Filtrele…"
+
+msgid "Loading…"
+msgstr "Yükleniyor…"
+
+msgid "Nothing to pick from"
+msgstr "Seçilecek bir şey yok"
+
+msgid "Load more stations"
+msgstr "Daha fazla istasyon yükle"
+
+# The three states of the station grid.
+msgid "Searching the directory…"
+msgstr "Dizin aranıyor…"
+
+msgid "Stations are coming from radio-browser.info."
+msgstr "İstasyonlar radio-browser.info adresinden geliyor."
+
+msgid "The station directory is unreachable"
+msgstr "İstasyon dizinine ulaşılamıyor"
+
+msgid "Check your connection and try again."
+msgstr "Bağlantını kontrol edip yeniden dene."
+
+msgid "Try again"
+msgstr "Yeniden dene"
+
+msgid "No stations matched"
+msgstr "Eşleşen istasyon yok"
+
+msgid "Try a different name, or clear a filter."
+msgstr "Farklı bir ad dene ya da bir filtreyi kaldır."
+
+# The station card's meta line, beside country and codec.
+msgid "{} kbps"
+msgstr "{} kbps"
+
+# The Recently Played tab's empty state body; its title takes the library's "Nothing played yet".
+msgid "Stations you listen to show up here."
+msgstr "Dinlediğin istasyonlar burada görünür."
+
+# The Favorites tab's sort picker. Only "Added" is its own: "Name", "Plays" and "Last played" are
+# the library's entries above, one msgid being one string to gettext however many surfaces use it.
+msgid "Added"
+msgstr "Eklenme"
+
+# The add / edit station dialog.
+msgid "Add Station"
+msgstr "İstasyon Ekle"
+
+msgid "Edit Station"
+msgstr "İstasyonu Düzenle"
+
+msgid "Stream URL"
+msgstr "Yayın URL'si"
+
+msgid "Name (optional)"
+msgstr "Ad (isteğe bağlı)"
+
+msgid "Leave blank to use the station's own name"
+msgstr "İstasyonun kendi adını kullanmak için boş bırak"
+
+msgid "Checking the stream…"
+msgstr "Yayın denetleniyor…"
+
+msgid "Couldn't reach that address. Check the URL and your connection."
+msgstr "Bu adrese ulaşılamadı. URL'yi ve bağlantını denetle."
+
+msgid "That address doesn't play as audio Melodia can decode."
+msgstr "Bu adres, Melodia'nın çözebileceği bir ses yayını vermiyor."
+
+msgid "Couldn't save the station."
+msgstr "İstasyon kaydedilemedi."
+
+# The same dialog opened on a directory-owned station: whatever the directory left blank.
+msgid "Station Details"
+msgstr "İstasyon Ayrıntıları"
+
+msgid "Logo URL"
+msgstr "Logo URL'si"
+
+msgid "Leave blank to look for a logo on the website above."
+msgstr "Yukarıdaki web sitesinde logo aramak için boş bırak."
+
+msgid "Jazz, Blues"
+msgstr "Caz, Blues"
+
+msgid "Tunisia"
+msgstr "Tunus"
+
+msgid "The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again."
+msgstr "Bu istasyonun adı ve yayını dizine ait. Boş bıraktıklarını sen doldurabilirsin; bir alanı kaldırmak için boş bırak."
+
+msgid "Website"
+msgstr "Web sitesi"
+
+msgid "That doesn't look like a web address. It should start with https://"
+msgstr "Bu bir web adresine benzemiyor. https:// ile başlamalı."
+
+# The station card's destructive action, once per tab: the two lists are independent, so each
+# names only its own.
+msgid "Remove from favorites?"
+msgstr "Favorilerden kaldırılsın mı?"
+
+msgid "\"{}\" will be removed from your favorites."
+msgstr "\"{}\" favorilerinden kaldırılacak."
+
+# A hand-typed station: leaving Favorites is leaving everything, so this one names the deletion.
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "\"{}\" dinlenme geçmişiyle birlikte istasyonlarından kaldırılacak."
+
+msgid "Remove from Recently Played?"
+msgstr "Son Çalınanlardan kaldırılsın mı?"
+
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "\"{}\" Son Çalınanlar listesinden kaldırılacak."
+
+# Station list import and export. Turkish doesn't pluralize after a numeral, so both
+# forms are the same sentence — the layout stays for msgid alignment.
+msgid "{n} station added"
+msgid_plural "{n} stations added"
+msgstr[0] "{n} istasyon eklendi"
+msgstr[1] "{n} istasyon eklendi"
+
+msgid "{n} was already in your list."
+msgid_plural "{n} were already in your list."
+msgstr[0] "{n} tanesi zaten listendeydi."
+msgstr[1] "{n} tanesi zaten listendeydi."
+
+msgid "Couldn't read any stations from the selected file(s)."
+msgstr "Seçilen dosyalardan hiçbir istasyon okunamadı."
+
+msgid "{n} station exported"
+msgid_plural "{n} stations exported"
+msgstr[0] "{n} istasyon dışa aktarıldı"
+msgstr[1] "{n} istasyon dışa aktarıldı"
+
+msgid "Couldn't write the station list."
+msgstr "İstasyon listesi yazılamadı."
+
+# --- The station page ---
+
+msgid "Vote"
+msgstr "Oy ver"
+
+msgid "Edit"
+msgstr "Düzenle"
+
+msgid "Vote not counted"
+msgstr "Oy sayılmadı"
+
+# Turkish doesn't pluralize the noun after a numeral, so both forms are the same.
+msgid "{n} vote"
+msgid_plural "{n} votes"
+msgstr[0] "{n} oy"
+msgstr[1] "{n} oy"
+
+msgid "The directory reached this station on its last check."
+msgstr "Dizin son denetiminde bu istasyona ulaştı."
+
+msgid "The directory could not reach this station on its last check."
+msgstr "Dizin son denetiminde bu istasyona ulaşamadı."
+
+msgid "Stream"
+msgstr "Yayın"
+
+msgid "Copy stream URL"
+msgstr "Yayın URL'sini kopyala"
+
+msgid "Open in your browser"
+msgstr "Tarayıcıda aç"
+
+msgid "Votes"
+msgstr "Oylar"
+
+msgid "Recently played on this station"
+msgstr "Bu istasyonda yakın zamanda çalanlar"
+
+# ---- Radio: a station on the transport ---------------------------------------
+
+# The badge where a track's seek bar goes. Keep it short and shouty — it is a pill.
+msgid "LIVE"
+msgstr "CANLI"
+
+msgid "Buffering…"
+msgstr "Arabelleğe alınıyor…"
+
+# Same pill, on a station the user paused. Pausing closes the connection, so this is a state and
+# not a hold; a transport verb like the Pause button's would read as the control it isn't.
+msgid "Paused"
+msgstr "Duraklatıldı"
+
+# Heading over the Now Playing panel that replaces "Up Next" while a station plays. Names the
+# kind of thing the panel describes, so keep it as short as that one.
+msgid "Station"
+msgstr "İstasyon"
+
+msgid "{}: {}"
+msgstr "{}: {}"

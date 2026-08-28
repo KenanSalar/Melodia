@@ -92,6 +92,12 @@ pub mod view_id {
     /// The Favorites page's Favorite Artists *tab*, whose sort is its own —
     /// [`FAVORITES`] is the Songs tab's, over track columns this grid has no notion of.
     pub const FAVORITE_ARTISTS: &str = "favorite_artists";
+    /// Radio's Favorites tab. Its sibling tab has no entry: Recently Played's order *is*
+    /// the page, so there is no sort state to persist.
+    pub const RADIO_FAVORITES: &str = "radio_favorites";
+    /// The station page. `last_detail_ids` only — a station has no track columns and no
+    /// sort, and only a station with a database row can be named here at all.
+    pub const RADIO_DETAIL: &str = "radio_detail";
 }
 
 /// Force a detail view's locked column off whatever the file says, against a hand-edit

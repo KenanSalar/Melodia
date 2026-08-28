@@ -81,7 +81,7 @@ export global Settings {
     callback play-button-animation-changed(int);
 
     // Persist-only — no runtime side effect. `main.rs` consults the flag once at the
-    // next launch, after `restore_persisted_queue`.
+    // next launch, after `restore_persisted_playback`.
     in-out property <bool> resume-on-startup: false;
     callback resume-on-startup-changed(bool);
 
@@ -143,6 +143,23 @@ export global Settings {
     callback discord-rpc-artwork-changed(bool);
     in-out property <bool> discord-rpc-hide-when-paused;
     callback discord-rpc-hide-when-paused-changed(bool);
+
+    // The Radio section's master switch: the sidebar row and the index-10 router branch both
+    // read it, so flipping it mounts and unmounts the whole feature with no restart. Declared
+    // false so a settings read that fails leaves a local-only install local-only. **The gate
+    // that matters isn't either of these** — `library::radio` refuses on the Rust shadow, which
+    // is what makes "off" mean no traffic rather than a hidden row.
+    in-out property <bool> radio-enabled: false;
+    callback radio-enabled-changed(bool);
+    // Both sub-toggles declare their live default here. Only the click one differs from the
+    // master's cautious `false`, describing what the feature does rather than whether it runs.
+    // Nothing in Slint reads either: the segment filter runs in `library::radio::search` and the
+    // click on the play path, both off Rust shadows, so these are the control surface and not the
+    // answer.
+    in-out property <bool> radio-hide-segmented: false;
+    callback radio-hide-segmented-changed(bool);
+    in-out property <bool> radio-send-clicks: true;
+    callback radio-send-clicks-changed(bool);
 
     // Persists, then flips the `FolderWatcher` on the tokio runtime rather than the
     // blocking pool — the start needs an async DB query before it can take the
@@ -378,6 +395,46 @@ export global Settings {
         return @tr("Couldn't write the playlist files.");
     }
 
+    // The station list's own pair. Separate msgids rather than a shared "{n} items imported":
+    // a station is not a playlist, and the skipped line has no playlist equivalent.
+    pure callback station-import-title(int /*imported*/) -> string;
+    station-import-title(imported) => {
+        return @tr("{n} station added" | "{n} stations added" % imported);
+    }
+    pure callback station-import-message(int /*skipped*/) -> string;
+    station-import-message(skipped) => {
+        // Empty where nothing was skipped, which is the ordinary import — the card drops a blank
+        // body, where an unconditional line reports "0 were already in your list."
+        return skipped > 0
+            ? @tr("{n} was already in your list." | "{n} were already in your list." % skipped)
+            : "";
+    }
+    pure callback station-import-failed-title() -> string;
+    station-import-failed-title => {
+        return @tr("Import failed");
+    }
+    pure callback station-import-failed-message() -> string;
+    station-import-failed-message => {
+        return @tr("Couldn't read any stations from the selected file(s).");
+    }
+
+    pure callback station-export-title(int /*exported*/) -> string;
+    station-export-title(exported) => {
+        return @tr("{n} station exported" | "{n} stations exported" % exported);
+    }
+    pure callback station-export-message(string /*path*/) -> string;
+    station-export-message(path) => {
+        return @tr("Saved to {}", path);
+    }
+    pure callback station-export-failed-title() -> string;
+    station-export-failed-title => {
+        return @tr("Export failed");
+    }
+    pure callback station-export-failed-message() -> string;
+    station-export-failed-message => {
+        return @tr("Couldn't write the station list.");
+    }
+
     // Titles for the generic backend-failure toasts coming through the
     // `services::toast` bridge, resolved by toast kind. The dynamic detail — a path or
     // an error message — rides on the body and is not translated.
@@ -396,6 +453,10 @@ export global Settings {
     pure callback toast-love-sync-title() -> string;
     toast-love-sync-title => {
         return @tr("Loved tracks");
+    }
+    pure callback toast-radio-vote-title() -> string;
+    toast-radio-vote-title => {
+        return @tr("Vote not counted");
     }
     // The one toast kind whose body is localized too — a restart that couldn't
     // relaunch carries no path or error worth showing, only an instruction.

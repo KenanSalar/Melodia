@@ -1,23 +1,34 @@
-// Debounces filter-box keystrokes: the host bumps `pending` on every `edited`, and this fires at
-// most once per `interval` while `pending` runs ahead of the last-applied tick, collapsing a fast
-// typist's burst into roughly one re-filter. Non-visual, and every view with a filter box mounts
-// one.
+// Paces filter-box keystrokes: the host bumps `pending` on every `edited`, and this fires while
+// `pending` runs ahead of the last-applied tick, collapsing a fast typist's burst into far fewer
+// re-filters. Non-visual, and every view with a filter box mounts one.
 //
 // **`fire()` has two shapes.** Usually it's a Rust round-trip, a keystroke costing a model rebuild.
 // Settings assigns one Slint property from another instead: a query there mounts all five tab pages
 // and fans out to several `matches` calls per row, so the expensive work is Slint's own
 // re-evaluation and the settled value has to be a property the sections can read.
 export component FilterThrottle {
-    // Debounce cadence. ~130 ms sits comfortably below "feels laggy".
+    // Cadence, or the settle time under `trailing`. ~130 ms sits comfortably below "feels laggy".
     in property <duration> interval: 130ms;
     // Monotonic keystroke counter; the host bumps this on each `edited`.
     in property <int> pending;
+    // Wait for the burst to *settle* rather than firing on a cadence. Where the settled value costs
+    // a network round trip, the values on the way to it are requests nobody asked for; where it
+    // costs a walk over rows already in hand, arriving early is worth more than arriving once.
+    in property <bool> trailing: false;
     // Fired once per settled burst — the host runs its re-filter here.
     callback fire();
 
     private property <int> applied: 0;
 
-    Timer {
+    // Pushes the deadline out rather than letting the timer run its period. Safe either way round
+    // against the `running` binding below: the generated `update_timers` starts a timer only when
+    // it isn't already running, so a restart on a live one resets it and a restart on a stopped one
+    // is followed by the start the binding asks for.
+    changed pending => {
+        if (root.trailing) { settle.restart(); }
+    }
+
+    settle := Timer {
         interval: root.interval;
         running: root.pending != root.applied;
         triggered() => {

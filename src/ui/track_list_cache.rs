@@ -38,7 +38,7 @@ use crate::ui::util::len_as_i32;
 /// input and `push_folded` maps away the rare field value carrying one.
 ///
 /// `year` stays an integer beside the packed text, so this and every `track_matches`
-/// surface run the *same* [`Needle::matches_year`] rule rather than two spellings of it.
+/// surface run the *same* [`Needle::matches_number`] rule rather than two spellings of it.
 ///
 /// `Clone` is for [`TrackListCache::remove`] alone — the only operation that changes the
 /// set's length, and so the only one that can't leave a reader's snapshot pointing at the
@@ -71,7 +71,7 @@ impl RowSearchKey {
     /// matcher that doesn't go through [`Needle::contains`], and what `Needle::as_str`
     /// exists for.
     pub fn matches(&self, needle: &Needle) -> bool {
-        self.packed.contains(needle.as_str()) || needle.matches_year(self.year)
+        self.packed.contains(needle.as_str()) || needle.matches_number(self.year)
     }
 }
 

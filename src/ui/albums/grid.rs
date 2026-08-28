@@ -142,7 +142,7 @@ pub(super) fn compute_indices(
             .filter(|(_, a)| {
                 needle.contains(&a.name)
                     || needle.contains(&a.artist_name)
-                    || needle.matches_year(a.year)
+                    || needle.matches_number(a.year)
             })
             .map(|(i, _)| i)
             .collect()

@@ -45,13 +45,17 @@ pub(crate) const UI_SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/ui
 /// it governs and nothing in the build, the lint gate or the test suite is looking.
 pub(crate) const RULES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.claude/rules");
 
-/// Every module that owns callback wiring: the cross-cutting root plus the eleven view
+/// The unbounded float fed to the guards that reject nonsense input. `f64::from` widens it
+/// where the guard under test takes an `f64`.
+pub(crate) const UNBOUNDED: f32 = f32::MAX * 2.0;
+
+/// Every module that owns callback wiring: the cross-cutting root plus the twelve view
 /// slices that keep their own.
 ///
 /// **Checked for equality, not containment.** What this guards is a subtree that stops
 /// existing, which a floor cannot see: every count-based pin over the corpus quietly loses
 /// that slice's coverage and all of them still pass.
-pub(crate) const CALLBACK_HOMES: [&str; 12] = [
+pub(crate) const CALLBACK_HOMES: [&str; 13] = [
     "albums",
     "artists",
     "browse",
@@ -62,14 +66,15 @@ pub(crate) const CALLBACK_HOMES: [&str; 12] = [
     "my_library",
     "playlists",
     "queue_sheet",
+    "radio",
     "recently_played",
     "search",
     "tracks",
 ];
 
-/// A floor under the walk itself, so it can't pass vacuously *ahead of* the set check.
-/// Loose on purpose — [`CALLBACK_HOMES`] is the real guard.
-const MIN_UI_SOURCES: usize = 180;
+/// A floor under any walk of [`UI_SRC_DIR`], so one can't pass vacuously. Loose on purpose —
+/// each caller has a real guard of its own, [`CALLBACK_HOMES`] here.
+pub(crate) const MIN_UI_SOURCES: usize = 180;
 
 /// Every wiring source under [`UI_SRC_DIR`], comment-stripped and paired with its
 /// `src/ui`-relative path.
@@ -266,6 +271,42 @@ pub(crate) fn block_body(src: &str, open: usize) -> Option<&str> {
     None
 }
 
+/// A wrapped condition joined back onto the `if` it belongs to, so a per-line walk sees one
+/// statement.
+///
+/// Slint has no formatter of its own and a branch head carrying more than its own term wraps.
+/// A test that only reads first lines counts a wrapped branch as absent, which is the loudest
+/// possible way to be wrong about a file that builds.
+fn fold_continuations(src: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    for line in src.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("&&") || trimmed.starts_with("||") {
+            out.push(' ');
+            out.push_str(trimmed);
+        } else {
+            out.push('\n');
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// The `ViewTransition` body branches `global`'s tabbed page mounts, one line each.
+///
+/// Comments dropped and continuations folded first, and both terms required: the sheet reads
+/// `tab-idx` again for the count line, the placeholder and the pill row, and none of those is a
+/// sub-view. Two pins ask about the same branches for different reasons, so the preprocessing is
+/// here rather than at either of them, where the pair would be free to drift apart.
+pub(crate) fn tab_body_branches(sheet: &str, global: &str) -> Vec<String> {
+    let tab_term = format!("{global}.tab-idx == {global}.tab-");
+    fold_continuations(&strip_line_comments(sheet))
+        .lines()
+        .filter(|line| line.contains(&tab_term) && line.contains(": ViewTransition {"))
+        .map(str::to_owned)
+        .collect()
+}
+
 /// Runs of whitespace collapsed to one space, so a pin reads a token sequence rather than one
 /// file's indentation. Pair it with [`strip_line_comments`] — this joins lines, so a trailing
 /// comment would otherwise run into the code after it.
@@ -302,15 +343,18 @@ pub(crate) fn array_body<'a>(src: &'a str, marker: &str) -> Option<&'a str> {
     src.split_once(marker).and_then(|(_, rest)| rest.split_once("];")).map(|(body, _)| body)
 }
 
-/// The `labels` and `fields` arrays of the one `SortPillRow` mount in `src` whose
+/// The `labels` and `fields` arrays of the one sort mount in `src` whose
 /// `sort-field` reads `field_property`, as raw comma-separated element lists.
+///
+/// Either presentation answers to it: `SortPillRow` and `SortMenuPopup` take the same
+/// parallel arrays, and the anchor below is a binding both spell.
 ///
 /// `field_property` is the whole property path the mount binds (`Albums.sort-field`, or
 /// `Favorites.artist-sort-field` where one global sorts more than one thing) — the only
 /// binding naming both the component and the global, so it locates the mount, and the two
 /// arrays are read backwards from it. `None` when no such mount exists, which is itself the
 /// failure a caller reports.
-pub(crate) fn sort_pill_row_arrays<'a>(
+pub(crate) fn sort_mount_arrays<'a>(
     src: &'a str,
     field_property: &str,
 ) -> Option<(&'a str, &'a str)> {

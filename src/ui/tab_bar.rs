@@ -1,6 +1,6 @@
 //! The Rust half of `melodia-ui/ui/components/tab-bar.slint`.
 //!
-//! Three pages mount a `TabBar` and persist which tab was showing, so all three need the
+//! Every page that mounts a `TabBar` persists which tab was showing, so each needs the
 //! same read-side clamp; the component's source-level invariants are pinned here too, no
 //! host owning the file. The two grid-bearing pages also share the pair of predicates
 //! below plus the count sentinel — those are about a *tab* rather than what one contains,

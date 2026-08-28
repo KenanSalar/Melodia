@@ -314,14 +314,20 @@ fn toggle_window(ui_weak: &slint::Weak<AppWindow>) {
 }
 
 /// Build a `TraySnapshot` from the latest light view-model.
+///
+/// Through `source()`, so a station reaches the tooltip as "song — station" without this file
+/// learning what a station is.
 fn snapshot_from_vm(vm: Option<&PlayerViewModelLight>) -> TraySnapshot {
-    match vm {
-        Some(vm) => TraySnapshot {
-            track_title: vm.current_track.as_ref().map(|t| t.title.clone()),
-            track_artist: vm.current_track.as_ref().and_then(|t| t.artist.clone()),
-            is_playing: vm.status == "playing",
-        },
-        None => TraySnapshot::default(),
+    let Some(vm) = vm else {
+        return TraySnapshot::default();
+    };
+    let source = vm.source();
+    TraySnapshot {
+        track_title: source.as_ref().map(|s| s.title.to_owned()),
+        track_artist: source.as_ref().and_then(|s| s.secondary.map(str::to_owned)),
+        is_playing: vm.status == "playing",
+        has_next: vm.has_next,
+        has_previous: vm.has_previous,
     }
 }
 
