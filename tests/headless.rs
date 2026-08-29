@@ -9,9 +9,10 @@
 //!   for. `src/tests/config_tests.rs` drives the choice under the env lock
 //!   instead.
 //! - `AppState::init` opens the default audio device (rodio); machines without
-//!   audio will fail here. CI points ALSA's default PCM at the userspace `null`
-//!   device (see the `test` job in `.github/workflows/pr-validation.yml`), so
-//!   this runs headless there too.
+//!   audio will fail here. The `test` job points ALSA's default PCM at the
+//!   userspace `null` device, so this runs headless there; `test-windows` skips
+//!   it by name instead, WASAPI having no equivalent short of a signed virtual
+//!   audio driver. Both jobs are in `.github/workflows/pr-validation.yml`.
 
 use std::path::PathBuf;
 

@@ -245,8 +245,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          # arch is in the key because Swatinem's shared-key form keys on this
-          # string alone — without it the two arches collide on the same `kind`.
+          # `arch` here is redundant: the action appends `os.type()` and
+          # `os.arch()` after the shared key, so the two arches of a `kind`
+          # already land on separate entries. Kept because changing the key
+          # churns every release cache to say the same thing.
           shared-key: "rust-release-${{ matrix.kind }}-${{ matrix.arch }}"
           cache-on-failure: true
 

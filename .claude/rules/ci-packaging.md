@@ -24,11 +24,11 @@ The release matrix itself is `.claude/rules/updater.md` and the procedure that f
 ## The PR gate
 
 `pr-validation.yml`, on PRs into `main`: `changes` (skip matrix) → `audit` ∥ `fmt` ∥ `clippy` ∥
-`test`. `clippy` is one step (`--all-targets --locked -- -D warnings`, both packages); `test` is
-plain `cargo test --locked`. All four hang off `changes` alone — chaining `test` behind `clippy`
-made the gate's wall clock their sum, and what waits on it is a person deciding whether to merge.
-`audit` and `fmt` compile nothing, so neither an advisory hit nor a reflow hides the lint and test
-results. No coverage on this path.
+`test` ∥ `test-windows`. `clippy` is one step (`--all-targets --locked -- -D warnings`, both
+packages); `test` is plain `cargo test --locked`. All five hang off `changes` alone — chaining
+`test` behind `clippy` made the gate's wall clock their sum, and what waits on it is a person
+deciding whether to merge. `audit` and `fmt` compile nothing, so neither an advisory hit nor a
+reflow hides the lint and test results. No coverage on this path.
 
 - **The aggregate `pr-validation` job is the required status check, and adding a job to it is two
   edits**: `needs:` *and* the `results=( … )` bash array the check step loops over. No
@@ -69,14 +69,38 @@ results. No coverage on this path.
   (`pcm.!default { type null }`) — no kernel module, no extra package. System libs come from
   `.github/actions/linux-system-deps` (composite: Azure apt-mirror swap + retrying install of the
   Slint/ALSA/Wayland/D-Bus set). `Swatinem/rust-cache` per job, `ci-*` shared-keys, distinct from
-  release's `rust-release-*`.
+  release's `rust-release-*`. The action appends `os.type()` and `os.arch()` *after* the shared
+  key, so `test` and `test-windows` both pass `ci-test` and still get their own entry.
 
-- **`CARGO_BUILD_JOBS: 4` on both compiling jobs is a memory cap, not a CPU match — don't raise it
-  to `.cargo/config.toml`'s dev-machine jobs=8.** The peak is a single `rustc` on **`melodia-ui`**,
-  and the count scales *one* process's peak because its LLVM codegen threads draw jobserver tokens:
-  13.30 / 10.71 / 8.83 GiB at jobs=8/4/2 against a 16 GB runner. Over the ceiling nothing fails —
-  it **swaps**, and a 14-minute job runs for most of an hour looking like a hang. jobs=4 leaves
-  ~4 GB headroom; jobs=2 buys 1.9 GB more for +300 s.
+- **`test-windows` is the one non-Linux job, and it runs the suite rather than linting it.**
+  `release.yml` already compiles the Windows lib and bin on both arches, so the `cfg(windows)`
+  arms are not uncompiled; they are compiled once a tag is pushed, after review is over, and
+  **nothing has ever run the tests there.** That is what the `.gitattributes` LF pin, the
+  joined-not-spelled path fixtures, `redact_home`'s `dirs::home_dir()` and `windows_swap`'s
+  `MoveFileExW` all rest on today. **No Windows clippy twin**: clippy's verdict is a function of
+  the code it type-checks, so everything compiling on both platforms already got its answer from
+  the Linux job, and what `cfg` hides from Linux (`services::dwm_titlebar` is gated at its
+  `pub mod`, so that file is not even parsed there) is FFI glue `release.yml` compiles anyway.
+  Cross-checking from the Linux runner is no substitute either: `ring`, `aws-lc-sys`,
+  `libsqlite3-sys` and `blake3` compile C, so `--target x86_64-pc-windows-msvc` wants an MSVC
+  toolchain wherever it runs. **The headless test is skipped by name**
+  (`-- --skip headless_scan_persists_track`), not by target selection and not by a
+  `cfg_attr(windows, ignore)`: what is missing is the runner's audio endpoint rather than Windows,
+  and a name filter leaves a *new* integration test running here by default, which target
+  selection would not. `windows-latest` rather than release's `windows-2025-vs2026`, whose
+  explicit label buys the preinstalled WiX this job has no use for. No system deps and so no
+  `linux-system-deps` twin: cpal reaches WASAPI through `windows-sys` and Slint needs no package,
+  which makes the shape `fmt`'s rather than `test`'s.
+
+- **`CARGO_BUILD_JOBS: 4` on `test` and `test-windows` is a memory cap, not a CPU match — don't
+  raise it to `.cargo/config.toml`'s dev-machine jobs=8.** The peak is a single `rustc` on
+  **`melodia-ui`**, and the count scales *one* process's peak because its LLVM codegen threads draw
+  jobserver tokens: 13.30 / 10.71 / 8.83 GiB at jobs=8/4/2 against a 16 GB runner. Over the ceiling
+  nothing fails — it **swaps**, and a 14-minute job runs for most of an hour looking like a hang.
+  jobs=4 leaves ~4 GB headroom; jobs=2 buys 1.9 GB more for +300 s. The Windows runner is the same
+  4-core / 16 GB box, so the number carries; `release.yml` leaves its Windows slots at 8 because a
+  release build is not the shape that needed the cap. `clippy` is the third compiling job and sets
+  nothing: it never codegens, so it doesn't reach that peak.
 
 - **The two-phase build is gone.** Pre-crate-split the generated unit compiled twice per
   `cargo test` (rlib + `--test` harness) at 20.96 GiB concurrently, so both workflows carried a

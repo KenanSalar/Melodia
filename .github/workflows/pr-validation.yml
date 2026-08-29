@@ -198,13 +198,59 @@ jobs:
       - name: cargo test
         run: cargo test --locked
 
+  # The one non-Linux job. `release.yml` already compiles the Windows lib and
+  # bin, but only once a tag is pushed, and it runs no test; the suite executing
+  # on Windows has never happened anywhere. That is what the `.gitattributes` LF
+  # pin, the joined-not-spelled path fixtures and `redact_home`'s
+  # `dirs::home_dir()` all rest on today.
+  #
+  # No clippy twin: clippy's verdict is a function of the code it type-checks, so
+  # on everything that compiles both places the Linux job reached it already, and
+  # what `cfg` hides from Linux is FFI glue `release.yml` compiles anyway.
+  #
+  # Nothing to install, hence no `linux-system-deps` twin: cpal reaches WASAPI
+  # through `windows-sys` and Slint needs no system package. `CARGO_BUILD_JOBS`
+  # is the cap `test` argues above, unchanged because the Windows runner is the
+  # same 4-core / 16 GB box.
+  test-windows:
+    name: test-windows
+    runs-on: windows-latest
+    needs: [changes]
+    env:
+      CARGO_BUILD_JOBS: 4
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          # The Linux job's key verbatim: rust-cache appends `os.type()` and
+          # `os.arch()` after the shared key, so the two entries are already
+          # distinct (`…-Linux-x64-…` against `…-Windows_NT-x64-…`).
+          shared-key: ci-test
+          cache-on-failure: true
+
+      # `headless_scan_persists_track` boots `AppState::init`, which opens the
+      # default output device, and WASAPI has no equivalent of the userspace null
+      # PCM the Linux job points ALSA at. The only other answer is a signed
+      # virtual audio driver.
+      #
+      # Skipped by name rather than by target selection, so a new integration
+      # test runs here by default. Same argument as the paths filter being a
+      # denylist: the failure worth designing against is the silent omission.
+      - name: cargo test
+        run: cargo test --locked -- --skip headless_scan_persists_track
+
   # Mark THIS as the required status check in branch protection. Green iff every
   # job passed or was skipped — `skipped` counting as a pass is what lets a
   # docs-only PR merge without a build, and why `changes` is a denylist.
   pr-validation:
     name: pr-validation
     if: always()
-    needs: [changes, audit, fmt, clippy, test]
+    needs: [changes, audit, fmt, clippy, test, test-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
@@ -218,6 +264,7 @@ jobs:
             "${{ needs.fmt.result }}"
             "${{ needs.clippy.result }}"
             "${{ needs.test.result }}"
+            "${{ needs.test-windows.result }}"
           )
           for result in "${results[@]}"; do
             if [[ "$result" != "success" && "$result" != "skipped" ]]; then
