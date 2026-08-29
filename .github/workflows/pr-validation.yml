@@ -198,20 +198,14 @@ jobs:
       - name: cargo test
         run: cargo test --locked
 
-  # The one non-Linux job. `release.yml` already compiles the Windows lib and
-  # bin, but only once a tag is pushed, and it runs no test; the suite executing
-  # on Windows has never happened anywhere. That is what the `.gitattributes` LF
-  # pin, the joined-not-spelled path fixtures and `redact_home`'s
-  # `dirs::home_dir()` all rest on today.
+  # The one non-Linux job. `release.yml` compiles the Windows lib and bin, but
+  # only once a tag is pushed and it runs no test, so the suite executing on
+  # Windows has never happened anywhere. `CARGO_BUILD_JOBS` is the cap `test`
+  # argues above, unchanged because the Windows runner is the same 4-core /
+  # 16 GB box.
   #
-  # No clippy twin: clippy's verdict is a function of the code it type-checks, so
-  # on everything that compiles both places the Linux job reached it already, and
-  # what `cfg` hides from Linux is FFI glue `release.yml` compiles anyway.
-  #
-  # Nothing to install, hence no `linux-system-deps` twin: cpal reaches WASAPI
-  # through `windows-sys` and Slint needs no system package. `CARGO_BUILD_JOBS`
-  # is the cap `test` argues above, unchanged because the Windows runner is the
-  # same 4-core / 16 GB box.
+  # Why there is no clippy twin, no `linux-system-deps` step and no pinned image
+  # label is argued once, in `.claude/rules/ci-packaging.md`.
   test-windows:
     name: test-windows
     runs-on: windows-latest

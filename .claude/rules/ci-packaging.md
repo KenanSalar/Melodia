@@ -70,25 +70,35 @@ reflow hides the lint and test results. No coverage on this path.
   `.github/actions/linux-system-deps` (composite: Azure apt-mirror swap + retrying install of the
   Slint/ALSA/Wayland/D-Bus set). `Swatinem/rust-cache` per job, `ci-*` shared-keys, distinct from
   release's `rust-release-*`. The action appends `os.type()` and `os.arch()` *after* the shared
-  key, so `test` and `test-windows` both pass `ci-test` and still get their own entry.
+  key, so `test` and `test-windows` both pass `ci-test` and still get their own entry. It is also
+  what makes `arch` redundant in release's key, and only because every slot builds on a runner of
+  its own arch — a slot that ever cross-compiles wants it back.
 
 - **`test-windows` is the one non-Linux job, and it runs the suite rather than linting it.**
   `release.yml` already compiles the Windows lib and bin on both arches, so the `cfg(windows)`
   arms are not uncompiled; they are compiled once a tag is pushed, after review is over, and
   **nothing has ever run the tests there.** That is what the `.gitattributes` LF pin, the
   joined-not-spelled path fixtures, `redact_home`'s `dirs::home_dir()` and `windows_swap`'s
-  `MoveFileExW` all rest on today. **No Windows clippy twin**: clippy's verdict is a function of
-  the code it type-checks, so everything compiling on both platforms already got its answer from
-  the Linux job, and what `cfg` hides from Linux (`services::dwm_titlebar` is gated at its
-  `pub mod`, so that file is not even parsed there) is FFI glue `release.yml` compiles anyway.
-  Cross-checking from the Linux runner is no substitute either: `ring`, `aws-lc-sys`,
-  `libsqlite3-sys` and `blake3` compile C, so `--target x86_64-pc-windows-msvc` wants an MSVC
-  toolchain wherever it runs. **The headless test is skipped by name**
-  (`-- --skip headless_scan_persists_track`), not by target selection and not by a
-  `cfg_attr(windows, ignore)`: what is missing is the runner's audio endpoint rather than Windows,
-  and a name filter leaves a *new* integration test running here by default, which target
-  selection would not. `windows-latest` rather than release's `windows-2025-vs2026`, whose
-  explicit label buys the preinstalled WiX this job has no use for. No system deps and so no
+  `MoveFileExW` all rest on today. A release build never passes `--cfg test` either, so a
+  `cfg(windows)` test has never been type-checked, let alone run: `updater::install`'s four and
+  the `all(test, target_os = "windows")` re-export written to feed them were authored blind. That
+  is the bigger half of what this job unlocks, and `services::dwm_titlebar::is_dark_from_rgb`, the
+  third copy of the luminance threshold, is what it makes reachable next. **No Windows clippy
+  twin**: clippy's verdict is a function of the code it type-checks, so everything compiling on
+  both platforms already got its answer from the Linux job, and what `cfg` hides from Linux
+  (`dwm_titlebar` is gated at its `pub mod`, so that file is not even parsed there) is FFI glue
+  `release.yml` compiles anyway. Cross-checking from the Linux runner is no substitute either:
+  `ring`, `aws-lc-sys`, `libsqlite3-sys` and `blake3` compile C, so
+  `--target x86_64-pc-windows-msvc` wants an MSVC toolchain wherever it runs. **The headless test
+  is skipped by name** (`-- --skip headless_scan_persists_track`), not by target selection and not
+  by a `cfg_attr(windows, ignore)`: what is missing is the runner's audio endpoint rather than
+  Windows, and a name filter leaves a *new* integration test running here by default, which target
+  selection would not. **`windows-latest` here, against a pinned label in release**: the gate
+  wants GitHub's rollovers, an image change being something that should redden a PR rather than a
+  tag, and the other four jobs take that same bet on `ubuntu-latest`. The label release pins is
+  `windows-2025-vs2026`, which is **not** the durable one — GitHub shipped it to test the Visual
+  Studio 2026 migration and folded it onto `windows-2025` when that finished, so all three spell
+  one image today and only `windows-2025` is documented to keep doing so. No system deps and so no
   `linux-system-deps` twin: cpal reaches WASAPI through `windows-sys` and Slint needs no package,
   which makes the shape `fmt`'s rather than `test`'s.
 
@@ -100,7 +110,14 @@ reflow hides the lint and test results. No coverage on this path.
   jobs=4 leaves ~4 GB headroom; jobs=2 buys 1.9 GB more for +300 s. The Windows runner is the same
   4-core / 16 GB box, so the number carries; `release.yml` leaves its Windows slots at 8 because a
   release build is not the shape that needed the cap. `clippy` is the third compiling job and sets
-  nothing: it never codegens, so it doesn't reach that peak.
+  nothing: it never codegens, so it doesn't reach that peak. **`RUST_TEST_THREADS` is deliberately
+  not capped alongside it** — `.cargo/config.toml`'s 8 stands, oversubscribing a 4-core runner 2:1,
+  because the cap answers a memory ceiling and the harness threads are mostly waiting. What it can
+  reach is a test bounded by wall clock rather than by sample count, and there are three:
+  `single_instance_tests`' two 1 s `recv_timeout`s, tightest because they also stand up a real
+  transport, and `tests/crossfade.rs`'s 2 s deferred-clear budget. Each spends that budget waiting
+  for a thread to be scheduled, so they are the first place to read if `test-windows` reddens
+  intermittently.
 
 - **The two-phase build is gone.** Pre-crate-split the generated unit compiled twice per
   `cargo test` (rlib + `--test` harness) at 20.96 GiB concurrently, so both workflows carried a

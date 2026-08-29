@@ -61,9 +61,14 @@ back to English silently.
 ## What CI runs
 
 Every pull request runs **PR Validation**: a `cargo audit` advisory scan, a `cargo fmt`
-check, `clippy` with `-D warnings`, and the full test suite. The aggregate
+check, `clippy` with `-D warnings`, and the test suite on both Linux and Windows — the
+Windows job skips the one integration test that needs an audio device. The aggregate
 `pr-validation` check has to be green before a merge. Documentation-only changes skip
-all four.
+all five.
+
+The Windows job is the one that can go red on a change you tested green locally, and
+the usual cause is a path: build them with `Path::join` or `MAIN_SEPARATOR_STR` rather
+than spelling a separator, in fixtures as much as in code.
 
 Coverage is a separate manual run (**Actions → Deploy Coverage → Run workflow**),
 published to [kenansalar.github.io/Melodia](https://kenansalar.github.io/Melodia/).
