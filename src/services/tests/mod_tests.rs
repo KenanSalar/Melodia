@@ -339,7 +339,7 @@ fn every_bundled_font_is_named_in_the_attribution() {
 const LICENSE_SHIPPERS: [(&str, &str); 5] = [
     ("scripts/build-rpm.sh", "%license LICENSE licenses/"),
     ("Cargo.toml", "[\"licenses/*\""),
-    (".github/workflows/release.yml", "cp -r licenses"),
+    ("scripts/build-tarball.sh", "cp -r \"$REPO_ROOT/licenses\""),
     ("scripts/build-appimage.sh", "cp -r \"$REPO_ROOT/licenses\""),
     ("wix/main.wxs", "$(var.RepoRoot)\\licenses\\"),
 ];
@@ -354,9 +354,9 @@ const LICENSE_SHIPPERS: [(&str, &str); 5] = [
 /// opposite reason: the set of formats is closed and changing it is deliberate, where the set of
 /// fonts is open.
 ///
-/// Naming `release.yml` is also why it must stay off `pr-validation.yml`'s skip denylist: it
-/// compiles nothing, but a PR touching only that file would skip `test`, and the gate counts
-/// `skipped` as a pass.
+/// Two of the five carry the same needle from different files, which is the point: the tarball got
+/// a `build-tarball.sh` of its own so all five spellings sit beside the format they ship, rather
+/// than one of them being a `cp` buried in a matrix slot.
 #[test]
 fn every_package_format_ships_the_licenses_dir() {
     let root = Path::new(REPO_ROOT);
@@ -581,8 +581,8 @@ fn as_dep5_field_body(text: &str) -> String {
 /// full — and a quoted licence is a second copy that can drift from the one the package actually
 /// ships. This re-derives both from their sources rather than trusting the copy.
 ///
-/// `LICENSE` is the second file this suite reads that must stay off `pr-validation.yml`'s skip
-/// denylist — see [`every_package_format_ships_the_licenses_dir`].
+/// `LICENSE` compiles nothing and must still stay off `pr-validation.yml`'s skip denylist: a PR
+/// touching only that file would skip `test`, and the gate counts `skipped` as a pass.
 #[test]
 fn the_debian_copyright_quotes_the_licences_it_ships() {
     let root = Path::new(REPO_ROOT);

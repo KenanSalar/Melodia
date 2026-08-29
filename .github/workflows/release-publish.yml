@@ -1,0 +1,138 @@
+name: Release · publish
+
+# Collate every slot's artifacts, rebuild latest.json, create or update the
+# draft, then checksum what actually landed on it. Two jobs because the second
+# reads the draft rather than the workspace: whatever a prior run left is in
+# scope, which is the point.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to create or update.
+        required: true
+        type: string
+      version:
+        description: Version the manifest and its signature name.
+        required: true
+        type: string
+    secrets:
+      MINISIGN_SECRET_KEY:
+        required: true
+      MINISIGN_PASSWORD:
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: ./.github/actions/install-minisign
+
+      - uses: ./.github/actions/minisign-verify
+        with:
+          signatures: artifacts/*.minisig
+
+      # Empty with --generate-notes so a body exists for the next step to read
+      # into latest.json; a re-push at the same version finds it and skips.
+      - name: Ensure draft release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "==> draft $TAG already exists"
+          else
+            echo "==> creating empty draft $TAG"
+            # `--target` is ignored when the tag exists, which on the tag-push
+            # path it always does. It is here for `workflow_dispatch` from a
+            # branch, which would otherwise draft against the default branch.
+            gh release create "$TAG" --draft \
+              --target "$GITHUB_SHA" \
+              --title "Melodia $TAG" \
+              --generate-notes
+          fi
+
+      - name: Capture release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          # Becomes `notes_short` in the updater panel, still the draft-time body;
+          # refresh-manifest.yml re-reads the edited one on publish.
+          gh release view "$TAG" --json body -q '.body' > release-notes.md \
+            || : > release-notes.md
+          wc -c release-notes.md
+
+      - uses: ./.github/actions/build-manifest
+        with:
+          version: ${{ inputs.version }}
+          tag: ${{ inputs.tag }}
+          artifacts: artifacts/
+          notes-file: release-notes.md
+          out: latest.json
+
+      # Closes the downgrade window: a stale `latest.json` would otherwise point
+      # clients at an older version whose per-artifact signatures still verify.
+      # The client verifies `latest.json.minisig` before parsing, and
+      # `manifest=true` domain-separates it from an artifact signature.
+      - uses: ./.github/actions/minisign-sign
+        with:
+          key: ${{ secrets.MINISIGN_SECRET_KEY }}
+          password: ${{ secrets.MINISIGN_PASSWORD }}
+          files: latest.json
+          trusted-comment: version=${{ inputs.version }} manifest=true
+
+      - uses: ./.github/actions/minisign-verify
+        with:
+          signatures: latest.json.minisig
+
+      - name: Upload artifacts + latest.json + manifest sig to draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload "$TAG" artifacts/* latest.json latest.json.minisig --clobber
+
+  # One `SHA256SUMS.txt` over everything on the draft, latest.json included.
+  checksums:
+    needs: [publish]
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          echo "Release tag: $TAG"
+          mkdir -p artifacts
+          gh release download "$TAG" --dir ./artifacts \
+            --pattern '*.AppImage' \
+            --pattern '*.tar.gz' \
+            --pattern '*.deb' \
+            --pattern '*.rpm' \
+            --pattern '*.msi' \
+            --pattern '*.minisig' \
+            --pattern 'latest.json' \
+            --pattern 'latest.json.minisig'
+
+      - uses: ./.github/actions/sha256sums
+
+      - name: Upload checksums to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload "$TAG" ./artifacts/SHA256SUMS.txt --clobber

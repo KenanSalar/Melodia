@@ -1,0 +1,186 @@
+name: Release · build slot
+
+# One matrix slot end to end: compile, package the one format this slot owns,
+# attest it, sign it, hand it to the artifact store. release.yml owns the table
+# of slots; this owns what a slot does.
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        description: Rust target triple.
+        required: true
+        type: string
+      runner:
+        description: Runner label to build on.
+        required: true
+        type: string
+      kind:
+        description: Package format this slot produces (selects the packaging step).
+        required: true
+        type: string
+      arch:
+        description: Architecture token; reaches the output filenames and the packaging scripts' ARCH.
+        required: true
+        type: string
+      tag:
+        description: Release tag, which the artifact filenames carry.
+        required: true
+        type: string
+      version:
+        description: Version, which goes into each signature's trusted comment.
+        required: true
+        type: string
+    secrets:
+      LASTFM_API_KEY:
+        required: false
+      LASTFM_SHARED_SECRET:
+        required: false
+      RADIO_BLOCKLIST:
+        required: false
+      MINISIGN_SECRET_KEY:
+        required: true
+      MINISIGN_PASSWORD:
+        required: true
+
+jobs:
+  package:
+    runs-on: ${{ inputs.runner }}
+    env:
+      TAG: ${{ inputs.tag }}
+      ARCH: ${{ inputs.arch }}
+      # Baked in at compile time via `option_env!` in scrobble/providers/lastfm.rs.
+      # An absent secret substitutes an empty string that `non_empty_env()` folds
+      # to None, so a keyless build ships ListenBrainz-only rather than failing.
+      LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+      LASTFM_SHARED_SECRET: ${{ secrets.LASTFM_SHARED_SECRET }}
+      # Read by `build.rs` on the same terms: absent means no source, not failure.
+      MELODIA_RADIO_BLOCKLIST: ${{ secrets.RADIO_BLOCKLIST }}
+      # `--target <triple>` moves the binary off the path the packaging scripts assume.
+      BINARY: target/${{ inputs.target }}/release/Melodia
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # `rpm` on top of the shared set: packaging-only, and the only thing that
+      # ever made this job's provisioning differ from the gate's.
+      - uses: ./.github/actions/linux-system-deps
+        if: runner.os == 'Linux'
+        with:
+          extra-packages: rpm
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          # `arch` is redundant, rust-cache appending `os.type()`/`os.arch()`
+          # itself. Kept because changing the key churns every release cache.
+          shared-key: rust-release-${{ inputs.kind }}-${{ inputs.arch }}
+          target: ${{ inputs.target }}
+
+      # `--locked` is honest on every platform: the winit fork is vendored at
+      # `winit/` and `[patch.crates-io]` points there, so checkout brings it along.
+      # No RUSTFLAGS stack workaround on Windows: `melodia-ui/build.rs` runs the
+      # Slint compile on a 16 MiB thread. (The root build.rs does no Slint work.)
+      - name: cargo build --release
+        run: cargo build --release --target ${{ inputs.target }} --locked
+
+      - name: Package tarball
+        if: inputs.kind == 'linux-tarball'
+        shell: bash
+        run: bash scripts/build-tarball.sh "melodia-${TAG}-${ARCH}-linux.tar.gz"
+
+      # ARCH also selects the linuxdeploy build, SHA256-pinned in the script.
+      - name: Package AppImage
+        if: inputs.kind == 'linux-appimage'
+        shell: bash
+        run: bash scripts/build-appimage.sh "melodia-${TAG}-${ARCH}.AppImage"
+
+      # ARCH drives `rpmbuild --target` and ExclusiveArch, which is what puts
+      # the output under ~/rpmbuild/RPMS/$ARCH/.
+      - name: Package RPM
+        if: inputs.kind == 'linux-rpm'
+        shell: bash
+        run: |
+          bash scripts/build-rpm.sh
+          cp ~/rpmbuild/RPMS/${ARCH}/melodia-*.rpm .
+
+      # Compiled from source rather than taiki-e/install-action, whose manifest
+      # stopped covering cargo-deb for aarch64_linux. The pin is not just
+      # reproducibility: `license-file = "packaging/debian-copyright"` leans on
+      # undocumented cargo-deb behaviour, `has_copyright_metadata` (config.rs, not
+      # the README) wanting a DEP-5 key in the first ten lines before it copies
+      # the file verbatim. A bump that narrows it silently ships a copyright
+      # declaring the package AGPL by one author, which the bundled fonts and
+      # vendored winit falsify, and no test sees it — the pin on that file reads
+      # the source, not the built package. Bumping means re-reading that function.
+      - name: Install cargo-deb
+        if: inputs.kind == 'linux-deb'
+        run: cargo install --locked --version 3.7.0 cargo-deb
+
+      # Renamed off cargo-deb's `melodia_<version>_<debarch>.deb` onto the
+      # hyphenated scheme, so the `melodia-*.deb` globs downstream match.
+      - name: Package deb
+        if: inputs.kind == 'linux-deb'
+        shell: bash
+        run: |
+          cargo deb --target ${{ inputs.target }} --no-build
+          src="$(ls target/${{ inputs.target }}/debian/*.deb)"
+          cp "$src" "melodia-${TAG}-${ARCH}.deb"
+
+      - uses: ./.github/actions/setup-wix
+        if: inputs.kind == 'windows-msi'
+
+      - name: Package MSI
+        if: inputs.kind == 'windows-msi'
+        shell: pwsh
+        run: |
+          # NEVER run `cargo wix init` in CI: it regenerates main.wxs with a fresh
+          # UpgradeCode, and the committed one is what makes in-place MSI upgrades
+          # work. `--package` is required rather than redundant, cargo-wix
+          # auto-selecting only in a single-member workspace and otherwise
+          # refusing outright, so splitting out `melodia-ui` made it mandatory.
+          # `--toolset modern` too: the default Legacy path finds the preinstalled
+          # WiX 3.14 on x64 and chokes on the v4 schema, and finds no candle.exe
+          # at all on arm64. `-arch` needs no flag, cargo-wix deriving it.
+          cargo wix --toolset modern --package Melodia --target ${{ inputs.target }} --no-build --nocapture
+          Get-ChildItem -Path "target/wix/" -Filter "*.msi" -Recurse |
+            ForEach-Object { Copy-Item $_.FullName -Destination "melodia-${env:TAG}-${env:ARCH}.msi" }
+
+      # A different question than the minisign signing below: not "the key holder
+      # signed these bytes" but "these bytes came out of this run at this commit",
+      # per GitHub's OIDC identity and the Sigstore log. Per-slot, stored against
+      # the repo automatically, and it no-ops on globs this slot skipped.
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: |
+            melodia-*.tar.gz
+            melodia-*.AppImage
+            melodia-*.rpm
+            melodia-*.deb
+            melodia-*.msi
+
+      - uses: ./.github/actions/install-minisign
+
+      - uses: ./.github/actions/minisign-sign
+        with:
+          key: ${{ secrets.MINISIGN_SECRET_KEY }}
+          password: ${{ secrets.MINISIGN_PASSWORD }}
+          files: melodia-*.tar.gz melodia-*.AppImage melodia-*.rpm melodia-*.deb melodia-*.msi
+          trusted-comment: version=${{ inputs.version }} target=${{ inputs.kind }} file={file}
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          # arch in the name because upload-artifact requires unique names across
+          # a job's slots; the publish job flattens them with `merge-multiple`.
+          # Keep every glob extension-qualified: a bare `melodia-*` also matches
+          # DIRECTORIES, so `melodia-ui/` rode along on every slot and the publish
+          # job's `gh release upload artifacts/*` died on "is a directory".
+          name: ${{ inputs.kind }}-${{ inputs.arch }}
+          path: |
+            melodia-*.tar.gz
+            melodia-*.AppImage
+            melodia-*.rpm
+            melodia-*.deb
+            melodia-*.msi
+            melodia-*.minisig
+          retention-days: 7
+          if-no-files-found: error

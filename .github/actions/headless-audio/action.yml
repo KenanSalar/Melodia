@@ -1,0 +1,18 @@
+name: Headless audio device
+description: >-
+  Point ALSA's default PCM at alsa-lib's userspace `null` device. `AppState::init`
+  opens rodio's default output, runners have no card, and the Azure kernel ships
+  no snd-dummy/snd-aloop, so this is the whole shim: no module, no extra package.
+  Linux only; WASAPI has no equivalent short of a signed virtual driver, which is
+  why the Windows suite skips that test by name instead.
+
+runs:
+  using: composite
+  steps:
+    - name: Set up dummy ALSA device (userspace null)
+      shell: bash
+      run: |
+        sudo tee /etc/asound.conf >/dev/null <<'EOF'
+        pcm.!default { type null }
+        ctl.!default { type null }
+        EOF

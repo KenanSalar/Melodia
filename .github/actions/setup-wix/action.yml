@@ -1,0 +1,57 @@
+name: Set up WiX
+description: >-
+  Install the WiX toolset, its two unbundled extensions and cargo-wix. The three
+  used to be three steps carrying three copies of one version number, each with a
+  comment saying it had to equal the others.
+
+inputs:
+  wix-version:
+    description: >-
+      WiX runtime AND extension version; they move together, there being no ABI
+      guarantee across patch skew. v6.0.2 is the last release where the Open
+      Source Maintenance Fee EULA isn't enforced at runtime, which headless CI
+      can't accept, and v7.x extensions drag in the v7 runtime and its EULA.
+    required: false
+    default: 6.0.2
+
+runs:
+  using: composite
+  steps:
+    # cargo-wix downloads nothing, shelling out to whatever is on PATH.
+    # `windows-2025-vs2026` preinstalls WiX v3.14 and `windows-11-arm` none, so
+    # install uniformly and let the v4-schema `main.wxs` build identically on both.
+    - name: Install WiX
+      shell: pwsh
+      run: |
+        dotnet tool install --global wix --version ${{ inputs.wix-version }}
+        "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    # v4+ unbundled the in-box extensions into NuGet packages that must reach
+    # the global cache before `wix build` can load them: `util` for
+    # RestartResource (upgrading over a running app skips "files in use") and
+    # `ui` for WixUI_FeatureTree. cargo-wix emits the `-ext` flags but installs
+    # nothing, that path being gated behind `--migrate global`, which rewrites
+    # the source.
+    - name: Install WiX UI + Util extensions (global cache)
+      shell: pwsh
+      run: |
+        wix extension add --global WixToolset.UI.wixext/${{ inputs.wix-version }}
+        wix extension add --global WixToolset.Util.wixext/${{ inputs.wix-version }}
+
+    # The latest crates.io cargo-wix (0.3.9) is legacy WiX 3 only: candle.exe +
+    # light.exe, no wix.exe path, and it rejects our v4 schema. Modern-toolset
+    # support is merged upstream but unreleased, hence the git pin; swap back to
+    # `taiki-e/install-action` once 0.4.0 lands. The cache wrapper keys on
+    # tool+git+rev, so the source build only runs on a miss.
+    #
+    # `rev:` below is the only spelling of that commit. `release-prepare.yml`
+    # preflights that it still resolves by scraping this file rather than
+    # restating it, upstream orphaning the commit being the failure this pin has
+    # to survive and a second copy being how the preflight ends up checking a
+    # different SHA than the one that gets installed.
+    - name: Install cargo-wix (pinned to PR #295 — modern WiX v4+ support, unreleased on crates.io)
+      uses: taiki-e/cache-cargo-install-action@417450f3c33ee20393705369577571770643d4c7 # v3.0.7
+      with:
+        tool: cargo-wix
+        git: https://github.com/volks73/cargo-wix
+        rev: 44fbc43cce8ff6dbcc6e6a321befd1a7b362494f

@@ -1,0 +1,37 @@
+name: Verify minisign signatures
+description: >-
+  Verify every signature in `signatures` against the file beside it and fail if
+  the set is empty. Reads the shipped public key, so it answers the same question
+  a client will and catches a bad sign step before the artifact reaches a draft.
+
+inputs:
+  signatures:
+    description: Glob (or space-separated globs) matching the `.minisig` files to verify.
+    required: true
+  public-key:
+    description: Path to the public key file.
+    required: false
+    default: assets/updater-pubkey.b64
+
+runs:
+  using: composite
+  steps:
+    - name: Verify signatures with the public key
+      shell: bash
+      env:
+        SIGNATURES: ${{ inputs.signatures }}
+        PUBLIC_KEY: ${{ inputs.public-key }}
+      run: |
+        # Lowercase `-p <file>` takes the multi-line pubkey with its `untrusted
+        # comment:` header, which is what we ship; `-P <string>` mishandles it.
+        shopt -s nullglob
+        verified=0
+        for sig in $SIGNATURES; do
+          artifact="${sig%.minisig}"
+          [[ -f "$artifact" ]] || { echo "missing artifact for $sig"; exit 1; }
+          echo "==> verifying $(basename "$artifact")"
+          minisign -Vm "$artifact" -p "$PUBLIC_KEY"
+          verified=$((verified + 1))
+        done
+        echo "verified $verified signature(s)"
+        [[ "$verified" -gt 0 ]] || { echo "ERROR: no signatures verified"; exit 1; }

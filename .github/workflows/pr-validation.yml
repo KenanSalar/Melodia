@@ -26,8 +26,13 @@ jobs:
       pull-requests: read   # paths-filter lists a PR's changed files via the API
       actions: write        # skip-duplicate-actions' documented minimum
     outputs:
-      code: ${{ steps.paths.outputs.code }}
-      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+      # One verdict rather than two raw signals, because every job downstream
+      # combines them the same way and six copies of that expression is six
+      # chances to spell the skip as a pass. `workflow_dispatch` bypasses the
+      # filters: no base ref to diff against.
+      run: >-
+        ${{ github.event_name == 'workflow_dispatch' ||
+        (steps.paths.outputs.code == 'true' && steps.skip_check.outputs.should_skip != 'true') }}
     steps:
       # A DENYLIST, never source globs: the gate counts `skipped` as a pass, so
       # an allowlist merges an unlisted path green with nothing run.
@@ -66,9 +71,7 @@ jobs:
     name: audit
     runs-on: ubuntu-latest
     needs: [changes]
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
+    if: needs.changes.outputs.run == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/cargo-audit
@@ -78,37 +81,27 @@ jobs:
     name: fmt
     runs-on: ubuntu-latest
     needs: [changes]
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
+    if: needs.changes.outputs.run == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install pinned Rust toolchain
-        run: rustup toolchain install
+      # No shared-key, so no cache: this job compiles nothing to cache.
+      - uses: ./.github/actions/setup-rust
       - name: cargo fmt
         run: cargo fmt --all --check
 
   # Mirrors the local gate, `-D warnings` promoting the workspace `[lints]`' warn
-  # level. `workflow_dispatch` bypasses the filters: no base ref to diff against.
+  # level.
   clippy:
     name: clippy
     runs-on: ubuntu-latest
     needs: [changes]
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
+    if: needs.changes.outputs.run == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/linux-system-deps
-      # Bare `install` takes the active toolchain, i.e. `rust-toolchain.toml`'s
-      # pin and components. Don't reintroduce `dtolnay/rust-toolchain`: it calls
-      # `rustup default`, which that file outranks, so clippy goes missing.
-      - name: Install pinned Rust toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: ./.github/actions/setup-rust
         with:
           shared-key: ci-clippy
-          cache-on-failure: true
       # Covers both packages, and package *selection* isn't what decides that:
       # cargo sets RUSTC_WORKSPACE_WRAPPER=clippy-driver for every member it
       # compiles. Plant a `needless_return` in each before adding `-p melodia-ui`.
@@ -127,28 +120,14 @@ jobs:
     needs: [changes]
     env:
       CARGO_BUILD_JOBS: 4
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
+    if: needs.changes.outputs.run == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/linux-system-deps
-      - name: Install pinned Rust toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: ./.github/actions/setup-rust
         with:
           shared-key: ci-test
-          cache-on-failure: true
-
-      # `tests/headless.rs` boots AppState, which opens rodio's default device.
-      # Runners have no card and the Azure kernel ships no snd-dummy/snd-aloop,
-      # so point ALSA at alsa-lib's userspace `null`: no module or extra package.
-      - name: Set up dummy ALSA device (userspace null)
-        run: |
-          sudo tee /etc/asound.conf >/dev/null <<'EOF'
-          pcm.!default { type null }
-          ctl.!default { type null }
-          EOF
+      - uses: ./.github/actions/headless-audio
 
       - name: cargo test
         run: cargo test --locked
@@ -162,17 +141,12 @@ jobs:
     name: clippy-windows
     runs-on: windows-latest
     needs: [changes]
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
+    if: needs.changes.outputs.run == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install pinned Rust toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: ./.github/actions/setup-rust
         with:
           shared-key: ci-clippy
-          cache-on-failure: true
       - name: cargo clippy
         run: cargo clippy --all-targets --locked -- -D warnings
 
@@ -186,18 +160,13 @@ jobs:
     needs: [changes]
     env:
       CARGO_BUILD_JOBS: 4
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
+    if: needs.changes.outputs.run == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install pinned Rust toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: ./.github/actions/setup-rust
         with:
           # rust-cache appends the OS after the key, so Linux's verbatim is fine.
           shared-key: ci-test
-          cache-on-failure: true
 
       # `headless_scan_persists_track` opens the default output device, and short
       # of a signed virtual driver WASAPI has no equivalent of the null PCM the

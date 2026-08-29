@@ -39,24 +39,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/linux-system-deps
       # cargo-llvm-cov's `llvm-tools-preview` rides the pin's `components` list.
-      - name: Install pinned Rust toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: ./.github/actions/setup-rust
         with:
           shared-key: ci-coverage
-          cache-on-failure: true
       - uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2.85.2
         with:
           tool: cargo-llvm-cov
-
-      # `tests/headless.rs` opens rodio's default device and runners have no
-      # card. Same userspace ALSA null the `test` job in pr-validation.yml uses.
-      - name: Set up dummy ALSA device (userspace null)
-        run: |
-          sudo tee /etc/asound.conf >/dev/null <<'EOF'
-          pcm.!default { type null }
-          ctl.!default { type null }
-          EOF
+      - uses: ./.github/actions/headless-audio
 
       # One instrumented run feeds both outputs; the report phases re-run nothing.
       # The regex drops `melodia-ui`'s generated `app-window.rs`, big enough to

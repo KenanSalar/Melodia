@@ -1,0 +1,31 @@
+name: Install minisign
+description: >-
+  Put the minisign CLI on PATH, whichever runner this is. System package manager
+  rather than taiki-e/install-action, which removed its recipe: binstall resolves
+  to the crates.io `minisign` *library*, a different project that ships no
+  binaries.
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/apt-mirror-failover
+      if: runner.os == 'Linux'
+
+    - name: Install minisign CLI (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        for attempt in 1 2 3; do
+          if sudo apt-get update -qq && sudo apt-get install -qq -y minisign; then
+            exit 0
+          fi
+          echo "::warning::apt install minisign attempt $attempt failed; retrying in 15s"
+          sleep 15
+        done
+        echo "::error::apt install minisign failed after 3 attempts"
+        exit 1
+
+    - name: Install minisign CLI (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: choco install minisign -y --no-progress

@@ -39,17 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install minisign CLI
-        run: |
-          for attempt in 1 2 3; do
-            if sudo apt-get update -qq && sudo apt-get install -qq -y minisign; then
-              exit 0
-            fi
-            echo "::warning::apt install minisign attempt $attempt failed; retrying in 15s"
-            sleep 15
-          done
-          echo "::error::apt install minisign failed after 3 attempts"
-          exit 1
+      - uses: ./.github/actions/install-minisign
 
       - name: Download release assets
         env:
@@ -108,44 +98,29 @@ jobs:
             || : > release-notes.md
           wc -c release-notes.md
 
-      - name: Install markdown-it-py for notes stripping
-        shell: bash
-        run: |
-          # Must equal release.yml's pin, or notes_short desyncs between the
-          # draft build and this refresh.
-          python3 -m pip install --quiet markdown-it-py==4.2.0
+      # Same action release-publish.yml builds the draft-time manifest with, so
+      # the notes-stripping pin cannot differ between the two.
+      - uses: ./.github/actions/build-manifest
+        with:
+          version: ${{ steps.meta.outputs.version }}
+          tag: ${{ env.TAG }}
+          artifacts: artifacts/
+          notes-file: release-notes.md
+          manifest-schema-version: ${{ steps.meta.outputs.schema }}
+          pub-date: ${{ steps.meta.outputs.pub_date }}
+          critical: ${{ steps.meta.outputs.critical }}
+          out: latest.json
 
-      - name: Rebuild latest.json
-        shell: bash
-        run: |
-          CRIT_FLAG=()
-          [[ "${{ steps.meta.outputs.critical }}" == "true" ]] && CRIT_FLAG=(--critical)
-          python3 scripts/build-latest-json.py \
-            --version "${{ steps.meta.outputs.version }}" \
-            --tag "$TAG" \
-            --artifacts artifacts/ \
-            --notes-file release-notes.md \
-            --manifest-schema-version "${{ steps.meta.outputs.schema }}" \
-            --pub-date "${{ steps.meta.outputs.pub_date }}" \
-            "${CRIT_FLAG[@]}" \
-            --out latest.json
+      - uses: ./.github/actions/minisign-sign
+        with:
+          key: ${{ secrets.MINISIGN_SECRET_KEY }}
+          password: ${{ secrets.MINISIGN_PASSWORD }}
+          files: latest.json
+          trusted-comment: version=${{ steps.meta.outputs.version }} manifest=true
 
-      - name: Sign latest.json (prehashed, manifest-tagged)
-        shell: bash
-        env:
-          KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-          PW: ${{ secrets.MINISIGN_PASSWORD }}
-        run: |
-          echo "$KEY" | base64 -d > "$RUNNER_TEMP/minisign.key"
-          chmod 0600 "$RUNNER_TEMP/minisign.key"
-          echo "$PW" | minisign -SHm latest.json -s "$RUNNER_TEMP/minisign.key" \
-            -t "version=${{ steps.meta.outputs.version }} manifest=true"
-          shred -u "$RUNNER_TEMP/minisign.key" 2>/dev/null || rm -f "$RUNNER_TEMP/minisign.key"
-
-      - name: Verify latest.json signature with the public key
-        shell: bash
-        run: |
-          minisign -Vm latest.json -p assets/updater-pubkey.b64
+      - uses: ./.github/actions/minisign-verify
+        with:
+          signatures: latest.json.minisig
 
       - name: Upload refreshed manifest to release
         env:
@@ -154,25 +129,17 @@ jobs:
         run: |
           gh release upload "$TAG" latest.json latest.json.minisig --clobber
 
-      - name: Regenerate SHA256SUMS.txt
+      # The published copy now carries stale lines for the re-signed manifest,
+      # so rebuild it over the fresh one.
+      - name: Stage the refreshed manifest for checksumming
+        shell: bash
+        run: cp latest.json latest.json.minisig artifacts/
+
+      - uses: ./.github/actions/sha256sums
+
+      - name: Upload checksums to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          # The published copy now carries stale lines for the re-signed
-          # manifest, so rebuild it over the fresh one.
-          cp latest.json latest.json.minisig artifacts/
-          cd artifacts
-          shopt -s nullglob
-          files=()
-          for f in *; do
-            [[ "$f" == "SHA256SUMS.txt" ]] && continue
-            files+=("$f")
-          done
-          if [[ ${#files[@]} -eq 0 ]]; then
-            echo "ERROR: no artifacts found to checksum"
-            exit 1
-          fi
-          sha256sum "${files[@]}" > SHA256SUMS.txt
-          cat SHA256SUMS.txt
-          gh release upload "$TAG" SHA256SUMS.txt --clobber
+          gh release upload "$TAG" ./artifacts/SHA256SUMS.txt --clobber
