@@ -61,7 +61,7 @@ pub fn reapply_from_theme(app: &AppWindow) {
 ///
 /// `<=`, not `<`: both siblings split on `lum > 0.5` for *light*, so anything but the exact
 /// complement disagrees with them on the colours that land on the threshold. Those are reachable —
-/// a Material You mantle comes off album art. `services::tests::dwm_titlebar_tests` pins the pair.
+/// a Material You mantle comes off album art. `services::dwm_titlebar::tests` pins the pair.
 fn is_dark_from_rgb(rgb: u32) -> bool {
     let r = f64::from((rgb >> 16) & 0xff) / 255.0;
     let g = f64::from((rgb >> 8) & 0xff) / 255.0;

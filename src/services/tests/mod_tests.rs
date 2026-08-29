@@ -382,26 +382,30 @@ fn every_package_format_ships_the_licenses_dir() {
     );
 }
 
-/// Job ids under `jobs:`, which are the only keys in the file at exactly one indent carrying no
-/// value. The two-space keys above that line (`on:`'s triggers, `permissions:`, `env:`) are either
-/// before it or spell a value, so splitting on it is what makes the shape unambiguous.
+/// A job id if `line` is one: under `jobs:`, those are the only keys at exactly one indent
+/// carrying no value. The two-space keys above that line (`on:`'s triggers, `permissions:`, `env:`)
+/// are either before it or spell a value, so splitting on it is what makes the shape unambiguous.
+fn workflow_job_id(line: &str) -> Option<&str> {
+    let id = line.strip_prefix("  ")?.strip_suffix(':')?;
+    (!id.starts_with([' ', '#'])).then_some(id)
+}
+
 fn workflow_job_ids(src: &str) -> Vec<&str> {
     let Some((_, jobs)) = src.split_once("\njobs:\n") else {
         return Vec::new();
     };
-    jobs.lines()
-        .filter_map(|line| line.strip_prefix("  ")?.strip_suffix(':'))
-        .filter(|id| !id.starts_with([' ', '#']))
-        .collect()
+    jobs.lines().filter_map(workflow_job_id).collect()
 }
 
-/// The `needs:` list of the named job, as spelled in its inline `[a, b, c]` form.
+/// The `needs:` list of the named job, as spelled in its inline `[a, b, c]` form. Bounded at the
+/// next job id, so a job that lost its own `needs:` reads as empty rather than as its neighbour's.
 fn workflow_job_needs<'a>(src: &'a str, job: &str) -> Vec<&'a str> {
     let Some((_, body)) = src.split_once(&format!("\n  {job}:\n")) else {
         return Vec::new();
     };
     let Some(list) = body
         .lines()
+        .take_while(|line| workflow_job_id(line).is_none())
         .find_map(|line| line.trim_start().strip_prefix("needs:"))
         .and_then(|rest| rest.trim().strip_prefix('[')?.strip_suffix(']'))
     else {
@@ -412,11 +416,9 @@ fn workflow_job_needs<'a>(src: &'a str, job: &str) -> Vec<&'a str> {
 
 /// The aggregate is the required status check, and it can only enforce what it waits on.
 ///
-/// The check step derives its verdict from `toJSON(needs)`, so `needs:` is now the single list —
-/// what used to be a second bash array restating it is gone, and with it the two-edit hazard. What
-/// that leaves is a job added to the file and never named in `needs:` at all: the aggregate
-/// doesn't wait for it, so it can report green while that job is still running or already red.
-/// Nothing in the workflow can catch that, `toJSON` seeing only what it was handed.
+/// The check step derives its verdict from `toJSON(needs)`, which sees only what `needs:` lists.
+/// What that leaves is a job added to the file and never named there: the aggregate doesn't wait
+/// for it, so it can report green while that job is still running or already red.
 #[test]
 fn the_aggregate_waits_on_every_job_in_the_gate_workflow() {
     const AGGREGATE: &str = "pr-validation";

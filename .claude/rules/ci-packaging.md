@@ -63,9 +63,8 @@ reflow hides the lint and test results. No coverage on this path.
   full gate; it governs who may approve a workflow change, and a control of that reach failing
   closed is worth one wasted run.
   Excluding a composite lands a broken provisioning step green; excluding `pr-validation.yml` lets
-  a change to the clippy invocation, the job list or the `results` array merge without the jobs it
-  governs ever running. Anything new under `.github/` runs everything by default — an exclusion is
-  earned.
+  a change to the clippy invocation or the job list merge without the jobs it governs ever running.
+  Anything new under `.github/` runs everything by default — an exclusion is earned.
 
 - **Headless audio** — `test` runs `tests/headless.rs` and `AppState::init` opens rodio's default
   device. GitHub's Azure runner ships **no `snd-dummy`/`snd-aloop`**, so CI points ALSA's default
@@ -86,10 +85,11 @@ reflow hides the lint and test results. No coverage on this path.
   `MoveFileExW` all rest on today. A release build never passes `--cfg test` either, so a
   `cfg(windows)` test has never been type-checked, let alone run: `updater::install`'s four and
   the `all(test, target_os = "windows")` re-export written to feed them were authored blind. That
-  is the bigger half of what this job unlocks, and it paid for itself immediately:
-  `services::dwm_titlebar::is_dark_from_rgb`, the third copy of the luminance threshold, split on
-  `lum < 0.5` where its two siblings split on `lum > 0.5` for *light*, so the caption disagreed
-  with the chrome under it on every colour landing exactly on the threshold. **No Windows clippy
+  is the bigger half of what this job unlocks. `services::dwm_titlebar::is_dark_from_rgb`, the
+  third copy of the luminance threshold, split on `lum < 0.5` where its two siblings split on
+  `lum > 0.5` for *light*, so the caption disagreed with the chrome under it on every colour
+  landing exactly on the threshold; the pin that holds it now is a `cfg(windows)` test, which is to
+  say this job or nothing. **No Windows clippy
   twin**: clippy's verdict is a function of the code it type-checks, so everything compiling on
   both platforms already got its answer from the Linux job, and what `cfg` hides from Linux
   (`dwm_titlebar` is gated at its `pub mod`, so that file is not even parsed there) is FFI glue

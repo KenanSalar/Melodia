@@ -224,7 +224,7 @@ pub(crate) fn color_to_rgb(c: Color) -> u32 {
 /// A third copy lives in `services::dwm_titlebar::is_dark_from_rgb`, duplicated
 /// on purpose to keep that windows-only module off the palette code that calls
 /// into it. It is pinned against `on_accent_hex` rather than against these, by
-/// `services::tests::dwm_titlebar_tests` — which runs only under the
+/// `services::dwm_titlebar::tests` — which runs only under the
 /// `test-windows` job, the reason that copy went unchecked for so long.
 pub(super) const LUMA_R: f64 = 0.2126;
 pub(super) const LUMA_G: f64 = 0.7152;

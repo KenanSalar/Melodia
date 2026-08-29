@@ -1,10 +1,8 @@
 //! The third copy of the luminance split, checked against the one that owns it.
 //!
 //! `is_dark_from_rgb` restates `themes::apply::on_accent_hex`'s weights and threshold rather than
-//! calling it, because `apply` is what calls *this* module. Nothing linked the two until
-//! `test-windows` existed to run a `cfg(windows)` test at all, and in that gap the copy drifted:
-//! it split on `lum < 0.5` where both siblings split on `lum > 0.5` for *light*, so the two
-//! disagreed on every colour sitting exactly on the threshold.
+//! calling it, because `apply` is what calls *into* this module. Nothing else links the two, and
+//! `test-windows` is the only place this runs.
 
 use super::is_dark_from_rgb;
 use crate::themes::apply::on_accent_hex;
