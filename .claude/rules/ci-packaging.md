@@ -24,11 +24,16 @@ The release matrix itself is `.claude/rules/updater.md` and the procedure that f
 ## The PR gate
 
 `pr-validation.yml`, on PRs into `main`: `changes` (skip matrix) → `audit` ∥ `fmt` ∥ `clippy` ∥
-`test` ∥ `test-windows`. `clippy` is one step (`--all-targets --locked -- -D warnings`, both
-packages); `test` is plain `cargo test --locked`. All five hang off `changes` alone — chaining
-`test` behind `clippy` made the gate's wall clock their sum, and what waits on it is a person
-deciding whether to merge. `audit` and `fmt` compile nothing, so neither an advisory hit nor a
-reflow hides the lint and test results. No coverage on this path.
+`test` ∥ `clippy-windows` ∥ `test-windows`. Both `clippy` jobs are one step
+(`--all-targets --locked -- -D warnings`, both packages); `test` is plain `cargo test --locked`.
+All six hang off `changes` alone — chaining `test` behind `clippy` made the gate's wall clock their
+sum, and what waits on it is a person deciding whether to merge. That is also why `audit` and `fmt`
+stay siblings despite compiling nothing and finishing in seconds: as parents they would buy back
+under half a minute of skipped work on the rare red run, and cost a whole round trip on it, since
+neither an advisory hit nor a reflow would ever reach the lint and test results. `audit` is the
+worst candidate of the two — it is the one job that reddens for reasons outside the PR, so as a
+parent an overnight advisory would block every open PR's feedback rather than one check. No
+coverage on this path.
 
 - **The aggregate `pr-validation` job is the required status check, and `needs:` is the only list.**
   The check step reads `toJSON(needs)` through `env:` and asks `jq` for anything that is neither
@@ -73,11 +78,13 @@ reflow hides the lint and test results. No coverage on this path.
   `.github/actions/linux-system-deps` (composite: Azure apt-mirror swap + retrying install of the
   Slint/ALSA/Wayland/D-Bus set). `Swatinem/rust-cache` per job, `ci-*` shared-keys, distinct from
   release's `rust-release-*`. The action appends `os.type()` and `os.arch()` *after* the shared
-  key, so `test` and `test-windows` both pass `ci-test` and still get their own entry. It is also
+  key, so each Linux/Windows pair passes one key (`ci-test`, `ci-clippy`) and still gets two
+  entries — which is why neither Windows job spells a key of its own. It is also
   what makes `arch` redundant in release's key, and only because every slot builds on a runner of
   its own arch — a slot that ever cross-compiles wants it back.
 
-- **`test-windows` is the one non-Linux job, and it runs the suite rather than linting it.**
+- **The two Windows jobs are the only non-Linux ones, and between them they close a gap
+  `release.yml` never touched.**
   `release.yml` already compiles the Windows lib and bin on both arches, so the `cfg(windows)`
   arms are not uncompiled; they are compiled once a tag is pushed, after review is over, and
   **nothing has ever run the tests there.** That is what the `.gitattributes` LF pin, the
@@ -89,13 +96,18 @@ reflow hides the lint and test results. No coverage on this path.
   third copy of the luminance threshold, split on `lum < 0.5` where its two siblings split on
   `lum > 0.5` for *light*, so the caption disagreed with the chrome under it on every colour
   landing exactly on the threshold; the pin that holds it now is a `cfg(windows)` test, which is to
-  say this job or nothing. **No Windows clippy
-  twin**: clippy's verdict is a function of the code it type-checks, so everything compiling on
-  both platforms already got its answer from the Linux job, and what `cfg` hides from Linux
-  (`dwm_titlebar` is gated at its `pub mod`, so that file is not even parsed there) is FFI glue
-  `release.yml` compiles anyway. Cross-checking from the Linux runner is no substitute either:
-  `ring`, `aws-lc-sys`, `libsqlite3-sys` and `blake3` compile C, so
-  `--target x86_64-pc-windows-msvc` wants an MSVC toolchain wherever it runs. **The headless test
+  say this job or nothing. **`clippy-windows` is the lint half, and the Linux job does not make it
+  redundant**: clippy's verdict is a function of the code it type-checks, so everything compiling
+  on both platforms already got its answer on Linux, but what `cfg` hides from Linux
+  (`dwm_titlebar` is gated at its `pub mod`, so that file is not even parsed there) had never met
+  clippy-driver anywhere. `release.yml` does not close that either — `cargo build` is rustc, and
+  lib plus bin, so `[workspace.lints.clippy]` and its `unwrap_used = "deny"` reached no
+  `cfg(windows)` arm and no test target on any platform. Nor does cross-checking from the Linux
+  runner: `ring`, `aws-lc-sys`, `libsqlite3-sys` and `blake3` compile C, so
+  `--target x86_64-pc-windows-msvc` wants an MSVC toolchain wherever it runs. It is a **sibling**
+  of `test-windows` rather than a step inside it, for the reason `fmt` is a sibling of `clippy`,
+  and it carries no `CARGO_BUILD_JOBS` cap because a check-only build never reaches the codegen
+  peak that cap is sized against. **The headless test
   is skipped by name** (`-- --skip headless_scan_persists_track`), not by target selection and not
   by a `cfg_attr(windows, ignore)`: what is missing is the runner's audio endpoint rather than
   Windows, and a name filter leaves a *new* integration test running here by default, which target

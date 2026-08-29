@@ -9,9 +9,8 @@ runs:
   using: composite
   steps:
     # arm64 runners default to community-hosted `ports.ubuntu.com`, which drops
-    # connections from Azure-hosted instances; repoint to Azure's own mirror,
-    # same fabric. Both branches no-op when the URL doesn't match, so this is
-    # safe on every Linux slot.
+    # connections from Azure-hosted instances. Both branches no-op when the URL
+    # doesn't match, so this is safe on every Linux slot.
     - name: Use Azure apt mirrors (mirror failover)
       shell: bash
       run: |
@@ -20,17 +19,12 @@ runs:
           -e 's|http://ports\.ubuntu\.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
           /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
 
-    # Defence in depth over the mirror swap above, for short hiccups.
-    #
-    # The retry loop can only see an exit code, and a mirror that accepts the
-    # connection then stops sending produces none: apt carries no overall
-    # deadline, `-qq` prints nothing while it waits, and the only bound outside
-    # this step is GitHub's six-hour job cap. Hence the `timeout`s, sized for the
-    # failure rather than the happy path; a 124 or 137 in the warning below is
-    # one of them firing rather than apt itself failing. `-k` because TERM is
-    # catchable and apt defers it around dpkg, and `sudo timeout` rather than
-    # `timeout sudo` because an unprivileged timeout cannot signal what sudo has
-    # already made root.
+    # Defence in depth over the mirror swap, for short hiccups. The retry loop
+    # only sees an exit code, and a mirror that accepts then stops sending
+    # produces none: apt has no overall deadline, so the `timeout`s are the only
+    # bound short of GitHub's six-hour cap, and a 124/137 in the warning below is
+    # one firing rather than apt failing. `-k` because TERM is catchable and apt
+    # defers it around dpkg; `sudo timeout`, an unprivileged one can't signal root.
     - name: Install Linux system deps
       shell: bash
       run: |

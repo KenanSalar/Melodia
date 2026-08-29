@@ -1,17 +1,11 @@
 name: Deploy Coverage
 
-# Manual-only, and off the PR path entirely: the instrumented build is the most
-# expensive thing in this repo's CI (it has OOM-killed the runner) and a coverage
-# delta is not what anyone reads to decide a merge. A paths filter wouldn't help
-# — "this merge touched Rust" is a different question from "someone wants a
-# report today", and asking beats guessing for a job this expensive.
-#
-# `workflow_dispatch` takes a ref, so the Run workflow dropdown picks what gets
-# measured and runs THAT branch's copy of this file. Two constraints on it: the
-# button exists only because this workflow is on the default branch, and `deploy`
-# is gated by the `github-pages` environment, whose branch policy allows `main`
-# only. Anywhere else builds and uploads, then fails at the publish — widen the
-# policy rather than expecting a second branch to deploy.
+# Manual-only and off the PR path: the instrumented build is the most expensive
+# thing in this repo's CI, it has OOM-killed the runner, and a coverage delta is
+# not what anyone reads to decide a merge. `workflow_dispatch` takes a ref, so
+# the dropdown picks what gets measured and runs THAT branch's copy; `deploy` is
+# then gated by the `github-pages` environment, whose branch policy allows `main`
+# only, so any other ref builds and uploads and fails at the publish.
 on:
   workflow_dispatch:
 
@@ -19,8 +13,7 @@ permissions:
   contents: read
 
 # Never cancel an in-flight Pages deployment. Two dispatches in quick succession
-# therefore queue two full instrumented builds, which still beats risking a
-# half-published report.
+# therefore queue two full instrumented builds, which beats a half-published one.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -33,17 +26,11 @@ jobs:
   coverage:
     name: coverage
     runs-on: ubuntu-latest
-    # Debug info goes to zero rather than `line-tables-only`: LLVM source-based
-    # coverage carries its own file/region table in `__llvm_covmap` and reads
-    # nothing from DWARF, so the summary and annotated HTML render identically
-    # without it, and nothing reads a backtrace out of this job.
-    #
-    # `CARGO_BUILD_JOBS` is the lever that actually keeps this inside the
-    # runner's memory — a cap, not a CPU match, overriding the dev-machine jobs=8
-    # in .cargo/config.toml. The peak is a single `rustc` on `melodia-ui`, whose
-    # LLVM codegen threads draw jobserver tokens, so the job count scales one
-    # process's peak. At jobs=8 a 16 GB runner swaps rather than failing, and
-    # this build has OOM-killed it (143) outright.
+    # Debug info to zero rather than `line-tables-only`: LLVM coverage carries
+    # its own region table in `__llvm_covmap` and reads no DWARF, so the report
+    # renders identically without it and nothing reads a backtrace here.
+    # `CARGO_BUILD_JOBS` is the memory cap `.claude/rules/ci-packaging.md`
+    # measures; this is the build that has OOM-killed the runner (143) outright.
     env:
       CARGO_BUILD_JOBS: 4
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -51,8 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/linux-system-deps
-      # `llvm-tools-preview`, which cargo-llvm-cov needs, comes from the pin's
-      # `components` list rather than a workflow input.
+      # cargo-llvm-cov's `llvm-tools-preview` rides the pin's `components` list.
       - name: Install pinned Rust toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -63,10 +49,8 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      # `tests/headless.rs` boots AppState, which opens rodio's default device.
-      # Runners have no sound card and the Azure kernel ships no
-      # snd-dummy/snd-aloop, so point ALSA at alsa-lib's built-in userspace
-      # `null` — no kernel module, daemon or extra package.
+      # `tests/headless.rs` opens rodio's default device and runners have no
+      # card. Same userspace ALSA null the `test` job in pr-validation.yml uses.
       - name: Set up dummy ALSA device (userspace null)
         run: |
           sudo tee /etc/asound.conf >/dev/null <<'EOF'
@@ -74,17 +58,13 @@ jobs:
           ctl.!default { type null }
           EOF
 
-      # One instrumented run feeds both outputs — the report phases re-run no
-      # tests.
-      #
-      # The regex drops `melodia-ui`'s generated `app-window.rs`, which is large
-      # enough to swamp the denominator on its own; cargo-llvm-cov's built-in
-      # excludes reach the sysroot and the registry but not a workspace member's
-      # OUT_DIR. Scoped to that crate rather than every `build/*/out/`, so a build
-      # script that one day generates exercised code doesn't vanish unnoticed.
-      #
-      # `pipefail` because the default shell is `bash -e` without it, so a failing
-      # `report` would be swallowed by `tee` and publish an empty summary.
+      # One instrumented run feeds both outputs; the report phases re-run nothing.
+      # The regex drops `melodia-ui`'s generated `app-window.rs`, big enough to
+      # swamp the denominator alone and missed by cargo-llvm-cov's built-in
+      # excludes, which reach the sysroot and registry but not a member's
+      # OUT_DIR. Scoped to that crate, so a build script that one day generates
+      # exercised code doesn't vanish. Without `pipefail`, `tee` swallows a
+      # failing `report` and publishes an empty summary.
       - name: Run tests with coverage
         env:
           IGNORE_GENERATED: '.*/build/melodia-ui-[^/]*/out/.*'
@@ -129,9 +109,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # Same-run artifact, which is why there's no cross-workflow fetch here and
-      # none of the `actions: read` grant, retry step and is-it-empty guard one
-      # would need.
+      # Same-run artifact, so no cross-workflow fetch and none of the
+      # `actions: read` grant, retry step and is-it-empty guard one would need.
       - name: Download coverage report
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

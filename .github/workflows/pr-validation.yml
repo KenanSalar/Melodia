@@ -8,7 +8,6 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded runs on the same PR/branch.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
@@ -18,8 +17,7 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # Two-phase skip detection. This workflow is purely the merge gate, so the
-  # cheapest correct answer for a docs-only PR is "nothing".
+  # Purely the merge gate, so the right answer for a docs-only PR is nothing.
   changes:
     name: detect-changes
     runs-on: ubuntu-latest
@@ -31,25 +29,12 @@ jobs:
       code: ${{ steps.paths.outputs.code }}
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
-      # A DENYLIST — `**` plus exclusions, never a list of source globs. The gate
-      # job below counts `skipped` as a pass, so an allowlist fails open: a path
-      # nobody remembered to list merges green with zero checks run. Here a new
-      # directory defaults to "run everything" and the exclusions are the part
-      # under review.
-      #
-      # `predicate-quantifier: every` is load-bearing. The default (`some`) makes
-      # a filter true when a file matches ANY pattern, and every file matches
-      # `**` — so the `!` lines would silently do nothing and this job would
-      # never skip. It builds, it looks right, and it is wrong.
-      #
-      # `assets/` and `.github/` are split per-path rather than excluded
-      # wholesale, because both hold real inputs to this build: `melodia.ico`
-      # plus three `include_*!`d payloads under the first, and under the second
-      # the two composites these jobs `uses:`, this file (it IS the gate), and
-      # `release.yml` + `LICENSE` — which compile nothing but are read by
-      # `services::tests`, so excluding them let a PR skip the very pins that
-      # exist to catch their second copy drifting. Anything added later defaults
-      # to running everything; earning a line below is the deliberate part.
+      # A DENYLIST, never source globs: the gate counts `skipped` as a pass, so
+      # an allowlist merges an unlisted path green with nothing run.
+      # `predicate-quantifier: every` is what makes the `!` lines do anything,
+      # the default `some` plus `**` matching every file and never skipping.
+      # `assets/` and `.github/` are excluded per file, both holding real inputs
+      # (`melodia.ico`, three `include_*!`d payloads); the rule file says which.
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: paths
         if: github.event_name == 'pull_request'
@@ -68,21 +53,15 @@ jobs:
               - '!.gitignore'
               - '!.env.example'
 
-      # Catches the identical tree arriving twice (rebase, revert, rename).
-      # Deliberately given NO `paths_filter`: two copies of that list can drift,
-      # and the failure is silent — a stale green handed back for a path only one
-      # of them knows about.
+      # Catches the identical tree arriving twice (rebase, revert, rename). No
+      # `paths_filter` on purpose: a second copy of that list drifts to a green.
       - uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578 # v5.3.2
         id: skip_check
 
-  # The same gate release.yml runs, moved forward so a vulnerable dep is caught
-  # while the Cargo.lock change is under review rather than at release time,
-  # where it blocks ten build slots and the fix is urgent. Shared composite
-  # because an early warning that disagrees with the release gate is worse than
-  # none.
-  #
-  # Sibling of clippy, not a parent: it compiles nothing, and an advisory hit
-  # shouldn't hide the lint and test results.
+  # release.yml's gate moved forward, so a vulnerable dep surfaces while the
+  # Cargo.lock change is under review rather than mid-release. Shared composite
+  # so the two can't disagree; sibling of clippy, not a parent, so an advisory
+  # hit doesn't hide the lint and test results.
   audit:
     name: audit
     runs-on: ubuntu-latest
@@ -94,9 +73,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/cargo-audit
 
-  # Compiles nothing, so it takes neither the system deps nor the cache — the
-  # cheapest job here. Sibling of clippy for the reason audit is: a wrapping nit
-  # shouldn't hide the lint and test results.
+  # Compiles nothing, so no system deps and no cache. Sibling for audit's reason.
   fmt:
     name: fmt
     runs-on: ubuntu-latest
@@ -111,11 +88,8 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all --check
 
-  # Mirrors the local gate. The workspace `[lints]` set pedantic/style/complexity
-  # to warn, so `-D warnings` promotes them to hard errors.
-  #
-  # `workflow_dispatch` bypasses the filters here and below: paths-filter has no
-  # base ref to diff against, and a manual run is an explicit "run this now".
+  # Mirrors the local gate, `-D warnings` promoting the workspace `[lints]`' warn
+  # level. `workflow_dispatch` bypasses the filters: no base ref to diff against.
   clippy:
     name: clippy
     runs-on: ubuntu-latest
@@ -126,45 +100,27 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/linux-system-deps
-      # Bare `install` takes the *active* toolchain, i.e. `rust-toolchain.toml`'s
-      # pin and its `components`. Don't reintroduce `dtolnay/rust-toolchain`: it
-      # calls `rustup default`, which that file outranks, so its `components:`
-      # land on a toolchain nothing builds with and clippy goes missing.
+      # Bare `install` takes the active toolchain, i.e. `rust-toolchain.toml`'s
+      # pin and components. Don't reintroduce `dtolnay/rust-toolchain`: it calls
+      # `rustup default`, which that file outranks, so clippy goes missing.
       - name: Install pinned Rust toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           shared-key: ci-clippy
           cache-on-failure: true
-      # One invocation covers both packages, and package *selection* is not what
-      # decides that: cargo sets RUSTC_WORKSPACE_WRAPPER=clippy-driver for every
-      # member it compiles, and clippy-driver skips non-primary packages only
-      # under `--no-deps`. So `melodia-ui` is linted as a path dependency, lib
-      # and build script both. A second `-p melodia-ui` step here would be
-      # redundant — probe it with a planted `needless_return` in each before
-      # believing otherwise.
+      # Covers both packages, and package *selection* isn't what decides that:
+      # cargo sets RUSTC_WORKSPACE_WRAPPER=clippy-driver for every member it
+      # compiles. Plant a `needless_return` in each before adding `-p melodia-ui`.
       - name: cargo clippy
         run: cargo clippy --all-targets --locked -- -D warnings
 
-  # Tests. A sibling of clippy, not a child: nothing here reads clippy's output,
-  # so chaining them made the gate's wall clock their sum, and what waits on that
-  # gate is a person deciding whether to merge. The order bought a fast-fail that
-  # skipped one build on a lint failure — runner minutes against merge latency,
-  # and the minutes are the cheaper of the two. Runs the FULL suite including the
-  # audio-dependent integration test `tests/headless.rs` behind a userspace ALSA
-  # null device.
-  #
-  # Plain `cargo test`, NOT `cargo llvm-cov` — nobody reads a coverage delta to
-  # decide a merge, and the instrumented build is the expensive half.
-  # deploy-coverage.yml runs it on demand instead. Debug info stays at the
-  # profile default, unlike that job: this is the one whose failures someone
-  # actually reads a backtrace from.
-  #
-  # `CARGO_BUILD_JOBS: 4` is a memory cap, not a CPU match, and it overrides the
-  # dev-machine jobs=8 in .cargo/config.toml. The peak is a single `rustc` on
-  # `melodia-ui`, whose LLVM codegen threads draw jobserver tokens — so the job
-  # count scales one process's peak. At jobs=8 a 16 GB runner does not fail, it
-  # swaps, and the job runs for most of an hour looking like a hang.
+  # The full suite, `tests/headless.rs` included, and plain `cargo test`: nobody
+  # reads a coverage delta to decide a merge, so deploy-coverage.yml runs the
+  # instrumented build on demand. Debug info stays at the profile default here
+  # (that job zeroes it), backtraces being read from this one. The
+  # `CARGO_BUILD_JOBS: 4` memory cap overrides .cargo/config.toml's jobs=8: past
+  # the ceiling nothing fails, it swaps, and the job looks like a hang.
   test:
     name: test
     runs-on: ubuntu-latest
@@ -185,9 +141,8 @@ jobs:
           cache-on-failure: true
 
       # `tests/headless.rs` boots AppState, which opens rodio's default device.
-      # Runners have no sound card and the Azure kernel ships no
-      # snd-dummy/snd-aloop, so point ALSA at alsa-lib's built-in userspace
-      # `null` — no kernel module, daemon or extra package.
+      # Runners have no card and the Azure kernel ships no snd-dummy/snd-aloop,
+      # so point ALSA at alsa-lib's userspace `null`: no module or extra package.
       - name: Set up dummy ALSA device (userspace null)
         run: |
           sudo tee /etc/asound.conf >/dev/null <<'EOF'
@@ -198,14 +153,33 @@ jobs:
       - name: cargo test
         run: cargo test --locked
 
-  # The one non-Linux job. `release.yml` compiles the Windows lib and bin, but
-  # only once a tag is pushed and it runs no test, so the suite executing on
-  # Windows has never happened anywhere. `CARGO_BUILD_JOBS` is the cap `test`
-  # argues above, unchanged because the Windows runner is the same 4-core /
-  # 16 GB box.
-  #
-  # Why there is no clippy twin, no `linux-system-deps` step and no pinned image
-  # label is argued once, in `.claude/rules/ci-packaging.md`.
+  # The clippy table's Windows half. `test-windows` type-checks these arms, but
+  # `[workspace.lints.clippy]` needs clippy-driver and nothing had ever pointed
+  # one at a `cfg(windows)` arm: `release.yml` is `cargo build`, lib and bin. A
+  # sibling so a lint failure doesn't hide the test results, and it sets no
+  # `CARGO_BUILD_JOBS`, a check-only build never reaching that peak.
+  clippy-windows:
+    name: clippy-windows
+    runs-on: windows-latest
+    needs: [changes]
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          shared-key: ci-clippy
+          cache-on-failure: true
+      - name: cargo clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+  # The suite's Windows half, and the only place it has ever run: `release.yml`
+  # compiles the Windows lib and bin, but only on a tag and it runs no test.
+  # Same cap as `test`, the runner being the same 4-core / 16 GB box; why neither
+  # Windows job takes system deps or a pinned image label is in the rule file.
   test-windows:
     name: test-windows
     runs-on: windows-latest
@@ -221,39 +195,30 @@ jobs:
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          # The Linux job's key verbatim: rust-cache appends `os.type()` and
-          # `os.arch()` after the shared key, so the two entries are already
-          # distinct (`…-Linux-x64-…` against `…-Windows_NT-x64-…`).
+          # rust-cache appends the OS after the key, so Linux's verbatim is fine.
           shared-key: ci-test
           cache-on-failure: true
 
-      # `headless_scan_persists_track` boots `AppState::init`, which opens the
-      # default output device, and WASAPI has no equivalent of the userspace null
-      # PCM the Linux job points ALSA at. The only other answer is a signed
-      # virtual audio driver.
-      #
-      # Skipped by name rather than by target selection, so a new integration
-      # test runs here by default. Same argument as the paths filter being a
-      # denylist: the failure worth designing against is the silent omission.
+      # `headless_scan_persists_track` opens the default output device, and short
+      # of a signed virtual driver WASAPI has no equivalent of the null PCM the
+      # Linux job uses. Skipped by name, not by target selection, so a new
+      # integration test runs here by default — the denylist argument again.
       - name: cargo test
         run: cargo test --locked -- --skip headless_scan_persists_track
 
   # Mark THIS as the required status check in branch protection. Green iff every
-  # job passed or was skipped — `skipped` counting as a pass is what lets a
-  # docs-only PR merge without a build, and why `changes` is a denylist.
+  # job passed or was skipped, `skipped` as a pass being what lets a docs-only PR
+  # merge without a build, and why `changes` is a denylist.
   pr-validation:
     name: pr-validation
     if: always()
-    needs: [changes, audit, fmt, clippy, test, test-windows]
+    needs: [changes, audit, fmt, clippy, test, clippy-windows, test-windows]
     runs-on: ubuntu-latest
     steps:
       # Derived from `needs:` above rather than restating it, so adding a job is
-      # one edit. What `toJSON` can't see is a job that never reached `needs:`;
-      # that half is pinned by `services::tests`.
-      #
-      # Through `env:` rather than `${{ }}` inside the script. These values are
-      # GitHub's own, but a `run:` that interpolates into bash is the shape that
-      # goes wrong the first time one of them isn't.
+      # one edit. `toJSON` can't see a job that never reached `needs:`; that half
+      # is pinned by `services::tests`. Through `env:` rather than `${{ }}` in
+      # the script, interpolating into bash being the shape that goes wrong.
       - name: Check job results
         env:
           NEEDS: ${{ toJSON(needs) }}
