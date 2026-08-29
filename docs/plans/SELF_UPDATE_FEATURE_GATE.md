@@ -11,8 +11,8 @@ Status: **proposed** · Owner: Kenan · Created: 2026-06-16
 Make the in-app auto-updater a **compile-time Cargo feature** (`self-update`,
 default-on) so we can ship two build configurations from one codebase:
 
-- **GitHub-release artifacts** (current `release.yml`: tarball, AppImage, RPM,
-  DEB, MSI) — feature **on**. These *are* the self-update channel: the updater
+- **GitHub-release artifacts** (the current release pipeline: tarball, AppImage,
+  RPM, DEB, MSI) — feature **on**. These *are* the self-update channel: the updater
   downloads the matching signed artifact and installs it (Linux via the polkit
   helper / `pkexec`, Windows via `msiexec`).
 - **External package-manager builds** (future: COPR/dnf, Flatpak/Flathub, AUR,
@@ -43,7 +43,7 @@ smaller build, never a broken one. This is the correct polarity.
 
 | Artifact | Built by | `self-update` |
 |---|---|---|
-| tarball / AppImage / RPM / DEB / MSI in **GitHub Releases** | existing `release.yml` | **on** (unchanged) |
+| tarball / AppImage / RPM / DEB / MSI in **GitHub Releases** | existing release pipeline | **on** (unchanged) |
 | COPR / dnf repo RPM | new `.spec` pipeline | **off** |
 | Flatpak / Flathub | new manifest | **off** |
 | AUR (`-bin` or source) | `PKGBUILD` | **off** |

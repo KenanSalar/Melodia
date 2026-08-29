@@ -130,10 +130,10 @@ from `main.rs` without ever opening this file.
   over `actions/attest` and points new work at that directly — worth folding in next time this line
   is touched.
 
-- **aarch64 builds alongside x86_64** (Linux + Windows): 10 `release.yml` matrix slots, 5 × x86_64
-  + 5 × aarch64 (`ubuntu-24.04-arm`/`windows-11-arm`). **`build-latest-json.py`'s
-  `PLATFORM_PATTERNS` is downstream of `release-build.yml`'s packaging steps and the
-  `scripts/build-*.sh` they call, and must move with them.**
+- **aarch64 builds alongside x86_64** (Linux + Windows): the 10 matrix slots `release.yml`
+  declares, 5 × x86_64 + 5 × aarch64 (`ubuntu-24.04-arm`/`windows-11-arm`).
+  **`build-latest-json.py`'s `PLATFORM_PATTERNS` is downstream of `release-build.yml`'s
+  packaging steps and the `scripts/build-*.sh` they call, and must move with them.**
   Every pattern pins an explicit arch token, so the two arch groups are disjoint and the
   aarch64-first ordering is readability rather than disambiguation — that ordering existed for
   cargo-deb's native `_arm64.deb`, which carries no leading-arch token, and `release-build.yml`

@@ -1,8 +1,6 @@
 ---
 paths:
   - .github/**
-  - .github/workflows/*.yml
-  - .github/actions/**
   - packaging/**
   - licenses/**
   - wix/main.wxs
@@ -21,6 +19,8 @@ paths:
 
 The release matrix itself is `.claude/rules/updater.md` and the procedure that fires it is
 `docs/RELEASING.md`; this is the gate around both and the obligations every artifact carries.
+`release.yml` holds the shape of a release and calls `release-{prepare,build,publish}.yml`, each of
+which argues itself; a filename below names whichever of the four owns the thing under discussion.
 
 ## The PR gate
 
@@ -62,11 +62,11 @@ coverage on this path.
 
 - **`.github/` is excluded per-file, never as `.github/**`.** `deploy-coverage`,
   `refresh-manifest`, `FUNDING.yml` and `ISSUE_TEMPLATE/` compile nothing and nothing reads them,
-  so each is named (`pull_request_template.md` rides the `*.md` line). What stays in is everything
-  the gate or a release actually runs: every composite under `.github/actions/`,
-  `pr-validation.yml` itself, and the four `release*.yml`.
-  `CODEOWNERS` stays in as well and is exercised by nothing, so a PR touching only it pays the
-  full gate; it governs who may approve a workflow change, and a control of that reach failing
+  so each is named (`pull_request_template.md` rides the `*.md` line). What stays in is what the
+  gate compiles or a test reads: every composite under `.github/actions/`, and `pr-validation.yml`
+  itself. The four `release*.yml` and `CODEOWNERS` stay in on the other argument, nothing
+  exercising either before a merge: a release workflow first runs on a pushed tag, after review is
+  over, and `CODEOWNERS` governs who may approve a workflow change. A control of that reach failing
   closed is worth one wasted run.
   Excluding a composite lands a broken provisioning step green; excluding `pr-validation.yml` lets
   a change to the clippy invocation or the job list merge without the jobs it governs ever running.

@@ -32,12 +32,13 @@ runs:
         FILES: ${{ inputs.files }}
         COMMENT: ${{ inputs.trusted-comment }}
       run: |
-        echo "$KEY" | base64 -d > "$RUNNER_TEMP/minisign.key"
-        chmod 0600 "$RUNNER_TEMP/minisign.key"
-        # Armed before the first signature rather than run after the last: `set -e`
-        # on a failed sign leaves the decoded key for every later step otherwise.
-        # `shred` is absent from Git Bash, so the Windows slots take the fallback.
+        # Armed before the key exists rather than run after the last signature:
+        # `set -e` anywhere in between leaves the decoded key for every later step
+        # otherwise. `shred` is absent from Git Bash, so Windows takes the fallback.
         trap 'shred -u "$RUNNER_TEMP/minisign.key" 2>/dev/null || rm -f "$RUNNER_TEMP/minisign.key"' EXIT
+        # Subshell so the mode is the key's alone, not every `.minisig` written
+        # below; a `chmod` after the redirect narrows the window instead of closing it.
+        (umask 077; echo "$KEY" | base64 -d > "$RUNNER_TEMP/minisign.key")
 
         shopt -s nullglob
         signed=0
