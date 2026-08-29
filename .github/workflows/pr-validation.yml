@@ -113,10 +113,11 @@ jobs:
   # instrumented build on demand. The `CARGO_BUILD_JOBS: 4` memory cap overrides
   # .cargo/config.toml's jobs=8: past the ceiling nothing fails, it swaps, and
   # the job looks like a hang. `line-tables-only` is a link-time cap rather than
-  # a memory one: `cargo test` links five binaries and full debuginfo is most of
-  # that tail, while file:line survives for the backtraces this job exists to
-  # print — hence not the `0` deploy-coverage.yml sets. Both profiles, since
-  # `cargo test` builds dependencies under `dev` and test targets under `test`.
+  # a memory one: `cargo test` links five test binaries and full debuginfo is
+  # most of that tail, while file:line survives for the backtraces this job
+  # exists to print — hence not the `0` deploy-coverage.yml sets. Both profiles,
+  # since `cargo test` builds dependencies under `dev` and test targets under
+  # `test`.
   test:
     name: test
     runs-on: ubuntu-latest

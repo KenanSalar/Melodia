@@ -53,8 +53,10 @@ const SKEW: f32 = 0.01;
 /// Wall clock, not a frame count: these waits turn on a blocked thread being
 /// woken, and a frame budget measures the puller's throughput instead. Pulling
 /// is cheap enough that two seconds of audio retires in tens of milliseconds,
-/// and on a contended runner the spinning puller keeps its share where the
-/// thread it waits for does not. Wide because the only thing past it is a hang.
+/// so on a contended runner a frame budget expires before the thread it waits
+/// for is ever scheduled. Wide because the only thing past it is a hang, and
+/// safe to be wide only because [`pull_until`] yields rather than spinning the
+/// six-second fixtures dry.
 const CONTROL_OP_BUDGET: Duration = Duration::from_secs(5);
 
 fn frames_for_ms(ms: u64) -> usize {
@@ -154,6 +156,9 @@ fn pull_until(src: &mut rodio::mixer::MixerSource, what: &str, mut done: impl Fn
     while !done() {
         assert!(Instant::now() < deadline, "{what}");
         pull_lenient(src, 64);
+        // The op is runnable once the hook has run, so give it a core: on a
+        // contended runner an unyielding puller is what it waits behind.
+        std::thread::yield_now();
     }
 }
 
