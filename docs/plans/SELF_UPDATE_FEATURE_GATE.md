@@ -223,7 +223,7 @@ compiles when `install` also exists.)
 
 ## CI changes
 
-`.github/workflows/release.yml`
+`.github/workflows/release-build.yml`
 - **No `--no-default-features` here.** Existing artifacts are the self-update
   channel and stay feature-on.
 - **Add a dual-config build check** so the feature-off path can't bit-rot — one

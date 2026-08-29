@@ -34,6 +34,10 @@ runs:
       run: |
         echo "$KEY" | base64 -d > "$RUNNER_TEMP/minisign.key"
         chmod 0600 "$RUNNER_TEMP/minisign.key"
+        # Armed before the first signature rather than run after the last: `set -e`
+        # on a failed sign leaves the decoded key for every later step otherwise.
+        # `shred` is absent from Git Bash, so the Windows slots take the fallback.
+        trap 'shred -u "$RUNNER_TEMP/minisign.key" 2>/dev/null || rm -f "$RUNNER_TEMP/minisign.key"' EXIT
 
         shopt -s nullglob
         signed=0
@@ -50,6 +54,5 @@ runs:
             -t "${COMMENT//\{file\}/$(basename "$f")}"
           signed=$((signed + 1))
         done
-        shred -u "$RUNNER_TEMP/minisign.key" 2>/dev/null || rm -f "$RUNNER_TEMP/minisign.key"
         echo "signed $signed artifact(s)"
         [[ "$signed" -gt 0 ]] || { echo "ERROR: nothing was signed"; exit 1; }

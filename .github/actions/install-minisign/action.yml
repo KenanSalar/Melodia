@@ -8,6 +8,9 @@ description: >-
 runs:
   using: composite
   steps:
+    # Repeated where `linux-system-deps` already swapped the mirrors: the sed is
+    # idempotent, and this action has to stand alone for the two jobs that sign
+    # or verify without ever provisioning build deps.
     - uses: ./.github/actions/apt-mirror-failover
       if: runner.os == 'Linux'
 

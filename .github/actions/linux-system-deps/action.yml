@@ -15,6 +15,9 @@ inputs:
 runs:
   using: composite
   steps:
+    # A relative `uses:` inside a composite resolves against `$GITHUB_WORKSPACE`,
+    # not this directory, so it holds only while checkout leaves the repo at the
+    # workspace root. An `actions/checkout` with `path:` breaks it silently.
     - uses: ./.github/actions/apt-mirror-failover
 
     # Defence in depth over the mirror swap, for short hiccups. The retry loop

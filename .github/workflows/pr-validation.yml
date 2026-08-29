@@ -134,9 +134,9 @@ jobs:
 
   # The clippy table's Windows half. `test-windows` type-checks these arms, but
   # `[workspace.lints.clippy]` needs clippy-driver and nothing had ever pointed
-  # one at a `cfg(windows)` arm: `release.yml` is `cargo build`, lib and bin. A
-  # sibling so a lint failure doesn't hide the test results, and it sets no
-  # `CARGO_BUILD_JOBS`, a check-only build never reaching that peak.
+  # one at a `cfg(windows)` arm: `release-build.yml` is `cargo build`, lib and
+  # bin. A sibling so a lint failure doesn't hide the test results, and it sets
+  # no `CARGO_BUILD_JOBS`, a check-only build never reaching that peak.
   clippy-windows:
     name: clippy-windows
     runs-on: windows-latest
@@ -150,8 +150,9 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --all-targets --locked -- -D warnings
 
-  # The suite's Windows half, and the only place it has ever run: `release.yml`
-  # compiles the Windows lib and bin, but only on a tag and it runs no test.
+  # The suite's Windows half, and the only place it has ever run:
+  # `release-build.yml` compiles the Windows lib and bin, but only on a tag and
+  # it runs no test.
   # Same cap as `test`, the runner being the same 4-core / 16 GB box; why neither
   # Windows job takes system deps or a pinned image label is in the rule file.
   test-windows:

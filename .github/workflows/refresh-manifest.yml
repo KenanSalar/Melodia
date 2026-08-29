@@ -2,8 +2,8 @@ name: Refresh manifest
 
 # Rebuilds and re-signs `latest.json` from the FINAL release body on publish.
 #
-# release.yml builds the manifest while the release is still a draft, so its
-# `notes_short` holds GitHub's auto-generated text; anything the author edits
+# release-publish.yml builds the manifest while the release is still a draft, so
+# its `notes_short` holds GitHub's auto-generated text; anything the author edits
 # before flipping the draft live would otherwise never reach the updater panel.
 # `workflow_dispatch` with a `tag` does the same retroactively, which is the
 # recovery path when this job fails.
@@ -98,8 +98,6 @@ jobs:
             || : > release-notes.md
           wc -c release-notes.md
 
-      # Same action release-publish.yml builds the draft-time manifest with, so
-      # the notes-stripping pin cannot differ between the two.
       - uses: ./.github/actions/build-manifest
         with:
           version: ${{ steps.meta.outputs.version }}

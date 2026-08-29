@@ -17,8 +17,9 @@ use std::io::Read;
 use minisign_verify::{Error as MinisignVerifyError, PublicKey, Signature};
 
 /// The compiled-in public key the updater verifies every downloaded artifact against. Full
-/// multi-line minisign file, paired with the `MINISIGN_SECRET_KEY` GitHub Secret; `release.yml`
-/// signs every artifact with `minisign -SH` (prehashed — see [`verify_stream`]).
+/// multi-line minisign file, paired with the `MINISIGN_SECRET_KEY` GitHub Secret;
+/// `.github/actions/minisign-sign` signs every artifact with `minisign -SH` (prehashed — see
+/// [`verify_stream`]).
 ///
 /// Rotation is **one-way and disruptive**: shipping a release signed with a new key makes every
 /// installed client, still verifying against the old key, reject the new artifact as a signature
