@@ -150,7 +150,7 @@ coverage on this path.
   because this is the job whose backtraces get read. In the workflow rather than `[profile.dev]`,
   so local and release builds are untouched; `rust-cache` hashes `CARGO_*`, so a change here costs
   one cold run per platform. That cold pair is also the only place those numbers can come from:
-  both `clippy` jobs dropped just as far across the same two runs on cache warmth alone.
+  both `clippy` jobs dropped further still across the same two runs on cache warmth alone.
 
 - **Four Windows levers that look obvious and are not**, checked so they aren't re-proposed. A
   Defender exclusion: the image already disables real-time monitoring and excludes both drives.

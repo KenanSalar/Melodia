@@ -446,27 +446,23 @@ fn the_aggregate_waits_on_every_job_in_the_gate_workflow() {
     );
 }
 
-/// The value of `key:` inside the named job's `env:`, bounded at the next job id like
-/// [`workflow_job_needs`]. Comment lines are skipped, a comment naming the key reading exactly
-/// like the key.
+/// The value of `key:` in the named job, bounded at the next job id like
+/// [`workflow_job_needs`]. Any indent, so a step's `env:` answers as well as the job's.
 fn workflow_job_env<'a>(src: &'a str, job: &str, key: &str) -> Option<&'a str> {
     let (_, body) = src.split_once(&format!("\n  {job}:\n"))?;
     let needle = format!("{key}:");
     body.lines()
         .take_while(|line| workflow_job_id(line).is_none())
         .map(str::trim_start)
-        .filter(|line| !line.starts_with('#'))
         .find_map(|line| line.strip_prefix(&needle))
-        .map(|value| value.trim().trim_matches('"'))
+        .map(|value| value.trim().trim_matches(['"', '\'']))
 }
 
 /// The gate and the coverage run disagree about debug info, and the disagreement is invisible.
 ///
-/// `deploy-coverage.yml` sets `0` because LLVM coverage carries its own region table and reads no
-/// DWARF, in the one job that has OOM-killed the runner outright. The gate sets `line-tables-only`
-/// because it is the job whose backtraces get read: `test-windows`' first red run named
-/// `tests\crossfade.rs:152:9`, which is the half `0` throws away. Tidy the two into agreement and
-/// nothing reddens; the gate just stops saying where the next Windows flake happened.
+/// Each side's reason sits in its own workflow; what neither file can say is that tidying them
+/// into agreement reddens nothing. The gate is the half whose backtraces get read, and `0`
+/// throws away what `test-windows`' first red run named: `tests\crossfade.rs:152:9`.
 ///
 /// A pin rather than a comment because the comment already failed. The coverage bullet went on
 /// describing the gate as keeping *default* debug info for a whole commit after it stopped.
@@ -499,6 +495,12 @@ fn the_two_workflows_disagree_about_debug_info_on_purpose() {
             "deploy-coverage.yml must not pay for DWARF no report reads"
         );
     }
+
+    assert!(
+        !gate.contains("!.github/workflows/deploy-coverage.yml"),
+        "the skip denylist excludes deploy-coverage.yml again, so the edit that breaks \
+         this pin merges with the gate skipped"
+    );
 }
 
 /// `src` with every `<!-- … -->` block removed.
