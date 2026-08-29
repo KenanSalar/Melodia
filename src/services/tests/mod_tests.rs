@@ -339,7 +339,7 @@ fn every_bundled_font_is_named_in_the_attribution() {
 const LICENSE_SHIPPERS: [(&str, &str); 5] = [
     ("scripts/build-rpm.sh", "%license LICENSE licenses/"),
     ("Cargo.toml", "[\"licenses/*\""),
-    (".github/workflows/release.yml", "cp -r licenses"),
+    ("scripts/build-tarball.sh", "cp -r \"$REPO_ROOT/licenses\""),
     ("scripts/build-appimage.sh", "cp -r \"$REPO_ROOT/licenses\""),
     ("wix/main.wxs", "$(var.RepoRoot)\\licenses\\"),
 ];
@@ -354,9 +354,9 @@ const LICENSE_SHIPPERS: [(&str, &str); 5] = [
 /// opposite reason: the set of formats is closed and changing it is deliberate, where the set of
 /// fonts is open.
 ///
-/// Naming `release.yml` is also why it must stay off `pr-validation.yml`'s skip denylist: it
-/// compiles nothing, but a PR touching only that file would skip `test`, and the gate counts
-/// `skipped` as a pass.
+/// Two of the five carry the same needle from different files, which is the point: the tarball got
+/// a `build-tarball.sh` of its own so all five spellings sit beside the format they ship, rather
+/// than one of them being a `cp` buried in a matrix slot.
 #[test]
 fn every_package_format_ships_the_licenses_dir() {
     let root = Path::new(REPO_ROOT);
@@ -379,6 +379,127 @@ fn every_package_format_ships_the_licenses_dir() {
         "{missing:?} no longer ship licenses/ — the fonts and the vendored winit fork are \
          compiled into the binary, so every format that ships the binary redistributes \
          them. If the spelling changed rather than the behaviour, update LICENSE_SHIPPERS."
+    );
+}
+
+/// A job id if `line` is one: under `jobs:`, those are the only keys at exactly one indent
+/// carrying no value. The two-space keys above that line (`on:`'s triggers, `permissions:`, `env:`)
+/// are either before it or spell a value, so splitting on it is what makes the shape unambiguous.
+fn workflow_job_id(line: &str) -> Option<&str> {
+    let id = line.strip_prefix("  ")?.strip_suffix(':')?;
+    (!id.starts_with([' ', '#'])).then_some(id)
+}
+
+fn workflow_job_ids(src: &str) -> Vec<&str> {
+    let Some((_, jobs)) = src.split_once("\njobs:\n") else {
+        return Vec::new();
+    };
+    jobs.lines().filter_map(workflow_job_id).collect()
+}
+
+/// The `needs:` list of the named job, as spelled in its inline `[a, b, c]` form. Bounded at the
+/// next job id, so a job that lost its own `needs:` reads as empty rather than as its neighbour's.
+fn workflow_job_needs<'a>(src: &'a str, job: &str) -> Vec<&'a str> {
+    let Some((_, body)) = src.split_once(&format!("\n  {job}:\n")) else {
+        return Vec::new();
+    };
+    let Some(list) = body
+        .lines()
+        .take_while(|line| workflow_job_id(line).is_none())
+        .find_map(|line| line.trim_start().strip_prefix("needs:"))
+        .and_then(|rest| rest.trim().strip_prefix('[')?.strip_suffix(']'))
+    else {
+        return Vec::new();
+    };
+    list.split(',').map(str::trim).filter(|id| !id.is_empty()).collect()
+}
+
+/// The aggregate is the required status check, and it can only enforce what it waits on.
+///
+/// The check step derives its verdict from `toJSON(needs)`, which sees only what `needs:` lists.
+/// What that leaves is a job added to the file and never named there: the aggregate doesn't wait
+/// for it, so it can report green while that job is still running or already red.
+#[test]
+fn the_aggregate_waits_on_every_job_in_the_gate_workflow() {
+    const AGGREGATE: &str = "pr-validation";
+
+    let path = Path::new(REPO_ROOT).join(".github/workflows/pr-validation.yml");
+    let src = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(!src.is_empty(), "unreadable or empty: {}", path.display());
+
+    let jobs = workflow_job_ids(&src);
+    assert!(
+        jobs.contains(&AGGREGATE) && jobs.len() > 2,
+        "parsed {jobs:?} out of {} — the job-id shape changed, not the job list",
+        path.display()
+    );
+
+    let gated = workflow_job_needs(&src, AGGREGATE);
+    assert!(!gated.is_empty(), "`{AGGREGATE}`'s `needs:` list did not parse");
+
+    let ungated: Vec<_> =
+        jobs.iter().filter(|id| **id != AGGREGATE && !gated.contains(id)).collect();
+    assert!(
+        ungated.is_empty(),
+        "{ungated:?} are missing from `{AGGREGATE}`'s `needs:`, so the required check never \
+         waits on them and goes green whatever they report"
+    );
+}
+
+/// The value of `key:` in the named job, bounded at the next job id like
+/// [`workflow_job_needs`]. Any indent, so a step's `env:` answers as well as the job's.
+fn workflow_job_env<'a>(src: &'a str, job: &str, key: &str) -> Option<&'a str> {
+    let (_, body) = src.split_once(&format!("\n  {job}:\n"))?;
+    let needle = format!("{key}:");
+    body.lines()
+        .take_while(|line| workflow_job_id(line).is_none())
+        .map(str::trim_start)
+        .find_map(|line| line.strip_prefix(&needle))
+        .map(|value| value.trim().trim_matches(['"', '\'']))
+}
+
+/// The gate and the coverage run disagree about debug info, and the disagreement is invisible.
+///
+/// Each side's reason sits in its own workflow; what neither file can say is that tidying them
+/// into agreement reddens nothing. The gate is the half whose backtraces get read, and `0`
+/// throws away what `test-windows`' first red run named: `tests\crossfade.rs:152:9`.
+///
+/// A pin rather than a comment because the comment already failed. The coverage bullet went on
+/// describing the gate as keeping *default* debug info for a whole commit after it stopped.
+/// `deploy-coverage.yml` leaves the skip denylist for the same reason `LICENSE` is absent from
+/// it: compiling nothing is not the same as being unexercised.
+#[test]
+fn the_two_workflows_disagree_about_debug_info_on_purpose() {
+    const KEYS: [&str; 2] = ["CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG"];
+    const GATE: [&str; 2] = ["test", "test-windows"];
+
+    let root = Path::new(REPO_ROOT).join(".github/workflows");
+    let read = |name: &str| {
+        let src = std::fs::read_to_string(root.join(name)).unwrap_or_default();
+        assert!(!src.is_empty(), "unreadable or empty: {name}");
+        src
+    };
+    let (gate, coverage) = (read("pr-validation.yml"), read("deploy-coverage.yml"));
+
+    for key in KEYS {
+        for job in GATE {
+            assert_eq!(
+                workflow_job_env(&gate, job, key),
+                Some("line-tables-only"),
+                "pr-validation.yml's `{job}` must keep `file:line` in its backtraces"
+            );
+        }
+        assert_eq!(
+            workflow_job_env(&coverage, "coverage", key),
+            Some("0"),
+            "deploy-coverage.yml must not pay for DWARF no report reads"
+        );
+    }
+
+    assert!(
+        !gate.contains("!.github/workflows/deploy-coverage.yml"),
+        "the skip denylist excludes deploy-coverage.yml again, so the edit that breaks \
+         this pin merges with the gate skipped"
     );
 }
 
@@ -517,8 +638,8 @@ fn as_dep5_field_body(text: &str) -> String {
 /// full — and a quoted licence is a second copy that can drift from the one the package actually
 /// ships. This re-derives both from their sources rather than trusting the copy.
 ///
-/// `LICENSE` is the second file this suite reads that must stay off `pr-validation.yml`'s skip
-/// denylist — see [`every_package_format_ships_the_licenses_dir`].
+/// `LICENSE` compiles nothing and must still stay off `pr-validation.yml`'s skip denylist: a PR
+/// touching only that file would skip `test`, and the gate counts `skipped` as a pass.
 #[test]
 fn the_debian_copyright_quotes_the_licences_it_ships() {
     let root = Path::new(REPO_ROOT);

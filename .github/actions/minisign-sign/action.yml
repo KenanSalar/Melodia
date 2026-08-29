@@ -1,0 +1,59 @@
+name: Sign with minisign
+description: >-
+  Sign every file matching `files` in prehashed mode and fail if the set is
+  empty. The secret key is loaded, used and shredded inside one step, so it
+  never outlives the signing it was fetched for.
+
+inputs:
+  key:
+    description: Base64-encoded minisign secret key. Stored encoded so its newlines survive the secrets pipeline.
+    required: true
+  password:
+    description: Password for the secret key.
+    required: true
+  files:
+    description: Glob (or space-separated globs) matching the files to sign.
+    required: true
+  trusted-comment:
+    description: >-
+      Signed trusted comment. A literal `{file}` is replaced with the file's
+      basename, which is how a per-artifact comment and a fixed manifest one
+      share this step.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Sign artifacts (prehashed mode — required for streaming verify)
+      shell: bash
+      env:
+        KEY: ${{ inputs.key }}
+        PW: ${{ inputs.password }}
+        FILES: ${{ inputs.files }}
+        COMMENT: ${{ inputs.trusted-comment }}
+      run: |
+        # Armed before the key exists rather than run after the last signature:
+        # `set -e` anywhere in between leaves the decoded key for every later step
+        # otherwise. `shred` is absent from Git Bash, so Windows takes the fallback.
+        trap 'shred -u "$RUNNER_TEMP/minisign.key" 2>/dev/null || rm -f "$RUNNER_TEMP/minisign.key"' EXIT
+        # Subshell so the mode is the key's alone, not every `.minisig` written
+        # below; a `chmod` after the redirect narrows the window instead of closing it.
+        (umask 077; echo "$KEY" | base64 -d > "$RUNNER_TEMP/minisign.key")
+
+        shopt -s nullglob
+        signed=0
+        for f in $FILES; do
+          [[ -f "$f" ]] || continue
+          # -H (prehashed) is what lets the client's `verify_stream` verify as
+          # it downloads; without it every client buffers the whole artifact.
+          # -t writes version, kind and filename into the signed trusted
+          # comment, and the client asserts `version=` against the manifest it
+          # is installing, so one legitimately-signed artifact can't be swapped
+          # for another. Drop the `-t` and every client rejects installs as
+          # `VersionMismatch`.
+          echo "$PW" | minisign -SHm "$f" -s "$RUNNER_TEMP/minisign.key" \
+            -t "${COMMENT//\{file\}/$(basename "$f")}"
+          signed=$((signed + 1))
+        done
+        echo "signed $signed artifact(s)"
+        [[ "$signed" -gt 0 ]] || { echo "ERROR: nothing was signed"; exit 1; }

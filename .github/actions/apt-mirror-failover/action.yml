@@ -1,0 +1,17 @@
+name: Azure apt mirrors
+description: >-
+  Point apt at Azure's Ubuntu mirrors. arm64 runners default to
+  community-hosted `ports.ubuntu.com`, which drops connections from
+  Azure-hosted instances; both branches no-op when the URL doesn't match, so
+  this is safe on every Linux runner and on none of the others.
+
+runs:
+  using: composite
+  steps:
+    - name: Use Azure apt mirrors (mirror failover)
+      shell: bash
+      run: |
+        sudo sed -i \
+          -e 's|http://archive\.ubuntu\.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g' \
+          -e 's|http://ports\.ubuntu\.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+          /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true

@@ -48,6 +48,15 @@ rustc-ice-*.txt
 /artists/
 /cache/
 
+# ─── Packaging ───────────────────────────────────────────────────────────────
+# `build-tarball.sh` and `build-appimage.sh` default to writing their artifact at
+# the repo root; the release slots always pass an output path, a local run never
+# does. (`build-rpm.sh` writes under ~/rpmbuild and needs no entry.) Anchored and
+# extension-qualified for the same reason the workflow globs are: a bare
+# `melodia-*` also matches the `melodia-ui/` directory.
+/melodia-*.tar.gz
+/Melodia-*.AppImage
+
 # ─── Environment / secrets ───────────────────────────────────────────────────
 .env
 .env.local

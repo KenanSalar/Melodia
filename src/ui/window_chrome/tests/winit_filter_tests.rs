@@ -75,8 +75,8 @@ fn the_resize_arm_retunes_the_cover_tiers() {
 /// Win32 parks winit's loop in a modal message loop for a whole resize drag, and `NewEvents` —
 /// the only place the backend ticks Slint — fires once, at the top of it. Without the pump every
 /// `changed` handler and `Timer` waits for the button to come up, which on a shrink past the
-/// miniplayer threshold is the swap not happening. A source walk because the arm's body is
-/// `cfg(target_os = "windows")` and CI never compiles it.
+/// miniplayer threshold is the swap not happening. A source walk because the Windows jobs compile
+/// this arm but nothing can run it, and compiling never proves it ticks anything.
 #[test]
 fn the_redraw_arm_ticks_the_loop_win32_parked() {
     const ARM: &str = "WindowEvent::RedrawRequested =>";

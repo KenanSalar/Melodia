@@ -19,6 +19,7 @@ use std::io::Write;
 use std::num::NonZero;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use melodia::player::replaygain::TrackReplayGain;
 use melodia::player::rodio_backend::RodioPlayer;
@@ -46,6 +47,17 @@ const WARMUP_FRAMES: usize = (RATE as usize) / 10;
 /// crossfade peaks at √2 and a non-complementary one dips by tens of percent —
 /// so it absorbs pipeline latency and nothing else.
 const SKEW: f32 = 0.01;
+
+/// How long a control op gets to land while this thread pulls for it.
+///
+/// Wall clock, not a frame count: these waits turn on a blocked thread being
+/// woken, and a frame budget measures the puller's throughput instead. Pulling
+/// is cheap enough that two seconds of audio retires in tens of milliseconds,
+/// so on a contended runner a frame budget expires before the thread it waits
+/// for is ever scheduled. Wide because the only thing past it is a hang, and
+/// safe to be wide only because [`pull_until`] yields rather than spinning the
+/// six-second fixtures dry.
+const CONTROL_OP_BUDGET: Duration = Duration::from_secs(5);
 
 fn frames_for_ms(ms: u64) -> usize {
     let ms = usize::try_from(ms).unwrap_or(0);
@@ -131,28 +143,33 @@ fn pull_lenient(src: &mut rodio::mixer::MixerSource, frames: usize) {
     }
 }
 
-/// Run a blocking `Player` control op on another thread while this one keeps the
-/// mixer turning.
+/// Turn the mixer until `done`, failing on [`CONTROL_OP_BUDGET`] rather than
+/// hanging the suite.
 ///
 /// `clear()` on a live deck waits for rodio's `periodic_access` hook and
 /// `try_seek()` for seek feedback, both of which arrive only when someone pulls
 /// samples — in production the audio callback thread, here us. Pulls
-/// *leniently*, the op being a transition by definition; a caller asserts
-/// [`pull`]'s steady-state coupling after this returns, not during it.
+/// *leniently*, whatever is landing being a transition by definition; a caller
+/// asserts [`pull`]'s steady-state coupling after this returns, not during it.
+fn pull_until(src: &mut rodio::mixer::MixerSource, what: &str, mut done: impl FnMut() -> bool) {
+    let deadline = Instant::now() + CONTROL_OP_BUDGET;
+    while !done() {
+        assert!(Instant::now() < deadline, "{what}");
+        pull_lenient(src, 64);
+        // The op is runnable once the hook has run, so give it a core: on a
+        // contended runner an unyielding puller is what it waits behind.
+        std::thread::yield_now();
+    }
+}
+
+/// Run a blocking `Player` control op on another thread while this one keeps the
+/// mixer turning, since the op is waiting on the pulling this thread does.
 fn drive_until<F>(src: &mut rodio::mixer::MixerSource, op: F)
 where
     F: FnOnce() + Send + 'static,
 {
-    // Bound the wait so a genuine deadlock fails the test rather than hanging
-    // the suite — orders of magnitude more than the service interval needs.
-    let cap = RATE as usize * 2;
     let handle = std::thread::spawn(op);
-    let mut pulled = 0usize;
-    while !handle.is_finished() {
-        assert!(pulled < cap, "control op never completed — deadlock?");
-        pull_lenient(src, 64);
-        pulled += 64;
-    }
+    pull_until(src, "control op never completed — deadlock?", || handle.is_finished());
     assert!(handle.join().is_ok(), "control op panicked");
 }
 
@@ -512,11 +529,7 @@ async fn a_deferred_clear_takes_a_late_preload_with_it() -> std::io::Result<()> 
     // lock, which the deferred task holds while `Player::clear()` waits on the
     // audio thread — this one — so reaching for it here deadlocks the test. The
     // flag is stored *after* the clear for the same reason.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    while rodio.is_gapless_preloaded() {
-        assert!(std::time::Instant::now() < deadline, "the deferred clear never landed");
-        pull_lenient(&mut mix, 64);
-    }
+    pull_until(&mut mix, "the deferred clear never landed", || !rodio.is_gapless_preloaded());
 
     assert_eq!(
         rodio.check_playback_state(),

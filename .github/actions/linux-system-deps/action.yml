@@ -2,37 +2,34 @@ name: Linux system deps
 description: >-
   Install Melodia's Linux build/test system dependencies (Slint femtovg fonts,
   ALSA, xkbcommon, Wayland, D-Bus, OpenSSL) with Azure apt-mirror failover and
-  a time-bounded retry loop. Mirrors the provisioning used by release.yml (minus
-  the packaging-only `rpm`).
+  a time-bounded retry loop. `extra-packages` is what a packaging slot adds on
+  top; the base set is the same everywhere so a gate and a release can't
+  provision differently.
+
+inputs:
+  extra-packages:
+    description: Space-separated packages to install alongside the base set.
+    required: false
+    default: ''
 
 runs:
   using: composite
   steps:
-    # arm64 runners default to community-hosted `ports.ubuntu.com`, which drops
-    # connections from Azure-hosted instances; repoint to Azure's own mirror,
-    # same fabric. Both branches no-op when the URL doesn't match, so this is
-    # safe on every Linux slot.
-    - name: Use Azure apt mirrors (mirror failover)
-      shell: bash
-      run: |
-        sudo sed -i \
-          -e 's|http://archive\.ubuntu\.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g' \
-          -e 's|http://ports\.ubuntu\.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
-          /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+    # A relative `uses:` inside a composite resolves against `$GITHUB_WORKSPACE`,
+    # not this directory, so it holds only while checkout leaves the repo at the
+    # workspace root. An `actions/checkout` with `path:` breaks it silently.
+    - uses: ./.github/actions/apt-mirror-failover
 
-    # Defence in depth over the mirror swap above, for short hiccups.
-    #
-    # The retry loop can only see an exit code, and a mirror that accepts the
-    # connection then stops sending produces none: apt carries no overall
-    # deadline, `-qq` prints nothing while it waits, and the only bound outside
-    # this step is GitHub's six-hour job cap. Hence the `timeout`s, sized for the
-    # failure rather than the happy path; a 124 or 137 in the warning below is
-    # one of them firing rather than apt itself failing. `-k` because TERM is
-    # catchable and apt defers it around dpkg, and `sudo timeout` rather than
-    # `timeout sudo` because an unprivileged timeout cannot signal what sudo has
-    # already made root.
+    # Defence in depth over the mirror swap, for short hiccups. The retry loop
+    # only sees an exit code, and a mirror that accepts then stops sending
+    # produces none: apt has no overall deadline, so the `timeout`s are the only
+    # bound short of GitHub's six-hour cap, and a 124/137 in the warning below is
+    # one firing rather than apt failing. `-k` because TERM is catchable and apt
+    # defers it around dpkg; `sudo timeout`, an unprivileged one can't signal root.
     - name: Install Linux system deps
       shell: bash
+      env:
+        EXTRA_PACKAGES: ${{ inputs.extra-packages }}
       run: |
         sudo systemctl stop unattended-upgrades || true
 
@@ -43,12 +40,18 @@ runs:
           -o Acquire::Retries=3
           -o Acquire::http::Timeout=15
         )
+        # Unquoted on purpose: the input is a package list, and splitting it on
+        # whitespace is the whole point.
+        packages=(
+          libasound2-dev libxkbcommon-dev libfontconfig1-dev libfreetype-dev
+          libwayland-dev libdbus-1-dev libssl-dev pkg-config
+          $EXTRA_PACKAGES
+        )
         for attempt in 1 2 3; do
           rc=0
           sudo timeout -k 30 120 apt-get update -qq "${apt_opts[@]}" && \
             sudo timeout -k 30 240 apt-get install -qq -y "${apt_opts[@]}" \
-              libasound2-dev libxkbcommon-dev libfontconfig1-dev libfreetype-dev \
-              libwayland-dev libdbus-1-dev libssl-dev pkg-config || rc=$?
+              "${packages[@]}" || rc=$?
           if [ "$rc" -eq 0 ]; then
             exit 0
           fi

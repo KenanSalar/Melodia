@@ -218,13 +218,14 @@ pub(crate) fn color_to_rgb(c: Color) -> u32 {
 /// linearized ones — cheap, and the threshold below is tuned for it. Not the
 /// relative luminance `ui::backdrop` solves scrims against; that one linearizes
 /// first. Named because `theme.slint`'s `ink-on` spells the same four numbers
-/// out and `themes::tests::theme_slint_ink_on_matches_on_accent_hex` builds its
-/// expected Slint expression from these, so a drift on either side fails.
+/// out and `themes::tests::theme_slint_is_light_matches_on_accent_hex` builds
+/// its expected Slint expression from these, so a drift on either side fails.
 ///
 /// A third copy lives in `services::dwm_titlebar::is_dark_from_rgb`, duplicated
-/// on purpose to keep that windows-only module off the cross-platform palette
-/// code. Nothing pins it and nothing can — it's `cfg(windows)`, so a test for it
-/// would never run in CI. Edit a weight here and edit that one by hand.
+/// on purpose to keep that windows-only module off the palette code that calls
+/// into it. It is pinned against `on_accent_hex` rather than against these, by
+/// `services::dwm_titlebar::tests` — which runs only under the
+/// `test-windows` job, the reason that copy went unchecked for so long.
 pub(super) const LUMA_R: f64 = 0.2126;
 pub(super) const LUMA_G: f64 = 0.7152;
 pub(super) const LUMA_B: f64 = 0.0722;
@@ -239,7 +240,10 @@ pub(super) const LUMA_THRESHOLD: f64 = 0.5;
 /// `theme.slint`'s `Theme.ink-on(brush)` is the Slint-side twin, for the
 /// surfaces whose fill isn't the accent (`danger`, the traffic-light hues).
 /// Same weights, same threshold, same pair — keep them in step.
-pub(super) fn on_accent_hex(accent_hex: u32) -> u32 {
+///
+/// `pub(crate)` rather than `pub(super)` so `dwm_titlebar`'s test can ask the
+/// twin directly instead of re-spelling the formula a fourth time.
+pub(crate) fn on_accent_hex(accent_hex: u32) -> u32 {
     let r = f64::from((accent_hex >> 16) & 0xff) / 255.0;
     let g = f64::from((accent_hex >> 8) & 0xff) / 255.0;
     let b = f64::from(accent_hex & 0xff) / 255.0;

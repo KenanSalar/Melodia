@@ -11,12 +11,10 @@ runs:
       with:
         tool: cargo-audit
 
-    # No toolchain and no system deps: a prebuilt binary reading the committed
-    # Cargo.lock, compiling nothing, so rust-toolchain.toml never comes into it.
-    #
-    # `--deny warnings` would over-trigger on transitive deps we don't control
-    # and on `yanked`, which is not a vulnerability. The escape hatch for the two
-    # categories that do block is the `ignore` list in .cargo/audit.toml.
+    # A prebuilt binary over the committed Cargo.lock, compiling nothing, so no
+    # toolchain and no system deps. Not `--deny warnings`: it over-triggers on
+    # transitive deps we don't control and on `yanked`, which is not a
+    # vulnerability. Escape hatch is the `ignore` list in .cargo/audit.toml.
     - name: cargo audit
       shell: bash
       run: cargo audit --deny unsound --deny unmaintained

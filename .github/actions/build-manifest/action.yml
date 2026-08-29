@@ -1,0 +1,74 @@
+name: Build latest.json
+description: >-
+  Render the updater manifest from a directory of artifacts. Shared by the
+  draft-time build and the on-publish refresh so the notes-stripping pin can't
+  differ between the manifest users first see and the one that replaces it.
+
+inputs:
+  version:
+    description: Version the manifest describes.
+    required: true
+  tag:
+    description: Release tag the assets hang off.
+    required: true
+  artifacts:
+    description: >-
+      Directory holding installable artifacts and their `.minisig` siblings and
+      NOTHING else. build-latest-json.py aborts on a file it can't classify
+      rather than dropping a platform in silence, so stage carry-over input
+      elsewhere.
+    required: true
+  notes-file:
+    description: Markdown release notes to strip into `notes_short`.
+    required: true
+  out:
+    description: Output path for the manifest.
+    required: false
+    default: latest.json
+  manifest-schema-version:
+    description: Carried over on a refresh; the script's default otherwise.
+    required: false
+    default: ''
+  pub-date:
+    description: Carried over on a refresh so a rebuild doesn't bump it.
+    required: false
+    default: ''
+  critical:
+    description: '"true" to set the critical flag.'
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    # Optional, the script falling back to a regex pipeline, but this parses
+    # fenced blocks, tables and nested formatting properly. Pinned because a
+    # break in the token-walk API `_strip_via_md_it` uses would corrupt
+    # notes_short silently.
+    - name: Install markdown-it-py for notes stripping
+      shell: bash
+      run: python3 -m pip install --quiet markdown-it-py==4.2.0
+
+    - name: Build latest.json
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        TAG: ${{ inputs.tag }}
+        ARTIFACTS: ${{ inputs.artifacts }}
+        NOTES_FILE: ${{ inputs.notes-file }}
+        OUT: ${{ inputs.out }}
+        SCHEMA: ${{ inputs.manifest-schema-version }}
+        PUB_DATE: ${{ inputs.pub-date }}
+        CRITICAL: ${{ inputs.critical }}
+      run: |
+        opts=()
+        [[ -n "$SCHEMA" ]] && opts+=(--manifest-schema-version "$SCHEMA")
+        [[ -n "$PUB_DATE" ]] && opts+=(--pub-date "$PUB_DATE")
+        [[ "$CRITICAL" == "true" ]] && opts+=(--critical)
+        python3 scripts/build-latest-json.py \
+          --version "$VERSION" \
+          --tag "$TAG" \
+          --artifacts "$ARTIFACTS" \
+          --notes-file "$NOTES_FILE" \
+          "${opts[@]}" \
+          --out "$OUT"

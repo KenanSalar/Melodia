@@ -1,0 +1,44 @@
+name: Set up Rust
+description: >-
+  Install the pinned toolchain and, unless `shared-key` is empty, restore the
+  build cache. Every job that compiles anything goes through here, so the pin's
+  one footgun and the cache action's SHA are each written down once.
+
+inputs:
+  shared-key:
+    description: >-
+      rust-cache shared-key. Empty means no cache, which is right for a job that
+      compiles nothing.
+    required: false
+    default: ''
+  target:
+    description: >-
+      Target triple to add alongside the host. Redundant on a native runner and
+      what covers a cross one.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    # Bare `install` takes the active toolchain, i.e. `rust-toolchain.toml`'s
+    # pin and components. Don't reintroduce `dtolnay/rust-toolchain`: it calls
+    # `rustup default`, which that file outranks, so clippy goes missing.
+    - name: Install pinned Rust toolchain
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+      run: |
+        args=()
+        if [[ -n "$TARGET" ]]; then
+          args+=(-t "$TARGET")
+        fi
+        rustup toolchain install "${args[@]}"
+
+    # The action appends `os.type()` and `os.arch()` after the key, so a
+    # Linux/Windows pair passing one key still gets two entries.
+    - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      if: inputs.shared-key != ''
+      with:
+        shared-key: ${{ inputs.shared-key }}
+        cache-on-failure: true
