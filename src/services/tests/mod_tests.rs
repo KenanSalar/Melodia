@@ -382,6 +382,68 @@ fn every_package_format_ships_the_licenses_dir() {
     );
 }
 
+/// Job ids under `jobs:`, which are the only keys in the file at exactly one indent carrying no
+/// value. The two-space keys above that line (`on:`'s triggers, `permissions:`, `env:`) are either
+/// before it or spell a value, so splitting on it is what makes the shape unambiguous.
+fn workflow_job_ids(src: &str) -> Vec<&str> {
+    let Some((_, jobs)) = src.split_once("\njobs:\n") else {
+        return Vec::new();
+    };
+    jobs.lines()
+        .filter_map(|line| line.strip_prefix("  ")?.strip_suffix(':'))
+        .filter(|id| !id.starts_with([' ', '#']))
+        .collect()
+}
+
+/// The `needs:` list of the named job, as spelled in its inline `[a, b, c]` form.
+fn workflow_job_needs<'a>(src: &'a str, job: &str) -> Vec<&'a str> {
+    let Some((_, body)) = src.split_once(&format!("\n  {job}:\n")) else {
+        return Vec::new();
+    };
+    let Some(list) = body
+        .lines()
+        .find_map(|line| line.trim_start().strip_prefix("needs:"))
+        .and_then(|rest| rest.trim().strip_prefix('[')?.strip_suffix(']'))
+    else {
+        return Vec::new();
+    };
+    list.split(',').map(str::trim).filter(|id| !id.is_empty()).collect()
+}
+
+/// The aggregate is the required status check, and it can only enforce what it waits on.
+///
+/// The check step derives its verdict from `toJSON(needs)`, so `needs:` is now the single list —
+/// what used to be a second bash array restating it is gone, and with it the two-edit hazard. What
+/// that leaves is a job added to the file and never named in `needs:` at all: the aggregate
+/// doesn't wait for it, so it can report green while that job is still running or already red.
+/// Nothing in the workflow can catch that, `toJSON` seeing only what it was handed.
+#[test]
+fn the_aggregate_waits_on_every_job_in_the_gate_workflow() {
+    const AGGREGATE: &str = "pr-validation";
+
+    let path = Path::new(REPO_ROOT).join(".github/workflows/pr-validation.yml");
+    let src = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(!src.is_empty(), "unreadable or empty: {}", path.display());
+
+    let jobs = workflow_job_ids(&src);
+    assert!(
+        jobs.contains(&AGGREGATE) && jobs.len() > 2,
+        "parsed {jobs:?} out of {} — the job-id shape changed, not the job list",
+        path.display()
+    );
+
+    let gated = workflow_job_needs(&src, AGGREGATE);
+    assert!(!gated.is_empty(), "`{AGGREGATE}`'s `needs:` list did not parse");
+
+    let ungated: Vec<_> =
+        jobs.iter().filter(|id| **id != AGGREGATE && !gated.contains(id)).collect();
+    assert!(
+        ungated.is_empty(),
+        "{ungated:?} are missing from `{AGGREGATE}`'s `needs:`, so the required check never \
+         waits on them and goes green whatever they report"
+    );
+}
+
 /// `src` with every `<!-- … -->` block removed.
 ///
 /// `test_support::strip_line_comments`' argument, in the one markup language that doesn't use

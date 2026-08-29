@@ -30,9 +30,13 @@ packages); `test` is plain `cargo test --locked`. All five hang off `changes` al
 deciding whether to merge. `audit` and `fmt` compile nothing, so neither an advisory hit nor a
 reflow hides the lint and test results. No coverage on this path.
 
-- **The aggregate `pr-validation` job is the required status check, and adding a job to it is two
-  edits**: `needs:` *and* the `results=( … )` bash array the check step loops over. No
-  `toJSON(needs)` fallback, so a job named in only the first is silently unenforced.
+- **The aggregate `pr-validation` job is the required status check, and `needs:` is the only list.**
+  The check step reads `toJSON(needs)` through `env:` and asks `jq` for anything that is neither
+  `success` nor `skipped`, so adding a job is one edit and the offenders get named. It used to be
+  two, a `results=( … )` bash array restating `needs:`, and a job in only the first was silently
+  unenforced. What `toJSON` cannot see is a job that never reached `needs:` at all — the aggregate
+  then doesn't wait on it and reports green while it is still running — so
+  `services::tests::the_aggregate_waits_on_every_job_in_the_gate_workflow` walks the file for that.
 
 - **The advisory scan is one policy with two callers.** `.github/actions/cargo-audit` (composite)
   holds the `taiki-e/install-action` pin and `cargo audit --deny unsound --deny unmaintained`;
@@ -82,8 +86,10 @@ reflow hides the lint and test results. No coverage on this path.
   `MoveFileExW` all rest on today. A release build never passes `--cfg test` either, so a
   `cfg(windows)` test has never been type-checked, let alone run: `updater::install`'s four and
   the `all(test, target_os = "windows")` re-export written to feed them were authored blind. That
-  is the bigger half of what this job unlocks, and `services::dwm_titlebar::is_dark_from_rgb`, the
-  third copy of the luminance threshold, is what it makes reachable next. **No Windows clippy
+  is the bigger half of what this job unlocks, and it paid for itself immediately:
+  `services::dwm_titlebar::is_dark_from_rgb`, the third copy of the luminance threshold, split on
+  `lum < 0.5` where its two siblings split on `lum > 0.5` for *light*, so the caption disagreed
+  with the chrome under it on every colour landing exactly on the threshold. **No Windows clippy
   twin**: clippy's verdict is a function of the code it type-checks, so everything compiling on
   both platforms already got its answer from the Linux job, and what `cfg` hides from Linux
   (`dwm_titlebar` is gated at its `pub mod`, so that file is not even parsed there) is FFI glue

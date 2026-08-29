@@ -56,15 +56,18 @@ pub fn reapply_from_theme(app: &AppWindow) {
 }
 
 /// Relative-luminance dark/light check on a packed `0x00RRGGBB` colour. Same coefficients and
-/// threshold as `themes::apply::on_accent_hex` — **a deliberate third copy** `cfg(windows)` keeps
-/// out of CI, so the windows-only module has no dependency on the cross-platform palette code.
-/// Hand-edit it alongside its two siblings; the root `CLAUDE.md` lists them.
+/// threshold as `themes::apply::on_accent_hex` — **a deliberate third copy**, so this module owes
+/// nothing to the palette code that calls *into* it.
+///
+/// `<=`, not `<`: both siblings split on `lum > 0.5` for *light*, so anything but the exact
+/// complement disagrees with them on the colours that land on the threshold. Those are reachable —
+/// a Material You mantle comes off album art. `services::tests::dwm_titlebar_tests` pins the pair.
 fn is_dark_from_rgb(rgb: u32) -> bool {
     let r = f64::from((rgb >> 16) & 0xff) / 255.0;
     let g = f64::from((rgb >> 8) & 0xff) / 255.0;
     let b = f64::from(rgb & 0xff) / 255.0;
     let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    lum < 0.5
+    lum <= 0.5
 }
 
 /// Extract the native Win32 `HWND` from a shown Slint window. `None` until the window has first
@@ -134,3 +137,7 @@ fn set_caption_color(hwnd: *mut c_void, rgb: u32) {
         log::debug!("DWMWA_CAPTION_COLOR not supported (hr=0x{hr:08x})");
     }
 }
+
+#[cfg(test)]
+#[path = "tests/dwm_titlebar_tests.rs"]
+mod tests;

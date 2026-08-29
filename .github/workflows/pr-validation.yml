@@ -247,23 +247,28 @@ jobs:
     needs: [changes, audit, fmt, clippy, test, test-windows]
     runs-on: ubuntu-latest
     steps:
+      # `needs:` above is the whole job list and this step derives from it. The
+      # hand-written array that used to sit here restated it, which made adding
+      # a job two edits and left a job named in only the first unenforced —
+      # nothing read its result, so the gate went green on its failure. What
+      # `toJSON` can't see is a job that never reached `needs:` at all; that
+      # half is pinned by `services::tests`.
+      #
+      # Through `env:` rather than expanded inside the script. These values are
+      # GitHub's own, but a `run:` that interpolates `${{ }}` into bash is the
+      # shape that goes wrong the first time one of them isn't.
       - name: Check job results
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          # Adding a job is TWO edits — `needs:` above and this array. A job
-          # named in only the first is unenforced: nothing here reads its
-          # result, so the gate goes green on its failure.
-          results=(
-            "${{ needs.changes.result }}"
-            "${{ needs.audit.result }}"
-            "${{ needs.fmt.result }}"
-            "${{ needs.clippy.result }}"
-            "${{ needs.test.result }}"
-            "${{ needs.test-windows.result }}"
-          )
-          for result in "${results[@]}"; do
-            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
-              echo "Job failed or was cancelled: $result"
-              exit 1
-            fi
-          done
+          not_green="$(jq -r '
+            to_entries[]
+            | select(.value.result != "success" and .value.result != "skipped")
+            | "  \(.key): \(.value.result)"' <<<"$NEEDS")"
+
+          if [[ -n "$not_green" ]]; then
+            echo "Jobs that failed or were cancelled:"
+            echo "$not_green"
+            exit 1
+          fi
           echo "All jobs passed or were skipped"
