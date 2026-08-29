@@ -130,20 +130,34 @@ coverage on this path.
   because a release build is not the shape that needed the cap. `clippy` is the third compiling
   job and sets nothing: it never codegens, so it doesn't reach that peak. **`RUST_TEST_THREADS` is
   deliberately not capped alongside it** — `.cargo/config.toml`'s 8 stands, oversubscribing a
-  4-core runner 2:1, because the cap answers a memory ceiling and the harness threads are mostly
-  waiting. What it can reach is a test bounded by wall clock rather than by sample count, and
-  there are three: `single_instance_tests`' two 1 s `recv_timeout`s, tightest because they also
-  stand up a real transport, and `tests/crossfade.rs`'s 2 s deferred-clear budget. Each spends
-  that budget waiting for a thread to be scheduled, so they are the first place to read if
-  `test-windows` reddens intermittently.
+  4-core runner 2:1, because the cap answers a memory ceiling and most harness threads are waiting
+  rather than running. `tests/crossfade.rs` is the exception, its eleven tests each turning the
+  mixer from a spin loop, and what that reaches is a wait budgeted in frames rather than in wall
+  clock: the budget then measures the puller's throughput, not the thing it waits for.
+  `CONTROL_OP_BUDGET` argues it, and `taskset -c 0` against a couple of dozen spinners reproduces
+  it off Windows. The tightest budgets left are `single_instance_tests`' two 1 s `recv_timeout`s,
+  tighter for standing up a real transport, and the first place to read if `test-windows` reddens.
+
+- **`test` and `test-windows` cap link time as well as memory.** `cargo test` links five binaries
+  and full debuginfo is most of that tail, worst on MSVC where it is PDBs; both set
+  `CARGO_PROFILE_{DEV,TEST}_DEBUG` to `line-tables-only`, both halves because `cargo test` uses
+  both profiles, and not the `0` `deploy-coverage.yml` sets because this is the job whose
+  backtraces get read. In the workflow rather than `[profile.dev]`, so local and release builds are
+  untouched; `rust-cache` hashes `CARGO_*`, so a change here costs one cold run per platform.
+
+- **Four Windows levers that look obvious and are not**, checked so they aren't re-proposed. A
+  Defender exclusion: the image already disables real-time monitoring and excludes both drives.
+  `CARGO_INCREMENTAL: 0`: `rust-cache` sets it. Folding `clippy-windows` into `test-windows`: check
+  and build units share no dependency artifacts, so one job compiles the graph twice in series
+  where two do it twice in parallel. Capping `clippy-windows`' jobs: same reason it has no cap.
 
 - **The two-phase build is gone.** Pre-crate-split the generated unit compiled twice per
   `cargo test` (rlib + `--test` harness) at 20.96 GiB concurrently, so both workflows carried a
   `--lib`-then-everything split; 10.71 GiB now fits in one command with margin. Cheap levers were
-  measured and **none** move it: `split-debuginfo=unpacked`, `debug=0` and dropping coverage
-  instrumentation are ~0.5 GiB each, `codegen-units` does nothing across 16..4096 (worse at 1),
-  cutting test binaries does nothing. The floor is `melodia-ui` itself (7.59 of the 10.71) — the
-  next lever is a smaller generated unit, not another scheduling trick.
+  measured **for memory** and none move it: `split-debuginfo=unpacked`, `debug=0` and dropping
+  coverage instrumentation are ~0.5 GiB each, `codegen-units` does nothing across 16..4096 (worse
+  at 1), cutting test binaries does nothing. The floor is `melodia-ui` itself (7.59 of the 10.71)
+  — the next lever is a smaller generated unit, not another scheduling trick.
 
 - **Coverage → Pages** — **off the PR path**: the instrumented build is the most expensive thing in
   this repo's CI and has OOM-killed the runner (143). `deploy-coverage.yml` runs `cargo llvm-cov`
