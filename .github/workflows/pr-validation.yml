@@ -50,7 +50,6 @@ jobs:
               - '**'
               - '!**/*.md'
               - '!.claude/**'
-              - '!.github/workflows/deploy-coverage.yml'
               - '!.github/workflows/refresh-manifest.yml'
               - '!.github/ISSUE_TEMPLATE/**'
               - '!.github/FUNDING.yml'
@@ -112,9 +111,9 @@ jobs:
   # reads a coverage delta to decide a merge, so deploy-coverage.yml runs the
   # instrumented build on demand. The `CARGO_BUILD_JOBS: 4` memory cap overrides
   # .cargo/config.toml's jobs=8: past the ceiling nothing fails, it swaps, and
-  # the job looks like a hang. `line-tables-only` is a link-time cap rather than
-  # a memory one: `cargo test` links five test binaries and full debuginfo is
-  # most of that tail, while file:line survives for the backtraces this job
+  # the job looks like a hang. `line-tables-only` is a build-time cap rather
+  # than a memory one: `cargo test` links five test binaries and full debuginfo
+  # is most of that tail, while file:line survives for the backtraces this job
   # exists to print — hence not the `0` deploy-coverage.yml sets. Both profiles,
   # since `cargo test` builds dependencies under `dev` and test targets under
   # `test`.
@@ -160,9 +159,10 @@ jobs:
   # `release-build.yml` compiles the Windows lib and bin, but only on a tag and
   # it runs no test.
   # Same two caps as `test`, the runner being the same 4-core / 16 GB box. The
-  # debuginfo one is worth more here than there: link.exe writing PDBs is the
-  # slowest step this job has. Why neither Windows job takes system deps or a
-  # pinned image label is in the rule file.
+  # debuginfo one is worth more here than there, MSVC PDBs being the heaviest
+  # form of it: it took over 40% off this job's build against Linux's 30%. Why
+  # neither Windows job takes system deps or a pinned image label is in the rule
+  # file.
   test-windows:
     name: test-windows
     runs-on: windows-latest

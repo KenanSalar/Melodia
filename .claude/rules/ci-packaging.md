@@ -60,11 +60,14 @@ coverage on this path.
   and the job would never skip. `fkirc/skip-duplicate-actions` catches the identical tree arriving
   twice and is given **no** `paths_filter`, so the two can't drift into a stale pass.
 
-- **`.github/` is excluded per-file, never as `.github/**`.** `deploy-coverage`,
-  `refresh-manifest`, `FUNDING.yml` and `ISSUE_TEMPLATE/` compile nothing and nothing reads them,
-  so each is named (`pull_request_template.md` rides the `*.md` line). What stays in is what the
-  gate runs or a test reads: the four composites `pr-validation.yml` uses, and `pr-validation.yml`
-  itself. The release-only composites, the four `release*.yml` and `CODEOWNERS` stay in on the
+- **`.github/` is excluded per-file, never as `.github/**`.** `refresh-manifest`, `FUNDING.yml` and
+  `ISSUE_TEMPLATE/` compile nothing and nothing reads them, so each is named
+  (`pull_request_template.md` rides the `*.md` line). What stays in is what the gate runs or a test
+  reads: the four composites `pr-validation.yml` uses, `pr-validation.yml` itself, and
+  **`deploy-coverage.yml`, which used to be excluded and stopped qualifying the day
+  `the_two_workflows_disagree_about_debug_info_on_purpose` began reading it**, the same move
+  `LICENSE` made below; excluding it would leave that pin blind to the edit that breaks it.
+  The release-only composites, the four `release*.yml` and `CODEOWNERS` stay in on the
   other argument, nothing exercising any of them before a merge: a release workflow first runs on
   a pushed tag, after review is over, and `CODEOWNERS` governs who may approve a workflow change.
   A control of that reach failing closed is worth one wasted run.
@@ -139,12 +142,15 @@ coverage on this path.
   1 s `recv_timeout`s, tighter for standing up a real transport, and the first place to read if
   `test-windows` reddens.
 
-- **`test` and `test-windows` cap link time as well as memory.** `cargo test` links five test
-  binaries and full debuginfo is most of that tail, worst on MSVC where it is PDBs; both set
-  `CARGO_PROFILE_{DEV,TEST}_DEBUG` to `line-tables-only`, both halves because `cargo test` uses
-  both profiles, and not the `0` `deploy-coverage.yml` sets because this is the job whose
-  backtraces get read. In the workflow rather than `[profile.dev]`, so local and release builds are
-  untouched; `rust-cache` hashes `CARGO_*`, so a change here costs one cold run per platform.
+- **`test` and `test-windows` cap build time as well as memory.** `cargo test` links five test
+  binaries and full debuginfo is most of that tail, worst on MSVC where it is PDBs. Cold on both
+  sides, cargo's own build phase reads 18m29s → 12m39s on Linux and 31m13s → 17m54s on Windows, so
+  the MSVC half is where it pays. Both set `CARGO_PROFILE_{DEV,TEST}_DEBUG` to `line-tables-only`,
+  both halves because `cargo test` uses both profiles, and not the `0` `deploy-coverage.yml` sets
+  because this is the job whose backtraces get read. In the workflow rather than `[profile.dev]`,
+  so local and release builds are untouched; `rust-cache` hashes `CARGO_*`, so a change here costs
+  one cold run per platform. That cold pair is also the only place those numbers can come from:
+  both `clippy` jobs dropped just as far across the same two runs on cache warmth alone.
 
 - **Four Windows levers that look obvious and are not**, checked so they aren't re-proposed. A
   Defender exclusion: the image already disables real-time monitoring and excludes both drives.
@@ -167,8 +173,11 @@ coverage on this path.
   (`https://kenansalar.github.io/Melodia/`) from a second job in the *same* run — no cross-workflow
   artifact fetch. **`CARGO_PROFILE_{DEV,TEST}_DEBUG: "0"`** there, not `line-tables-only`: LLVM
   source-based coverage carries its own file/region table in `__llvm_covmap` and reads nothing from
-  DWARF, and nothing reads a backtrace out of that job (the PR `test` job keeps default debug info
-  for the opposite reason). Both `report` calls pass **`--ignore-filename-regex`** scoped to
+  DWARF, and nothing reads a backtrace out of that job (the gate's two `test` jobs keep
+  `line-tables-only` for the opposite reason, and
+  `services::tests::the_two_workflows_disagree_about_debug_info_on_purpose` holds the pair apart,
+  tidying them into agreement reddening nothing and silently costing the gate its `file:line`).
+  Both `report` calls pass **`--ignore-filename-regex`** scoped to
   `melodia-ui`'s `OUT_DIR` — cargo-llvm-cov's built-in excludes reach the sysroot and registry but
   not a workspace member's generated code, and `app-window.rs` would swamp the denominator. **The
   dispatch takes a ref**, so the dropdown picks what gets measured and runs that branch's copy; the

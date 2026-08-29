@@ -446,6 +446,61 @@ fn the_aggregate_waits_on_every_job_in_the_gate_workflow() {
     );
 }
 
+/// The value of `key:` inside the named job's `env:`, bounded at the next job id like
+/// [`workflow_job_needs`]. Comment lines are skipped, a comment naming the key reading exactly
+/// like the key.
+fn workflow_job_env<'a>(src: &'a str, job: &str, key: &str) -> Option<&'a str> {
+    let (_, body) = src.split_once(&format!("\n  {job}:\n"))?;
+    let needle = format!("{key}:");
+    body.lines()
+        .take_while(|line| workflow_job_id(line).is_none())
+        .map(str::trim_start)
+        .filter(|line| !line.starts_with('#'))
+        .find_map(|line| line.strip_prefix(&needle))
+        .map(|value| value.trim().trim_matches('"'))
+}
+
+/// The gate and the coverage run disagree about debug info, and the disagreement is invisible.
+///
+/// `deploy-coverage.yml` sets `0` because LLVM coverage carries its own region table and reads no
+/// DWARF, in the one job that has OOM-killed the runner outright. The gate sets `line-tables-only`
+/// because it is the job whose backtraces get read: `test-windows`' first red run named
+/// `tests\crossfade.rs:152:9`, which is the half `0` throws away. Tidy the two into agreement and
+/// nothing reddens; the gate just stops saying where the next Windows flake happened.
+///
+/// A pin rather than a comment because the comment already failed. The coverage bullet went on
+/// describing the gate as keeping *default* debug info for a whole commit after it stopped.
+/// `deploy-coverage.yml` leaves the skip denylist for the same reason `LICENSE` is absent from
+/// it: compiling nothing is not the same as being unexercised.
+#[test]
+fn the_two_workflows_disagree_about_debug_info_on_purpose() {
+    const KEYS: [&str; 2] = ["CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG"];
+    const GATE: [&str; 2] = ["test", "test-windows"];
+
+    let root = Path::new(REPO_ROOT).join(".github/workflows");
+    let read = |name: &str| {
+        let src = std::fs::read_to_string(root.join(name)).unwrap_or_default();
+        assert!(!src.is_empty(), "unreadable or empty: {name}");
+        src
+    };
+    let (gate, coverage) = (read("pr-validation.yml"), read("deploy-coverage.yml"));
+
+    for key in KEYS {
+        for job in GATE {
+            assert_eq!(
+                workflow_job_env(&gate, job, key),
+                Some("line-tables-only"),
+                "pr-validation.yml's `{job}` must keep `file:line` in its backtraces"
+            );
+        }
+        assert_eq!(
+            workflow_job_env(&coverage, "coverage", key),
+            Some("0"),
+            "deploy-coverage.yml must not pay for DWARF no report reads"
+        );
+    }
+}
+
 /// `src` with every `<!-- … -->` block removed.
 ///
 /// `test_support::strip_line_comments`' argument, in the one markup language that doesn't use
