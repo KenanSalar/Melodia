@@ -63,11 +63,11 @@ coverage on this path.
 - **`.github/` is excluded per-file, never as `.github/**`.** `deploy-coverage`,
   `refresh-manifest`, `FUNDING.yml` and `ISSUE_TEMPLATE/` compile nothing and nothing reads them,
   so each is named (`pull_request_template.md` rides the `*.md` line). What stays in is what the
-  gate compiles or a test reads: every composite under `.github/actions/`, and `pr-validation.yml`
-  itself. The four `release*.yml` and `CODEOWNERS` stay in on the other argument, nothing
-  exercising either before a merge: a release workflow first runs on a pushed tag, after review is
-  over, and `CODEOWNERS` governs who may approve a workflow change. A control of that reach failing
-  closed is worth one wasted run.
+  gate runs or a test reads: the four composites `pr-validation.yml` uses, and `pr-validation.yml`
+  itself. The release-only composites, the four `release*.yml` and `CODEOWNERS` stay in on the
+  other argument, nothing exercising any of them before a merge: a release workflow first runs on
+  a pushed tag, after review is over, and `CODEOWNERS` governs who may approve a workflow change.
+  A control of that reach failing closed is worth one wasted run.
   Excluding a composite lands a broken provisioning step green; excluding `pr-validation.yml` lets
   a change to the clippy invocation or the job list merge without the jobs it governs ever running.
   Anything new under `.github/` runs everything by default — an exclusion is earned.

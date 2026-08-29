@@ -168,7 +168,7 @@ fn embed_windows_icon() {
 /// - **No `.env`** — the case for contributors, forks, and release/CI builds — is
 ///   a silent no-op, so a build never fails on its absence.
 /// - **The environment wins**: a key already set (a shell export, or CI's
-///   GitHub-secret env var from `release.yml`) is left untouched, never
+///   GitHub-secret env var from `release-build.yml`) is left untouched, never
 ///   overwritten by `.env`.
 ///
 /// A keyless build is fully supported: `lastfm::is_configured()` returns false
