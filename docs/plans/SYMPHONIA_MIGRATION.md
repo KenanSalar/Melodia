@@ -402,8 +402,12 @@ Four things in that decoder are worth taking as findings rather than rediscoveri
   Symphonia issue #258. `player::stream_decode` already does this through `names_a_codec`; the
   file decoder owes the same guard rather than trusting `default_track`.
 - **The decoder is reset selectively after a seek**, only for MP3, citing Symphonia issue
-  #274, because resetting misbehaves for some containers. That contradicts the blanket "always
-  reset after seeking" advice in `.claude/rules/rodio-symphonia.md`.
+  #274. **This one was followed and then walked back**: #274 reports MP3 seeks popping and
+  says the fault is *not* seen with MKA/Vorbis or M4A/AAC, so it argues for resetting MP3 and
+  says nothing about a reset harming anything else. In 0.6.1 AAC and Vorbis clear an overlap-add
+  buffer on reset and FLAC/ALAC/PCM/ADPCM document theirs as no-ops, so the selective version
+  costs the two codecs that need it most and saves nothing. `player::file_decode` resets
+  unconditionally, as rodio and rox do.
 - **They build their own `CodecRegistry`** in a `LazyLock`: `CodecRegistry::new()`,
   `register_enabled_codecs`, then `register_audio_decoder::<OpusDecoder>()` behind a feature.
   That is precisely the Opus route in `docs/plans/OPUS_SUPPORT.md`, working in production.
@@ -454,11 +458,11 @@ the work.
    so the clock has to come from what the output callback consumed, not from what the decoder
    produced. This is the change most likely to be subtly wrong and least likely to fail a
    test.
-2. **Seek, and which decoders may be reset.** The standing advice is to reset the decoder
-   after every seek, and it is not universally safe: resetting after a seek misbehaves for
-   some containers, which is why a working implementation resets only for MP3 and cites
-   Symphonia issue #274. Pair the seek with the head trim that drops frames between the
-   packet landing and the requested position, or every seek replays the tail before it.
+2. **Seek.** Reset the decoder after every one: the codecs that keep no state say so in their
+   own `reset`, and AAC and Vorbis hold an overlap-add buffer that blends the audio either side
+   of the jump if it is skipped. Pair the seek with the head trim that drops frames between the
+   packet landing and the requested position, or every seek replays the tail before it, and
+   clamp the target short of a stated length rather than onto it.
 3. **Crossfade amplitude.** The mixer must stay unclamped, because the complementary linear
    ramps summing to unity is what keeps it from clipping. `tests/crossfade.rs` already pins
    this against a device free mixer and should keep passing across both phases.
@@ -529,7 +533,9 @@ today, so **CUE does not depend on this migration** and should not be sequenced 
 | termusic is MIT | its root `Cargo.toml`, `license = "MIT"` |
 | Their decoder names a finite span | `playback/src/backends/rusty/decoder/mod.rs`, `current_span_len` returns `Some(self.buffer.frame_len)` |
 | `default_track` can return a null codec | same file, filtered with `is_codec_null` and a fallback, citing [Symphonia issue #258](https://github.com/pdeljanov/Symphonia/issues/258) |
-| Decoder reset after seek is not universally safe | same file, reset only for `CODEC_ID_MP3`, citing [Symphonia issue #274](https://github.com/pdeljanov/Symphonia/issues/274) |
+| A working player resets selectively after a seek (not followed) | same file, reset only for `CODEC_ID_MP3`, citing [Symphonia issue #274](https://github.com/pdeljanov/Symphonia/issues/274), which reports MP3 popping and rules out MKA/Vorbis and M4A/AAC |
+| Only MP3, AAC and Vorbis keep state a reset clears | `symphonia-bundle-mp3/src/decoder.rs`, `symphonia-codec-aac/src/aac/ics/mod.rs`, `symphonia-codec-vorbis/src/dsp.rs`; FLAC's and ALAC's `reset` say "nothing to do" |
+| Seeking onto a stated length parks the reader at the end | rox, `crates/rox-playback/src/engine.rs`, `SEEK_END_MARGIN_SECS` and `inside_track` |
 | A custom registry is how Opus gets registered | same file, `static CODEC_REGISTRY: LazyLock<CodecRegistry>` with `register_enabled_codecs` then `register_audio_decoder::<OpusDecoder>()` |
 | Symphonia ships its own reference player | `symphonia-play/` in [the Symphonia repository](https://github.com/pdeljanov/Symphonia), MPL-2.0, at the v0.6.1 tag |
 | Gapless lives on the decoder options, from the author | `symphonia-play/src/main.rs`, `AudioDecoderOptions::default().gapless(!args.get_flag("no-gapless"))` |

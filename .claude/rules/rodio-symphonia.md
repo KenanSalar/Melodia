@@ -58,11 +58,21 @@ loop {
 
 ### Seeking
 
-- **Reset the decoder after a seek only where the codec needs it** — the blanket advice is wrong.
-  Resetting misbehaves for some containers, sending them back to the start
-  ([symphonia#274](https://github.com/pdeljanov/Symphonia/issues/274)); `player::file_decode` resets
-  for MP3 and nothing else, which is what a working implementation does
+- **Always reset the decoder after a seek**, and don't be talked out of it. `FormatReader::seek`'s
+  own docs say every decoder consuming that reader should be reset, and in 0.6.1 the codecs holding
+  no state across packets — FLAC, ALAC, PCM, ADPCM — document their `reset` as doing nothing, so
+  the blanket call costs them a vtable hop. The ones it is *for* are MP3, which rebuilds its whole
+  state, and AAC and Vorbis, which clear an overlap-add buffer that otherwise blends the audio
+  either side of the jump. Reset selectively and those two are exactly what you lose.
+  [symphonia#274](https://github.com/pdeljanov/Symphonia/issues/274) is not an argument against it:
+  it reports MP3 seeks popping, and says the fault is *not* seen with MKA/Vorbis or M4A/AAC. It was
+  read here once as saying a reset sends some containers back to the start, which it does not say
+  and no decoder's `reset` could do
 - Use `FormatReader::seek()` with `SeekTo::Time` for timestamp-based seeking, and `SeekMode::Accurate`
+- **Clamp a seek short of a stated length, not onto it.** The last frame is not somewhere a demuxer
+  can land: the seek answers out of range and the failed attempt still parks the reader at the end,
+  so the next pull reads as the track finishing. A slider dragged to its right edge asks for exactly
+  the length, so this is the common case rather than an edge one — `file_decode::SEEK_END_MARGIN`
 - **A demuxer seek lands on a packet boundary, so trim the head yourself.** Without it every seek
   replays the tail of what came before. `required_ts - actual_ts` through the track's timebase gives
   the frames to drop. Note that neither reference player does this: `symphonia-play` skips whole

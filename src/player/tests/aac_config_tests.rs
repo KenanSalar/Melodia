@@ -120,6 +120,8 @@ fn demoted(asc: &[u8]) -> Result<Box<[u8]>, AppError> {
     core_layer_config(asc).ok_or_else(|| AppError::Player("an SBR config should demote".to_owned()))
 }
 
+/// Upstream's registry rather than `decode`'s, deliberately: the claim under test is about what
+/// Symphonia accepts, so asking anything of ours would weaken it.
 fn make_decoder(
     params: &AudioCodecParameters,
 ) -> Result<Box<dyn AudioDecoder>, symphonia::core::errors::Error> {

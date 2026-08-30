@@ -1,15 +1,15 @@
-//! Turning a file's bytes into samples: opening it, the packet loop and the seek.
+//! Turning a file's bytes into samples: opening it, and the seek.
 //!
 //! What is this module's own is everything a file has and a mount does not — a length, a seek that
 //! can land anywhere, and an end it reaches by itself. The probe, the codec registry and the packet
-//! loop are [`super::decode`]'s, shared with [`super::stream_decode`], and the argument for
+//! cursor are [`super::decode`]'s, shared with [`super::stream_decode`], and the argument for
 //! decoding against Symphonia 0.6 rather than the 0.5 rodio pins is in that module's `//!`.
 //!
 //! It replaces `rodio::Decoder`, so that type doubles as the specification: what must not be lost
 //! is the frame-accurate seek, which is the one thing here neither reference implementation does.
 
-use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::fs::{File, Metadata};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,7 +17,6 @@ use std::time::Duration;
 use rodio::source::SeekError;
 use rodio::{ChannelCount, Sample, SampleRate, Source};
 use symphonia::core::codecs::audio::AudioDecoder;
-use symphonia::core::codecs::audio::well_known::CODEC_ID_MP3;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, Track};
 use symphonia::core::io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions};
@@ -28,19 +27,46 @@ use crate::error::AppError;
 
 use super::decode;
 
-/// Symphonia pulls frames in chunks well above the std 8 KB default for most formats, so a small
-/// buffer costs a refill per frame. This covers typical FLAC and MP3 frame clusters without
-/// meaningful per-track memory.
-const READ_BUFFER_BYTES: usize = 64 * 1024;
+/// How far short of a stated length a seek is allowed to land.
+///
+/// The stated length is not somewhere to land: some formats answer out of range and park the reader
+/// at the end, and the rest land with nothing left to decode. Either way the deck drains and the
+/// monitor reads it as the track finishing, and dragging the slider to its right edge asks for
+/// exactly the length, so on the last queue entry that would end the queue.
+///
+/// The size is not derived from packet geometry — a packet here runs anywhere from an AAC frame to
+/// a FLAC block, four times longer. It only has to clear the gap between the length a container
+/// states and where its last decodable frame really is, which tags overstate by more than a frame
+/// routinely, while staying short enough that a drag to the edge still sounds like the end.
+const SEEK_END_MARGIN: Duration = Duration::from_millis(100);
 
-/// A file as the demuxer wants it: seekable, and with a length it can trust.
+/// A file as the demuxer wants it, with both of its answers taken once.
 ///
 /// The mirror of [`super::stream_decode::LiveSource`], which answers no to both. A stated length is
 /// what lets the probe reach trailing metadata and the seek land anywhere, neither of which a live
-/// mount can offer.
+/// mount can offer. Symphonia ships its own `MediaSource` for `File` and re-reads the filesystem on
+/// every call to say so, warning in its docs to cache what it returns; the demuxer asks once per
+/// probe and again per seek.
+///
+/// No `BufReader` underneath: [`MediaSourceStream`] is already the read-ahead buffer, and a second
+/// one only copies every byte again. Both reference players hand it the file directly.
 struct FileSource {
-    inner: BufReader<File>,
+    inner: File,
+    seekable: bool,
     byte_len: Option<u64>,
+}
+
+impl FileSource {
+    fn new(inner: File) -> Self {
+        // Anything but a regular file is a pipe or a device wearing an audio extension: no length,
+        // and nowhere to seek to.
+        let regular = inner.metadata().ok().filter(Metadata::is_file);
+        Self {
+            seekable: regular.is_some(),
+            byte_len: regular.map(|m| m.len()),
+            inner,
+        }
+    }
 }
 
 impl Read for FileSource {
@@ -57,7 +83,7 @@ impl Seek for FileSource {
 
 impl MediaSource for FileSource {
     fn is_seekable(&self) -> bool {
-        true
+        self.seekable
     }
 
     fn byte_len(&self) -> Option<u64> {
@@ -70,36 +96,21 @@ pub struct FileDecoder {
     format: Box<dyn FormatReader>,
     decoder: Box<dyn AudioDecoder>,
     track: u32,
-    /// The packet currently being handed out, interleaved.
-    samples: Vec<f32>,
-    next: usize,
-    channels: ChannelCount,
-    sample_rate: SampleRate,
+    cursor: decode::Cursor,
     time_base: Option<TimeBase>,
     total_duration: Option<Duration>,
-    /// Whether this codec is one of the few a seek leaves in a state only a reset clears.
-    reset_after_seek: bool,
-    /// Set once there is nothing more to hand out, so a re-poll past the end cannot serve the
-    /// packet that ended it.
-    ended: bool,
 }
 
 impl FileDecoder {
     /// Probe `path`, build a decoder for its audio track, and decode enough of it to know the
     /// shape of what follows.
-    ///
-    /// The first packet is decoded here rather than lazily for the reason the stream path does it:
-    /// the deck is told the channel count and sample rate when the source is appended, and rodio
-    /// cannot renegotiate either afterwards.
     pub fn open(path: &Path) -> Result<Self, AppError> {
         let file = File::open(path)
             .map_err(|e| AppError::Player(format!("Cannot open {}: {e}", path.display())))?;
-        let byte_len = file.metadata().map(|m| m.len()).ok();
-        let source = FileSource {
-            inner: BufReader::with_capacity(READ_BUFFER_BYTES, file),
-            byte_len,
-        };
-        let mss = MediaSourceStream::new(Box::new(source), MediaSourceStreamOptions::default());
+        let mss = MediaSourceStream::new(
+            Box::new(FileSource::new(file)),
+            MediaSourceStreamOptions::default(),
+        );
 
         let mut hint = Hint::new();
         if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
@@ -115,7 +126,6 @@ impl FileDecoder {
         let params = decode::audio_params(track)
             .ok_or_else(|| AppError::Player(format!("{} names no audio codec", path.display())))?
             .clone();
-        let reset_after_seek = params.codec == CODEC_ID_MP3;
         let track_id = track.id;
         let time_base = track.time_base;
         let total_duration = playing_time(&*format, track);
@@ -123,22 +133,17 @@ impl FileDecoder {
         let mut decoder = decode::make_decoder(params)
             .map_err(|e| AppError::Player(format!("Decode error for {}: {e}", path.display())))?;
 
-        let mut samples = Vec::new();
-        let shape = decode::fill(&mut *format, &mut *decoder, track_id, &mut samples)
+        let cursor = decode::Cursor::open(&mut *format, &mut *decoder, track_id)
+            .map_err(|e| AppError::Player(format!("Cannot read {}: {e}", path.display())))?
             .ok_or_else(|| AppError::Player(format!("{} decoded to nothing", path.display())))?;
 
         Ok(Self {
             format,
             decoder,
             track: track_id,
-            samples,
-            next: 0,
-            channels: shape.channels,
-            sample_rate: shape.sample_rate,
+            cursor,
             time_base,
             total_duration,
-            reset_after_seek,
-            ended: false,
         })
     }
 
@@ -157,12 +162,13 @@ impl FileDecoder {
             return 0;
         };
 
-        let ticks = ahead * u128::from(time_base.numer.get()) * u128::from(self.sample_rate.get());
+        let rate = u128::from(self.cursor.sample_rate().get());
+        let ticks = ahead * u128::from(time_base.numer.get()) * rate;
         let frames = ticks.div_ceil(u128::from(time_base.denom.get()));
         let Ok(frames) = usize::try_from(frames) else {
             return 0;
         };
-        frames.saturating_mul(usize::from(self.channels.get()))
+        frames.saturating_mul(usize::from(self.cursor.channels().get()))
     }
 
     /// Discard `count` interleaved samples, decoding as far as it takes.
@@ -219,49 +225,24 @@ impl Iterator for FileDecoder {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.ended {
-            return None;
-        }
-        if self.next >= self.samples.len() {
-            let Some(shape) =
-                decode::fill(&mut *self.format, &mut *self.decoder, self.track, &mut self.samples)
-            else {
-                self.ended = true;
-                return None;
-            };
-            // rodio was told the shape at the append and cannot renegotiate it, so a file that
-            // changes one mid-track ends here rather than playing on at the wrong rate.
-            if shape.channels != self.channels || shape.sample_rate != self.sample_rate {
-                self.ended = true;
-                return None;
-            }
-            self.next = 0;
-        }
-        let sample = *self.samples.get(self.next)?;
-        self.next += 1;
-        Some(sample)
+        self.cursor.next_sample(&mut *self.format, &mut *self.decoder, self.track)
     }
 }
 
 impl Source for FileDecoder {
     #[inline]
     fn current_span_len(&self) -> Option<usize> {
-        // Never `None`: that reaches `UniformSourceIterator::bootstrap` as an unbounded `Take`, so
-        // the mixer builds one `SampleRateConverter` out of whichever source reached the deck first
-        // and never gets a boundary to rebuild it at. The packet is the boundary rodio's own
-        // decoder hands up, and it names the whole one rather than what is left of it for the same
-        // reason: a span of zero would have the converter rebuild against an empty `Take`.
-        Some(self.samples.len())
+        Some(self.cursor.span_len())
     }
 
     #[inline]
     fn channels(&self) -> ChannelCount {
-        self.channels
+        self.cursor.channels()
     }
 
     #[inline]
     fn sample_rate(&self) -> SampleRate {
-        self.sample_rate
+        self.cursor.sample_rate()
     }
 
     #[inline]
@@ -272,22 +253,16 @@ impl Source for FileDecoder {
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
         // `Source::try_seek` promises to saturate wherever a length is known, and the caller asks
         // past the end routinely: the position it seeks to comes off the tags, which overshoot the
-        // decoded length by a few frames often enough. Unclamped, the demuxer answers out of range
-        // or parks at the end, and a deck draining reads to the monitor as the track finishing.
-        let pos = self.total_duration.map_or(pos, |total| pos.min(total));
+        // decoded length by a few frames often enough. The ceiling is short of the end rather than
+        // on it, for [`SEEK_END_MARGIN`]'s reason.
+        let pos =
+            self.total_duration.map_or(pos, |total| pos.min(total.saturating_sub(SEEK_END_MARGIN)));
 
         let time = symphonia::core::units::Time::try_new(
             i64::try_from(pos.as_secs()).map_err(other)?,
             pos.subsec_nanos(),
         )
         .ok_or_else(|| other(AppError::Player("Seek position out of range".to_owned())))?;
-
-        // Which channel of a frame the puller is part way through. A seek restarts on a frame
-        // boundary, so without putting this back the next sample handed out is channel 0 where
-        // channel 1 was due, and rodio's channel converter — which keeps its own phase and is not
-        // reset by a seek — runs one sample out of step for the rest of the track. That is the
-        // permanent channel swap, and rodio's own decoder carries these two lines for it.
-        let channel_phase = self.next % usize::from(self.channels.get());
 
         let seeked = self
             .format
@@ -300,17 +275,17 @@ impl Source for FileDecoder {
             )
             .map_err(other)?;
 
-        // The buffer is left alone and only stepped past, so `current_span_len` keeps naming a
-        // real packet until the next pull replaces it.
-        self.next = self.samples.len();
-        self.ended = false;
+        // A seek is a demuxer operation the decoder is told nothing about, so whatever overlap
+        // state it holds now describes audio that is no longer adjacent. Unconditional because
+        // that is what upstream asks for and what rodio did: the codecs keeping no state across
+        // packets document their `reset` as doing nothing.
+        self.decoder.reset();
 
-        // Resetting is not universally safe — it sends some containers back to the start
-        // ([symphonia#274](https://github.com/pdeljanov/Symphonia/issues/274)) — so it happens for
-        // the one codec that needs it rather than for all of them.
-        if self.reset_after_seek {
-            self.decoder.reset();
-        }
+        // Which channel of a frame the puller was part way through. A seek restarts on a frame
+        // boundary, so without putting this back the next sample handed out is channel 0 where
+        // channel 1 was due, and rodio's channel converter — which keeps its own phase and is not
+        // reset by a seek — runs one sample out of step for the rest of the track.
+        let channel_phase = self.cursor.discard_buffered();
 
         // A demuxer seek lands on a packet boundary, so without the trim every seek replays the
         // tail of what came before. Both reference players stop at the whole packet, and one says

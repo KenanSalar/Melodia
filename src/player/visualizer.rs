@@ -406,9 +406,9 @@ impl<S: Source> Source for VisualizerTap<S> {
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
         self.input.try_seek(pos)?;
-        // Start the frame being assembled over. The input need not resume in phase — `EqSource`
-        // drops whatever was left of the frame it was processing — so the grid this averages
-        // over is only knowable from here by beginning a new one.
+        // Start the frame being averaged over. The input does resume in phase, so this re-anchors
+        // a grid rather than repairing one: at worst it downmixes one straddled frame, on a
+        // decoration, which is cheaper than threading the phase up through the tap.
         self.accum = 0.0;
         self.phase = 0;
         Ok(())

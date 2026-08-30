@@ -49,7 +49,7 @@ enum SamplingFrequency {
 /// Every other codec, and every AAC config with nothing to demote, is left exactly as it was.
 /// Call it on a track's parameters ahead of building a decoder from them — either decoder can be
 /// handed the config 0.6 refuses.
-pub(crate) fn demote_he_aac(params: &mut AudioCodecParameters) {
+pub(super) fn demote_he_aac(params: &mut AudioCodecParameters) {
     if params.codec != CODEC_ID_AAC {
         return;
     }

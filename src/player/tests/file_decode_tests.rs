@@ -80,15 +80,28 @@ fn the_span_names_a_real_packet() -> Result<(), AppError> {
 /// few frames often enough. Unclamped the demuxer answers out of range or parks at the end, and a
 /// deck draining reads to the monitor as the track finishing — the queue jumps, from a drag of the
 /// slider to its own right edge.
+///
+/// Two assertions because the formats fail differently: some answer out of range, and the rest
+/// return `Ok` having landed with nothing left to play. A WAV is the second kind, so the seek
+/// succeeding is exactly what a length check alone would have believed.
 #[test]
 fn a_seek_past_the_end_saturates_rather_than_failing() -> Result<(), AppError> {
-    let mut decoder = FileDecoder::open(&asset("silence.wav"))?;
-    let Some(length) = decoder.total_duration() else {
-        return Err(AppError::Player("the fixture states no length to clamp to".to_owned()));
-    };
+    for fixture in [
+        "silence.wav",
+        "silence.mp3",
+        "silence.m4a",
+        "silence.ogg",
+        "silence.flac",
+    ] {
+        let mut decoder = FileDecoder::open(&asset(fixture))?;
+        let Some(length) = decoder.total_duration() else {
+            return Err(AppError::Player(format!("{fixture} states no length to clamp to")));
+        };
 
-    let seeked = decoder.try_seek(length * 4);
-    assert!(seeked.is_ok(), "a seek past the end must saturate: {seeked:?}");
+        let seeked = decoder.try_seek(length * 4);
+        assert!(seeked.is_ok(), "{fixture}: a seek past the end must saturate: {seeked:?}");
+        assert!(decoder.next().is_some(), "{fixture}: and must leave audio behind it");
+    }
     Ok(())
 }
 

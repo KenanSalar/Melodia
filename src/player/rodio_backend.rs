@@ -382,7 +382,7 @@ impl RodioPlayer {
         // shares this mutex, so a synchronous Symphonia probe under it stalls
         // position publication. It is the only step that can be hoisted out;
         // everything depending on *which* deck we land on happens below.
-        let decoded = decode_file(file_path)?;
+        let decoded = FileDecoder::open(Path::new(file_path))?;
 
         self.bump_epoch();
         self.clear_live_stream();
@@ -506,7 +506,7 @@ impl RodioPlayer {
     ) -> Result<(), AppError> {
         // Decode outside the lock, pick the deck and build inside it — see the
         // same note in `play_media`.
-        let decoded = decode_file(file_path)?;
+        let decoded = FileDecoder::open(Path::new(file_path))?;
 
         self.bump_epoch();
         self.clear_live_stream();
@@ -795,7 +795,7 @@ impl RodioPlayer {
 
         // Decode off the deck lock, as in `play_media` — a preload fires right
         // when a stall in position publication would be most visible.
-        let decoded = match decode_file(path) {
+        let decoded = match FileDecoder::open(Path::new(path)) {
             Ok(decoded) => decoded,
             Err(e) => {
                 log::warn!("Failed to preload gapless track {path}: {e}");
@@ -892,10 +892,6 @@ impl RodioPlayer {
     fn lock_decks(&self) -> std::sync::MutexGuard<'_, Decks> {
         lock_decks(&self.decks)
     }
-}
-
-fn decode_file(path: &str) -> Result<FileDecoder, AppError> {
-    FileDecoder::open(Path::new(path))
 }
 
 #[cfg(test)]

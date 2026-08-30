@@ -1,8 +1,8 @@
-//! Turning a live mount's bytes into samples: opening it, and the packet loop.
+//! Turning a live mount's bytes into samples: opening it.
 //!
 //! What is this module's own is everything a mount has and a file does not — no length, no seek,
 //! no end of its own, and a shape that can change under a reconnect. The probe, the codec registry
-//! and the packet loop are [`super::decode`]'s, shared with [`super::file_decode`], and the
+//! and the packet cursor are [`super::decode`]'s, shared with [`super::file_decode`], and the
 //! argument for decoding against Symphonia 0.6 is in that module's `//!`; this was the path that
 //! hit it first.
 //!
@@ -61,23 +61,12 @@ pub struct StreamDecoder {
     format: Box<dyn FormatReader>,
     decoder: Box<dyn AudioDecoder>,
     track: u32,
-    /// The packet currently being handed out, interleaved.
-    samples: Vec<f32>,
-    next: usize,
-    channels: ChannelCount,
-    sample_rate: SampleRate,
-    /// Set once there is nothing more to hand out, so a re-poll past the end cannot serve the
-    /// packet that ended it.
-    ended: bool,
+    cursor: decode::Cursor,
 }
 
 impl StreamDecoder {
     /// Probe `source`, build a decoder for its audio track, and decode enough of it to know the
     /// shape of what follows.
-    ///
-    /// The first packet is decoded here rather than lazily because the deck is told the channel
-    /// count and sample rate when the source is appended, and rodio cannot renegotiate either
-    /// afterwards.
     pub fn open(source: Box<dyn MediaSource>, mime: Option<&str>) -> Result<Self, AppError> {
         let mss = MediaSourceStream::new(source, MediaSourceStreamOptions::default());
 
@@ -104,9 +93,9 @@ impl StreamDecoder {
         let mut decoder = decode::make_decoder(params)
             .map_err(|e| AppError::Player(format!("Cannot decode the station's stream: {e}")))?;
 
-        let mut samples = Vec::new();
-        let shape =
-            decode::fill(&mut *format, &mut *decoder, track_id, &mut samples).ok_or_else(|| {
+        let cursor = decode::Cursor::open(&mut *format, &mut *decoder, track_id)
+            .map_err(|e| AppError::Player(format!("Cannot read the station's stream: {e}")))?
+            .ok_or_else(|| {
                 AppError::Player("The station's stream ended before it played".to_owned())
             })?;
 
@@ -114,20 +103,16 @@ impl StreamDecoder {
             format,
             decoder,
             track: track_id,
-            samples,
-            next: 0,
-            channels: shape.channels,
-            sample_rate: shape.sample_rate,
-            ended: false,
+            cursor,
         })
     }
 
     pub fn channels(&self) -> ChannelCount {
-        self.channels
+        self.cursor.channels()
     }
 
     pub fn sample_rate(&self) -> SampleRate {
-        self.sample_rate
+        self.cursor.sample_rate()
     }
 }
 
@@ -135,27 +120,6 @@ impl Iterator for StreamDecoder {
     type Item = Sample;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.ended {
-            return None;
-        }
-        if self.next >= self.samples.len() {
-            let Some(shape) =
-                decode::fill(&mut *self.format, &mut *self.decoder, self.track, &mut self.samples)
-            else {
-                self.ended = true;
-                return None;
-            };
-            // rodio cannot renegotiate the shape it was told at the append, so a mount that
-            // changes one mid-connection ends here rather than playing on at the wrong rate: the
-            // feed thread reads that as a reconnect, which refuses the new format and stops.
-            if shape.channels != self.channels || shape.sample_rate != self.sample_rate {
-                self.ended = true;
-                return None;
-            }
-            self.next = 0;
-        }
-        let sample = *self.samples.get(self.next)?;
-        self.next += 1;
-        Some(sample)
+        self.cursor.next_sample(&mut *self.format, &mut *self.decoder, self.track)
     }
 }

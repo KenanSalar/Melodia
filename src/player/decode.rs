@@ -1,10 +1,10 @@
 //! What both decoders need before and around the codec: the registry, the track pick, and the
-//! packet loop.
+//! packet cursor.
 //!
 //! [`super::file_decode`] and [`super::stream_decode`] differ in what they open — a file with a
 //! length and a seek against a mount with neither — and in nothing after that. Resolving a codec
-//! and pulling a packet out of it are the same questions for both, and the answers have to agree
-//! or the split this module closed grows back one function at a time.
+//! and handing out the samples it produces are the same questions for both, and the answers have
+//! to agree or the split this module closed grows back one function at a time.
 //!
 //! **Why Symphonia 0.6 rather than the 0.5 rodio pins.** 0.5's probe picks a demuxer by matching a
 //! two-byte marker and nothing else — its `format()` takes a `Hint` and discards it, and scoring is
@@ -96,9 +96,114 @@ fn drop_companded_sample_width(params: &mut AudioCodecParameters) {
 }
 
 /// What one decoded packet says the audio is.
-pub(super) struct Shape {
-    pub(super) channels: ChannelCount,
-    pub(super) sample_rate: SampleRate,
+struct Shape {
+    channels: ChannelCount,
+    sample_rate: SampleRate,
+}
+
+/// The packet being handed out, one interleaved sample at a time.
+///
+/// Both decoders own one and neither adds to it: the refill, the shape check rodio's fixed append
+/// makes necessary, and the latch that stops a re-poll past the end serving the packet that ended
+/// it are the same three answers whether the bytes came off a socket or off disk.
+pub(super) struct Cursor {
+    samples: Vec<f32>,
+    next: usize,
+    channels: ChannelCount,
+    sample_rate: SampleRate,
+    /// Set once there is nothing more to hand out.
+    ended: bool,
+}
+
+impl Cursor {
+    /// Decode enough to know the shape of what follows. `Ok(None)` where the source held no
+    /// audio at all, against `Err` for one that could not be read.
+    ///
+    /// The two are worth telling apart here and nowhere else: this is the one call reached off the
+    /// audio thread, and its answer becomes what the user is shown, where a permissions failure and
+    /// an empty container read very differently.
+    ///
+    /// The first packet is decoded eagerly because the deck is told the channel count and sample
+    /// rate when the source is appended, and rodio cannot renegotiate either afterwards.
+    pub(super) fn open(
+        format: &mut dyn FormatReader,
+        decoder: &mut dyn AudioDecoder,
+        track: u32,
+    ) -> Result<Option<Self>, SymphoniaError> {
+        let mut samples = Vec::new();
+        let Some(shape) = fill(format, decoder, track, &mut samples)? else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            samples,
+            next: 0,
+            channels: shape.channels,
+            sample_rate: shape.sample_rate,
+            ended: false,
+        }))
+    }
+
+    pub(super) fn channels(&self) -> ChannelCount {
+        self.channels
+    }
+
+    pub(super) fn sample_rate(&self) -> SampleRate {
+        self.sample_rate
+    }
+
+    /// The whole buffered packet, not what is left of it.
+    ///
+    /// It answers `Source::current_span_len`, which must never be `None`: that reaches
+    /// `UniformSourceIterator::bootstrap` as an unbounded `Take`, so the mixer builds one
+    /// `SampleRateConverter` out of whichever source reached the deck first and never gets a
+    /// boundary to rebuild it at. Naming the whole packet is for the same reason a span of zero
+    /// would be wrong, the converter rebuilding against an empty `Take`.
+    pub(super) fn span_len(&self) -> usize {
+        self.samples.len()
+    }
+
+    /// Steps past the buffered packet, reporting the channel of the frame the puller was part way
+    /// through so a seek can put it back there.
+    ///
+    /// The buffer is left in place rather than cleared, so [`Self::span_len`] keeps naming a real
+    /// packet until the next pull replaces it.
+    pub(super) fn discard_buffered(&mut self) -> usize {
+        let channel_phase = self.next % usize::from(self.channels.get());
+        self.next = self.samples.len();
+        self.ended = false;
+        channel_phase
+    }
+
+    pub(super) fn next_sample(
+        &mut self,
+        format: &mut dyn FormatReader,
+        decoder: &mut dyn AudioDecoder,
+        track: u32,
+    ) -> Option<f32> {
+        if self.ended {
+            return None;
+        }
+        if self.next >= self.samples.len() {
+            // A read that fails and a clean end are one thing from here: this runs on the audio
+            // callback thread, where nothing may log and there is no channel back, so both reach
+            // the caller as the only move it has.
+            let Ok(Some(shape)) = fill(format, decoder, track, &mut self.samples) else {
+                self.ended = true;
+                return None;
+            };
+            // rodio was told the shape at the append and cannot renegotiate it, so a source that
+            // changes one mid-track ends here rather than playing on at the wrong rate. A mount
+            // doing it is a reconnect the feed thread then refuses.
+            if shape.channels != self.channels || shape.sample_rate != self.sample_rate {
+                self.ended = true;
+                return None;
+            }
+            self.next = 0;
+        }
+        let sample = *self.samples.get(self.next)?;
+        self.next += 1;
+        Some(sample)
+    }
 }
 
 /// Decode packets into `samples` until one yields audio, or the source runs out.
@@ -112,15 +217,19 @@ pub(super) struct Shape {
 /// it where a chained stream starts a new physical one, and recovering means re-reading the track
 /// list and rebuilding the decoder against parameters that may have moved. Neither reference player
 /// does it. A mount gets the feed thread's reconnect on top; a chained file stops there.
-pub(super) fn fill(
+///
+/// A read that fails is kept apart from a clean end, which 0.6 made possible by spelling the end
+/// as `Ok(None)` where 0.5 raised `UnexpectedEof`. Only [`Cursor::open`] has any use for the
+/// distinction; [`Cursor::next_sample`] folds the two back together and says why.
+fn fill(
     format: &mut dyn FormatReader,
     decoder: &mut dyn AudioDecoder,
     track: u32,
     samples: &mut Vec<f32>,
-) -> Option<Shape> {
+) -> Result<Option<Shape>, SymphoniaError> {
     loop {
-        let Ok(Some(packet)) = format.next_packet() else {
-            return None;
+        let Some(packet) = format.next_packet()? else {
+            return Ok(None);
         };
         if packet.track_id != track {
             continue;
@@ -132,15 +241,24 @@ pub(super) fn fill(
                 decoded.copy_to_vec_interleaved(samples);
                 if !samples.is_empty() {
                     let channels =
-                        u16::try_from(spec.channels().count()).ok().and_then(ChannelCount::new)?;
-                    return Some(Shape {
+                        u16::try_from(spec.channels().count()).ok().and_then(ChannelCount::new);
+                    let (Some(channels), Some(sample_rate)) =
+                        (channels, SampleRate::new(spec.rate()))
+                    else {
+                        // Nothing rodio can be told about, so it is the decoder rather than the
+                        // read that this source runs out on.
+                        return Err(SymphoniaError::Unsupported(
+                            "channel count or sample rate out of range",
+                        ));
+                    };
+                    return Ok(Some(Shape {
                         channels,
-                        sample_rate: SampleRate::new(spec.rate())?,
-                    });
+                        sample_rate,
+                    }));
                 }
             }
             Err(SymphoniaError::DecodeError(_)) => {}
-            Err(_) => return None,
+            Err(e) => return Err(e),
         }
     }
 }

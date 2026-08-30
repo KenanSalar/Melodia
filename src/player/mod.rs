@@ -1,8 +1,8 @@
-pub(crate) mod aac_config;
+mod aac_config;
 pub mod actions;
 pub mod crossfade;
 pub(crate) mod decks;
-pub(crate) mod decode;
+mod decode;
 pub(crate) mod dsp;
 pub mod equalizer;
 pub mod event_sink;

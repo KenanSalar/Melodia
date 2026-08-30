@@ -348,24 +348,25 @@ async fn seeking_mid_crossfade_drops_the_outgoing_deck_and_restores_unity() -> s
 
 /// A demuxer seek lands on a packet boundary, so the decoder resumes at the start of a frame —
 /// but rodio's `ChannelCountConverter` keeps its own phase and nothing resets it across a seek. If
-/// the decoder does not put the consumer back on the channel it was part way through, every frame
-/// after that straddles two source frames and the stereo image is swapped for the rest of the
-/// track. `FileDecoder::try_seek` carries the restoration rodio's own decoder does; this is what
-/// says so.
+/// anything in the chain hands back a different number of samples than it owed, every frame after
+/// that straddles two source frames and the stereo image is swapped for the rest of the track.
 ///
 /// Only the mixer can see it. Below the converter every sample is correct and in order, which is
-/// why a unit test on the decoder passes either way — the same argument `tests/stream_rate.rs`
+/// why a unit test on either stage passes either way — the same argument `tests/stream_rate.rs`
 /// makes for the resampler.
 ///
 /// Distinct per-channel amplitudes are the whole fixture: the DC pair the other cases use carries
 /// one value in both channels, where a swap is invisible. Several seeks rather than one because
 /// `periodic_access` fires every 441 samples at this rate — an odd number, so the mid-frame
 /// landing that triggers it is roughly every other seek.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn seeking_never_swaps_the_stereo_image() -> std::io::Result<()> {
+fn assert_seeking_keeps_the_image(eq_on: bool) -> std::io::Result<()> {
     const LEFT: f32 = 0.5;
     const RIGHT: f32 = 0.25;
     const SEEKS: u64 = 8;
+    /// Any peaking band leaves a DC fixture alone — an RBJ peaking EQ is unity at zero
+    /// frequency whatever its gain — so this buys the active path without moving what is
+    /// asserted.
+    const BAND: usize = 5;
 
     let tmp = tempfile::tempdir()?;
     let wav = tmp.path().join("stereo.wav");
@@ -373,6 +374,10 @@ async fn seeking_never_swaps_the_stereo_image() -> std::io::Result<()> {
     let path = wav.to_string_lossy().into_owned();
 
     let (rodio, mut mix) = player();
+    if eq_on {
+        rodio.set_eq_enabled(true);
+        rodio.set_eq_band(BAND, 6.0);
+    }
     start(&rodio, &path);
     pull_lenient(&mut mix, WARMUP_FRAMES);
 
@@ -393,6 +398,23 @@ async fn seeking_never_swaps_the_stereo_image() -> std::io::Result<()> {
     }
 
     Ok(())
+}
+
+/// `FileDecoder::try_seek` carries the channel restoration rodio's own decoder does, and
+/// `EqSource` keeps `frame_phase` rather than zeroing it, so the two agree on where in the frame
+/// playback resumed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seeking_never_swaps_the_stereo_image() -> std::io::Result<()> {
+    assert_seeking_keeps_the_image(false)
+}
+
+/// The same, on the path that buffers a whole frame before handing any of it out. It keeps its own
+/// count, so it is a second way to owe the converter a sample and not pay it: dropping what is left
+/// of the frame in flight at the seek swaps the image just as surely, and the bypass case above
+/// cannot see that because it buffers nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seeking_never_swaps_the_stereo_image_through_the_eq() -> std::io::Result<()> {
+    assert_seeking_keeps_the_image(true)
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
