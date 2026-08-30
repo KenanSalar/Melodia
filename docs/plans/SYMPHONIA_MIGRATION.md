@@ -367,8 +367,8 @@ Four things in that decoder are worth taking as findings rather than rediscoveri
   same conclusion the span bug above forced on us, independently.
 - **The audio track is chosen defensively.** `default_track(TrackType::Audio)` can return a
   track whose codec is null, so they filter it and fall back to the first non null one, citing
-  Symphonia issue #258. **`player::stream_decode` does not do this today**, which is a small
-  latent bug worth fixing whether or not the migration happens.
+  Symphonia issue #258. `player::stream_decode` already does this through `names_a_codec`; the
+  file decoder owes the same guard rather than trusting `default_track`.
 - **The decoder is reset selectively after a seek**, only for MP3, citing Symphonia issue
   #274, because resetting misbehaves for some containers. That contradicts the blanket "always
   reset after seeking" advice in `.claude/rules/rodio-symphonia.md`.
