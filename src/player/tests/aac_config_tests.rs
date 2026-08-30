@@ -2,13 +2,15 @@
 //!
 //! The byte literals are audio specific configs written out field by field; each comment names
 //! the fields in the order they are packed. The last test is the point of the module: it asks
-//! Symphonia's own decoder, which is the thing that refuses these files.
+//! Symphonia's own decoder, which is the thing that refuses these files. It going red after a
+//! Symphonia bump means upstream shipped real HE-AAC support, so the answer is to delete the
+//! module rather than to relax the assertion.
 
 use symphonia::core::audio::Channels;
-use symphonia::core::codecs::audio::well_known::CODEC_ID_AAC;
+use symphonia::core::codecs::audio::well_known::{CODEC_ID_AAC, CODEC_ID_MP3};
 use symphonia::core::codecs::audio::{AudioCodecParameters, AudioDecoder, AudioDecoderOptions};
 
-use super::core_layer_config;
+use super::{core_layer_config, demote_he_aac};
 use crate::error::AppError;
 
 /// Object type 5 (SBR), core 22050 (index 7), stereo, extension 44100 (index 4), core type 2.
@@ -67,6 +69,26 @@ fn a_truncated_config_is_refused_rather_than_read_past() {
 fn demoting_twice_changes_nothing() -> Result<(), AppError> {
     assert_eq!(core_layer_config(&demoted(&HE_AAC)?), None);
     Ok(())
+}
+
+#[test]
+fn a_track_that_is_not_aac_keeps_whatever_it_carries() {
+    let mut params = AudioCodecParameters::new();
+    params.for_codec(CODEC_ID_MP3).with_extra_data(HE_AAC.into());
+
+    demote_he_aac(&mut params);
+
+    assert_eq!(params.extra_data.as_deref(), Some(&HE_AAC[..]));
+}
+
+#[test]
+fn an_adts_stream_has_no_config_to_demote() {
+    let mut params = AudioCodecParameters::new();
+    params.for_codec(CODEC_ID_AAC);
+
+    demote_he_aac(&mut params);
+
+    assert_eq!(params.extra_data, None);
 }
 
 #[test]

@@ -17,10 +17,7 @@ use std::io::{Read, Seek, SeekFrom};
 
 use rodio::{ChannelCount, Sample, SampleRate};
 use symphonia::core::codecs::CodecParameters;
-use symphonia::core::codecs::audio::well_known::CODEC_ID_AAC;
-use symphonia::core::codecs::audio::{
-    AudioCodecParameters, AudioDecoder, AudioDecoderOptions, CODEC_ID_NULL_AUDIO,
-};
+use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions, CODEC_ID_NULL_AUDIO};
 use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, Track, TrackType};
@@ -114,7 +111,7 @@ impl StreamDecoder {
                 AppError::Player("The station's stream names no audio codec".to_owned())
             })?
             .clone();
-        demote_he_aac(&mut params);
+        aac_config::demote_he_aac(&mut params);
 
         let mut decoder = symphonia::default::get_codecs()
             .make_audio_decoder(&params, &AudioDecoderOptions::default())
@@ -186,19 +183,6 @@ fn names_a_codec(track: &Track) -> bool {
         .as_ref()
         .and_then(CodecParameters::audio)
         .is_some_and(|params| params.codec != CODEC_ID_NULL_AUDIO)
-}
-
-/// Replaces an HE-AAC config with the AAC-LC core layer it describes, so a mount serving one
-/// decodes rather than being refused outright ([`super::aac_config`]).
-fn demote_he_aac(params: &mut AudioCodecParameters) {
-    if params.codec != CODEC_ID_AAC {
-        return;
-    }
-    if let Some(asc) = params.extra_data.as_deref()
-        && let Some(core) = aac_config::core_layer_config(asc)
-    {
-        params.extra_data = Some(core);
-    }
 }
 
 /// What one decoded packet says the audio is.
