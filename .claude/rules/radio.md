@@ -93,7 +93,7 @@ is the copy to delete.
 
 ## The stream
 
-- **D8, the reconnect's home and the two-Symphonia-majors seam are `src/player/CLAUDE.md`'s**,
+- **D8, the reconnect's home and what the ring is still for are `src/player/CLAUDE.md`'s**,
   over `prebuffer.rs`'s and `stream_decode.rs`'s `//!`. That file loads on the whole directory,
   including `handlers.rs` — the monitor the reconnect argument is *about*, and the one file in it
   no glob here reaches.

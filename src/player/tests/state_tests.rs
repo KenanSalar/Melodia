@@ -1382,6 +1382,33 @@ fn a_station_reports_no_next_or_previous() {
     assert!(!vm.has_previous);
 }
 
+/// `source_allows` asks whether what is playing rules an action out, not whether something is
+/// playing — so an empty deck permits everything. Spelling it `is_some_and` instead would leave a
+/// fully loaded queue with its transport greyed out until the first track started, which is a
+/// silent failure nothing else in the suite would catch.
+#[test]
+fn an_empty_deck_rules_nothing_out() {
+    let mut state = PlayerState::default();
+    state.queue.add_tracks(vec![
+        make_summary(1, "One", 100_000),
+        make_summary(2, "Two", 100_000),
+    ]);
+    state.queue.current_index = Some(0);
+    assert!(state.current_track().is_none(), "nothing has reached the deck yet");
+
+    for capability in [
+        PlaybackSource::advances_queue,
+        PlaybackSource::is_seekable,
+        PlaybackSource::has_known_duration,
+        PlaybackSource::has_variable_speed,
+    ] {
+        assert!(state.source_allows(capability));
+    }
+
+    let vm = state.to_view_model_light();
+    assert!(vm.has_next, "a loaded queue offers Next before its first track plays");
+}
+
 #[test]
 fn the_view_model_carries_the_station_instead_of_a_track() {
     let (mut state, generation) = tuned_in();

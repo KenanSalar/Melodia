@@ -1,8 +1,7 @@
 //! Tests for the file decoder.
 //!
-//! Every fixture named here is a container the 0.6 feature list has to carry. They read as
-//! duration tests and they are also the pin on that list: drop `mkv`, `caf`, `aiff`, `pcm` or
-//! `adpcm` from the manifest and the matching case goes red rather than the format quietly
+//! The fixtures pin the 0.6 feature list as much as the decoder: drop `aac`, `mkv`, `caf`, `aiff`,
+//! `pcm` or `adpcm` from the manifest and the matching case goes red rather than the format quietly
 //! scanning, listing, and then refusing to play.
 
 use std::path::{Path, PathBuf};
@@ -48,25 +47,19 @@ fn probe_duration_is_none_when_nothing_decodes() -> Result<(), AppError> {
     Ok(())
 }
 
-/// Every extension `media::AUDIO_EXTENSIONS` offers has to reach a decoder, and a fixture that
-/// opens is the only thing that says so.
+/// Every extension the scanner offers has to reach a decoder, and a fixture that opens is the only
+/// thing that says so.
+///
+/// Walked rather than listed, because a list cannot see the entry that is missing from it: an
+/// extension added to `AUDIO_EXTENSIONS` with no fixture beside it fails here, rather than shipping
+/// as a format the library offers and nothing plays. `aac` is why — raw ADTS is the case the whole
+/// move to 0.6 was for, and it went untested under a hand-written list.
 #[test]
-fn every_fixture_container_opens() -> Result<(), AppError> {
-    for fixture in [
-        "silence.mp3",
-        "silence.flac",
-        "silence.m4a",
-        "silence.ogg",
-        "silence.wav",
-        "silence.aiff",
-        "silence.aifc",
-        "silence.mka",
-        "silence.caf",
-        "silence-adpcm.wav",
-    ] {
-        let decoder = FileDecoder::open(&asset(fixture))?;
-        assert!(decoder.sample_rate().get() > 0, "{fixture}");
-        assert!(decoder.channels().get() > 0, "{fixture}");
+fn every_scanned_extension_reaches_a_decoder() -> Result<(), AppError> {
+    for extension in crate::media::AUDIO_EXTENSIONS {
+        let decoder = FileDecoder::open(&asset(&format!("silence.{extension}")))?;
+        assert!(decoder.sample_rate().get() > 0, "{extension}");
+        assert!(decoder.channels().get() > 0, "{extension}");
     }
     Ok(())
 }
@@ -79,6 +72,23 @@ fn the_span_names_a_real_packet() -> Result<(), AppError> {
     let decoder = FileDecoder::open(&asset("silence.flac"))?;
     let span = decoder.current_span_len();
     assert!(span.is_some_and(|len| len > 0), "{span:?}");
+    Ok(())
+}
+
+/// `Source::try_seek` saturates wherever a length is known, and the caller asks past the end
+/// routinely: the position it seeks to comes off the tags, which overshoot the decoded length by a
+/// few frames often enough. Unclamped the demuxer answers out of range or parks at the end, and a
+/// deck draining reads to the monitor as the track finishing — the queue jumps, from a drag of the
+/// slider to its own right edge.
+#[test]
+fn a_seek_past_the_end_saturates_rather_than_failing() -> Result<(), AppError> {
+    let mut decoder = FileDecoder::open(&asset("silence.wav"))?;
+    let Some(length) = decoder.total_duration() else {
+        return Err(AppError::Player("the fixture states no length to clamp to".to_owned()));
+    };
+
+    let seeked = decoder.try_seek(length * 4);
+    assert!(seeked.is_ok(), "a seek past the end must saturate: {seeked:?}");
     Ok(())
 }
 

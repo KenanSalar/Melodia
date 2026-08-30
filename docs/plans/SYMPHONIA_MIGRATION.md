@@ -9,7 +9,7 @@ Status: **Phase 1 done, Phase 2 not started** · Issue:
 > **Phase 1 shipped**, so the tree now compiles one Symphonia and rodio is cut to `playback`.
 > Everything below about *two* majors is history rather than description; what is still live is
 > Phase 2 ([#90](https://github.com/KenanSalar/Melodia/issues/90)) and the prior art for it.
-> Four things the work found that this doc had wrong or did not know:
+> Six things the work found that this doc had wrong or did not know:
 >
 > 1. **`Track::num_frames` is the wrong field for a duration** and `Track::duration` alone is not
 >    enough either. Upstream's own note says to present `duration`; Matroska sets neither on the
@@ -26,6 +26,17 @@ Status: **Phase 1 done, Phase 2 not started** · Issue:
 > 4. **The feature list had to widen to the union** of what stations serve and what the library
 >    ingests, which retires this doc's "a format nothing streams is only another way to guess
 >    wrong" — true under 0.5's marker match, moot under 0.6's scoring.
+> 5. **"Gapless trimming, which turns out to be free" below is half right.** The flag does default
+>    on, but only the MP3 and Vorbis decoders act on it in 0.6.1, and `symphonia-format-isomp4`
+>    fills in neither the packet trims nor `Track::delay`/`padding`, so an iTunes `.m4a` keeps its
+>    encoder delay. Nothing regressed: 0.5 gated the same two demuxers, and MP3 improved, since 0.6
+>    emits its trims unconditionally. Trimming AAC delay is a feature to write, not a switch, and
+>    belongs in its own issue rather than in #89's acceptance.
+> 6. **`refine_position` was not the only thing the seek had to keep.** rodio's decoder also puts
+>    the consumer back on the channel it was part way through, because rodio's channel converter
+>    holds its own phase across a seek and nothing resets it. Without that the stereo image swaps
+>    for the rest of the track, on roughly every other seek, and only the mixer can see it —
+>    `tests/crossfade.rs::seeking_never_swaps_the_stereo_image` is what pins it.
 
 > Every upstream fact below was verified **2026-08-20** against the pinned sources in the
 > cargo registry and this tree's `Cargo.lock`. Versions move. Re-check the appendix before

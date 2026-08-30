@@ -71,7 +71,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   a file that can't be *read*. `extract_metadata` stays strict, and the tag-write and MBID
   re-reads depend on that: a row built from a parse that didn't happen would blank the track
   instead of reporting the failure. Duration on a fallback row comes from
-  `player::rodio_backend::probe_duration`, the one edge `media/` has into `player/`. Each half is
+  `player::file_decode::probe_duration`, the one edge `media/` has into `player/`. Each half is
   argued at its own definition, including why identification is `FileType::from_buffer` and never
   lofty's junk-tolerant `Probe::guess_file_type`.
 

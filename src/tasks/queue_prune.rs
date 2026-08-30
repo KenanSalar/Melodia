@@ -22,6 +22,7 @@ use crate::player::rodio_backend::RodioPlayer;
 use crate::player::state::{
     PlayerAction, PlayerStateHandle, lock_state, play_track_inner, stop_end_of_queue,
 };
+use crate::player::types::PlaybackSource;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 
@@ -109,21 +110,21 @@ async fn reconcile_once(
     // rebuilds rows automatically.
     emit_and_execute(&**rodio, db, player_state, sinks, |s| {
         let outcome = s.queue.prune_missing(&to_remove);
-        if outcome.current_was_removed {
-            if let Some(track) = s.queue.get_current().cloned() {
-                play_track_inner(s, track, None)
-            } else {
-                let mut acts = stop_end_of_queue(s);
-                // Clear the deck so the now-playing bar stops showing a track the
-                // queue no longer holds. The published light ViewModel projects this
-                // field, so it propagates to the UI.
-                s.source = None;
-                acts.push(PlayerAction::PreloadGapless(None));
-                acts
-            }
-        } else {
-            Vec::new()
+        // A station leaves the queue seated underneath rather than playing from it, so a row
+        // going missing out of it is not a playback event at all: reacting would stop the
+        // station and take it off screen over a track it was never playing.
+        if !outcome.current_was_removed || !s.source_allows(PlaybackSource::advances_queue) {
+            return Vec::new();
         }
+        if let Some(track) = s.queue.get_current().cloned() {
+            return play_track_inner(s, track, None);
+        }
+        let mut acts = stop_end_of_queue(s);
+        // Clear the deck so the now-playing bar stops showing a track the queue no longer
+        // holds. The published light ViewModel projects this field, so it propagates to the UI.
+        s.source = None;
+        acts.push(PlayerAction::PreloadGapless(None));
+        acts
     });
     Ok(())
 }

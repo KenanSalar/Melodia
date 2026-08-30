@@ -72,11 +72,20 @@ loop {
 ### Gapless Support
 
 - **0.6 moved the flag rather than dropping it**: it is `AudioDecoderOptions::gapless`, not
-  `FormatOptions::enable_gapless`, and it **defaults to `true`** — so `AudioDecoderOptions::default()`
-  already trims encoder delay and padding and there is nothing to enable
-- `Track::delay` and `Track::padding` carry the same numbers, so the trim can be checked rather than
-  reimplemented. Worth checking: rox distrusts Symphonia's trimming enough to do its own, citing an
-  MP3 LAME-header gap
+  `FormatOptions::enable_gapless`, and it **defaults to `true`**, so `AudioDecoderOptions::default()`
+  needs nothing enabled
+- **But only two decoders act on it**, MP3 and Vorbis. AAC, ALAC, FLAC, PCM and ADPCM ignore
+  `opts.gapless` outright, and `symphonia-format-isomp4` populates neither `Packet::trim_start`/
+  `trim_end` nor `Track::delay`/`padding` (it parses the edit list into `TrakAtom.edts` and never
+  reads it; iTunSMPB is not parsed at all). So an iTunes `.m4a` keeps its encoder delay, and there
+  is nothing on the track to check that against either. This is not a 0.6 regression: 0.5 gated the
+  same two demuxers on `FormatOptions::enable_gapless`, and MP3 got *better*, since 0.6 emits the
+  trims unconditionally under a default-on flag
+- **`Track::delay`/`padding` is advisory metadata rather than something applied.** CAF fills both
+  from its packet table and no decoder it feeds ever uses them; Opus-in-Ogg fills `delay` from
+  `pre_skip` for a decoder 0.6.1 does not ship. Trimming either ourselves is a feature to write,
+  not a switch to find — rox reached the same conclusion from the other direction, distrusting the
+  trimming enough to plan its own before verifying that MP3's holds
 
 ### Performance
 

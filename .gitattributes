@@ -43,8 +43,12 @@ src/services/updater/tests/fixtures/*.json -text -merge
 *.flac binary
 *.mp3  binary
 *.m4a  binary
+*.m4b  binary
+*.aac  binary
 *.ogg  binary
+*.oga  binary
 *.wav  binary
+*.aif  binary
 *.aiff binary
 *.aifc binary
 *.mka  binary

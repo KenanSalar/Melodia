@@ -1,4 +1,8 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
+
+use crate::entities::track::TrackSummary;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -132,13 +136,13 @@ impl From<&crate::entities::radio::RadioStation> for RadioNowPlaying {
 /// radio that is the odd one out.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlaybackSource {
-    Track(std::sync::Arc<crate::entities::track::TrackSummary>),
-    Station(std::sync::Arc<RadioNowPlaying>),
+    Track(Arc<TrackSummary>),
+    Station(Arc<RadioNowPlaying>),
 }
 
 impl PlaybackSource {
     /// The track, when this is one. `None` for every live source.
-    pub fn track(&self) -> Option<&std::sync::Arc<crate::entities::track::TrackSummary>> {
+    pub fn track(&self) -> Option<&Arc<TrackSummary>> {
         match self {
             Self::Track(track) => Some(track),
             Self::Station(_) => None,
@@ -146,9 +150,7 @@ impl PlaybackSource {
     }
 
     /// The track for in-place mutation, which is how a rating or a favourite reaches the deck.
-    pub fn track_mut(
-        &mut self,
-    ) -> Option<&mut std::sync::Arc<crate::entities::track::TrackSummary>> {
+    pub fn track_mut(&mut self) -> Option<&mut Arc<TrackSummary>> {
         match self {
             Self::Track(track) => Some(track),
             Self::Station(_) => None,
@@ -156,7 +158,7 @@ impl PlaybackSource {
     }
 
     /// The station, when this is one.
-    pub fn station(&self) -> Option<&std::sync::Arc<RadioNowPlaying>> {
+    pub fn station(&self) -> Option<&Arc<RadioNowPlaying>> {
         match self {
             Self::Station(station) => Some(station),
             Self::Track(_) => None,
@@ -164,7 +166,7 @@ impl PlaybackSource {
     }
 
     /// The station for in-place mutation, which is how a live title and the buffering flag arrive.
-    pub fn station_mut(&mut self) -> Option<&mut std::sync::Arc<RadioNowPlaying>> {
+    pub fn station_mut(&mut self) -> Option<&mut Arc<RadioNowPlaying>> {
         match self {
             Self::Station(station) => Some(station),
             Self::Track(_) => None,

@@ -143,7 +143,8 @@ impl FileDecoder {
     }
 
     /// Interleaved samples between where the demuxer landed and where the seek asked for, rounded
-    /// up and then down to a whole frame so the channels stay in step.
+    /// up to a whole frame so the channels stay in step. Never under, so a seek cannot replay a
+    /// frame the listener already heard; rodio rounds the other way and can.
     ///
     /// Integer arithmetic against the timebase's own ratio rather than seconds, so a rate the
     /// timebase does not divide evenly cannot drift the answer by a frame.
@@ -182,14 +183,19 @@ impl FileDecoder {
 /// neither on the track, putting the segment's own duration on the media. A `.mka` reaching the
 /// library reading 0:00 is what this exists to prevent, and it is the container that needs the
 /// third.
+///
+/// A stated zero is the reader saying it doesn't know rather than the file being empty — a
+/// fragmented MP4 zeroes both track fields — so each one has to be discarded before the next is
+/// reached, or the first answers for all three.
 fn playing_time(format: &dyn FormatReader, track: &Track) -> Option<Duration> {
     let from_track = track.time_base.and_then(|time_base| {
-        let ticks = track.duration.or_else(|| track.num_frames.map(SymphoniaDuration::new))?;
+        let frames = || track.num_frames.filter(|frames| *frames > 0).map(SymphoniaDuration::new);
+        let ticks = track.duration.filter(|stated| stated.get() > 0).or_else(frames)?;
         time_base.calc_duration(ticks)
     });
     let from_media = || {
         let media = format.media_info();
-        media.time_base?.calc_duration(media.duration?)
+        media.time_base?.calc_duration(media.duration.filter(|stated| stated.get() > 0)?)
     };
 
     let (seconds, nanos) = from_track.or_else(from_media)?.parts();
@@ -264,11 +270,24 @@ impl Source for FileDecoder {
     }
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
+        // `Source::try_seek` promises to saturate wherever a length is known, and the caller asks
+        // past the end routinely: the position it seeks to comes off the tags, which overshoot the
+        // decoded length by a few frames often enough. Unclamped, the demuxer answers out of range
+        // or parks at the end, and a deck draining reads to the monitor as the track finishing.
+        let pos = self.total_duration.map_or(pos, |total| pos.min(total));
+
         let time = symphonia::core::units::Time::try_new(
             i64::try_from(pos.as_secs()).map_err(other)?,
             pos.subsec_nanos(),
         )
         .ok_or_else(|| other(AppError::Player("Seek position out of range".to_owned())))?;
+
+        // Which channel of a frame the puller is part way through. A seek restarts on a frame
+        // boundary, so without putting this back the next sample handed out is channel 0 where
+        // channel 1 was due, and rodio's channel converter — which keeps its own phase and is not
+        // reset by a seek — runs one sample out of step for the rest of the track. That is the
+        // permanent channel swap, and rodio's own decoder carries these two lines for it.
+        let channel_phase = self.next % usize::from(self.channels.get());
 
         let seeked = self
             .format
@@ -293,11 +312,12 @@ impl Source for FileDecoder {
             self.decoder.reset();
         }
 
-        // A demuxer seek lands on a packet boundary, so without this every seek replays the tail of
-        // what came before. Both reference players stop at the whole packet, and one says in its
-        // own comment that it should not; rodio trims to the frame today, and that is the behaviour
-        // this path has to keep.
-        self.skip(self.samples_before(seeked.required_ts, seeked.actual_ts));
+        // A demuxer seek lands on a packet boundary, so without the trim every seek replays the
+        // tail of what came before. Both reference players stop at the whole packet, and one says
+        // in its own comment that it should not; rodio trims to the frame today, and that is the
+        // behaviour this path has to keep.
+        let trim = self.samples_before(seeked.required_ts, seeked.actual_ts);
+        self.skip(trim + channel_phase);
         Ok(())
     }
 }

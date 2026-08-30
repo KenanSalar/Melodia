@@ -331,10 +331,11 @@ impl PlayerState {
 
     /// Whether the source on the deck is a live stream.
     ///
-    /// Only three things ask this rather than asking a capability: the two that *are* about a
-    /// station — invalidating its session, and clearing it — and the pause that drops its socket.
-    /// Everywhere else the question is what the source can do, not what it is, and asking it that
-    /// way is what stops a third kind of source being silently treated as a file.
+    /// Five things ask this rather than asking a capability, and every one of them is *about* a
+    /// station: the pause that drops its socket, the play that cannot resume from one, the stop
+    /// that forgets it, the session check, and the track that evicts it. Everywhere else the
+    /// question is what the source can do, not what it is, and asking it that way is what stops a
+    /// third kind of source being silently treated as a file.
     fn is_radio(&self) -> bool {
         self.station().is_some()
     }
@@ -494,7 +495,7 @@ impl PlayerState {
     /// Build actions for seek command.
     pub fn build_seek_actions(&mut self, position_ms: u64) -> Vec<PlayerAction> {
         // A live stream has no timeline to land on; the position is elapsed listening time.
-        if self.is_radio() {
+        if !self.source_allows(PlaybackSource::is_seekable) {
             return vec![];
         }
         self.position_ms = position_ms;
@@ -503,7 +504,7 @@ impl PlayerState {
 
     /// Build actions for next-track command.
     pub fn build_next_actions(&mut self) -> Vec<PlayerAction> {
-        if self.is_radio() {
+        if !self.source_allows(PlaybackSource::advances_queue) {
             return vec![];
         }
         let mut actions = vec![];
@@ -542,7 +543,7 @@ impl PlayerState {
 
     /// Build actions for previous-track command.
     pub fn build_previous_actions(&mut self) -> Vec<PlayerAction> {
-        if self.is_radio() {
+        if !self.source_allows(PlaybackSource::advances_queue) {
             return vec![];
         }
         let was_paused = self.status == PlaybackStatus::Paused;
@@ -598,7 +599,7 @@ impl PlayerState {
         // A station's deck only drains once its feed thread has spent its reconnect budget, so
         // there is nothing to advance to — the queue underneath belongs to the library, and
         // wandering into it because a station went off air would be a silent change of source.
-        if self.is_radio() {
+        if !self.source_allows(PlaybackSource::advances_queue) {
             return self.build_stop_actions(0);
         }
 
@@ -656,7 +657,7 @@ impl PlayerState {
     pub fn build_crossfade_actions(&mut self, decision: CrossfadeDecision) -> Vec<PlayerAction> {
         let mut actions = Vec::with_capacity(2);
 
-        if self.is_radio() {
+        if !self.source_allows(PlaybackSource::advances_queue) {
             return actions;
         }
 
@@ -701,7 +702,7 @@ impl PlayerState {
         // rodio implements speed by reporting a multiplied sample rate upward, which against a
         // source arriving in real time drifts the prebuffer until it starves. Refused rather than
         // clamped, so the transport keeps showing the 1.0 the deck is actually running at.
-        if self.is_radio() {
+        if !self.source_allows(PlaybackSource::has_variable_speed) {
             return vec![];
         }
         let speed = speed.clamp(MIN_SPEED, MAX_SPEED);

@@ -107,6 +107,11 @@ pub(super) struct Shape {
 /// with a few that do, and a file with a damaged frame plays past it the way every other player
 /// does. So is a packet that decodes to nothing, which is not the end of the stream either
 /// ([symphonia#403](https://github.com/pdeljanov/Symphonia/issues/403)).
+///
+/// `Err(ResetRequired)` does end it, and that one is a choice rather than an oversight: Ogg raises
+/// it where a chained stream starts a new physical one, and recovering means re-reading the track
+/// list and rebuilding the decoder against parameters that may have moved. Neither reference player
+/// does it. A mount gets the feed thread's reconnect on top; a chained file stops there.
 pub(super) fn fill(
     format: &mut dyn FormatReader,
     decoder: &mut dyn AudioDecoder,

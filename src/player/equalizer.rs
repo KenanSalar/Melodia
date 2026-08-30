@@ -786,8 +786,10 @@ impl<S: Source> Source for EqSource<S> {
         self.limiter.reset();
         self.frame_len = 0;
         self.frame_pos = 0;
-        // The decoder lands on a frame boundary, so the phase restarts with it.
-        self.frame_phase = 0;
+        // `frame_phase` is deliberately left alone. The decoder resumes at the channel it was
+        // interrupted at rather than at the start of a frame, so the phase this mirrors on the
+        // bypass path is still the true one, and zeroing it would put every later frame — the
+        // generation poll and the ramp step both — a sample out of step.
         Ok(())
     }
 }
