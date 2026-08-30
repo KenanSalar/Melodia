@@ -35,7 +35,7 @@ paths:
 
 ### Format Probing
 
-- **A `Hint` does not steer 0.5's probe** — `Probe::format` takes it as `_hint` and resolves the format by matching a two-byte marker, scoring still a `TODO`. Pass one anyway (it costs a line and 0.6 keeps the parameter), but never rely on it to break a tie: a container whose marker isn't registered is one the probe will mis-assign, silently and to whichever reader matches first. **This tree carries two Symphonia majors for that reason** — rodio's 0.5 for local files, where the extension is known and the formats are well-marked, and 0.6 in `player::stream_decode` for live streams, where neither holds. Read that module before touching either.
+- **A `Hint` does not steer 0.5's probe** — `Probe::format` takes it as `_hint` and resolves the format by matching a two-byte marker, scoring still a `TODO`. Pass one anyway (it costs a line and 0.6 keeps the parameter), but never rely on it to break a tie: a container whose marker isn't registered is one the probe will mis-assign, silently and to whichever reader matches first. **This tree carried two Symphonia majors for that reason and no longer does** — rodio is cut to its `playback` feature and everything decodes through `player::decode` against 0.6, whose probe scores each candidate against the frames that follow it. Read that module before touching either decoder.
 - Use `MediaSourceStream` (not `BufReader`) — it provides optimized buffering for multimedia I/O
 - Search for the first audio track explicitly — default track may be video in container formats
 
@@ -58,13 +58,25 @@ loop {
 
 ### Seeking
 
-- **Always reset the decoder after seeking** — stale internal state causes artifacts
-- Use `FormatReader::seek()` with `SeekTo::Time` for timestamp-based seeking
+- **Reset the decoder after a seek only where the codec needs it** — the blanket advice is wrong.
+  Resetting misbehaves for some containers, sending them back to the start
+  ([symphonia#274](https://github.com/pdeljanov/Symphonia/issues/274)); `player::file_decode` resets
+  for MP3 and nothing else, which is what a working implementation does
+- Use `FormatReader::seek()` with `SeekTo::Time` for timestamp-based seeking, and `SeekMode::Accurate`
+- **A demuxer seek lands on a packet boundary, so trim the head yourself.** Without it every seek
+  replays the tail of what came before. `required_ts - actual_ts` through the track's timebase gives
+  the frames to drop. Note that neither reference player does this: `symphonia-play` skips whole
+  packets and says in its own comment that it should not, and termusic seeks `Coarse` and skips whole
+  packets too. rodio's `refine_position` is frame-accurate, and that is the bar to keep
 
 ### Gapless Support
 
-- Enable `FormatOptions::enable_gapless = true` for seamless track transitions
-- Symphonia handles encoder delay/padding trimming automatically when gapless is enabled
+- **0.6 moved the flag rather than dropping it**: it is `AudioDecoderOptions::gapless`, not
+  `FormatOptions::enable_gapless`, and it **defaults to `true`** — so `AudioDecoderOptions::default()`
+  already trims encoder delay and padding and there is nothing to enable
+- `Track::delay` and `Track::padding` carry the same numbers, so the trim can be checked rather than
+  reimplemented. Worth checking: rox distrusts Symphonia's trimming enough to do its own, citing an
+  MP3 LAME-header gap
 
 ### Performance
 

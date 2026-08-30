@@ -52,7 +52,7 @@ fn play_tracks_clears_queue_and_starts_at_index() {
     if let Some(track) = state.queue.get_current().cloned() {
         let actions = play_track_inner(&mut state, track, None);
         assert_eq!(state.status, PlaybackStatus::Playing);
-        assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(3));
+        assert_eq!(state.current_track().map(|t| t.id), Some(3));
         assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
     }
 }
@@ -229,7 +229,7 @@ fn next_advances_queue() {
 
     let actions = state.build_next_actions();
 
-    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(2));
+    assert_eq!(state.current_track().map(|t| t.id), Some(2));
     assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
     assert!(!actions.iter().any(|a| matches!(a, PlayerAction::UpdateSkipCount(_))));
 }
@@ -495,7 +495,7 @@ fn toggle_from_stopped_with_current_track_resumes() {
 fn toggle_from_stopped_without_track_is_noop() {
     let mut state = state_with_queue(0);
     assert_eq!(state.status, PlaybackStatus::Stopped);
-    assert!(state.current_track.is_none());
+    assert!(state.current_track().is_none());
 
     let actions = toggle(&mut state);
     assert_eq!(state.status, PlaybackStatus::Stopped);
@@ -530,14 +530,14 @@ fn only_a_paused_station_routes_to_a_reopen() {
 #[test]
 fn toggling_a_playing_station_pauses_it_by_dropping_the_connection() {
     let mut state = tuned_in();
-    assert!(!needs_station_reopen(state.status, state.radio.is_some()));
+    assert!(!needs_station_reopen(state.status, state.station().is_some()));
 
     let actions = toggle(&mut state);
 
     assert_eq!(state.status, PlaybackStatus::Paused);
     assert!(matches!(actions.as_slice(), [PlayerAction::Stop { fade_ms: 250 }]));
-    assert!(state.radio.is_some(), "the station stays on screen");
-    assert!(needs_station_reopen(state.status, state.radio.is_some()), "and play re-opens it");
+    assert!(state.station().is_some(), "the station stays on screen");
+    assert!(needs_station_reopen(state.status, state.station().is_some()), "and play re-opens it");
 }
 
 /// A connect that is still in flight is cancelled rather than resumed: the session generation moves,

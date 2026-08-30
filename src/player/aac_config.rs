@@ -14,8 +14,9 @@
 //! run, so those files pass the gate untouched and are none of this module's business.
 //!
 //! Only containers carrying a real config reach here, so MP4 and Matroska. ADTS synthesises one
-//! with SBR clear, which is why the radio work never turned this up; a station serving fragmented
-//! MP4 reaches it all the same, and until local decode moves over that is the only caller.
+//! with SBR clear, which is why the radio work never turned this up — though a station serving
+//! fragmented MP4 reaches it all the same, which is why it is applied once in
+//! [`super::decode::make_decoder`] rather than at either decoder.
 
 use symphonia::core::codecs::audio::AudioCodecParameters;
 use symphonia::core::codecs::audio::well_known::CODEC_ID_AAC;

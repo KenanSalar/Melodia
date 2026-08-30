@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::BufReader;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -7,13 +5,14 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use rodio::mixer::Mixer;
-use rodio::{Decoder, Player, Source};
+use rodio::{Player, Source};
 
 use crate::error::AppError;
 
 use super::crossfade::{self, CrossfadeShared};
 use super::decks::{Deck, Decks, DeferredOp, lock_decks};
 use super::equalizer::{self, EqShared, EqSource};
+use super::file_decode::FileDecoder;
 use super::prebuffer::StreamShared;
 use super::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 use super::stream_source::PreparedStream;
@@ -532,8 +531,8 @@ impl RodioPlayer {
     /// `ReplayGain` and `deck`'s ramp cell, under a visualizer tap writing into `deck`'s own ring.
     ///
     /// Generic over the source rather than over a reader, because a live stream reaches here as a
-    /// [`super::prebuffer::PrebufferSource`] and a file as a `Decoder` — the ring sits between the
-    /// stream's decoder and the DSP chain, so the two only meet at `Source`. Everything downstream
+    /// [`super::prebuffer::PrebufferSource`] and a file as a [`FileDecoder`] — the ring sits between
+    /// the stream's decoder and the DSP chain, so the two only meet at `Source`. Everything downstream
     /// is identical, which is the point: the EQ, the limiter and the visualizer work on a station
     /// with no code of their own.
     ///
@@ -895,39 +894,8 @@ impl RodioPlayer {
     }
 }
 
-/// How long the file plays for, as the container reports it, or `None` when it carries
-/// no frame count or no decoder is registered for its codec.
-///
-/// The scan path's answer of last resort. Lofty reads duration off the same parse that
-/// reads the tags, so a file it can't identify (a Matroska or CAF one, say) reaches the
-/// database with no length at all unless someone asks the decoder instead
-/// (`media::metadata`). It costs a probe plus one decoded packet, which is why it stays
-/// on that failure path rather than running for every file scanned.
-pub fn probe_duration(path: &Path) -> Option<Duration> {
-    decode_file(path.to_str()?).ok()?.total_duration()
-}
-
-fn decode_file(path: &str) -> Result<Decoder<BufReader<File>>, AppError> {
-    let file =
-        File::open(path).map_err(|e| AppError::Player(format!("Cannot open {path}: {e}")))?;
-    let file_len = file.metadata().map(|m| m.len()).ok();
-
-    let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
-
-    // Symphonia pulls frames in chunks well above the std 8 KB default for most
-    // formats, so a small buffer costs a refill per frame. 64 KB covers typical
-    // FLAC/MP3 frame clusters without meaningful per-track memory.
-    let mut builder = Decoder::builder()
-        .with_data(BufReader::with_capacity(64 * 1024, file))
-        .with_hint(ext)
-        .with_gapless(true)
-        .with_seekable(true);
-
-    if let Some(len) = file_len {
-        builder = builder.with_byte_len(len);
-    }
-
-    builder.build().map_err(|e| AppError::Player(format!("Decode error for {path}: {e}")))
+fn decode_file(path: &str) -> Result<FileDecoder, AppError> {
+    FileDecoder::open(Path::new(path))
 }
 
 #[cfg(test)]

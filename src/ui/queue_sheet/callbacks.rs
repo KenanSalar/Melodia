@@ -150,7 +150,7 @@ pub(super) fn wire_callbacks(
                             Arc::make_mut(t).is_favorite = fav;
                         }
                     }
-                    if let Some(ct) = st.current_track.as_mut()
+                    if let Some(ct) = st.current_track_mut()
                         && ct.id == id
                     {
                         Arc::make_mut(ct).is_favorite = fav;

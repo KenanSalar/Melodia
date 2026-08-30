@@ -163,60 +163,55 @@ parking_lot = "0.12.5"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "derive", "macros"] }
 
 # Audio
-rodio = { version = "0.22.2", default-features = false, features = [
-    "playback",
-    # `mpa` over `mp3`: both are `symphonia-bundle-mp3`, already compiled either way, and
-    # the wider one adds the Layer I and II decoders alongside Layer III's. Neither layer
-    # has an extension of its own here, and neither needs one: they arrive as an `.mka`
-    # track, or as an `.mp3` whose frames say Layer II, the reader taking the layer off
-    # the frame header rather than off the name.
-    "symphonia-mpa",
-    "symphonia-flac",
-    "symphonia-isomp4",
-    "symphonia-aac",
-    "symphonia-ogg",
-    "symphonia-vorbis",
-    "symphonia-wav",
-    "symphonia-pcm",
-    # Two containers rather than two codecs: whatever they carry is decoded by the
-    # entries around them, so an `.mka` holding Opus demuxes and then finds no decoder
-    # until #35 lands. Lofty reads neither, so both scan through the filename-row
-    # fallback in `media::metadata`.
-    "symphonia-mkv",
-    "symphonia-caf",
-    # The RIFF demuxer already resolves the two ADPCM wave formats to their codec types
-    # and then finds no decoder registered for either, so this is the missing half of a
-    # path that otherwise demuxes and dies. It does *not* reach `.aifc` ADPCM, which the
-    # AIFC common chunk rejects before any codec is looked up.
-    "symphonia-adpcm",
-    "symphonia-alac",
-    "symphonia-aiff",
-] }
-# A live stream is decoded here rather than by `rodio::Decoder`, and **deliberately
-# against a newer Symphonia than the 0.5 rodio pins**. 0.5's probe picks a demuxer off
-# a two-byte marker with scoring still a TODO, and the only ADTS marker it knows is
-# `0xFFF1` — so a station sending MPEG-2 ADTS matches nothing, the search runs into the
-# payload, and a stray `0xFFFB` there hands an AAC stream to the MP3 demuxer, which then
-# never syncs. 0.6 scores candidates against the frames that follow and registers all
-# four ADTS sync words.
+# `playback` only, and **no `symphonia-*` features**: every one of those pulls in rodio's own
+# Symphonia 0.5, which is the major this tree left behind. Nothing decodes through rodio any
+# more — `player::file_decode` and `player::stream_decode` both go through `player::decode` — so
+# what is left here is the mixer, the device stream and the two per-deck queues. Adding a
+# `symphonia-*` entry back compiles a second Symphonia beside ours and gives the same bytes two
+# different probes again, which is the whole fault this closed.
+rodio = { version = "0.22.2", default-features = false, features = ["playback"] }
+# Everything decodes here — files through `player::file_decode`, live mounts through
+# `player::stream_decode` — and **deliberately against a newer Symphonia than the 0.5 rodio
+# pins**. 0.5's probe picks a demuxer off a two-byte marker with scoring still a TODO, and the
+# only ADTS marker it knows is `0xFFF1`, so an MPEG-2 ADTS stream matches nothing, the search
+# runs into the payload, and a stray `0xFFFB` there hands an AAC stream to the MP3 demuxer,
+# which then never syncs. 0.6 scores candidates against the frames that follow and registers
+# all four ADTS sync words.
 #
-# The two majors coexist because they never meet: `player::prebuffer`'s ring is the seam,
-# and rodio is handed samples, not a decoder. Local files stay on rodio's own.
+# The list is the union of what stations serve and what `media::AUDIO_EXTENSIONS` ingests, and
+# has to stay that way: an entry missing here is a format the scanner offers and nothing plays.
+# Breadth used to be the risk — every entry is another demuxer the probe considers, and under
+# 0.5's marker match a format nothing streams was another way to guess wrong — but scoring is
+# what retired that argument, and one dependency now answers for both paths.
 symphonia = { version = "0.6.1", default-features = false, features = [
-    # What stations actually serve. Deliberately not `all-codecs`: every entry is another
-    # demuxer the probe has to consider, and a format nothing streams is only another way
-    # to guess wrong. `aac` is what carries the ADTS demuxer.
+    # `aac` carries the ADTS demuxer as well as the codec.
     "aac",
+    "alac",
     "flac",
-    # Fragmented MP4, which is what a segmented station serves when it is not MPEG-TS. Only
+    # Also fragmented MP4, which is what a segmented station serves when it is not MPEG-TS. Only
     # reachable with the playlist's own init segment spliced in front — a media segment opens
     # with `styp`/`moof` and this demuxer requires `ftyp` then `moov`, which the init supplies.
     "isomp4",
+    "mkv",
+    # `mpa` over `mp3`: same crate either way, and the wider one adds the Layer I and II
+    # decoders. Neither layer has an extension of its own and neither needs one — they arrive as
+    # an `.mka` track, or as an `.mp3` whose frames say Layer II, the reader taking the layer off
+    # the frame header rather than off the name.
     "mpa",
     "ogg",
     "vorbis",
-    # A mount that opens with an ID3v2 tag, which the probe chains past rather than
-    # mistaking for audio.
+    "wav",
+    "aiff",
+    "caf",
+    "pcm",
+    # The RIFF demuxer resolves the two ADPCM wave formats to their codec types and would then
+    # find no decoder registered for either, so this is the missing half of a path that otherwise
+    # demuxes and dies. It does *not* reach `.aifc` ADPCM, which the AIFC common chunk rejects
+    # before any codec is looked up.
+    "adpcm",
+    # A file or mount that opens with a tag, which the probe chains past rather than mistaking
+    # for audio.
+    "id3v1",
     "id3v2",
 ] }
 # Rodio 0.22 ships only low/high-pass BLT filters, so the graphic EQ cascades

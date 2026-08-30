@@ -114,11 +114,10 @@ async fn reconcile_once(
                 play_track_inner(s, track, None)
             } else {
                 let mut acts = stop_end_of_queue(s);
-                // Clear out the player's lingering `current_track` so the
-                // now-playing bar doesn't keep showing the deleted track
-                // after the queue is empty. The published light ViewModel
-                // mirrors `current_track`, so this propagates to the UI.
-                s.current_track = None;
+                // Clear the deck so the now-playing bar stops showing a track the
+                // queue no longer holds. The published light ViewModel projects this
+                // field, so it propagates to the UI.
+                s.source = None;
                 acts.push(PlayerAction::PreloadGapless(None));
                 acts
             }

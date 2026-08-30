@@ -220,7 +220,7 @@ fn extract(
         Some(props) => i64::try_from(props.duration().as_millis()).unwrap_or(i64::MAX),
         // Lofty reports duration off the parse that just failed, so the decoder is the
         // only thing left that knows. Still `0` where it can't say either.
-        None => crate::player::rodio_backend::probe_duration(path)
+        None => crate::player::file_decode::probe_duration(path)
             .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)),
     };
 

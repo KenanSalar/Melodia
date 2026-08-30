@@ -3,8 +3,29 @@
 Working doc. Background and shape for replacing rodio entirely. Delete it when the migration
 ships.
 
-Status: **accepted, not started** · Issue:
+Status: **Phase 1 done, Phase 2 not started** · Issue:
 [#79](https://github.com/KenanSalar/Melodia/issues/79) · Created: 2026-08-20
+
+> **Phase 1 shipped**, so the tree now compiles one Symphonia and rodio is cut to `playback`.
+> Everything below about *two* majors is history rather than description; what is still live is
+> Phase 2 ([#90](https://github.com/KenanSalar/Melodia/issues/90)) and the prior art for it.
+> Four things the work found that this doc had wrong or did not know:
+>
+> 1. **`Track::num_frames` is the wrong field for a duration** and `Track::duration` alone is not
+>    enough either. Upstream's own note says to present `duration`; Matroska sets neither on the
+>    track and puts the segment's on `MediaInfo`. termusic uses `num_frames` exclusively and would
+>    read a `.mka` as 0:00. All three sources are needed.
+> 2. **Neither reference player implements the frame-accurate seek trim.** `symphonia-play` says so
+>    in its own comment ("This is a half-baked approach to seeking!") and termusic seeks `Coarse`
+>    and skips whole packets. rodio's `refine_position` was the only frame-accurate one of the
+>    three, and reproducing it was the real work of the seek.
+> 3. **HE-AAC was not the only file that would have stopped playing.** 0.6's PCM decoder added a
+>    width check that `symphonia-format-caf` contradicts, so every A-law `.caf` fails to build a
+>    decoder where 0.5 played it. `decode::drop_companded_sample_width` is the answer, and the
+>    fixture walk in `file_decode`'s tests is what found it.
+> 4. **The feature list had to widen to the union** of what stations serve and what the library
+>    ingests, which retires this doc's "a format nothing streams is only another way to guess
+>    wrong" — true under 0.5's marker match, moot under 0.6's scoring.
 
 > Every upstream fact below was verified **2026-08-20** against the pinned sources in the
 > cargo registry and this tree's `Cargo.lock`. Versions move. Re-check the appendix before

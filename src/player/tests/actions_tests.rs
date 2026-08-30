@@ -524,7 +524,7 @@ async fn execute_play_stream_failure_clears_the_station() -> Result<(), AppError
     crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
 
     let state = crate::player::state::lock_state(&fx.player_state);
-    assert!(state.radio.is_none(), "a station that could not start must not sit on Loading");
+    assert!(state.station().is_none(), "a station that could not start must not sit on Loading");
     assert_eq!(state.status, crate::player::types::PlaybackStatus::Stopped);
     // The failure path is `build_station_failed_actions`, not `enqueue_auto_skip`: there is no
     // next station to fall through to, and reaching into the queue would be a change of source.

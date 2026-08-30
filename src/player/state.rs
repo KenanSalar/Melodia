@@ -12,7 +12,8 @@ use super::replaygain::TrackReplayGain;
 use crate::entities::track::TrackSummary;
 
 use super::types::{
-    PersistableQueue, PersistedPlayback, PlaybackStatus, RadioNowPlaying, RepeatMode,
+    PersistableQueue, PersistedPlayback, PlaybackSource, PlaybackStatus, RadioNowPlaying,
+    RepeatMode,
 };
 
 /// Restart-from-beginning threshold for Previous command (ms).
@@ -42,7 +43,12 @@ pub fn volume_to_amplitude(volume: u32, is_muted: bool) -> f64 {
 
 pub struct PlayerState {
     pub status: PlaybackStatus,
-    pub current_track: Option<Arc<TrackSummary>>,
+    /// What is on the deck, and what may be done with it — see [`PlaybackSource`].
+    ///
+    /// It was a track and a station held as separate `Option`s, mutually exclusive by an invariant
+    /// only [`begin_track`] enforced, which left every reader inferring "not a track" from an
+    /// absent one. Reach for [`Self::current_track`] and [`Self::station`] to read either half.
+    pub source: Option<PlaybackSource>,
     pub position_ms: u64,
     pub duration_ms: u64,
     pub volume: u32,
@@ -57,11 +63,6 @@ pub struct PlayerState {
     /// the UI as `sleep_at_track_end` on the light `ViewModel` so the overflow
     /// menu's sleep row auto-clears once the monitor fires and disarms it.
     pub pause_after_current_track: bool,
-    /// The station being played, or being connected to. `Some` is what makes this a *live* source,
-    /// and every transport builder branches on it: a stream has no next, no previous, no seek and
-    /// no speed. The queue underneath is left exactly as it was, so stopping the station resumes
-    /// the library where it left off.
-    pub radio: Option<Arc<RadioNowPlaying>>,
     /// Which station session is current. Bumped by every transition that starts or ends one, so a
     /// connect that finishes after the user moved on is refused rather than played late. An open
     /// takes seconds and a click takes none, which is why this is a counter rather than a flag.
@@ -73,7 +74,7 @@ impl Default for PlayerState {
     fn default() -> Self {
         Self {
             status: PlaybackStatus::Stopped,
-            current_track: None,
+            source: None,
             position_ms: 0,
             duration_ms: 0,
             volume: 100,
@@ -82,7 +83,6 @@ impl Default for PlayerState {
             playback_speed: 1.0,
             gapless_enabled: true,
             pause_after_current_track: false,
-            radio: None,
             radio_generation: 0,
             queue: QueueState::default(),
         }
@@ -309,21 +309,55 @@ impl PlayerState {
         }
     }
 
-    /// Whether the source on the deck is a live stream, which is what every transport builder
-    /// below branches on. `Some` covers the connecting stretch too: the queue is already out of
-    /// the picture by then.
+    /// The track on the deck, or `None` when the source is a live one or there is none.
+    pub fn current_track(&self) -> Option<&Arc<TrackSummary>> {
+        self.source.as_ref().and_then(PlaybackSource::track)
+    }
+
+    /// The track on the deck, for the two writers that mutate it in place.
+    pub fn current_track_mut(&mut self) -> Option<&mut Arc<TrackSummary>> {
+        self.source.as_mut().and_then(PlaybackSource::track_mut)
+    }
+
+    /// The station on the deck, including through the stretch where it is still connecting.
+    pub fn station(&self) -> Option<&Arc<RadioNowPlaying>> {
+        self.source.as_ref().and_then(PlaybackSource::station)
+    }
+
+    /// The station on the deck, for the live title and the buffering flag.
+    pub fn station_mut(&mut self) -> Option<&mut Arc<RadioNowPlaying>> {
+        self.source.as_mut().and_then(PlaybackSource::station_mut)
+    }
+
+    /// Whether the source on the deck is a live stream.
+    ///
+    /// Only three things ask this rather than asking a capability: the two that *are* about a
+    /// station — invalidating its session, and clearing it — and the pause that drops its socket.
+    /// Everywhere else the question is what the source can do, not what it is, and asking it that
+    /// way is what stops a third kind of source being silently treated as a file.
     fn is_radio(&self) -> bool {
-        self.radio.is_some()
+        self.station().is_some()
+    }
+
+    /// Whether what is on the deck permits `capability`.
+    ///
+    /// **An empty deck permits everything**, which is why this is `is_none_or` and not
+    /// `is_some_and`. Each caller is asking whether what is playing rules the action out, not
+    /// whether something is playing: a loaded queue with nothing on the deck still offers Next,
+    /// and gating that on a source being present silently disables it.
+    ///
+    /// Takes the capability rather than exposing one accessor per question, so a third kind of
+    /// source is a match arm on [`PlaybackSource`] and nothing here.
+    pub fn source_allows(&self, capability: fn(&PlaybackSource) -> bool) -> bool {
+        self.source.as_ref().is_none_or(capability)
     }
 
     fn has_next(&self) -> bool {
-        // A station has nowhere to go: the queue is untouched underneath but skipping into it
-        // would be a silent change of source. Shortwave, Tuner and RadioDroid all disable both.
-        !self.is_radio() && self.queue.peek_next().is_some()
+        self.source_allows(PlaybackSource::advances_queue) && self.queue.peek_next().is_some()
     }
 
     fn has_previous(&self) -> bool {
-        !self.is_radio()
+        self.source_allows(PlaybackSource::advances_queue)
             && !self.queue.play_order.is_empty()
             && (self.queue.current_index.is_some_and(|ci| ci > 0) || self.queue.repeat_mode.wraps())
     }
@@ -336,7 +370,7 @@ impl PlayerState {
     pub fn to_view_model(&self) -> PlayerViewModel {
         PlayerViewModel {
             status: self.status.as_str().to_owned(),
-            current_track: self.current_track.clone(),
+            current_track: self.current_track().cloned(),
             position_ms: self.position_ms,
             duration_ms: self.duration_ms,
             progress_percent: self.progress_percent(),
@@ -345,7 +379,7 @@ impl PlayerState {
             playback_speed: self.playback_speed,
             gapless_enabled: self.gapless_enabled,
             sleep_at_track_end: self.pause_after_current_track,
-            radio: self.radio.clone(),
+            radio: self.station().cloned(),
             queue_tracks: self.queue.tracks_in_play_order(),
             queue_index: super::queue::current_index_to_i32(self.queue.current_index),
             shuffle_enabled: self.queue.shuffle_enabled,
@@ -359,7 +393,7 @@ impl PlayerState {
     pub fn to_view_model_light(&self) -> PlayerViewModelLight {
         PlayerViewModelLight {
             status: self.status.as_str(),
-            current_track: self.current_track.clone(),
+            current_track: self.current_track().cloned(),
             position_ms: self.position_ms,
             duration_ms: self.duration_ms,
             progress_percent: self.progress_percent(),
@@ -368,7 +402,7 @@ impl PlayerState {
             playback_speed: self.playback_speed,
             gapless_enabled: self.gapless_enabled,
             sleep_at_track_end: self.pause_after_current_track,
-            radio: self.radio.clone(),
+            radio: self.station().cloned(),
             has_next: self.has_next(),
             has_previous: self.has_previous(),
         }
@@ -394,7 +428,7 @@ impl PlayerState {
         PersistedPlayback {
             queue: self.queue.to_persistable(),
             // A station with no row cannot be looked back up, so there is nothing to write down.
-            station_id: self.radio.as_ref().map(|r| r.station_id).filter(|id| *id != 0),
+            station_id: self.station().map(|s| s.station_id).filter(|id| *id != 0),
         }
     }
 
@@ -452,7 +486,7 @@ impl PlayerState {
         self.status = PlaybackStatus::Stopped;
         if self.is_radio() {
             self.end_stream_session();
-            self.radio = None;
+            self.source = None;
         }
         vec![PlayerAction::Stop { fade_ms }]
     }
@@ -475,7 +509,7 @@ impl PlayerState {
         let mut actions = vec![];
         let was_paused = self.status == PlaybackStatus::Paused;
 
-        if let Some(ref track) = self.current_track
+        if let Some(track) = self.current_track()
             && self.duration_ms > 0
             && self.position_ms < self.duration_ms / 2
         {
@@ -570,7 +604,7 @@ impl PlayerState {
 
         let mut actions = Vec::with_capacity(4);
 
-        if let Some(ref track) = self.current_track {
+        if let Some(track) = self.current_track() {
             actions.push(PlayerAction::UpdatePlayCount(track.id));
         }
 
@@ -626,7 +660,7 @@ impl PlayerState {
             return actions;
         }
 
-        let Some(outgoing_id) = self.current_track.as_ref().map(|t| t.id) else {
+        let Some(outgoing_id) = self.current_track().map(|t| t.id) else {
             return actions;
         };
         if self.status != PlaybackStatus::Playing
@@ -692,8 +726,7 @@ impl PlayerState {
     ) -> (u64, Vec<PlayerAction>) {
         self.end_stream_session();
         self.status = PlaybackStatus::Loading;
-        self.radio = Some(station);
-        self.current_track = None;
+        self.source = Some(PlaybackSource::Station(station));
         self.duration_ms = 0;
         self.position_ms = 0;
         self.pause_after_current_track = false;
@@ -736,7 +769,7 @@ impl PlayerState {
         if !self.is_current_station_session(generation) {
             return vec![];
         }
-        self.radio = None;
+        self.source = None;
         self.status = PlaybackStatus::Stopped;
         vec![PlayerAction::Stop { fade_ms: 0 }]
     }
@@ -751,8 +784,8 @@ impl PlayerState {
     /// rather than played late. Called by every transition that starts or ends one.
     fn end_stream_session(&mut self) {
         self.radio_generation = self.radio_generation.wrapping_add(1);
-        if let Some(radio) = self.radio.as_mut() {
-            Arc::make_mut(radio).buffering = false;
+        if let Some(station) = self.station_mut() {
+            Arc::make_mut(station).buffering = false;
         }
     }
 }
@@ -778,12 +811,11 @@ fn begin_track(
     track: Arc<TrackSummary>,
     start_position_ms: Option<u64>,
 ) -> TrackStart {
-    // A track and a station are mutually exclusive sources, and ending the session is the half
-    // that matters: a connect still in flight would otherwise pass its generation check and start
-    // the station over the track that replaced it.
-    if state.radio.is_some() {
+    // Seating the track below evicts a station on its own, the two being one field now. What
+    // still has to be said out loud is the session: a connect in flight would otherwise pass its
+    // generation check and start the station over the track that replaced it.
+    if state.is_radio() {
         state.end_stream_session();
-        state.radio = None;
     }
 
     state.status = PlaybackStatus::Playing;
@@ -800,7 +832,7 @@ fn begin_track(
         speed: state.playback_speed,
         start_position_ms: clamped_pos,
     };
-    state.current_track = Some(track);
+    state.source = Some(PlaybackSource::Track(track));
     start
 }
 
@@ -848,7 +880,7 @@ pub fn resume_from_stopped(state: &mut PlayerState) -> Vec<PlayerAction> {
     if state.status != PlaybackStatus::Stopped {
         return vec![];
     }
-    if let Some(track) = state.current_track.clone() {
+    if let Some(track) = state.current_track().cloned() {
         let resume_pos = (state.position_ms > 0).then_some(state.position_ms);
         return play_track_inner(state, track, resume_pos);
     }
@@ -919,7 +951,7 @@ pub fn sync_current_track_if_in(
 ) {
     let affects_current = {
         let g = lock_state(state);
-        g.current_track.as_ref().is_some_and(|t| ids.contains(&t.id))
+        g.current_track().is_some_and(|t| ids.contains(&t.id))
     };
     if !affects_current {
         return;
@@ -927,7 +959,7 @@ pub fn sync_current_track_if_in(
     with_state_emit(state, sinks, |s| {
         // Re-check the id under the emit lock — the track may have advanced
         // between the pre-check and here.
-        if let Some(track) = s.current_track.as_mut()
+        if let Some(track) = s.current_track_mut()
             && ids.contains(&track.id)
         {
             apply(Arc::make_mut(track));
@@ -944,8 +976,7 @@ pub fn sync_current_track_if_in(
 /// skipped on the common "edited tracks aren't playing/queued" path.
 pub fn any_tracked(state: &PlayerStateHandle, pred: impl Fn(i64) -> bool) -> bool {
     let g = lock_state(state);
-    g.current_track.as_ref().is_some_and(|t| pred(t.id))
-        || g.queue.tracks.iter().any(|t| pred(t.id))
+    g.current_track().is_some_and(|t| pred(t.id)) || g.queue.tracks.iter().any(|t| pred(t.id))
 }
 
 /// Overwrite every queued / currently-playing [`TrackSummary`] whose id appears
@@ -965,7 +996,7 @@ pub fn sync_track_summaries<S: std::hash::BuildHasher>(
     }
 
     with_state_emit(state, sinks, |s| {
-        if let Some(track) = s.current_track.as_mut()
+        if let Some(track) = s.current_track_mut()
             && let Some(f) = fresh.get(&track.id)
         {
             *Arc::make_mut(track) = f.clone();
@@ -1011,7 +1042,7 @@ pub fn restore_queue(
     if let Some(track) = state.queue.get_current().cloned() {
         state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
         state.position_ms = u64::try_from(track.last_position.max(0)).unwrap_or(0);
-        state.current_track = Some(track);
+        state.source = Some(PlaybackSource::Track(track));
     }
 }
 
@@ -1020,9 +1051,8 @@ pub fn restore_queue(
 ///
 /// `Paused` because that is already the one status holding a station with no connection —
 /// pausing one drops its socket, so a restart is the same shape, and
-/// `library::playback::player_play` re-opens from it. The track fields go back to what
-/// [`PlayerState::build_station_connecting_actions`] leaves them, the two sources being mutually
-/// exclusive everywhere that reads them.
+/// `library::playback::player_play` re-opens from it. Seating the station is what evicts whatever
+/// [`restore_queue`] just put on the deck, the two being one field.
 ///
 /// Returns actions, so the caller owes an `emit_and_execute`: the speed pin is a backend write,
 /// and boot is the one place a station can arrive over a rate `settings.json` restored.
@@ -1030,9 +1060,8 @@ pub fn restore_station(
     state: &mut PlayerState,
     station: Arc<RadioNowPlaying>,
 ) -> Vec<PlayerAction> {
-    state.radio = Some(station);
+    state.source = Some(PlaybackSource::Station(station));
     state.status = PlaybackStatus::Paused;
-    state.current_track = None;
     state.duration_ms = 0;
     state.position_ms = 0;
     state.pin_speed_for_station().into_iter().collect()

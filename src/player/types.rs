@@ -114,6 +114,93 @@ impl From<&crate::entities::radio::RadioStation> for RadioNowPlaying {
     }
 }
 
+/// What is on the deck, and what may be done with it.
+///
+/// It replaces a pair of `Option`s — a track and a station — that were mutually exclusive by an
+/// invariant nothing enforced, and that only one function ever restored. Making the exclusion
+/// structural is the smaller half of what this buys.
+///
+/// The larger half is the accessors below. Source kind used to be a boolean, and a dozen branches
+/// asked it as a stand-in for a dozen different questions: whether there is a next item, whether a
+/// position can be asked for, whether a length is known, whether the speed may be varied. Podcasts
+/// and streaming turn each of those into a three or four way question, and every site left as a
+/// boolean silently answers it the way a local file would. Asking the capability instead means a
+/// third variant states its own answers once rather than being audited into a dozen branches.
+///
+/// So the variants are not a taxonomy of where bytes come from. A podcast episode is far closer to
+/// a local file than to a station — finite, seekable, with a position worth resuming — and it is
+/// radio that is the odd one out.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlaybackSource {
+    Track(std::sync::Arc<crate::entities::track::TrackSummary>),
+    Station(std::sync::Arc<RadioNowPlaying>),
+}
+
+impl PlaybackSource {
+    /// The track, when this is one. `None` for every live source.
+    pub fn track(&self) -> Option<&std::sync::Arc<crate::entities::track::TrackSummary>> {
+        match self {
+            Self::Track(track) => Some(track),
+            Self::Station(_) => None,
+        }
+    }
+
+    /// The track for in-place mutation, which is how a rating or a favourite reaches the deck.
+    pub fn track_mut(
+        &mut self,
+    ) -> Option<&mut std::sync::Arc<crate::entities::track::TrackSummary>> {
+        match self {
+            Self::Track(track) => Some(track),
+            Self::Station(_) => None,
+        }
+    }
+
+    /// The station, when this is one.
+    pub fn station(&self) -> Option<&std::sync::Arc<RadioNowPlaying>> {
+        match self {
+            Self::Station(station) => Some(station),
+            Self::Track(_) => None,
+        }
+    }
+
+    /// The station for in-place mutation, which is how a live title and the buffering flag arrive.
+    pub fn station_mut(&mut self) -> Option<&mut std::sync::Arc<RadioNowPlaying>> {
+        match self {
+            Self::Station(station) => Some(station),
+            Self::Track(_) => None,
+        }
+    }
+
+    /// Whether the queue is what says which item follows this one.
+    ///
+    /// False for a station, whose queue is left seated underneath rather than played from: skipping
+    /// into it would be a silent change of source, and a station going off air stops rather than
+    /// advancing. Shortwave, Tuner and `RadioDroid` all disable both transports for the same reason.
+    pub fn advances_queue(&self) -> bool {
+        matches!(self, Self::Track(_))
+    }
+
+    /// Whether a position within the source can be asked for.
+    pub fn is_seekable(&self) -> bool {
+        matches!(self, Self::Track(_))
+    }
+
+    /// Whether the source knows how long it runs for, which is what a progress bar, a crossfade and
+    /// an end-of-track sleep timer each need before they mean anything.
+    pub fn has_known_duration(&self) -> bool {
+        matches!(self, Self::Track(_))
+    }
+
+    /// Whether playback speed may be varied.
+    ///
+    /// rodio implements speed by reporting a multiplied sample rate upward, which against a
+    /// fixed-rate live source drifts the ring until it starves — so a station is pinned to 1.0
+    /// rather than merely discouraged from moving.
+    pub fn has_variable_speed(&self) -> bool {
+        matches!(self, Self::Track(_))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PersistableQueue {
     pub track_ids: Vec<i64>,

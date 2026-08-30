@@ -113,7 +113,7 @@ fn sync_current_track_favorite(state: &AppState, ids: &[i64], favorite: bool) {
 pub async fn toggle_current_favorite(state: &AppState) -> Result<Option<(i64, bool)>, AppError> {
     let Some((id, new_fav)) = ({
         let g = lock_state(&state.player_state);
-        g.current_track.as_ref().map(|t| (t.id, !t.is_favorite))
+        g.current_track().map(|t| (t.id, !t.is_favorite))
     }) else {
         return Ok(None);
     };
@@ -124,7 +124,7 @@ pub async fn toggle_current_favorite(state: &AppState) -> Result<Option<(i64, bo
     with_state_emit(&state.player_state, &state.sinks, |s| {
         // Guard against a track change between the id read above and here: only
         // flip the cached flag if `current_track` is still the track we wrote.
-        if let Some(track) = s.current_track.as_mut()
+        if let Some(track) = s.current_track_mut()
             && track.id == id
         {
             Arc::make_mut(track).is_favorite = new_fav;

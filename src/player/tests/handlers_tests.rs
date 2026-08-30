@@ -40,7 +40,7 @@ fn playing_state() -> PlayerState {
     state.queue.add_tracks(vec![track(1, Some("A")), track(2, Some("B"))]);
     state.queue.current_index = Some(0);
     state.status = PlaybackStatus::Playing;
-    state.current_track = Some(track(1, Some("A")));
+    state.source = Some(PlaybackSource::Track(track(1, Some("A"))));
     state.duration_ms = 180_000;
     state.gapless_enabled = true;
     state

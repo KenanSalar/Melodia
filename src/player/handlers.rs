@@ -18,7 +18,7 @@ use super::rodio_backend::{PlaybackCheck, RodioPlayer};
 use super::state::{
     PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state, with_state_emit,
 };
-use super::types::PlaybackStatus;
+use super::types::{PlaybackSource, PlaybackStatus};
 
 /// How often the monitor wakes: tight enough that gapless preload triggers and
 /// end-of-stream detection stay responsive, loose enough not to spin.
@@ -93,7 +93,7 @@ pub fn evaluate_playing_tick(
     // a crossfade ramps between two tracks and a gapless preload stages the next one. The position
     // published above is elapsed listening time, since the silence the prebuffer emits while
     // starved still advances rodio's tracker.
-    if state.radio.is_some() {
+    if !state.source_allows(PlaybackSource::advances_queue) {
         return Some(PlayingTick {
             tick,
             late_preload: None,
@@ -102,7 +102,7 @@ pub fn evaluate_playing_tick(
     }
 
     let next = state.queue.peek_next();
-    let same_album = match (state.current_track.as_ref(), next) {
+    let same_album = match (state.current_track(), next) {
         (Some(cur), Some(nxt)) => crossfade::same_album(cur, nxt),
         _ => false,
     };
@@ -133,7 +133,7 @@ pub fn evaluate_playing_tick(
     )
     .map(|fade_ms| crossfade::CrossfadeDecision {
         fade_ms,
-        track_id: state.current_track.as_ref().map(|t| t.id),
+        track_id: state.current_track().map(|t| t.id),
         position_ms: state.position_ms,
     });
 
@@ -181,7 +181,7 @@ pub fn evaluate_playing_tick(
 /// Named rather than described: the station is what they chose, and by the time this fires the
 /// state is about to forget it.
 fn notify_station_ended(player_state: &PlayerStateHandle) {
-    let station = lock_state(player_state).radio.as_ref().map(|r| r.name.clone());
+    let station = lock_state(player_state).station().map(|s| s.name.clone());
     if let Some(name) = station {
         crate::services::toast::notify(crate::services::toast::ToastKind::PlaybackFailed, name);
     }
@@ -205,7 +205,7 @@ fn reconcile_live_stream(
     let title_generation = stream.title_generation();
     let title_moved = title_generation != *last_title_generation;
     let buffering_moved =
-        lock_state(player_state).radio.as_ref().is_some_and(|radio| radio.buffering != buffering);
+        lock_state(player_state).station().is_some_and(|station| station.buffering != buffering);
 
     if !title_moved && !buffering_moved {
         return;
@@ -214,7 +214,7 @@ fn reconcile_live_stream(
     let title = title_moved.then(|| stream.title());
 
     with_state_emit(player_state, sinks, |state| {
-        if let Some(radio) = state.radio.as_mut() {
+        if let Some(radio) = state.station_mut() {
             // The one place the station is mutated in flight, so the `Arc`'s copy-on-write lands
             // here: once a song, against a clone per emit if the struct were held inline.
             let radio = std::sync::Arc::make_mut(radio);
@@ -310,7 +310,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         let mut actions = Vec::with_capacity(2);
 
                         // Update play count for the track that just finished
-                        if let Some(ref track) = state.current_track {
+                        if let Some(track) = state.current_track() {
                             actions.push(PlayerAction::UpdatePlayCount(track.id));
                         }
 
@@ -321,7 +321,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                             state.position_ms = 0;
                             state.duration_ms =
                                 u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
-                            state.current_track = Some(track);
+                            state.source = Some(PlaybackSource::Track(track));
                         }
 
                         actions
@@ -430,7 +430,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             if save_tick_counter == 0 {
                 let (track_data, persistable) = {
                     let state = lock_state(&player_state);
-                    let td = state.current_track.as_ref().map(|t| (t.id, state.position_ms));
+                    let td = state.current_track().map(|t| (t.id, state.position_ms));
                     (td, state.to_persisted())
                 };
                 if let Some((track_id, position_ms)) = track_data

@@ -47,7 +47,7 @@ pub async fn set_current_rating(
     let rating = clamp_rating(rating);
     let Some(id) = ({
         let g = lock_state(&state.player_state);
-        g.current_track.as_ref().map(|t| t.id)
+        g.current_track().map(|t| t.id)
     }) else {
         return Ok(None);
     };
@@ -58,7 +58,7 @@ pub async fn set_current_rating(
     with_state_emit(&state.player_state, &state.sinks, |s| {
         // Guard against a track change between the id read above and here: only
         // flip the cached rating if `current_track` is still the track we wrote.
-        if let Some(track) = s.current_track.as_mut()
+        if let Some(track) = s.current_track_mut()
             && track.id == id
         {
             Arc::make_mut(track).rating = rating;
