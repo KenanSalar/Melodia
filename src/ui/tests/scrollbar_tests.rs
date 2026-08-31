@@ -18,10 +18,11 @@ use crate::test_support::{
     MIN_SLINT_SOURCES, UI_DIR, block_body, normalize_ws as normalized, stripped_sources,
 };
 
-/// The elements every walk here recognises. `Flickable` is deliberately absent, and
+/// The elements both block walks recognise. `Flickable` is deliberately absent, and
 /// the reason differs per walk: it owns no scrollbar pair to turn off, and it spells
 /// drag-panning `interactive` rather than `mouse-drag-pan-enabled`. The tree declares
-/// none, so both walks are complete; one that appears is outside all of them.
+/// none — held by [`the_tree_declares_no_bare_flickable`], since one that appears is
+/// outside every walk in this file.
 const SCROLLERS: [&str; 2] = ["ScrollView", "ListView"];
 const AXES: [&str; 2] = ["horizontal", "vertical"];
 const OPT_OUT: &str = "always-off";
@@ -257,6 +258,25 @@ fn every_card_shaped_list_opts_out_of_drag_to_pan() {
     assert!(
         offenders.is_empty(),
         "these lists act on a click the way a card does, so they answer the same way:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// Both block walks key on [`SCROLLERS`], so what makes them complete is that nothing
+/// declares a bare `Flickable` — which spells drag-panning `interactive`, carries the `true`
+/// default the opt-outs exist to pin against, and is invisible to every needle here.
+#[test]
+fn the_tree_declares_no_bare_flickable() {
+    let offenders: Vec<_> = sources()
+        .iter()
+        .filter(|(_, src)| mounts(src, "Flickable"))
+        .map(|(path, _)| format!("{path}: declares a bare Flickable"))
+        .collect();
+
+    assert!(
+        offenders.is_empty(),
+        "a bare `Flickable` sits outside every walk in this file and opts into drag-to-pan \
+         by writing nothing at all — reach for `ScrollView` or `ListView`:\n{}",
         offenders.join("\n")
     );
 }
