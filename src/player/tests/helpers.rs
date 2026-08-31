@@ -24,14 +24,14 @@ use crate::player::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekEr
 use crate::player::state::PlayerViewModelLight;
 use crate::player::types::RadioNowPlaying;
 
-fn nz_u16(v: u16) -> ChannelCount {
+pub(crate) fn nz_u16(v: u16) -> ChannelCount {
     match NonZero::new(v) {
         Some(n) => n,
         None => NonZero::<u16>::MIN,
     }
 }
 
-fn nz_u32(v: u32) -> SampleRate {
+pub(crate) fn nz_u32(v: u32) -> SampleRate {
     match NonZero::new(v) {
         Some(n) => n,
         None => NonZero::<u32>::MIN,

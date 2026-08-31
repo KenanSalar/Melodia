@@ -11,6 +11,7 @@ pub mod file_decode;
 pub mod handlers;
 pub mod hls;
 pub mod now_playing;
+pub mod output;
 pub mod prebuffer;
 pub mod queue;
 pub mod replaygain;

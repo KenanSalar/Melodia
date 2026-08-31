@@ -170,6 +170,14 @@ sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio
 # `symphonia-*` entry back compiles a second Symphonia beside ours and gives the same bytes two
 # different probes again, which is the whole fault this closed.
 rodio = { version = "0.22.2", default-features = false, features = ["playback"] }
+# The device stream `player::output` opens, and the `StreamError` variants
+# `player::stream_health` classifies. Pinned to the version rodio already resolves
+# so the graph carries one cpal while both are in it — `rodio::cpal::StreamError`
+# and this crate's are then literally the same type, which is what lets the
+# output layer be built and the health path re-pointed in separate commits. The
+# 0.18 bump is its own change: it folds `StreamError` into a unified `Error`,
+# which is a rework of exactly the device-loss classification hardest to test.
+cpal = "0.17.3"
 # Everything decodes here — files through `player::file_decode`, live mounts through
 # `player::stream_decode` — and **deliberately against a newer Symphonia than the 0.5 rodio
 # pins**. 0.5's probe picks a demuxer off a two-byte marker with scoring still a TODO, and the
