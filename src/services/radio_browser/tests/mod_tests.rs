@@ -30,7 +30,9 @@ fn a_directory_url_joins_the_host_and_path_once() {
 /// lookup, which is what keeps a resolver crate out of the dependency list.
 #[test]
 fn the_mirror_list_is_fetched_over_https() {
-    assert!(SERVERS_URL.starts_with("https://"));
+    let parsed = crate::services::http_url(SERVERS_URL);
+
+    assert!(parsed.is_some_and(|url| url.scheme() == "https"), "{SERVERS_URL} is not HTTPS");
 }
 
 /// A row the client keeps: it can be played, and it can be told apart from the

@@ -181,6 +181,22 @@ export component FacetChip inherits Rectangle {
             width: 100%;
             height: 100%;
 
+            // The winit Release filter clears `PopupHighlight.id` on **every** mouse release, this
+            // popup's own included, and nothing in here closes the picker — so reclaim the id, per
+            // the third clause of `globals/shell.slint`'s contract. Without it one click inside the
+            // picker drops both the chip's fill and the watcher below.
+            //
+            // Declared first, so it only ever sees a click that landed on bare surface: a
+            // `SearchBar` hands its clicks to `TextInput` and an `OverlayScrollbar` grabs its own,
+            // so those two restore the claim on the next keystroke or surface click instead.
+            TouchArea {
+                pointer-event(ev) => {
+                    if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
+                        PopupHighlight.id = root.popup-id;
+                    }
+                }
+            }
+
             VerticalLayout {
                 padding: Theme.pad-xs;
                 spacing: Theme.pad-xs;
@@ -190,7 +206,12 @@ export component FacetChip inherits Rectangle {
                     input-width: root.popup-w - 2 * Theme.pad-xs;
                     placeholder: @tr("Filter…");
                     text <=> root.needle;
-                    edited(t) => { root.needle-edited(t); }
+                    edited(t) => {
+                        root.needle-edited(t);
+                        // The click that focused this box cleared the claim; typing is the first
+                        // thing after it this chip can hear.
+                        PopupHighlight.id = root.popup-id;
+                    }
                 }
 
                 Rectangle {

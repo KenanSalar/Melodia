@@ -313,8 +313,7 @@ impl Scheduler {
 
 /// Read at most [`SEGMENT_MAX_BYTES`] of one segment.
 ///
-/// Streamed rather than `bytes()`-ed for the same reason a playlist is: a server that misstates
-/// its content length must not be able to make this allocate without bound.
+/// The bound is [`crate::services::read_capped`]'s, which argues why it is streamed.
 async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, AppError> {
     let response =
         client.get(url.clone()).timeout(SEGMENT_TIMEOUT).send().await.map_err(|e| {

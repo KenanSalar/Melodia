@@ -82,6 +82,9 @@ mod aurora_backdrop_tests;
 #[path = "tests/detail_restore_tests.rs"]
 mod detail_restore_tests;
 #[cfg(test)]
+#[path = "tests/entity_card_tests.rs"]
+mod entity_card_tests;
+#[cfg(test)]
 #[path = "tests/hero_blur_backdrop_tests.rs"]
 mod hero_blur_backdrop_tests;
 #[cfg(test)]

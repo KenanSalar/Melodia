@@ -1,6 +1,5 @@
 import { Theme } from "../../theme.slint";
 import { ArtworkImage } from "../artwork-image.slint";
-import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { PlayCountBadge } from "play-count-badge.slint";
 
@@ -40,9 +39,9 @@ export component EntityCard inherits Rectangle {
     // reads as no scale at all.
     in property <float> cover-scale-hover: 1.04;
 
-    // The Playlists grid's hover-revealed CRUD trio, which is what lets it skip a
-    // per-card overflow menu. Off everywhere else. Also gates the `@children` slot beside it, so
-    // a host supplying its own controls raises this rather than a second flag.
+    // Whether the host put controls in the `@children` overlay slot, and the whole of what this
+    // gates. **Not a list of buttons this card owns** — it carried the Playlists CRUD trio once,
+    // which every other host raising the flag then drew on top of its own controls.
     in property <bool> show-overlay-actions: false;
 
     // Hover on a control the *host* put in the overlay slot, OR'd into `card-hovered` below.
@@ -66,22 +65,19 @@ export component EntityCard inherits Rectangle {
     in property <int> play-count: 0;
 
     callback clicked();
-    callback delete-clicked();
-    callback edit-artwork-clicked();
-    callback edit-name-clicked();
 
     // **Every hover-driven binding on this card reads this, not `touch.has-hover`.** A
     // higher-z TouchArea captures the pointer, so hovering any nested button flips that
     // false and the fill, the zoom and the overlay would all drop out while the user is
-    // aiming at one. Each button's own flag is false while they're hidden, so this stays
-    // correct on the cards that don't use the overlay.
+    // aiming at one — which is what `overlay-hovered` is for.
     // `out`, so a host placing a control *beside* the card rather than in the overlay slot can
     // ride the same answer — the star on a station card is the one such control.
-    out property <bool> card-hovered: touch.has-hover
-        || root.overlay-hovered
-        || delete_btn.has-hover
-        || artwork_btn.has-hover
-        || name_btn.has-hover;
+    out property <bool> card-hovered: touch.has-hover || root.overlay-hovered;
+
+    // The artwork square, published because a host positioning against it must not re-derive the
+    // formula: a station card sizes its favicon's 1:1 estimate off this, and a padding change here
+    // would otherwise skew that silently.
+    out property <length> tile-size: root.card-width - 2 * Theme.pad-sm;
 
     width: card-width;
     height: card-height;
@@ -102,10 +98,8 @@ export component EntityCard inherits Rectangle {
             ArtworkImage {
                 artwork-path: root.artwork-path;
                 cover: root.cover;
-                tile-size: root.card-width - 2 * Theme.pad-sm;
-                tile-radius: root.circular
-                    ? (root.card-width - 2 * Theme.pad-sm) / 2
-                    : Theme.radius-md;
+                tile-size: root.tile-size;
+                tile-radius: root.circular ? root.tile-size / 2 : Theme.radius-md;
                 cover-scale: root.card-hovered ? root.cover-scale-hover : 1.0;
                 fallback-icon: root.fallback-icon;
                 fallback-text: root.fallback-text;
@@ -154,59 +148,26 @@ export component EntityCard inherits Rectangle {
         clicked => { root.clicked(); }
     }
 
-    // **After `touch`**, so the nested buttons consume their own clicks before the
-    // card's open action fires, and matched to the artwork square so the icons frame the
-    // artwork rather than the title row.
+    // The host's own hover controls, framing the artwork square rather than the title row, and
+    // riding **one** `opacity` between them. That single fade is the point: an `opacity` per button
+    // layers each of them, and `Opacity::need_layer` bails only on a lone childless child, which an
+    // `IconButton` root is not. A control that has to stay up while the card is idle does not
+    // belong here — it is not a hover affordance, so it goes beside the card and takes
+    // `IconButton.fade`.
     //
-    // **Always mounted rather than behind an `if`**, so the root can reference each
-    // button's `has-hover` from `card-hovered`. `visible` propagates to the children, so
-    // they aren't rendered, hit-tested or hover-tracked when a host doesn't opt in.
+    // **After `touch`**, so a nested button consumes its own click before the card's open action
+    // fires. `visible` propagates to the children, so nothing here is rendered, hit-tested or
+    // hover-tracked on a card whose host put no controls in the slot.
     overlay := Rectangle {
         visible: root.show-overlay-actions;
         x: Theme.pad-sm;
         y: Theme.pad-sm;
-        width: root.card-width - 2 * Theme.pad-sm;
-        height: root.card-width - 2 * Theme.pad-sm;
+        width: root.tile-size;
+        height: root.tile-size;
 
         opacity: root.card-hovered ? 1.0 : 0.0;
         animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
 
-        delete_btn := IconButton {
-            x: parent.width - self.width - Theme.pad-sm;
-            y: Theme.pad-sm;
-            icon: "delete";
-            icon-size: 18px;
-            diameter: 30px;
-            idle-bg: Theme.floating-chrome-bg;
-            hover-fg: Theme.danger;
-            clicked => { root.delete-clicked(); }
-        }
-
-        artwork_btn := IconButton {
-            x: Theme.pad-sm;
-            y: parent.height - self.height - Theme.pad-sm;
-            icon: "image";
-            icon-size: 18px;
-            diameter: 30px;
-            idle-bg: Theme.floating-chrome-bg;
-            clicked => { root.edit-artwork-clicked(); }
-        }
-
-        name_btn := IconButton {
-            x: parent.width - self.width - Theme.pad-sm;
-            y: parent.height - self.height - Theme.pad-sm;
-            icon: "edit";
-            icon-size: 18px;
-            diameter: 30px;
-            idle-bg: Theme.floating-chrome-bg;
-            clicked => { root.edit-name-clicked(); }
-        }
-
-        // A host's own controls, framing the same square and riding the same single `opacity`
-        // above. That one fade is the point: an `opacity` per button layers each of them, and
-        // `Opacity::need_layer` bails only on a lone childless child, which an `IconButton` root
-        // is not. A control that has to stay up while the card is idle does not belong here — it
-        // is not a hover affordance, so it goes beside the card and takes `IconButton.fade`.
         @children
     }
 

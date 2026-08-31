@@ -79,6 +79,21 @@ this file is what builds, looks right, and is wrong.
 - **`parent` not accessible from component's root binding.** Take host metric as explicit
   `in property <length> host-width;`.
 
+- **An element passed into a `@children` slot is *drawn* where the slot is and *resolves names*
+  where it was written, so `parent` there is the mount, not the slot's container.** A host writing
+  `Card { btn := IconButton { y: parent.height - self.height - 8px; } }` reads as positioning
+  against whatever `Card` wraps its `@children` in; it compiles to the **`Card` element's** own
+  height. The offsets are still applied inside the container, so the control lands at the
+  container's origin plus a distance measured off something else — `EntityCard`'s overlay is its
+  artwork square and its mount is a taller card, so four station controls compiled to
+  `card-height - …` and drew 74 px low, over the text block, with no term in the source that looks
+  wrong. Nothing warns, and both readings are plausible enough that review settles on the wrong one.
+  Cure: **the container publishes its own metric and the host frames against that**
+  (`out property <length> tile-size` on `EntityCard`, `card-body.tile-size - self.width - …`),
+  never `parent`. Verify in the generated tree — the binding names the property it actually read.
+  Pinned by `ui::entity_card_tests::no_overlay_host_positions_against_parent`, which finds the
+  hosts by the flag that opens the slot rather than listing them.
+
 - **`height: 100%` on child + `height: Npx` on parent → unbounded layout.** Row swallows whole
   body; sibling `ListView` renders 0 rows. Pin fixed-size rows with `min-height` + `max-height` +
   `vertical-stretch: 0`. Never `height/width: 100%` on layout child.

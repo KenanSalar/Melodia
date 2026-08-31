@@ -42,15 +42,16 @@ export component StationCard inherits Rectangle {
     // `Radio.logo-decode-size`, drilled like `covers-generation` — this file imports no global.
     in property <int> logo-decode-size;
 
-    property <length> tile-size: root.card-width - 2 * Theme.pad-sm;
-
     // What the stored logo would draw at 1:1 here. The tier decodes to `logo-decode-size` physical
     // pixels across this tile and never pads a small source up, so the source's own width is the
     // fraction of the tile it can cover — scale-free, both numbers being physical. What
     // `ArtworkImage` does with it, and the budget it does it against, is the tile's own.
+    //
+    // Off the card's published square rather than a second copy of its formula, which would skew
+    // this silently if the card's padding ever moved.
     property <length> logo-native-size: root.logo-decode-size > 0
-        ? root.tile-size * root.cover.width / root.logo-decode-size
-        : root.tile-size;
+        ? card-body.tile-size * root.cover.width / root.logo-decode-size
+        : card-body.tile-size;
 
     callback clicked();
     callback play-clicked();
@@ -111,8 +112,14 @@ export component StationCard inherits Rectangle {
         // **Above the link, and in its slot when the station has no site**: the right edge is a
         // stack off the bottom, so a control left hovering over a gap reads as a sibling that
         // failed to draw.
+        //
+        // **The four below frame the tile off `card-body.tile-size`, never off `parent`.** These
+        // are laid out inside the card's overlay slot, but a `@children` element resolves names
+        // where it is *written*, so `parent` here is the `EntityCard` — its full height, not the
+        // square. The source reads correctly either way and only the generated tree tells them
+        // apart, which is what `ui::entity_card_tests` walks for.
         play_btn := IconButton {
-            x: parent.width - self.width - Theme.pad-sm;
+            x: card-body.tile-size - self.width - Theme.pad-sm;
             y: home_btn.y - (root.homepage-known ? self.height + Theme.pad-xs : 0px);
             icon: "play_arrow";
             icon-size: 18px;
@@ -124,8 +131,8 @@ export component StationCard inherits Rectangle {
 
         home_btn := IconButton {
             visible: root.homepage-known;
-            x: parent.width - self.width - Theme.pad-sm;
-            y: parent.height - self.height - Theme.pad-sm;
+            x: card-body.tile-size - self.width - Theme.pad-sm;
+            y: card-body.tile-size - self.height - Theme.pad-sm;
             icon: "link";
             icon-size: 18px;
             diameter: 30px;
@@ -138,7 +145,7 @@ export component StationCard inherits Rectangle {
         remove_btn := IconButton {
             visible: root.removable;
             x: Theme.pad-sm;
-            y: parent.height - self.height - Theme.pad-sm;
+            y: card-body.tile-size - self.height - Theme.pad-sm;
             icon: "delete";
             icon-size: 18px;
             diameter: 30px;
@@ -150,7 +157,7 @@ export component StationCard inherits Rectangle {
         edit_btn := IconButton {
             visible: root.editable;
             x: Theme.pad-sm + remove_btn.width + Theme.pad-xs;
-            y: parent.height - self.height - Theme.pad-sm;
+            y: card-body.tile-size - self.height - Theme.pad-sm;
             icon: "edit";
             icon-size: 18px;
             diameter: 30px;

@@ -146,7 +146,7 @@ Automatic system dark/light mode detection is supported. Material You dynamic th
 Every header (Now Playing and the six library heroes) can be painted two ways. By default the cover art is blurred behind them; **Aurora Backdrop** instead sweeps the album's own colors broadly across the surface over the theme's background, so the header follows the theme's light or dark polarity. Headers with no cover to draw from still get one: a genre washes the colors of its own name-derived gradient, and anything untagged washes your accent. It skips the per-cover blur entirely, and takes effect on the next launch.
 
 ### Supported Audio Formats
-MP3, FLAC, M4A/M4B (AAC and ALAC), Ogg Vorbis (`.ogg`, `.oga`), WAV, AIFF/AIFF-C, Matroska (`.mka`) and CAF
+MP3, FLAC, M4A/M4B (AAC and ALAC), raw AAC (`.aac`), Ogg Vorbis (`.ogg`, `.oga`), WAV (PCM and ADPCM), AIFF/AIFF-C, Matroska (`.mka`) and CAF
 
 Matroska and CAF carry no tags Melodia can read, so those tracks are listed under their filename with the duration taken from the file itself. Anything whose tags are too damaged to parse is listed the same way rather than being skipped.
 

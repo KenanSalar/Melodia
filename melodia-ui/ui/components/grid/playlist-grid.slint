@@ -2,6 +2,7 @@ import { ListView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { PlaylistGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
+import { IconButton } from "../icon-button.slint";
 
 // Virtualized playlist-card grid, `AlbumGrid`'s shape: Rust chunks the flat list
 // into rows of `columns` cards, covers come lazily off the host's
@@ -44,7 +45,7 @@ export component PlaylistGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                for playlist in grid-row.playlists: EntityCard {
+                for playlist in grid-row.playlists: card := EntityCard {
                     card-width: root.card-width;
                     card-height: root.card-height;
                     artwork-path: playlist.artwork_path;
@@ -62,12 +63,53 @@ export component PlaylistGrid inherits Rectangle {
                         ? @tr("{n} track" | "{n} tracks" % playlist.track_count)
                             + " · " + Theme.format-duration(playlist.total_duration_ms)
                         : @tr("0 tracks");
-                    show-overlay-actions: true;
                     badge-icon: playlist.is_smart ? "auto_awesome" : "";
                     clicked => { root.open-playlist(playlist.id); }
-                    delete-clicked => { root.delete-playlist(playlist.id); }
-                    edit-artwork-clicked => { root.edit-playlist-artwork(playlist.id); }
-                    edit-name-clicked => { root.rename-playlist(playlist.id); }
+
+                    // The hover-revealed CRUD trio, which is what lets this grid skip a per-card
+                    // overflow menu. **The card's slot rather than the card itself**: it lived in
+                    // `EntityCard` once, where every other host raising the flag drew all three on
+                    // top of its own controls.
+                    //
+                    // **Framed off `card.tile-size`, never off `parent`.** These sit in the card's
+                    // overlay square, but a `@children` element resolves names where it is
+                    // *written*, so `parent` here is the `EntityCard` — its full height, not the
+                    // square — and the source reads correctly either way.
+                    show-overlay-actions: true;
+                    overlay-hovered: delete_btn.has-hover
+                        || artwork_btn.has-hover
+                        || name_btn.has-hover;
+
+                    delete_btn := IconButton {
+                        x: card.tile-size - self.width - Theme.pad-sm;
+                        y: Theme.pad-sm;
+                        icon: "delete";
+                        icon-size: 18px;
+                        diameter: 30px;
+                        idle-bg: Theme.floating-chrome-bg;
+                        hover-fg: Theme.danger;
+                        clicked => { root.delete-playlist(playlist.id); }
+                    }
+
+                    artwork_btn := IconButton {
+                        x: Theme.pad-sm;
+                        y: card.tile-size - self.height - Theme.pad-sm;
+                        icon: "image";
+                        icon-size: 18px;
+                        diameter: 30px;
+                        idle-bg: Theme.floating-chrome-bg;
+                        clicked => { root.edit-playlist-artwork(playlist.id); }
+                    }
+
+                    name_btn := IconButton {
+                        x: card.tile-size - self.width - Theme.pad-sm;
+                        y: card.tile-size - self.height - Theme.pad-sm;
+                        icon: "edit";
+                        icon-size: 18px;
+                        diameter: 30px;
+                        idle-bg: Theme.floating-chrome-bg;
+                        clicked => { root.rename-playlist(playlist.id); }
+                    }
                 }
             }
         }

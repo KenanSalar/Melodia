@@ -137,10 +137,20 @@ silently miss the other.
   zero-width `chunks` is a panic. Grid tabs take `chunk_entity_rows` + `write_grid` (generic over
   the row type, so Browse uses it too). Don't re-roll either.
 
-- **The play-count badge is its own leaf** (`grid/play-count-badge.slint`), mounted by `EntityCard`
-  and by Radio's `StationCard` — a host that isn't an `EntityCard` is what turned it into markup a
-  card could own. It renders a `MaterialIcon` rather than a `"▶"` in the string (the fallback-font
+- **The play-count badge is its own leaf** (`grid/play-count-badge.slint`) with **one** mount,
+  `EntityCard` — Radio's `StationCard` hosts one now, so what a station card owes is the count and
+  not the markup. It renders a `MaterialIcon` rather than a `"▶"` in the string (the fallback-font
   line-box pitfall) and hides itself at a count of zero, so no host restates the suppression.
+
+- **A card's hover controls are the *host's*, through `EntityCard`'s `@children` overlay slot** —
+  the Playlists CRUD trio and Radio's five both. `show-overlay-actions` opens the slot and gates
+  nothing else: it named a set of buttons the card drew *and* the slot once, so the second host to
+  raise it got three controls it had no callbacks for, on its own corners. The host owes
+  `overlay-hovered` back (the card's `touch` goes false under a higher-z button) and must frame its
+  controls off the published `tile-size` rather than `parent`, which in that slot is not what it
+  reads as — `slint-pitfalls.md` argues why. A control that stays up while the card is idle is not
+  a hover affordance: it goes *beside* the card on `IconButton.fade`, as the station star does,
+  since the slot carries one fade for everything in it.
 
 - **`MosaicHeroTile`** is the 140 px artwork square both curated heroes draw, and it draws **one
   composed collage, never a live `CoverMosaic`** — `media::artwork`'s `COMPOSITE_LAYOUTS` owns the

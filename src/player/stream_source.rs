@@ -499,8 +499,8 @@ async fn follow_playlist(client: &reqwest::Client, url: &Url) -> Result<Followed
 
 /// Read at most [`PLAYLIST_MAX_BYTES`] of `url` as text.
 ///
-/// Streamed rather than `bytes()`-ed so a server that lies about (or omits) its content length
-/// cannot make this allocate without bound.
+/// The header check below is a cheap early bail on a server that is honest about the size; the
+/// bound that holds is [`crate::services::read_capped`]'s, which argues why it is streamed.
 pub(super) async fn fetch_capped(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
     let response = client
         .get(url.clone())
@@ -515,7 +515,11 @@ pub(super) async fn fetch_capped(client: &reqwest::Client, url: &Url) -> Result<
         )));
     }
     if response.content_length().is_some_and(|len| len > PLAYLIST_MAX_BYTES) {
-        return Err(AppError::network_msg("Station playlist is larger than a playlist should be"));
+        // Worded as `read_capped` words it, the two refusing the same thing from either side of
+        // the download.
+        return Err(AppError::network_msg(format!(
+            "Station playlist is larger than {PLAYLIST_MAX_BYTES} bytes"
+        )));
     }
 
     let body =
