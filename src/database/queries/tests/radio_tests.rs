@@ -370,6 +370,50 @@ async fn a_stream_url_already_kept_is_recognised_whether_or_not_it_has_a_uuid()
     Ok(())
 }
 
+/// The uuid outranks the URL, which is the whole reason the statement carries an `ORDER BY`
+/// rather than two `WHERE`s the caller picks between.
+///
+/// A directory row repointed at a new mount is the case: its uuid still names it, and the URL it
+/// used to hold can meanwhile belong to a station the user typed in by hand. Answered by URL that
+/// entry lands on the wrong row and the re-import rewrites a station nobody asked it to touch.
+/// The two ranks used to be two calls in a fixed order, where the order was on the page; folded
+/// into one statement it is a sort key, which is a thing a later edit can quietly simplify away.
+#[tokio::test]
+async fn a_repointed_directory_row_is_found_by_its_uuid_and_not_by_its_old_url()
+-> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let moved = "http://example.invalid/moved";
+
+    let listed = save_station(&db, &directory_station("uuid-1", "Listed")).await?;
+    set_favorite(&db, listed, true).await?;
+    let hand_typed = save_station(&db, &custom_station("Hand Typed", moved)).await?;
+
+    assert_eq!(
+        super::kept_station_matching(db.read(), Some("uuid-1"), moved).await?,
+        Some((listed, true)),
+        "both keys match, and a different row each — the uuid is the directory's own identity \
+         for a station, so it is the one that answers"
+    );
+    assert_eq!(
+        super::kept_station_matching(db.read(), None, moved).await?,
+        Some((hand_typed, false)),
+        "an entry carrying no uuid still has to find its row, that being every hand-typed one"
+    );
+    assert_eq!(
+        super::kept_station_matching(db.read(), Some("uuid-1"), "http://example.invalid/new")
+            .await?,
+        Some((listed, true)),
+        "the uuid alone is enough — a mount the row has never held is what a repoint looks like"
+    );
+    assert_eq!(
+        super::kept_station_matching(db.read(), Some("uuid-9"), "http://example.invalid/new")
+            .await?,
+        None,
+        "neither key matches, so the entry is new and the import inserts it"
+    );
+    Ok(())
+}
+
 /// Timestamps the retention rules compare, spelled rather than derived: the pass is a string
 /// comparison against the clock, so a test that built its dates the same way the code does would
 /// only be reading the format back to itself.

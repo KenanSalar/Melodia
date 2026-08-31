@@ -241,6 +241,7 @@ export component FacetChip inherits Rectangle {
                         height: 100%;
                         vertical-scrollbar-policy: always-off;
                         horizontal-scrollbar-policy: always-off;
+                        mouse-drag-pan-enabled: false;
 
                         for option in root.options: FacetOption {
                             label: option.name;
