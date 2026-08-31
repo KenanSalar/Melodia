@@ -15,6 +15,7 @@
 use std::num::NonZero;
 
 use melodia::player::prebuffer::{PrebufferSource, StreamShared};
+use melodia::player::rodio_compat::RodioBridge;
 
 /// The device rate everything is resampled to.
 const OUT_RATE: u32 = 48_000;
@@ -54,7 +55,7 @@ fn nz_u32(value: u32) -> rodio::SampleRate {
 
 /// A station already fully buffered and closed, so the deck plays it start to finish without ever
 /// reaching for the feed thread this test does not have.
-fn station(rate: u32, seconds: u32) -> PrebufferSource {
+fn station(rate: u32, seconds: u32) -> RodioBridge<PrebufferSource> {
     let shared = StreamShared::new();
     let (source, writer) = PrebufferSource::new(shared.clone(), nz_u16(CHANNELS), nz_u32(rate));
 
@@ -68,7 +69,7 @@ fn station(rate: u32, seconds: u32) -> PrebufferSource {
         assert!(writer.push(polarity), "the ring must take the whole station up front");
     }
     shared.finish();
-    source
+    RodioBridge::new(source)
 }
 
 fn pull(out: &mut rodio::mixer::MixerSource, count: usize) -> Vec<f32> {

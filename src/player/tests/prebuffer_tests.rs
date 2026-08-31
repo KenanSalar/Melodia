@@ -1,8 +1,7 @@
 use std::num::NonZero;
 use std::sync::Arc;
 
-use rodio::{ChannelCount, SampleRate, Source};
-
+use crate::player::audio::{AudioSource, ChannelCount, SampleRate};
 use crate::player::prebuffer::{PrebufferSource, RingWriter, StreamShared};
 
 fn stereo_channels() -> ChannelCount {
@@ -145,25 +144,6 @@ fn a_live_stream_reports_no_length_and_refuses_to_seek() {
     assert_eq!(source.channels(), stereo_channels());
     assert_eq!(source.sample_rate(), rate());
     assert!(source.try_seek(std::time::Duration::from_secs(1)).is_err());
-}
-
-/// A `None` span reaches rodio's mixer as an unbounded `Take`, pinning its `SampleRateConverter` to
-/// whichever source landed on the deck first — every station after that plays at the first one's
-/// rate, fast or slow, until the process restarts. Nothing else reports it, so the shape is pinned
-/// here rather than left to review; this test asserted the `None` before it was understood.
-#[test]
-fn a_live_stream_names_a_frame_aligned_span_for_the_resampler() {
-    for channels in [NonZero::<u16>::MIN, stereo_channels()] {
-        let (source, _writer) = PrebufferSource::new(StreamShared::new(), channels, rate());
-
-        let frame = usize::from(channels.get());
-        let span = source.current_span_len();
-        assert!(
-            span.is_some_and(|span| span > 0 && span.is_multiple_of(frame)),
-            "a live stream must name a positive, frame-aligned span, got {span:?} for {frame} \
-             channels — a `None` leaves the mixer's resampler pinned to the first station's rate"
-        );
-    }
 }
 
 #[test]

@@ -19,10 +19,8 @@ use std::num::NonZero;
 use std::sync::Arc;
 use std::time::Duration;
 
-use rodio::source::SeekError;
-use rodio::{ChannelCount, Sample, SampleRate, Source};
-
 use crate::entities::track::TrackSummary;
+use crate::player::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
 use crate::player::state::PlayerViewModelLight;
 use crate::player::types::RadioNowPlaying;
 
@@ -97,10 +95,7 @@ impl Iterator for TestSource {
     }
 }
 
-impl Source for TestSource {
-    fn current_span_len(&self) -> Option<usize> {
-        None
-    }
+impl AudioSource for TestSource {
     fn channels(&self) -> ChannelCount {
         nz_u16(self.channels)
     }

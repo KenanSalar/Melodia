@@ -3,12 +3,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use rodio::Source;
-
 use super::{
     BAND_FREQS, EqShared, EqSource, MAX_GAIN_DB, MAX_PREAMP_DB, MIN_GAIN_DB, MIN_PREAMP_DB,
     NUM_BANDS, PRESETS, clamp_gain, clamp_preamp, normalize_gains, preset_index,
 };
+use crate::player::audio::AudioSource;
 use crate::player::crossfade::FadeShared;
 use crate::player::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 use crate::player::tests::helpers::{TestSource, approx_eq as approx, bits};

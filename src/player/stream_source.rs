@@ -21,7 +21,6 @@ use std::time::Duration;
 
 use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
 use reqwest::Url;
-use rodio::{ChannelCount, SampleRate};
 use stream_download::http::{Client as StreamClient, HttpStream, format_range_header_bytes};
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
@@ -30,6 +29,7 @@ use stream_download::{Settings, StreamDownload};
 use crate::error::AppError;
 use crate::services::describe;
 
+use super::audio::{ChannelCount, SampleRate};
 use super::hls;
 use super::prebuffer::{PrebufferSource, RingWriter, StreamShared};
 use super::stream_decode::{LiveSource, StreamDecoder};

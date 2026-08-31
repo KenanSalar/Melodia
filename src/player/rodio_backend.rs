@@ -4,11 +4,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use parking_lot::Mutex;
+use rodio::Player;
 use rodio::mixer::Mixer;
-use rodio::{Player, Source};
 
 use crate::error::AppError;
 
+use super::audio::AudioSource;
 use super::crossfade::{self, CrossfadeShared};
 use super::decks::{Deck, Decks, DeferredOp, lock_decks};
 use super::equalizer::{self, EqShared, EqSource};
@@ -540,7 +541,7 @@ impl RodioPlayer {
     /// for why the two can't be split. Building the tap also *claims* that ring for the life of
     /// the value and stamps its history away if the deck was idle, both only correct for a source
     /// about to play, so don't build one anywhere it might be held or discarded instead.
-    fn build_source<S: Source + Send + 'static>(
+    fn build_source<S: AudioSource + 'static>(
         &self,
         input: S,
         baked_rg: TrackReplayGain,

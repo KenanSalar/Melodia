@@ -19,7 +19,6 @@
 
 use std::sync::LazyLock;
 
-use rodio::{ChannelCount, SampleRate};
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::codecs::audio::well_known::{CODEC_ID_PCM_ALAW, CODEC_ID_PCM_MULAW};
 use symphonia::core::codecs::audio::{
@@ -30,6 +29,7 @@ use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::formats::{FormatReader, Track, TrackType};
 
 use super::aac_config;
+use super::audio::{ChannelCount, SampleRate};
 
 /// Our own registry, rather than `symphonia::default::get_codecs`.
 ///
@@ -151,22 +151,8 @@ impl Cursor {
         self.sample_rate
     }
 
-    /// The whole buffered packet, not what is left of it.
-    ///
-    /// It answers `Source::current_span_len`, which must never be `None`: that reaches
-    /// `UniformSourceIterator::bootstrap` as an unbounded `Take`, so the mixer builds one
-    /// `SampleRateConverter` out of whichever source reached the deck first and never gets a
-    /// boundary to rebuild it at. Naming the whole packet is for the same reason a span of zero
-    /// would be wrong, the converter rebuilding against an empty `Take`.
-    pub(super) fn span_len(&self) -> usize {
-        self.samples.len()
-    }
-
     /// Steps past the buffered packet, reporting the channel of the frame the puller was part way
     /// through so a seek can put it back there.
-    ///
-    /// The buffer is left in place rather than cleared, so [`Self::span_len`] keeps naming a real
-    /// packet until the next pull replaces it.
     pub(super) fn discard_buffered(&mut self) -> usize {
         let channel_phase = self.next % usize::from(self.channels.get());
         self.next = self.samples.len();

@@ -34,10 +34,12 @@
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};
 
+use rodio::Player;
 use rodio::mixer::Mixer;
-use rodio::{Player, Source};
 
+use super::audio::AudioSource;
 use super::crossfade::FadeShared;
+use super::rodio_compat::RodioBridge;
 
 /// How many voices the player alternates between. The visualizer keeps one sample ring per deck,
 /// so the two counts have to agree.
@@ -67,11 +69,11 @@ impl Deck {
     /// Apply the transport parameters and start `source` on this deck.
     pub fn start<S>(&self, source: S, volume: f64, speed: f64)
     where
-        S: Source + Send + 'static,
+        S: AudioSource + 'static,
     {
         self.player.set_volume(narrow_audio_param(volume));
         self.player.set_speed(narrow_audio_param(speed));
-        self.player.append(source);
+        self.player.append(RodioBridge::new(source));
         self.player.play();
     }
 
@@ -82,9 +84,9 @@ impl Deck {
     /// ramp cell the source carries is guaranteed to belong to the deck it lands on.
     pub fn stage<S>(&self, build: impl FnOnce(&Self) -> S)
     where
-        S: Source + Send + 'static,
+        S: AudioSource + 'static,
     {
-        self.player.append(build(self));
+        self.player.append(RodioBridge::new(build(self)));
     }
 
     /// Drop everything on this deck and disarm its ramp.
@@ -168,7 +170,7 @@ impl Decks {
     /// `get_pos()` reporting the previous track's position for a few milliseconds.
     pub fn cut_to<S>(&self, volume: f64, speed: f64, build: impl FnOnce(&Deck) -> S)
     where
-        S: Source + Send + 'static,
+        S: AudioSource + 'static,
     {
         self.clear_all();
         let target = self.active();
@@ -189,7 +191,7 @@ impl Decks {
         speed: f64,
         build: impl FnOnce(&Deck) -> S,
     ) where
-        S: Source + Send + 'static,
+        S: AudioSource + 'static,
     {
         let target = 1 - self.active;
         // The target deck may still hold a previous crossfade's outgoing track.

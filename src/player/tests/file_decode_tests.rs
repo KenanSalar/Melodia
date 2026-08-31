@@ -6,10 +6,9 @@
 
 use std::path::{Path, PathBuf};
 
-use rodio::Source;
-
 use super::{FileDecoder, probe_duration};
 use crate::error::AppError;
+use crate::player::audio::AudioSource;
 use crate::test_support::ASSETS_DIR;
 
 fn asset(name: &str) -> PathBuf {
@@ -64,18 +63,7 @@ fn every_scanned_extension_reaches_a_decoder() -> Result<(), AppError> {
     Ok(())
 }
 
-/// A span of zero would have the mixer rebuild its resampler against an empty `Take`, and `None`
-/// would pin it to whatever reached the deck first — the fault `tests/stream_rate.rs` covers for
-/// the ring, on the path that feeds the same mixer.
-#[test]
-fn the_span_names_a_real_packet() -> Result<(), AppError> {
-    let decoder = FileDecoder::open(&asset("silence.flac"))?;
-    let span = decoder.current_span_len();
-    assert!(span.is_some_and(|len| len > 0), "{span:?}");
-    Ok(())
-}
-
-/// `Source::try_seek` saturates wherever a length is known, and the caller asks past the end
+/// `AudioSource::try_seek` saturates wherever a length is known, and the caller asks past the end
 /// routinely: the position it seeks to comes off the tags, which overshoot the decoded length by a
 /// few frames often enough. Unclamped the demuxer answers out of range or parks at the end, and a
 /// deck draining reads to the monitor as the track finishing — the queue jumps, from a drag of the

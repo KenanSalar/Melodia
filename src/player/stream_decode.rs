@@ -12,7 +12,6 @@
 
 use std::io::{Read, Seek, SeekFrom};
 
-use rodio::{ChannelCount, Sample, SampleRate};
 use symphonia::core::codecs::audio::AudioDecoder;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader};
@@ -21,6 +20,7 @@ use symphonia::core::meta::MetadataOptions;
 
 use crate::error::AppError;
 
+use super::audio::{ChannelCount, Sample, SampleRate};
 use super::decode;
 
 /// A reader the demuxer may read but must never seek or measure.

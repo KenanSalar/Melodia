@@ -2,9 +2,8 @@
 
 use std::time::Duration;
 
-use rodio::Source;
-
 use super::{RING_CAP, VisualizerShared, VisualizerTap};
+use crate::player::audio::AudioSource;
 use crate::player::tests::helpers::{TestSource, bits};
 use crate::test_support::UNBOUNDED;
 

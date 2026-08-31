@@ -2,7 +2,7 @@
 //! to change it.
 //!
 //! [`VisualizerShared`] is the transport — a lock-free ring per deck, written by the audio thread
-//! and snapshotted by the UI as a mix — and [`VisualizerTap`] is a [`Source`] wrapping
+//! and snapshotted by the UI as a mix — and [`VisualizerTap`] is an [`AudioSource`] wrapping
 //! [`EqSource`] that copies one downmixed value out of each frame it forwards, leaving the audio
 //! bit-identical either way.
 //!
@@ -19,9 +19,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::time::Duration;
 
-use rodio::source::SeekError;
-use rodio::{ChannelCount, Sample, SampleRate, Source};
-
+use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
 use super::decks::DECK_COUNT;
 
 /// Ring capacity, in mono samples. A power of two so the wrap is a mask, and comfortably wider
@@ -337,7 +335,7 @@ pub struct VisualizerTap<S> {
     rate_published: bool,
 }
 
-impl<S: Source> VisualizerTap<S> {
+impl<S: AudioSource> VisualizerTap<S> {
     pub fn new(input: S, viz: &Arc<VisualizerShared>, deck: usize) -> Self {
         let channels = input.channels().get();
         Self {
@@ -354,7 +352,7 @@ impl<S: Source> VisualizerTap<S> {
     }
 }
 
-impl<S: Source> Iterator for VisualizerTap<S> {
+impl<S: AudioSource> Iterator for VisualizerTap<S> {
     type Item = Sample;
 
     #[inline]
@@ -383,12 +381,7 @@ impl<S: Source> Iterator for VisualizerTap<S> {
     }
 }
 
-impl<S: Source> Source for VisualizerTap<S> {
-    #[inline]
-    fn current_span_len(&self) -> Option<usize> {
-        self.input.current_span_len()
-    }
-
+impl<S: AudioSource> AudioSource for VisualizerTap<S> {
     #[inline]
     fn channels(&self) -> ChannelCount {
         self.input.channels()

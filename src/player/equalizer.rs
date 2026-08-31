@@ -20,9 +20,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 
 use biquad::{Biquad, Coefficients, DirectForm1, Hertz, Type};
-use rodio::source::SeekError;
-use rodio::{ChannelCount, Sample, SampleRate, Source};
 
+use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
 use super::crossfade::{self, FadeShared};
 use super::dsp::{Generation, db_to_linear, linear_to_db};
 use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
@@ -399,7 +398,7 @@ pub struct EqSource<S> {
     bypass: bool,
 }
 
-impl<S: Source> EqSource<S> {
+impl<S: AudioSource> EqSource<S> {
     pub fn new(
         input: S,
         shared: Arc<EqShared>,
@@ -723,7 +722,7 @@ impl<S: Source> EqSource<S> {
     }
 }
 
-impl<S: Source> Iterator for EqSource<S> {
+impl<S: AudioSource> Iterator for EqSource<S> {
     type Item = Sample;
 
     fn next(&mut self) -> Option<Sample> {
@@ -750,12 +749,7 @@ impl<S: Source> Iterator for EqSource<S> {
     }
 }
 
-impl<S: Source> Source for EqSource<S> {
-    #[inline]
-    fn current_span_len(&self) -> Option<usize> {
-        self.input.current_span_len()
-    }
-
+impl<S: AudioSource> AudioSource for EqSource<S> {
     #[inline]
     fn channels(&self) -> ChannelCount {
         self.input.channels()

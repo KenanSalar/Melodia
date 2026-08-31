@@ -14,8 +14,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use rodio::source::SeekError;
-use rodio::{ChannelCount, Sample, SampleRate, Source};
 use symphonia::core::codecs::audio::AudioDecoder;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, Track};
@@ -25,6 +23,7 @@ use symphonia::core::units::{Duration as SymphoniaDuration, TimeBase, Timestamp}
 
 use crate::error::AppError;
 
+use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
 use super::decode;
 
 /// How far short of a stated length a seek is allowed to land.
@@ -229,12 +228,7 @@ impl Iterator for FileDecoder {
     }
 }
 
-impl Source for FileDecoder {
-    #[inline]
-    fn current_span_len(&self) -> Option<usize> {
-        Some(self.cursor.span_len())
-    }
-
+impl AudioSource for FileDecoder {
     #[inline]
     fn channels(&self) -> ChannelCount {
         self.cursor.channels()
@@ -251,7 +245,7 @@ impl Source for FileDecoder {
     }
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
-        // `Source::try_seek` promises to saturate wherever a length is known, and the caller asks
+        // `AudioSource::try_seek` promises to saturate wherever a length is known, and the caller asks
         // past the end routinely: the position it seeks to comes off the tags, which overshoot the
         // decoded length by a few frames often enough. The ceiling is short of the end rather than
         // on it, for [`SEEK_END_MARGIN`]'s reason.
