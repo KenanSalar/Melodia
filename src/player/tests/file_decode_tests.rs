@@ -118,3 +118,36 @@ fn a_seek_lands_on_the_frame_it_asked_for() -> Result<(), AppError> {
     assert!(drift <= 1, "{remaining} frames left, expected about {expected}");
     Ok(())
 }
+
+/// The seek puts the puller back on the channel it was part way through, and nothing downstream
+/// re-syncs, so getting this wrong swaps the stereo image for the rest of the track.
+///
+/// Driven by hand because the deck's converter cannot be the caller that reaches it — it takes
+/// whole frames and seeks between them. `stereo-dc.wav` carries a different constant per channel,
+/// which is the only way to tell which one a sample came from; every other fixture is mono, where
+/// the fault is invisible.
+#[test]
+fn a_seek_resumes_on_the_channel_it_was_part_way_through() -> Result<(), AppError> {
+    const LEFT: f32 = 0.5;
+    const RIGHT: f32 = 0.25;
+
+    let mut decoder = FileDecoder::open(&asset("stereo-dc.wav"))?;
+
+    // One sample leaves the puller owed channel 1.
+    let Some(first) = decoder.next() else {
+        return Err(AppError::Player("the fixture decoded nothing".to_owned()));
+    };
+    assert!((first - LEFT).abs() < 1e-3, "the fixture opened on {first}, not its left channel");
+    decoder
+        .try_seek(std::time::Duration::from_millis(500))
+        .map_err(|e| AppError::Player(e.to_string()))?;
+
+    let Some(resumed) = decoder.next() else {
+        return Err(AppError::Player("the seek left nothing to play".to_owned()));
+    };
+    assert!(
+        (resumed - RIGHT).abs() < 1e-3,
+        "resumed on {resumed}, which is the left channel where the right was due"
+    );
+    Ok(())
+}

@@ -219,10 +219,10 @@ symphonia = { version = "0.6.1", default-features = false, features = [
     "id3v1",
     "id3v2",
 ] }
-# Rodio 0.22 ships only low/high-pass BLT filters, so the graphic EQ cascades
-# this crate's `Type::PeakingEQ` `DirectForm1` filters instead. `DirectForm1`
-# keeps past inputs/outputs in its delay line, so a live coefficient swap (a
-# slider drag) injects no transient.
+# The graphic EQ cascades this crate's `Type::PeakingEQ` filters: rodio 0.22
+# shipped only low/high-pass BLT ones, and nothing replaced them when it went.
+# `DirectForm1` keeps past inputs/outputs in its delay line, so a live
+# coefficient swap (a slider drag) injects no transient.
 biquad = "0.6.0"
 # Real-to-complex FFT for the spectrum visualizer. Over raw `rustfft` (which it
 # wraps) because a real input yields N/2+1 bins from a half-length complex FFT —

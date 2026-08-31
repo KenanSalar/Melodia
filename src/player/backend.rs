@@ -390,11 +390,10 @@ impl PlaybackEngine {
     /// Playback speed while a station plays.
     ///
     /// Speed is a ratio on the deck's converter, so anything but 1.0 consumes the source faster or
-    /// slower than real time, and a mount arriving at exactly that rate starves or overruns its
-    /// ring. Pinned rather than
-    /// merely ignored, so what the deck runs at and what the transport claims stay the same
-    /// number — [`super::state::PlayerState::build_station_connecting_actions`] resets the state
-    /// side to match.
+    /// slower than real time, and a mount arriving at exactly real time starves or overruns its
+    /// ring. Pinned rather than merely ignored, so what the deck runs at and what the transport
+    /// claims stay the same — [`super::state::PlayerState::build_station_connecting_actions`]
+    /// resets the state side to match.
     const STREAM_SPEED: f64 = 1.0;
 
     /// Park an opened live stream for the `PlayStream` action that follows it.

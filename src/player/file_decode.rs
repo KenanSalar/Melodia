@@ -275,10 +275,11 @@ impl AudioSource for FileDecoder {
         // packets document their `reset` as doing nothing.
         self.decoder.reset();
 
-        // Which channel of a frame the puller was part way through. A seek restarts on a frame
+        // Which channel of a frame the puller was part way through: a seek restarts on a frame
         // boundary, so without putting this back the next sample handed out is channel 0 where
-        // channel 1 was due, and the deck's converter — which takes whole frames off this iterator
-        // and never re-syncs — runs one sample out of step for the rest of the track.
+        // channel 1 was due, and nothing downstream re-syncs. The deck's converter is never that
+        // puller — it takes whole frames and seeks between them — but `try_seek` is on
+        // `AudioSource`, so anything driving this iterator by hand can be.
         let channel_phase = self.cursor.discard_buffered();
 
         // A demuxer seek lands on a packet boundary, so without the trim every seek replays the

@@ -17,8 +17,8 @@ export struct SleepPreset {
 }
 
 export global SpeedPresets {
-    // Capped at the player's 2×: the deck resamples naively so pitch shifts with it, and past that it's
-    // chipmunk territory. Mirror any change in `current-speed-label()`.
+    // Capped at the player's 2×: the deck resamples naively so pitch shifts with it, and past
+    // that it's chipmunk territory. Mirror any change in `current-speed-label()`.
     out property <[SpeedPreset]> list: [
         { value: 0.25, label: "0.25x" },
         { value: 0.5,  label: "0.5x" },

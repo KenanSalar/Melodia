@@ -304,7 +304,7 @@ pub async fn restore_persisted_playback(state: &AppState) -> AppResult<()> {
         .await
         .map_err(|e| AppError::Settings(format!("restore_persisted_playback join: {e}")))??;
 
-    // `emit_and_execute` rather than a bare emit because a seated station may owe the engine a speed
+    // `emit_and_execute` rather than a bare emit because a seated station may owe the deck a speed
     // reset: `settings.json` hydrates the speed ahead of this and a station is pinned at 1.0.
     emit_and_execute(&*state.engine, &state.db, &state.player_state, &state.sinks, |s| {
         if let Some(p) = persisted.as_ref() {

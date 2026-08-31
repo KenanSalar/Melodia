@@ -228,9 +228,8 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
             // drawing ramps back in from silence rather than resuming on a stale shape.
             viz.set_enabled(analyzing);
 
-            // Not `sample_rate()`: the tap sits above the deck's converter, where speed is
-            // applied. Zero is the "draw
-            // nothing new" signal both styles decay on.
+            // Not `sample_rate()`: the tap sits above the deck's converter, which is where speed
+            // is applied. Zero is the "draw nothing new" signal both styles decay on.
             let rate = if analyzing { viz.analysis_rate() } else { 0 };
 
             let waveform = is_waveform(style.get());

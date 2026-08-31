@@ -13,6 +13,9 @@
 //! still opened. Carrying one size down every rung loses that, and `Fixed` is the least portable
 //! thing in this file — on ALSA it names a *period*, checked against a range reported for the whole
 //! buffer. So the walk runs twice, [`TARGET_BUFFER`] first and the host's own choice behind it.
+//! Both passes run the whole ladder, which lets a rung at the size we want beat the device's own
+//! config at a size we didn't — safe because `Fixed` is a device-wide constraint, so a first pass
+//! that fails at the default fails at every rung and the second lands back on the default.
 //!
 //! It also has to survive CI, where there is no sound card and `.github/actions/headless-audio`
 //! points ALSA's default PCM at the userspace `null` device. A stricter open than this one makes
@@ -33,7 +36,8 @@ use super::mixer::MixerPull;
 ///
 /// Latency against wakeup cost, and it is what the position lags the ear by. rodio asked for the
 /// same 50 ms; the value is a request rather than a promise, and a host outside its own reported
-/// range clamps or ignores it.
+/// range clamps or ignores it. The second pass doesn't ask at all, and keeps this only as the size
+/// the callback's staging buffer starts at.
 const TARGET_BUFFER: Duration = Duration::from_millis(50);
 
 /// What the device actually agreed to, as opposed to what it was asked for.
@@ -145,7 +149,8 @@ where
     config.buffer_size = buffer.size(supported);
 
     let format = supported.sample_format();
-    let stream = build_stream(device, &config, format, pull, error_callback)?;
+    let staging = staging_samples(supported);
+    let stream = build_stream(device, &config, format, staging, pull, error_callback)?;
     stream
         .play()
         .map_err(|e| AppError::Player(format!("Failed to start the audio stream: {e}")))?;
@@ -197,6 +202,16 @@ fn target_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
     }
 }
 
+/// Samples the callback's staging buffer holds before it has ever run.
+///
+/// [`TARGET_BUFFER`]'s worth either way, which on the [`Buffer::Target`] pass is exactly the block
+/// asked for and on [`Buffer::HostChoice`] is a floor under a block nobody named. Sizing that pass
+/// from the request would size it from nothing, leaving the callback to allocate its way up to the
+/// host's own block — on the one thread in the process that must not wait for the arena lock.
+fn staging_samples(supported: &cpal::SupportedStreamConfig) -> usize {
+    target_frames(supported) as usize * usize::from(supported.channels())
+}
+
 /// One arm per sample format the host can ask for, because the callback is monomorphic in it.
 ///
 /// Every arm stages in [`Sample`] and converts on the way out, so [`MixerPull::fill`] stays the one
@@ -206,6 +221,7 @@ fn build_stream<E>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
     format: cpal::SampleFormat,
+    staging_samples: usize,
     pull: MixerPull,
     error_callback: E,
 ) -> Result<cpal::Stream, AppError>
@@ -216,7 +232,7 @@ where
         ($($variant:ident => $ty:ty),+ $(,)?) => {
             match format {
                 $(cpal::SampleFormat::$variant => {
-                    output_stream::<$ty, E>(device, config, pull, error_callback)
+                    output_stream::<$ty, E>(device, config, staging_samples, pull, error_callback)
                 })+
                 other => Err(AppError::Player(format!("Unsupported sample format {other}"))),
             }
@@ -245,6 +261,7 @@ where
 fn output_stream<T, E>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
+    staging_samples: usize,
     mut pull: MixerPull,
     error_callback: E,
 ) -> Result<cpal::Stream, AppError>
@@ -252,13 +269,8 @@ where
     T: SizedSample + FromSample<Sample>,
     E: FnMut(cpal::StreamError) + Send + 'static,
 {
-    // Sized for the block that was asked for, so the callback's first pass allocates nothing. A
-    // host that hands over more than it agreed to grows this once and keeps it.
-    let requested = match config.buffer_size {
-        cpal::BufferSize::Fixed(frames) => frames as usize * usize::from(config.channels),
-        cpal::BufferSize::Default => 0,
-    };
-    let mut staging: Vec<Sample> = vec![0.0; requested];
+    // A host handing over more than `staging_samples` allowed for grows this once and keeps it.
+    let mut staging: Vec<Sample> = vec![0.0; staging_samples];
     device
         .build_output_stream::<T, _, _>(
             config,

@@ -1,10 +1,10 @@
-//! Graphic-equalizer DSP — hand-rolled because rodio 0.22 ships only
+//! Graphic-equalizer DSP — hand-rolled because rodio 0.22 shipped only
 //! `low_pass` / `high_pass` BLT filters, no peaking ones.
 //!
 //! [`EqShared`] is the lock-free control state; [`EqSource`] is the
 //! [`AudioSource`] that reads it, one [`DirectForm1`] per band **per channel**.
-//! Per-channel state is the point — rodio's own `BltFilter` runs one state
-//! across interleaved channels and cross-contaminates them. `DirectForm1`
+//! Per-channel state is the point — rodio's own `BltFilter` ran one state
+//! across interleaved channels and cross-contaminated them. `DirectForm1`
 //! rather than `DirectForm2Transposed` because its delay line stays valid
 //! across a live coefficient swap, so slider drags don't inject transients.
 //!
@@ -417,9 +417,9 @@ impl<S: AudioSource> EqSource<S> {
             .map(|_| std::array::from_fn(|_| DirectForm1::<f32>::new(identity_coeffs())))
             .collect();
         // Frames elapse at the per-channel rate, which is exactly what
-        // `AudioSource::sample_rate()` already reports — do NOT divide by the channel count,
-        // or the limiter runs that many times too fast and desyncs from the
-        // biquads, which use the same value as their `fs`.
+        // `AudioSource::sample_rate()` already reports — do NOT divide by the
+        // channel count, or the limiter runs that many times too fast and
+        // desyncs from the biquads, which use the same value as their `fs`.
         let frame_rate = sample_rate;
         // Seed off the live values so the first `next()` rebuilds. Same for the
         // fade cell, which is how a gapless successor appended to an
@@ -779,11 +779,10 @@ impl<S: AudioSource> AudioSource for EqSource<S> {
         }
         self.limiter.reset();
         // What is left of the frame being handed out drains rather than being dropped, and
-        // `frame_phase` is left alone for the same reason: those samples are ones the consumer is
-        // owed, and the deck's converter takes whole frames off this iterator and never re-syncs.
-        // Drop them and every frame after this one is a channel out of step, for the rest of the
-        // track. The
-        // decoder puts the puller back on its channel so the two agree either way.
+        // `frame_phase` is left alone for the same reason: those samples are owed, and dropping
+        // them leaves every frame after this one a channel out of step for the rest of the track.
+        // The deck's converter never seeks part way through a frame, so this is for a caller
+        // pulling by hand — and the decoder restores its own phase, so the two agree either way.
         Ok(())
     }
 }
