@@ -5,9 +5,10 @@
 //! this task exists: nothing else notices, so playback runs on with the position
 //! ticking and no sound.
 //!
-//! **Reopening the stream is deliberately not attempted** — the `MixerDeviceSink`
-//! is `Box::leak`'d and both decks hold its mixer, so recovery means rebuilding
-//! them and re-staging. Telling the user is the honest first step.
+//! **Reopening the stream is deliberately not attempted.** It is now possible — the output is
+//! owned rather than leaked, so the device can be released — but recovery still means rebuilding
+//! the decks against a new mixer and re-staging whatever was playing, which is the same structural
+//! work a bit-perfect reopen needs and belongs with it. Telling the user is the honest first step.
 //!
 //! **A lost device reaches here two different ways, and only one of them is a
 //! variant.** Core Audio and WASAPI report `DeviceNotAvailable` outright, and
@@ -40,7 +41,7 @@ const DRAIN_INTERVAL: Duration = Duration::from_secs(5);
 /// their `other` can never exceed about one per window and this is a Linux
 /// escalation in practice.
 ///
-/// [`StreamError::DeviceNotAvailable`]: rodio::cpal::StreamError::DeviceNotAvailable
+/// [`StreamError::DeviceNotAvailable`]: cpal::StreamError::DeviceNotAvailable
 const BACKEND_ERROR_STORM: u64 = 1_000;
 
 /// How many consecutive storms before the user hears about it, so a burst that

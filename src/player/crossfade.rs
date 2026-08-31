@@ -313,9 +313,10 @@ pub fn crossfade_eligible(
 /// The length is the *actual* remaining media, never clamped up to the configured duration, so the
 /// ramp lands exactly on the declared track end — which self-corrects for poll granularity.
 ///
-/// The window doubles as a stale-position filter. rodio only zeroes a `Player`'s tracked position
-/// when it actually clears a source, so a drained deck can report its *previous* track's position
-/// for a few milliseconds: too high saturates `remaining` to zero, too low pushes it past the cap.
+/// The window doubles as a stale-position filter, and stays one now that a deck re-anchors its
+/// clock on every source it starts and zeroes it on every clear. What it still catches is the gap
+/// between the monitor reading a position and acting on it: too high saturates `remaining` to zero,
+/// too low pushes it past the cap. Both arms are cheap and both are pinned.
 #[must_use]
 pub fn should_crossfade(
     eligible: bool,

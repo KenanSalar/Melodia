@@ -1,21 +1,23 @@
 //! Two stations at different sample rates through one deck, no audio device.
 //!
-//! rodio's `mixer()` builds a device-less `Mixer` + `MixerSource`, and a `Player` connected to it
-//! is one mixer voice: one `UniformSourceIterator` wrapping everything the deck ever plays. That
-//! is the whole hazard. The converter inside it is rebuilt only at a span boundary, so a source
-//! reporting no span (`Source::current_span_len() == None`) reaches it as an unbounded `Take` and
-//! pins it to whichever station landed first. Every station after that is resampled at the first
-//! one's rate, and it lasts until the process restarts.
+//! A deck holds one converter per source and rebuilds it when it advances, so a second station is
+//! resampled from the rate *it* reports. Under rodio that was one converter per *voice*, built out
+//! of whichever source reached the deck first and rebuilt only at a span boundary — so a source
+//! that reported no span pinned every station after the first to the first one's rate, for the life
+//! of the process.
 //!
-//! Nothing reports that, and no unit test on the source can see it: the fault is in what the
-//! *mixer* built out of the answer. Hence a square wave with a known period, read back off the
-//! mixer's own output in output samples per half period, which is the ratio of the two rates and
-//! nothing else. `player::tests::prebuffer` pins the answer; this pins what rodio does with it.
+//! That fault was never visible below the mixer: every sample the source handed over was correct
+//! and in order. Hence a square wave with a known period, read back off the mixer's own output in
+//! output samples per half period, which is the ratio of the two rates and nothing else. The span
+//! that used to be the mechanism is gone; the property it protected is what this still asserts.
 
 use std::num::NonZero;
 
+use melodia::player::audio::{ChannelCount, SampleRate};
+use melodia::player::decks::DECK_COUNT;
+use melodia::player::output::convert::Shape;
+use melodia::player::output::mixer::{self, MixerPull};
 use melodia::player::prebuffer::{PrebufferSource, StreamShared};
-use melodia::player::rodio_compat::RodioBridge;
 
 /// The device rate everything is resampled to.
 const OUT_RATE: u32 = 48_000;
@@ -45,17 +47,17 @@ const WINDOW: usize = 16_000;
 /// absorb the interpolated crossing and the partial runs at either end of the window.
 const TOLERANCE: f64 = 0.05;
 
-fn nz_u16(value: u16) -> rodio::ChannelCount {
+fn nz_u16(value: u16) -> ChannelCount {
     NonZero::new(value).unwrap_or(NonZero::<u16>::MIN)
 }
 
-fn nz_u32(value: u32) -> rodio::SampleRate {
+fn nz_u32(value: u32) -> SampleRate {
     NonZero::new(value).unwrap_or(NonZero::<u32>::MIN)
 }
 
 /// A station already fully buffered and closed, so the deck plays it start to finish without ever
 /// reaching for the feed thread this test does not have.
-fn station(rate: u32, seconds: u32) -> RodioBridge<PrebufferSource> {
+fn station(rate: u32, seconds: u32) -> PrebufferSource {
     let shared = StreamShared::new();
     let (source, writer) = PrebufferSource::new(shared.clone(), nz_u16(CHANNELS), nz_u32(rate));
 
@@ -69,17 +71,12 @@ fn station(rate: u32, seconds: u32) -> RodioBridge<PrebufferSource> {
         assert!(writer.push(polarity), "the ring must take the whole station up front");
     }
     shared.finish();
-    RodioBridge::new(source)
+    source
 }
 
-fn pull(out: &mut rodio::mixer::MixerSource, count: usize) -> Vec<f32> {
-    let mut samples = Vec::with_capacity(count);
-    for _ in 0..count {
-        let Some(sample) = out.next() else {
-            break;
-        };
-        samples.push(sample);
-    }
+fn pull(out: &mut MixerPull, count: usize) -> Vec<f32> {
+    let mut samples = vec![0.0; count];
+    out.fill(&mut samples);
     samples
 }
 
@@ -138,9 +135,14 @@ fn assert_reads_as(samples: &[f32], rate: u32, what: &str) {
 /// own rate. Pinned to the first station's it reads back at twice the period, which is what a
 /// listener hears as the second station playing slow.
 #[test]
-fn a_second_station_plays_at_its_own_rate_rather_than_the_first_ones() {
-    let (mixer, mut out) = rodio::mixer::mixer(nz_u16(CHANNELS), nz_u32(OUT_RATE));
-    let deck = rodio::Player::connect_new(&mixer);
+fn a_second_station_plays_at_its_own_rate_rather_than_the_first_ones() -> std::io::Result<()> {
+    let device = Shape {
+        channels: nz_u16(CHANNELS),
+        rate: nz_u32(OUT_RATE),
+    };
+    let (mixer, mut out) = mixer::pair(DECK_COUNT, device);
+    let deck =
+        mixer.deck(0).ok_or_else(|| std::io::Error::other("a two-voice mixer has a deck 0"))?;
 
     deck.append(station(FIRST_RATE, STATION_SECONDS));
     deck.play();
@@ -158,4 +160,5 @@ fn a_second_station_plays_at_its_own_rate_rather_than_the_first_ones() {
     let _ = pull(&mut out, WARMUP);
     let second = pull(&mut out, WINDOW);
     assert_reads_as(&second, SECOND_RATE, "the second station");
+    Ok(())
 }

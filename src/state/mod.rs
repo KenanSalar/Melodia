@@ -18,7 +18,9 @@ use crate::media::{
     self_writes::SelfWrites,
     watcher::{FileEvent, FolderWatcher},
 };
+use crate::player::decks::DECK_COUNT;
 use crate::player::event_sink::{MediaControlsSync, PlayerSinks};
+use crate::player::output::AudioOutput;
 use crate::player::rodio_backend::RodioPlayer;
 use crate::player::state::{
     PlayerStateHandle, PlayerViewModelLight, PositionTick, QueueViewModel, lock_state,
@@ -52,6 +54,9 @@ pub struct AppState {
     pub cover_cache: CoverCache,
     pub player_state: Arc<PlayerStateHandle>,
     pub rodio: Arc<RodioPlayer>,
+    /// The open device. Held because dropping it stops the stream and releases the card — which is
+    /// the whole difference from the leaked sink this replaced, and what a device picker will need.
+    pub audio_output: Arc<AudioOutput>,
     /// Fault counters the output device's error callback writes into, on the
     /// audio thread. Drained by `tasks::audio_health` and read nowhere else.
     pub audio_health: Arc<AudioStreamHealth>,
@@ -147,26 +152,20 @@ pub struct StartupChannels {
 
 impl AppState {
     pub async fn init(paths: Paths, runtime: Handle) -> AppResult<(Self, StartupChannels)> {
-        // Our own error callback rather than rodio's, which `eprintln!`s to
-        // stderr unless its `tracing` feature is on. It records into counters
-        // instead of logging because cpal calls it on the output worker thread;
-        // `player::stream_health` argues that.
+        // The error callback records into counters rather than logging, because cpal calls it on
+        // the output worker thread; `player::stream_health` argues that.
         //
-        // `open_sink_or_fallback` rather than `open_stream`: the latter turns
-        // any config the device rejects into a boot that stops with no audio at
-        // all, where this first retries every config the device supports.
+        // The output is **owned rather than leaked**. rodio's sink had to outlive every deck and
+        // the only way to say so was `Box::leak`, which also meant the device could never be
+        // released; the decks hold reference-counted voices instead, so the handle can simply live
+        // on `AppState` and be dropped with it.
         let audio_health = Arc::new(AudioStreamHealth::default());
-        let builder = rodio::DeviceSinkBuilder::from_default_device()
-            .map_err(|e| AppError::Player(format!("Failed to open audio output device: {e}")))?
-            .with_error_callback(stream_health::error_callback(audio_health.clone()));
-        let mut speakers = builder
-            .open_sink_or_fallback()
-            .map_err(|e| AppError::Player(format!("Failed to open audio output device: {e}")))?;
-        speakers.log_on_drop(false);
-        let speakers: &'static rodio::MixerDeviceSink = Box::leak(Box::new(speakers));
+        let audio_output =
+            AudioOutput::open(DECK_COUNT, stream_health::error_callback(audio_health.clone()))?;
+        log::info!("Audio output: {:?}", audio_output.negotiated());
         // The runtime handle is only used to schedule the deferred half of a
         // faded pause / stop (arm the ramp now, pause the decks once it lands).
-        let rodio = Arc::new(RodioPlayer::new(speakers.mixer(), runtime.clone()));
+        let rodio = Arc::new(RodioPlayer::new(audio_output.mixer(), runtime.clone())?);
 
         let db = database::init_database(&paths).await?;
 
@@ -247,6 +246,7 @@ impl AppState {
             cover_cache,
             player_state,
             rodio,
+            audio_output: Arc::new(audio_output),
             audio_health,
             sinks,
             position_tx,

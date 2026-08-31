@@ -3,17 +3,16 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
-use parking_lot::Mutex;
-use rodio::Player;
-use rodio::mixer::Mixer;
-
 use crate::error::AppError;
+use parking_lot::Mutex;
 
 use super::audio::AudioSource;
 use super::crossfade::{self, CrossfadeShared};
 use super::decks::{Deck, Decks, DeferredOp, lock_decks};
 use super::equalizer::{self, EqShared, EqSource};
 use super::file_decode::FileDecoder;
+use super::output::deck::Deck as Voice;
+use super::output::mixer::Mixer;
 use super::prebuffer::StreamShared;
 use super::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 use super::stream_source::PreparedStream;
@@ -188,38 +187,6 @@ pub fn evaluate_playback_check(
     PlaybackCheck::Playing
 }
 
-/// Convert rodio's reported position into the media (source) position.
-///
-/// rodio inserts `track_position()` *after* `speed()`, so `Player::get_pos()`
-/// measures the *output* timeline (`media / speed`) and recovering the media
-/// position means multiplying back up. [`media_to_output_ms`] is the inverse.
-#[allow(
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "speed * ms math intentionally uses f64; result is non-negative, finite, and fits in u64 for any real audio duration"
-)]
-pub fn compute_position(wall_time: Duration, speed: f64) -> u64 {
-    let ms = u64::try_from(wall_time.as_millis()).unwrap_or(u64::MAX);
-    (ms as f64 * speed) as u64
-}
-
-/// Inverse of [`compute_position`]: a MEDIA position as the output-timeline
-/// value `try_seek` expects. A non-positive `speed` passes through unchanged.
-#[allow(
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "media_ms / speed is non-negative, finite, and fits in u64 for any real audio duration"
-)]
-pub fn media_to_output_ms(media_ms: u64, speed: f64) -> u64 {
-    if speed > 0.0 {
-        (media_ms as f64 / speed) as u64
-    } else {
-        media_ms
-    }
-}
-
 pub struct RodioPlayer {
     // The mutex is what makes a multi-op sequence atomic (rodio's `Player` is
     // already Send+Sync); `Arc` so a deferred pause/stop can hold the decks
@@ -269,9 +236,12 @@ pub struct RodioPlayer {
 }
 
 impl RodioPlayer {
-    pub fn new(mixer: &Mixer, runtime: tokio::runtime::Handle) -> Self {
-        Self {
-            decks: Arc::new(std::sync::Mutex::new(Decks::connect(mixer))),
+    /// # Errors
+    ///
+    /// [`AppError::Player`] if `mixer` carries fewer voices than the decks need.
+    pub fn new(mixer: &Mixer, runtime: tokio::runtime::Handle) -> Result<Self, AppError> {
+        Ok(Self {
+            decks: Arc::new(std::sync::Mutex::new(Decks::connect(mixer)?)),
             gapless_pending: Arc::new(AtomicBool::new(false)),
             crossfade_armed: AtomicBool::new(false),
             deck_epoch: Arc::new(AtomicU64::new(0)),
@@ -282,7 +252,7 @@ impl RodioPlayer {
             staged_stream: Mutex::new(None),
             live_stream: Arc::new(Mutex::new(None)),
             runtime,
-        }
+        })
     }
 
     /// Invalidate any deferred pause/stop *and* any in-flight gapless preload,
@@ -412,7 +382,7 @@ impl RodioPlayer {
         self.gapless_pending.store(false, Ordering::Release);
         if let Some(pos) = start_position_ms {
             log::debug!("Resuming playback at {pos}ms");
-            Self::seek_to_media(&decks.active().player, pos, speed);
+            Self::seek_to(&decks.active().player, pos);
         }
         Ok(())
     }
@@ -563,7 +533,7 @@ impl RodioPlayer {
             return false;
         }
         let decks = self.lock_decks();
-        if decks.idle().player.empty() {
+        if decks.idle().player.is_empty() {
             drop(decks);
             self.crossfade_armed.store(false, Ordering::Release);
             return false;
@@ -583,14 +553,12 @@ impl RodioPlayer {
         decks.active().fade.arm(None, 1.0, crossfade::ABORT_RAMP_MS, false);
     }
 
-    /// Seek the (already-locked) player to a MEDIA-time position.
+    /// Seek the (already-locked) deck.
     ///
-    /// `try_seek` takes output time, which `Speed::try_seek` multiplies back up
-    /// to reach the decoder — so passing `media_ms` straight through would land
-    /// the decoder on `media_ms × speed` and read back wrong.
-    fn seek_to_media(player: &Player, media_ms: u64, speed: f64) {
-        let output_ms = media_to_output_ms(media_ms, speed);
-        if let Err(e) = player.try_seek(Duration::from_millis(output_ms)) {
+    /// One timeline: speed is a ratio inside the deck's converter rather than a multiplier on the
+    /// rate reported upward, so a media position is what both the caller and the source mean.
+    fn seek_to(player: &Voice, media_ms: u64) {
+        if let Err(e) = player.try_seek(Duration::from_millis(media_ms)) {
             log::warn!("Seek failed: {e}");
         }
     }
@@ -689,34 +657,25 @@ impl RodioPlayer {
         // decks running silently at the ramp's zero gain while the UI reads
         // Paused — seeking a paused track is an ordinary thing to do.
         let decks = self.lock_decks();
-        let player = &decks.active().player;
-        let speed = f64::from(player.speed());
-        Self::seek_to_media(player, position_ms, speed);
+        Self::seek_to(&decks.active().player, position_ms);
     }
 
     pub fn set_volume(&self, volume: f64) {
         self.lock_decks().set_volume_all(volume);
     }
 
+    /// Both decks must run at the same speed or a crossfade would drift.
+    ///
+    /// **No re-anchoring seek.** rodio needed one because its position tracker sat after its speed
+    /// stage, so a change rescaled the elapsed portion too and the slider jumped; the deck counts
+    /// media frames the source actually handed over, which no later change to the ratio can
+    /// retroactively alter.
     pub fn set_speed(&self, speed: f64) {
-        let decks = self.lock_decks();
-        let player = &decks.active().player;
-        let old_speed = f64::from(player.speed());
-        let media_ms = compute_position(player.get_pos(), old_speed);
-        // Both decks must run at the same speed or a crossfade drifts, but only
-        // the active one carries a position worth re-anchoring.
-        decks.set_speed_all(speed);
-        // The tap sits *under* rodio's speed stage, so the analyzer needs the
-        // factor to place band edges on the pitch you hear. Sole writer of that
-        // cell — see `VisualizerShared::set_speed`.
+        self.lock_decks().set_speed_all(speed);
+        // The tap sits *above* the converter, so it sees media-rate samples while the ear hears
+        // them scaled: the analyzer needs the factor to place band edges on the pitch you hear.
+        // Sole writer of that cell — see `VisualizerShared::set_speed`.
         self.viz.set_speed(speed);
-        // Re-anchor rodio's position tracker, or `get_pos()` keeps the output
-        // time it accumulated at the old speed and `query_position` rescales
-        // that whole elapsed portion, jumping the UI position. Skipped at 0 to
-        // avoid a spurious decoder seek on boot.
-        if media_ms > 0 {
-            Self::seek_to_media(player, media_ms, speed);
-        }
     }
 
     /// Enable / disable the graphic equalizer. Lock-free — every `EqSource`
@@ -821,7 +780,7 @@ impl RodioPlayer {
         // Never rejects a legitimate stage: the only caller passing a path is
         // the monitor's late preload, from its `Playing` branch, and
         // `play_media` appends under this same lock.
-        if deck.player.empty() {
+        if deck.player.is_empty() {
             log::debug!("Dropping gapless preload of {path}: nothing left to follow");
             return;
         }
@@ -831,11 +790,8 @@ impl RodioPlayer {
 
     /// Current playback position in milliseconds, on the media timeline.
     pub fn query_position(&self) -> u64 {
-        let decks = self.lock_decks();
-        let player = &decks.active().player;
-        let wall_time = player.get_pos();
-        let speed = f64::from(player.speed());
-        compute_position(wall_time, speed)
+        let position = self.lock_decks().active().player.position();
+        u64::try_from(position.as_millis()).unwrap_or(u64::MAX)
     }
 
     /// One lock acquisition, so gapless-transition and end-of-stream detection
@@ -849,7 +805,7 @@ impl RodioPlayer {
         let decks = self.lock_decks();
         let player = &decks.active().player;
         let queue_len = player.len();
-        let is_empty = player.empty();
+        let is_empty = player.is_empty();
         drop(decks);
 
         let result = evaluate_playback_check(was_gapless, queue_len, is_empty);

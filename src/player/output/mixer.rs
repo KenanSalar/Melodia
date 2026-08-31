@@ -10,6 +10,8 @@
 //! [`MixerPull`] on the test thread. Anything that stops being reachable that way stops being
 //! testable without a sound card.
 
+use std::sync::Arc;
+
 use super::super::audio::Sample;
 use super::convert::Shape;
 use super::deck::{Deck, DeckVoice};
@@ -20,16 +22,34 @@ use super::deck::{Deck, DeckVoice};
 /// the ~50 ms period the output asks for, so in practice the growth never happens.
 const SCRATCH_FRAMES: usize = 8_192;
 
+/// Device frames every deck advances before any deck advances again.
+///
+/// **This is what bounds a crossfade's overshoot.** The two ramps are armed together on the control
+/// thread but each advances as *its own* source is pulled, so a deck that has already been rendered
+/// for this block picks the arm up a block late. Render a whole device period per deck and the
+/// outgoing track stays at full gain for that whole period while the incoming one ramps up, and the
+/// sum — which nothing clamps, deliberately — goes past unity by the period over the fade length.
+/// Stepping every deck through the block together bounds that to this many frames instead, which
+/// against the shortest crossfade the settings allow is a fraction of a percent. rodio's mixer
+/// pulled one sample from every voice in turn, so this is the same property at a coarser grain,
+/// chosen so the loop costs a few dozen iterations per callback rather than a few thousand.
+pub const LOCKSTEP_FRAMES: usize = 64;
+
 /// The control side: the decks, and the shape everything is brought to.
+///
+/// The decks are shared rather than lent out, so `player::decks` can hold them for as long as it
+/// needs without borrowing from this. Reference counting is what replaces the `Box::leak` rodio's
+/// arrangement needed: a leaked handle outlives everything by never being dropped, and so never
+/// releases the device either.
 pub struct Mixer {
-    decks: Box<[Deck]>,
+    decks: Box<[Arc<Deck>]>,
     device: Shape,
 }
 
 impl Mixer {
     /// The deck at `index`, or `None` past the voice count this mixer was built with.
-    pub fn deck(&self, index: usize) -> Option<&Deck> {
-        self.decks.get(index)
+    pub fn deck(&self, index: usize) -> Option<Arc<Deck>> {
+        self.decks.get(index).map(Arc::clone)
     }
 
     pub fn device(&self) -> Shape {
@@ -66,17 +86,19 @@ impl MixerPull {
             self.scratch.resize(whole, 0.0);
         }
 
-        let mut written = false;
-        for voice in &mut self.voices {
-            if written {
-                let reached = voice.render(&mut self.scratch[..whole]);
-                for (slot, sample) in out.iter_mut().zip(&self.scratch[..reached]) {
-                    // Unclamped, deliberately — see the module docs.
-                    *slot += *sample;
+        for step in out.chunks_mut(LOCKSTEP_FRAMES * width) {
+            let mut written = false;
+            for voice in &mut self.voices {
+                if written {
+                    let reached = voice.render(&mut self.scratch[..step.len()]);
+                    for (slot, sample) in step.iter_mut().zip(&self.scratch[..reached]) {
+                        // Unclamped, deliberately — see the module docs.
+                        *slot += *sample;
+                    }
+                } else {
+                    // Straight into the block, so nothing has touched these samples on the way.
+                    written = voice.render(step) > 0;
                 }
-            } else {
-                // Straight into the block, so nothing has touched these samples on the way.
-                written = voice.render(out) > 0;
             }
         }
     }
@@ -84,7 +106,8 @@ impl MixerPull {
 
 /// Build a mixer and its puller, with `voices` decks brought to `device`.
 pub fn pair(voices: usize, device: Shape) -> (Mixer, MixerPull) {
-    let (decks, pulls): (Vec<_>, Vec<_>) = (0..voices).map(|_| super::deck::pair(device)).unzip();
+    let (decks, pulls): (Vec<_>, Vec<_>) =
+        (0..voices).map(|_| super::deck::pair(device)).map(|(d, v)| (Arc::new(d), v)).unzip();
 
     let width = usize::from(device.channels.get());
     (

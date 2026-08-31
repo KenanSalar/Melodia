@@ -1,8 +1,8 @@
 //! The ring that keeps the network off the audio callback thread.
 //!
-//! rodio pulls [`Source::next`] from inside the cpal data callback, so a source that reads a
-//! socket stalls the whole mixer — the local track on the other deck included — for as long as
-//! the network is wedged. Everything here exists to make that impossible: a feed thread owns the
+//! The mixer pulls [`AudioSource::next`] from inside the cpal data callback, so a source that
+//! reads a socket stalls the whole block — the local track on the other deck included — for as
+//! long as the network is wedged. Everything here exists to make that impossible: a feed thread owns the
 //! decoder and fills [`SampleRing`] ahead of time, and [`PrebufferSource`] pops from it without
 //! ever blocking, yielding silence when it runs dry.
 //!
@@ -266,7 +266,7 @@ impl PrebufferSource {
 }
 
 impl Drop for PrebufferSource {
-    /// rodio drops an exhausted source **on the audio thread**, so this stores a flag and does
+    /// An exhausted source is dropped **on the audio thread**, so this stores a flag and does
     /// nothing else. Joining the feed thread here would block the callback for as long as a socket
     /// read takes, which is the whole thing this module exists to prevent.
     fn drop(&mut self) {

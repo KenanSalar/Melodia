@@ -103,7 +103,7 @@ struct Shape {
 
 /// The packet being handed out, one interleaved sample at a time.
 ///
-/// Both decoders own one and neither adds to it: the refill, the shape check rodio's fixed append
+/// Both decoders own one and neither adds to it: the refill, the shape check a deck's fixed append
 /// makes necessary, and the latch that stops a re-poll past the end serving the packet that ended
 /// it are the same three answers whether the bytes came off a socket or off disk.
 pub(super) struct Cursor {
@@ -123,8 +123,8 @@ impl Cursor {
     /// audio thread, and its answer becomes what the user is shown, where a permissions failure and
     /// an empty container read very differently.
     ///
-    /// The first packet is decoded eagerly because the deck is told the channel count and sample
-    /// rate when the source is appended, and rodio cannot renegotiate either afterwards.
+    /// The first packet is decoded eagerly because the deck builds its converter from the channel
+    /// count and sample rate the source reports at the append, and cannot rebuild it mid-source.
     pub(super) fn open(
         format: &mut dyn FormatReader,
         decoder: &mut dyn AudioDecoder,
@@ -177,9 +177,9 @@ impl Cursor {
                 self.ended = true;
                 return None;
             };
-            // rodio was told the shape at the append and cannot renegotiate it, so a source that
-            // changes one mid-track ends here rather than playing on at the wrong rate. A mount
-            // doing it is a reconnect the feed thread then refuses.
+            // The deck's converter was built from the shape reported at the append, so a source
+            // that changes one mid-track ends here rather than playing on at the wrong rate. A
+            // mount doing it is a reconnect the feed thread then refuses.
             if shape.channels != self.channels || shape.sample_rate != self.sample_rate {
                 self.ended = true;
                 return None;
@@ -231,8 +231,8 @@ fn fill(
                     let (Some(channels), Some(sample_rate)) =
                         (channels, SampleRate::new(spec.rate()))
                     else {
-                        // Nothing rodio can be told about, so it is the decoder rather than the
-                        // read that this source runs out on.
+                        // Nothing a deck can be handed, so it is the decoder rather than the read
+                        // that this source runs out on.
                         return Err(SymphoniaError::Unsupported(
                             "channel count or sample rate out of range",
                         ));

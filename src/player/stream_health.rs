@@ -14,7 +14,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use rodio::cpal::StreamError;
+use cpal::StreamError;
 
 /// Stream faults recorded since the last drain.
 ///

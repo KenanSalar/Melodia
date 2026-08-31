@@ -503,9 +503,10 @@ fn main() -> AppResult<()> {
     shutdown::respawn_if_requested();
 
     // Returning normally would linger until every non-daemon thread exits, and
-    // four never do: the leaked `MixerDeviceSink`'s output thread, souvlaki's
-    // MPRIS thread, accesskit's a11y thread, and any tokio worker parked on a
-    // blocking call. State is flushed and the rest is OS-managed.
+    // three never do: souvlaki's MPRIS thread, accesskit's a11y thread, and any
+    // tokio worker parked on a blocking call. State is flushed and the rest is
+    // OS-managed. The audio output used to be a fourth and no longer is — it is
+    // owned now rather than leaked — which changes nothing here.
     std::process::exit(0);
 }
 

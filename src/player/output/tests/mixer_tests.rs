@@ -3,6 +3,8 @@
 //! `tests/crossfade.rs` covers the same ground through the whole chain, with a real decoder and a
 //! real ramp; what is here is the property on its own, so a change to the sum fails at the sum.
 
+use std::sync::Arc;
+
 use super::{Mixer, pair};
 use crate::error::AppError;
 use crate::player::output::convert::Shape;
@@ -19,7 +21,7 @@ fn shape(channels: u16) -> Shape {
     }
 }
 
-fn deck_at(mixer: &Mixer, index: usize) -> Result<&Deck, AppError> {
+fn deck_at(mixer: &Mixer, index: usize) -> Result<Arc<Deck>, AppError> {
     mixer
         .deck(index)
         .ok_or_else(|| AppError::Player(format!("a {VOICES}-voice mixer has no deck {index}")))

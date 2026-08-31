@@ -34,14 +34,6 @@ const SERVICE_TIMEOUT: Duration = Duration::from_millis(500);
 /// callback that services it rather than on the next tick of a coarser timer.
 const SERVICE_POLL: Duration = Duration::from_millis(1);
 
-/// How many finished sources can be waiting to be dropped off the audio thread.
-///
-/// A decoder holds a 64 KiB read buffer, too big for glibc's per-thread cache, so freeing one in
-/// the callback takes the arena lock this process shares between the audio, UI and tokio threads.
-/// Handing it back to a control thread instead costs a slot. A deck holds a playing and a staged
-/// source, so two is the real ceiling; the rest is slack for a burst of skips between collections.
-const RETIRED_SLOTS: usize = 8;
-
 /// How many control ops can be in flight before the sender gives up on the callback.
 ///
 /// Bounded so the queue is allocated once rather than per send. Nothing issues ops faster than the
@@ -52,6 +44,12 @@ const COMMAND_SLOTS: usize = 8;
 ///
 /// Built on the control thread, because [`Converter::new`] allocates and the thread it would
 /// otherwise be built on is the one that must not.
+///
+/// **Dropped on the audio thread**, which frees a decoder's 64 KiB read buffer there: too big for
+/// glibc's per-thread cache, so it takes the arena lock this process shares with the UI and tokio
+/// threads. Handing finished sources back to a control thread instead was tried and reverted — the
+/// visualizer's per-deck liveness is scoped to the source's *drop*, so deferring it leaves a
+/// finished deck's ring mixing into the analysis window until someone collects.
 struct Voice {
     source: Box<dyn AudioSource>,
     converter: Converter,
@@ -88,14 +86,12 @@ struct DeckShared {
 pub struct Deck {
     shared: Arc<DeckShared>,
     commands: SyncSender<Command>,
-    retired: Receiver<Voice>,
     device: Shape,
 }
 
 impl Deck {
     /// Queue `source` behind whatever is already on this deck.
     pub fn append<S: AudioSource + 'static>(&self, source: S) {
-        self.drop_retired();
         let shape = Shape {
             channels: source.channels(),
             rate: source.sample_rate(),
@@ -114,7 +110,6 @@ impl Deck {
     /// Drop everything on this deck and pause it, as rodio's `clear` did.
     pub fn clear(&self) {
         self.pause();
-        self.drop_retired();
         if self.shared.sources.load(Ordering::SeqCst) == 0 {
             return;
         }
@@ -217,18 +212,12 @@ impl Deck {
             std::thread::sleep(SERVICE_POLL);
         }
     }
-
-    /// Free what the callback handed back rather than dropping on its own thread.
-    fn drop_retired(&self) {
-        while self.retired.try_recv().is_ok() {}
-    }
 }
 
 /// The audio side of one voice. Pulled only from the callback.
 pub struct DeckVoice {
     shared: Arc<DeckShared>,
     commands: Receiver<Command>,
-    retired: SyncSender<Voice>,
     current: Option<Voice>,
     staged: VecDeque<Voice>,
 }
@@ -312,10 +301,12 @@ impl DeckVoice {
         self.current = Some(voice);
     }
 
-    /// The playing source ran out: hand it back to be dropped and take the staged one, if any.
+    /// The playing source ran out: drop it and take the staged one, if any.
+    ///
+    /// The drop is what releases the visualizer's claim on this deck's ring, so it happens here
+    /// rather than being deferred — see [`Voice`].
     fn finish_current(&mut self) {
-        if let Some(spent) = self.current.take() {
-            self.retire(spent);
+        if self.current.take().is_some() {
             self.shared.sources.fetch_sub(1, Ordering::SeqCst);
         }
         if let Some(next) = self.staged.pop_front() {
@@ -324,13 +315,8 @@ impl DeckVoice {
     }
 
     fn clear(&mut self) {
-        let dropped = usize::from(self.current.is_some()) + self.staged.len();
-        if let Some(voice) = self.current.take() {
-            self.retire(voice);
-        }
-        while let Some(voice) = self.staged.pop_front() {
-            self.retire(voice);
-        }
+        let dropped = usize::from(self.current.take().is_some()) + self.staged.len();
+        self.staged.clear();
         self.shared.sources.fetch_sub(dropped, Ordering::SeqCst);
         self.shared.frames.store(0, Ordering::Relaxed);
     }
@@ -351,18 +337,11 @@ impl DeckVoice {
             *slot = Some(result);
         }
     }
-
-    /// Hand a finished source to the control side. A full channel means it has not collected in a
-    /// while, so this falls back to what rodio did and drops here.
-    fn retire(&self, voice: Voice) {
-        let _ = self.retired.try_send(voice);
-    }
 }
 
 /// Build one voice's two halves.
 pub fn pair(device: Shape) -> (Deck, DeckVoice) {
     let (command_tx, command_rx) = sync_channel(COMMAND_SLOTS);
-    let (retired_tx, retired_rx) = sync_channel(RETIRED_SLOTS);
 
     let shared = Arc::new(DeckShared {
         paused: AtomicBool::new(false),
@@ -379,13 +358,11 @@ pub fn pair(device: Shape) -> (Deck, DeckVoice) {
     let deck = Deck {
         shared: shared.clone(),
         commands: command_tx,
-        retired: retired_rx,
         device,
     };
     let voice = DeckVoice {
         shared,
         commands: command_rx,
-        retired: retired_tx,
         current: None,
         staged: VecDeque::with_capacity(2),
     };

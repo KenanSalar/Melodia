@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use rodio::cpal::{BackendSpecificError, StreamError};
+use cpal::{BackendSpecificError, StreamError};
 
 use super::{AudioStreamHealth, error_callback};
 
