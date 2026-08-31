@@ -2,12 +2,26 @@
 
 Working doc. Delete when the feature ships.
 
-Adds `.opus` playback via rodio's `symphonia-libopus` feature (libopus through
-`symphonia-adapter-libopus`), gated on the release of **rodio 0.23**.
+> **The route below is dead, and most of this doc with it.** It waited on rodio 0.23 to
+> register `symphonia-adapter-libopus` through a feature flag; #90 removed rodio from the
+> tree entirely, and `player::decode::CODECS` is our own `CodecRegistry` built by
+> `CodecRegistry::new()` + `register_enabled_codecs`. Registering a decoder is now one
+> line there and nothing at either call site — which was always the argument for owning
+> the registry.
+>
+> **What is left of this plan:** add `symphonia-adapter-libopus` to `Cargo.toml`, call
+> `register_audio_decoder::<OpusDecoder>()` in `decode.rs`, add `"opus"` to
+> `media::AUDIO_EXTENSIONS` (which pulls in a `silence.opus` fixture, since
+> `file_decode_tests::every_scanned_extension_reaches_a_decoder` walks that list), and
+> check the licence against the five packaging formats. Phases 1 and 2 below are about a
+> rodio bump and do not apply; the container findings and the licence work still do.
+>
+> `symphonia-format-ogg` already demuxes Opus and applies `pre_skip`, so the decoder is
+> genuinely the only missing piece — that half of this doc holds.
 
 All upstream facts below were verified **2026-07-23**. Anything marked
-⚠️ **re-verify** is expected to drift before 0.23 lands — check it again on the day
-rather than trusting this doc.
+⚠️ **re-verify** is expected to drift — check it again on the day rather than trusting
+this doc.
 
 ---
 

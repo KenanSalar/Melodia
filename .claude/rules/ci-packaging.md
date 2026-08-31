@@ -75,9 +75,11 @@ coverage on this path.
   a change to the clippy invocation or the job list merge without the jobs it governs ever running.
   Anything new under `.github/` runs everything by default — an exclusion is earned.
 
-- **Headless audio** — `test` runs `tests/headless.rs` and `AppState::init` opens rodio's default
+- **Headless audio** — `test` runs `tests/headless.rs` and `AppState::init` opens cpal's default
   device, which no runner has. `.github/actions/headless-audio` is the whole shim and argues
-  itself. System libs come from `.github/actions/linux-system-deps`, which the release slots take
+  itself. It works because the shim is an *ALSA* one and `output::device` opens whatever
+  `pcm.!default` names, then walks every config the device reports rather than giving up on the
+  first — a stricter open fails that test looking like a scan bug. System libs come from `.github/actions/linux-system-deps`, which the release slots take
   as well, adding the packaging-only `rpm` through its `extra-packages` input: one base list, so a
   gate and a release cannot provision differently. `Swatinem/rust-cache` per job, `ci-*`
   shared-keys, distinct from release's `rust-release-*`. The action appends `os.type()` and
