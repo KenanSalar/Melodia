@@ -32,7 +32,7 @@ const DIRECTORY_CONFLICT: &str = "\
         sort_key = excluded.sort_key";
 
 /// Save a station, resolving against the existing row when the directory
-/// already knows its `station_uuid`.
+/// already knows its `station_uuid`. Answers the row's id.
 ///
 /// One door rather than an upsert and an insert the caller picks between,
 /// because the uuid already answers which is wanted: a directory row always
@@ -40,10 +40,25 @@ const DIRECTORY_CONFLICT: &str = "\
 /// `None` rather than left inert, `SQLite` treating NULLs as distinct under
 /// UNIQUE, so a hand-typed station adds a row every time the way importing the
 /// same playlist twice is two playlists.
-pub async fn save_station(
-    db: &DbPool,
+///
+/// **`RETURNING id`, not the row.** Every caller wants the id and nothing else, and the row is 22
+/// columns and a dozen heap strings dropped on the next line — a cost the import loop pays per
+/// entry. A caller that genuinely wants the persisted state reads it back with
+/// [`get_station_by_id`], which also answers for what `SQLite` stored rather than what the insert
+/// echoed.
+pub async fn save_station(db: &DbPool, station: &radio::NewRadioStation) -> Result<i64, AppError> {
+    save_station_on(db.write(), station).await
+}
+
+/// [`save_station`] against any executor, so the import can run its whole loop inside one
+/// transaction without a second copy of the statement.
+pub(crate) async fn save_station_on<'e, E>(
+    executor: E,
     station: &radio::NewRadioStation,
-) -> Result<radio::RadioStation, AppError> {
+) -> Result<i64, AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let sort_key = to_natural_sort_key(&station.name);
     let now = crate::utils::now_rfc3339();
     let conflict = if station.station_uuid.is_some() {
@@ -56,9 +71,9 @@ pub async fn save_station(
         "INSERT INTO radio_stations ({INSERT_COLUMNS})
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          {conflict}
-         RETURNING *"
+         RETURNING id"
     );
-    Ok(sqlx::query_as::<_, radio::RadioStation>(sqlx::AssertSqlSafe(sql))
+    Ok(sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql))
         .bind(&station.station_uuid)
         .bind(&station.name)
         .bind(&station.stream_url)
@@ -73,7 +88,7 @@ pub async fn save_station(
         .bind(station.hls)
         .bind(&sort_key)
         .bind(&now)
-        .fetch_one(db.write())
+        .fetch_one(executor)
         .await?)
 }
 
@@ -165,26 +180,57 @@ pub async fn station_id_with_url(db: &DbPool, stream_url: &str) -> Result<Option
         .await?)
 }
 
-/// The station the directory identifies by `station_uuid`, if it is already kept.
+/// The row an import entry lands on, as `(id, is_favorite)`, or `None` for one that is new.
 ///
-/// [`station_id_with_url`]'s twin for the half of the import that carries a uuid, and it has to
-/// be asked first: the uuid is the directory's own identity for a station, so one repointed at a
-/// new mount is the same row under a `stream_url` that has moved.
-pub async fn station_id_with_uuid(
-    db: &DbPool,
-    station_uuid: &str,
-) -> Result<Option<i64>, AppError> {
-    Ok(sqlx::query_scalar("SELECT id FROM radio_stations WHERE station_uuid = ? LIMIT 1")
-        .bind(station_uuid)
-        .fetch_optional(db.read())
-        .await?)
+/// **Both keys in one statement, and the star in the same row.** The uuid is asked first — it is
+/// the directory's own identity for a station, so one repointed at a new mount is the same row
+/// under a `stream_url` that has moved — and the URL after it, so an entry with no uuid, or one
+/// typed in by hand before the directory listed it, still finds its row. Spelled as three queries
+/// (id by uuid, id by URL, then the row for its `is_favorite`) this ran per entry, over a table the
+/// import is itself growing.
+///
+/// Executor-generic because the import must ask *through its own transaction*: reading off the
+/// read pool would not see the rows earlier entries in the same file just wrote, and a list naming
+/// one station twice would add it twice.
+pub(crate) async fn kept_station_matching<'e, E>(
+    executor: E,
+    station_uuid: Option<&str>,
+    stream_url: &str,
+) -> Result<Option<(i64, bool)>, AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    Ok(sqlx::query_as::<_, (i64, bool)>(
+        "SELECT id, is_favorite FROM radio_stations
+         WHERE (? IS NOT NULL AND station_uuid = ?) OR stream_url = ?
+         ORDER BY (station_uuid IS NOT NULL AND station_uuid = ?) DESC
+         LIMIT 1",
+    )
+    .bind(station_uuid)
+    .bind(station_uuid)
+    .bind(stream_url)
+    .bind(station_uuid)
+    .fetch_optional(executor)
+    .await?)
 }
 
 pub async fn set_favorite(db: &DbPool, id: i64, favorite: bool) -> Result<(), AppError> {
+    set_favorite_on(db.write(), id, favorite).await
+}
+
+/// [`set_favorite`] against any executor. See [`save_station_on`].
+pub(crate) async fn set_favorite_on<'e, E>(
+    executor: E,
+    id: i64,
+    favorite: bool,
+) -> Result<(), AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query("UPDATE radio_stations SET is_favorite = ? WHERE id = ?")
         .bind(favorite)
         .bind(id)
-        .execute(db.write())
+        .execute(executor)
         .await?;
     Ok(())
 }
@@ -232,6 +278,18 @@ pub async fn set_local_fields(
     id: i64,
     fields: &radio::StationOverrides,
 ) -> Result<(), AppError> {
+    set_local_fields_on(db.write(), id, fields).await
+}
+
+/// [`set_local_fields`] against any executor. See [`save_station_on`].
+pub(crate) async fn set_local_fields_on<'e, E>(
+    executor: E,
+    id: i64,
+    fields: &radio::StationOverrides,
+) -> Result<(), AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query(
         "UPDATE radio_stations
          SET local_homepage = ?, local_favicon_url = ?, local_tags = ?, local_country = ?
@@ -242,7 +300,7 @@ pub async fn set_local_fields(
     .bind(fields.genre.as_deref())
     .bind(fields.country.as_deref())
     .bind(id)
-    .execute(db.write())
+    .execute(executor)
     .await?;
     Ok(())
 }

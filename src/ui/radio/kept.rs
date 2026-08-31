@@ -331,19 +331,30 @@ const HEAL_BATCH: usize = 4;
 ///
 /// **Once per station per session**, which is what makes the cost bear the frequency: `refresh`
 /// runs on a section enter, on every star flip — Browse's included — and on every removal, and a
-/// station that failed is a stored backoff a repeat only pays two queries to be told about again.
+/// station that failed is a stored backoff a repeat is told about without spending a round trip.
 /// The set is what the backoff already says, held where a click can't spend a round trip on it.
+///
+/// **The stored answers for the whole set are read ahead of the flight**, one query rather than
+/// two per station — `library::radio::AnswerSeed` argues why. Shared rather than handed out per
+/// task, hence the `Arc`: which answers a station needs has nothing to do with its seat in the
+/// window.
 async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>) {
-    let mut pending = logoless_stations(radio_ui).into_iter();
+    let logoless = logoless_stations(radio_ui);
+    let seed = Arc::new(
+        library::radio::AnswerSeed::for_urls(state, &library::radio::heal_seed_urls(&logoless))
+            .await,
+    );
+
+    let mut pending = logoless.into_iter();
     let mut in_flight = tokio::task::JoinSet::new();
     for station in pending.by_ref().take(HEAL_BATCH) {
-        spawn_heal(&mut in_flight, state, station);
+        spawn_heal(&mut in_flight, state, &seed, station);
     }
 
     let mut landed = false;
     while let Some(joined) = in_flight.join_next().await {
         if let Some(station) = pending.next() {
-            spawn_heal(&mut in_flight, state, station);
+            spawn_heal(&mut in_flight, state, &seed, station);
         }
         let Ok(Some((id, path))) = joined else {
             continue;
@@ -365,11 +376,13 @@ async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWi
 fn spawn_heal(
     in_flight: &mut tokio::task::JoinSet<Option<(i64, String)>>,
     state: &AppState,
+    seed: &Arc<library::radio::AnswerSeed>,
     station: RadioStation,
 ) {
     let state = state.clone();
+    let seed = Arc::clone(seed);
     in_flight.spawn(async move {
-        let path = library::radio::heal_station_logo(&state, &station).await?;
+        let path = library::radio::heal_station_logo(&state, &seed, &station).await?;
         Some((station.id, path))
     });
 }

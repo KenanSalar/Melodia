@@ -44,19 +44,23 @@ async fn station_count(db: &DbPool) -> Result<i64, AppError> {
 #[tokio::test]
 async fn a_re_import_rewrites_the_directory_column_and_never_the_user_s() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let saved = save_station(&db, &directory_station("uuid-1", "Nidaa")).await?;
-    assert!(saved.homepage.is_none(), "the directory sent none, which is the case under test");
+    let id = save_station(&db, &directory_station("uuid-1", "Nidaa")).await?;
+    let listed_first = get_station_by_id(&db, id).await?;
+    assert!(
+        listed_first.homepage.is_none(),
+        "the directory sent none, which is the case under test"
+    );
 
     let mine = radio::StationOverrides {
         website: Some("https://nidaa.fm/".to_owned()),
         genre: Some("Talk".to_owned()),
         ..Default::default()
     };
-    set_local_fields(&db, saved.id, &mine).await?;
+    set_local_fields(&db, id, &mine).await?;
 
     // A play or a star re-sends the same directory row, still carrying none of this.
     save_station(&db, &directory_station("uuid-1", "Nidaa")).await?;
-    let kept = get_station_by_id(&db, saved.id).await?;
+    let kept = get_station_by_id(&db, id).await?;
     assert_eq!(
         (kept.local_homepage.as_deref(), kept.local_tags.as_deref()),
         (Some("https://nidaa.fm/"), Some("Talk")),
@@ -71,7 +75,7 @@ async fn a_re_import_rewrites_the_directory_column_and_never_the_user_s() -> Res
     listed.homepage = Some("https://www.nidaa.fm/".to_owned());
     listed.tags = "News".to_owned();
     save_station(&db, &listed).await?;
-    let updated = get_station_by_id(&db, saved.id).await?;
+    let updated = get_station_by_id(&db, id).await?;
     assert_eq!(updated.homepage.as_deref(), Some("https://www.nidaa.fm/"));
     assert_eq!(updated.local_homepage.as_deref(), Some("https://nidaa.fm/"));
     assert_eq!(updated.website(), Some("https://nidaa.fm/"), "the user's answer wins the read");
@@ -79,8 +83,8 @@ async fn a_re_import_rewrites_the_directory_column_and_never_the_user_s() -> Res
 
     // Cleared, the directory's own values are what the card falls back to — and with nothing of
     // the user's left over them, those fields close rather than offering them up for editing.
-    set_local_fields(&db, saved.id, &radio::StationOverrides::default()).await?;
-    let cleared = get_station_by_id(&db, saved.id).await?;
+    set_local_fields(&db, id, &radio::StationOverrides::default()).await?;
+    let cleared = get_station_by_id(&db, id).await?;
     assert_eq!(cleared.website(), Some("https://www.nidaa.fm/"));
     assert_eq!(cleared.genre(), Some("News"));
     assert!(!cleared.can_set_website(), "a directory link is not the user's to overwrite");
@@ -97,18 +101,20 @@ async fn re_importing_a_station_updates_it_without_touching_the_user_side() -> R
     let db = DbPool::test_pool().await?;
     let logo = "/data/artwork/33fb807d1f1b7cbb.jpg";
 
-    let first = save_station(&db, &directory_station("uuid-1", "Old Name")).await?;
-    set_favorite(&db, first.id, true).await?;
-    mark_played(&db, first.id).await?;
-    set_artwork(&db, first.id, Some(logo)).await?;
+    let first_id = save_station(&db, &directory_station("uuid-1", "Old Name")).await?;
+    set_favorite(&db, first_id, true).await?;
+    mark_played(&db, first_id).await?;
+    set_artwork(&db, first_id, Some(logo)).await?;
+    let first = get_station_by_id(&db, first_id).await?;
 
     let mut refreshed = directory_station("uuid-1", "New Name");
     refreshed.stream_url = "http://example.invalid/moved".to_owned();
     refreshed.bitrate = 320;
-    let second = save_station(&db, &refreshed).await?;
+    let second_id = save_station(&db, &refreshed).await?;
+    let second = get_station_by_id(&db, second_id).await?;
 
     assert_eq!(station_count(&db).await?, 1, "the re-import inserted a second row");
-    assert_eq!(second.id, first.id);
+    assert_eq!(second_id, first_id);
     assert_eq!(second.name, "New Name");
     assert_eq!(second.stream_url, "http://example.invalid/moved");
     assert_eq!(second.bitrate, 320);
@@ -128,13 +134,13 @@ async fn re_importing_a_station_updates_it_without_touching_the_user_side() -> R
 async fn hand_typed_stations_coexist_with_no_uuid() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
 
-    let first = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
-    let second = save_station(&db, &custom_station("B", "http://b.invalid/")).await?;
+    let first_id = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
+    let second_id = save_station(&db, &custom_station("B", "http://b.invalid/")).await?;
 
-    assert_ne!(first.id, second.id);
+    assert_ne!(first_id, second_id);
     assert_eq!(station_count(&db).await?, 2);
-    assert!(first.station_uuid.is_none());
-    assert!(second.station_uuid.is_none());
+    assert!(get_station_by_id(&db, first_id).await?.station_uuid.is_none());
+    assert!(get_station_by_id(&db, second_id).await?.station_uuid.is_none());
     Ok(())
 }
 
@@ -144,8 +150,8 @@ async fn favorites_come_back_in_natural_name_order() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
 
     for name in ["Radio 10", "Radio 2", "Radio 1"] {
-        let station = save_station(&db, &custom_station(name, "http://x.invalid/")).await?;
-        set_favorite(&db, station.id, true).await?;
+        let id = save_station(&db, &custom_station(name, "http://x.invalid/")).await?;
+        set_favorite(&db, id, true).await?;
     }
     // Favorited by nobody, so it must not appear.
     save_station(&db, &custom_station("Radio 3", "http://y.invalid/")).await?;
@@ -161,14 +167,15 @@ async fn favorites_come_back_in_natural_name_order() -> Result<(), AppError> {
 async fn marking_a_play_counts_it_and_stamps_the_time() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
 
-    let station = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
-    assert_eq!(station.play_count, 0);
-    assert!(station.last_played.is_none());
+    let id = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
+    let fresh = get_station_by_id(&db, id).await?;
+    assert_eq!(fresh.play_count, 0);
+    assert!(fresh.last_played.is_none());
 
-    mark_played(&db, station.id).await?;
-    mark_played(&db, station.id).await?;
+    mark_played(&db, id).await?;
+    mark_played(&db, id).await?;
 
-    let played = get_station_by_id(&db, station.id).await?;
+    let played = get_station_by_id(&db, id).await?;
     assert_eq!(played.play_count, 2);
     assert!(played.last_played.is_some());
     Ok(())
@@ -185,13 +192,13 @@ async fn clearing_a_history_drops_the_station_out_of_recents_and_leaves_the_star
 -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
 
-    let station = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
-    set_favorite(&db, station.id, true).await?;
-    mark_played(&db, station.id).await?;
+    let id = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
+    set_favorite(&db, id, true).await?;
+    mark_played(&db, id).await?;
 
-    clear_play_history(&db, station.id).await?;
+    clear_play_history(&db, id).await?;
 
-    let cleared = get_station_by_id(&db, station.id).await?;
+    let cleared = get_station_by_id(&db, id).await?;
     assert!(cleared.last_played.is_none());
     assert_eq!(cleared.play_count, 0);
     assert!(cleared.is_favorite, "the star belongs to the other tab");
@@ -212,8 +219,8 @@ async fn recents_come_back_newest_first_and_skip_the_unplayed() -> Result<(), Ap
     save_station(&db, &custom_station("Never", "http://c.invalid/")).await?;
 
     for (id, stamp) in [
-        (older.id, "2026-08-01T00:00:00+00:00"),
-        (newer.id, "2026-08-02T00:00:00+00:00"),
+        (older, "2026-08-01T00:00:00+00:00"),
+        (newer, "2026-08-02T00:00:00+00:00"),
     ] {
         sqlx::query("UPDATE radio_stations SET last_played = ? WHERE id = ?")
             .bind(stamp)
@@ -234,10 +241,10 @@ async fn a_station_that_was_deleted_between_render_and_click_is_not_found() -> R
 {
     let db = DbPool::test_pool().await?;
 
-    let station = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
-    delete_station(&db, station.id).await?;
+    let id = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
+    delete_station(&db, id).await?;
 
-    let Err(err) = get_station_by_id(&db, station.id).await else {
+    let Err(err) = get_station_by_id(&db, id).await else {
         return Err(AppError::Validation("expected a deleted station to be NotFound".into()));
     };
     assert!(matches!(err, AppError::NotFound(_)), "got: {err}");
@@ -265,7 +272,7 @@ async fn every_column_a_save_binds_comes_back_where_it_was_put() -> Result<(), A
         hls: true,
     };
 
-    let saved = save_station(&db, &station).await?;
+    let saved = get_station_by_id(&db, save_station(&db, &station).await?).await?;
 
     assert_eq!(saved.station_uuid.as_deref(), Some("uuid-1"));
     assert_eq!(saved.name, "Radio Example");
@@ -290,9 +297,10 @@ async fn every_column_a_save_binds_comes_back_where_it_was_put() -> Result<(), A
 #[tokio::test]
 async fn editing_a_station_moves_its_sort_key_with_its_name() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let saved = save_station(&db, &custom_station("Zed FM", "http://example.invalid/zed")).await?;
-    set_favorite(&db, saved.id, true).await?;
-    mark_played(&db, saved.id).await?;
+    let id = save_station(&db, &custom_station("Zed FM", "http://example.invalid/zed")).await?;
+    set_favorite(&db, id, true).await?;
+    mark_played(&db, id).await?;
+    let saved = get_station_by_id(&db, id).await?;
 
     let edit = radio::StationEdit {
         name: "Alpha FM".to_owned(),
@@ -303,9 +311,9 @@ async fn editing_a_station_moves_its_sort_key_with_its_name() -> Result<(), AppE
         codec: "AAC".to_owned(),
         bitrate: 192,
     };
-    update_station(&db, saved.id, &edit).await?;
+    update_station(&db, id, &edit).await?;
 
-    let edited = get_station_by_id(&db, saved.id).await?;
+    let edited = get_station_by_id(&db, id).await?;
     assert_eq!(edited.name, "Alpha FM");
     assert_eq!(edited.stream_url, "http://example.invalid/alpha");
     assert_eq!(edited.homepage.as_deref(), Some("https://alpha.invalid"));
@@ -343,7 +351,7 @@ async fn a_stream_url_already_kept_is_recognised_whether_or_not_it_has_a_uuid()
     let kept = save_station(&db, &custom_station("One", url)).await?;
     assert_eq!(
         station_id_with_url(&db, url).await?,
-        Some(kept.id),
+        Some(kept),
         "the caller merges onto this row, so it has to be the row that holds the URL"
     );
     assert!(

@@ -121,6 +121,11 @@ fn store_if_big_enough(bytes: &[u8], ext: &'static str, dir: &Path) -> Option<St
     if width < MIN_LOGO_DIM || height < MIN_LOGO_DIM {
         return None;
     }
+    // Held to the end rather than around the decode: `logo_tile::compose` flattens at full source
+    // resolution before it downscales, and the store decodes again to bound an oversized source.
+    // `MAX_LOGO_BYTES` is no substitute — it bounds the *compressed* size, which a flat-colour icon
+    // stays under at any dimension, and the fetch window runs several at once.
+    let _oversized = image_decode::large_decode_guard(u64::from(width) * u64::from(height));
     // `None` is "store the source's own bytes": it is already a square opaque icon, or the tile
     // it wanted would not encode and the source is the better of the two.
     let tile = match tile_for(bytes) {

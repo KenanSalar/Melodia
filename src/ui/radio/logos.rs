@@ -259,7 +259,10 @@ pub async fn discover_missing<'a>(
     for origin in wanted {
         let state = state.clone();
         in_flight.spawn(async move {
-            let path = library::radio::discover_site_logo(&state, &origin).await;
+            // Unseeded: this set is bounded by `EXPLICIT_RESULT_MAX`, so the per-origin query is
+            // already a handful rather than a page's worth.
+            let seed = library::radio::AnswerSeed::unseeded();
+            let path = library::radio::discover_site_logo(&state, &seed, &origin).await;
             (origin.as_str().to_owned(), path)
         });
     }

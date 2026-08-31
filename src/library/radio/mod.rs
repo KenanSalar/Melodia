@@ -28,9 +28,9 @@ mod playback;
 pub use authoring::{add_custom_station, set_station_overrides, update_custom_station};
 pub use directory::{facets, search, station_details, vote};
 pub use logos::{
-    SiteOrigin, answer_is_suppressed, artwork_is_present, discover_site_logo, fetch_logo,
-    heal_station_logo, logo_answers, prune_logo_answers, record_logo_outcome, set_artwork,
-    site_origin,
+    AnswerSeed, SiteOrigin, answer_is_suppressed, artwork_is_present, discover_site_logo,
+    fetch_logo, heal_seed_urls, heal_station_logo, logo_answers, prune_logo_answers,
+    record_logo_outcome, set_artwork, site_origin,
 };
 pub use playback::{
     mark_played, play_directory_station, play_station, set_directory_favorite, station_to_restore,
@@ -101,12 +101,12 @@ pub async fn get_station(state: &AppState, id: i64) -> Result<radio::RadioStatio
     queries::radio::get_station_by_id(&state.db, id).await
 }
 
-/// Persist a station, updating the row when the directory already knows it.
+/// Persist a station, updating the row when the directory already knows it, and answer its id.
 /// Preserves everything the user did with it.
 pub async fn save_station(
     state: &AppState,
     station: &radio::NewRadioStation,
-) -> Result<radio::RadioStation, AppError> {
+) -> Result<i64, AppError> {
     queries::radio::save_station(&state.db, station).await
 }
 

@@ -32,7 +32,7 @@ use rayon::prelude::*;
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 
 use super::image_decode::{
-    FilterType, MAX_SOURCE_DIM, decode_capped_to, resize_rgb8, source_pixels,
+    FilterType, MAX_SOURCE_DIM, decode_capped_to, large_decode_guard, resize_rgb8, source_pixels,
 };
 
 /// Row-tier thumbnail size at a 1× display — just over the now-playing bar's tile, the larger of
@@ -53,18 +53,6 @@ pub fn row_cover_size(scale: f64) -> u32 {
         ROW_THUMB_SIZE
     }
 }
-
-/// Source pixel count past which a decode waits its turn on [`LARGE_DECODE_GATE`] — well above any
-/// real cover, for the occasional full-resolution original a user's tags carry.
-const LARGE_SOURCE_PIXELS: u64 = 4_000_000;
-
-/// Serializes oversized decodes against each other.
-///
-/// [`DECODE_POOL`] bounds the transient peak at *pool width* × the largest source, the wrong shape
-/// when one cover is enormous and the rest are thumbnails: narrowing the pool for the rare huge
-/// one would cost every scan. Gating on the header-read size leaves the common path untouched and
-/// caps the peak at one full-resolution bitmap.
-static LARGE_DECODE_GATE: Mutex<()> = Mutex::new(());
 
 /// Row-tier LRU capacity, counting unique *covers* rather than tracks, so it scales with library
 /// size. Past the cap, eviction means a scroll-back re-decodes one thumbnail inline.
@@ -455,11 +443,9 @@ fn buf_to_image(buf: &CachedBuf) -> Image {
 }
 
 fn decode_thumb_buffer(path: &Path, thumb_size: u32) -> CachedBuf {
-    // Held for the decode only — see `LARGE_DECODE_GATE`. A header the probe can't read leaves the
-    // decode ungated, which is no worse than having no gate.
-    let _oversized = source_pixels(path)
-        .is_some_and(|pixels| pixels > LARGE_SOURCE_PIXELS)
-        .then(|| LARGE_DECODE_GATE.lock());
+    // Held for the decode only. A header the probe can't read leaves the decode ungated, which is
+    // no worse than having no gate.
+    let _oversized = source_pixels(path).and_then(large_decode_guard);
 
     let dyn_img = decode_capped_to(path, MAX_SOURCE_DIM, thumb_size).ok()?;
 

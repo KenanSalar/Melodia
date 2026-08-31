@@ -13,7 +13,7 @@ use crate::player::stream_source::{self, StationFacts};
 use crate::services::radio_blocklist;
 use crate::state::AppState;
 
-use super::logos::{adopted, ask_logo_url};
+use super::logos::{AnswerSeed, adopted, ask_logo_url};
 use super::{directory_client, get_station, save_station, set_favorite};
 
 /// Open a URL far enough to know it plays, and report what the server said about itself.
@@ -110,12 +110,12 @@ pub async fn add_custom_station(
         hls: facts.hls,
     };
 
-    let saved = save_station(state, &station).await?;
-    set_favorite(state, saved.id, true).await?;
+    let id = save_station(state, &station).await?;
+    set_favorite(state, id, true).await?;
     if let Some(logo_url) = facts.logo_url.as_deref() {
-        adopt_logo(state, saved.id, logo_url).await;
+        adopt_logo(state, id, logo_url).await;
     }
-    Ok(saved.id)
+    Ok(id)
 }
 
 /// Record what the user says about a station, and fetch a logo where they named one.
@@ -253,7 +253,7 @@ pub async fn update_custom_station(
 /// is what most of the directory takes anyway, and there is nothing a user could do about a dead
 /// favicon host.
 async fn adopt_logo(state: &AppState, id: i64, logo_url: &str) {
-    if let Some(path) = ask_logo_url(state, logo_url).await {
+    if let Some(path) = ask_logo_url(state, &AnswerSeed::unseeded(), logo_url).await {
         adopted(state, id, path).await;
     }
 }

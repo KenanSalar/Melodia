@@ -257,34 +257,36 @@ pub fn filter(ui: &AppWindow, radio_ui: &Arc<RadioUi>, needle: &str) {
     write_filtered(&ui.global::<Radio>(), &facets, needle);
 }
 
-/// How many options the picker draws when the user has typed nothing.
+/// How many options the picker draws, typed into or not.
 ///
 /// A ceiling on the *drawing*, never on what is reachable: the lists arrive ordered
-/// by station count, so an untouched picker shows the popular head, and the needle
-/// below searches every entry the fetch brought back. Nobody scrolls to the end of
-/// the tag list, and building a row per entry to let them try costs a model rebuild
-/// on every open and every clear.
+/// by station count, so the picker shows the popular head of whatever the needle
+/// left, and the needle itself searches every entry the fetch brought back. Nobody
+/// scrolls to the end of the tag list, and building a row per entry to let them try
+/// costs a model rebuild on every open and every clear.
+///
+/// **Both arms, and the filtered one is the half worth stating**: the needle is
+/// unthrottled because it narrows a list already in memory, so uncapped there it
+/// built a row per match on the UI thread on every keystroke — over the tag list,
+/// most of `TAG_FACET_LIMIT`'s worth of them, for a picker that draws a screenful.
 ///
 /// Only the tag list is long enough to reach this; the curated three sit well under
 /// it and are drawn whole.
-pub(super) const UNFILTERED_ROW_CAP: usize = 500;
+pub(super) const PICKER_ROW_CAP: usize = 500;
 
 fn write_filtered(g: &Radio<'_>, facets: &[Facet], needle: &str) {
     // Off the global rather than threaded in: the picker only ever draws the chip it is showing,
     // and both callers have already made `facet-shown` that chip.
     let chip = chip_from_index(g, g.get_facet_shown());
     let folded = row_match::fold_needle(needle);
-    let matches = facets.iter().filter(|facet| matches_needle(chip, facet, &folded));
-    let row = |facet: &Facet| rows::to_slint_facet_row(chip, facet);
-
-    // `Needle::contains` answers true for an empty needle, so the filter above is
-    // already the identity there and the cap is the whole difference. Gated on the
-    // *folded* needle, since a box holding only spaces narrows nothing either.
-    let facet_rows: Vec<_> = if folded.is_empty() {
-        matches.take(UNFILTERED_ROW_CAP).map(row).collect()
-    } else {
-        matches.map(row).collect()
-    };
+    // `Needle::contains` answers true for an empty needle, so the filter is the identity there and
+    // the cap alone decides what an untouched picker draws.
+    let facet_rows: Vec<_> = facets
+        .iter()
+        .filter(|facet| matches_needle(chip, facet, &folded))
+        .take(PICKER_ROW_CAP)
+        .map(|facet| rows::to_slint_facet_row(chip, facet))
+        .collect();
     write_grid(&g.get_facet_options(), facet_rows, "radio::facets");
 }
 

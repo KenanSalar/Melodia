@@ -16,9 +16,9 @@ use super::{
 
 /// A kept row, seeded from the same shape the writer tests build.
 async fn seed(db: &DbPool, station: &RadioStation) -> Result<RadioStation, AppError> {
-    let saved = queries::radio::save_station(db, &station.to_new_station()).await?;
-    queries::radio::set_favorite(db, saved.id, true).await?;
-    Ok(saved)
+    let id = queries::radio::save_station(db, &station.to_new_station()).await?;
+    queries::radio::set_favorite(db, id, true).await?;
+    queries::radio::get_station_by_id(db, id).await
 }
 
 /// Import through the real door. The file is the half a hand-edit reaches, so reading one is part

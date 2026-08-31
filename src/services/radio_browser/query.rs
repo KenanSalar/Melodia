@@ -27,8 +27,8 @@ pub const DEFAULT_PAGE_LIMIT: u32 = 50;
 /// **High enough to take the whole list, not just its head.** A tag the picker
 /// never fetched is one nothing can filter by and no scope pill can offer, and the
 /// tail is where a specific genre lives — the head is all general. What the picker
-/// *draws* with nothing typed is a separate question, answered by
-/// `ui::radio::facets::UNFILTERED_ROW_CAP`.
+/// *draws* out of it is a separate question, answered by
+/// `ui::radio::facets::PICKER_ROW_CAP`.
 ///
 /// There is no "no ceiling" to raise this to: the endpoint answers a call carrying
 /// no `limit` with a default slice of its own, so a number is going to be sent

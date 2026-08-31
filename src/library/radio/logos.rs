@@ -190,8 +190,8 @@ pub fn artwork_is_present(artwork_path: Option<&str>) -> bool {
 /// the host saying it has nothing usable, the other is not reaching the host at all — and
 /// persisting a transport failure would suppress a perfectly good logo for a day over a moment
 /// offline. `ui::radio::logos` splits them the same way on the browse path.
-pub(super) async fn ask_logo_url(state: &AppState, url: &str) -> Option<String> {
-    match stored_answer(state, url).await {
+pub(super) async fn ask_logo_url(state: &AppState, seed: &AnswerSeed, url: &str) -> Option<String> {
+    match stored_answer(state, seed, url).await {
         Answered::Hit(path) => return Some(path),
         Answered::Suppressed => return None,
         Answered::Unknown => {}
@@ -217,30 +217,62 @@ enum Answered {
     Unknown,
 }
 
-/// The stored answer for `url`, read once for both questions it settles.
+/// Stored answers already in hand, so a pass over many stations asks once rather than per station.
 ///
-/// One query, because a second would ask the same row the same thing. A hit whose file is gone is
-/// [`Answered::Unknown`]: the store is swept against the columns that reference it, and a path
-/// naming nothing paints an empty tile where the monogram was the honest answer.
-async fn stored_answer(state: &AppState, url: &str) -> Answered {
+/// **The heal pass is who wants it.** Each station it looks at settles against the answer table
+/// twice before it reaches the network — the URL its row carries, then its site — and a URL at a
+/// time those go through the batching helper as one-element queries, which rebuild their SQL and
+/// prepare non-persistent. The browse side already asks for a whole page at once.
+///
+/// [`Self::unseeded`] is the honest answer for a caller holding one URL: every lookup misses and
+/// falls through to the query it would have made anyway.
+#[derive(Default)]
+pub struct AnswerSeed(std::collections::HashMap<String, radio::StoredLogoAnswer>);
+
+impl AnswerSeed {
+    /// For a caller settling a single URL, where one query is the whole cost either way.
+    #[must_use]
+    pub fn unseeded() -> Self {
+        Self::default()
+    }
+
+    /// Every stored answer among `urls`, in one query. Duplicates and blanks cost nothing —
+    /// stations routinely share a site, and a row with no logo URL contributes none.
+    pub async fn for_urls(state: &AppState, urls: &[String]) -> Self {
+        let Ok(answers) = logo_answers(state, urls).await else {
+            return Self::default();
+        };
+        Self(answers.into_iter().map(|answer| (answer.favicon_url.clone(), answer)).collect())
+    }
+}
+
+/// The stored answer for `url`, from `seed` where it holds one and from its own query otherwise.
+///
+/// One query either way, because a second would ask the same row the same thing. A hit whose file
+/// is gone is [`Answered::Unknown`]: the store is swept against the columns that reference it, and
+/// a path naming nothing paints an empty tile where the monogram was the honest answer.
+async fn stored_answer(state: &AppState, seed: &AnswerSeed, url: &str) -> Answered {
+    if let Some(answer) = seed.0.get(url) {
+        return classify(answer, &crate::utils::now_rfc3339());
+    }
     let asked = [url.to_owned()];
     let Ok(answers) = logo_answers(state, &asked).await else {
         return Answered::Unknown;
     };
-    // The two arms are mutually exclusive on the row — a hit carries no `retry_after` and a miss
-    // carries no path — so the order is only what keeps the borrow ahead of the move.
     let now = crate::utils::now_rfc3339();
-    for answer in answers {
-        if answer_is_suppressed(&answer, &now) {
-            return Answered::Suppressed;
-        }
-        if let Some(path) = answer.artwork_path
-            && artwork_is_present(Some(&path))
-        {
-            return Answered::Hit(path);
-        }
+    answers.first().map_or(Answered::Unknown, |answer| classify(answer, &now))
+}
+
+/// What one stored row says. The two arms are mutually exclusive on the row — a hit carries no
+/// `retry_after` and a miss carries no path — so the order is only what reads most directly.
+fn classify(answer: &radio::StoredLogoAnswer, now: &str) -> Answered {
+    if answer_is_suppressed(answer, now) {
+        return Answered::Suppressed;
     }
-    Answered::Unknown
+    match &answer.artwork_path {
+        Some(path) if artwork_is_present(Some(path)) => Answered::Hit(path.clone()),
+        _ => Answered::Unknown,
+    }
 }
 
 /// The site a station's logo is discovered from, and the key its answer is memoized under.
@@ -278,16 +310,40 @@ pub fn site_origin(homepage: &str, stream_url: &str) -> Option<SiteOrigin> {
 /// the whole payoff of letting them record a website for an entry the directory left blank: the
 /// site they named is the one read for a `<link rel="icon">`, and a station that had no logo and
 /// no way to get one now has both.
-pub async fn heal_station_logo(state: &AppState, station: &radio::RadioStation) -> Option<String> {
+pub async fn heal_station_logo(
+    state: &AppState,
+    seed: &AnswerSeed,
+    station: &radio::RadioStation,
+) -> Option<String> {
     if let Some(url) = station.logo_source()
-        && let Some(path) = ask_logo_url(state, url).await
+        && let Some(path) = ask_logo_url(state, seed, url).await
     {
         return adopted(state, station.id, path).await;
     }
 
     let origin = site_origin(station.website().unwrap_or_default(), &station.stream_url)?;
-    let path = discover_site_logo(state, &origin).await?;
+    let path = discover_site_logo(state, seed, &origin).await?;
     adopted(state, station.id, path).await
+}
+
+/// Every URL [`heal_station_logo`] settles against the answer table before it reaches the network,
+/// for a whole pass over `stations`.
+///
+/// **The two it can name in advance, and not the third.** A logo the station's own site turns out
+/// to advertise is only known once that document has been read, so it keeps its own lookup; these
+/// two are on the row already. Kept here beside the function whose order it mirrors, so the pair
+/// cannot drift apart.
+#[must_use]
+pub fn heal_seed_urls(stations: &[radio::RadioStation]) -> Vec<String> {
+    let mut urls = Vec::with_capacity(stations.len() * 2);
+    for station in stations {
+        urls.extend(station.logo_source().map(str::to_owned));
+        urls.extend(
+            site_origin(station.website().unwrap_or_default(), &station.stream_url)
+                .map(|origin| origin.as_str().to_owned()),
+        );
+    }
+    urls
 }
 
 /// The logo a station's own site advertises, past the backoff that rides on the site.
@@ -299,14 +355,20 @@ pub async fn heal_station_logo(state: &AppState, station: &radio::RadioStation) 
 /// Costs a page fetch on top of the download, which is why the browse side asks only about a
 /// result narrow enough to be the station the user typed — a directory page would pay one for the
 /// third of its rows that carry no logo field.
-pub async fn discover_site_logo(state: &AppState, origin: &SiteOrigin) -> Option<String> {
-    match stored_answer(state, origin.as_str()).await {
+pub async fn discover_site_logo(
+    state: &AppState,
+    seed: &AnswerSeed,
+    origin: &SiteOrigin,
+) -> Option<String> {
+    match stored_answer(state, seed, origin.as_str()).await {
         Answered::Hit(path) => return Some(path),
         Answered::Suppressed => return None,
         Answered::Unknown => {}
     }
+    // The discovered URL is not one the seed could have named — the document had to be read first
+    // — so this one settles on its own query.
     let landed = match discover_logo_url(state, &origin.0).await {
-        Some(url) => ask_logo_url(state, &url).await,
+        Some(url) => ask_logo_url(state, &AnswerSeed::unseeded(), &url).await,
         None => None,
     };
     if landed.is_none() {

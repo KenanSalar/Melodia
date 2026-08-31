@@ -79,12 +79,12 @@ async fn keep_station(
     state: &AppState,
     station: &radio::DirectoryStation,
     logo: Option<&str>,
-) -> Result<radio::RadioStation, AppError> {
-    let saved = save_station(state, &station.to_new_station()).await?;
+) -> Result<i64, AppError> {
+    let id = save_station(state, &station.to_new_station()).await?;
     if logo.is_some() {
-        set_artwork(state, saved.id, logo).await?;
+        set_artwork(state, id, logo).await?;
     }
-    Ok(saved)
+    Ok(id)
 }
 
 /// Keep or release a browsed station, writing its row on the way in.
@@ -97,9 +97,9 @@ pub async fn set_directory_favorite(
     favorite: bool,
     logo: Option<&str>,
 ) -> Result<i64, AppError> {
-    let saved = keep_station(state, station, logo).await?;
-    set_favorite(state, saved.id, favorite).await?;
-    Ok(saved.id)
+    let id = keep_station(state, station, logo).await?;
+    set_favorite(state, id, favorite).await?;
+    Ok(id)
 }
 
 /// Tune to a browsed station, keeping it first.
@@ -109,8 +109,8 @@ pub async fn play_directory_station(
     logo: Option<&str>,
 ) -> Result<(), AppError> {
     ensure_enabled(state)?;
-    let saved = keep_station(state, station, logo).await?;
-    play_station(state, saved.id).await
+    let id = keep_station(state, station, logo).await?;
+    play_station(state, id).await
 }
 
 /// Tell the directory a station was played, if the user left that on.

@@ -137,8 +137,8 @@ async fn a_logo_referenced_only_by_a_station_is_still_referenced() -> Result<(),
     let db = DbPool::test_pool().await?;
     let logo = "/data/artwork/33fb807d1f1b7cbb.jpg";
 
-    let station = queries::radio::save_station(&db, &test_station()).await?;
-    queries::radio::set_artwork(&db, station.id, Some(logo)).await?;
+    let station_id = queries::radio::save_station(&db, &test_station()).await?;
+    queries::radio::set_artwork(&db, station_id, Some(logo)).await?;
 
     let referenced = queries::artwork::referenced_filenames(&db).await?;
 
