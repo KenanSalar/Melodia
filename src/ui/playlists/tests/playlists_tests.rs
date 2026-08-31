@@ -137,11 +137,15 @@ fn every_multi_caller_playlist_dialog_opens_through_its_own_function() {
     );
 }
 
-/// A row drag and the list's own drag-pan are one gesture, and left to itself
-/// the pan wins: it intercepts the row's grab mid-drag, so the drop never
-/// commits. Both scrollers around the rows opt out, and so does the queue
-/// sheet's list. Nothing else catches a regression here — it compiles, reads
-/// clean, and only misbehaves on a list long enough to scroll.
+/// A row drag and the list's own drag-pan are one gesture, and whichever element
+/// owns it the other gets nothing: a pan intercepts the row's grab mid-drag, so
+/// the drop never commits. Both scrollers around the rows opt out, and so does
+/// the queue sheet's list. Nothing else catches a regression here — it compiles,
+/// reads clean, and only misbehaves on a list long enough to scroll.
+///
+/// The value was `!reorder-enabled`, which reads as leaving a `true` default alone
+/// and is not one: every style but Material publishes this off, so that spelling
+/// *enabled* the pan on every sort that retires the drag.
 #[test]
 fn every_draggable_list_opts_out_of_drag_panning() {
     // The binding rather than the token: the property reads as an *enable*, so
@@ -149,7 +153,7 @@ fn every_draggable_list_opts_out_of_drag_panning() {
     // occurrence count can't fail on it.
     let list = normalize_ws(&strip_line_comments(DRAGGABLE_LIST));
     assert_eq!(
-        list.matches("mouse-drag-pan-enabled: !root.reorder-enabled").count(),
+        list.matches("mouse-drag-pan-enabled: false").count(),
         2,
         "both `outer-scroll` and `inner-list` must opt out — a diagonal drag steals the \
          grab on either axis once the columns overflow"

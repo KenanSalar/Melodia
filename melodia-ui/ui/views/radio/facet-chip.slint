@@ -241,6 +241,8 @@ export component FacetChip inherits Rectangle {
                         height: 100%;
                         vertical-scrollbar-policy: always-off;
                         horizontal-scrollbar-policy: always-off;
+                        // An option click picks the facet, so it answers the way a card
+                        // does; argument on `views/radio/station-grid.slint`.
                         mouse-drag-pan-enabled: false;
 
                         for option in root.options: FacetOption {

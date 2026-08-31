@@ -18,8 +18,10 @@ use crate::test_support::{
     MIN_SLINT_SOURCES, UI_DIR, block_body, normalize_ws as normalized, stripped_sources,
 };
 
-/// The elements that own a scrollbar-policy pair. `Flickable` is deliberately
-/// absent: it has no scrollbars to turn off.
+/// The elements every walk here recognises. `Flickable` is deliberately absent, and
+/// the reason differs per walk: it owns no scrollbar pair to turn off, and it spells
+/// drag-panning `interactive` rather than `mouse-drag-pan-enabled`. The tree declares
+/// none, so both walks are complete; one that appears is outside all of them.
 const SCROLLERS: [&str; 2] = ["ScrollView", "ListView"];
 const AXES: [&str; 2] = ["horizontal", "vertical"];
 const OPT_OUT: &str = "always-off";
@@ -31,15 +33,16 @@ const DIALOG_DIR: &str = "components/dialog/";
 const DIALOG_STRAYS: [&str; 1] = ["multiline-input.slint"];
 const CARD_TRACK: &str = "track-color: Theme.scrollbar-track-on-card;";
 
-/// The card grids, every one of them click-to-open. Scoped to the directory rather than
-/// listed, so a seventh grid is held on the day it lands.
+/// The card surfaces, every one of them click-to-open. Scoped to the directory rather than
+/// listed, so a new one is held on the day it lands.
 const GRID_DIR: &str = "components/grid/";
 
 /// The click-to-act lists outside [`GRID_DIR`], which no directory scope reaches.
 ///
-/// Both track lists are deliberately absent. `track-list.slint` keeps the default because a
-/// row click is a selection rather than a navigation, and `draggable-track-list.slint` binds
-/// the property to `!root.reorder-enabled`, a drag there being the reorder itself.
+/// `track-list.slint` is deliberately absent: a row click there is a selection rather than
+/// a navigation, so it takes whatever the style publishes. `draggable-track-list.slint` is
+/// absent for the opposite reason, its two bindings being pinned by an exact count in
+/// `ui::playlists::tests` instead, a drag there being the reorder itself.
 const CARD_SHAPED_LISTS: [&str; 4] = [
     "views/radio/station-grid.slint",
     "views/browse-view.slint",
@@ -201,11 +204,13 @@ fn every_scroller_opts_out_of_the_stock_scrollbar() {
     );
 }
 
-/// A card click and a drag-pan are one gesture, and the pan wins by default: past 8 px of
-/// travel inside 500 ms the flickable takes the grab and every item under it is sent a
-/// cancel, so a press that drifts that far never lands as a click. That reads as "sometimes
-/// it doesn't open", it only happens on a grid long enough to flick, and a new grid inherits
-/// it by binding nothing at all. `views/radio/station-grid.slint` carries the argument.
+/// A card click and a drag-pan are one gesture, and which of them a grid gets is the
+/// *style's* answer unless the grid states one: every style but Material publishes
+/// `mouse-drag-pan-enabled` off, so a scroller binding nothing rides a default no file here
+/// owns. Where the pan is on, 8 px of travel inside 500 ms hands the flickable the grab and
+/// every item under it is sent a cancel, so a press that drifts that far never lands as a
+/// click — "sometimes it doesn't open", on a grid long enough to flick and nowhere else.
+/// `views/radio/station-grid.slint` carries the argument.
 #[test]
 fn every_grid_scroller_opts_out_of_drag_to_pan() {
     let sources = sources();
