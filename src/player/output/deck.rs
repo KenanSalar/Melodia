@@ -327,12 +327,16 @@ impl DeckVoice {
         };
         let result = voice.source.try_seek(position);
         if result.is_ok() {
+            voice.converter.reanchor();
             // Integer throughout: the count this re-anchors is what `Deck::position` divides back
             // down, so a float round trip here would read back a millisecond off its own target.
             let rate = u128::from(voice.source.sample_rate().get());
             let frames = position.as_micros().saturating_mul(rate) / 1_000_000;
             self.shared.frames.store(u64::try_from(frames).unwrap_or(u64::MAX), Ordering::Relaxed);
         }
+        // The audio thread may not block, hence `try_lock`. Nothing contends it: the waiter only
+        // reads the slot once `serviced` moves, which is after the whole drain. A result lost to a
+        // future contender would read as a landed seek, as a timed-out wait already does.
         if let Some(mut slot) = self.shared.seek_result.try_lock() {
             *slot = Some(result);
         }

@@ -239,9 +239,9 @@ impl VisualizerShared {
     /// The rate the analyzer places its band edges against: the source's own rate scaled by the
     /// live playback speed.
     ///
-    /// The tap sits *inside* rodio's `Speed` wrapper, which forwards samples verbatim and
-    /// implements speed purely by reporting a multiplied `sample_rate()` upward. So the ring holds
-    /// media samples at the media rate, and analysing against that plots the *file's* pitch.
+    /// The tap sits *above* the deck's converter, which is where speed is applied. So the ring
+    /// holds media samples at the media rate, and analysing against that plots the *file's* pitch
+    /// rather than the one the ear hears.
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -270,7 +270,7 @@ const _: fn() = || {
 /// One source's claim on a deck's ring, held for exactly as long as that source is alive — and
 /// what tells the reader which rings to mix. A deck whose last source was dropped still holds a
 /// full window, and mixing that frozen tail into every later frame leaves a ghost of the track
-/// that ended. rodio drops a source as soon as it is exhausted or cleared, so the claim is
+/// that ended. A deck drops a source as soon as it is exhausted or cleared, so the claim is
 /// released within a frame of the audio stopping.
 ///
 /// It is not *strictly* ordered against a control op, and `src/player/CLAUDE.md` documents that

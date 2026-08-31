@@ -6,9 +6,9 @@
 //! argument for decoding against Symphonia 0.6 is in that module's `//!`; this was the path that
 //! hit it first.
 //!
-//! [`super::prebuffer`]'s ring sits below all of it, and what reaches rodio is `f32` rather than a
-//! decoder. That is to keep the network off the audio callback thread, and it holds whether or not
-//! anything else in the tree decodes.
+//! [`super::prebuffer`]'s ring sits below all of it, and what reaches the deck is `f32` rather
+//! than a decoder. That is to keep the network off the audio callback thread, and it holds whether
+//! or not anything else in the tree decodes.
 
 use std::io::{Read, Seek, SeekFrom};
 

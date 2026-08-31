@@ -1,7 +1,7 @@
 //! Visualizer-section setters. Unlike their audio siblings there is no runtime
 //! half to pair with: the flags only decide whether the Now-Playing strip
 //! mounts and which style it draws, and the Slint bindings have already applied
-//! that by the time these run. Arming the Rodio sample tap follows from the
+//! that by the time these run. Arming the sample tap follows from the
 //! strip being on screen — see [`crate::ui::visualizer`].
 
 use crate::error::AppError;

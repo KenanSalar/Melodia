@@ -1,5 +1,5 @@
 //! Equalizer-section setters. The runtime effect (applying gains to the live
-//! Rodio EQ) is done synchronously by the UI callback through
+//! EQ) is done synchronously by the UI callback through
 //! `library::playback::player_set_eq_*` *before* these async disk writes, so the
 //! sound changes immediately and the `settings.json` commit only persists the
 //! choice. Mirrors the shape of [`super::playback`].

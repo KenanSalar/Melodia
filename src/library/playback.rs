@@ -280,7 +280,7 @@ pub fn player_previous(ctx: &PlaybackContext) -> Result<(), AppError> {
 }
 
 pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppError> {
-    // Fast no-op short-circuit: skip the whole with_state_emit / rodio /
+    // Fast no-op short-circuit: skip the whole with_state_emit / engine /
     // ViewModel-watch dance when nothing would actually change. Catches
     // duplicate slider emits at the boundary.
     {
@@ -366,7 +366,7 @@ pub fn player_set_pause_at_track_end(ctx: &PlaybackContext, armed: bool) -> Resu
 
 // --- Graphic equalizer -----------------------------------------------------
 //
-// EQ state lives on the Rodio backend's lock-free shared cell, not the
+// EQ state lives on the playback engine's lock-free shared cell, not the
 // `PlayerState` machine, so these bypass `with_state_emit` / `execute_actions`
 // and write the shared cell directly — the same place `set_volume`/`set_speed`
 // ultimately land. They're synchronous and infallible (no decode, no I/O), and

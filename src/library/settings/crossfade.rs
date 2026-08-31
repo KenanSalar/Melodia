@@ -1,5 +1,5 @@
 //! Crossfade-section setters. Like the equalizer and `ReplayGain` setters, the
-//! runtime effect (applying to the live Rodio backend) is done synchronously by
+//! runtime effect (applying to the live playback engine) is done synchronously by
 //! the UI callback through `library::playback::player_set_crossfade_*` *before*
 //! these async disk writes, so the change takes effect immediately and the
 //! `settings.json` commit only persists the choice. Mirrors the shape of

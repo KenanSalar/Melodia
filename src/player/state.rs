@@ -24,9 +24,10 @@ pub const RESTART_THRESHOLD_MS: u64 = 3000;
 pub const MAX_VOLUME: u32 = 100;
 /// Minimum playback speed multiplier.
 pub const MIN_SPEED: f64 = 0.25;
-/// Maximum playback speed multiplier. Capped at 2× — rodio's `set_speed` is
-/// naive resampling (it shifts pitch), so beyond 2× the audio degrades into
-/// chipmunk territory with little practical use for music.
+/// Maximum playback speed multiplier. Capped at 2×: speed is a ratio on the
+/// deck's converter, which is naive resampling and shifts pitch with it, so
+/// beyond 2× the audio degrades into chipmunk territory with little practical
+/// use for music.
 pub const MAX_SPEED: f64 = 2.0;
 
 /// Single source of truth for converting a stored volume level (percent,
@@ -100,7 +101,7 @@ pub struct PlayerStateHandle {
     /// single state mutation atomic, but the `execute_actions` that follows runs
     /// on whatever tokio worker the caller happens to be on. Without this,
     /// two batches (e.g. the monitor's EOS-advance and a UI `Stop`) can interleave
-    /// their rodio side effects on separate workers and leave state and backend
+    /// their side effects on separate workers and leave state and backend
     /// disagreeing. `emit_and_execute` holds this across *both* the mutation and
     /// the execution so mutation order equals side-effect order. Held only across
     /// synchronous work (never an `.await`), so a blocking mutex is correct.
@@ -699,9 +700,10 @@ impl PlayerState {
 
     /// Build actions for set-playback-speed command.
     pub fn build_set_speed_actions(&mut self, speed: f64) -> Vec<PlayerAction> {
-        // rodio implements speed by reporting a multiplied sample rate upward, which against a
-        // source arriving in real time drifts the prebuffer until it starves. Refused rather than
-        // clamped, so the transport keeps showing the 1.0 the deck is actually running at.
+        // Speed is a ratio on the deck's converter, so anything but 1.0 consumes a source faster or
+        // slower than real time, and a live mount arriving at exactly real time starves or overruns
+        // its ring. Refused rather than clamped, so the transport keeps showing the 1.0 the deck is
+        // actually running at.
         if !self.source_allows(PlaybackSource::has_variable_speed) {
             return vec![];
         }
@@ -719,8 +721,7 @@ impl PlayerState {
     ///
     /// Speed is reset alongside, because [`Self::build_set_speed_actions`] refuses to move it
     /// while a station plays and the transport would otherwise claim a rate the deck is not
-    /// running at. The `SetSpeed` follows the `Stop` so it lands on emptied decks and skips the
-    /// re-anchoring seek.
+    /// running at. The `SetSpeed` follows the `Stop` so it lands on emptied decks.
     pub fn build_station_connecting_actions(
         &mut self,
         station: Arc<RadioNowPlaying>,
@@ -738,7 +739,7 @@ impl PlayerState {
     }
 
     /// Put the deck back on 1.0 for a station that is about to sit on it, and hand back the
-    /// action that lands it on rodio.
+    /// action that lands it on the deck.
     ///
     /// Shared with [`restore_station`], the one other way a station reaches the deck, because the
     /// state and the backend have to move together: skip the action and a stream opens against a
@@ -850,7 +851,7 @@ pub fn play_track_inner(
     // Gapless preload is staged late (by the playback monitor) when the
     // current track approaches its end — see `spawn_playback_monitor`. That
     // way mid-track repeat-mode / queue changes are reflected in what gets
-    // preloaded, instead of being clobbered by a stale Rodio queue entry.
+    // preloaded, instead of being clobbered by a source already staged on the deck.
     vec![PlayerAction::PlayMedia {
         file_path: start.file_path,
         volume: start.volume,

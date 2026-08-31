@@ -2,9 +2,9 @@
 //!
 //! The mixer pulls [`AudioSource::next`] from inside the cpal data callback, so a source that
 //! reads a socket stalls the whole block — the local track on the other deck included — for as
-//! long as the network is wedged. Everything here exists to make that impossible: a feed thread owns the
-//! decoder and fills [`SampleRing`] ahead of time, and [`PrebufferSource`] pops from it without
-//! ever blocking, yielding silence when it runs dry.
+//! long as the network is wedged. Everything here exists to make that impossible: a feed thread
+//! owns the decoder and fills [`SampleRing`] ahead of time, and [`PrebufferSource`] pops from it
+//! without ever blocking, yielding silence when it runs dry.
 //!
 //! Running dry is published rather than hidden. [`StreamShared`] is the one cell the feed thread,
 //! the audio thread and the playback monitor all read, and the buffering indicator the UI shows is

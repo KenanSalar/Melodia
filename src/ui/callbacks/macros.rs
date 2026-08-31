@@ -33,7 +33,7 @@ macro_rules! spawn_logged_toast {
 
 /// Sync variant of `spawn_logged!` for `library::*` functions that are not `async`
 /// **and do no file I/O** — the transport calls, which take a `parking_lot::Mutex` and
-/// reach Rodio. Onto the runtime, so the UI thread isn't blocked. A `views.json` /
+/// reach the playback engine. Onto the runtime, so the UI thread isn't blocked. A `views.json` /
 /// `settings.json` write wants [`spawn_blocking_logged!`]; the pool is the difference
 /// and the two are not interchangeable.
 macro_rules! spawn_logged_sync {
@@ -72,7 +72,7 @@ macro_rules! spawn_blocking_logged {
 }
 
 /// Sync wire for `library::*` functions taking `&AppState`. Still hops onto the runtime
-/// so the UI thread doesn't stall on the callback body's lock and Rodio call.
+/// so the UI thread doesn't stall on the callback body's lock and engine call.
 macro_rules! wire_sync {
     ($target:expr, $method:ident, $state:expr, $label:literal, $libfn:path) => {{
         let s = $state.clone();

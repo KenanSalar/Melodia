@@ -135,7 +135,7 @@ pub fn execute_actions<B: PlayerBackend>(
 /// `execute_actions(...)` pair. `with_state_emit` alone keeps each *mutation*
 /// atomic, but the `execute_actions` that follows runs on whatever worker the
 /// caller is on; two batches from different tasks (e.g. the playback monitor's
-/// EOS-advance and a UI `Stop`) could otherwise interleave their rodio effects
+/// EOS-advance and a UI `Stop`) could otherwise interleave their side effects
 /// and leave state and backend disagreeing (a rare TOCTOU). Holding `exec_lock`
 /// across both halves closes that window.
 ///

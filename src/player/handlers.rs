@@ -92,7 +92,7 @@ pub fn evaluate_playing_tick(
     // A live source has no track end, which is the only thing the two decisions below are about:
     // a crossfade ramps between two tracks and a gapless preload stages the next one. The position
     // published above is elapsed listening time, since the silence the prebuffer emits while
-    // starved still advances rodio's tracker.
+    // starved still advances the deck's clock.
     if !state.source_allows(PlaybackSource::advances_queue) {
         return Some(PlayingTick {
             tick,
@@ -154,9 +154,9 @@ pub fn evaluate_playing_tick(
         // `build_end_of_stream_actions`' pause-at-track-end gate can catch.
         && !state.pause_after_current_track
         && state.duration_ms > 0
-        // Reject a stale position read from a deck rodio hasn't re-anchored yet
-        // (it only zeroes the tracked position when `clear()` actually removes a
-        // source).
+        // A deck reads 0 until it has been pulled for the source just started on
+        // it, and a track shorter than the lead would read its whole length as
+        // remaining and stage a preload on the spot.
         && state.position_ms > 0
         && state.position_ms <= state.duration_ms
         && state.duration_ms.saturating_sub(state.position_ms) < PRELOAD_LEAD_MS
@@ -314,7 +314,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                             actions.push(PlayerAction::UpdatePlayCount(track.id));
                         }
 
-                        // Advance queue — update state only (Rodio is already playing).
+                        // Advance queue — update state only (the deck is already playing).
                         // The next gapless preload is staged later, by the `Playing`
                         // branch, when this new current track approaches its own end.
                         if let Some(track) = state.queue.advance().cloned() {

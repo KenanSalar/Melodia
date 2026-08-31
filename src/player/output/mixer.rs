@@ -16,12 +16,6 @@ use super::super::audio::Sample;
 use super::convert::Shape;
 use super::deck::{Deck, DeckVoice};
 
-/// Device frames the scratch buffer is sized for up front.
-///
-/// Only a ceiling: a host asking for a longer block grows it once and keeps it. Comfortably past
-/// the ~50 ms period the output asks for, so in practice the growth never happens.
-const SCRATCH_FRAMES: usize = 8_192;
-
 /// Device frames every deck advances before any deck advances again.
 ///
 /// **This is what bounds a crossfade's overshoot.** The two ramps are armed together on the control
@@ -61,8 +55,8 @@ impl Mixer {
 pub struct MixerPull {
     voices: Box<[DeckVoice]>,
     device: Shape,
-    /// One deck's contribution before it is summed. Sized once; never grown on the audio thread
-    /// after the first block that needs it.
+    /// One deck's contribution before it is summed. Sized for a single [`LOCKSTEP_FRAMES`] step,
+    /// which is the longest slice a voice is ever handed, so the audio thread never grows it.
     scratch: Vec<Sample>,
 }
 
@@ -82,9 +76,6 @@ impl MixerPull {
         let out = &mut out[..whole];
 
         out.fill(0.0);
-        if self.scratch.len() < whole {
-            self.scratch.resize(whole, 0.0);
-        }
 
         for step in out.chunks_mut(LOCKSTEP_FRAMES * width) {
             let mut written = false;
@@ -118,7 +109,7 @@ pub fn pair(voices: usize, device: Shape) -> (Mixer, MixerPull) {
         MixerPull {
             voices: pulls.into_boxed_slice(),
             device,
-            scratch: vec![0.0; SCRATCH_FRAMES * width],
+            scratch: vec![0.0; LOCKSTEP_FRAMES * width],
         },
     )
 }

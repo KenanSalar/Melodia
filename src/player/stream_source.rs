@@ -7,7 +7,7 @@
 //!
 //! **Reconnect lives here rather than in the playback monitor.** The feed thread already holds the
 //! URL, the client and the ring, so when its decoder ends it re-opens and keeps filling the *same*
-//! ring: the rodio source never ends, the deck never blinks, and the state machine needs no
+//! ring: the source never ends, the deck never blinks, and the state machine needs no
 //! reconnect path at all. Only once the attempt budget is spent, or a server comes back with a
 //! format the already-appended source cannot carry, does the thread give up and let the deck
 //! drain — which the monitor reads as the end of the station.
@@ -675,8 +675,8 @@ fn feed_loop(mut ctx: FeedContext) {
                 ctx.decoder = opened.decoder;
             }
             Ok(_) => {
-                // The deck was told this source's channel count and rate when it was appended, and
-                // rodio has no way to renegotiate mid-source. Ending is what lets the station be
+                // The deck built its converter from this source's channel count and rate at the
+                // append, and cannot rebuild it mid-source. Ending is what lets the station be
                 // restarted cleanly from the top.
                 log::warn!("Radio stream returned in a different audio format; stopping");
                 ctx.shared.finish();

@@ -216,6 +216,35 @@ fn seeking_an_empty_deck_is_not_an_error() {
     assert!(deck.try_seek(Duration::from_secs(1)).is_ok());
 }
 
+/// A seek can land on a source that has just handed over its last frame, the block boundary only
+/// having to fall one frame short of the end. Told nothing, the converter ends that source again on
+/// its next advance and the deck drops the very track the seek had moved.
+///
+/// Driven through `DeckVoice::seek` rather than `Deck::try_seek` because the window is one frame
+/// wide and the public op blocks until a callback services it, which here would be the pull that
+/// closes the window.
+#[test]
+fn a_seek_keeps_a_source_that_had_just_reached_its_end() {
+    const FRAMES: usize = 4_410;
+
+    let (deck, mut voice) = pair(mono(RATE));
+    deck.append(TestSource::new(vec![0.5; FRAMES], 1, RATE));
+
+    // One short of the whole source, which leaves the converter holding its last frame with nothing
+    // behind it: drained, but not yet finished.
+    assert_eq!(pump(&mut voice, FRAMES - 1).len(), FRAMES - 1);
+    assert_eq!(deck.len(), 1, "the source must still be on the deck to be seekable");
+
+    voice.seek(Duration::ZERO);
+
+    assert_eq!(
+        pump(&mut voice, 64).len(),
+        64,
+        "the deck stopped at the pre-seek end of the source"
+    );
+    assert!(!deck.is_empty(), "the seek's own source was dropped");
+}
+
 /// The converter is built against the source's own shape, so a second source at a different rate
 /// gets its own rather than inheriting whatever the first one negotiated. This is the fault
 /// `tests/stream_rate.rs` covers end to end, asked at the level it now lives at.

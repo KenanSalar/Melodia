@@ -1,8 +1,8 @@
 //! Graphic-equalizer DSP — hand-rolled because rodio 0.22 ships only
 //! `low_pass` / `high_pass` BLT filters, no peaking ones.
 //!
-//! [`EqShared`] is the lock-free control state; [`EqSource`] is the rodio
-//! [`Source`] that reads it, one [`DirectForm1`] per band **per channel**.
+//! [`EqShared`] is the lock-free control state; [`EqSource`] is the
+//! [`AudioSource`] that reads it, one [`DirectForm1`] per band **per channel**.
 //! Per-channel state is the point — rodio's own `BltFilter` runs one state
 //! across interleaved channels and cross-contaminates them. `DirectForm1`
 //! rather than `DirectForm2Transposed` because its delay line stays valid
@@ -12,7 +12,7 @@
 //! per-track `ReplayGain` pre-gain (baked at construction, *before* the bands,
 //! so the limiter guards a boost for free), and the deck's crossfade ramp
 //! (*after* the limiter's clamp, so two overlapping decks can't sum past unity
-//! in rodio's unclamped mixer). Each is polled through its own generation
+//! in the unclamped mixer). Each is polled through its own generation
 //! counter. With all three inert the source is a bit-identical passthrough.
 
 use std::sync::Arc;
@@ -323,7 +323,7 @@ impl Limiter {
     }
 }
 
-/// A rodio source applying the shared graphic EQ **and `ReplayGain`** to its
+/// An [`AudioSource`] applying the shared graphic EQ **and `ReplayGain`** to its
 /// inner decoder — one per decoded track.
 ///
 /// The playing and gapless-preloaded tracks share the same [`EqShared`] /
@@ -416,8 +416,8 @@ impl<S: AudioSource> EqSource<S> {
         let banks = (0..channels)
             .map(|_| std::array::from_fn(|_| DirectForm1::<f32>::new(identity_coeffs())))
             .collect();
-        // Frames elapse at the per-channel rate, which is exactly what rodio's
-        // `sample_rate()` already reports — do NOT divide by the channel count,
+        // Frames elapse at the per-channel rate, which is exactly what
+        // `AudioSource::sample_rate()` already reports — do NOT divide by the channel count,
         // or the limiter runs that many times too fast and desyncs from the
         // biquads, which use the same value as their `fs`.
         let frame_rate = sample_rate;
@@ -648,7 +648,7 @@ impl<S: AudioSource> EqSource<S> {
 
     /// Bypass + fade: the EQ / `ReplayGain` stages are inert, so skip the frame
     /// machinery, but still clamp before the ramp — raw decoder output can
-    /// exceed full scale and rodio's mixer sums its voices unclamped.
+    /// exceed full scale and the mixer sums its voices unclamped.
     ///
     /// The ramp advances once per *frame*, so both channels share a gain;
     /// per-sample would shear the stereo image across the fade.
@@ -780,8 +780,9 @@ impl<S: AudioSource> AudioSource for EqSource<S> {
         self.limiter.reset();
         // What is left of the frame being handed out drains rather than being dropped, and
         // `frame_phase` is left alone for the same reason: those samples are ones the consumer is
-        // owed, and rodio's channel converter keeps its own phase across a seek. Drop them and
-        // every frame after this one is a channel out of step, for the rest of the track. The
+        // owed, and the deck's converter takes whole frames off this iterator and never re-syncs.
+        // Drop them and every frame after this one is a channel out of step, for the rest of the
+        // track. The
         // decoder puts the puller back on its channel so the two agree either way.
         Ok(())
     }

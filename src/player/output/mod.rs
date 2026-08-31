@@ -30,8 +30,9 @@ use self::mixer::Mixer;
 
 /// The open device and the decks feeding it.
 ///
-/// Field order is the drop order and it is load-bearing: the stream goes first, so the callback has
-/// stopped before the decks it pulls from are torn down.
+/// The stream goes first, which is what stops the callback: the voices it pulls live inside its own
+/// closure. Nothing dangles the other way round, a deck's two halves sharing one `Arc`, but a
+/// control op issued against a stopped callback waits out its whole timeout, so the order stays.
 pub struct AudioOutput {
     stream: DeviceStream,
     mixer: Mixer,

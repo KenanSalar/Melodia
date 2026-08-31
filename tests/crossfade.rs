@@ -31,14 +31,14 @@ const RATE: u32 = 44_100;
 const CHANNELS: u16 = 2;
 /// Half scale, so the clamp in `EqSource` can never mask a summing bug.
 const AMPLITUDE: f32 = 0.5;
-/// Long enough that rodio's fixed pipeline latency is a small fraction of the
-/// ramp. Also the shipped default.
+/// Long enough that the mixer's lockstep step is a small fraction of the ramp,
+/// which is what `SKEW` below is derived from. Also the shipped default.
 const FADE_MS: u64 = 2_000;
 
 /// Frames discarded before asserting on steady-state amplitude.
 ///
 /// A deck starts contributing on the first pull after its source is appended, so this is not
-/// waiting for the pipeline to fill the way it was under rodio. What it does cover is the ramp's
+/// waiting for the pipeline to fill the way it was under engine. What it does cover is the ramp's
 /// own first steps and the decoder's first packet, neither of which is steady state.
 const WARMUP_FRAMES: usize = (RATE as usize) / 10;
 
@@ -253,29 +253,29 @@ fn player() -> std::io::Result<(Arc<PlaybackEngine>, MixerPull)> {
     Ok((Arc::new(player), pull))
 }
 
-fn start(rodio: &PlaybackEngine, path: &str) {
-    let r = rodio.play_media(path, 1.0, 1.0, None, TrackReplayGain::default());
+fn start(engine: &PlaybackEngine, path: &str) {
+    let r = engine.play_media(path, 1.0, 1.0, None, TrackReplayGain::default());
     assert!(r.is_ok(), "play_media failed: {:?}", r.err());
 }
 
-fn crossfade_into(rodio: &PlaybackEngine, path: &str) {
-    let r = rodio.begin_crossfade(path, TrackReplayGain::default(), FADE_MS, 1.0, 1.0);
+fn crossfade_into(engine: &PlaybackEngine, path: &str) {
+    let r = engine.begin_crossfade(path, TrackReplayGain::default(), FADE_MS, 1.0, 1.0);
     assert!(r.is_ok(), "begin_crossfade failed: {:?}", r.err());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn crossfade_overlaps_two_decks_without_ever_clipping_the_mixer() -> std::io::Result<()> {
     let fx = fixture()?;
-    let (rodio, mut mix) = player()?;
-    start(&rodio, &fx.track_a);
+    let (engine, mut mix) = player()?;
+    start(&engine, &fx.track_a);
 
     // Deck A alone, at full amplitude.
     let solo = pull(&mut mix, WARMUP_FRAMES * 2);
     assert_holds_at(&solo[WARMUP_FRAMES..], AMPLITUDE, 1e-3, "deck A alone");
-    assert!(!rodio.is_crossfading());
+    assert!(!engine.is_crossfading());
 
-    crossfade_into(&rodio, &fx.track_b);
-    assert!(rodio.is_crossfading(), "the outgoing deck is still draining");
+    crossfade_into(&engine, &fx.track_b);
+    assert!(engine.is_crossfading(), "the outgoing deck is still draining");
 
     // Two correlated DC signals under complementary linear ramps must sum to a
     // constant: never above, the mixer not clamping, and never meaningfully below.
@@ -286,7 +286,7 @@ async fn crossfade_overlaps_two_decks_without_ever_clipping_the_mixer() -> std::
     // Past the ramp the outgoing deck has ended itself, which is the backend's
     // signal that the overlap is over.
     let after = pull(&mut mix, WARMUP_FRAMES * 2);
-    assert!(!rodio.is_crossfading(), "outgoing deck must drain when its ramp lands");
+    assert!(!engine.is_crossfading(), "outgoing deck must drain when its ramp lands");
     assert_holds_at(&after[WARMUP_FRAMES..], AMPLITUDE, 1e-3, "deck B alone");
 
     Ok(())
@@ -298,20 +298,20 @@ async fn the_visualizer_tap_reads_the_mix_not_the_two_decks_interleaved() -> std
     const WINDOW: usize = 2_048;
 
     let fx = fixture()?;
-    let (rodio, mut mix) = player()?;
+    let (engine, mut mix) = player()?;
     // The backend's own spelling; the Now-Playing view reaches the same cell
     // through `visualizer()`, one line down.
-    rodio.set_visualizer_enabled(true);
-    let viz = rodio.visualizer();
+    engine.set_visualizer_enabled(true);
+    let viz = engine.visualizer();
     let mut window = vec![0.0; WINDOW];
 
-    start(&rodio, &fx.track_a);
+    start(&engine, &fx.track_a);
     pull(&mut mix, WARMUP_FRAMES * 2);
 
     viz.snapshot(&mut window);
     assert_holds_at(&window, AMPLITUDE, 1e-3, "one deck playing");
 
-    crossfade_into(&rodio, &fx.track_b);
+    crossfade_into(&engine, &fx.track_b);
     // A quarter of the way in, so the two ramps are far apart.
     pull(&mut mix, frames_for_ms(FADE_MS / 4));
     viz.snapshot(&mut window);
@@ -324,7 +324,7 @@ async fn the_visualizer_tap_reads_the_mix_not_the_two_decks_interleaved() -> std
     // The handover: the outgoing ramp lands, its source ends and releases the
     // ring, and the survivor carries the window alone.
     pull(&mut mix, frames_for_ms(FADE_MS) + WARMUP_FRAMES * 2);
-    assert!(!rodio.is_crossfading(), "outgoing deck must drain when its ramp lands");
+    assert!(!engine.is_crossfading(), "outgoing deck must drain when its ramp lands");
     viz.snapshot(&mut window);
     assert_holds_at(&window, AMPLITUDE, 1e-3, "after the overlap");
 
@@ -334,20 +334,20 @@ async fn the_visualizer_tap_reads_the_mix_not_the_two_decks_interleaved() -> std
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn seeking_mid_crossfade_drops_the_outgoing_deck_and_restores_unity() -> std::io::Result<()> {
     let fx = fixture()?;
-    let (rodio, mut mix) = player()?;
-    start(&rodio, &fx.track_a);
+    let (engine, mut mix) = player()?;
+    start(&engine, &fx.track_a);
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
-    crossfade_into(&rodio, &fx.track_b);
+    crossfade_into(&engine, &fx.track_b);
 
     // Land mid-overlap, where the incoming deck sits at ~half gain.
     let _ = pull(&mut mix, frames_for_ms(FADE_MS) / 2);
 
     // `seek` clears the live outgoing deck and seeks the survivor; both calls
     // block on the audio thread, which is us.
-    let r = rodio.clone();
+    let r = engine.clone();
     drive_until(&mut mix, move || r.seek(0));
-    assert!(!rodio.is_crossfading(), "a seek must abort the crossfade");
+    assert!(!engine.is_crossfading(), "a seek must abort the crossfade");
 
     // The survivor ramps back to unity from its partial fade-in gain. Had the
     // abort left it stranded, this would sit low.
@@ -358,9 +358,9 @@ async fn seeking_mid_crossfade_drops_the_outgoing_deck_and_restores_unity() -> s
 }
 
 /// A demuxer seek lands on a packet boundary, so the decoder resumes at the start of a frame —
-/// but rodio's `ChannelCountConverter` keeps its own phase and nothing resets it across a seek. If
-/// anything in the chain hands back a different number of samples than it owed, every frame after
-/// that straddles two source frames and the stereo image is swapped for the rest of the track.
+/// but the deck's converter takes whole frames off the source and never re-syncs. If anything in
+/// the chain hands back a different number of samples than it owed, every frame after that
+/// straddles two source frames and the stereo image is swapped for the rest of the track.
 ///
 /// Only the mixer can see it. Below the converter every sample is correct and in order, which is
 /// why a unit test on either stage passes either way — the same argument `tests/stream_rate.rs`
@@ -368,8 +368,8 @@ async fn seeking_mid_crossfade_drops_the_outgoing_deck_and_restores_unity() -> s
 ///
 /// Distinct per-channel amplitudes are the whole fixture: the DC pair the other cases use carries
 /// one value in both channels, where a swap is invisible. Several seeks rather than one because
-/// `periodic_access` fires every 441 samples at this rate — an odd number, so the mid-frame
-/// landing that triggers it is roughly every other seek.
+/// only a landing part way through a frame leaves anything owed, and the targets below are spread
+/// so they are not all the same parity.
 fn assert_seeking_keeps_the_image(eq_on: bool) -> std::io::Result<()> {
     const LEFT: f32 = 0.5;
     const RIGHT: f32 = 0.25;
@@ -384,19 +384,19 @@ fn assert_seeking_keeps_the_image(eq_on: bool) -> std::io::Result<()> {
     write_dc_wav(&wav, 6, LEFT, RIGHT)?;
     let path = wav.to_string_lossy().into_owned();
 
-    let (rodio, mut mix) = player()?;
+    let (engine, mut mix) = player()?;
     if eq_on {
-        rodio.set_eq_enabled(true);
-        rodio.set_eq_band(BAND, 6.0);
+        engine.set_eq_enabled(true);
+        engine.set_eq_band(BAND, 6.0);
     }
-    start(&rodio, &path);
+    start(&engine, &path);
     pull_lenient(&mut mix, WARMUP_FRAMES);
 
     for step in 0..SEEKS {
         // Spread across a frame's worth of sample offsets, so the landings are not all the same
         // parity. Well inside the six-second fixture.
         let position_ms = 500 + step * 37;
-        let r = rodio.clone();
+        let r = engine.clone();
         drive_until(&mut mix, move || r.seek(position_ms));
         pull_lenient(&mut mix, WARMUP_FRAMES);
 
@@ -433,20 +433,20 @@ async fn a_manual_crossfade_also_holds_the_amplitude() -> std::io::Result<()> {
     // With `crossfade_manual` on, `play_media` fades rather than cuts. It clears
     // the *idle* target deck first, which doesn't block.
     let fx = fixture()?;
-    let (rodio, mut mix) = player()?;
-    rodio.set_crossfade_enabled(true);
-    rodio.set_crossfade_manual(true);
-    rodio.set_crossfade_duration_ms(u32::try_from(FADE_MS).unwrap_or(2_000));
+    let (engine, mut mix) = player()?;
+    engine.set_crossfade_enabled(true);
+    engine.set_crossfade_manual(true);
+    engine.set_crossfade_duration_ms(u32::try_from(FADE_MS).unwrap_or(2_000));
 
-    start(&rodio, &fx.track_a);
+    start(&engine, &fx.track_a);
     let solo = pull(&mut mix, WARMUP_FRAMES * 2);
     assert_holds_at(&solo[WARMUP_FRAMES..], AMPLITUDE, 1e-3, "deck A alone");
 
     // Now a "manual next" onto the other deck.
-    let r = rodio.clone();
+    let r = engine.clone();
     let path = fx.track_b.clone();
     drive_until(&mut mix, move || start(&r, &path));
-    assert!(rodio.is_crossfading(), "a manual track change must fade, not cut");
+    assert!(engine.is_crossfading(), "a manual track change must fade, not cut");
 
     let during = pull(&mut mix, frames_for_ms(FADE_MS));
     assert_no_clipping(&during, "manual crossfade");
@@ -467,13 +467,13 @@ async fn a_plain_play_is_transparent() -> std::io::Result<()> {
     // adapter sits in the way, so compare against the decoded PCM value rather
     // than bit-for-bit.
     let fx = fixture()?;
-    let (rodio, mut mix) = player()?;
-    start(&rodio, &fx.track_a);
+    let (engine, mut mix) = player()?;
+    start(&engine, &fx.track_a);
 
     let out = pull(&mut mix, WARMUP_FRAMES * 2);
     let expected = f32::from(pcm_sample(AMPLITUDE)) / 32_768.0;
     assert_holds_at(&out[WARMUP_FRAMES..], expected, 1e-6, "bypass passthrough");
-    assert!(!rodio.is_crossfading());
+    assert!(!engine.is_crossfading());
     Ok(())
 }
 
@@ -484,23 +484,23 @@ async fn stopping_a_paused_deck_clears_it_immediately() -> std::io::Result<()> {
     // pulled, so a ramp armed on it never advances. Deferring the clear behind
     // it would leave the decks loaded while the UI already reads Stopped.
     let fx = fixture()?;
-    let (rodio, mut mix) = player()?;
-    start(&rodio, &fx.track_a);
+    let (engine, mut mix) = player()?;
+    start(&engine, &fx.track_a);
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
     // `pause()` is the immediate one, so the deck is genuinely paused with no
     // deferred op pending — the state under test. Flush the boundary so what
     // follows runs against steady silence.
-    rodio.pause();
+    engine.pause();
     pull_lenient(&mut mix, WARMUP_FRAMES);
 
-    let stopper = Arc::clone(&rodio);
+    let stopper = Arc::clone(&engine);
     drive_until(&mut mix, move || {
         stopper.stop_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
     });
 
     assert_eq!(
-        rodio.check_playback_state(),
+        engine.check_playback_state(),
         melodia::player::backend::PlaybackCheck::EndOfStream,
         "the decks must be cleared by the time `stop_with_fade` returns, not \
          behind a deferred clear waiting on a ramp that can never advance"
@@ -515,16 +515,16 @@ async fn a_zero_length_pause_fade_silences_the_deck_at_once() -> std::io::Result
     // fade there would ramp the freshly-started track down from full volume
     // rather than pausing it, making its first quarter-second audible.
     let fx = fixture()?;
-    let (rodio, mut mix) = player()?;
+    let (engine, mut mix) = player()?;
     // Fade-on-pause ON, so the length passed in is the only thing that can make
     // this immediate — the backend must not reach for the setting itself.
-    rodio.set_crossfade_fade_on_pause(true);
-    start(&rodio, &fx.track_a);
+    engine.set_crossfade_fade_on_pause(true);
+    start(&engine, &fx.track_a);
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
-    rodio.pause_with_fade(0);
-    // A pause lands through rodio's `periodic_access` hook, so flush a generous
-    // window first.
+    engine.pause_with_fade(0);
+    // The pause is serviced on the next pull rather than at the call, so flush a
+    // generous window first.
     pull_lenient(&mut mix, frames_for_ms(20));
 
     // Well inside a `PAUSE_FADE_MS` ramp, which would still be near full volume
@@ -547,15 +547,15 @@ async fn stopping_with_a_gapless_track_staged_clears_both_decks_at_once() -> std
     // clears only the *idle* deck, and strands the staged source behind an
     // outgoing track armed to self-end.
     let fx = fixture()?;
-    let (rodio, mut mix) = player()?;
-    rodio.set_crossfade_fade_on_pause(true);
-    start(&rodio, &fx.track_a);
+    let (engine, mut mix) = player()?;
+    engine.set_crossfade_fade_on_pause(true);
+    start(&engine, &fx.track_a);
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
-    rodio.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
-    assert!(rodio.is_gapless_preloaded(), "the next track must really be staged");
+    engine.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
+    assert!(engine.is_gapless_preloaded(), "the next track must really be staged");
 
-    let stopper = Arc::clone(&rodio);
+    let stopper = Arc::clone(&engine);
     drive_until(&mut mix, move || {
         stopper.stop_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
     });
@@ -565,12 +565,12 @@ async fn stopping_with_a_gapless_track_staged_clears_both_decks_at_once() -> std
     // Clearing `gapless_pending` alone leaves the deck two sources deep and
     // still reporting `Playing`.
     assert_eq!(
-        rodio.check_playback_state(),
+        engine.check_playback_state(),
         melodia::player::backend::PlaybackCheck::EndOfStream,
         "both decks — staged source included — must be cleared by the time \
          `stop_with_fade` returns, not behind a deferred clear"
     );
-    assert!(!rodio.is_gapless_preloaded(), "and the flag must agree");
+    assert!(!engine.is_gapless_preloaded(), "and the flag must agree");
     Ok(())
 }
 
@@ -580,15 +580,15 @@ async fn pausing_with_a_gapless_track_staged_is_immediate() -> std::io::Result<(
     // deck at zero gain while the outgoing source drains into the staged one,
     // which then inherits the ramp and burns its own first quarter-second.
     let fx = fixture()?;
-    let (rodio, mut mix) = player()?;
-    rodio.set_crossfade_fade_on_pause(true);
-    start(&rodio, &fx.track_a);
+    let (engine, mut mix) = player()?;
+    engine.set_crossfade_fade_on_pause(true);
+    start(&engine, &fx.track_a);
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
-    rodio.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
-    assert!(rodio.is_gapless_preloaded(), "the next track must really be staged");
+    engine.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
+    assert!(engine.is_gapless_preloaded(), "the next track must really be staged");
 
-    rodio.pause_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
+    engine.pause_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
     pull_lenient(&mut mix, frames_for_ms(20));
 
     // A ramp would still be near full volume this early, so silence is the tell.
@@ -597,7 +597,7 @@ async fn pausing_with_a_gapless_track_staged_is_immediate() -> std::io::Result<(
 
     // A pause keeps the deck contents, so the staged source and the flag must
     // both survive it.
-    assert!(rodio.is_gapless_preloaded(), "a pause must not discard the staged source");
+    assert!(engine.is_gapless_preloaded(), "a pause must not discard the staged source");
     Ok(())
 }
 
@@ -612,16 +612,16 @@ async fn a_deferred_clear_takes_a_late_preload_with_it() -> std::io::Result<()> 
     // flag set over empty decks reads as a `GaplessTransition` that never
     // happened and advances the queue out of a stopped player.
     let fx = fixture()?;
-    let (rodio, mut mix) = player()?;
-    rodio.set_crossfade_fade_on_pause(true);
-    start(&rodio, &fx.track_a);
+    let (engine, mut mix) = player()?;
+    engine.set_crossfade_fade_on_pause(true);
+    start(&engine, &fx.track_a);
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
     // Nothing staged yet, so the fade is allowed and the clear really defers.
-    rodio.stop_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
-    rodio.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
+    engine.stop_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
+    engine.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
     assert!(
-        rodio.is_gapless_preloaded(),
+        engine.is_gapless_preloaded(),
         "a preload past the epoch bump must still be able to stage — that is the \
          window under test"
     );
@@ -630,10 +630,10 @@ async fn a_deferred_clear_takes_a_late_preload_with_it() -> std::io::Result<()> 
     // lock, which the deferred task holds while `Player::clear()` waits on the
     // audio thread — this one — so reaching for it here deadlocks the test. The
     // flag is stored *after* the clear for the same reason.
-    pull_until(&mut mix, "the deferred clear never landed", || !rodio.is_gapless_preloaded());
+    pull_until(&mut mix, "the deferred clear never landed", || !engine.is_gapless_preloaded());
 
     assert_eq!(
-        rodio.check_playback_state(),
+        engine.check_playback_state(),
         melodia::player::backend::PlaybackCheck::EndOfStream,
         "the deferred clear must empty both decks, staged source included"
     );
@@ -653,22 +653,22 @@ async fn a_preload_that_outlives_the_stop_it_raced_is_refused() -> std::io::Resu
     // reads is the post-bump one either way, which is why the epoch cannot be
     // what catches this.
     let fx = fixture()?;
-    let (rodio, mut mix) = player()?;
-    start(&rodio, &fx.track_a);
+    let (engine, mut mix) = player()?;
+    start(&engine, &fx.track_a);
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
     // `stop()` clears a live deck, so it blocks on the audio thread — us.
-    let stopper = Arc::clone(&rodio);
+    let stopper = Arc::clone(&engine);
     drive_until(&mut mix, move || stopper.stop());
 
-    rodio.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
+    engine.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
 
     assert!(
-        !rodio.is_gapless_preloaded(),
+        !engine.is_gapless_preloaded(),
         "a preload behind an emptied deck must be refused, not staged"
     );
     assert_eq!(
-        rodio.check_playback_state(),
+        engine.check_playback_state(),
         melodia::player::backend::PlaybackCheck::EndOfStream,
         "and the decks must stay empty — a source staged here would read as a \
          `GaplessTransition` off a stopped player"

@@ -163,7 +163,7 @@ impl PlayerBackend for PlaybackEngine {
     }
 }
 
-/// Result of checking the Rodio player queue in a single lock acquisition.
+/// Result of checking what is on the active deck in a single lock acquisition.
 #[derive(Debug, PartialEq)]
 pub enum PlaybackCheck {
     /// Queue depth dropped from 2 to 1 — the staged source took over.
@@ -188,8 +188,8 @@ pub fn evaluate_playback_check(
 }
 
 pub struct PlaybackEngine {
-    // The mutex is what makes a multi-op sequence atomic (rodio's `Player` is
-    // already Send+Sync); `Arc` so a deferred pause/stop can hold the decks
+    // The mutex is what makes a multi-op sequence atomic (a `Deck` is already
+    // Send+Sync on its own); `Arc` so a deferred pause/stop can hold the decks
     // after its sleep.
     decks: Arc<std::sync::Mutex<Decks>>,
     // `Arc` because the deferred clear of a faded stop must drop this flag
@@ -389,8 +389,9 @@ impl PlaybackEngine {
 
     /// Playback speed while a station plays.
     ///
-    /// rodio implements speed by reporting a multiplied sample rate upward, which against a source
-    /// arriving at a fixed real-time rate drifts the ring until it starves. Pinned rather than
+    /// Speed is a ratio on the deck's converter, so anything but 1.0 consumes the source faster or
+    /// slower than real time, and a mount arriving at exactly that rate starves or overruns its
+    /// ring. Pinned rather than
     /// merely ignored, so what the deck runs at and what the transport claims stay the same
     /// number — [`super::state::PlayerState::build_station_connecting_actions`] resets the state
     /// side to match.
@@ -738,7 +739,7 @@ impl PlaybackEngine {
     }
 
     /// Stage the next track *behind* the current one on the **active** deck, so
-    /// rodio's queue plays them back-to-back. Mutually exclusive with a
+    /// the deck sequences them back-to-back. Mutually exclusive with a
     /// crossfade for a given transition — see `crossfade::crossfade_eligible`.
     pub fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
         let Some(path) = file_path else {

@@ -17,7 +17,7 @@ export struct SleepPreset {
 }
 
 export global SpeedPresets {
-    // Capped at the player's 2×: rodio's speed change shifts pitch with it, and past that it's
+    // Capped at the player's 2×: the deck resamples naively so pitch shifts with it, and past that it's
     // chipmunk territory. Mirror any change in `current-speed-label()`.
     out property <[SpeedPreset]> list: [
         { value: 0.25, label: "0.25x" },

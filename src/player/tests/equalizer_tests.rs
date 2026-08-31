@@ -439,7 +439,7 @@ fn a_fade_in_climbs_to_unity_and_restores_the_bypass() {
 
 #[test]
 fn complementary_ramps_on_two_decks_never_sum_past_unity() {
-    // The property that keeps rodio's unclamped mixer safe. Both "decks" run a
+    // The property that keeps the unclamped mixer safe. Both "decks" run a
     // full-scale signal; their summed output must stay inside full scale.
     let out_fade = FadeShared::idle();
     out_fade.arm(None, 0.0, 200, true);
@@ -475,7 +475,7 @@ fn a_fade_advances_once_per_frame_not_once_per_sample() {
 #[test]
 fn the_fade_engages_the_clamp_on_a_bypassed_hot_source() {
     // Raw decoder output can exceed full scale. In the bypass path the fade
-    // must still clamp before scaling, or two overlapping decks feeding rodio's
+    // must still clamp before scaling, or two overlapping decks feeding the
     // unclamped mixer could sum past unity.
     let fade = FadeShared::idle();
     fade.arm(Some(1.0), 1.0, 1_000, false);
@@ -534,7 +534,7 @@ fn enabling_the_eq_mid_frame_still_ends_the_source_on_a_frame_boundary() {
     // wide frame at a time, so if it were allowed to start from that odd offset
     // every frame it formed would be off by one — and the self-ending fade-out
     // below would then end the source *between* the two channels of a frame,
-    // flipping that deck's channel parity in rodio's mixer for every track
+    // flipping that deck's channel parity in the mixer for every track
     // appended to it afterwards. The generation poll only fires at phase 0, so
     // the switch waits for the next real boundary.
     let fade = FadeShared::idle();

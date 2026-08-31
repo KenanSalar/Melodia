@@ -7,6 +7,13 @@
 //! every config the device reports, in cpal's own preference order, taking the first that opens and
 //! reporting the *original* failure if none do.
 //!
+//! **The block size is one of the things a rung varies, not a constant across them.** rodio asked
+//! for a fixed block only on its first attempt: its retry rungs rebuilt the config from scratch and
+//! dropped the request with it, so a host that took the config and refused `BufferSize::Fixed`
+//! still opened. Carrying one size down every rung loses that, and `Fixed` is the least portable
+//! thing in this file — on ALSA it names a *period*, checked against a range reported for the whole
+//! buffer. So the walk runs twice, [`TARGET_BUFFER`] first and the host's own choice behind it.
+//!
 //! It also has to survive CI, where there is no sound card and `.github/actions/headless-audio`
 //! points ALSA's default PCM at the userspace `null` device. A stricter open than this one makes
 //! `tests/headless.rs` fail looking like a scan bug.
@@ -74,19 +81,22 @@ where
         .default_output_config()
         .map_err(|e| AppError::Player(format!("Failed to read the output device's config: {e}")))?;
 
-    let first = match attempt(&device, &default, &mut build, error_callback.clone()) {
-        Ok(opened) => return Ok(opened),
-        Err(e) => e,
-    };
-
-    for candidate in ladder(&device)? {
-        if let Ok(opened) = attempt(&device, &candidate, &mut build, error_callback.clone()) {
-            return Ok(opened);
+    let mut first = None;
+    for buffer in [Buffer::Target, Buffer::HostChoice] {
+        // The device's own config leads each pass: it is the likeliest to open, and on the second
+        // pass it has not been tried at that block size at all.
+        for candidate in std::iter::once(default.clone()).chain(ladder(&device)?) {
+            match attempt(&device, &candidate, buffer, &mut build, error_callback.clone()) {
+                Ok(opened) => return Ok(opened),
+                Err(e) => {
+                    first.get_or_insert(e);
+                }
+            }
         }
     }
-    // The first failure, not the last: it is the one about the config the device itself named, and
-    // the rest are about configs nobody asked for.
-    Err(first)
+    // The first failure, not the last: it is the one about the config the device itself named at the
+    // block we wanted, and the rest are about configs and sizes nobody asked for.
+    Err(first.unwrap_or_else(|| AppError::Player("The output device offered no config".to_owned())))
 }
 
 /// Every config the device reports, best first, each at its top rate, then 44.1 kHz where that is
@@ -118,6 +128,7 @@ fn ladder(
 fn attempt<T, E, B>(
     device: &cpal::Device,
     supported: &cpal::SupportedStreamConfig,
+    buffer: Buffer,
     build: &mut B,
     error_callback: E,
 ) -> Result<(DeviceStream, T), AppError>
@@ -131,7 +142,7 @@ where
     let (kept, pull) = build(shape);
 
     let mut config = supported.config();
-    config.buffer_size = cpal::BufferSize::Fixed(buffer_frames(supported));
+    config.buffer_size = buffer.size(supported);
 
     let format = supported.sample_format();
     let stream = build_stream(device, &config, format, pull, error_callback)?;
@@ -155,12 +166,33 @@ fn shape_of(supported: &cpal::SupportedStreamConfig) -> Option<Shape> {
     })
 }
 
+/// What one rung asks the host to hand the callback at a time.
+#[derive(Clone, Copy)]
+enum Buffer {
+    /// [`TARGET_BUFFER`], which is what we actually want.
+    Target,
+    /// Whatever the host picks, which for some hosts is the only answer they take.
+    HostChoice,
+}
+
+impl Buffer {
+    fn size(self, supported: &cpal::SupportedStreamConfig) -> cpal::BufferSize {
+        match self {
+            Self::Target => cpal::BufferSize::Fixed(target_frames(supported)),
+            Self::HostChoice => cpal::BufferSize::Default,
+        }
+    }
+}
+
 /// [`TARGET_BUFFER`] in frames, held inside whatever range the device reports.
-fn buffer_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
+///
+/// `max` then `min` rather than `clamp`, which asserts its two bounds are the right way round: the
+/// pair comes straight off a driver, and one reporting them backwards would panic the boot.
+fn target_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
     let target = u128::from(supported.sample_rate()) * TARGET_BUFFER.as_millis() / 1_000;
     let target = cpal::FrameCount::try_from(target).unwrap_or(cpal::FrameCount::MAX);
     match supported.buffer_size() {
-        cpal::SupportedBufferSize::Range { min, max } => target.clamp(*min, *max),
+        cpal::SupportedBufferSize::Range { min, max } => target.max(*min).min(*max),
         cpal::SupportedBufferSize::Unknown => target,
     }
 }
@@ -191,15 +223,20 @@ where
         };
     }
 
+    // Every variant cpal 0.17 has, which is what rodio covered. The 24-bit pair is the one worth
+    // naming: cpal's own config ordering ranks it, and a card offering nothing else would otherwise
+    // fail every rung of the ladder and take the boot with it.
     arms! {
         F32 => f32,
         F64 => f64,
         I8 => i8,
         I16 => i16,
+        I24 => cpal::I24,
         I32 => i32,
         I64 => i64,
         U8 => u8,
         U16 => u16,
+        U24 => cpal::U24,
         U32 => u32,
         U64 => u64,
     }

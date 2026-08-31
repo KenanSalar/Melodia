@@ -359,10 +359,10 @@ impl AppState {
     }
 }
 
-/// Seed the Rodio backend's lock-free cells (graphic EQ, `ReplayGain`,
+/// Seed the playback engine's lock-free cells (graphic EQ, `ReplayGain`,
 /// crossfade) from persisted settings before playback starts, so the first
 /// track is already processed when any of them is enabled. All three live on
-/// the Rodio backend (not `PlayerState`). Ordering is deliberate: values first,
+/// the engine (not `PlayerState`). Ordering is deliberate: values first,
 /// `enabled` last, so the enable's generation bump publishes a fully-seeded
 /// state to the audio thread.
 fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData) {
