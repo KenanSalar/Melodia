@@ -19,7 +19,6 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures_util::StreamExt;
 use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
 use reqwest::Url;
 use rodio::{ChannelCount, SampleRate};
@@ -74,7 +73,7 @@ const ABANDON_POLL: Duration = Duration::from_millis(100);
 const PLAYLIST_TIMEOUT: Duration = Duration::from_secs(15);
 /// How much of a playlist body to read before refusing it. A `.pls` or `.m3u` pointing at a
 /// station is a few hundred bytes; anything past this is not the document we were promised.
-const PLAYLIST_MAX_BYTES: usize = 64 * 1024;
+const PLAYLIST_MAX_BYTES: u64 = 64 * 1024;
 /// URL extensions that mean "this is a pointer, not audio".
 const PLAYLIST_EXTENSIONS: [&str; 4] = ["pls", "m3u", "m3u8", "asx"];
 /// Response content types that mean the same, for the mounts that carry no extension.
@@ -515,22 +514,12 @@ pub(super) async fn fetch_capped(client: &reqwest::Client, url: &Url) -> Result<
             response.status().as_u16()
         )));
     }
-    if response.content_length().is_some_and(|len| len > PLAYLIST_MAX_BYTES as u64) {
+    if response.content_length().is_some_and(|len| len > PLAYLIST_MAX_BYTES) {
         return Err(AppError::network_msg("Station playlist is larger than a playlist should be"));
     }
 
-    let mut body = Vec::with_capacity(1024);
-    let mut chunks = response.bytes_stream();
-    while let Some(chunk) = chunks.next().await {
-        let chunk =
-            chunk.map_err(|e| AppError::network("Could not read the station's playlist", e))?;
-        if body.len() + chunk.len() > PLAYLIST_MAX_BYTES {
-            return Err(AppError::network_msg(
-                "Station playlist is larger than a playlist should be",
-            ));
-        }
-        body.extend_from_slice(&chunk);
-    }
+    let body =
+        crate::services::read_capped(response, "Station playlist", PLAYLIST_MAX_BYTES).await?;
     Ok(String::from_utf8_lossy(&body).into_owned())
 }
 
@@ -598,9 +587,10 @@ fn quoted_href(line: &str) -> Option<&str> {
     inner.split(quote).next()
 }
 
+/// Whether a playlist line is a URL worth following. A bare `http://` parses as a scheme and names
+/// no host, so it is not one — returning it hands the deck an address that cannot open.
 fn is_http_url(candidate: &str) -> bool {
-    let lower = candidate.to_ascii_lowercase();
-    lower.starts_with("http://") || lower.starts_with("https://")
+    crate::services::http_url(candidate).is_some()
 }
 
 /// How long to wait before reconnect attempt `attempt`, or `None` once the budget is spent.

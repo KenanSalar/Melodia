@@ -199,6 +199,18 @@ export global RadioForm {
 
     callback submit();
 
+    // What Enter means in any of the form's six fields, stated once. Each field used to spell its
+    // own guard and two spellings grew: the URL and name fields required a URL, the four override
+    // fields did not — correct on a directory-owned station, which draws no URL field, and wrong
+    // on the add form, where Enter from the genre field attempted a submit that could not succeed.
+    // A `public function` rather than a callback, per `reset` above: a callback has one handler
+    // slot and Rust claims it.
+    public function submit-if-ready() {
+        if (!root.busy && (root.directory-owned || root.url != "")) {
+            root.submit();
+        }
+    }
+
     // The edit dialog's chrome. Resolved here rather than written from Rust for the reason every
     // string on this side is: `@tr` folds msgids at codegen, so a sentence Rust pushed would
     // render untranslated. The *add* dialog opens from `views/radio/tab-pills.slint`, where the

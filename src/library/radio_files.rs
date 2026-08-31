@@ -254,21 +254,26 @@ async fn apply_overrides(db: &DbPool, id: i64, overrides: &radio::StationOverrid
     }
 }
 
-/// Read one `#MELODIA-*:` line into `pending`, answering whether the line was one.
+/// The four `#MELODIA-*:` tags and the field each carries, **read and written off this one
+/// table**.
 ///
-/// The four are collected rather than matched one at a time so a fifth is a row in the table
-/// rather than a fifth arm to keep parallel with [`serialize`]'s own loop.
+/// It used to be two — a list of `&mut` slots for the reader, a list of `local_*` reads for the
+/// writer — so the "a fifth is a row in the table" this file already claimed was a fifth row in
+/// two tables, either of which could be the one that forgets it. `radio::OverrideField` exists to
+/// give the two halves a single name per field.
+const OVERRIDE_TAGS: [(&str, radio::OverrideField); 4] = [
+    (WEBSITE_TAG, radio::OverrideField::Website),
+    (LOGO_TAG, radio::OverrideField::LogoUrl),
+    (GENRE_TAG, radio::OverrideField::Genre),
+    (COUNTRY_TAG, radio::OverrideField::Country),
+];
+
+/// Read one `#MELODIA-*:` line into `pending`, answering whether the line was one.
 fn take_override_tag(line: &str, pending: &mut radio::StationOverrides) -> bool {
-    let slots: [(&str, &mut Option<String>); 4] = [
-        (WEBSITE_TAG, &mut pending.website),
-        (LOGO_TAG, &mut pending.logo_url),
-        (GENRE_TAG, &mut pending.genre),
-        (COUNTRY_TAG, &mut pending.country),
-    ];
-    for (tag, slot) in slots {
+    for (tag, field) in OVERRIDE_TAGS {
         if let Some(rest) = line.strip_prefix(tag) {
             let rest = rest.trim();
-            *slot = (!rest.is_empty()).then(|| rest.to_owned());
+            *pending.slot_mut(field) = (!rest.is_empty()).then(|| rest.to_owned());
             return true;
         }
     }
@@ -318,16 +323,12 @@ fn serialize(stations: &[radio::RadioStation]) -> String {
             out.push_str(&snapshot);
             out.push('\n');
         }
-        // The user's own columns, and only ever from the `local_*` half: the block above is the
-        // directory's account of the station and this is the user's answer to what it left blank,
-        // so folding the resolved value into either would spell one station out of both.
-        for (tag, value) in [
-            (WEBSITE_TAG, station.local_homepage.as_deref()),
-            (LOGO_TAG, station.local_favicon_url.as_deref()),
-            (GENRE_TAG, station.local_tags.as_deref()),
-            (COUNTRY_TAG, station.local_country.as_deref()),
-        ] {
-            if let Some(value) = value.filter(|text| !text.is_empty()) {
+        // The user's own columns, and only ever from the `local_*` half — which is what
+        // `local_override` answers and `website()` and its siblings deliberately do not: the block
+        // above is the directory's account of the station and this is the user's answer to what it
+        // left blank, so folding the resolved value into either would spell one station out of both.
+        for (tag, field) in OVERRIDE_TAGS {
+            if let Some(value) = station.local_override(field).filter(|text| !text.is_empty()) {
                 out.push_str(tag);
                 out.push_str(&one_line(value));
                 out.push('\n');
@@ -427,11 +428,12 @@ fn indexed_key(key: &str, prefix: &str) -> Option<u32> {
     index.parse().ok()
 }
 
-/// Whether `value` is an absolute `http`/`https` URL. The scheme check is the whole filter: a
-/// `file://` line in a playlist somebody sent you is not a station.
+/// Whether `value` is an absolute `http`/`https` URL naming a host. A `file://` line in a playlist
+/// somebody sent you is not a station, and neither is a bare `http://` — this feeds
+/// [`StationEntry::url`] and on into the table, so it is the strictest of the reasons to parse
+/// rather than test a prefix.
 fn is_http_url(value: &str) -> bool {
-    let lowered = value.to_ascii_lowercase();
-    lowered.starts_with("http://") || lowered.starts_with("https://")
+    crate::services::http_url(value).is_some()
 }
 
 #[cfg(test)]

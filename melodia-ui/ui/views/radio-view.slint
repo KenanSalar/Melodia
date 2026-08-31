@@ -1,3 +1,4 @@
+import { Theme } from "../theme.slint";
 import { Radio } from "../globals/radio.slint";
 import { NavEnterFrom } from "../globals/nav.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
@@ -169,7 +170,7 @@ export component RadioView inherits Rectangle {
             tile-bg: @linear-gradient(135deg,
                 Radio.detail-station.tile_color_1,
                 Radio.detail-station.tile_color_2);
-            tile-icon-color: #ffffff.transparentize(0.1);
+            tile-icon-color: Theme.tile-ink;
             // The detail tier decodes at source size rather than to a fixed target, so the
             // logo's own pixel count *is* its 1:1 size here, read at one device pixel per point.
             // A favicon too small to stretch across a 232 px banner at 1× is too small at 2×, so

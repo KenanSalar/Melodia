@@ -27,7 +27,7 @@ use crate::ui::row_match::{self, Needle};
 use crate::{AppWindow, Radio, RadioSuggestionRow};
 
 use super::facets::{self, ChipFilter, FacetIndex};
-use super::{RadioTab, RadioUi, browse, tab_from_index};
+use super::{RadioTab, RadioUi, browse, mounted_tab};
 
 /// How many pills the row shows. It sits above the grid on one line and does not wrap, so this is
 /// what the line holds rather than a relevance judgement.
@@ -217,7 +217,7 @@ pub(super) fn refresh(ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
 /// over it. The other two tabs filter rows already in hand, where the needle is not a query and
 /// there is no second field to offer.
 fn offers_scopes(g: &Radio<'_>) -> bool {
-    !g.get_detail_open() && tab_from_index(g, g.get_tab_idx()) == RadioTab::Browse
+    !g.get_detail_open() && mounted_tab(g) == RadioTab::Browse
 }
 
 fn to_row(g: &Radio<'_>, suggestion: &Suggestion) -> RadioSuggestionRow {

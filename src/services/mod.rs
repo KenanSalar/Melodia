@@ -97,6 +97,48 @@ pub(crate) fn build_http_client() -> reqwest::Client {
         })
 }
 
+/// `candidate` as an absolute `http`/`https` URL that names a host, or `None`.
+///
+/// **The parse is the check, and that is the whole point.** A `starts_with("http://")` test admits
+/// the bare scheme, which names nothing and is not a fetch anything can make — two of the four
+/// spellings this replaced did exactly that, and one of them was on the station-import path, so a
+/// line reading `http://` became a row. It also gets case for free, `Url` lowercasing the scheme
+/// where a prefix test has to remember to.
+///
+/// Everything that takes a URL from outside the app goes through here: a station's website field,
+/// its logo URL, and the lines of a `.pls`/`.m3u`/`.asx` pointer.
+pub(crate) fn http_url(candidate: &str) -> Option<reqwest::Url> {
+    let parsed = reqwest::Url::parse(candidate.trim()).ok()?;
+    (matches!(parsed.scheme(), "http" | "https") && parsed.has_host()).then_some(parsed)
+}
+
+/// Read at most `max_bytes` of `response`, refusing as soon as the body crosses the cap.
+///
+/// **Streamed rather than `bytes()`-ed**, and that is the whole point: a `Content-Length` check
+/// ahead of the call is a courtesy a host can omit or lie about, so a cap enforced only after
+/// `bytes()` has returned has already allocated whatever was sent. Every bounded fetch in the tree
+/// goes through this — a station logo, a station's site document, a station playlist, an HLS
+/// segment and a Deezer artist image — each with its own `max_bytes` and its own `what`, which
+/// names the thing in the error so a refusal points at the right half of a two-request fetch.
+pub(crate) async fn read_capped(
+    response: reqwest::Response,
+    what: &str,
+    max_bytes: u64,
+) -> Result<Vec<u8>, AppError> {
+    use futures_util::StreamExt;
+
+    let mut body = Vec::new();
+    let mut chunks = response.bytes_stream();
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.map_err(|e| AppError::network(format!("{what} could not be read"), e))?;
+        if body.len().saturating_add(chunk.len()) as u64 > max_bytes {
+            return Err(AppError::network_msg(format!("{what} is larger than {max_bytes} bytes")));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
 /// [`write_json_atomic_sync`]'s plain-text sibling, for M3U export. Bytes go out verbatim — the
 /// caller owns line endings and the trailing newline.
 pub fn write_text_atomic_sync(path: &Path, text: &str) -> AppResult<()> {

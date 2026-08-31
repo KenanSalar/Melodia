@@ -37,6 +37,14 @@ pub fn tab_from_index(g: &Radio<'_>, idx: i32) -> RadioTab {
     }
 }
 
+/// The tab currently mounted, which is [`tab_from_index`] asked about the global's own index.
+///
+/// Its own function because that pairing is the question six call sites actually have, and spelled
+/// out it invites reading one global twice in the same expression — which one of them did.
+pub fn mounted_tab(g: &Radio<'_>) -> RadioTab {
+    tab_from_index(g, g.get_tab_idx())
+}
+
 /// Whether the page is the section on screen — the wire-time seed for [`super::RadioUi`]'s
 /// `section` shadow. Deliberately blind to the tab: the page mounts one gate for all three.
 pub fn section_is_up(ui: &AppWindow) -> bool {

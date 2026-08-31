@@ -84,14 +84,19 @@ fn an_unset_limit_is_measured_against_the_default_page_size() {
     assert!(!page_from(full_page(default - 1), 0).has_more);
 }
 
-/// Where this module may be named, relative to [`SRC_DIR`]: the declaration and
-/// the facade.
+/// Where this module may be named, relative to [`SRC_DIR`]: its own declaration.
 ///
-/// A file-level allowlist rather than the per-file *counts*
-/// `services::tests::mod_tests` pins `current_exe` with. There a second call in
-/// an exempt file is itself the regression; here the facade is meant to grow one
-/// per surface Phase 6 onwards adds.
-const CALLERS: [&str; 2] = ["services/mod.rs", "library/radio.rs"];
+/// An allowlist rather than the per-file *counts* `services::tests::mod_tests` pins `current_exe`
+/// with. There a second call in an exempt file is itself the regression; here the facade is meant
+/// to grow one per surface it gains.
+const CALLER_DECL: &str = "services/mod.rs";
+
+/// The facade, as a prefix rather than a file list.
+///
+/// It is a directory now and three of its files reach the directory client. Listing them would
+/// cost an edit per submodule, and a listed name that moves pre-authorises whatever takes its
+/// path next — [`OWN_TREE`]'s argument, from the other side of the same wall.
+const CALLER_TREE: &str = "library/radio/";
 
 /// This module's own tree. A prefix rather than a file list, so a fourth source
 /// beside the three needs no edit.
@@ -114,14 +119,17 @@ fn only_the_radio_facade_reaches_the_directory_client() {
     const NEEDLE: &str = "radio_browser";
 
     let mut reaching = Vec::new();
-    let mut callers_seen = Vec::new();
+    let mut declaration_seen = false;
+    let mut facade_files = 0usize;
 
     for (path, src) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
         if path.starts_with(OWN_TREE) || !src.contains(NEEDLE) {
             continue;
         }
-        if CALLERS.contains(&path.as_str()) {
-            callers_seen.push(path);
+        if path == CALLER_DECL {
+            declaration_seen = true;
+        } else if path.starts_with(CALLER_TREE) {
+            facade_files += 1;
         } else {
             reaching.push(path);
         }
@@ -132,10 +140,14 @@ fn only_the_radio_facade_reaches_the_directory_client() {
         "{reaching:?} name `{NEEDLE}` directly. Go through `library::radio`, which is where \
          the setting that turns radio off is enforced"
     );
-    assert_eq!(
-        callers_seen.len(),
-        CALLERS.len(),
-        "CALLERS names {CALLERS:?} but the walk only reached {callers_seen:?}. A moved or \
-         renamed entry pre-authorises whatever takes its path next"
+    assert!(
+        declaration_seen,
+        "`{CALLER_DECL}` no longer names `{NEEDLE}`, so a moved declaration has pre-authorised \
+         whatever takes its path next"
+    );
+    assert!(
+        facade_files > 0,
+        "no file under `{CALLER_TREE}` names `{NEEDLE}`, so the facade has stopped being the door \
+         and this walk is passing over an empty set"
     );
 }

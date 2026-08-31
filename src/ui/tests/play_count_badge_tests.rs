@@ -1,9 +1,12 @@
-//! Source pins for the play-count badge and its four mounts.
+//! Source pins for the play-count badge and the cards that carry it.
 //!
-//! The badge is one leaf drawn by two unrelated cards, and every way it goes wrong is a way that
-//! reviews clean: a host re-rolling the pill looks like ordinary markup, a mount opting every card
-//! into it looks like a simplification, and the corner it shares on a station card only collides on
-//! a row almost nobody has.
+//! Every way it goes wrong is a way that reviews clean: a host re-rolling the pill looks like
+//! ordinary markup, a mount opting every card into it looks like a simplification, and the corner
+//! it shares on a station card only collides on a row almost nobody has.
+//!
+//! The badge has **one** mount now that a station card is an `EntityCard` host, so what a station
+//! card owes is the count rather than the markup — and a dropped `play-count:` line is silent,
+//! which is what the second assertion below is for.
 
 use crate::test_support::strip_line_comments;
 
@@ -23,16 +26,30 @@ const CARDS: [(&str, &str); 2] = [
 const PILL_MARKUP: &str = "border-color: Theme.surface2";
 
 #[test]
-fn both_cards_mount_the_shared_badge_rather_than_drawing_their_own() {
+fn the_badge_has_one_mount_and_the_station_card_feeds_it() {
+    let entity = strip_line_comments(ENTITY_CARD);
+    assert!(
+        entity.contains("PlayCountBadge {"),
+        "`entity-card.slint` must mount `PlayCountBadge` — it is the one mount, and both grids \
+         and station cards reach the badge through it"
+    );
+
+    let station = strip_line_comments(STATION_CARD);
+    assert!(
+        !station.contains("PlayCountBadge {"),
+        "`station-card.slint` mounts the badge a second time — it hosts an `EntityCard`, which \
+         already draws one, so the two would stack in the same corner"
+    );
+    assert!(
+        station.contains("play-count: root.play-count;"),
+        "`station-card.slint` must hand its count to the `EntityCard` it hosts — dropping the \
+         line leaves the badge at the default zero, where the leaf hides itself and Recently \
+         Played silently stops showing plays"
+    );
+
     for (name, source) in CARDS {
-        let code = strip_line_comments(source);
         assert!(
-            code.contains("PlayCountBadge {"),
-            "`{name}` must mount `PlayCountBadge` — a card that draws the pill itself is the \
-             second copy the leaf exists to prevent"
-        );
-        assert!(
-            !code.contains(PILL_MARKUP),
+            !strip_line_comments(source).contains(PILL_MARKUP),
             "`{name}` spells the pill's own chrome — the badge is `grid/play-count-badge.slint` \
              and a host may only mount it"
         );

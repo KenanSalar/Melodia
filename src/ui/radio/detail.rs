@@ -33,7 +33,7 @@ use crate::ui::track_list_view::view_id;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, NavEnterFrom, Radio, RadioStationRow};
 
-use super::tabs::{RadioTab, section_is_up, tab_from_index};
+use super::tabs::{RadioTab, mounted_tab, section_is_up};
 use super::{RadioUi, browse, kept, rows};
 
 // `apply_detail_artwork` — the cover and hero-blur write. `artwork_only` because this detail's
@@ -141,11 +141,6 @@ const VOTES_UNKNOWN: i32 = -1;
 
 /// `Radio.detail-tab` with no station page on the mounted tab.
 pub const NO_SEAT: i32 = -1;
-
-/// Which tab's page is painted right now.
-fn mounted_tab(g: &Radio<'_>) -> RadioTab {
-    tab_from_index(g, g.get_tab_idx())
-}
 
 /// The station a page was opened for, from whichever side had it.
 ///

@@ -3,7 +3,6 @@
 use std::io::{self, Read, Seek, SeekFrom};
 use std::time::Duration;
 
-use futures_util::StreamExt;
 use reqwest::Url;
 use tokio::sync::mpsc;
 
@@ -28,7 +27,7 @@ const SEGMENT_QUEUE_DEPTH: usize = 4;
 
 /// Ceiling on one segment. Generous next to the few seconds of audio a station sends, because the
 /// point is to refuse a mount serving something else entirely rather than to size a buffer.
-const SEGMENT_MAX_BYTES: usize = 4 * 1024 * 1024;
+const SEGMENT_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const SEGMENT_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Consecutive playlist failures before the stream is given up on.
@@ -328,18 +327,5 @@ async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, A
         )));
     }
 
-    let mut body = Vec::with_capacity(64 * 1024);
-    let mut chunks = response.bytes_stream();
-    while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.map_err(|e| {
-            AppError::network("Could not read a segment of the station's stream", e)
-        })?;
-        if body.len() + chunk.len() > SEGMENT_MAX_BYTES {
-            return Err(AppError::network_msg(
-                "Station segment is larger than a segment should be",
-            ));
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
+    crate::services::read_capped(response, "Station segment", SEGMENT_MAX_BYTES).await
 }

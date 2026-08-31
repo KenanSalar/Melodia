@@ -9,7 +9,7 @@ use slint::ComponentHandle;
 
 use crate::state::AppState;
 use crate::ui::grid_prewarm;
-use crate::ui::radio::{RadioTab, RadioUi, browse, kept, tab_from_index};
+use crate::ui::radio::{RadioTab, RadioUi, browse, kept, mounted_tab};
 use crate::{AppWindow, Radio};
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
@@ -24,7 +24,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         let weak = weak.clone();
         g.on_columns_changed(move |_| {
             let Some(ui) = weak.upgrade() else { return };
-            match tab_from_index(&ui.global::<Radio>(), ui.global::<Radio>().get_tab_idx()) {
+            match mounted_tab(&ui.global::<Radio>()) {
                 RadioTab::Browse => browse::apply(&ui, &ru),
                 tab => kept::apply(&ui, &ru, tab),
             }

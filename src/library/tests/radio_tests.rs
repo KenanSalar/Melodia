@@ -3,10 +3,46 @@ use std::sync::Arc;
 use crate::entities::radio::{DirectoryStation, Facet, FacetKind, RadioStation, StationPage};
 use crate::error::AppError;
 
-use super::{
-    ensure_editable, hide_segmented, hide_segmented_codecs, is_listed, names_segmented,
-    resolve_station_name, website_url,
-};
+use super::authoring::{ensure_editable, resolve_station_name, website_url};
+use super::directory::{hide_segmented, hide_segmented_codecs, names_segmented};
+use super::is_listed;
+
+/// Every file the facade is made of, concatenated, with line comments stripped.
+///
+/// **Read off the directory rather than named**, which is what makes the walks below cover a
+/// submodule nobody has written yet. The facade was one file when they were written and a split
+/// that re-anchored them onto `mod.rs` alone would have left four fifths of it unmeasured — a
+/// refactor that looks like an improvement and quietly disables a check.
+fn facade_source() -> String {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src/library/radio");
+    let mut entries: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
+        .collect();
+    assert!(
+        !entries.is_empty(),
+        "`src/library/radio/` holds no Rust files, so this walk reads nothing"
+    );
+    // Sorted so a failure names the same offset run to run.
+    entries.sort();
+
+    let mut source = String::new();
+    let mut read = 0usize;
+    for path in &entries {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            source.push_str(&crate::test_support::strip_line_comments(&text));
+            source.push('\n');
+            read += 1;
+        }
+    }
+    // Counted rather than skipped: a file that fails to read leaves the walks below measuring less
+    // than they claim to, which is the exact failure this helper exists to prevent.
+    assert_eq!(read, entries.len(), "every file under `src/library/radio/` has to be readable");
+    source
+}
 
 /// One directory row, segmented or not. Spelled out rather than defaulted: `DirectoryStation` has
 /// no `Default`, a station with no uuid and no URL being one nothing may keep.
@@ -77,7 +113,7 @@ fn leaving_them_shown_changes_nothing() {
 /// and it is legible from the text.
 #[test]
 fn a_station_that_cannot_be_reached_is_still_counted_as_played() {
-    let source = include_str!("../radio.rs");
+    let source = facade_source();
     let body = source
         .split_once("pub async fn play_station")
         .and_then(|(_, rest)| rest.split_once("\n}\n"))
@@ -342,8 +378,7 @@ fn a_station_takes_the_best_name_on_offer() {
 /// tree has no network tests.
 #[test]
 fn every_outbound_call_takes_its_client_from_behind_the_switch() {
-    const FACADE: &str = include_str!("../radio.rs");
-    let src = crate::test_support::strip_line_comments(FACADE);
+    let src = facade_source();
 
     // Receiver-agnostic: counting `state.http_client()` would leave a reach spelled off any other
     // binding uncounted, which is the one thing this test is for.

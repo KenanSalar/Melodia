@@ -1,6 +1,6 @@
 use crate::database::queries::scan::to_natural_sort_key;
 use crate::database::{DbPool, chunked_in_query};
-use crate::entities::radio;
+use crate::entities::radio::{self, StoredLogoAnswer};
 use crate::error::AppError;
 
 /// The columns [`save_station`] writes, in bind order.
@@ -255,16 +255,6 @@ pub async fn set_artwork(db: &DbPool, id: i64, artwork_path: Option<&str>) -> Re
         .execute(db.write())
         .await?;
     Ok(())
-}
-
-/// What an earlier session's attempt at one logo URL left behind.
-#[derive(Debug, Clone, sqlx::FromRow)]
-pub struct StoredLogoAnswer {
-    pub favicon_url: String,
-    /// The stored file, or `None` where the URL answered with nothing.
-    pub artwork_path: Option<String>,
-    /// When this URL may be asked again. `None` on a hit.
-    pub retry_after: Option<String>,
 }
 
 /// What is already known about each of `favicon_urls`.

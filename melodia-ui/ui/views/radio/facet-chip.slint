@@ -4,6 +4,7 @@ import { RadioFacetRow } from "../../models.slint";
 import { FocusLossWatcher } from "../../components/focus-loss-watcher.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { PopupHighlight } from "../../globals/shell.slint";
 import { PopupSurface } from "../../components/popup-surface.slint";
 import { SearchBar } from "../../components/search-bar.slint";
 
@@ -84,7 +85,15 @@ export component FacetChip inherits Rectangle {
     callback picked(int /*kind*/, string /*name*/, string /*code*/);
     callback cleared(int /*kind*/);
 
+    // What this chip writes into `PopupHighlight.id` before `show()`, per `globals/shell.slint`'s
+    // contract. A per-mount string rather than something derived from `kind`, so the five chips in
+    // the strip cannot cross-talk.
+    in property <string> popup-id;
+
     property <bool> is-set: root.value != "";
+    // The `!= ""` half is `MenuSurface`'s: every close path clears the global back to `""`, which
+    // is also this property's default, so a mount that forgot it would read as permanently open.
+    property <bool> popup-open: root.popup-id != "" && PopupHighlight.id == root.popup-id;
     // Spelled once because the filter box's slot is this number less the surface's padding, and a
     // hand-derived second copy is what left the box floating in a gutter.
     property <length> popup-w: 320px;
@@ -100,9 +109,11 @@ export component FacetChip inherits Rectangle {
     chip := Rectangle {
         height: 100%;
         border-radius: self.height / 2;
+        // `has-hover` goes false the moment the picker takes input, so an open chip reads its own
+        // highlight off the global instead: without it the fill drops out from under the pointer.
         background: root.is-set
             ? Theme.accent
-            : (touch.has-hover ? Theme.surface2 : Theme.surface1);
+            : (touch.has-hover || root.popup-open ? Theme.surface2 : Theme.surface1);
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
         HorizontalLayout {
@@ -137,6 +148,7 @@ export component FacetChip inherits Rectangle {
                     root.cleared(root.kind);
                 } else {
                     root.opened(root.kind);
+                    PopupHighlight.id = root.popup-id;
                     popup.show();
                 }
             }
@@ -159,8 +171,10 @@ export component FacetChip inherits Rectangle {
         // The rows need their own handlers to run before it closes, so they close it themselves.
         close-policy: close-on-click-outside;
 
-        FocusLossWatcher {
-            close => { popup.close(); }
+        // Live only while this is the open picker: five chips are mounted whenever Browse is up,
+        // and an ungated watcher is five of them against one popup.
+        if root.popup-open: FocusLossWatcher {
+            close => { popup.close(); PopupHighlight.id = ""; }
         }
 
         PopupSurface {
@@ -214,6 +228,7 @@ export component FacetChip inherits Rectangle {
                             clicked => {
                                 root.picked(root.kind, option.name, option.code);
                                 popup.close();
+                                PopupHighlight.id = "";
                             }
                         }
                     }

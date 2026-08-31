@@ -89,3 +89,33 @@ pub fn announce_warm(ui: &AppWindow) {
     let g = ui.global::<Radio>();
     g.set_covers_generation(g.get_covers_generation().saturating_add(1));
 }
+
+/// Decode `paths` off the UI thread, then run `then` and announce the tier on the UI thread.
+///
+/// Both fill paths owe this exact pair and each had its own copy. The decode goes to
+/// `spawn_blocking` because it is a decode; the announce has to be back on the UI thread and has
+/// to re-check `section_active`, since a leave landing after the prewarm returned has handed the
+/// buffers back and bumping the generation over an emptied tier is what the gate exists to stop.
+/// A `JoinError` reads the same as a released tier: we do not know, so we do not announce.
+///
+/// `then` is whatever the caller owes on that same tick — Browse repaints its grid when a logo
+/// landed, the kept tabs owe nothing — and runs whether or not the tier survived, being about the
+/// rows rather than about the decode.
+pub async fn warm_and_announce(
+    radio_ui: &std::sync::Arc<RadioUi>,
+    weak: &slint::Weak<AppWindow>,
+    paths: Vec<String>,
+    then: impl FnOnce(&AppWindow) + Send + 'static,
+) {
+    let warming = radio_ui.clone();
+    let warmed =
+        tokio::task::spawn_blocking(move || prewarm(&warming, &paths)).await.unwrap_or(false);
+
+    let announcing = radio_ui.clone();
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        then(&ui);
+        if warmed && announcing.section_active() {
+            announce_warm(&ui);
+        }
+    });
+}
