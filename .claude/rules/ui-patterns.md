@@ -143,10 +143,11 @@ silently miss the other.
   line-box pitfall) and hides itself at a count of zero, so no host restates the suppression.
 
 - **A card's hover controls are the *host's*, through `EntityCard`'s `@children` overlay slot** —
-  the Playlists CRUD trio and Radio's five both. `show-overlay-actions` opens the slot and gates
+  the Playlists CRUD trio and Radio's four both. `show-overlay-actions` opens the slot and gates
   nothing else: it named a set of buttons the card drew *and* the slot once, so the second host to
   raise it got three controls it had no callbacks for, on its own corners. The host owes
-  `overlay-hovered` back (the card's `touch` goes false under a higher-z button) and must frame its
+  `overlay-hovered` back for every control it owns, the star outside the slot included (the card's
+  `touch` goes false under any higher-z button), and must frame its
   controls off the published `tile-size` rather than `parent`, which in that slot is not what it
   reads as — `slint-pitfalls.md` argues why. A control that stays up while the card is idle is not
   a hover affordance: it goes *beside* the card on `IconButton.fade`, as the station star does,

@@ -44,7 +44,9 @@ export component EntityCard inherits Rectangle {
     // which every other host raising the flag then drew on top of its own controls.
     in property <bool> show-overlay-actions: false;
 
-    // Hover on a control the *host* put in the overlay slot, OR'd into `card-hovered` below.
+    // Hover on any control the *host* owns, OR'd into `card-hovered` below. Usually the ones in
+    // the overlay slot, but not only: a station card folds in its star too, which sits beside the
+    // card and takes the pointer off `touch` just the same.
     // A component cannot read `has-hover` off its `@children`, so the host that named those
     // buttons is the only thing that can answer, and without the answer the fill and the zoom
     // drop out while the pointer is on one of them.

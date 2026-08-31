@@ -51,6 +51,11 @@ static MIRROR: OnceCell<String> = OnceCell::const_new();
 /// ten-second connect timeout and still transfer a facet list behind it.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Ceiling on a directory answer. The widest of them is the full country or language facet list,
+/// which is thousands of short objects; a station page is `PAGE_SIZE` rows and nowhere near it.
+/// Generous because a mirror is free to add fields, bounded because a mirror is a third party.
+const DIRECTORY_MAX_BYTES: u64 = 16 * 1024 * 1024;
+
 /// Search the directory.
 pub async fn search(
     client: &reqwest::Client,
@@ -291,9 +296,14 @@ async fn get_json<T: serde::de::DeserializeOwned>(
         )));
     }
 
-    response
-        .json::<T>()
-        .await
+    let body = crate::services::read_capped(
+        response,
+        &format!("Radio directory {what}"),
+        DIRECTORY_MAX_BYTES,
+    )
+    .await?;
+
+    serde_json::from_slice(&body)
         .map_err(|e| AppError::network(format!("Failed to parse radio directory {what}"), e))
 }
 

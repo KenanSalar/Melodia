@@ -112,19 +112,22 @@ pub(crate) fn http_url(candidate: &str) -> Option<reqwest::Url> {
     (matches!(parsed.scheme(), "http" | "https") && parsed.has_host()).then_some(parsed)
 }
 
-/// Ceiling on the capacity a `Content-Length` may claim before a byte has arrived. High enough that
-/// the bodies read here land in one allocation, low enough that a host overstating its length buys
-/// a page or two rather than the caller's whole cap.
+/// Ceiling on the capacity a `Content-Length` may claim before a byte has arrived. High enough to
+/// skip the cheap end of the growth chain on every body here, low enough that a host overstating
+/// its length buys one hint rather than the caller's whole cap, which for the largest of them is
+/// two orders of magnitude more.
 const READ_HINT_MAX_BYTES: u64 = 64 * 1024;
 
 /// Read at most `max_bytes` of `response`, refusing as soon as the body crosses the cap.
 ///
 /// **Streamed rather than `bytes()`-ed**, and that is the whole point: a `Content-Length` check
 /// ahead of the call is a courtesy a host can omit or lie about, so a cap enforced only after
-/// `bytes()` has returned has already allocated whatever was sent. Every bounded fetch in the tree
-/// goes through this — a station logo, a station's site document, a station playlist, an HLS
-/// segment and a Deezer artist image — each with its own `max_bytes` and its own `what`, which
-/// names the thing in the error so a refusal points at the right half of a two-request fetch.
+/// `bytes()` has returned has already allocated whatever was sent. **Every response body in the
+/// tree is read here**, the updater's streamed-to-disk download aside, and a `.json::<T>()` is not
+/// the exemption it looks like: it allocates the whole body before serde sees a byte, so a typed
+/// decode bounds the *shape* and nothing about the size. Each caller brings its own `max_bytes` and
+/// its own `what`, which names the thing in the error so a refusal points at the right half of a
+/// two-request fetch.
 pub(crate) async fn read_capped(
     response: reqwest::Response,
     what: &str,
@@ -133,8 +136,9 @@ pub(crate) async fn read_capped(
     use futures_util::StreamExt;
 
     // The same header the cap deliberately doesn't trust is still a fine allocation hint, clamped
-    // by [`READ_HINT_MAX_BYTES`] because it is a claim. An HLS segment arrives every few seconds
-    // and ran up a doubling chain of copies from zero without it.
+    // by [`READ_HINT_MAX_BYTES`] because it is a claim. It buys the reallocations up to the clamp,
+    // not the ones past it: a body larger than the hint still grows the rest of the way, which for
+    // an HLS segment arriving every few seconds is the point worth being honest about.
     let hint = response.content_length().unwrap_or(0).min(max_bytes).min(READ_HINT_MAX_BYTES);
     let mut body = Vec::with_capacity(usize::try_from(hint).unwrap_or(0));
     let mut chunks = response.bytes_stream();

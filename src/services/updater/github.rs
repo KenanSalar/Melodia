@@ -29,6 +29,15 @@ const LATEST_JSON_URL: &str =
 const LATEST_JSON_SIG_URL: &str =
     "https://github.com/KenanSalar/Melodia/releases/latest/download/latest.json.minisig";
 
+/// Ceiling on the manifest body. Room for many times the release
+/// matrix it describes, and still a bound: the signature is checked
+/// *after* the download, so an unbounded read here would allocate
+/// whatever the CDN in front of the release served.
+const MANIFEST_MAX_BYTES: u64 = 256 * 1024;
+
+/// A minisign blob is two comment lines and a base64 signature.
+const SIGNATURE_MAX_BYTES: u64 = 8 * 1024;
+
 #[derive(Debug)]
 pub enum FetchOutcome {
     NotModified,
@@ -75,8 +84,7 @@ pub async fn fetch_latest_manifest(
     }
 
     let etag = resp.headers().get(ETAG).and_then(|v| v.to_str().ok()).map(str::to_owned);
-    let body =
-        resp.bytes().await.map_err(|e| AppError::network("read latest.json body failed", e))?;
+    let body = crate::services::read_capped(resp, "latest.json", MANIFEST_MAX_BYTES).await?;
 
     // Fetch the sibling .minisig. A missing or non-200 response is
     // treated as a verification failure — we'd rather refuse to install
@@ -96,10 +104,9 @@ pub async fn fetch_latest_manifest(
             sig_resp.status()
         )));
     }
-    let sig_text = sig_resp
-        .text()
-        .await
-        .map_err(|e| AppError::network("read latest.json.minisig body failed", e))?;
+    let sig_bytes =
+        crate::services::read_capped(sig_resp, "latest.json.minisig", SIGNATURE_MAX_BYTES).await?;
+    let sig_text = String::from_utf8_lossy(&sig_bytes);
 
     let pubkey = minisign::embedded_pubkey()
         .map_err(|e| AppError::Validation(format!("embedded updater pubkey is invalid: {e}")))?;

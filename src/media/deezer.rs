@@ -95,6 +95,10 @@ fn classify<T: serde::de::DeserializeOwned>(
         .map_err(|e| AppError::network(format!("Failed to parse {what}"), e))
 }
 
+/// Ceiling on a search body. A page of results is a few kilobytes and the caller
+/// only ever reads the first entry, so the cap is slack rather than a budget.
+const MAX_SEARCH_BYTES: u64 = 512 * 1024;
+
 /// Read and classify a search response.
 async fn decode_search<T: serde::de::DeserializeOwned>(
     response: reqwest::Response,
@@ -105,10 +109,7 @@ async fn decode_search<T: serde::de::DeserializeOwned>(
         return Ok(DeezerAnswer::HttpStatus(status));
     }
 
-    let body = response
-        .bytes()
-        .await
-        .map_err(|e| AppError::network(format!("Failed to read {what}"), e))?;
+    let body = crate::services::read_capped(response, what, MAX_SEARCH_BYTES).await?;
 
     classify(&body, what)
 }
