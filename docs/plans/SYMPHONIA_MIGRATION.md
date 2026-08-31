@@ -3,8 +3,40 @@
 Working doc. Background and shape for replacing rodio entirely. Delete it when the migration
 ships.
 
-Status: **accepted, not started** · Issue:
+Status: **Phase 1 done, Phase 2 not started** · Issue:
 [#79](https://github.com/KenanSalar/Melodia/issues/79) · Created: 2026-08-20
+
+> **Phase 1 shipped**, so the tree now compiles one Symphonia and rodio is cut to `playback`.
+> Everything below about *two* majors is history rather than description; what is still live is
+> Phase 2 ([#90](https://github.com/KenanSalar/Melodia/issues/90)) and the prior art for it.
+> Six things the work found that this doc had wrong or did not know:
+>
+> 1. **`Track::num_frames` is the wrong field for a duration** and `Track::duration` alone is not
+>    enough either. Upstream's own note says to present `duration`; Matroska sets neither on the
+>    track and puts the segment's on `MediaInfo`. termusic uses `num_frames` exclusively and would
+>    read a `.mka` as 0:00. All three sources are needed.
+> 2. **Neither reference player implements the frame-accurate seek trim.** `symphonia-play` says so
+>    in its own comment ("This is a half-baked approach to seeking!") and termusic seeks `Coarse`
+>    and skips whole packets. rodio's `refine_position` was the only frame-accurate one of the
+>    three, and reproducing it was the real work of the seek.
+> 3. **HE-AAC was not the only file that would have stopped playing.** 0.6's PCM decoder added a
+>    width check that `symphonia-format-caf` contradicts, so every A-law `.caf` fails to build a
+>    decoder where 0.5 played it. `decode::drop_companded_sample_width` is the answer, and the
+>    fixture walk in `file_decode`'s tests is what found it.
+> 4. **The feature list had to widen to the union** of what stations serve and what the library
+>    ingests, which retires this doc's "a format nothing streams is only another way to guess
+>    wrong" — true under 0.5's marker match, moot under 0.6's scoring.
+> 5. **"Gapless trimming, which turns out to be free" below is half right.** The flag does default
+>    on, but only the MP3 and Vorbis decoders act on it in 0.6.1, and `symphonia-format-isomp4`
+>    fills in neither the packet trims nor `Track::delay`/`padding`, so an iTunes `.m4a` keeps its
+>    encoder delay. Nothing regressed: 0.5 gated the same two demuxers, and MP3 improved, since 0.6
+>    emits its trims unconditionally. Trimming AAC delay is a feature to write, not a switch, and
+>    belongs in its own issue rather than in #89's acceptance.
+> 6. **`refine_position` was not the only thing the seek had to keep.** rodio's decoder also puts
+>    the consumer back on the channel it was part way through, because rodio's channel converter
+>    holds its own phase across a seek and nothing resets it. Without that the stereo image swaps
+>    for the rest of the track, on roughly every other seek, and only the mixer can see it —
+>    `tests/crossfade.rs::seeking_never_swaps_the_stereo_image` is what pins it.
 
 > Every upstream fact below was verified **2026-08-20** against the pinned sources in the
 > cargo registry and this tree's `Cargo.lock`. Versions move. Re-check the appendix before
@@ -367,11 +399,15 @@ Four things in that decoder are worth taking as findings rather than rediscoveri
   same conclusion the span bug above forced on us, independently.
 - **The audio track is chosen defensively.** `default_track(TrackType::Audio)` can return a
   track whose codec is null, so they filter it and fall back to the first non null one, citing
-  Symphonia issue #258. **`player::stream_decode` does not do this today**, which is a small
-  latent bug worth fixing whether or not the migration happens.
+  Symphonia issue #258. `player::stream_decode` already does this through `names_a_codec`; the
+  file decoder owes the same guard rather than trusting `default_track`.
 - **The decoder is reset selectively after a seek**, only for MP3, citing Symphonia issue
-  #274, because resetting misbehaves for some containers. That contradicts the blanket "always
-  reset after seeking" advice in `.claude/rules/rodio-symphonia.md`.
+  #274. **This one was followed and then walked back**: #274 reports MP3 seeks popping and
+  says the fault is *not* seen with MKA/Vorbis or M4A/AAC, so it argues for resetting MP3 and
+  says nothing about a reset harming anything else. In 0.6.1 AAC and Vorbis clear an overlap-add
+  buffer on reset and FLAC/ALAC/PCM/ADPCM document theirs as no-ops, so the selective version
+  costs the two codecs that need it most and saves nothing. `player::file_decode` resets
+  unconditionally, as rodio and rox do.
 - **They build their own `CodecRegistry`** in a `LazyLock`: `CodecRegistry::new()`,
   `register_enabled_codecs`, then `register_audio_decoder::<OpusDecoder>()` behind a feature.
   That is precisely the Opus route in `docs/plans/OPUS_SUPPORT.md`, working in production.
@@ -422,11 +458,11 @@ the work.
    so the clock has to come from what the output callback consumed, not from what the decoder
    produced. This is the change most likely to be subtly wrong and least likely to fail a
    test.
-2. **Seek, and which decoders may be reset.** The standing advice is to reset the decoder
-   after every seek, and it is not universally safe: resetting after a seek misbehaves for
-   some containers, which is why a working implementation resets only for MP3 and cites
-   Symphonia issue #274. Pair the seek with the head trim that drops frames between the
-   packet landing and the requested position, or every seek replays the tail before it.
+2. **Seek.** Reset the decoder after every one: the codecs that keep no state say so in their
+   own `reset`, and AAC and Vorbis hold an overlap-add buffer that blends the audio either side
+   of the jump if it is skipped. Pair the seek with the head trim that drops frames between the
+   packet landing and the requested position, or every seek replays the tail before it, and
+   clamp the target short of a stated length rather than onto it.
 3. **Crossfade amplitude.** The mixer must stay unclamped, because the complementary linear
    ramps summing to unity is what keeps it from clipping. `tests/crossfade.rs` already pins
    this against a device free mixer and should keep passing across both phases.
@@ -497,7 +533,9 @@ today, so **CUE does not depend on this migration** and should not be sequenced 
 | termusic is MIT | its root `Cargo.toml`, `license = "MIT"` |
 | Their decoder names a finite span | `playback/src/backends/rusty/decoder/mod.rs`, `current_span_len` returns `Some(self.buffer.frame_len)` |
 | `default_track` can return a null codec | same file, filtered with `is_codec_null` and a fallback, citing [Symphonia issue #258](https://github.com/pdeljanov/Symphonia/issues/258) |
-| Decoder reset after seek is not universally safe | same file, reset only for `CODEC_ID_MP3`, citing [Symphonia issue #274](https://github.com/pdeljanov/Symphonia/issues/274) |
+| A working player resets selectively after a seek (not followed) | same file, reset only for `CODEC_ID_MP3`, citing [Symphonia issue #274](https://github.com/pdeljanov/Symphonia/issues/274), which reports MP3 popping and rules out MKA/Vorbis and M4A/AAC |
+| Only MP3, AAC and Vorbis keep state a reset clears | `symphonia-bundle-mp3/src/decoder.rs`, `symphonia-codec-aac/src/aac/ics/mod.rs`, `symphonia-codec-vorbis/src/dsp.rs`; FLAC's and ALAC's `reset` say "nothing to do" |
+| Seeking onto a stated length parks the reader at the end | rox, `crates/rox-playback/src/engine.rs`, `SEEK_END_MARGIN_SECS` and `inside_track` |
 | A custom registry is how Opus gets registered | same file, `static CODEC_REGISTRY: LazyLock<CodecRegistry>` with `register_enabled_codecs` then `register_audio_decoder::<OpusDecoder>()` |
 | Symphonia ships its own reference player | `symphonia-play/` in [the Symphonia repository](https://github.com/pdeljanov/Symphonia), MPL-2.0, at the v0.6.1 tag |
 | Gapless lives on the decoder options, from the author | `symphonia-play/src/main.rs`, `AudioDecoderOptions::default().gapless(!args.get_flag("no-gapless"))` |

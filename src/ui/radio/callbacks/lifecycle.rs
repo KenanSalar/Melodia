@@ -88,6 +88,10 @@ fn leave(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         detail::release_seated_artwork(radio_ui);
         let ru = radio_ui.clone();
         state.runtime.spawn_blocking(move || ru.release_detail_artwork());
+    } else {
+        // The tier release above runs on the UI thread, where the arena walk may not, and the
+        // seated arm gets its trim from `release_detail_artwork`. This is the other leave.
+        state.runtime.spawn_blocking(crate::tasks::heap_trim::trim);
     }
 
     // The browsed-logo cache only grows while this page is open, so the leave is when it stops —

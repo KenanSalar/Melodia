@@ -57,12 +57,13 @@ export component StationGrid inherits Rectangle {
     list := ListView {
         vertical-scrollbar-policy: always-off;
         horizontal-scrollbar-policy: always-off;
-        // **Opted out, because a card click and a drag-pan are one gesture and the pan wins by
-        // default.** `Flickable.interactive` defaults true, and past 8 px of travel inside 500 ms
-        // the flickable intercepts the grab and every item under it is sent a cancel — so a press
-        // that drifts that far never lands as a click. That reads as "sometimes it doesn't open",
-        // and it only ever happens on a grid long enough to flick. Nothing here wants
-        // drag-to-pan; the wheel still works, `!interactive` forwarding it unchanged.
+        // **Stated because the default is the *style's* to pick, and a card click and a
+        // drag-pan are one gesture.** Every style but Material publishes this off, so a
+        // scroller that binds nothing is one `SLINT_STYLE` from panning. Where it is on
+        // the pan takes a press that drifts, which reads as "sometimes it doesn't open"
+        // and only on a grid long enough to flick. Nothing here wants drag-to-pan; the
+        // wheel still works, `!interactive` forwarding it unchanged.
+        // `slint-pitfalls.md` carries the mechanism.
         mouse-drag-pan-enabled: false;
 
         for grid-row in root.rows: Rectangle {

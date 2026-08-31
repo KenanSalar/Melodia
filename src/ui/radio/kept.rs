@@ -26,7 +26,7 @@ use crate::ui::row_match::{self, Needle};
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Radio, RadioStationGridRow};
 
-use super::{RadioTab, RadioUi, covers, rows, tab_from_index};
+use super::{RadioTab, RadioUi, covers, mounted_tab, rows};
 
 /// One local list: what was fetched, and what the box has narrowed it to.
 #[derive(Debug, Default)]
@@ -116,7 +116,7 @@ fn cache(radio_ui: &RadioUi, tab: RadioTab) -> &parking_lot::Mutex<KeptState> {
 
 /// Whichever of the two local tabs is mounted, or `None` on Browse.
 fn local_tab(g: &Radio<'_>) -> Option<RadioTab> {
-    match tab_from_index(g, g.get_tab_idx()) {
+    match mounted_tab(g) {
         RadioTab::Browse => None,
         tab => Some(tab),
     }
@@ -331,19 +331,30 @@ const HEAL_BATCH: usize = 4;
 ///
 /// **Once per station per session**, which is what makes the cost bear the frequency: `refresh`
 /// runs on a section enter, on every star flip — Browse's included — and on every removal, and a
-/// station that failed is a stored backoff a repeat only pays two queries to be told about again.
+/// station that failed is a stored backoff a repeat is told about without spending a round trip.
 /// The set is what the backoff already says, held where a click can't spend a round trip on it.
+///
+/// **The stored answers for the whole set are read ahead of the flight**, one query rather than
+/// two per station — `library::radio::AnswerSeed` argues why. Shared rather than handed out per
+/// task, hence the `Arc`: which answers a station needs has nothing to do with its seat in the
+/// window.
 async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>) {
-    let mut pending = logoless_stations(radio_ui).into_iter();
+    let logoless = logoless_stations(radio_ui);
+    let seed = Arc::new(
+        library::radio::AnswerSeed::for_urls(state, &library::radio::heal_seed_urls(&logoless))
+            .await,
+    );
+
+    let mut pending = logoless.into_iter();
     let mut in_flight = tokio::task::JoinSet::new();
     for station in pending.by_ref().take(HEAL_BATCH) {
-        spawn_heal(&mut in_flight, state, station);
+        spawn_heal(&mut in_flight, state, &seed, station);
     }
 
     let mut landed = false;
     while let Some(joined) = in_flight.join_next().await {
         if let Some(station) = pending.next() {
-            spawn_heal(&mut in_flight, state, station);
+            spawn_heal(&mut in_flight, state, &seed, station);
         }
         let Ok(Some((id, path))) = joined else {
             continue;
@@ -365,11 +376,13 @@ async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWi
 fn spawn_heal(
     in_flight: &mut tokio::task::JoinSet<Option<(i64, String)>>,
     state: &AppState,
+    seed: &Arc<library::radio::AnswerSeed>,
     station: RadioStation,
 ) {
     let state = state.clone();
+    let seed = Arc::clone(seed);
     in_flight.spawn(async move {
-        let path = library::radio::heal_station_logo(&state, &station).await?;
+        let path = library::radio::heal_station_logo(&state, &seed, &station).await?;
         Some((station.id, path))
     });
 }
@@ -427,24 +440,11 @@ fn paint_mounted(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
 /// Decode a screenful of one tab's logos and announce the tier.
 ///
 /// Nothing is downloaded: a kept station's logo was stored when it was kept, so this only ever
-/// reads files already on disk. The `spawn_blocking` is the decode, which must not sit on a
-/// worker — the same rule every grid tier follows. Paths arrive already ordered, since only a
-/// caller on the UI thread can read the sort they are ordered by.
+/// reads files already on disk. Paths arrive already ordered, since only a caller on the UI thread
+/// can read the sort they are ordered by. There are no rows to repaint beside the announce — the
+/// apply that produced this order has already run.
 async fn warm(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, paths: Vec<String>) {
-    let ru_warm = radio_ui.clone();
-    // `Some(())` only once the decode reports the tier is still its own: a leave landing inside
-    // the burst hands the buffers back, and announcing anyway would bump the generation over an
-    // emptied tier. A `JoinError` is the same "we don't know".
-    let warmed = tokio::task::spawn_blocking(move || covers::prewarm(&ru_warm, &paths))
-        .await
-        .unwrap_or(false);
-
-    let ru = radio_ui.clone();
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        if warmed && ru.section_active() {
-            covers::announce_warm(&ui);
-        }
-    });
+    covers::warm_and_announce(radio_ui, weak, paths, |_| {}).await;
 }
 
 /// Bring a tab the user just picked up to date from cache.

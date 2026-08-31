@@ -39,6 +39,10 @@ const fn non_empty_env(value: Option<&str>) -> Option<&str> {
 /// The Last.fm 2.0 API endpoint. Every method POSTs here as form-urlencoded.
 const LASTFM_ENDPOINT: &str = "https://ws.audioscrobbler.com/2.0/";
 
+/// Ceiling on a response body. A scrobble answer is a few hundred bytes; the slack is for the
+/// error shape, which carries a message written for a human.
+const RESPONSE_MAX_BYTES: u64 = 256 * 1024;
+
 /// Whether this build shipped Last.fm app credentials (both key and secret).
 /// Gates the Last.fm setter / UI / detector so a keyless build ships
 /// ListenBrainz-only.
@@ -299,9 +303,9 @@ async fn send<K: Serialize>(
         .send()
         .await
         .map_err(|e| AppError::network("Last.fm request failed", e))?;
-    let body: serde_json::Value = response
-        .json()
-        .await
+    let bytes =
+        crate::services::read_capped(response, "Last.fm response", RESPONSE_MAX_BYTES).await?;
+    let body: serde_json::Value = serde_json::from_slice(&bytes)
         .map_err(|e| AppError::network("Failed to parse Last.fm response", e))?;
     if let Some(code) = body.get("error").and_then(serde_json::Value::as_u64) {
         let message =

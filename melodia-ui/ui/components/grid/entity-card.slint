@@ -1,6 +1,5 @@
 import { Theme } from "../../theme.slint";
 import { ArtworkImage } from "../artwork-image.slint";
-import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { PlayCountBadge } from "play-count-badge.slint";
 
@@ -13,6 +12,9 @@ export component EntityCard inherits Rectangle {
     in property <image> cover;
     in property <string> title;
     in property <string> subtitle;
+    // A third line, for a card whose tile sits above three. Empty on every other host, and the
+    // dimmest of the three: a card that wants two lines says nothing and gets the layout it had.
+    in property <string> subtitle2;
     in property <length> card-width: 180px;
     in property <length> card-height: 226px;
     // The Artists grid's avatar mode: the tile takes a radius of half its size, the text staying
@@ -20,6 +22,13 @@ export component EntityCard inherits Rectangle {
     in property <bool> circular: false;
     // Artists passes `"person"`; everything else takes the default.
     in property <string> fallback-icon: "music-note";
+    // Initials to draw instead of the glyph, for a host whose entities have no shared icon worth
+    // repeating across a page. Both fall through to `ArtworkImage`, which prefers the text.
+    in property <string> fallback-text;
+    // What the stored image would draw at 1:1, for a source too small to fill the tile. `0px`
+    // means "assume it fills", which is `ArtworkImage`'s own default and every host's answer but
+    // the one drawing favicons.
+    in property <length> native-size: 0px;
 
     // The tile's chrome. The Genres grid overrides both, painting its per-genre name-hashed
     // gradient and tinting the fallback glyph against it.
@@ -30,9 +39,18 @@ export component EntityCard inherits Rectangle {
     // reads as no scale at all.
     in property <float> cover-scale-hover: 1.04;
 
-    // The Playlists grid's hover-revealed CRUD trio, which is what lets it skip a
-    // per-card overflow menu. Off everywhere else.
+    // Whether the host put controls in the `@children` overlay slot, and the whole of what this
+    // gates. **Not a list of buttons this card owns** — it carried the Playlists CRUD trio once,
+    // which every other host raising the flag then drew on top of its own controls.
     in property <bool> show-overlay-actions: false;
+
+    // Hover on any control the *host* owns, OR'd into `card-hovered` below. Usually the ones in
+    // the overlay slot, but not only: a station card folds in its star too, which sits beside the
+    // card and takes the pointer off `touch` just the same.
+    // A component cannot read `has-hover` off its `@children`, so the host that named those
+    // buttons is the only thing that can answer, and without the answer the fill and the zoom
+    // drop out while the pointer is on one of them.
+    in property <bool> overlay-hovered: false;
 
     // Browse's card view draws disk-only files — present inside a library folder but
     // not in the DB — and dims them inert, the same 0.45 the disabled `TrackListRow`
@@ -49,19 +67,19 @@ export component EntityCard inherits Rectangle {
     in property <int> play-count: 0;
 
     callback clicked();
-    callback delete-clicked();
-    callback edit-artwork-clicked();
-    callback edit-name-clicked();
 
     // **Every hover-driven binding on this card reads this, not `touch.has-hover`.** A
     // higher-z TouchArea captures the pointer, so hovering any nested button flips that
     // false and the fill, the zoom and the overlay would all drop out while the user is
-    // aiming at one. Each button's own flag is false while they're hidden, so this stays
-    // correct on the cards that don't use the overlay.
-    property <bool> card-hovered: touch.has-hover
-        || delete_btn.has-hover
-        || artwork_btn.has-hover
-        || name_btn.has-hover;
+    // aiming at one — which is what `overlay-hovered` is for.
+    // `out`, so a host placing a control *beside* the card rather than in the overlay slot can
+    // ride the same answer — the star on a station card is the one such control.
+    out property <bool> card-hovered: touch.has-hover || root.overlay-hovered;
+
+    // The artwork square, published because a host positioning against it must not re-derive the
+    // formula: a station card sizes its favicon's 1:1 estimate off this, and a padding change here
+    // would otherwise skew that silently.
+    out property <length> tile-size: root.card-width - 2 * Theme.pad-sm;
 
     width: card-width;
     height: card-height;
@@ -82,12 +100,12 @@ export component EntityCard inherits Rectangle {
             ArtworkImage {
                 artwork-path: root.artwork-path;
                 cover: root.cover;
-                tile-size: root.card-width - 2 * Theme.pad-sm;
-                tile-radius: root.circular
-                    ? (root.card-width - 2 * Theme.pad-sm) / 2
-                    : Theme.radius-md;
+                tile-size: root.tile-size;
+                tile-radius: root.circular ? root.tile-size / 2 : Theme.radius-md;
                 cover-scale: root.card-hovered ? root.cover-scale-hover : 1.0;
                 fallback-icon: root.fallback-icon;
+                fallback-text: root.fallback-text;
+                native-size: root.native-size;
                 tile-bg: root.tile-bg;
                 tile-icon-color: root.tile-icon-color;
             }
@@ -109,6 +127,13 @@ export component EntityCard inherits Rectangle {
                     overflow: elide;
                     visible: root.subtitle != "";
                 }
+                Text {
+                    text: "‎" + root.subtitle2;
+                    color: Theme.overlay1;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                    visible: root.subtitle2 != "";
+                }
             }
 
             // Absorbs the slack, so the block stays top-pinned whatever height the host
@@ -125,53 +150,27 @@ export component EntityCard inherits Rectangle {
         clicked => { root.clicked(); }
     }
 
-    // **After `touch`**, so the nested buttons consume their own clicks before the
-    // card's open action fires, and matched to the artwork square so the icons frame the
-    // artwork rather than the title row.
+    // The host's own hover controls, framing the artwork square rather than the title row, and
+    // riding **one** `opacity` between them. That single fade is the point: an `opacity` per button
+    // layers each of them, and `Opacity::need_layer` bails only on a lone childless child, which an
+    // `IconButton` root is not. A control that has to stay up while the card is idle does not
+    // belong here — it is not a hover affordance, so it goes beside the card and takes
+    // `IconButton.fade`.
     //
-    // **Always mounted rather than behind an `if`**, so the root can reference each
-    // button's `has-hover` from `card-hovered`. `visible` propagates to the children, so
-    // they aren't rendered, hit-tested or hover-tracked when a host doesn't opt in.
+    // **After `touch`**, so a nested button consumes its own click before the card's open action
+    // fires. `visible` propagates to the children, so nothing here is rendered, hit-tested or
+    // hover-tracked on a card whose host put no controls in the slot.
     overlay := Rectangle {
         visible: root.show-overlay-actions;
         x: Theme.pad-sm;
         y: Theme.pad-sm;
-        width: root.card-width - 2 * Theme.pad-sm;
-        height: root.card-width - 2 * Theme.pad-sm;
+        width: root.tile-size;
+        height: root.tile-size;
 
         opacity: root.card-hovered ? 1.0 : 0.0;
         animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
 
-        delete_btn := IconButton {
-            x: parent.width - self.width - Theme.pad-sm;
-            y: Theme.pad-sm;
-            icon: "delete";
-            icon-size: 18px;
-            diameter: 30px;
-            idle-bg: Theme.floating-chrome-bg;
-            hover-fg: Theme.danger;
-            clicked => { root.delete-clicked(); }
-        }
-
-        artwork_btn := IconButton {
-            x: Theme.pad-sm;
-            y: parent.height - self.height - Theme.pad-sm;
-            icon: "image";
-            icon-size: 18px;
-            diameter: 30px;
-            idle-bg: Theme.floating-chrome-bg;
-            clicked => { root.edit-artwork-clicked(); }
-        }
-
-        name_btn := IconButton {
-            x: parent.width - self.width - Theme.pad-sm;
-            y: parent.height - self.height - Theme.pad-sm;
-            icon: "edit";
-            icon-size: 18px;
-            diameter: 30px;
-            idle-bg: Theme.floating-chrome-bg;
-            clicked => { root.edit-name-clicked(); }
-        }
+        @children
     }
 
     // Top-left of the tile, clear of the hover trio. Non-interactive, so card clicks

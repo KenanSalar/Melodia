@@ -1,4 +1,5 @@
-//! The two primitives every image path shares: one bounded decode, and one resize.
+//! The primitives every image path shares: one bounded decode, one resize, and the gate that
+//! keeps two oversized decodes off the heap at once.
 //!
 //! Cover art reaches the app from files the user didn't write, so every decode has
 //! to be bounded before it runs: a forged dimension header in a tag can ask for
@@ -24,6 +25,9 @@
 //! **It takes a target and computes none.** What shape a cover ends up is a question
 //! each tier answers differently, so it stays at the call site; [`fit_within`] is the
 //! one piece of that arithmetic more than one of them needed.
+//!
+//! [`large_decode_guard`] is shared for the reason the bound above is: what it holds down is
+//! process RSS, so a second copy beside it would cap its own half and leave the sum free.
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -270,6 +274,35 @@ pub fn source_pixels(path: &Path) -> Option<u64> {
     let reader = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?;
     let (width, height) = reader.into_dimensions().ok()?;
     Some(u64::from(width) * u64::from(height))
+}
+
+/// Source pixel count past which a decode waits its turn on [`LARGE_DECODE_GATE`] — well above any
+/// real cover or station logo, for the occasional full-resolution original a user's tags carry or a
+/// host serves as a favicon.
+const LARGE_SOURCE_PIXELS: u64 = 4_000_000;
+
+/// Serializes oversized decodes against each other, across every pool that runs one.
+///
+/// A worker pool bounds the transient peak at *pool width* × the largest source, the wrong shape
+/// when one image is enormous and the rest are thumbnails: narrowing the pool for the rare huge one
+/// would cost every scan. Gating on the header-read size leaves the common path untouched and caps
+/// the peak at one full-resolution bitmap.
+///
+/// **One gate rather than one per caller**, which is the whole reason it sits here: the peak it
+/// bounds is process RSS, and two gates would each cap their own half while the sum went unbounded.
+/// The two callers are also on different pools — covers on the rayon decode pool, station logos on
+/// tokio's blocking pool — so nothing else relates them.
+static LARGE_DECODE_GATE: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+
+/// A guard held for the length of an oversized decode, or `None` where `pixels` is small enough to
+/// need none.
+///
+/// Take it from the header read that precedes the decode — [`source_pixels`] for a path,
+/// [`memory_dimensions`] for bytes in hand — and hold it across everything that keeps a
+/// full-resolution buffer alive, the flatten and re-encode included, not just the decode call.
+#[must_use]
+pub fn large_decode_guard(pixels: u64) -> Option<parking_lot::MutexGuard<'static, ()>> {
+    (pixels > LARGE_SOURCE_PIXELS).then(|| LARGE_DECODE_GATE.lock())
 }
 
 /// Decoder limits refusing anything wider or taller than `max_dim`.

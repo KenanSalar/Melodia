@@ -1,5 +1,9 @@
 use crate::error::AppError;
 
+/// Ceiling on a search body. The query asks for `limit=1` and reads one field off it, so this is
+/// slack against a schema change rather than a budget.
+const MAX_RESPONSE_BYTES: u64 = 512 * 1024;
+
 #[derive(serde::Deserialize)]
 struct ItunesSearchResponse {
     results: Vec<ItunesAlbum>,
@@ -41,9 +45,9 @@ pub async fn search_album_cover(
         return Err(AppError::network_msg(format!("iTunes album search returned HTTP {status}")));
     }
 
-    let body = response
-        .json::<ItunesSearchResponse>()
-        .await
+    let bytes =
+        crate::services::read_capped(response, "iTunes album response", MAX_RESPONSE_BYTES).await?;
+    let body: ItunesSearchResponse = serde_json::from_slice(&bytes)
         .map_err(|e| AppError::network("Failed to parse iTunes album response", e))?;
 
     Ok(body.results.first().and_then(|a| a.artwork_url_100.as_deref().map(upsize_artwork_url)))

@@ -1,7 +1,7 @@
 ---
 paths:
   - src/ui/radio/**/*.rs
-  - src/library/radio.rs
+  - src/library/radio/**/*.rs
   - src/library/radio_files.rs
   - src/services/radio_browser/**/*.rs
   - src/player/stream_source.rs
@@ -48,8 +48,11 @@ is the copy to delete.
   walks holding it, one per direction and neither covering the other's half:
   `library::radio::tests::every_outbound_call_takes_its_client_from_behind_the_switch` counts the
   reaches inside the facade, `radio_browser::tests::only_the_radio_facade_reaches_the_directory_client`
-  counts them outside it. So **`http_client()` may be named exactly once in `library/radio.rs`**
-  and `radio_browser` may be named nowhere else in the tree.
+  counts them outside it. So **`http_client()` may be named exactly once across all of
+  `library/radio/`** and `radio_browser` may be named nowhere else in the tree. Both walks read the
+  facade off its **directory** rather than off a file list, so a sixth submodule is covered the day
+  it is added — the facade was one file once, and re-anchoring them onto `mod.rs` alone would have
+  left four fifths of it unmeasured while still passing.
 - **`station_to_restore` is the one getter guarded like a play**, what it does being to put a
   station back on the deck rather than to answer a question about one.
 - **Turning it off has four consequences beyond the row, and three are findable only from here.**
@@ -93,7 +96,7 @@ is the copy to delete.
 
 ## The stream
 
-- **D8, the reconnect's home and the two-Symphonia-majors seam are `src/player/CLAUDE.md`'s**,
+- **D8, the reconnect's home and what the ring is still for are `src/player/CLAUDE.md`'s**,
   over `prebuffer.rs`'s and `stream_decode.rs`'s `//!`. That file loads on the whole directory,
   including `handlers.rs` — the monitor the reconnect argument is *about*, and the one file in it
   no glob here reaches.

@@ -55,6 +55,10 @@ impl SegmentReader {
     /// live stream is a gap, and the next one usually plays.
     pub fn append(&mut self, segment: &[u8], out: &mut Vec<u8>) {
         let start = out.len();
+        // Exact: every arm below is bounded above by the input, two copying it whole and the
+        // transport one stripping headers. Worth reserving because that arm appends per packet,
+        // so a segment lands in hundreds of pushes rather than one.
+        out.reserve(segment.len());
         // ISO-BMFF is asked about first, and by its box type rather than by elimination: a
         // fragment is already the framing its demuxer wants, so unwrapping it is exactly wrong,
         // and three sync bytes 188 apart are not impossible inside one.

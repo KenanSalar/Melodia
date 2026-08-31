@@ -19,11 +19,11 @@ use slint::ComponentHandle;
 use crate::state::AppState;
 use crate::{AppWindow, Radio};
 
-use super::{RadioTab, RadioUi, browse, kept, suggest, tab_from_index};
+use super::{RadioTab, RadioUi, browse, kept, mounted_tab, suggest};
 
 pub fn dispatch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, text: &str) {
     let g = ui.global::<Radio>();
-    match tab_from_index(&g, g.get_tab_idx()) {
+    match mounted_tab(&g) {
         RadioTab::Browse => browse::set_query(ui, state, radio_ui, text),
         tab => kept::set_filter(ui, radio_ui, tab, text),
     }
@@ -44,7 +44,7 @@ pub fn dispatch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, text:
 /// The box is given up either way: it now says something the user did not type on this tab.
 pub fn sync_box(ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
     let g = ui.global::<Radio>();
-    let mounted = match tab_from_index(&g, g.get_tab_idx()) {
+    let mounted = match mounted_tab(&g) {
         RadioTab::Browse => browse::query_name(radio_ui),
         tab => kept::filter_text(radio_ui, tab),
     };

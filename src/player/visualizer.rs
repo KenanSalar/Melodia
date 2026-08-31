@@ -406,8 +406,9 @@ impl<S: Source> Source for VisualizerTap<S> {
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
         self.input.try_seek(pos)?;
-        // Realign with the decoder's frame boundary and `EqSource::try_seek`'s
-        // reset phase — otherwise every later downmix straddles two frames.
+        // Start the frame being averaged over. The input does resume in phase, so this re-anchors
+        // a grid rather than repairing one: at worst it downmixes one straddled frame, on a
+        // decoration, which is cheaper than threading the phase up through the tap.
         self.accum = 0.0;
         self.phase = 0;
         Ok(())

@@ -163,14 +163,26 @@ async fn read_station_list(db: &DbPool, src: &Path) -> Result<ImportStationsResu
         .await
         .map_err(AppError::io_source)??;
 
+    // **One transaction for the whole file.** Every entry was its own implicit commit on a write
+    // pool that holds a single connection, so a list of fifty stations queued a couple of hundred
+    // of them behind whatever else wanted to write. It also makes the lookup inside `import_one`
+    // able to see the rows earlier entries just wrote, which off the read pool it could not: a
+    // file naming one station twice used to depend on each write having already committed.
+    //
+    // All-or-nothing on an error, where before a failure part way left what it had already
+    // written. That is the better half of the trade — the errors reachable here are the database
+    // being unwritable, which is not a condition the next entry recovers from — and it is the same
+    // argument `queries::artwork::repoint_all` makes for its own pass.
+    let mut tx = db.write().begin().await?;
     let mut result = ImportStationsResult::default();
     for entry in parse(&body) {
-        if import_one(db, &entry).await? {
+        if import_one(&mut tx, &entry).await? {
             result.imported = result.imported.saturating_add(1);
         } else {
             result.skipped = result.skipped.saturating_add(1);
         }
     }
+    tx.commit().await?;
     Ok(result)
 }
 
@@ -182,7 +194,10 @@ async fn read_station_list(db: &DbPool, src: &Path) -> Result<ImportStationsResu
 /// lost by that: a station the user deleted arrives as a new row, and un-starring one never
 /// touched its `local_*` columns. It also keeps every row [`apply_overrides`] writes to logo-less,
 /// which is the state [`super::radio::heal_station_logo`] needs to reach one.
-async fn import_one(db: &DbPool, entry: &StationEntry) -> Result<bool, AppError> {
+async fn import_one(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    entry: &StationEntry,
+) -> Result<bool, AppError> {
     let station = entry.to_new_station();
     // A file is the one door into the table that never passed the directory, so
     // without this a blocked station is one export away from a row. Counted as
@@ -191,42 +206,25 @@ async fn import_one(db: &DbPool, entry: &StationEntry) -> Result<bool, AppError>
     if crate::services::radio_blocklist::blocks(&station) {
         return Ok(false);
     }
-    let Some(existing) = find_existing(db, &station).await? else {
-        let saved = queries::radio::save_station(db, &station).await?;
-        queries::radio::set_favorite(db, saved.id, true).await?;
-        apply_overrides(db, saved.id, &entry.overrides).await;
+    let existing = queries::radio::kept_station_matching(
+        &mut **tx,
+        station.station_uuid.as_deref(),
+        &station.stream_url,
+    )
+    .await?;
+
+    let Some((id, is_favorite)) = existing else {
+        let id = queries::radio::save_station_on(&mut **tx, &station).await?;
+        queries::radio::set_favorite_on(&mut **tx, id, true).await?;
+        apply_overrides(tx, id, &entry.overrides).await;
         return Ok(true);
     };
 
-    if existing.is_favorite {
+    if is_favorite {
         return Ok(false);
     }
-    queries::radio::set_favorite(db, existing.id, true).await?;
+    queries::radio::set_favorite_on(&mut **tx, id, true).await?;
     Ok(true)
-}
-
-/// The row this entry already is, by uuid where it names one and by stream URL otherwise.
-///
-/// The uuid first, that being the directory's own identity for a station, so one repointed at a
-/// new mount is found rather than added a second time. The URL after it, so an entry with no uuid
-/// — or one whose station was typed in by hand before the directory listed it — still lands on its
-/// row.
-async fn find_existing(
-    db: &DbPool,
-    station: &radio::NewRadioStation,
-) -> Result<Option<radio::RadioStation>, AppError> {
-    let by_uuid = match station.station_uuid.as_deref() {
-        Some(uuid) => queries::radio::station_id_with_uuid(db, uuid).await?,
-        None => None,
-    };
-    let found = match by_uuid {
-        Some(id) => Some(id),
-        None => queries::radio::station_id_with_url(db, &station.stream_url).await?,
-    };
-    match found {
-        Some(id) => queries::radio::get_station_by_id(db, id).await.map(Some),
-        None => Ok(None),
-    }
 }
 
 /// Write the four fields the file carried, if it carried any.
@@ -238,7 +236,11 @@ async fn find_existing(
 ///
 /// Best-effort: one hand-edited line is not worth refusing a file of fifty stations over, and
 /// every field is editable on the card.
-async fn apply_overrides(db: &DbPool, id: i64, overrides: &radio::StationOverrides) {
+async fn apply_overrides(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: i64,
+    overrides: &radio::StationOverrides,
+) {
     if *overrides == radio::StationOverrides::default() {
         return;
     }
@@ -249,26 +251,31 @@ async fn apply_overrides(db: &DbPool, id: i64, overrides: &radio::StationOverrid
             return;
         }
     };
-    if let Err(e) = queries::radio::set_local_fields(db, id, &stored).await {
+    if let Err(e) = queries::radio::set_local_fields_on(&mut **tx, id, &stored).await {
         log::debug!("radio: imported details not stored: {}", crate::services::describe(&e));
     }
 }
 
-/// Read one `#MELODIA-*:` line into `pending`, answering whether the line was one.
+/// The four `#MELODIA-*:` tags and the field each carries, **read and written off this one
+/// table**.
 ///
-/// The four are collected rather than matched one at a time so a fifth is a row in the table
-/// rather than a fifth arm to keep parallel with [`serialize`]'s own loop.
+/// It used to be two — a list of `&mut` slots for the reader, a list of `local_*` reads for the
+/// writer — so the "a fifth is a row in the table" this file already claimed was a fifth row in
+/// two tables, either of which could be the one that forgets it. `radio::OverrideField` exists to
+/// give the two halves a single name per field.
+const OVERRIDE_TAGS: [(&str, radio::OverrideField); 4] = [
+    (WEBSITE_TAG, radio::OverrideField::Website),
+    (LOGO_TAG, radio::OverrideField::LogoUrl),
+    (GENRE_TAG, radio::OverrideField::Genre),
+    (COUNTRY_TAG, radio::OverrideField::Country),
+];
+
+/// Read one `#MELODIA-*:` line into `pending`, answering whether the line was one.
 fn take_override_tag(line: &str, pending: &mut radio::StationOverrides) -> bool {
-    let slots: [(&str, &mut Option<String>); 4] = [
-        (WEBSITE_TAG, &mut pending.website),
-        (LOGO_TAG, &mut pending.logo_url),
-        (GENRE_TAG, &mut pending.genre),
-        (COUNTRY_TAG, &mut pending.country),
-    ];
-    for (tag, slot) in slots {
+    for (tag, field) in OVERRIDE_TAGS {
         if let Some(rest) = line.strip_prefix(tag) {
             let rest = rest.trim();
-            *slot = (!rest.is_empty()).then(|| rest.to_owned());
+            *pending.slot_mut(field) = (!rest.is_empty()).then(|| rest.to_owned());
             return true;
         }
     }
@@ -318,16 +325,12 @@ fn serialize(stations: &[radio::RadioStation]) -> String {
             out.push_str(&snapshot);
             out.push('\n');
         }
-        // The user's own columns, and only ever from the `local_*` half: the block above is the
-        // directory's account of the station and this is the user's answer to what it left blank,
-        // so folding the resolved value into either would spell one station out of both.
-        for (tag, value) in [
-            (WEBSITE_TAG, station.local_homepage.as_deref()),
-            (LOGO_TAG, station.local_favicon_url.as_deref()),
-            (GENRE_TAG, station.local_tags.as_deref()),
-            (COUNTRY_TAG, station.local_country.as_deref()),
-        ] {
-            if let Some(value) = value.filter(|text| !text.is_empty()) {
+        // The user's own columns, and only ever from the `local_*` half — which is what
+        // `local_override` answers and `website()` and its siblings deliberately do not: the block
+        // above is the directory's account of the station and this is the user's answer to what it
+        // left blank, so folding the resolved value into either would spell one station out of both.
+        for (tag, field) in OVERRIDE_TAGS {
+            if let Some(value) = station.local_override(field).filter(|text| !text.is_empty()) {
                 out.push_str(tag);
                 out.push_str(&one_line(value));
                 out.push('\n');
@@ -427,11 +430,12 @@ fn indexed_key(key: &str, prefix: &str) -> Option<u32> {
     index.parse().ok()
 }
 
-/// Whether `value` is an absolute `http`/`https` URL. The scheme check is the whole filter: a
-/// `file://` line in a playlist somebody sent you is not a station.
+/// Whether `value` is an absolute `http`/`https` URL naming a host. A `file://` line in a playlist
+/// somebody sent you is not a station, and neither is a bare `http://` — this feeds
+/// [`StationEntry::url`] and on into the table, so it is the strictest of the reasons to parse
+/// rather than test a prefix.
 fn is_http_url(value: &str) -> bool {
-    let lowered = value.to_ascii_lowercase();
-    lowered.starts_with("http://") || lowered.starts_with("https://")
+    crate::services::http_url(value).is_some()
 }
 
 #[cfg(test)]

@@ -22,6 +22,7 @@ use tokio::task::JoinSet;
 
 use crate::error::AppError;
 use crate::library;
+use crate::library::radio::SiteOrigin;
 use crate::media::station_logo::StoredLogo;
 use crate::state::AppState;
 
@@ -228,7 +229,7 @@ async fn record_answer(
         }
     };
 
-    record_outcome(state, &url, logo.as_ref()).await;
+    library::radio::record_logo_outcome(state, &url, logo.as_ref()).await;
     let hit = logo.is_some();
     memo.record(url, logo.map(|logo| logo.path));
     hit
@@ -258,8 +259,11 @@ pub async fn discover_missing<'a>(
     for origin in wanted {
         let state = state.clone();
         in_flight.spawn(async move {
-            let path = library::radio::discover_site_logo(&state, &origin).await;
-            (origin.to_string(), path)
+            // Unseeded: this set is bounded by `EXPLICIT_RESULT_MAX`, so the per-origin query is
+            // already a handful rather than a page's worth.
+            let seed = library::radio::AnswerSeed::unseeded();
+            let path = library::radio::discover_site_logo(&state, &seed, &origin).await;
+            (origin.as_str().to_owned(), path)
         });
     }
 
@@ -292,15 +296,15 @@ pub async fn discover_missing<'a>(
 fn unasked_sites<'a>(
     memo: &LogoMemo,
     sites: impl Iterator<Item = (&'a str, &'a str)>,
-) -> Vec<reqwest::Url> {
+) -> Vec<SiteOrigin> {
     let answers = memo.answers.lock();
     let mut seen = HashSet::new();
-    let mut out: Vec<reqwest::Url> = Vec::new();
+    let mut out: Vec<SiteOrigin> = Vec::new();
     for (homepage, stream_url) in sites {
         let Some(origin) = library::radio::site_origin(homepage, stream_url) else {
             continue;
         };
-        if answers.peek(origin.as_str()).is_none() && seen.insert(origin.to_string()) {
+        if answers.peek(origin.as_str()).is_none() && seen.insert(origin.as_str().to_owned()) {
             out.push(origin);
         }
     }
@@ -367,21 +371,6 @@ async fn seed_from_store(
         on_landed();
     }
     landed
-}
-
-/// Carry this page's answers back to the table the next session reads.
-///
-/// A hit stores its path, which is what lets that session draw the logo without asking; it also
-/// clears whatever backoff the URL had earned, or a host that recovered would stay suppressed
-/// until a schedule from when it was down finally ran out.
-async fn record_outcome(state: &AppState, favicon_url: &str, logo: Option<&StoredLogo>) {
-    let recorded = match logo {
-        Some(logo) => library::radio::note_logo_hit(state, favicon_url, logo).await,
-        None => library::radio::note_logo_miss(state, favicon_url).await,
-    };
-    if let Err(e) = recorded {
-        log::debug!("radio: logo outcome not recorded: {}", crate::services::describe(&e));
-    }
 }
 
 #[cfg(test)]

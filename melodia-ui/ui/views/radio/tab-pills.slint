@@ -6,6 +6,21 @@ import { ActionPill, PillButton, PillDivider } from "../../components/action-pil
 import { SortMenuPopup } from "../../components/sort-menu-popup.slint";
 import { FacetChip } from "facet-chip.slint";
 
+// One of the four chips whose options come off the directory. Everything below is the same for
+// all four, and the `facet-shown == kind` test was previously spelled twice per chip with the kind
+// restated on both sides — eight chances to name the wrong one, none of them visible until a
+// picker filled with another chip's list. The bitrate chip is deliberately not one of these: its
+// options are a literal, so it has no fetch, no needle and nothing to be shown.
+component DirectoryFacetChip inherits FacetChip {
+    options: Radio.facet-shown == self.kind ? Radio.facet-options : [];
+    loading: Radio.facet-shown == self.kind && Radio.facet-loading;
+    needle <=> Radio.facet-filter;
+    opened(k) => { Radio.request-facet(k); }
+    needle-edited(t) => { Radio.facet-filter-changed(t); }
+    picked(k, n, c) => { Radio.facet-picked(k, n, c); }
+    cleared(k) => { Radio.clear-facet(k); }
+}
+
 // Every pill row the Radio band can show, mutually exclusive on the mounted tab and handed to
 // `LibraryTabBand` as its whole `@children`: Browse's filter chips, then Favorites' single chip of
 // add / import / export plus its sort picker. Recently Played has none, its order being the page.
@@ -42,56 +57,32 @@ export component RadioTabPills inherits Rectangle {
         if !Radio.detail-open && Radio.tab-idx == Radio.tab-browse: HorizontalLayout {
             spacing: Theme.pad-sm;
 
-            FacetChip {
+            DirectoryFacetChip {
                 kind: Radio.facet-country;
+                popup-id: "facet-country";
                 label: @tr("Country");
                 value: Radio.pick-country;
-                options: Radio.facet-shown == Radio.facet-country ? Radio.facet-options : [];
-                loading: Radio.facet-shown == Radio.facet-country && Radio.facet-loading;
-                needle <=> Radio.facet-filter;
-                opened(k) => { Radio.request-facet(k); }
-                needle-edited(t) => { Radio.facet-filter-changed(t); }
-                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
-                cleared(k) => { Radio.clear-facet(k); }
             }
 
-            FacetChip {
+            DirectoryFacetChip {
                 kind: Radio.facet-language;
+                popup-id: "facet-language";
                 label: @tr("Language");
                 value: Radio.pick-language;
-                options: Radio.facet-shown == Radio.facet-language ? Radio.facet-options : [];
-                loading: Radio.facet-shown == Radio.facet-language && Radio.facet-loading;
-                needle <=> Radio.facet-filter;
-                opened(k) => { Radio.request-facet(k); }
-                needle-edited(t) => { Radio.facet-filter-changed(t); }
-                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
-                cleared(k) => { Radio.clear-facet(k); }
             }
 
-            FacetChip {
+            DirectoryFacetChip {
                 kind: Radio.facet-tag;
+                popup-id: "facet-tag";
                 label: @tr("Genre");
                 value: Radio.pick-tag;
-                options: Radio.facet-shown == Radio.facet-tag ? Radio.facet-options : [];
-                loading: Radio.facet-shown == Radio.facet-tag && Radio.facet-loading;
-                needle <=> Radio.facet-filter;
-                opened(k) => { Radio.request-facet(k); }
-                needle-edited(t) => { Radio.facet-filter-changed(t); }
-                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
-                cleared(k) => { Radio.clear-facet(k); }
             }
 
-            FacetChip {
+            DirectoryFacetChip {
                 kind: Radio.facet-codec;
+                popup-id: "facet-codec";
                 label: @tr("Format");
                 value: Radio.pick-codec;
-                options: Radio.facet-shown == Radio.facet-codec ? Radio.facet-options : [];
-                loading: Radio.facet-shown == Radio.facet-codec && Radio.facet-loading;
-                needle <=> Radio.facet-filter;
-                opened(k) => { Radio.request-facet(k); }
-                needle-edited(t) => { Radio.facet-filter-changed(t); }
-                picked(k, n, c) => { Radio.facet-picked(k, n, c); }
-                cleared(k) => { Radio.clear-facet(k); }
             }
 
             // Its options are a literal rather than a fetch: the floors are ours to choose, not
@@ -99,6 +90,7 @@ export component RadioTabPills inherits Rectangle {
             // while the label is not.
             FacetChip {
                 kind: Radio.facet-bitrate;
+                popup-id: "facet-bitrate";
                 label: @tr("Bitrate");
                 value: Radio.pick-bitrate-min > 0
                     ? @tr("{} kbps and up", Radio.pick-bitrate-min)

@@ -79,6 +79,25 @@ this file is what builds, looks right, and is wrong.
 - **`parent` not accessible from component's root binding.** Take host metric as explicit
   `in property <length> host-width;`.
 
+- **An element passed into a `@children` slot is *drawn* where the slot is and *resolves names*
+  where it was written, so `parent` there is the mount, not the slot's container.** A host writing
+  `Card { btn := IconButton { y: parent.height - self.height - 8px; } }` reads as positioning
+  against whatever `Card` wraps its `@children` in; it compiles to the **`Card` element's** own
+  height. The offsets are still applied inside the container, so the control lands at the
+  container's origin plus a distance measured off something else — `EntityCard`'s overlay is its
+  artwork square and its mount is a taller card, so four station controls compiled to
+  `card-height - …` and drew `card-height - tile-size` low, over the text block, with no term in the
+  source that looks wrong. Both dimensions come off `GridGeometry`, so the miss is a relation rather
+  than a number and there is no window width at which it reads as a rounding error.
+  Nothing warns, and both readings are plausible enough that review settles on the wrong one.
+  Cure: **the container publishes its own metric and the host frames against that**
+  (`out property <length> tile-size` on `EntityCard`, `card-body.tile-size - self.width - …`),
+  never `parent`. Verify in the generated tree — the binding names the property it actually read.
+  Pinned by `ui::entity_card_tests::no_overlay_host_positions_against_parent`, which finds the
+  hosts by the flag that opens the slot and reads **the mount's own braces**: a host is free to
+  spell `parent` elsewhere in its file, `x: parent.width - self.width` being the canonical
+  `OverlayScrollbar` mount, so a file-wide ban would fail the first overlay host carrying a bar.
+
 - **`height: 100%` on child + `height: Npx` on parent → unbounded layout.** Row swallows whole
   body; sibling `ListView` renders 0 rows. Pin fixed-size rows with `min-height` + `max-height` +
   `vertical-stretch: 0`. Never `height/width: 100%` on layout child.
@@ -132,24 +151,37 @@ this file is what builds, looks right, and is wrong.
   Slint's kinetic fling, gated on that same flag. `MouseWheel` carries no position, hence the
   `CursorMoved` mirror beside it.
 
-- **The same `Flickable` steals a *mouse* drag, and there the cure is per-list —
-  `mouse-drag-pan-enabled`.** A row drag and a drag-pan are one gesture, only one element can own
-  it, and the pan wins by default: `ScrollView` publishes
-  `mouse-drag-pan-enabled <=> flickable.interactive` and `Flickable.interactive` defaults
-  **`true`**, so every bare `ListView` opts in. A press inside one returns `DelayForwarding`, and
-  `handle_mouse_grab` (`input.rs`) re-consults exactly those ancestors *during* the inner grab;
-  past `DISTANCE_THRESHOLD` (8 px) inside `DURATION_THRESHOLD` (500 ms) on a scrollable axis it
-  returns `Intercept`, and every item below is sent `MouseEvent::Exit`, delivered by `TouchArea`
-  as `PointerEventKind::Cancel`. The row's drag state is wiped and the committing pointer-up never
+- **The same `Flickable` steals a *mouse* drag wherever it is interactive, and there the cure is
+  per-list: `mouse-drag-pan-enabled`.** A row drag and a drag-pan are one gesture and only one
+  element can own it. **Which one wins is the *style's* answer rather than Slint's**, and the
+  property is the styled widget's, not the item's: `ScrollView` publishes
+  `mouse-drag-pan-enabled <=> flickable.interactive`, and while the bare `Flickable.interactive`
+  does default **`true`**, fluent, cupertino, cosmic and qt each pin `interactive: false` inside
+  their own `ScrollView`. Material is the one that doesn't, which is what the Slint docs mean by
+  "defaults to `true` for the Material style and `false` for all other styles".
+  `ListView inherits ScrollView`, so it takes the same answer, and the tree declares no bare
+  `Flickable` at all. Melodia sets no style and `i-slint-compiler`'s `typeloader.rs` resolves it to
+  **fluent**, so the live default here is *off* and every scroller binding nothing already
+  compiles to `false`. What the opt-outs buy is therefore a pin rather than an override: no
+  click-to-act list depends on which style compiled. **Verify in the generated file, never in the
+  `.slint`** — the value is inlined per instance, so a source binding and an inherited default are
+  the same line.
+  Where the pan *is* on, a press inside one returns `DelayForwarding`, and `handle_mouse_grab`
+  (`input.rs`) re-consults exactly those ancestors *during* the inner grab; past
+  `DISTANCE_THRESHOLD` (8 px) inside `DURATION_THRESHOLD` (500 ms) on a scrollable axis it returns
+  `Intercept`, and every item below is sent `MouseEvent::Exit`, delivered by `TouchArea` as
+  `PointerEventKind::Cancel`. The row's drag state is wiped and the committing pointer-up never
   arrives. **The row arms at 4 px, i.e. inside that window**, so the failure is total rather than
-  occasional — and at 4–8 px of travel the computed slot is still the source's own, so no drop
+  occasional, and at 4–8 px of travel the computed slot is still the source's own, so no drop
   indicator paints either. It still reads as intermittent, both escapes being real: a list shorter
   than its viewport can't flick, and a press held past 500 ms before moving is never intercepted.
-  Both draggable lists opt out —
-  `draggable-track-list.slint` on `!reorder-enabled` (both axes; a diagonal drag steals sideways
-  once the columns overflow) and `queue-sheet.slint` outright — pinned by
+  Both draggable lists opt out outright, `draggable-track-list.slint` on both axes (a diagonal
+  drag steals sideways once the columns overflow) and `queue-sheet.slint`, pinned by
   `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
-  under a pointer. `!interactive` still forwards wheel events, so only drag-to-pan goes.
+  under a pointer; the click-to-act grids and lists are pinned by `ui::scrollbar_tests`.
+  **`!reorder-enabled` is what that binding used to say, and is the trap worth keeping**: it reads
+  as leaving a `true` default alone and instead *enables* the pan on every sort that retires the
+  drag. `!interactive` still forwards wheel events, so only drag-to-pan goes.
 
 - **Animating a binding derived from another animating property phase-lags.** Animate source only.
 

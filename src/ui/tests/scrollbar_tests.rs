@@ -1,6 +1,9 @@
 //! Source pin for the scrollbar convention: nothing in the Slint tree paints
 //! Slint's stock scrollbar.
 //!
+//! Also for what a scroller does with a *drag*, which lands here rather than beside itself
+//! because it is answered on the same two elements by the same block walk.
+//!
 //! `CLAUDE.md` states the rule — both policies `always-off` on every scroller, with a
 //! sibling `OverlayScrollbar` pinned by absolute coordinates — because std-widgets' bar
 //! paints inside padded containers and can't be reskinned. A drifted scroller reads as a
@@ -15,8 +18,11 @@ use crate::test_support::{
     MIN_SLINT_SOURCES, UI_DIR, block_body, normalize_ws as normalized, stripped_sources,
 };
 
-/// The elements that own a scrollbar-policy pair. `Flickable` is deliberately
-/// absent: it has no scrollbars to turn off.
+/// The elements both block walks recognise. `Flickable` is deliberately absent, and
+/// the reason differs per walk: it owns no scrollbar pair to turn off, and it spells
+/// drag-panning `interactive` rather than `mouse-drag-pan-enabled`. The tree declares
+/// none — held by [`the_tree_declares_no_bare_flickable`], since one that appears is
+/// outside every walk in this file.
 const SCROLLERS: [&str; 2] = ["ScrollView", "ListView"];
 const AXES: [&str; 2] = ["horizontal", "vertical"];
 const OPT_OUT: &str = "always-off";
@@ -27,6 +33,26 @@ const OPT_OUT: &str = "always-off";
 const DIALOG_DIR: &str = "components/dialog/";
 const DIALOG_STRAYS: [&str; 1] = ["multiline-input.slint"];
 const CARD_TRACK: &str = "track-color: Theme.scrollbar-track-on-card;";
+
+/// The card surfaces, every one of them click-to-open. Scoped to the directory rather than
+/// listed, so a new one is held on the day it lands.
+const GRID_DIR: &str = "components/grid/";
+
+/// The click-to-act lists outside [`GRID_DIR`], which no directory scope reaches.
+///
+/// `track-list.slint` is deliberately absent: a row click there is a selection rather than
+/// a navigation, so it takes whatever the style publishes. `draggable-track-list.slint` is
+/// absent for the opposite reason, its two bindings being pinned by an exact count in
+/// `ui::playlists::tests` instead, a drag there being the reorder itself.
+const CARD_SHAPED_LISTS: [&str; 4] = [
+    "views/radio/station-grid.slint",
+    "views/browse-view.slint",
+    "views/radio/facet-chip.slint",
+    "components/now-playing/up-next-list.slint",
+];
+
+const DRAG_PAN: &str = "mouse-drag-pan-enabled:";
+const DRAG_PAN_OPT_OUT: &str = "false";
 
 /// The two components that own a `TrackList`'s bar pair — the plain page and the
 /// nested-under-another-scroller case. They are the only files allowed to bind a list's
@@ -105,10 +131,10 @@ fn scroller_blocks(src: &str) -> Vec<(&'static str, &str)> {
     out
 }
 
-/// The `<axis>-scrollbar-policy` values `body` sets at its **own** nesting depth. Depth
-/// is the whole point: the composite views nest a `TrackList`'s scrollers inside their
-/// own, so a scroller with no policy would otherwise pass on its child's.
-fn own_policies(body: &str) -> Vec<(&str, &str)> {
+/// The values `body` binds `key` to at its **own** nesting depth. Depth is the whole
+/// point: the composite views nest a `TrackList`'s scrollers inside their own, so a
+/// scroller that binds nothing would otherwise pass on its child's answer.
+fn own_property<'a>(body: &'a str, key: &str) -> Vec<&'a str> {
     let bytes = body.as_bytes();
     let mut out = Vec::new();
     let mut depth = 0usize;
@@ -121,13 +147,10 @@ fn own_policies(body: &str) -> Vec<(&str, &str)> {
             b'{' if !in_string => depth += 1,
             b'}' if !in_string => depth = depth.saturating_sub(1),
             _ if depth == 0 && !in_string => {
-                for axis in AXES {
-                    let key = format!("{axis}-scrollbar-policy:");
-                    if bytes[i..].starts_with(key.as_bytes())
-                        && let Some(end) = body[i..].find(';').map(|rel| rel + i)
-                    {
-                        out.push((axis, body[i + key.len()..end].trim()));
-                    }
+                if bytes[i..].starts_with(key.as_bytes())
+                    && let Some(end) = body[i..].find(';').map(|rel| rel + i)
+                {
+                    out.push(body[i + key.len()..end].trim());
                 }
             }
             _ => {}
@@ -135,6 +158,21 @@ fn own_policies(body: &str) -> Vec<(&str, &str)> {
         i += 1;
     }
     out
+}
+
+/// The `<axis>-scrollbar-policy` values `body` sets at its own depth.
+fn own_policies(body: &str) -> Vec<(&str, &str)> {
+    let mut out = Vec::new();
+    for axis in AXES {
+        let key = format!("{axis}-scrollbar-policy:");
+        out.extend(own_property(body, &key).into_iter().map(|value| (axis, value)));
+    }
+    out
+}
+
+/// Whether `body` turns drag-to-pan off at its own depth.
+fn opts_out_of_drag_pan(body: &str) -> bool {
+    own_property(body, DRAG_PAN).contains(&DRAG_PAN_OPT_OUT)
 }
 
 /// The check that catches an omission, which is the shape most drift takes.
@@ -163,6 +201,82 @@ fn every_scroller_opts_out_of_the_stock_scrollbar() {
         offenders.is_empty(),
         "every ScrollView/ListView must turn both stock scrollbars off and mount an \
          OverlayScrollbar instead (CLAUDE.md, Slint Conventions):\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// A card click and a drag-pan are one gesture, and which of them a grid gets is the
+/// *style's* answer unless the grid states one: every style but Material publishes
+/// `mouse-drag-pan-enabled` off, so a scroller binding nothing rides a default no file here
+/// owns. Where the pan is on, 8 px of travel inside 500 ms hands the flickable the grab and
+/// every item under it is sent a cancel, so a press that drifts that far never lands as a
+/// click — "sometimes it doesn't open", on a grid long enough to flick and nowhere else.
+/// `views/radio/station-grid.slint` carries the argument.
+#[test]
+fn every_grid_scroller_opts_out_of_drag_to_pan() {
+    let sources = sources();
+    let mut blocks = 0usize;
+    let mut offenders = Vec::new();
+
+    for (path, src) in sources.iter().filter(|(path, _)| path.contains(GRID_DIR)) {
+        for (element, body) in scroller_blocks(src) {
+            blocks += 1;
+            if !opts_out_of_drag_pan(body) {
+                offenders.push(format!("{path}: {element} does not set {DRAG_PAN} false"));
+            }
+        }
+    }
+
+    assert!(blocks >= 7, "only {blocks} grid scrollers found — the walk is broken");
+    assert!(
+        offenders.is_empty(),
+        "a card grid's delegates are click-to-open, so drag-to-pan costs a click it \
+         intercepts and buys a gesture nothing here wants:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// [`every_grid_scroller_opts_out_of_drag_to_pan`] for the click-to-act lists a directory
+/// scope can't reach. Per file rather than per block, which is the granularity
+/// [`CARD_SHAPED_LISTS`] is written at: Browse mounts the page scroller its folder list sits
+/// inside, and that one wraps a `TrackList` that keeps the default.
+#[test]
+fn every_card_shaped_list_opts_out_of_drag_to_pan() {
+    let sources = sources();
+    let mut offenders = Vec::new();
+
+    for name in CARD_SHAPED_LISTS {
+        let Some((path, src)) = sources.iter().find(|(path, _)| path.as_str() == name) else {
+            offenders.push(format!("{name}: named here but not in the tree"));
+            continue;
+        };
+        if !scroller_blocks(src).into_iter().any(|(_, body)| opts_out_of_drag_pan(body)) {
+            offenders.push(format!("{path}: no scroller sets {DRAG_PAN} false"));
+        }
+    }
+
+    assert!(
+        offenders.is_empty(),
+        "these lists act on a click the way a card does, so they answer the same way:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// Both block walks key on [`SCROLLERS`], so what makes them complete is that nothing
+/// declares a bare `Flickable` — which spells drag-panning `interactive`, carries the `true`
+/// default the opt-outs exist to pin against, and is invisible to every needle here.
+#[test]
+fn the_tree_declares_no_bare_flickable() {
+    let offenders: Vec<_> = sources()
+        .iter()
+        .filter(|(_, src)| mounts(src, "Flickable"))
+        .map(|(path, _)| format!("{path}: declares a bare Flickable"))
+        .collect();
+
+    assert!(
+        offenders.is_empty(),
+        "a bare `Flickable` sits outside every walk in this file and opts into drag-to-pan \
+         by writing nothing at all — reach for `ScrollView` or `ListView`:\n{}",
         offenders.join("\n")
     );
 }

@@ -784,10 +784,11 @@ impl<S: Source> Source for EqSource<S> {
             }
         }
         self.limiter.reset();
-        self.frame_len = 0;
-        self.frame_pos = 0;
-        // The decoder lands on a frame boundary, so the phase restarts with it.
-        self.frame_phase = 0;
+        // What is left of the frame being handed out drains rather than being dropped, and
+        // `frame_phase` is left alone for the same reason: those samples are ones the consumer is
+        // owed, and rodio's channel converter keeps its own phase across a seek. Drop them and
+        // every frame after this one is a channel out of step, for the rest of the track. The
+        // decoder puts the puller back on its channel so the two agree either way.
         Ok(())
     }
 }

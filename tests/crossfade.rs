@@ -74,7 +74,9 @@ fn nz_u32(v: u32) -> rodio::SampleRate {
 
 /// Write a 16-bit PCM WAV of constant amplitude. Hand-rolled — the project has
 /// no WAV encoder dependency and the canonical header is 44 bytes.
-fn write_dc_wav(path: &Path, seconds: u32, amplitude: f32) -> std::io::Result<()> {
+/// `left` and `right` are separate so a fixture can tell its channels apart — the crossfade cases
+/// want them equal, [`seeking_never_swaps_the_stereo_image`] wants them not to be.
+fn write_dc_wav(path: &Path, seconds: u32, left: f32, right: f32) -> std::io::Result<()> {
     let frames = RATE * seconds;
     let data_len = frames * u32::from(CHANNELS) * 2;
     let mut buf = Vec::with_capacity(44 + data_len as usize);
@@ -92,9 +94,10 @@ fn write_dc_wav(path: &Path, seconds: u32, amplitude: f32) -> std::io::Result<()
     buf.extend_from_slice(b"data");
     buf.extend_from_slice(&data_len.to_le_bytes());
 
-    let sample = pcm_sample(amplitude);
-    for _ in 0..frames * u32::from(CHANNELS) {
-        buf.extend_from_slice(&sample.to_le_bytes());
+    let (left, right) = (pcm_sample(left), pcm_sample(right));
+    for _ in 0..frames {
+        buf.extend_from_slice(&left.to_le_bytes());
+        buf.extend_from_slice(&right.to_le_bytes());
     }
 
     let mut f = std::fs::File::create(path)?;
@@ -126,6 +129,22 @@ fn pull(src: &mut rodio::mixer::MixerSource, frames: usize) -> Vec<f32> {
             // `a_fade_advances_once_per_frame_not_once_per_sample`.
             assert!((l - r).abs() < 1e-3, "channels sheared: {l} vs {r}");
             out.push(l);
+        }
+    }
+    out
+}
+
+/// Pull `frames` frames as `(left, right)` pairs, for the one fixture whose channels differ.
+///
+/// [`pull`] collapses a frame to channel 0 after checking the two track, which is right for the DC
+/// fixtures and blind to the two being swapped.
+fn pull_stereo(src: &mut rodio::mixer::MixerSource, frames: usize) -> Vec<(f32, f32)> {
+    let mut out = Vec::with_capacity(frames);
+    for _ in 0..frames {
+        let (left, right) = (src.next(), src.next());
+        assert!(left.is_some() && right.is_some(), "mixer must stay alive");
+        if let (Some(l), Some(r)) = (left, right) {
+            out.push((l, r));
         }
     }
     out
@@ -207,8 +226,8 @@ fn fixture() -> std::io::Result<Fixture> {
     let tmp = tempfile::tempdir()?;
     let a: PathBuf = tmp.path().join("a.wav");
     let b: PathBuf = tmp.path().join("b.wav");
-    write_dc_wav(&a, 6, AMPLITUDE)?;
-    write_dc_wav(&b, 6, AMPLITUDE)?;
+    write_dc_wav(&a, 6, AMPLITUDE, AMPLITUDE)?;
+    write_dc_wav(&b, 6, AMPLITUDE, AMPLITUDE)?;
     Ok(Fixture {
         _tmp: tmp,
         track_a: a.to_string_lossy().into_owned(),
@@ -325,6 +344,77 @@ async fn seeking_mid_crossfade_drops_the_outgoing_deck_and_restores_unity() -> s
     assert_holds_at(&after[WARMUP_FRAMES..], AMPLITUDE, 1e-3, "surviving deck after abort");
 
     Ok(())
+}
+
+/// A demuxer seek lands on a packet boundary, so the decoder resumes at the start of a frame —
+/// but rodio's `ChannelCountConverter` keeps its own phase and nothing resets it across a seek. If
+/// anything in the chain hands back a different number of samples than it owed, every frame after
+/// that straddles two source frames and the stereo image is swapped for the rest of the track.
+///
+/// Only the mixer can see it. Below the converter every sample is correct and in order, which is
+/// why a unit test on either stage passes either way — the same argument `tests/stream_rate.rs`
+/// makes for the resampler.
+///
+/// Distinct per-channel amplitudes are the whole fixture: the DC pair the other cases use carries
+/// one value in both channels, where a swap is invisible. Several seeks rather than one because
+/// `periodic_access` fires every 441 samples at this rate — an odd number, so the mid-frame
+/// landing that triggers it is roughly every other seek.
+fn assert_seeking_keeps_the_image(eq_on: bool) -> std::io::Result<()> {
+    const LEFT: f32 = 0.5;
+    const RIGHT: f32 = 0.25;
+    const SEEKS: u64 = 8;
+    /// Any peaking band leaves a DC fixture alone — an RBJ peaking EQ is unity at zero
+    /// frequency whatever its gain — so this buys the active path without moving what is
+    /// asserted.
+    const BAND: usize = 5;
+
+    let tmp = tempfile::tempdir()?;
+    let wav = tmp.path().join("stereo.wav");
+    write_dc_wav(&wav, 6, LEFT, RIGHT)?;
+    let path = wav.to_string_lossy().into_owned();
+
+    let (rodio, mut mix) = player();
+    if eq_on {
+        rodio.set_eq_enabled(true);
+        rodio.set_eq_band(BAND, 6.0);
+    }
+    start(&rodio, &path);
+    pull_lenient(&mut mix, WARMUP_FRAMES);
+
+    for step in 0..SEEKS {
+        // Spread across a frame's worth of sample offsets, so the landings are not all the same
+        // parity. Well inside the six-second fixture.
+        let position_ms = 500 + step * 37;
+        let r = rodio.clone();
+        drive_until(&mut mix, move || r.seek(position_ms));
+        pull_lenient(&mut mix, WARMUP_FRAMES);
+
+        for (left, right) in pull_stereo(&mut mix, WARMUP_FRAMES) {
+            assert!(
+                (left - LEFT).abs() < 1e-3 && (right - RIGHT).abs() < 1e-3,
+                "seek to {position_ms} ms left the image swapped: {left} / {right}"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// `FileDecoder::try_seek` carries the channel restoration rodio's own decoder does, and
+/// `EqSource` keeps `frame_phase` rather than zeroing it, so the two agree on where in the frame
+/// playback resumed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seeking_never_swaps_the_stereo_image() -> std::io::Result<()> {
+    assert_seeking_keeps_the_image(false)
+}
+
+/// The same, on the path that buffers a whole frame before handing any of it out. It keeps its own
+/// count, so it is a second way to owe the converter a sample and not pay it: dropping what is left
+/// of the frame in flight at the seek swaps the image just as surely, and the bypass case above
+/// cannot see that because it buffers nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seeking_never_swaps_the_stereo_image_through_the_eq() -> std::io::Result<()> {
+    assert_seeking_keeps_the_image(true)
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

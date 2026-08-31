@@ -5,7 +5,7 @@ use crate::entities::track::TrackSummary;
 use crate::error::AppError;
 use crate::player::state::{lock_state, play_track_inner, with_state_emit};
 use crate::player::stream_source;
-use crate::player::types::{PlaybackStatus, RadioNowPlaying};
+use crate::player::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
 use crate::state::PlaybackContext;
 
 /// Which slot of `summaries` playback should start on.
@@ -117,10 +117,10 @@ pub(crate) fn needs_station_reopen(status: PlaybackStatus, has_station: bool) ->
 fn resume_station(ctx: &PlaybackContext) -> bool {
     let mut resuming = None;
     ctx.emit_and_execute(|s| {
-        if !needs_station_reopen(s.status, s.radio.is_some()) {
+        if !needs_station_reopen(s.status, s.station().is_some()) {
             return vec![];
         }
-        let Some(station) = s.radio.clone() else {
+        let Some(station) = s.station().cloned() else {
             return vec![];
         };
         let (generation, actions) = s.build_station_connecting_actions(station.clone());
@@ -255,7 +255,7 @@ pub fn player_stop(ctx: &PlaybackContext) -> Result<(), AppError> {
 pub fn player_stop_station(ctx: &PlaybackContext) -> Result<(), AppError> {
     let fade_ms = transport_fade_ms(ctx);
     ctx.emit_and_execute(move |s| {
-        if s.radio.is_some() {
+        if s.station().is_some() {
             s.build_stop_actions(fade_ms)
         } else {
             Vec::new()
@@ -359,7 +359,7 @@ pub fn player_set_gapless(ctx: &PlaybackContext, enabled: bool) -> Result<(), Ap
 /// so a grep can prove it; the flyout dims the row on top of this.
 pub fn player_set_pause_at_track_end(ctx: &PlaybackContext, armed: bool) -> Result<(), AppError> {
     with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
-        s.pause_after_current_track = armed && s.radio.is_none();
+        s.pause_after_current_track = armed && s.source_allows(PlaybackSource::has_known_duration);
     });
     Ok(())
 }

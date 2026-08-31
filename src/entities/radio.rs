@@ -136,6 +136,21 @@ impl RadioStation {
         self.can_override(Some(self.country.as_str()), self.local_country.as_deref())
     }
 
+    /// The user's own answer for one field, and never the directory's.
+    ///
+    /// **Deliberately not [`Self::website`]'s ladder.** That one resolves what a *surface* should
+    /// draw; this one answers what the user set, which is what an export writes back. Folding the
+    /// directory's value in would spell one station out of both halves and re-import it as an
+    /// override of something nobody overrode.
+    pub fn local_override(&self, field: OverrideField) -> Option<&str> {
+        match field {
+            OverrideField::Website => self.local_homepage.as_deref(),
+            OverrideField::LogoUrl => self.local_favicon_url.as_deref(),
+            OverrideField::Genre => self.local_tags.as_deref(),
+            OverrideField::Country => self.local_country.as_deref(),
+        }
+    }
+
     /// Whether the card offers its pencil at all: it does while any one field is still the user's
     /// to fill, and goes away once the directory has answered for all of them.
     pub fn is_editable(&self) -> bool {
@@ -172,6 +187,20 @@ impl RadioStation {
     }
 }
 
+/// Which of the four a caller means.
+///
+/// An enum rather than four named call sites because the set is *walked* rather than read one at
+/// a time: `radio_files` had the four spelled once for its reader and again for its writer, so
+/// what its own doc asks for — "a fifth is a row in the table rather than a fifth arm to keep
+/// parallel" — was two rows in two tables. One table needs one name per field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OverrideField {
+    Website,
+    LogoUrl,
+    Genre,
+    Country,
+}
+
 /// The four fields a user may fill in where the directory left a blank.
 ///
 /// A struct rather than four parameters for [`RadioStation`]'s own reason: they are all
@@ -183,6 +212,18 @@ pub struct StationOverrides {
     pub logo_url: Option<String>,
     pub genre: Option<String>,
     pub country: Option<String>,
+}
+
+impl StationOverrides {
+    /// The slot one field reads into, for a caller filling them from a table.
+    pub fn slot_mut(&mut self, field: OverrideField) -> &mut Option<String> {
+        match field {
+            OverrideField::Website => &mut self.website,
+            OverrideField::LogoUrl => &mut self.logo_url,
+            OverrideField::Genre => &mut self.genre,
+            OverrideField::Country => &mut self.country,
+        }
+    }
 }
 
 /// What a caller supplies when saving a station.
@@ -229,6 +270,20 @@ pub struct StationEdit {
     pub tags: String,
     pub codec: String,
     pub bitrate: i32,
+}
+
+/// What an earlier session's attempt at one logo URL left behind.
+///
+/// Here rather than beside the query that reads it, for the reason every other row type is: it
+/// crosses `library::radio`'s public signature and is read in `src/ui/radio`, and a boundary type
+/// spelled `queries::radio::…` at those call sites is the UI naming the database layer.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct StoredLogoAnswer {
+    pub favicon_url: String,
+    /// The stored file, or `None` where the URL answered with nothing.
+    pub artwork_path: Option<String>,
+    /// When this URL may be asked again. `None` on a hit.
+    pub retry_after: Option<String>,
 }
 
 /// What the directory's checker writes into [`DirectoryStation::codec`] when it could not identify

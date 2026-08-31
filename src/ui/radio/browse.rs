@@ -472,22 +472,11 @@ async fn warm_page(
         browse.stations.iter().filter_map(|station| logo_for(radio_ui, station)).collect()
     };
 
-    // `Some(())` only once the decode reports the tier is still its own: a leave landing inside
-    // the burst hands the buffers back, and announcing anyway would bump the generation over an
-    // emptied tier. A `JoinError` is the same "we don't know".
-    let ru_warm = radio_ui.clone();
-    let warmed = tokio::task::spawn_blocking(move || covers::prewarm(&ru_warm, &artwork_paths))
-        .await
-        .unwrap_or(false);
-
     let ru = radio_ui.clone();
-    let _ = weak.upgrade_in_event_loop(move |ui| {
+    covers::warm_and_announce(radio_ui, weak, artwork_paths, move |ui| {
         if new_logos {
-            apply(&ui, &ru);
+            apply(ui, &ru);
         }
-        // The same re-check the prewarm made, against anything that landed after it returned.
-        if warmed && ru.section_active() {
-            covers::announce_warm(&ui);
-        }
-    });
+    })
+    .await;
 }

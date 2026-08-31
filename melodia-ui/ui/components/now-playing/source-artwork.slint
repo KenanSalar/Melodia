@@ -26,5 +26,5 @@ export component SourceArtwork inherits ArtworkImage {
     tile-bg: Player.vm.has_station
         ? @linear-gradient(135deg, Player.vm.radio.tile_color_1, Player.vm.radio.tile_color_2)
         : Theme.accent.with-alpha(0.15);
-    tile-icon-color: Player.vm.has_station ? #ffffff.transparentize(0.1) : Theme.accent;
+    tile-icon-color: Player.vm.has_station ? Theme.tile-ink : Theme.accent;
 }

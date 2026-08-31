@@ -135,36 +135,94 @@ const MIN_SOURCES: usize = 200;
 /// and not `/* */`, and the needle is a substring rather than a parse.
 #[test]
 fn nothing_outside_the_helper_asks_the_os_for_the_binary_path() {
-    let mut raw = Vec::new();
-    let mut exempt_seen = Vec::new();
-
-    for (path, src) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
-        let found = src.matches(RAW_CALL).count();
-        match EXEMPT.iter().find(|(exempt, _)| *exempt == path) {
-            Some((_, allowed)) => {
-                assert_eq!(
-                    found, *allowed,
-                    "{path} spells `{RAW_CALL}` {found} time(s), not {allowed} — \
-                     if that is a new raw call, route it through `services::current_exe`; \
-                     if the sanctioned one went away, drop the entry from EXEMPT"
-                );
-                exempt_seen.push(path);
-            }
-            None if found > 0 => raw.push(path),
-            None => {}
-        }
-    }
+    let raw = spellings_outside(RAW_CALL, &EXEMPT);
 
     assert!(
         raw.is_empty(),
         "{raw:?} ask the OS for the binary path directly — use `services::current_exe`, \
          which resolves the `\" (deleted)\"` marker an unlinked executable gets"
     );
+}
+
+/// Every file under [`SRC_DIR`] that spells `needle`, minus the ones `exempt` names — each of
+/// which is held to its exact count rather than forgiven wholesale, since a second call written
+/// into a sanctioned file is itself the regression.
+fn spellings_outside(needle: &str, exempt: &[(&str, usize)]) -> Vec<String> {
+    let mut offenders = Vec::new();
+    let mut exempt_seen = Vec::new();
+
+    for (path, src) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
+        let found = src.matches(needle).count();
+        match exempt.iter().find(|(name, _)| *name == path) {
+            Some((_, allowed)) => {
+                assert_eq!(
+                    found, *allowed,
+                    "{path} spells `{needle}` {found} time(s), not {allowed} — either route the \
+                     new one through the shared helper, or drop the stale entry from the list"
+                );
+                exempt_seen.push(path);
+            }
+            None if found > 0 => offenders.push(path),
+            None => {}
+        }
+    }
+
     assert_eq!(
         exempt_seen.len(),
-        EXEMPT.len(),
-        "EXEMPT names {EXEMPT:?} but the walk only reached {exempt_seen:?} — a moved or \
-         renamed entry pre-authorises whatever takes its path next"
+        exempt.len(),
+        "the exemptions for `{needle}` name {exempt:?} but the walk only reached \
+         {exempt_seen:?} — a moved or renamed entry pre-authorises whatever takes its path next"
+    );
+    offenders
+}
+
+/// A URL scheme tested by prefix, in the substring both spellings share.
+const RAW_SCHEME_TEST: &str = "starts_with(\"http";
+
+/// Nobody, this one included: the needle carries a quote, so the declaration above spells it `\"`
+/// in the source and cannot match itself the way [`RAW_BODY_READ`]'s does.
+const SCHEME_EXEMPT: [(&str, usize); 0] = [];
+
+/// Four sites tested a scheme by prefix — a station's website field, its logo URL, a `.pls`/`.m3u`
+/// line and an import line — and two admitted a bare `http://`, which names no host; on the import
+/// path that became a row. [`super::http_url`] is the one parse now, and only a corpus walk can
+/// see a fifth copy: a prefix test reads as ordinary code and is wrong only on input nobody types
+/// by hand.
+#[test]
+fn nothing_tests_a_url_scheme_by_prefix() {
+    let raw = spellings_outside(RAW_SCHEME_TEST, &SCHEME_EXEMPT);
+
+    assert!(
+        raw.is_empty(),
+        "{raw:?} test a URL's scheme by prefix — use `services::http_url`, whose parse also \
+         rejects a scheme naming no host"
+    );
+}
+
+/// The streamed body read [`super::read_capped`] owns.
+const RAW_BODY_READ: &str = "bytes_stream()";
+
+/// Where it may appear, and how often. Paths are relative to [`SRC_DIR`].
+const BODY_READ_EXEMPT: [(&str, usize); 3] = [
+    ("services/mod.rs", 1),
+    // The updater's download, and a genuinely different shape: it streams to a file and reports
+    // progress rather than collecting a capped `Vec` in memory.
+    ("services/updater/install/download.rs", 1),
+    // This pin.
+    ("services/tests/mod_tests.rs", 1),
+];
+
+/// Five bounded fetches each had their own copy of the stream-under-a-cap loop, and one of them
+/// (the artist image) was a `bytes()` measured afterwards — which had already allocated whatever
+/// the host sent. A sixth copy is invisible in review, so it is walked for rather than reviewed.
+#[test]
+fn every_capped_body_read_goes_through_the_shared_one() {
+    let raw = spellings_outside(RAW_BODY_READ, &BODY_READ_EXEMPT);
+
+    assert!(
+        raw.is_empty(),
+        "{raw:?} stream a response body themselves — use `services::read_capped`, which refuses \
+         as soon as the body crosses the caller's cap"
     );
 }
 

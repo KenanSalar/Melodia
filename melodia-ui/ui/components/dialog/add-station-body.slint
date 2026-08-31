@@ -47,22 +47,14 @@ export component AddStationBody inherits VerticalLayout {
                     // entry for one is an invitation to localize a hostname.
                     placeholder: "https://example.com/stream";
                     text <=> RadioForm.url;
-                    accepted => {
-                        if (RadioForm.url != "" && !RadioForm.busy) {
-                            RadioForm.submit();
-                        }
-                    }
+                    accepted => { RadioForm.submit-if-ready(); }
                 }
 
                 if !RadioForm.directory-owned: LabeledInput {
                     label: @tr("Name (optional)");
                     placeholder: @tr("Leave blank to use the station's own name");
                     text <=> RadioForm.name;
-                    accepted => {
-                        if (RadioForm.url != "" && !RadioForm.busy) {
-                            RadioForm.submit();
-                        }
-                    }
+                    accepted => { RadioForm.submit-if-ready(); }
                 }
 
                 // The four the directory may have left blank. Each is gated on its own flag rather
@@ -73,22 +65,14 @@ export component AddStationBody inherits VerticalLayout {
                     label: @tr("Website");
                     placeholder: "https://example.com";
                     text <=> RadioForm.website;
-                    accepted => {
-                        if (!RadioForm.busy) {
-                            RadioForm.submit();
-                        }
-                    }
+                    accepted => { RadioForm.submit-if-ready(); }
                 }
 
                 if RadioForm.can-edit-logo: LabeledInput {
                     label: @tr("Logo URL");
                     placeholder: "https://example.com/logo.png";
                     text <=> RadioForm.logo-url;
-                    accepted => {
-                        if (!RadioForm.busy) {
-                            RadioForm.submit();
-                        }
-                    }
+                    accepted => { RadioForm.submit-if-ready(); }
                 }
 
                 // Left blank with a website filled in, the logo is read off that site instead —
@@ -105,22 +89,14 @@ export component AddStationBody inherits VerticalLayout {
                     label: @tr("Genre");
                     placeholder: @tr("Jazz, Blues");
                     text <=> RadioForm.genre;
-                    accepted => {
-                        if (!RadioForm.busy) {
-                            RadioForm.submit();
-                        }
-                    }
+                    accepted => { RadioForm.submit-if-ready(); }
                 }
 
                 if RadioForm.can-edit-country: LabeledInput {
                     label: @tr("Country");
                     placeholder: @tr("Tunisia");
                     text <=> RadioForm.country;
-                    accepted => {
-                        if (!RadioForm.busy) {
-                            RadioForm.submit();
-                        }
-                    }
+                    accepted => { RadioForm.submit-if-ready(); }
                 }
 
                 // Says why the name and stream URL are missing, which otherwise reads as a broken

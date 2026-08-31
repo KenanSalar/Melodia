@@ -10,12 +10,17 @@
 -- as distinct under UNIQUE, which is why a custom station is a plain INSERT and
 -- never that upsert: it would conflict with nothing and duplicate on every call.
 --
--- No secondary indexes. Favorites and recents are the only list queries and both
--- read a table the user fills by hand, where a scan beats a seek and an index is
--- a cost on the write that follows every play. The tracks table is the other
--- shape, and its history runs both ways: idx_tracks_last_played was dropped
--- there as write-only and had to come back the moment Recently Played existed.
--- Adding one here is additive, so it waits for the surface that wants it.
+-- One secondary index, and it is on stream_url rather than on either list query.
+-- Favorites and recents read a table the user fills by hand, where a scan beats a
+-- seek and an index is a cost on the write that follows every play, so neither
+-- gets one. The tracks table is the other shape, and its history runs both ways:
+-- idx_tracks_last_played was dropped there as write-only and had to come back the
+-- moment Recently Played existed.
+--
+-- The URL lookup is neither. It is a point query the import runs once per entry --
+-- duplicate detection cannot use the UNIQUE above, a hand-typed station carrying
+-- no station_uuid -- so unindexed it is O(entries x rows) on precisely the
+-- operation that makes the table large enough for that to matter.
 --
 -- sort_key is the to_natural_sort_key column tracks already carries, stored for
 -- the ordering semantics rather than for speed. It is what puts "Radio 2" ahead
@@ -76,6 +81,8 @@ CREATE TABLE
         last_played TEXT,
         play_count INTEGER NOT NULL DEFAULT 0
     );
+
+CREATE INDEX IF NOT EXISTS idx_radio_stations_stream_url ON radio_stations (stream_url);
 
 -- What each logo URL answered last time it was asked, so a browse doesn't spend
 -- the same round trips every launch. Both outcomes, in one row per URL, because

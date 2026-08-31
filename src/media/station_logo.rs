@@ -15,8 +15,6 @@
 use std::path::Path;
 use std::time::Duration;
 
-use futures_util::StreamExt;
-
 use crate::error::AppError;
 use crate::media::logo_tile::Tile;
 use crate::media::{artwork, image_decode, logo_tile};
@@ -94,40 +92,12 @@ pub async fn fetch(
         )));
     }
 
-    let bytes = read_capped(response, "Station logo body", MAX_LOGO_BYTES).await?;
+    let bytes = crate::services::read_capped(response, "Station logo body", MAX_LOGO_BYTES).await?;
 
     let dir = artwork_dir.to_path_buf();
     tokio::task::spawn_blocking(move || store_if_big_enough(&bytes, ext, &dir))
         .await
         .map_err(AppError::io_source)
-}
-
-/// Read at most `max_bytes` of `response`.
-///
-/// Streamed rather than `bytes()`-ed, for the reason `player::stream_source::fetch_capped` is: the
-/// header check ahead of this is a courtesy, and a host that omits or lies about its content
-/// length owes it nothing. Unlike the artist path there is no allowlist behind the cap, the host
-/// being whoever the station's owner named.
-///
-/// Shared with [`super::logo_discovery`], which reads a page from the same kind of host under its
-/// own cap. The cap is the caller's, and so is `what` — the two read different things off the same
-/// host, and an error naming a logo for a refused document sends whoever reads the log looking in
-/// the wrong half of the fetch.
-pub(super) async fn read_capped(
-    response: reqwest::Response,
-    what: &str,
-    max_bytes: u64,
-) -> Result<Vec<u8>, AppError> {
-    let mut body = Vec::new();
-    let mut chunks = response.bytes_stream();
-    while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.map_err(|e| AppError::network(format!("{what} could not be read"), e))?;
-        if body.len().saturating_add(chunk.len()) as u64 > max_bytes {
-            return Err(AppError::network_msg(format!("{what} is larger than {max_bytes} bytes")));
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
 }
 
 /// The URL to fetch, or a refusal.
@@ -137,12 +107,9 @@ pub(super) async fn read_capped(
 /// little: no credential is sent, and what comes back is only ever bytes the store decodes as an
 /// image, bounds and re-encodes.
 pub(super) fn fetchable_url(favicon_url: &str) -> Result<reqwest::Url, AppError> {
-    let parsed = reqwest::Url::parse(favicon_url)
-        .map_err(|e| AppError::network("Station logo URL could not be parsed", e))?;
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(AppError::network_msg("Station logo URL must be HTTP"));
-    }
-    Ok(parsed)
+    crate::services::http_url(favicon_url).ok_or_else(|| {
+        AppError::network_msg("Station logo URL must be an http:// or https:// address")
+    })
 }
 
 /// The store's own bounds, plus the floor above and [`logo_tile::compose`], on the decode pool.
@@ -154,6 +121,11 @@ fn store_if_big_enough(bytes: &[u8], ext: &'static str, dir: &Path) -> Option<St
     if width < MIN_LOGO_DIM || height < MIN_LOGO_DIM {
         return None;
     }
+    // Held to the end rather than around the decode: `logo_tile::compose` flattens at full source
+    // resolution before it downscales, and the store decodes again to bound an oversized source.
+    // `MAX_LOGO_BYTES` is no substitute — it bounds the *compressed* size, which a flat-colour icon
+    // stays under at any dimension, and the fetch window runs several at once.
+    let _oversized = image_decode::large_decode_guard(u64::from(width) * u64::from(height));
     // `None` is "store the source's own bytes": it is already a square opaque icon, or the tile
     // it wanted would not encode and the source is the better of the two.
     let tile = match tile_for(bytes) {

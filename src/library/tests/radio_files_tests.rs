@@ -16,9 +16,9 @@ use super::{
 
 /// A kept row, seeded from the same shape the writer tests build.
 async fn seed(db: &DbPool, station: &RadioStation) -> Result<RadioStation, AppError> {
-    let saved = queries::radio::save_station(db, &station.to_new_station()).await?;
-    queries::radio::set_favorite(db, saved.id, true).await?;
-    Ok(saved)
+    let id = queries::radio::save_station(db, &station.to_new_station()).await?;
+    queries::radio::set_favorite(db, id, true).await?;
+    queries::radio::get_station_by_id(db, id).await
 }
 
 /// Import through the real door. The file is the half a hand-edit reaches, so reading one is part
@@ -344,6 +344,35 @@ async fn a_re_import_stars_the_row_a_leftover_play_kept() -> Result<(), AppError
         },
         "a second pass has nothing to do and reports that rather than adding a duplicate"
     );
+    Ok(())
+}
+
+/// A file naming one station twice adds it once, the second entry seeing the row the first wrote.
+///
+/// The whole import runs in one transaction, so the lookup reads through it rather than off the
+/// read pool — where the row would not be there yet, uncommitted writes being invisible outside
+/// the connection that made them, and the list would land as two cards nothing can tell apart. A
+/// duplicate is not an exotic file: it is what concatenating two exports gives, and what a
+/// hand-edit gives whenever a station is pasted below one already in the list.
+#[tokio::test]
+async fn a_file_naming_one_station_twice_imports_it_once() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let text = "#EXTM3U\n\
+                #EXTINF:-1,Nidaa FM\n\
+                https://example.test/one\n\
+                #EXTINF:-1,Nidaa FM\n\
+                https://example.test/one\n";
+
+    assert_eq!(
+        import_text(&db, text).await?,
+        ImportStationsResult {
+            imported: 1,
+            skipped: 1
+        },
+        "the second entry is the first one's row, already starred, so it is skipped"
+    );
+    let kept = queries::radio::get_favorite_stations(&db).await?;
+    assert_eq!(kept.len(), 1, "one card, not two the user has to tell apart by hand");
     Ok(())
 }
 

@@ -35,7 +35,7 @@ paths:
 
 ### Format Probing
 
-- **A `Hint` does not steer 0.5's probe** — `Probe::format` takes it as `_hint` and resolves the format by matching a two-byte marker, scoring still a `TODO`. Pass one anyway (it costs a line and 0.6 keeps the parameter), but never rely on it to break a tie: a container whose marker isn't registered is one the probe will mis-assign, silently and to whichever reader matches first. **This tree carries two Symphonia majors for that reason** — rodio's 0.5 for local files, where the extension is known and the formats are well-marked, and 0.6 in `player::stream_decode` for live streams, where neither holds. Read that module before touching either.
+- **A `Hint` does not steer 0.5's probe** — `Probe::format` takes it as `_hint` and resolves the format by matching a two-byte marker, scoring still a `TODO`. Pass one anyway (it costs a line and 0.6 keeps the parameter), but never rely on it to break a tie: a container whose marker isn't registered is one the probe will mis-assign, silently and to whichever reader matches first. **This tree carried two Symphonia majors for that reason and no longer does** — rodio is cut to its `playback` feature and everything decodes through `player::decode` against 0.6, whose probe scores each candidate against the frames that follow it. Read that module before touching either decoder.
 - Use `MediaSourceStream` (not `BufReader`) — it provides optimized buffering for multimedia I/O
 - Search for the first audio track explicitly — default track may be video in container formats
 
@@ -58,13 +58,44 @@ loop {
 
 ### Seeking
 
-- **Always reset the decoder after seeking** — stale internal state causes artifacts
-- Use `FormatReader::seek()` with `SeekTo::Time` for timestamp-based seeking
+- **Always reset the decoder after a seek**, and don't be talked out of it. `FormatReader::seek`'s
+  own docs say every decoder consuming that reader should be reset, and in 0.6.1 the codecs holding
+  no state across packets — FLAC, ALAC, PCM, ADPCM — document their `reset` as doing nothing, so
+  the blanket call costs them a vtable hop. The ones it is *for* are MP3, which rebuilds its whole
+  state, and AAC and Vorbis, which clear an overlap-add buffer that otherwise blends the audio
+  either side of the jump. Reset selectively and those two are exactly what you lose.
+  [symphonia#274](https://github.com/pdeljanov/Symphonia/issues/274) is not an argument against it:
+  it reports MP3 seeks popping, and says the fault is *not* seen with MKA/Vorbis or M4A/AAC. It was
+  read here once as saying a reset sends some containers back to the start, which it does not say
+  and no decoder's `reset` could do
+- Use `FormatReader::seek()` with `SeekTo::Time` for timestamp-based seeking, and `SeekMode::Accurate`
+- **Clamp a seek short of a stated length, not onto it.** The last frame is not somewhere a demuxer
+  can land: the seek answers out of range and the failed attempt still parks the reader at the end,
+  so the next pull reads as the track finishing. A slider dragged to its right edge asks for exactly
+  the length, so this is the common case rather than an edge one — `file_decode::SEEK_END_MARGIN`
+- **A demuxer seek lands on a packet boundary, so trim the head yourself.** Without it every seek
+  replays the tail of what came before. `required_ts - actual_ts` through the track's timebase gives
+  the frames to drop. Note that neither reference player does this: `symphonia-play` skips whole
+  packets and says in its own comment that it should not, and termusic seeks `Coarse` and skips whole
+  packets too. rodio's `refine_position` is frame-accurate, and that is the bar to keep
 
 ### Gapless Support
 
-- Enable `FormatOptions::enable_gapless = true` for seamless track transitions
-- Symphonia handles encoder delay/padding trimming automatically when gapless is enabled
+- **0.6 moved the flag rather than dropping it**: it is `AudioDecoderOptions::gapless`, not
+  `FormatOptions::enable_gapless`, and it **defaults to `true`**, so `AudioDecoderOptions::default()`
+  needs nothing enabled
+- **But only two decoders act on it**, MP3 and Vorbis. AAC, ALAC, FLAC, PCM and ADPCM ignore
+  `opts.gapless` outright, and `symphonia-format-isomp4` populates neither `Packet::trim_start`/
+  `trim_end` nor `Track::delay`/`padding` (it parses the edit list into `TrakAtom.edts` and never
+  reads it; iTunSMPB is not parsed at all). So an iTunes `.m4a` keeps its encoder delay, and there
+  is nothing on the track to check that against either. This is not a 0.6 regression: 0.5 gated the
+  same two demuxers on `FormatOptions::enable_gapless`, and MP3 got *better*, since 0.6 emits the
+  trims unconditionally under a default-on flag
+- **`Track::delay`/`padding` is advisory metadata rather than something applied.** CAF fills both
+  from its packet table and no decoder it feeds ever uses them; Opus-in-Ogg fills `delay` from
+  `pre_skip` for a decoder 0.6.1 does not ship. Trimming either ourselves is a feature to write,
+  not a switch to find — rox reached the same conclusion from the other direction, distrusting the
+  trimming enough to plan its own before verifying that MP3's holds
 
 ### Performance
 

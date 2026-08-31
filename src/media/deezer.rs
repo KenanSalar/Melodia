@@ -95,6 +95,10 @@ fn classify<T: serde::de::DeserializeOwned>(
         .map_err(|e| AppError::network(format!("Failed to parse {what}"), e))
 }
 
+/// Ceiling on a search body. A page of results is a few kilobytes and the caller
+/// only ever reads the first entry, so the cap is slack rather than a budget.
+const MAX_SEARCH_BYTES: u64 = 512 * 1024;
+
 /// Read and classify a search response.
 async fn decode_search<T: serde::de::DeserializeOwned>(
     response: reqwest::Response,
@@ -105,10 +109,7 @@ async fn decode_search<T: serde::de::DeserializeOwned>(
         return Ok(DeezerAnswer::HttpStatus(status));
     }
 
-    let body = response
-        .bytes()
-        .await
-        .map_err(|e| AppError::network(format!("Failed to read {what}"), e))?;
+    let body = crate::services::read_capped(response, what, MAX_SEARCH_BYTES).await?;
 
     classify(&body, what)
 }
@@ -232,16 +233,10 @@ pub async fn download_and_cache_artist_image(
         )));
     }
 
-    let bytes =
-        response.bytes().await.map_err(|e| AppError::network("Failed to read image bytes", e))?;
-
-    if bytes.len() as u64 > MAX_IMAGE_BYTES {
-        return Err(AppError::network_msg(format!(
-            "Image too large: {} bytes (max {})",
-            bytes.len(),
-            MAX_IMAGE_BYTES
-        )));
-    }
+    // Streamed under the cap rather than `bytes()`-ed and measured afterwards: the header check
+    // above is only as good as the header, and a host that omits or understates it had already
+    // been allocated in full by the time the old check could refuse it.
+    let bytes = crate::services::read_capped(response, "Artist image", MAX_IMAGE_BYTES).await?;
 
     // Through the shared store so an artist image is bounded and deduplicated exactly as a cover
     // is. Deezer serves these at a fixed 250 px, so the bounds don't fire today — what matters is

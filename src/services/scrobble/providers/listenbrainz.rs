@@ -20,6 +20,13 @@ use crate::services::scrobble::model::ScrobbleTrack;
 /// The `ListenBrainz` API root.
 const LB_API_BASE: &str = "https://api.listenbrainz.org";
 
+/// Ceiling on a refusal's body. Tighter than [`ANSWER_MAX_BYTES`] because the text lands in an
+/// error a user reads, so a host answering with a page of HTML would otherwise be quoted in full.
+const ERROR_MAX_BYTES: u64 = 8 * 1024;
+
+/// Ceiling on a success body. The widest is a bulk lookup of [`MAX_LOOKUPS_PER_POST`] recordings.
+const ANSWER_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
 /// Identifies Melodia as the player and submitting client in listen metadata.
 const MEDIA_PLAYER: &str = "Melodia";
 const SUBMISSION_CLIENT: &str = "Melodia";
@@ -76,7 +83,10 @@ pub async fn validate_token(
     if !status.is_success() {
         return Err(server_error(status, response).await);
     }
-    let validated = response.json::<ValidatedToken>().await.map_err(|e| {
+    let bytes =
+        crate::services::read_capped(response, "ListenBrainz validate-token", ANSWER_MAX_BYTES)
+            .await?;
+    let validated: ValidatedToken = serde_json::from_slice(&bytes).map_err(|e| {
         AppError::network("Failed to parse ListenBrainz validate-token response", e)
     })?;
     Ok(validated)
@@ -166,7 +176,10 @@ pub async fn lookup_recording_mbid(
     if !status.is_success() {
         return Err(error_for(status, response).await);
     }
-    let result = response.json::<LookupResult>().await.map_err(|e| {
+    let bytes =
+        crate::services::read_capped(response, "ListenBrainz metadata-lookup", ANSWER_MAX_BYTES)
+            .await?;
+    let result: LookupResult = serde_json::from_slice(&bytes).map_err(|e| {
         AppError::network("Failed to parse ListenBrainz metadata-lookup response", e)
     })?;
     Ok(mbid_match(result.recording_mbid, result.release_mbid))
@@ -197,7 +210,13 @@ pub async fn lookup_recording_mbids_bulk(
     if !status.is_success() {
         return Err(error_for(status, response).await);
     }
-    let results = response.json::<Vec<BulkLookupResult>>().await.map_err(|e| {
+    let bytes = crate::services::read_capped(
+        response,
+        "ListenBrainz bulk metadata-lookup",
+        ANSWER_MAX_BYTES,
+    )
+    .await?;
+    let results: Vec<BulkLookupResult> = serde_json::from_slice(&bytes).map_err(|e| {
         AppError::network("Failed to parse ListenBrainz bulk metadata-lookup response", e)
     })?;
     Ok(align_bulk_results(queries.len(), results))
@@ -246,9 +265,14 @@ async fn error_for(status: StatusCode, response: reqwest::Response) -> ListenBra
 }
 
 /// Read a failed response's body into a `Server` error — best-effort, so an
-/// unreadable body degrades to an empty message.
+/// unreadable body, or one past [`ERROR_MAX_BYTES`], degrades to an empty
+/// message.
 async fn server_error(status: StatusCode, response: reqwest::Response) -> ListenBrainzError {
-    let message = response.text().await.unwrap_or_default();
+    let message =
+        crate::services::read_capped(response, "ListenBrainz error body", ERROR_MAX_BYTES)
+            .await
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .unwrap_or_default();
     ListenBrainzError::Server {
         status: status.as_u16(),
         message,

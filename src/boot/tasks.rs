@@ -86,7 +86,7 @@ pub fn maybe_resume_on_startup(
     // re-enters the same lock through `with_state_emit`.
     let has_source = {
         let s = melodia::player::state::lock_state(&state.player_state);
-        s.current_track.is_some() || s.radio.is_some()
+        s.source.is_some()
     };
     if has_source && let Err(e) = library::playback::player_play(&state.playback_ctx()) {
         log::warn!("resume_on_startup: player_play failed: {e}");

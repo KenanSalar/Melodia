@@ -122,6 +122,12 @@ export global Theme {
     // at its right end so the two don't meet in the corner, and a `TrackList` reserves it as a lane.
     out property <length> scrollbar-slot: 10px;
 
+    // The one ink drawn on a name-hashed tile — the station monogram and the glyph beside it, on
+    // the four surfaces that paint one. Theme-independent on purpose: it is legible because
+    // `ui::radio::identity` keeps the generated stops deep, not because of anything the palette
+    // says, so a variant cannot re-tune it and lowering those floors is what would break it.
+    out property <brush> tile-ink: #ffffff.transparentize(0.1);
+
     out property <length> pad-xs: 4px;
     out property <length> pad-sm: 8px;
     out property <length> pad-md: 12px;
