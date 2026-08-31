@@ -18,10 +18,10 @@ use crate::media::{
     self_writes::SelfWrites,
     watcher::{FileEvent, FolderWatcher},
 };
+use crate::player::backend::PlaybackEngine;
 use crate::player::decks::DECK_COUNT;
 use crate::player::event_sink::{MediaControlsSync, PlayerSinks};
 use crate::player::output::AudioOutput;
-use crate::player::rodio_backend::RodioPlayer;
 use crate::player::state::{
     PlayerStateHandle, PlayerViewModelLight, PositionTick, QueueViewModel, lock_state,
 };
@@ -53,7 +53,7 @@ pub struct AppState {
     pub db: DbPool,
     pub cover_cache: CoverCache,
     pub player_state: Arc<PlayerStateHandle>,
-    pub rodio: Arc<RodioPlayer>,
+    pub engine: Arc<PlaybackEngine>,
     /// The open device. Held because dropping it stops the stream and releases the card — which is
     /// the whole difference from the leaked sink this replaced, and what a device picker will need.
     pub audio_output: Arc<AudioOutput>,
@@ -165,7 +165,7 @@ impl AppState {
         log::info!("Audio output: {:?}", audio_output.negotiated());
         // The runtime handle is only used to schedule the deferred half of a
         // faded pause / stop (arm the ramp now, pause the decks once it lands).
-        let rodio = Arc::new(RodioPlayer::new(audio_output.mixer(), runtime.clone())?);
+        let engine = Arc::new(PlaybackEngine::new(audio_output.mixer(), runtime.clone())?);
 
         let db = database::init_database(&paths).await?;
 
@@ -188,11 +188,11 @@ impl AppState {
             let vol = s.effective_volume();
             let speed = s.playback_speed;
             drop(s);
-            rodio.set_volume(vol);
-            rodio.set_speed(speed);
+            engine.set_volume(vol);
+            engine.set_speed(speed);
         }
 
-        hydrate_audio_dsp(&rodio, &settings);
+        hydrate_audio_dsp(&engine, &settings);
 
         let cover_cache: CoverCache = crate::media::artwork::new_cover_cache();
 
@@ -245,7 +245,7 @@ impl AppState {
             db,
             cover_cache,
             player_state,
-            rodio,
+            engine,
             audio_output: Arc::new(audio_output),
             audio_health,
             sinks,
@@ -365,29 +365,29 @@ impl AppState {
 /// the Rodio backend (not `PlayerState`). Ordering is deliberate: values first,
 /// `enabled` last, so the enable's generation bump publishes a fully-seeded
 /// state to the audio thread.
-fn hydrate_audio_dsp(rodio: &RodioPlayer, settings: &settings::SettingsData) {
+fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData) {
     // `set_eq_gains` clamps and length-normalises the (possibly hand-edited)
     // gain list; the EQ ships off by default.
-    rodio.set_eq_gains(&settings.equalizer.eq_band_gains);
-    rodio.set_eq_preamp(settings.equalizer.eq_preamp);
-    rodio.set_eq_enabled(settings.equalizer.eq_enabled);
+    engine.set_eq_gains(&settings.equalizer.eq_band_gains);
+    engine.set_eq_preamp(settings.equalizer.eq_preamp);
+    engine.set_eq_enabled(settings.equalizer.eq_enabled);
 
     // ReplayGain master state seeds the same way — per-track gain is baked per
     // source at play time. Ships off by default; the mode string falls back to
     // Album on an unknown value.
-    rodio.set_replaygain_preamp(settings.replaygain.rg_preamp);
-    rodio.set_replaygain_mode(crate::player::replaygain::RgMode::from_settings_str(
+    engine.set_replaygain_preamp(settings.replaygain.rg_preamp);
+    engine.set_replaygain_mode(crate::player::replaygain::RgMode::from_settings_str(
         &settings.replaygain.rg_mode,
     ));
-    rodio.set_replaygain_prevent_clipping(settings.replaygain.rg_prevent_clipping);
-    rodio.set_replaygain_enabled(settings.replaygain.rg_enabled);
+    engine.set_replaygain_prevent_clipping(settings.replaygain.rg_prevent_clipping);
+    engine.set_replaygain_enabled(settings.replaygain.rg_enabled);
 
     // Crossfade ships off; `set_crossfade_duration_ms` clamps a hand-edited value.
-    rodio.set_crossfade_duration_ms(settings.crossfade.crossfade_duration_ms);
-    rodio.set_crossfade_manual(settings.crossfade.crossfade_manual);
-    rodio.set_crossfade_skip_same_album(settings.crossfade.crossfade_skip_same_album);
-    rodio.set_crossfade_fade_on_pause(settings.crossfade.crossfade_fade_on_pause);
-    rodio.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
+    engine.set_crossfade_duration_ms(settings.crossfade.crossfade_duration_ms);
+    engine.set_crossfade_manual(settings.crossfade.crossfade_manual);
+    engine.set_crossfade_skip_same_album(settings.crossfade.crossfade_skip_same_album);
+    engine.set_crossfade_fade_on_pause(settings.crossfade.crossfade_fade_on_pause);
+    engine.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
 
     // The visualizer is deliberately absent: its tap is armed by the
     // Now-Playing view being on screen, not by a persisted flag, so it must

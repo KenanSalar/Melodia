@@ -199,7 +199,7 @@ pub enum DeferredOp {
 /// only the `Arc`, not the player.
 pub fn lock_decks(decks: &Mutex<Decks>) -> MutexGuard<'_, Decks> {
     decks.lock().unwrap_or_else(|poisoned| {
-        log::error!("RodioPlayer decks mutex was poisoned, recovering");
+        log::error!("PlaybackEngine decks mutex was poisoned, recovering");
         poisoned.into_inner()
     })
 }

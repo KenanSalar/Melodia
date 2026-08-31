@@ -206,7 +206,7 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     // tick — one frame. Nothing here allocates except the one `SharedString` the waveform path has
     // to be handed to Slint as.
     {
-        let viz = state.rodio.visualizer();
+        let viz = state.engine.visualizer();
         let model = model.clone();
         let style = style.clone();
         let analyzers = analyzers.clone();
@@ -265,7 +265,7 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     // has to disarm the tap on the way out; on the way in it arms optimistically and the next tick
     // refines it. The session's buffers leave with it, being the feature's resident footprint.
     {
-        let viz = state.rodio.visualizer();
+        let viz = state.engine.visualizer();
         let analyzers = analyzers.clone();
         let model = model.clone();
         let weak = ui.as_weak();
@@ -292,7 +292,7 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     // the strip's Timer, so a hide landing on an already-settled drawing stops it in the same pass
     // as it drops the gate: `Timer::stop` takes effect at once and the disarming tick never runs.
     {
-        let viz = state.rodio.visualizer();
+        let viz = state.engine.visualizer();
         viz_global.on_window_hidden(move || viz.set_enabled(false));
     }
 

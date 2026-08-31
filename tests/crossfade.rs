@@ -21,11 +21,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use melodia::player::audio::{ChannelCount, SampleRate};
+use melodia::player::backend::PlaybackEngine;
 use melodia::player::decks::DECK_COUNT;
 use melodia::player::output::convert::Shape;
 use melodia::player::output::mixer::{self, MixerPull};
 use melodia::player::replaygain::TrackReplayGain;
-use melodia::player::rodio_backend::RodioPlayer;
 
 const RATE: u32 = 44_100;
 const CHANNELS: u16 = 2;
@@ -238,27 +238,27 @@ fn fixture() -> std::io::Result<Fixture> {
     })
 }
 
-/// `RodioPlayer` + the puller its two decks feed.
+/// `PlaybackEngine` + the puller its two decks feed.
 ///
 /// The `Mixer` itself is dropped on the way out: the decks are reference-counted, so `Decks` keeps
 /// the two it took and the puller keeps the voices behind them.
-fn player() -> std::io::Result<(Arc<RodioPlayer>, MixerPull)> {
+fn player() -> std::io::Result<(Arc<PlaybackEngine>, MixerPull)> {
     let shape = Shape {
         channels: nz_u16(CHANNELS),
         rate: nz_u32(RATE),
     };
     let (mixer, pull) = mixer::pair(DECK_COUNT, shape);
-    let player = RodioPlayer::new(&mixer, tokio::runtime::Handle::current())
+    let player = PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())
         .map_err(std::io::Error::other)?;
     Ok((Arc::new(player), pull))
 }
 
-fn start(rodio: &RodioPlayer, path: &str) {
+fn start(rodio: &PlaybackEngine, path: &str) {
     let r = rodio.play_media(path, 1.0, 1.0, None, TrackReplayGain::default());
     assert!(r.is_ok(), "play_media failed: {:?}", r.err());
 }
 
-fn crossfade_into(rodio: &RodioPlayer, path: &str) {
+fn crossfade_into(rodio: &PlaybackEngine, path: &str) {
     let r = rodio.begin_crossfade(path, TrackReplayGain::default(), FADE_MS, 1.0, 1.0);
     assert!(r.is_ok(), "begin_crossfade failed: {:?}", r.err());
 }
@@ -501,7 +501,7 @@ async fn stopping_a_paused_deck_clears_it_immediately() -> std::io::Result<()> {
 
     assert_eq!(
         rodio.check_playback_state(),
-        melodia::player::rodio_backend::PlaybackCheck::EndOfStream,
+        melodia::player::backend::PlaybackCheck::EndOfStream,
         "the decks must be cleared by the time `stop_with_fade` returns, not \
          behind a deferred clear waiting on a ramp that can never advance"
     );
@@ -566,7 +566,7 @@ async fn stopping_with_a_gapless_track_staged_clears_both_decks_at_once() -> std
     // still reporting `Playing`.
     assert_eq!(
         rodio.check_playback_state(),
-        melodia::player::rodio_backend::PlaybackCheck::EndOfStream,
+        melodia::player::backend::PlaybackCheck::EndOfStream,
         "both decks — staged source included — must be cleared by the time \
          `stop_with_fade` returns, not behind a deferred clear"
     );
@@ -634,7 +634,7 @@ async fn a_deferred_clear_takes_a_late_preload_with_it() -> std::io::Result<()> 
 
     assert_eq!(
         rodio.check_playback_state(),
-        melodia::player::rodio_backend::PlaybackCheck::EndOfStream,
+        melodia::player::backend::PlaybackCheck::EndOfStream,
         "the deferred clear must empty both decks, staged source included"
     );
     Ok(())
@@ -669,7 +669,7 @@ async fn a_preload_that_outlives_the_stop_it_raced_is_refused() -> std::io::Resu
     );
     assert_eq!(
         rodio.check_playback_state(),
-        melodia::player::rodio_backend::PlaybackCheck::EndOfStream,
+        melodia::player::backend::PlaybackCheck::EndOfStream,
         "and the decks must stay empty — a source staged here would read as a \
          `GaplessTransition` off a stopped player"
     );

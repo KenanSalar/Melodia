@@ -218,7 +218,7 @@ impl VisualizerShared {
         self.enabled.load(Ordering::Relaxed)
     }
 
-    /// Publish the live playback speed. `RodioPlayer::set_speed` is the single writer — boot
+    /// Publish the live playback speed. `PlaybackEngine::set_speed` is the single writer — boot
     /// hydration goes through it and `play_media` / `begin_crossfade` only re-apply what it
     /// published, so don't add calls there.
     #[expect(
@@ -317,7 +317,7 @@ impl Drop for DeckRun {
 
 /// A transparent [`Source`] copying a downmixed sample out of every frame it forwards. Every
 /// source the decks play is wrapped in one by
-/// [`RodioPlayer::build_source`](super::rodio_backend::RodioPlayer), so the playing track, a
+/// [`PlaybackEngine::build_source`](super::backend::PlaybackEngine), so the playing track, a
 /// gapless successor and both sides of a crossfade each feed the ring of the deck they were built
 /// for.
 pub struct VisualizerTap<S> {

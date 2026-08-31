@@ -18,7 +18,7 @@ use super::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 use super::stream_source::PreparedStream;
 use super::visualizer::{VisualizerShared, VisualizerTap};
 
-/// Audio playback operations, so tests can stand a mock in for `RodioPlayer`.
+/// Audio playback operations, so tests can stand a mock in for `PlaybackEngine`.
 pub trait PlayerBackend: Send + Sync {
     fn play_media(
         &self,
@@ -59,7 +59,7 @@ pub trait PlayerBackend: Send + Sync {
     fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError>;
 }
 
-/// Blanket impl so an `Arc<RodioPlayer>` is itself a backend.
+/// Blanket impl so an `Arc<PlaybackEngine>` is itself a backend.
 impl<T: std::ops::Deref + Send + Sync> PlayerBackend for T
 where
     T::Target: PlayerBackend,
@@ -113,7 +113,7 @@ where
     }
 }
 
-impl PlayerBackend for RodioPlayer {
+impl PlayerBackend for PlaybackEngine {
     fn play_media(
         &self,
         file_path: &str,
@@ -172,7 +172,7 @@ pub enum PlaybackCheck {
     Playing,
 }
 
-/// Pure half of [`RodioPlayer::check_playback_state`], split out for testability.
+/// Pure half of [`PlaybackEngine::check_playback_state`], split out for testability.
 pub fn evaluate_playback_check(
     was_gapless: bool,
     queue_len: usize,
@@ -187,7 +187,7 @@ pub fn evaluate_playback_check(
     PlaybackCheck::Playing
 }
 
-pub struct RodioPlayer {
+pub struct PlaybackEngine {
     // The mutex is what makes a multi-op sequence atomic (rodio's `Player` is
     // already Send+Sync); `Arc` so a deferred pause/stop can hold the decks
     // after its sleep.
@@ -235,7 +235,7 @@ pub struct RodioPlayer {
     runtime: tokio::runtime::Handle,
 }
 
-impl RodioPlayer {
+impl PlaybackEngine {
     /// # Errors
     ///
     /// [`AppError::Player`] if `mixer` carries fewer voices than the decks need.
@@ -852,5 +852,5 @@ impl RodioPlayer {
 }
 
 #[cfg(test)]
-#[path = "tests/rodio_backend_tests.rs"]
+#[path = "tests/backend_tests.rs"]
 mod tests;

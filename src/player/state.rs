@@ -119,7 +119,7 @@ impl Default for PlayerStateHandle {
 
 impl PlayerStateHandle {
     /// Acquire the execution lock, recovering from poison rather than panicking
-    /// (mirrors [`lock_state`] / `RodioPlayer::lock_player`). The guarded unit
+    /// (mirrors [`lock_state`] / `PlaybackEngine::lock_decks`). The guarded unit
     /// carries no data — poison only means a prior holder panicked mid-batch, and
     /// the guard exists purely to serialize the next batch.
     pub fn lock_exec(&self) -> MutexGuard<'_, ()> {

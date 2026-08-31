@@ -1,6 +1,7 @@
 mod aac_config;
 pub mod actions;
 pub mod audio;
+pub mod backend;
 pub mod crossfade;
 pub mod decks;
 mod decode;
@@ -15,7 +16,6 @@ pub mod output;
 pub mod prebuffer;
 pub mod queue;
 pub mod replaygain;
-pub mod rodio_backend;
 pub mod spectrum;
 pub mod state;
 pub mod stream_decode;

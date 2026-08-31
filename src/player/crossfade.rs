@@ -121,9 +121,9 @@ pub struct FadeCmd {
     /// hold tracks at different sample rates.
     pub ramp_ms: u64,
     /// Fade-out only: the source ends once the ramp lands, draining its deck, which is how
-    /// [`RodioPlayer::is_crossfading`] sees the overlap finish.
+    /// [`PlaybackEngine::is_crossfading`] sees the overlap finish.
     ///
-    /// [`RodioPlayer::is_crossfading`]: super::rodio_backend::RodioPlayer::is_crossfading
+    /// [`PlaybackEngine::is_crossfading`]: super::backend::PlaybackEngine::is_crossfading
     pub end_on_complete: bool,
 }
 

@@ -3,9 +3,9 @@ use std::sync::Mutex;
 use tokio::sync::watch;
 
 use crate::error::AppError;
+use crate::player::backend::PlayerBackend;
 use crate::player::event_sink::PlayerSinks;
 use crate::player::replaygain::TrackReplayGain;
-use crate::player::rodio_backend::PlayerBackend;
 use crate::player::state::{PlayerAction, PlayerStateHandle};
 
 /// Records all `PlayerBackend` calls for assertion in tests.

@@ -177,12 +177,12 @@ async fn open_and_start_station(
 
     match opened {
         Ok(prepared) => {
-            ctx.rodio.stage_stream(generation, prepared);
+            ctx.engine.stage_stream(generation, prepared);
             ctx.emit_and_execute(|s| s.build_station_connected_actions(generation));
             // The session can have ended while the open was in flight, in which case the emit
             // above declined and nothing claimed the stage. Closing it here rather than leaving it
             // for the next station is what stops an abandoned connection outliving its station.
-            ctx.rodio.discard_staged_stream(generation);
+            ctx.engine.discard_staged_stream(generation);
             Ok(())
         }
         Err(e) => {
@@ -209,7 +209,7 @@ async fn open_and_start_station(
 /// left to fade), and the `Pause` that next/previous append to restore a paused
 /// deck (fading there would make the incoming track audible on arrival).
 fn transport_fade_ms(ctx: &PlaybackContext) -> u64 {
-    if ctx.rodio.crossfade_settings().fade_on_pause {
+    if ctx.engine.crossfade_settings().fade_on_pause {
         crate::player::crossfade::PAUSE_FADE_MS
     } else {
         0
@@ -374,22 +374,22 @@ pub fn player_set_pause_at_track_end(ctx: &PlaybackContext, armed: bool) -> Resu
 
 /// Toggle the graphic equalizer on the live player.
 pub fn player_set_eq_enabled(ctx: &PlaybackContext, enabled: bool) {
-    ctx.rodio.set_eq_enabled(enabled);
+    ctx.engine.set_eq_enabled(enabled);
 }
 
 /// Set a single EQ band's gain (dB) on the live player.
 pub fn player_set_eq_band(ctx: &PlaybackContext, index: usize, gain_db: f32) {
-    ctx.rodio.set_eq_band(index, gain_db);
+    ctx.engine.set_eq_band(index, gain_db);
 }
 
 /// Replace all EQ band gains on the live player (preset / reset / hydration).
 pub fn player_set_eq_gains(ctx: &PlaybackContext, gains: &[f32]) {
-    ctx.rodio.set_eq_gains(gains);
+    ctx.engine.set_eq_gains(gains);
 }
 
 /// Set the EQ preamp / master gain (dB) on the live player.
 pub fn player_set_eq_preamp(ctx: &PlaybackContext, preamp_db: f32) {
-    ctx.rodio.set_eq_preamp(preamp_db);
+    ctx.engine.set_eq_preamp(preamp_db);
 }
 
 // --- ReplayGain ------------------------------------------------------------
@@ -402,22 +402,22 @@ pub fn player_set_eq_preamp(ctx: &PlaybackContext, preamp_db: f32) {
 
 /// Toggle `ReplayGain` on the live player.
 pub fn player_set_replaygain_enabled(ctx: &PlaybackContext, enabled: bool) {
-    ctx.rodio.set_replaygain_enabled(enabled);
+    ctx.engine.set_replaygain_enabled(enabled);
 }
 
 /// Set the `ReplayGain` mode (Track / Album) on the live player.
 pub fn player_set_replaygain_mode(ctx: &PlaybackContext, mode: crate::player::replaygain::RgMode) {
-    ctx.rodio.set_replaygain_mode(mode);
+    ctx.engine.set_replaygain_mode(mode);
 }
 
 /// Set the `ReplayGain` preamp (dB) on the live player.
 pub fn player_set_replaygain_preamp(ctx: &PlaybackContext, preamp_db: f32) {
-    ctx.rodio.set_replaygain_preamp(preamp_db);
+    ctx.engine.set_replaygain_preamp(preamp_db);
 }
 
 /// Toggle the static peak-based clip guard on the live player.
 pub fn player_set_replaygain_prevent_clipping(ctx: &PlaybackContext, on: bool) {
-    ctx.rodio.set_replaygain_prevent_clipping(on);
+    ctx.engine.set_replaygain_prevent_clipping(on);
 }
 
 // --- Crossfade -------------------------------------------------------------
@@ -429,33 +429,33 @@ pub fn player_set_replaygain_prevent_clipping(ctx: &PlaybackContext, on: bool) {
 
 /// Toggle crossfade on the live player.
 pub fn player_set_crossfade_enabled(ctx: &PlaybackContext, enabled: bool) {
-    ctx.rodio.set_crossfade_enabled(enabled);
+    ctx.engine.set_crossfade_enabled(enabled);
 }
 
 /// Set the crossfade length (ms) on the live player. Clamped by the backend.
 pub fn player_set_crossfade_duration_ms(ctx: &PlaybackContext, ms: u32) {
-    ctx.rodio.set_crossfade_duration_ms(ms);
+    ctx.engine.set_crossfade_duration_ms(ms);
 }
 
 /// Also crossfade on a manual track change (next / previous / picking a track).
 pub fn player_set_crossfade_manual(ctx: &PlaybackContext, on: bool) {
-    ctx.rodio.set_crossfade_manual(on);
+    ctx.engine.set_crossfade_manual(on);
 }
 
 /// Leave same-album transitions gapless.
 pub fn player_set_crossfade_skip_same_album(ctx: &PlaybackContext, on: bool) {
-    ctx.rodio.set_crossfade_skip_same_album(on);
+    ctx.engine.set_crossfade_skip_same_album(on);
 }
 
 /// Fade out on pause / user stop, and fade back in on resume.
 pub fn player_set_crossfade_fade_on_pause(ctx: &PlaybackContext, on: bool) {
-    ctx.rodio.set_crossfade_fade_on_pause(on);
+    ctx.engine.set_crossfade_fade_on_pause(on);
 }
 
 // The visualizer has no setter here on purpose: its tap is armed by the
 // Now-Playing view's visibility rather than by a persisted setting, so
 // `crate::ui::visualizer` calls `VisualizerShared::set_enabled` on the cell it
-// already holds — `RodioPlayer::visualizer()` — for snapshotting.
+// already holds — `PlaybackEngine::visualizer()` — for snapshotting.
 
 #[cfg(test)]
 #[path = "tests/playback_tests.rs"]
