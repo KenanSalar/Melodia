@@ -115,8 +115,10 @@ export component UpNextList inherits Rectangle {
     // overlap and the row hover paints under the bar. The remaining gap also keeps the
     // row TouchAreas off the window's right-edge resize band.
     in property <length> list-inset-right: compact ? 12px : 20px;
-    // The bar keeps its own thickness; the extra in the full host is hit-test margin.
-    in property <length> scrollbar-width: compact ? 8px : 10px;
+    // The bar keeps its own thickness; the extra in the full host is hit-test margin. The compact
+    // branch goes under the shared slot, the sheet having no room for it — as the collapsed
+    // sidebar rail does, for the same kind of reason.
+    in property <length> scrollbar-width: compact ? 8px : Theme.scrollbar-slot;
 
     // **The one place a row's height is decided**, handed to every row and to the slide
     // below, so the two can't drift.

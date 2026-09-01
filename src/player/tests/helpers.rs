@@ -19,24 +19,30 @@ use std::num::NonZero;
 use std::sync::Arc;
 use std::time::Duration;
 
-use rodio::source::SeekError;
-use rodio::{ChannelCount, Sample, SampleRate, Source};
-
 use crate::entities::track::TrackSummary;
+use crate::player::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape};
 use crate::player::state::PlayerViewModelLight;
 use crate::player::types::RadioNowPlaying;
 
-fn nz_u16(v: u16) -> ChannelCount {
+pub(crate) fn nz_u16(v: u16) -> ChannelCount {
     match NonZero::new(v) {
         Some(n) => n,
         None => NonZero::<u16>::MIN,
     }
 }
 
-fn nz_u32(v: u32) -> SampleRate {
+pub(crate) fn nz_u32(v: u32) -> SampleRate {
     match NonZero::new(v) {
         Some(n) => n,
         None => NonZero::<u32>::MIN,
+    }
+}
+
+/// A [`Shape`] from the plain integers a test spells, over the two above.
+pub(crate) fn shape(channels: u16, rate: u32) -> Shape {
+    Shape {
+        channels: nz_u16(channels),
+        rate: nz_u32(rate),
     }
 }
 
@@ -97,10 +103,7 @@ impl Iterator for TestSource {
     }
 }
 
-impl Source for TestSource {
-    fn current_span_len(&self) -> Option<usize> {
-        None
-    }
+impl AudioSource for TestSource {
     fn channels(&self) -> ChannelCount {
         nz_u16(self.channels)
     }

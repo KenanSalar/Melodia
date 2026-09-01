@@ -22,7 +22,7 @@ use tokio::task::JoinSet;
 
 use crate::error::AppError;
 use crate::library;
-use crate::library::radio::SiteOrigin;
+use crate::library::radio::{LogoAnswer, SiteOrigin};
 use crate::media::station_logo::StoredLogo;
 use crate::state::AppState;
 
@@ -85,7 +85,10 @@ impl Effort {
 }
 
 /// One in-flight download: the URL asked, and what came back.
-type LogoAnswer = (String, Result<Option<StoredLogo>, AppError>);
+///
+/// Distinct from [`LogoAnswer`], which is what the *store* already knew about a URL — this is a
+/// fetch we just made.
+type FetchOutcome = (String, Result<Option<StoredLogo>, AppError>);
 
 /// The session's answers, keyed on the URL they came from.
 ///
@@ -312,7 +315,7 @@ fn unasked_sites<'a>(
 }
 
 /// Hand one URL to the download seam and tag the answer with what was asked.
-fn spawn_fetch(in_flight: &mut JoinSet<LogoAnswer>, state: &AppState, url: String) {
+fn spawn_fetch(in_flight: &mut JoinSet<FetchOutcome>, state: &AppState, url: String) {
     let state = state.clone();
     in_flight.spawn(async move {
         let path = library::radio::fetch_logo(&state, &url).await;
@@ -349,20 +352,18 @@ async fn seed_from_store(
     let mut answered: HashSet<String> = HashSet::new();
     let mut landed = false;
     for answer in answers {
-        match answer.artwork_path {
-            Some(path) if library::radio::artwork_is_present(Some(&path)) => {
+        match library::radio::classify_logo_answer(&answer, &now) {
+            LogoAnswer::Hit(path) => {
                 memo.record(answer.favicon_url.clone(), Some(path));
                 answered.insert(answer.favicon_url);
                 landed = true;
             }
-            // Suppressed, and this page is not the one the backoff makes an exception for.
-            None if effort == Effort::Page
-                && library::radio::answer_is_suppressed(&answer, &now) =>
-            {
+            // Only this page honours the backoff; a detail visit is the exception it makes.
+            LogoAnswer::Suppressed if effort == Effort::Page => {
                 memo.record(answer.favicon_url.clone(), None);
                 answered.insert(answer.favicon_url);
             }
-            _ => {}
+            LogoAnswer::Suppressed | LogoAnswer::Unknown => {}
         }
     }
 

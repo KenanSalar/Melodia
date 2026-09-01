@@ -53,13 +53,57 @@ export component ShortcutScope inherits FocusScope {
         root.commit-debounce-ticks = 3;
     }
 
-    // Guarded on a real duration, so a press with no track loaded is a no-op rather
-    // than a seek against an unloaded backend.
+    // Scrubbing off the end of a track is how a track change lands mid-run, and it is the
+    // common way to reach the end rather than an exotic one. Without this the trailing edge
+    // would seek the *incoming* track to the outgoing one's target. On a mirror because
+    // `changed` rejects path expressions on globals.
+    property <int> watched-seek-track: Player.vm.track.id;
+    changed watched-seek-track => {
+        Player.end-seek-run();
+    }
+
+    seek-run-timer := Timer {
+        interval: 100ms;
+        running: Player.seek-run-ticks > 0;
+        triggered => {
+            Player.seek-run-ticks = max(0, Player.seek-run-ticks - 1);
+            if (Player.seek-run-ticks == 0) {
+                root.flush-seek();
+                Player.end-seek-run();
+            }
+        }
+    }
+
+    function flush-seek() {
+        if (Player.seek-run-unsent && Player.seek-run-target-ms >= 0) {
+            Player.seek(Player.seek-run-target-ms);
+            Player.seek-run-unsent = false;
+        }
+    }
+
+    // Walk the run's target rather than re-reading the position per press, for two reasons that
+    // happen to share a fix. A seek round-trips through the backend asynchronously and does not
+    // land inside a key repeat, so every repeat would aim at the same sample and the run would
+    // travel one step; and a seek is far from free down there, where the track is reopened and
+    // the demuxer walked to the target, so issuing one per repeat is the expensive way to go
+    // nowhere.
+    //
+    // Guarded on a real duration, so a press with no track loaded is a no-op rather than a seek
+    // against an unloaded backend.
     function bump-seek(delta-ms: int) {
         if (Player.duration-ms > 0) {
-            Player.seek(clamp(Player.position-ms + delta-ms,
-                              0,
-                              Player.duration-ms));
+            Player.seek-run-target-ms = clamp(
+                (Player.seek-run-target-ms >= 0 ? Player.seek-run-target-ms : Player.position-ms)
+                    + delta-ms,
+                0,
+                Player.duration-ms);
+            Player.seek-run-unsent = true;
+            // Leading edge, so a single tap still seeks on the keystroke; a repeat inside
+            // the window only moves the target and the trailing edge sends where it ended.
+            if (Player.seek-run-ticks == 0) {
+                root.flush-seek();
+            }
+            Player.seek-run-ticks = 3;
         }
     }
 
@@ -67,7 +111,7 @@ export component ShortcutScope inherits FocusScope {
     // an integer so the arithmetic does; the rounding bias is negligible at ms scale.
     function seek-to-percent(pct: int) {
         if (Player.duration-ms > 0) {
-            Player.seek(round(Player.duration-ms * pct / 100));
+            Player.seek-to(round(Player.duration-ms * pct / 100));
         }
     }
 

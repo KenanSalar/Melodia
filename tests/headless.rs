@@ -8,7 +8,7 @@
 //!   `XDG_DATA_HOME`, a process-global mutation this binary would need `unsafe`
 //!   for. `src/tests/config_tests.rs` drives the choice under the env lock
 //!   instead.
-//! - `AppState::init` opens the default audio device (rodio); machines without
+//! - `AppState::init` opens the default audio device; machines without
 //!   audio will fail here. The `test` job points ALSA's default PCM at the
 //!   userspace `null` device, so this runs headless there; `test-windows` skips
 //!   it by name instead, WASAPI having no equivalent short of a signed virtual

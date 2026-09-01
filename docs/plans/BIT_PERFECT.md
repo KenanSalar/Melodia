@@ -8,6 +8,10 @@ Status: **proposed** · Created: 2026-08-14
 > `rodio 0.22.2` / `cpal 0.17.3` sources in the registry, this tree's `Cargo.lock`,
 > and the rox checkout at `~/Development/rox` (ADR 9 / ADR 19,
 > `crates/rox-playback/src/output/`).
+>
+> **Re-read against #90 before acting on any of it.** rodio is gone and
+> `src/player/output/` exists, so findings 1 through 3 and Phase 1 are largely spent —
+> each is marked where it changed. Everything about exclusive mode is untouched.
 
 ---
 
@@ -35,13 +39,13 @@ That holds only when **all** of these are true, and the UI states which one is n
 | Volume == 100% | see below |
 
 The visualizer tap is the one thing that **stays on**: it is read-only and taps
-before rodio's speed/pause/volume wrappers (`src/player/CLAUDE.md`), so it observes
+before the deck's conversion, pause and volume (`src/player/CLAUDE.md`), so it observes
 without touching. That's a Melodia advantage worth keeping — most players kill their
 visualizer in exclusive mode.
 
-Volume is the interesting one. rodio's `Sample` is `f32`, so `x * 1.0f32 == x`
-exactly, and Melodia's `volume_to_amplitude` produces exactly `1.0` at volume 100.
-Bit-exactness therefore survives a unity multiply without a short-circuit — but the
+Volume is the interesting one, and #90 settled it: a deck skips the multiply entirely
+when its volume's bit pattern is exactly unity, which `volume_to_amplitude` produces at
+volume 100. Bit-exactness is therefore structural rather than an f32 accident — but the
 *user-facing* rule stays "volume at 100%", because that's the only value we'd defend,
 and Phase 4's round-trip test is what pins it rather than the argument.
 
@@ -125,7 +129,7 @@ it is the half worth porting.
 | writer threads at default priority | `AvSetMmThreadCharacteristics("Pro Audio")` on Windows; `SCHED_FIFO` (best-effort, degrade quietly) on Linux | a hand-rolled writer thread is exactly where the OS expects you to ask for RT scheduling. Without it a 40 ms buffer is at CFS's mercy |
 | claims `hw:` with no coordination | acquire `org.freedesktop.ReserveDevice1` first, release on drop | on a stock PipeWire desktop — which is every Fedora/Ubuntu install — the card is already reserved. Without this, Linux exclusive fails for most users and the reason string blames the hardware |
 | `fill()` pops the ring one sample at a time, re-reads `slots()` per frame, matches on channel count per frame | drain in contiguous chunks, hoist the channel decision out of the loop | this is the measurable inefficiency. `rtrb::read_chunk` hands back slices; per-frame atomic loads and a per-frame `match` on a value that never changes are pure overhead on the RT thread |
-| bit-exactness argued in the ADR, tested only in `f32` | a round-trip test: known 16- and 24-bit fixtures → the full chain, bypassed → assert bit-identical | rox's hardware tests are `#[ignore]`d, so nothing in CI pins the claim. Melodia can pull `MixerSource` in a plain unit test and prove it without a device |
+| bit-exactness argued in the ADR, tested only in `f32` | a round-trip test: known 16- and 24-bit fixtures → the full chain, bypassed → assert bit-identical | rox's hardware tests are `#[ignore]`d, so nothing in CI pins the claim. Melodia can pull `MixerPull` in a plain unit test and prove it without a device |
 | `Result<_, String>` throughout | `AppError` with the boundary variants | the tree's error contract; `services::describe` needs a typed cause |
 | hand-declares ~300 lines of CoreAudio `extern "C"` + four-char constants | use `objc2-core-audio` | finding 4 — it's already in our lock file, needs no SDK and no bindgen, and covers the whole surface |
 
@@ -138,27 +142,36 @@ CPU does.
 
 ## Five findings that decide the shape
 
-1. **`Mixer::add` resamples at add time.** `mixer.rs:62` wraps every source in
-   `UniformSourceIterator::new(source, self.0.channels, self.0.sample_rate)`. The
-   rate converter has a `from == to` passthrough (`conversions/sample_rate.rs:58`),
-   so equal rates cost nothing — but a 44.1 kHz file into a 48 kHz mixer is resampled
-   *inside rodio*, before any device backend sees it. **Bit-perfect therefore requires
-   the mixer itself to run at the source rate**, and the mixer's rate is fixed at
-   construction. Following the rate means building a new mixer.
+1. **Resampling is per source and visible, and the passthrough is exact.**
+   `output::convert` runs per deck source rather than per voice, and steps exactly one
+   source frame per output frame when the rates match — bit-identically, `-0.0`
+   included, which `convert_tests` pins. **Bit-perfect still requires the mixer to run
+   at the source rate**, since the conversion happens whether or not anyone wanted it;
+   what changed is that following the rate is now a mixer rebuild rather than a fight
+   with a dependency. *(Was: `Mixer::add` resampled inside rodio at add time against a
+   rate fixed at construction. #90 removed that.)*
 
-2. **A new mixer means new decks.** `Decks` connects two `Player`s to the mixer at
-   boot with `keep_alive_if_empty` queues, and that's the property crossfade rests on.
-   Both must be rebuilt against the new mixer, under the decks lock, in the right
-   order. This is the structural spine of the feature and the only genuinely risky
-   part — hence its own phase, built and shipped against the *shared* backend where a
-   mistake is a glitch rather than a dead device.
+2. **A new mixer means new decks.** `Decks` takes its two voices off the mixer at boot,
+   and that's the property crossfade rests on. Both must be rebuilt against the new
+   mixer, under the decks lock, in the right order. This is the structural spine of the
+   feature and the only genuinely risky part — hence its own phase, built and shipped
+   against the *shared* backend where a mistake is a glitch rather than a dead device.
+   The voices are reference-counted, so the rebuild is a swap rather than a lifetime
+   problem.
 
-3. **The `Box::leak` in `AppState::init` blocks the reopen.** `MixerDeviceSink` is
-   leaked so it outlives every `Player`; a leaked sink can never be dropped, and a
-   sink that is never dropped never releases the device. The leak has to become an
-   owned handle inside the new output type with drop order enforced (decks first,
-   then backend). That also touches the `process::exit(0)` rationale in `CLAUDE.md`
-   — update it in the same phase, don't leave the two disagreeing.
+3. **The reopen is unblocked.** *(Was: `MixerDeviceSink` was `Box::leak`'d so it
+   outlived every `Player`, and a leaked sink never releases the device.)* #90 made the
+   handle an owned `AudioOutput` on `AppState` with the stream dropping before the
+   decks, and corrected the `process::exit(0)` paragraph in `CLAUDE.md` — which stays,
+   because three other threads never exit and only one of the four was the sink's.
+
+   **rox already ships the recovery half, so it need not be re-derived.** Its cpal error
+   callback only sets a `device_lost` flag (`crates/rox-playback/src/output.rs:381-389`)
+   and the UI pump polls it and calls `reopen_device`
+   (`crates/rox-services/src/player.rs:1345-1357`), rebuilding the session at the current
+   spot or clearing it with a reason. That is the shape `tasks::audio_health` defers here:
+   it already has the signal and deliberately only reports it, because acting on it means
+   the deck rebuild item 2 above owns.
 
 4. **Every platform binding we need is already in `Cargo.lock`,** pulled by
    `cpal 0.17.3`:
@@ -185,18 +198,29 @@ CPU does.
 
 ## Structure
 
-New directory, because this **is** a directory's worth of work and it cuts across
-nothing else:
+**The directory exists.** #90 built `src/player/output/` for the shared backend, so this is no
+longer a greenfield layout — it is four files to extend rather than one `shared.rs` to write:
 
 ```
 src/player/output/
-  mod.rs        the seam: OutputMode, OutputRequest, Negotiated, OutputBackend, pump()
-  shared.rs     today's MixerDeviceSink behind the trait
+  mod.rs        AudioOutput: the open handle, and the only door onto Mixer
+  device.rs     the cpal stream, the config ladder, Negotiated, the period math
+  mixer.rs      the unclamped sum, in LOCKSTEP_FRAMES steps
+  deck.rs       one voice: transport, the command channel, the clock
+  convert.rs    rate, channel map, the speed ratio
+  tests/        convert / deck / mixer / device, per the tree's `#[path]` convention
+```
+
+What this plan still adds, on top of that:
+
+```
+  mod.rs        + the seam: OutputMode, OutputRequest, OutputBackend, pump()
+                  (Negotiated is already device.rs's and moves or is re-exported)
+  device.rs     becomes the shared backend behind the trait
   alsa.rs       #[cfg(target_os = "linux")]
   reserve.rs    #[cfg(target_os = "linux")]  org.freedesktop.ReserveDevice1
   wasapi.rs     #[cfg(target_os = "windows")] — format ladder + period math above the cfg
   coreaudio.rs  #[cfg(target_os = "macos")]
-  tests/        bypass + ladder + period math, per the tree's `#[path]` convention
 ```
 
 Ownership rules, so this doesn't sprawl:
@@ -223,21 +247,20 @@ Each phase is independently shippable and leaves the tree working. Platform phas
 are independent of each other — the seam falls back to shared wherever a backend
 doesn't exist.
 
-### Phase 1 — The output seam · no behaviour change
+### Phase 1 — The output seam · **mostly done by #90**
 
-1. Create `src/player/output/mod.rs` with `OutputMode { Shared, Exclusive }`,
-   `OutputRequest { mode, device, rate, channels, format, period_ms }`,
-   `Negotiated { mode, device, sample_rate, channels, format, engaged, reason }`,
-   and `trait OutputBackend` (hands back the mixer, reports `Negotiated`, drops to
-   release the device).
-2. Move the `DeviceSinkBuilder` / `open_sink_or_fallback` block out of
-   `AppState::init` into `output/shared.rs` behind that trait. Keep the fallback
-   ladder and the `stream_health` error callback exactly as they are.
-3. Replace the `&'static MixerDeviceSink` with an owned `AudioOutput` on `AppState`
-   (finding 3). Enforce drop order: decks, then backend. Update the `Box::leak` /
-   `process::exit(0)` paragraph in `CLAUDE.md` in the same commit.
-4. `pump()` lands as a stub `shared.rs` doesn't call yet — cpal still owns the
-   callback in shared mode. It exists so Phase 5 has one place to fill in.
+`src/player/output/` exists, `AudioOutput` is owned on `AppState`, `device::open` carries
+the fallback ladder and the `stream_health` callback, and `mixer::fill` is the single
+point samples reach a device buffer — the ownership rule this doc wrote for `pump()`,
+adopted there. What is left of this phase is the exclusive-mode vocabulary, which had
+nowhere to attach before there was a seam:
+
+1. Widen `Negotiated` (currently `{ shape, format }`) with `mode`, `device`, `engaged`
+   and `reason`, and add `OutputMode { Shared, Exclusive }` plus
+   `OutputRequest { mode, device, rate, channels, format, period_ms }`.
+2. Put today's `device.rs` behind a `trait OutputBackend` so a platform backend is a
+   sibling file rather than an arm in every match. `device::open`'s `build` closure
+   already inverts the construction the right way for this.
 
 **Exit:** `cargo clippy --all-targets --locked -- -D warnings` clean, `cargo test`
 clean, playback behaves identically. No user-visible change.
@@ -259,9 +282,9 @@ clean, playback behaves identically. No user-visible change.
 
 The risky phase. Built against the **shared** backend so a bug is a glitch.
 
-1. `RodioPlayer::reopen_at(rate, channels)`: under the decks lock, drop both decks,
-   drop the backend, build a fresh `mixer(channels, rate)`, open the backend against
-   it, rebuild `Decks`. `EqShared` / `ReplayGainShared` / `VisualizerShared` are
+1. `PlaybackEngine::reopen_at(rate, channels)`: under the decks lock, drop both decks,
+   drop the backend, build a fresh `mixer::pair(DECK_COUNT, shape)`, open the backend
+   against it, rebuild `Decks`. `EqShared` / `ReplayGainShared` / `VisualizerShared` are
    rate-independent `Arc`s and survive; `FadeShared` is deck-scoped and is rebuilt
    with the decks.
 2. Wire it as a side effect on the `emit_and_execute` path — it must run under
@@ -298,7 +321,8 @@ end of the phase).
    and either **Engaged** or the single reason it isn't, taken from
    `Negotiated::reason`. This is the deliverable that makes the claim checkable.
 4. **The round-trip test.** Fixtures: a short 16-bit and a short 24-bit WAV. Build
-   the full chain with everything bypassed, pull `MixerSource` directly, assert the
+   the full chain with everything bypassed, pull `MixerPull` directly (via
+   `output::mixer::pair`, as `tests/crossfade.rs` already does), assert the
    samples are bit-identical to the decoder's output. No device needed. This is the
    test rox doesn't have, and it's what stops a future DSP change quietly breaking
    the claim.
@@ -393,7 +417,7 @@ path; toggling off restores system audio.
   caches. Measure peak RSS once at the end of Phase 3 and once at the end of Phase 5;
   anything over the usual ceiling gets `heaptrack` before it merges.
 - **Threading.** Backends run on their own threads and never touch Slint. The reopen
-  is a side effect on the `emit_and_execute` path — `exec_lock → PlayerState → rodio`,
+  is a side effect on the `emit_and_execute` path — `exec_lock → PlayerState → decks`,
   never reversed.
 - **Errors.** `AppError` boundary variants with `#[source]`, and every fallback reason
   is a user-facing string that names what failed, not that something did.

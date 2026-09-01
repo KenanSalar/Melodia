@@ -40,8 +40,8 @@ export component EntityCard inherits Rectangle {
     in property <float> cover-scale-hover: 1.04;
 
     // Whether the host put controls in the `@children` overlay slot, and the whole of what this
-    // gates. **Not a list of buttons this card owns** — it carried the Playlists CRUD trio once,
-    // which every other host raising the flag then drew on top of its own controls.
+    // gates. **The card draws none of its own** — raising the flag opens the slot rather than
+    // adding buttons, and a card that shipped some would land them over every host's.
     in property <bool> show-overlay-actions: false;
 
     // Hover on any control the *host* owns, OR'd into `card-hovered` below. Usually the ones in

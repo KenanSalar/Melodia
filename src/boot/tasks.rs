@@ -69,7 +69,7 @@ pub fn restore_persisted_playback(runtime: &tokio::runtime::Runtime, state: &App
 }
 
 /// With "Resume on Startup" on and a restored source, play here so the
-/// first frame paints `Playing` and rodio is already decoding.
+/// first frame paints `Playing` and the deck is already decoding.
 ///
 /// A restored station goes through the same call and comes back the way it went away — as a
 /// re-open, since `player_play` routes a paused station to `resume_station`. That one is a

@@ -13,6 +13,8 @@
 //! one surface. Carrying the needle also answers its *shape* once per walk rather than per
 //! row — all-ASCII, and all-ASCII-digits — neither of which can change between rows.
 
+use std::cell::RefCell;
+
 use unicode_normalization::UnicodeNormalization;
 use unicode_normalization::char::is_combining_mark;
 
@@ -132,7 +134,7 @@ impl Needle {
         self.text.is_empty()
     }
 
-    /// Case- and accent-insensitive substring check, skipping the allocating path on
+    /// Case- and accent-insensitive substring check, skipping the fold entirely on
     /// all-ASCII text — where the filter walk spends nearly all its time, a large genre
     /// detail running this over thousands of rows per throttled keystroke. An empty needle
     /// matches anything, which is what lets a filter walk run unconditionally.
@@ -152,7 +154,7 @@ impl Needle {
                 .windows(n.len())
                 .any(|w| w.iter().zip(n).all(|(a, b)| fold_ascii_byte(*a) == *b));
         }
-        fold(haystack).contains(&self.text)
+        with_folded(haystack, |folded| folded.contains(&self.text))
     }
 
     /// Case- and accent-insensitive equality, on the same fold as [`Self::contains`].
@@ -165,7 +167,7 @@ impl Needle {
             return haystack.len() == n.len()
                 && haystack.bytes().zip(n).all(|(a, b)| fold_ascii_byte(a) == *b);
         }
-        fold(haystack) == self.text
+        with_folded(haystack, |folded| folded == self.text)
     }
 
     /// Case- and accent-insensitive prefix check, on the same fold as [`Self::contains`].
@@ -179,7 +181,7 @@ impl Needle {
             return haystack.len() >= n.len()
                 && haystack.bytes().zip(n).all(|(a, b)| fold_ascii_byte(a) == *b);
         }
-        fold(haystack).starts_with(&self.text)
+        with_folded(haystack, |folded| folded.starts_with(&self.text))
     }
 
     /// Substring match on an integer field in decimal, without formatting it onto the
@@ -255,6 +257,31 @@ fn fold(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     push_folded(&mut out, s);
     out
+}
+
+thread_local! {
+    /// The buffer the three predicates fold a *haystack* into.
+    ///
+    /// A needle is folded once by its owner, but the row side is folded per candidate, and
+    /// a filter box runs that walk over the whole list on every keystroke: a fresh
+    /// `String` per row where one reused buffer does. Only the accented arm reaches here;
+    /// an all-ASCII pair never leaves the byte walk.
+    ///
+    /// Thread-local rather than a field on [`Needle`], which the detail views keep behind a
+    /// `Mutex` and which a `RefCell` would stop being `Sync`.
+    static FOLD_SCRATCH: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// Fold `haystack` into the thread's scratch and answer `matches` against it.
+///
+/// `matches` is a `str` comparison at every call site, so it cannot re-enter this and the
+/// borrow is uncontended by construction.
+fn with_folded<R>(haystack: &str, matches: impl FnOnce(&str) -> R) -> R {
+    FOLD_SCRATCH.with_borrow_mut(|scratch| {
+        scratch.clear();
+        push_folded(scratch, haystack);
+        matches(scratch)
+    })
 }
 
 /// The one way to build a [`Needle`]. Trims first — an untrimmed trailing space empties

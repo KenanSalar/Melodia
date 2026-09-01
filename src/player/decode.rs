@@ -1,12 +1,13 @@
-//! What both decoders need before and around the codec: the registry, the track pick, and the
-//! packet cursor.
+//! What both decoders need before and around the codec: the registry, the track pick, the open
+//! that resolves the two, and the packet cursor.
 //!
-//! [`super::file_decode`] and [`super::stream_decode`] differ in what they open — a file with a
-//! length and a seek against a mount with neither — and in nothing after that. Resolving a codec
-//! and handing out the samples it produces are the same questions for both, and the answers have
-//! to agree or the split this module closed grows back one function at a time.
+//! [`super::file_decode`] and [`super::stream_decode`] differ in what they hand [`open`] — a file
+//! with a length and a seek against a mount with neither — and in nothing after that. That is
+//! structural rather than a convention held by review: each carried its own copy of the probe,
+//! track pick, decoder build and first packet once, five parallel failure arms apiece, and the two
+//! only agreed because nobody had yet edited one.
 //!
-//! **Why Symphonia 0.6 rather than the 0.5 rodio pins.** 0.5's probe picks a demuxer by matching a
+//! **Why Symphonia 0.6 rather than the 0.5 rodio pinned.** 0.5's probe picks a demuxer by matching a
 //! two-byte marker and nothing else — its `format()` takes a `Hint` and discards it, and scoring is
 //! still a `TODO` there. The only ADTS marker it registers is `0xFFF1`, so MPEG-2 ADTS (`0xFFF9`)
 //! matches nothing at all, the search runs on into the payload, and the first stray `0xFFFB` in it
@@ -18,8 +19,8 @@
 //! ADTS sync words, and it answers for both paths so the same bytes cannot get two answers.
 
 use std::sync::LazyLock;
+use std::time::Duration;
 
-use rodio::{ChannelCount, SampleRate};
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::codecs::audio::well_known::{CODEC_ID_PCM_ALAW, CODEC_ID_PCM_MULAW};
 use symphonia::core::codecs::audio::{
@@ -27,9 +28,14 @@ use symphonia::core::codecs::audio::{
 };
 use symphonia::core::codecs::registry::CodecRegistry;
 use symphonia::core::errors::Error as SymphoniaError;
-use symphonia::core::formats::{FormatReader, Track, TrackType};
+use symphonia::core::formats::probe::Hint;
+use symphonia::core::formats::{FormatOptions, FormatReader, Track, TrackType};
+use symphonia::core::io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions};
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::units::{Duration as SymphoniaDuration, TimeBase};
 
 use super::aac_config;
+use super::audio::{ChannelCount, SampleRate, Shape};
 
 /// Our own registry, rather than `symphonia::default::get_codecs`.
 ///
@@ -95,22 +101,112 @@ fn drop_companded_sample_width(params: &mut AudioCodecParameters) {
     }
 }
 
-/// What one decoded packet says the audio is.
-struct Shape {
-    channels: ChannelCount,
-    sample_rate: SampleRate,
+/// A demuxer, a decoder for its audio track, and enough of that track decoded to know its shape.
+///
+/// [`super::file_decode`] and [`super::stream_decode`] hold the first four of these verbatim and
+/// differ only in what they hand [`open`] and in how they name a failure, which is why the sequence
+/// that produces them lives here rather than once in each. `time_base` and `total_duration` are the
+/// two a mount has no use for and drops.
+pub(super) struct Opened {
+    pub format: Box<dyn FormatReader>,
+    pub decoder: Box<dyn AudioDecoder>,
+    pub track: u32,
+    pub cursor: Cursor,
+    pub time_base: Option<TimeBase>,
+    pub total_duration: Option<Duration>,
+}
+
+/// Why a source could not be opened, phrased as the tail of a sentence naming it — so a caller
+/// says "`/music/x.flac` has no audio" or "The station's stream has no audio" over one message.
+pub(super) enum OpenError {
+    Unreadable(SymphoniaError),
+    NoAudio,
+    NoCodec,
+    Undecodable(SymphoniaError),
+    Empty,
+}
+
+impl std::fmt::Display for OpenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unreadable(e) => write!(f, "could not be read: {e}"),
+            Self::NoAudio => f.write_str("has no audio"),
+            Self::NoCodec => f.write_str("names no audio codec"),
+            Self::Undecodable(e) => write!(f, "could not be decoded: {e}"),
+            Self::Empty => f.write_str("decoded to nothing"),
+        }
+    }
+}
+
+/// Probe `source`, build a decoder for its audio track, and decode enough of it to know the shape
+/// of what follows.
+///
+/// `hint` is the one thing the two callers answer differently — a file's extension against a
+/// mount's content type — and 0.6 scores rather than trusting it either way.
+pub(super) fn open(source: Box<dyn MediaSource>, hint: &Hint) -> Result<Opened, OpenError> {
+    let mss = MediaSourceStream::new(source, MediaSourceStreamOptions::default());
+    let mut format = symphonia::default::get_probe()
+        .probe(hint, mss, FormatOptions::default(), MetadataOptions::default())
+        .map_err(OpenError::Unreadable)?;
+
+    let track = audio_track(&*format).ok_or(OpenError::NoAudio)?;
+    let params = audio_params(track).ok_or(OpenError::NoCodec)?.clone();
+    let track_id = track.id;
+    let time_base = track.time_base;
+    let total_duration = playing_time(&*format, track);
+
+    let mut decoder = make_decoder(params).map_err(OpenError::Undecodable)?;
+    let cursor = Cursor::open(&mut *format, &mut *decoder, track_id)
+        .map_err(OpenError::Unreadable)?
+        .ok_or(OpenError::Empty)?;
+
+    Ok(Opened {
+        format,
+        decoder,
+        track: track_id,
+        cursor,
+        time_base,
+        total_duration,
+    })
+}
+
+/// How long the track plays for.
+///
+/// Three sources, because no one of them answers for every container. `Track::duration` is the one
+/// upstream says to present, a timebase not having to be the reciprocal of the frame rate;
+/// `num_frames` is where a container states its length in frames instead; and Matroska states
+/// neither on the track, putting the segment's own duration on the media. A `.mka` reaching the
+/// library reading 0:00 is what this exists to prevent, and it is the container that needs the
+/// third.
+///
+/// A stated zero is the reader saying it doesn't know rather than the file being empty — a
+/// fragmented MP4 zeroes both track fields — so each one has to be discarded before the next is
+/// reached, or the first answers for all three. A live mount states none of the three, which is
+/// what lets the stream path take this answer unchanged.
+fn playing_time(format: &dyn FormatReader, track: &Track) -> Option<Duration> {
+    let from_track = track.time_base.and_then(|time_base| {
+        let frames = || track.num_frames.filter(|frames| *frames > 0).map(SymphoniaDuration::new);
+        let ticks = track.duration.filter(|stated| stated.get() > 0).or_else(frames)?;
+        time_base.calc_duration(ticks)
+    });
+    let from_media = || {
+        let media = format.media_info();
+        media.time_base?.calc_duration(media.duration.filter(|stated| stated.get() > 0)?)
+    };
+
+    let (seconds, nanos) = from_track.or_else(from_media)?.parts();
+    Some(Duration::new(u64::try_from(seconds).ok()?, nanos))
 }
 
 /// The packet being handed out, one interleaved sample at a time.
 ///
-/// Both decoders own one and neither adds to it: the refill, the shape check rodio's fixed append
+/// Both decoders own one and neither adds to it: the refill, the shape check a deck's fixed append
 /// makes necessary, and the latch that stops a re-poll past the end serving the packet that ended
 /// it are the same three answers whether the bytes came off a socket or off disk.
 pub(super) struct Cursor {
     samples: Vec<f32>,
     next: usize,
-    channels: ChannelCount,
-    sample_rate: SampleRate,
+    shape: Shape,
     /// Set once there is nothing more to hand out.
     ended: bool,
 }
@@ -123,8 +219,8 @@ impl Cursor {
     /// audio thread, and its answer becomes what the user is shown, where a permissions failure and
     /// an empty container read very differently.
     ///
-    /// The first packet is decoded eagerly because the deck is told the channel count and sample
-    /// rate when the source is appended, and rodio cannot renegotiate either afterwards.
+    /// The first packet is decoded eagerly because the deck builds its converter from the channel
+    /// count and sample rate the source reports at the append, and cannot rebuild it mid-source.
     pub(super) fn open(
         format: &mut dyn FormatReader,
         decoder: &mut dyn AudioDecoder,
@@ -137,38 +233,19 @@ impl Cursor {
         Ok(Some(Self {
             samples,
             next: 0,
-            channels: shape.channels,
-            sample_rate: shape.sample_rate,
+            shape,
             ended: false,
         }))
     }
 
-    pub(super) fn channels(&self) -> ChannelCount {
-        self.channels
-    }
-
-    pub(super) fn sample_rate(&self) -> SampleRate {
-        self.sample_rate
-    }
-
-    /// The whole buffered packet, not what is left of it.
-    ///
-    /// It answers `Source::current_span_len`, which must never be `None`: that reaches
-    /// `UniformSourceIterator::bootstrap` as an unbounded `Take`, so the mixer builds one
-    /// `SampleRateConverter` out of whichever source reached the deck first and never gets a
-    /// boundary to rebuild it at. Naming the whole packet is for the same reason a span of zero
-    /// would be wrong, the converter rebuilding against an empty `Take`.
-    pub(super) fn span_len(&self) -> usize {
-        self.samples.len()
+    pub(super) fn shape(&self) -> Shape {
+        self.shape
     }
 
     /// Steps past the buffered packet, reporting the channel of the frame the puller was part way
     /// through so a seek can put it back there.
-    ///
-    /// The buffer is left in place rather than cleared, so [`Self::span_len`] keeps naming a real
-    /// packet until the next pull replaces it.
     pub(super) fn discard_buffered(&mut self) -> usize {
-        let channel_phase = self.next % usize::from(self.channels.get());
+        let channel_phase = self.next % usize::from(self.shape.channels.get());
         self.next = self.samples.len();
         self.ended = false;
         channel_phase
@@ -191,10 +268,10 @@ impl Cursor {
                 self.ended = true;
                 return None;
             };
-            // rodio was told the shape at the append and cannot renegotiate it, so a source that
-            // changes one mid-track ends here rather than playing on at the wrong rate. A mount
-            // doing it is a reconnect the feed thread then refuses.
-            if shape.channels != self.channels || shape.sample_rate != self.sample_rate {
+            // The deck's converter was built from the shape reported at the append, so a source
+            // that changes one mid-track ends here rather than playing on at the wrong rate. A
+            // mount doing it is a reconnect the feed thread then refuses.
+            if shape != self.shape {
                 self.ended = true;
                 return None;
             }
@@ -237,24 +314,23 @@ fn fill(
 
         match decoder.decode(&packet) {
             Ok(decoded) => {
-                let spec = decoded.spec().clone();
+                // Borrowed, not cloned: `copy_to_vec_interleaved` takes `&self` too, and
+                // `Channels` has a boxed variant, so the clone was a latent per-packet
+                // allocation on the thread that decodes a local file, the audio callback.
+                let spec = decoded.spec();
                 decoded.copy_to_vec_interleaved(samples);
                 if !samples.is_empty() {
                     let channels =
                         u16::try_from(spec.channels().count()).ok().and_then(ChannelCount::new);
-                    let (Some(channels), Some(sample_rate)) =
-                        (channels, SampleRate::new(spec.rate()))
+                    let (Some(channels), Some(rate)) = (channels, SampleRate::new(spec.rate()))
                     else {
-                        // Nothing rodio can be told about, so it is the decoder rather than the
-                        // read that this source runs out on.
+                        // Nothing a deck can be handed, so it is the decoder rather than the read
+                        // that this source runs out on.
                         return Err(SymphoniaError::Unsupported(
                             "channel count or sample rate out of range",
                         ));
                     };
-                    return Ok(Some(Shape {
-                        channels,
-                        sample_rate,
-                    }));
+                    return Ok(Some(Shape { channels, rate }));
                 }
             }
             Err(SymphoniaError::DecodeError(_)) => {}

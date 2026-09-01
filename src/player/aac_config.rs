@@ -2,11 +2,11 @@
 //!
 //! Symphonia 0.6 refuses an AAC track whose config declares SBR, on the reasonable grounds that
 //! a loud "unsupported" beats silently handing back a worse version of the track. 0.5, which
-//! rodio pins, never consulted that flag: the same complexity gate passed, the AAC-LC core
+//! rodio pinned, never consulted that flag: the same complexity gate passed, the AAC-LC core
 //! decoded, and SBR and PS were thrown away — so an HE-AAC v2 file came out as a half rate mono
-//! core. Rewriting the config restores exactly that and nothing better. It is what keeps a file
-//! that plays today from going silent when local decode moves onto 0.6, not a fix, and it
-//! retires itself if upstream's real HE-AAC support lands.
+//! core. Rewriting the config restores exactly that and nothing better. It is what kept such a
+//! file playing when local decode moved onto 0.6, not a fix, and it retires itself if upstream's
+//! real HE-AAC support lands.
 //!
 //! The trigger is narrow deliberately, and it is exactly as narrow as the gate. 0.6 raises
 //! `sbr_present` only from a config that *opens* at object type 5 or 29; the backward compatible

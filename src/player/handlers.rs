@@ -10,11 +10,11 @@ use crate::database::DbPool;
 use crate::database::queries;
 
 use super::actions::emit_and_execute;
+use super::backend::{PlaybackCheck, PlaybackEngine};
 use super::crossfade;
 use super::event_sink::PlayerSinks;
 use super::prebuffer::StreamShared;
 use super::replaygain::TrackReplayGain;
-use super::rodio_backend::{PlaybackCheck, RodioPlayer};
 use super::state::{
     PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state, with_state_emit,
 };
@@ -92,7 +92,7 @@ pub fn evaluate_playing_tick(
     // A live source has no track end, which is the only thing the two decisions below are about:
     // a crossfade ramps between two tracks and a gapless preload stages the next one. The position
     // published above is elapsed listening time, since the silence the prebuffer emits while
-    // starved still advances rodio's tracker.
+    // starved still advances the deck's clock.
     if !state.source_allows(PlaybackSource::advances_queue) {
         return Some(PlayingTick {
             tick,
@@ -154,9 +154,9 @@ pub fn evaluate_playing_tick(
         // `build_end_of_stream_actions`' pause-at-track-end gate can catch.
         && !state.pause_after_current_track
         && state.duration_ms > 0
-        // Reject a stale position read from a deck rodio hasn't re-anchored yet
-        // (it only zeroes the tracked position when `clear()` actually removes a
-        // source).
+        // A deck reads 0 until it has been pulled for the source just started on
+        // it, and a track shorter than the lead would read its whole length as
+        // remaining and stage a preload on the spot.
         && state.position_ms > 0
         && state.position_ms <= state.duration_ms
         && state.duration_ms.saturating_sub(state.position_ms) < PRELOAD_LEAD_MS
@@ -233,7 +233,7 @@ fn reconcile_live_stream(
 pub struct PlaybackMonitorContext {
     pub shutdown_token: CancellationToken,
     pub player_state: Arc<PlayerStateHandle>,
-    pub rodio_player: Arc<RodioPlayer>,
+    pub engine: Arc<PlaybackEngine>,
     pub sinks: Arc<PlayerSinks>,
     pub position_tx: watch::Sender<Option<PositionTick>>,
     pub db: DbPool,
@@ -246,7 +246,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
     let PlaybackMonitorContext {
         shutdown_token,
         player_state,
-        rodio_player,
+        engine,
         sinks,
         position_tx,
         db,
@@ -291,6 +291,10 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 _ = interval.tick() => {}
             }
 
+            // Ahead of the not-playing short circuit below, because a stop is what retires the
+            // most sources at once and it lands on exactly the ticks that circuit skips.
+            engine.collect_spent();
+
             // Quick check: skip tick when not playing (lock-free via atomic mirror)
             let is_playing = player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed)
                 == PlaybackStatus::Playing as u8;
@@ -304,9 +308,9 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             }
 
             // Single lock acquisition to avoid TOCTOU between gapless and EOS checks
-            match rodio_player.check_playback_state() {
+            match engine.check_playback_state() {
                 PlaybackCheck::GaplessTransition => {
-                    emit_and_execute(&rodio_player, &db, &player_state, &sinks, |state| {
+                    emit_and_execute(&*engine, &db, &player_state, &sinks, |state| {
                         let mut actions = Vec::with_capacity(2);
 
                         // Update play count for the track that just finished
@@ -314,7 +318,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                             actions.push(PlayerAction::UpdatePlayCount(track.id));
                         }
 
-                        // Advance queue — update state only (Rodio is already playing).
+                        // Advance queue — update state only (the deck is already playing).
                         // The next gapless preload is staged later, by the `Playing`
                         // branch, when this new current track approaches its own end.
                         if let Some(track) = state.queue.advance().cloned() {
@@ -332,7 +336,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     // reconnect budget — and `is_finished` is that reason. Anything else is a deck
                     // caught in the instant between `play_stream` publishing the cell and
                     // appending the source, where an empty deck means "not yet", not "over".
-                    let live = rodio_player.stream_shared();
+                    let live = engine.stream_shared();
                     if live.as_deref().is_some_and(|s| !s.is_finished()) {
                         continue;
                     }
@@ -343,7 +347,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     // track" mode is armed, disarm it and stop instead). See
                     // `PlayerState::build_end_of_stream_actions`.
                     emit_and_execute(
-                        &rodio_player,
+                        &*engine,
                         &db,
                         &player_state,
                         &sinks,
@@ -355,10 +359,10 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     // Query the backend BEFORE locking PlayerState to avoid a
                     // nested lock — `evaluate_playing_tick` takes these as inputs.
                     let backend = BackendSnapshot {
-                        position_ms: rodio_player.query_position(),
-                        already_preloaded: rodio_player.is_gapless_preloaded(),
-                        crossfading: rodio_player.is_crossfading(),
-                        xf: rodio_player.crossfade_settings(),
+                        position_ms: engine.query_position(),
+                        already_preloaded: engine.is_gapless_preloaded(),
+                        crossfading: engine.is_crossfading(),
+                        xf: engine.crossfade_settings(),
                     };
                     let decided = {
                         let mut state = lock_state(&player_state);
@@ -385,7 +389,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         let _ = position_tx.send(Some(tick.clone()));
                     }
 
-                    if let Some(stream) = rodio_player.stream_shared() {
+                    if let Some(stream) = engine.stream_shared() {
                         reconcile_live_stream(
                             &stream,
                             &player_state,
@@ -401,11 +405,11 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         // current track and the position under the exec lock, so
                         // anything that landed since the decision above can't be
                         // clobbered.
-                        emit_and_execute(&rodio_player, &db, &player_state, &sinks, |state| {
+                        emit_and_execute(&*engine, &db, &player_state, &sinks, |state| {
                             state.build_crossfade_actions(decision)
                         });
                     } else if let Some((path, rg)) = late_preload {
-                        rodio_player.preload_gapless(Some(&path), rg);
+                        engine.preload_gapless(Some(&path), rg);
                     }
 
                     // OS media controls: update position every ~5 seconds

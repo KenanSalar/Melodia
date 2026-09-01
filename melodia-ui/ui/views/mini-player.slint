@@ -183,7 +183,7 @@ export component MiniPlayerView inherits Rectangle {
             seam-mask-color: Theme.mantle;
             committed(v) => {
                 if (Player.duration-ms > 0) {
-                    Player.seek(round(v * Player.duration-ms));
+                    Player.seek-to(round(v * Player.duration-ms));
                 }
             }
         }
@@ -389,7 +389,7 @@ export component MiniPlayerView inherits Rectangle {
             seam-mask-color: Theme.mantle;
             committed(v) => {
                 if (Player.duration-ms > 0) {
-                    Player.seek(round(v * Player.duration-ms));
+                    Player.seek-to(round(v * Player.duration-ms));
                 }
             }
         }

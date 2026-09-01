@@ -11,7 +11,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 
-use super::dsp::Generation;
+use super::dsp::{AtomicF32, Generation};
 use crate::entities::track::TrackSummary;
 
 /// Shortest crossfade the user can select.
@@ -32,9 +32,15 @@ pub const DEFAULT_CROSSFADE_MS: u32 = 2_000;
 /// which would cut the outgoing track at a non-zero gain (an audible click).
 pub const MIN_FADE_MS: u64 = 250;
 
-/// How long the surviving deck takes to climb back to unity when a crossfade is aborted (seek, or
-/// a new track picked mid-overlap). Long enough to avoid a step discontinuity, short enough to be
-/// imperceptible.
+/// How long the surviving deck takes to climb back to unity when a crossfade is aborted. Long
+/// enough to avoid a step discontinuity, short enough to be imperceptible.
+///
+/// Only reaches the ear when the seek that aborted then *bails* — an empty deck, a file that
+/// would not reopen. A seek that lands rebuilds the source, and a fresh [`EqSource`] has no gain
+/// of its own for [`FadeCmd::start`] = `None` to resume from, so it opens at unity. Nothing is
+/// lost there: the audio either side of a seek is a splice already.
+///
+/// [`EqSource`]: super::equalizer::EqSource
 pub const ABORT_RAMP_MS: u64 = 40;
 
 /// Fade length for pause / resume / user-initiated stop when [`CrossfadeSettings::fade_on_pause`]
@@ -121,9 +127,9 @@ pub struct FadeCmd {
     /// hold tracks at different sample rates.
     pub ramp_ms: u64,
     /// Fade-out only: the source ends once the ramp lands, draining its deck, which is how
-    /// [`RodioPlayer::is_crossfading`] sees the overlap finish.
+    /// [`PlaybackEngine::is_crossfading`] sees the overlap finish.
     ///
-    /// [`RodioPlayer::is_crossfading`]: super::rodio_backend::RodioPlayer::is_crossfading
+    /// [`PlaybackEngine::is_crossfading`]: super::backend::PlaybackEngine::is_crossfading
     pub end_on_complete: bool,
 }
 
@@ -137,9 +143,9 @@ pub struct FadeCmd {
 pub struct FadeShared {
     generation: Generation,
     kind: AtomicU8,
-    /// `f32` bit pattern, or `f32::NAN` for [`FadeCmd::start`] = `None`.
-    start_bits: AtomicU32,
-    target_bits: AtomicU32,
+    /// `f32::NAN` stands for [`FadeCmd::start`] = `None`.
+    start: AtomicF32,
+    target: AtomicF32,
     ramp_ms: AtomicU64,
     end_on_complete: AtomicBool,
 }
@@ -152,8 +158,8 @@ impl FadeShared {
         Arc::new(Self {
             generation: Generation::new(),
             kind: AtomicU8::new(KIND_IDLE),
-            start_bits: AtomicU32::new(f32::NAN.to_bits()),
-            target_bits: AtomicU32::new(1.0_f32.to_bits()),
+            start: AtomicF32::new(f32::NAN),
+            target: AtomicF32::new(1.0),
             ramp_ms: AtomicU64::new(0),
             end_on_complete: AtomicBool::new(false),
         })
@@ -166,8 +172,8 @@ impl FadeShared {
 
     /// Arm a ramp. Replaces any ramp already in flight on this deck.
     pub fn arm(&self, start: Option<f32>, target: f32, ramp_ms: u64, end_on_complete: bool) {
-        self.start_bits.store(start.unwrap_or(f32::NAN).to_bits(), Ordering::Relaxed);
-        self.target_bits.store(target.to_bits(), Ordering::Relaxed);
+        self.start.store(start.unwrap_or(f32::NAN));
+        self.target.store(target);
         self.ramp_ms.store(ramp_ms, Ordering::Relaxed);
         self.end_on_complete.store(end_on_complete, Ordering::Relaxed);
         self.kind.store(KIND_RAMP, Ordering::Relaxed);
@@ -192,10 +198,10 @@ impl FadeShared {
         if self.kind.load(Ordering::Relaxed) != KIND_RAMP {
             return None;
         }
-        let start = f32::from_bits(self.start_bits.load(Ordering::Relaxed));
+        let start = self.start.load();
         Some(FadeCmd {
             start: if start.is_nan() { None } else { Some(start) },
-            target: f32::from_bits(self.target_bits.load(Ordering::Relaxed)),
+            target: self.target.load(),
             ramp_ms: self.ramp_ms.load(Ordering::Relaxed),
             end_on_complete: self.end_on_complete.load(Ordering::Relaxed),
         })
@@ -313,9 +319,10 @@ pub fn crossfade_eligible(
 /// The length is the *actual* remaining media, never clamped up to the configured duration, so the
 /// ramp lands exactly on the declared track end — which self-corrects for poll granularity.
 ///
-/// The window doubles as a stale-position filter. rodio only zeroes a `Player`'s tracked position
-/// when it actually clears a source, so a drained deck can report its *previous* track's position
-/// for a few milliseconds: too high saturates `remaining` to zero, too low pushes it past the cap.
+/// The window doubles as a stale-position filter, and stays one now that a deck re-anchors its
+/// clock on every source it starts and zeroes it on every clear. What it still catches is the gap
+/// between the monitor reading a position and acting on it: too high saturates `remaining` to zero,
+/// too low pushes it past the cap. Both arms are cheap and both are pinned.
 #[must_use]
 pub fn should_crossfade(
     eligible: bool,

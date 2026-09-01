@@ -2,9 +2,8 @@
 
 use std::time::Duration;
 
-use rodio::Source;
-
 use super::{RING_CAP, VisualizerShared, VisualizerTap};
+use crate::player::audio::AudioSource;
 use crate::player::tests::helpers::{TestSource, bits};
 use crate::test_support::UNBOUNDED;
 
@@ -267,7 +266,7 @@ fn the_analysis_rate_is_the_sample_rate_at_unity_speed() {
 
 #[test]
 fn the_analysis_rate_follows_the_playback_speed() {
-    // The tap sits under rodio's speed stage, so a 2x listener hears every
+    // The tap sits above the deck's converter, so a 2x listener hears every
     // frequency an octave up — the band edges have to follow or the bars plot
     // the file's pitch instead of the one playing.
     let viz = VisualizerShared::new(true);

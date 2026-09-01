@@ -79,7 +79,7 @@ pub async fn logo_answers(
 /// The clock comparison lands here rather than in the `WHERE`: the placeholder list is what
 /// `chunked_in_query` binds and a second parameter would have to ride ahead of it. Still a string
 /// comparison against the same `to_rfc3339` shape both sides are written in.
-pub fn answer_is_suppressed(answer: &radio::StoredLogoAnswer, now: &str) -> bool {
+fn answer_is_suppressed(answer: &radio::StoredLogoAnswer, now: &str) -> bool {
     answer.retry_after.as_deref().is_some_and(|retry_after| retry_after > now)
 }
 
@@ -192,9 +192,9 @@ pub fn artwork_is_present(artwork_path: Option<&str>) -> bool {
 /// offline. `ui::radio::logos` splits them the same way on the browse path.
 pub(super) async fn ask_logo_url(state: &AppState, seed: &AnswerSeed, url: &str) -> Option<String> {
     match stored_answer(state, seed, url).await {
-        Answered::Hit(path) => return Some(path),
-        Answered::Suppressed => return None,
-        Answered::Unknown => {}
+        LogoAnswer::Hit(path) => return Some(path),
+        LogoAnswer::Suppressed => return None,
+        LogoAnswer::Unknown => {}
     }
     let logo = match fetch_logo(state, url).await {
         Ok(logo) => logo,
@@ -208,7 +208,11 @@ pub(super) async fn ask_logo_url(state: &AppState, seed: &AnswerSeed, url: &str)
 }
 
 /// What an earlier session already settled about one URL.
-enum Answered {
+///
+/// Public because the browse page asks the same question of the same rows and used to answer it
+/// inline, with the two arms in the opposite order — correct only while the row invariant below
+/// holds, and nothing but a comment said it did.
+pub enum LogoAnswer {
     /// A stored file still on disk, so there is nothing to ask.
     Hit(String),
     /// A miss inside the backoff it earned.
@@ -249,29 +253,31 @@ impl AnswerSeed {
 /// The stored answer for `url`, from `seed` where it holds one and from its own query otherwise.
 ///
 /// One query either way, because a second would ask the same row the same thing. A hit whose file
-/// is gone is [`Answered::Unknown`]: the store is swept against the columns that reference it, and
+/// is gone is [`LogoAnswer::Unknown`]: the store is swept against the columns that reference it, and
 /// a path naming nothing paints an empty tile where the monogram was the honest answer.
-async fn stored_answer(state: &AppState, seed: &AnswerSeed, url: &str) -> Answered {
+async fn stored_answer(state: &AppState, seed: &AnswerSeed, url: &str) -> LogoAnswer {
     if let Some(answer) = seed.0.get(url) {
-        return classify(answer, &crate::utils::now_rfc3339());
+        return classify_logo_answer(answer, &crate::utils::now_rfc3339());
     }
     let asked = [url.to_owned()];
     let Ok(answers) = logo_answers(state, &asked).await else {
-        return Answered::Unknown;
+        return LogoAnswer::Unknown;
     };
     let now = crate::utils::now_rfc3339();
-    answers.first().map_or(Answered::Unknown, |answer| classify(answer, &now))
+    answers.first().map_or(LogoAnswer::Unknown, |answer| classify_logo_answer(answer, &now))
 }
 
 /// What one stored row says. The two arms are mutually exclusive on the row — a hit carries no
-/// `retry_after` and a miss carries no path — so the order is only what reads most directly.
-fn classify(answer: &radio::StoredLogoAnswer, now: &str) -> Answered {
+/// `retry_after` and a miss carries no path — so the order is only what reads most directly, and
+/// the one place it is decided is here.
+#[must_use]
+pub fn classify_logo_answer(answer: &radio::StoredLogoAnswer, now: &str) -> LogoAnswer {
     if answer_is_suppressed(answer, now) {
-        return Answered::Suppressed;
+        return LogoAnswer::Suppressed;
     }
     match &answer.artwork_path {
-        Some(path) if artwork_is_present(Some(path)) => Answered::Hit(path.clone()),
-        _ => Answered::Unknown,
+        Some(path) if artwork_is_present(Some(path)) => LogoAnswer::Hit(path.clone()),
+        _ => LogoAnswer::Unknown,
     }
 }
 
@@ -361,9 +367,9 @@ pub async fn discover_site_logo(
     origin: &SiteOrigin,
 ) -> Option<String> {
     match stored_answer(state, seed, origin.as_str()).await {
-        Answered::Hit(path) => return Some(path),
-        Answered::Suppressed => return None,
-        Answered::Unknown => {}
+        LogoAnswer::Hit(path) => return Some(path),
+        LogoAnswer::Suppressed => return None,
+        LogoAnswer::Unknown => {}
     }
     // The discovered URL is not one the seed could have named — the document had to be read first
     // — so this one settles on its own query.

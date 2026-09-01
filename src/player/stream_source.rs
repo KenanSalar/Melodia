@@ -7,7 +7,7 @@
 //!
 //! **Reconnect lives here rather than in the playback monitor.** The feed thread already holds the
 //! URL, the client and the ring, so when its decoder ends it re-opens and keeps filling the *same*
-//! ring: the rodio source never ends, the deck never blinks, and the state machine needs no
+//! ring: the source never ends, the deck never blinks, and the state machine needs no
 //! reconnect path at all. Only once the attempt budget is spent, or a server comes back with a
 //! format the already-appended source cannot carry, does the thread give up and let the deck
 //! drain — which the monitor reads as the end of the station.
@@ -21,7 +21,6 @@ use std::time::Duration;
 
 use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
 use reqwest::Url;
-use rodio::{ChannelCount, SampleRate};
 use stream_download::http::{Client as StreamClient, HttpStream, format_range_header_bytes};
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
@@ -30,6 +29,7 @@ use stream_download::{Settings, StreamDownload};
 use crate::error::AppError;
 use crate::services::describe;
 
+use super::audio::Shape;
 use super::hls;
 use super::prebuffer::{PrebufferSource, RingWriter, StreamShared};
 use super::stream_decode::{LiveSource, StreamDecoder};
@@ -65,8 +65,9 @@ const RECONNECT_ATTEMPTS: u32 = 5;
 /// The first backoff step; each attempt doubles it up to [`RECONNECT_MAX_DELAY`].
 const RECONNECT_BASE_SECS: u64 = 1;
 const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(16);
-/// Granularity at which a backoff sleep notices the source was dropped.
-const ABANDON_POLL: Duration = Duration::from_millis(100);
+/// Granularity at which a blocking wait notices the source was dropped. Shared with
+/// [`super::hls`], whose reader parks on the same question from the same thread.
+pub(super) const ABANDON_POLL: Duration = Duration::from_millis(100);
 
 /// Whole-request ceiling for fetching a playlist file, which is a small text document nobody
 /// should be waiting on. The audio request itself is deliberately unbounded — it never ends.
@@ -142,8 +143,7 @@ impl StreamClient for IcyClient {
 /// An opened stream, before it has a ring or a thread.
 struct OpenedStream {
     decoder: StreamDecoder,
-    channels: ChannelCount,
-    sample_rate: SampleRate,
+    shape: Shape,
     facts: StationFacts,
 }
 
@@ -232,8 +232,7 @@ pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream,
         reopen,
     } = connect_following_playlist(client, url, &shared).await?;
 
-    let (source, writer) =
-        PrebufferSource::new(shared.clone(), opened.channels, opened.sample_rate);
+    let (source, writer) = PrebufferSource::new(shared.clone(), opened.shape);
     spawn_feed(FeedContext {
         decoder: opened.decoder,
         writer,
@@ -241,8 +240,7 @@ pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream,
         client: client.clone(),
         url,
         reopen,
-        channels: opened.channels,
-        sample_rate: opened.sample_rate,
+        shape: opened.shape,
         runtime: tokio::runtime::Handle::current(),
     });
 
@@ -278,7 +276,7 @@ async fn connect_following_playlist(
     // Extension first: a hand-typed `.pls` is worth spotting before opening a stream we would only
     // throw away, and it is the shape most custom stations arrive in.
     let url = if is_playlist_url(&url) {
-        match follow_playlist(client, &url).await? {
+        match follow_playlist(client, &url, shared).await? {
             Followed::Segments(opened) => {
                 return Ok(Resolved {
                     opened: *opened,
@@ -300,7 +298,7 @@ async fn connect_following_playlist(
         }),
         // An extensionless mount that turned out to be a pointer. Depth stays at one: what it
         // names is opened as audio or not at all.
-        Opened::Playlist => match follow_playlist(client, &url).await? {
+        Opened::Playlist => match follow_playlist(client, &url, shared).await? {
             Followed::Segments(opened) => Ok(Resolved {
                 opened: *opened,
                 url,
@@ -335,21 +333,23 @@ async fn reopen(
             }
         },
         Reopen::Segments => {
-            let body = fetch_capped(client, url).await?;
-            open_segments(client, url, &body).await
+            let body = fetch_playlist(client, url).await?;
+            open_segments(client, url, &body, shared).await
         }
     }
 }
 
 /// Open a segment playlist as a stream, which is the whole of [`hls`]'s job plus the probe.
 ///
-/// No `shared`: HLS carries no ICY metadata, so nothing here has a title to publish.
+/// `shared` reaches the reader for its abandon flag alone, never for a title: HLS carries no ICY
+/// metadata, so nothing here has one to publish.
 async fn open_segments(
     client: &reqwest::Client,
     url: &Url,
     body: &str,
+    shared: &Arc<StreamShared>,
 ) -> Result<OpenedStream, AppError> {
-    let stream = hls::open(client, url, body).await?;
+    let stream = hls::open(client, url, body, Arc::clone(shared)).await?;
     let facts = StationFacts {
         codec: stream.codec.to_owned(),
         bitrate: stream.bitrate_kbps,
@@ -366,8 +366,7 @@ async fn open_segments(
     .map_err(AppError::io_source)??;
 
     Ok(OpenedStream {
-        channels: decoder.channels(),
-        sample_rate: decoder.sample_rate(),
+        shape: decoder.shape(),
         decoder,
         facts,
     })
@@ -431,8 +430,7 @@ async fn connect(
     .map_err(AppError::io_source)??;
 
     Ok(Opened::Audio(Box::new(OpenedStream {
-        channels: decoder.channels(),
-        sample_rate: decoder.sample_rate(),
+        shape: decoder.shape(),
         decoder,
         facts,
     })))
@@ -484,10 +482,14 @@ fn prefetch_bytes(bitrate_kbps: Option<u32>) -> u64 {
 /// The HLS check comes first because the two overlap on the wire — a segment playlist is also a
 /// valid Extended M3U, and read as a pointer its first segment opens, plays for a few seconds and
 /// stops.
-async fn follow_playlist(client: &reqwest::Client, url: &Url) -> Result<Followed, AppError> {
-    let body = fetch_capped(client, url).await?;
+async fn follow_playlist(
+    client: &reqwest::Client,
+    url: &Url,
+    shared: &Arc<StreamShared>,
+) -> Result<Followed, AppError> {
+    let body = fetch_playlist(client, url).await?;
     if hls::playlist::is_hls(&body) {
-        return Ok(Followed::Segments(Box::new(open_segments(client, url, &body).await?)));
+        return Ok(Followed::Segments(Box::new(open_segments(client, url, &body, shared).await?)));
     }
 
     let target = first_stream_url(&body)
@@ -498,38 +500,20 @@ async fn follow_playlist(client: &reqwest::Client, url: &Url) -> Result<Followed
 }
 
 /// Read at most [`PLAYLIST_MAX_BYTES`] of `url` as text.
-///
-/// The header check below is a cheap early bail on a server that is honest about the size; the
-/// bound that holds is [`crate::services::read_capped`]'s, which argues why it is streamed.
-pub(super) async fn fetch_capped(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    let response = client
-        .get(url.clone())
-        .timeout(PLAYLIST_TIMEOUT)
-        .send()
-        .await
-        .map_err(|e| AppError::network("Could not fetch the station's playlist", e))?;
-    if !response.status().is_success() {
-        return Err(AppError::network_msg(format!(
-            "Station playlist request returned HTTP {}",
-            response.status().as_u16()
-        )));
-    }
-    if response.content_length().is_some_and(|len| len > PLAYLIST_MAX_BYTES) {
-        // Worded as `read_capped` words it, the two refusing the same thing from either side of
-        // the download.
-        return Err(AppError::network_msg(format!(
-            "Station playlist is larger than {PLAYLIST_MAX_BYTES} bytes"
-        )));
-    }
-
-    let body =
-        crate::services::read_capped(response, "Station playlist", PLAYLIST_MAX_BYTES).await?;
-    Ok(String::from_utf8_lossy(&body).into_owned())
+async fn fetch_playlist(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
+    crate::services::get_capped_text(
+        client,
+        url,
+        "Station playlist",
+        PLAYLIST_TIMEOUT,
+        PLAYLIST_MAX_BYTES,
+    )
+    .await
 }
 
 /// Does this URL's path end in a playlist extension? Query and fragment are stripped first, since
 /// a mount routinely carries a session parameter after the name.
-pub fn is_playlist_url(url: &Url) -> bool {
+fn is_playlist_url(url: &Url) -> bool {
     let path = url.path();
     let Some((_, ext)) = path.rsplit_once('.') else {
         return false;
@@ -540,7 +524,7 @@ pub fn is_playlist_url(url: &Url) -> bool {
 /// Does this response content type name a playlist? Parameters (`; charset=…`) are already gone by
 /// the time stream-download hands over a `ContentType`, but callers passing a raw header are
 /// tolerated.
-pub fn is_playlist_content_type(content_type: &str) -> bool {
+fn is_playlist_content_type(content_type: &str) -> bool {
     let bare = content_type.split(';').next().unwrap_or(content_type).trim();
     PLAYLIST_CONTENT_TYPES.iter().any(|known| bare.eq_ignore_ascii_case(known))
 }
@@ -558,7 +542,7 @@ pub fn is_playlist_content_type(content_type: &str) -> bool {
 /// depends on this module's crate half, not the other way round) and it answers a different
 /// question — track paths with BLAKE3 hashes and `#EXTINF` durations, none of which a stream
 /// playlist carries, and neither of the other two formats at all.
-pub fn first_stream_url(body: &str) -> Option<String> {
+fn first_stream_url(body: &str) -> Option<String> {
     let body = body.strip_prefix('\u{FEFF}').unwrap_or(body);
     for raw in body.lines() {
         let line = raw.trim();
@@ -570,7 +554,8 @@ pub fn first_stream_url(body: &str) -> Option<String> {
             line.split_once('=').map(|(_, value)| value.trim()),
             Some(line),
         ];
-        if let Some(url) = readings.into_iter().flatten().find(|c| is_http_url(c)) {
+        if let Some(url) = readings.into_iter().flatten().find(|c| crate::services::is_http_url(c))
+        {
             return Some(url.to_owned());
         }
     }
@@ -591,17 +576,11 @@ fn quoted_href(line: &str) -> Option<&str> {
     inner.split(quote).next()
 }
 
-/// Whether a playlist line is a URL worth following. A bare `http://` parses as a scheme and names
-/// no host, so it is not one — returning it hands the deck an address that cannot open.
-fn is_http_url(candidate: &str) -> bool {
-    crate::services::http_url(candidate).is_some()
-}
-
 /// How long to wait before reconnect attempt `attempt`, or `None` once the budget is spent.
 ///
 /// Exponential from [`RECONNECT_BASE_SECS`] and capped, so a station that drops for a moment is
 /// back almost immediately while one that has gone away is not hammered.
-pub fn reconnect_delay(attempt: u32) -> Option<Duration> {
+fn reconnect_delay(attempt: u32) -> Option<Duration> {
     if attempt >= RECONNECT_ATTEMPTS {
         return None;
     }
@@ -619,8 +598,7 @@ struct FeedContext {
     /// ordinary stream, the segment playlist for a segmented one.
     url: Url,
     reopen: Reopen,
-    channels: ChannelCount,
-    sample_rate: SampleRate,
+    shape: Shape,
     runtime: tokio::runtime::Handle,
 }
 
@@ -669,14 +647,12 @@ fn feed_loop(mut ctx: FeedContext) {
         }
 
         match ctx.runtime.block_on(reopen(&ctx.client, &ctx.url, &ctx.shared, ctx.reopen)) {
-            Ok(opened)
-                if opened.channels == ctx.channels && opened.sample_rate == ctx.sample_rate =>
-            {
+            Ok(opened) if opened.shape == ctx.shape => {
                 ctx.decoder = opened.decoder;
             }
             Ok(_) => {
-                // The deck was told this source's channel count and rate when it was appended, and
-                // rodio has no way to renegotiate mid-source. Ending is what lets the station be
+                // The deck built its converter from this source's channel count and rate at the
+                // append, and cannot rebuild it mid-source. Ending is what lets the station be
                 // restarted cleanly from the top.
                 log::warn!("Radio stream returned in a different audio format; stopping");
                 ctx.shared.finish();

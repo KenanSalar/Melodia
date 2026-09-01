@@ -1,10 +1,10 @@
 //! The ring that keeps the network off the audio callback thread.
 //!
-//! rodio pulls [`Source::next`] from inside the cpal data callback, so a source that reads a
-//! socket stalls the whole mixer — the local track on the other deck included — for as long as
-//! the network is wedged. Everything here exists to make that impossible: a feed thread owns the
-//! decoder and fills [`SampleRing`] ahead of time, and [`PrebufferSource`] pops from it without
-//! ever blocking, yielding silence when it runs dry.
+//! The mixer pulls each [`AudioSource`] from inside the cpal data callback, so a source that
+//! reads a socket stalls the whole block — the local track on the other deck included — for as
+//! long as the network is wedged. Everything here exists to make that impossible: a feed thread
+//! owns the decoder and fills [`SampleRing`] ahead of time, and [`PrebufferSource`] pops from it
+//! without ever blocking, yielding silence when it runs dry.
 //!
 //! Running dry is published rather than hidden. [`StreamShared`] is the one cell the feed thread,
 //! the audio thread and the playback monitor all read, and the buffering indicator the UI shows is
@@ -19,8 +19,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
-use rodio::source::SeekError;
-use rodio::{ChannelCount, Sample, SampleRate, Source};
+use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape};
 
 /// How much decoded audio the ring holds before the feed thread has to wait for room.
 ///
@@ -30,25 +29,6 @@ use rodio::{ChannelCount, Sample, SampleRate, Source};
 /// `stream_source::DOWNLOAD_BUFFER_BYTES`. Widening this trades resident memory for tolerance of
 /// something the layer above already tolerates better.
 pub const PREBUFFER_MS: u64 = 1_500;
-
-/// How many samples the mixer resamples before re-reading the source's format.
-///
-/// It buys two things against each other. The converter is rebuilt at every span boundary, so a
-/// short span costs the rebuild often and resets the interpolation window with it; but a station
-/// change is only *noticed* at one, so a long span plays that many samples of the incoming station
-/// at the outgoing one's rate. Rodio's own worst-case span (`queue::threshold`) balances them here,
-/// and matching it is what keeps a station on the same footing as a file.
-const SPAN_SAMPLES: usize = 512;
-
-/// [`SPAN_SAMPLES`] rounded up to a whole frame.
-///
-/// A boundary landing mid-frame would shear the channel converter, and it would leave the deck's
-/// parity flipped for whatever plays next — the same reason the starvation decision is taken per
-/// frame rather than per sample.
-fn span_samples(channels: ChannelCount) -> usize {
-    let channels = usize::from(channels.get());
-    SPAN_SAMPLES.div_ceil(channels) * channels
-}
 
 /// How long the feed thread sleeps when it finds the ring full.
 ///
@@ -233,8 +213,8 @@ impl RingWriter {
     }
 }
 
-/// The [`Source`] the decks play for a live stream: a ring pop per sample, silence when starved,
-/// and an end only once the feed thread has given up *and* the ring has drained.
+/// The [`AudioSource`] the decks play for a live stream: a ring pop per sample, silence when
+/// starved, and an end only once the feed thread has given up *and* the ring has drained.
 ///
 /// Everything it reports about the audio's shape is pinned at construction. A live mount does not
 /// renegotiate its format mid-stream, and a reconnect that comes back with a different one is
@@ -243,8 +223,7 @@ impl RingWriter {
 pub struct PrebufferSource {
     ring: Arc<SampleRing>,
     shared: Arc<StreamShared>,
-    channels: ChannelCount,
-    sample_rate: SampleRate,
+    shape: Shape,
     /// Which sample of the current frame comes next. The starvation decision is taken once per
     /// frame at phase 0 and held for the whole frame.
     frame_phase: u16,
@@ -255,12 +234,8 @@ pub struct PrebufferSource {
 
 impl PrebufferSource {
     /// The source and the writer that feeds it, plus the shared cell both report through.
-    pub fn new(
-        shared: Arc<StreamShared>,
-        channels: ChannelCount,
-        sample_rate: SampleRate,
-    ) -> (Self, RingWriter) {
-        let ring = Arc::new(SampleRing::for_format(channels, sample_rate));
+    pub fn new(shared: Arc<StreamShared>, shape: Shape) -> (Self, RingWriter) {
+        let ring = Arc::new(SampleRing::for_format(shape.channels, shape.rate));
         let writer = RingWriter {
             ring: ring.clone(),
             shared: shared.clone(),
@@ -268,8 +243,7 @@ impl PrebufferSource {
         let source = Self {
             ring,
             shared,
-            channels,
-            sample_rate,
+            shape,
             frame_phase: 0,
             frame_starved: false,
             starved: false,
@@ -286,9 +260,8 @@ impl PrebufferSource {
 }
 
 impl Drop for PrebufferSource {
-    /// rodio drops an exhausted source **on the audio thread**, so this stores a flag and does
-    /// nothing else. Joining the feed thread here would block the callback for as long as a socket
-    /// read takes, which is the whole thing this module exists to prevent.
+    /// Stores a flag and does nothing else. Joining the feed thread here would block for as long
+    /// as a socket read takes, and the drop happens wherever a spent source is collected.
     fn drop(&mut self) {
         self.shared.abandon();
     }
@@ -300,7 +273,7 @@ impl Iterator for PrebufferSource {
     #[inline]
     fn next(&mut self) -> Option<Sample> {
         if self.frame_phase == 0 {
-            let whole_frame = usize::from(self.channels.get());
+            let whole_frame = usize::from(self.shape.channels.get());
             self.frame_starved = self.ring.len() < whole_frame;
             if self.frame_starved {
                 // A trailing partial frame goes with it: half a frame would flip this deck's
@@ -313,7 +286,7 @@ impl Iterator for PrebufferSource {
                 self.publish_starved(false);
             }
         }
-        self.frame_phase = (self.frame_phase + 1) % self.channels.get();
+        self.frame_phase = (self.frame_phase + 1) % self.shape.channels.get();
 
         if self.frame_starved {
             Some(0.0)
@@ -325,27 +298,15 @@ impl Iterator for PrebufferSource {
     }
 }
 
-impl Source for PrebufferSource {
-    #[inline]
-    fn current_span_len(&self) -> Option<usize> {
-        // **Never `None`, however well that describes a live stream.** `None` reaches
-        // `UniformSourceIterator::bootstrap` as an unbounded `Take`, so the mixer builds one
-        // `SampleRateConverter` out of whichever source is on the deck first and never gets a
-        // boundary to rebuild it at. Every station after that is resampled at the first one's
-        // rate: 44.1 kHz after 24 kHz plays fast, the other way round plays slow, and it lasts
-        // until the process restarts. Rodio's decoders are handed a boundary for free, a packet
-        // at a time; a ring that never ends has to name one.
-        Some(span_samples(self.channels))
-    }
-
+impl AudioSource for PrebufferSource {
     #[inline]
     fn channels(&self) -> ChannelCount {
-        self.channels
+        self.shape.channels
     }
 
     #[inline]
     fn sample_rate(&self) -> SampleRate {
-        self.sample_rate
+        self.shape.rate
     }
 
     #[inline]
@@ -357,6 +318,13 @@ impl Source for PrebufferSource {
         Err(SeekError::NotSupported {
             underlying_source: "live stream",
         })
+    }
+
+    /// A live socket is the kind of claim this exists for, and the flag is one the drop already
+    /// sets — so setting it here is the difference between a station releasing its connection when
+    /// it stops and when someone next collects it.
+    fn release_claims(&mut self) {
+        self.shared.abandon();
     }
 }
 

@@ -109,7 +109,77 @@ pub(crate) fn build_http_client() -> reqwest::Client {
 /// its logo URL, and the lines of a `.pls`/`.m3u`/`.asx` pointer.
 pub(crate) fn http_url(candidate: &str) -> Option<reqwest::Url> {
     let parsed = reqwest::Url::parse(candidate.trim()).ok()?;
-    (matches!(parsed.scheme(), "http" | "https") && parsed.has_host()).then_some(parsed)
+    is_http(&parsed).then_some(parsed)
+}
+
+/// [`http_url`] where only the verdict is wanted. Two callers wrote this line out for themselves.
+pub(crate) fn is_http_url(candidate: &str) -> bool {
+    http_url(candidate).is_some()
+}
+
+/// The rule itself, asked of a URL already parsed. [`http_url`] is this plus the parse.
+///
+/// `Url::join` returns an absolute URI unchanged, so a playlist line reading `file:///etc/passwd`
+/// or `data:…` comes back out of it as a `Url` like any other. Nothing downstream re-asks, and the
+/// text form is gone by then, so the check has to be reachable on the parsed value too.
+pub(crate) fn is_http(url: &reqwest::Url) -> bool {
+    matches!(url.scheme(), "http" | "https") && url.has_host()
+}
+
+/// GET `url` and read at most `max_bytes` of what comes back.
+///
+/// [`read_capped`] is the half that holds; this is the request around it, plus the two cheap
+/// refusals that come before a byte is read — a non-success status, and a `Content-Length` already
+/// over the cap. The header check is a courtesy a host can omit or lie about, which is why it sits
+/// here rather than instead of the streamed bound.
+///
+/// `what` is a noun phrase, capitalized as every [`read_capped`] caller passes one: it is the
+/// subject of all four messages the two halves can raise, so a refusal points at the right half of
+/// a two-request fetch. Timeout and cap are the caller's, a station's playlist and one of its
+/// segments being two orders of magnitude apart on the cap.
+pub(crate) async fn get_capped(
+    client: &reqwest::Client,
+    url: &reqwest::Url,
+    what: &str,
+    timeout: std::time::Duration,
+    max_bytes: u64,
+) -> Result<Vec<u8>, AppError> {
+    let response = client
+        .get(url.clone())
+        .timeout(timeout)
+        .send()
+        .await
+        .map_err(|e| AppError::network(format!("{what} could not be fetched"), e))?;
+    if !response.status().is_success() {
+        return Err(AppError::network_msg(format!(
+            "{what} request returned HTTP {}",
+            response.status().as_u16()
+        )));
+    }
+    if response.content_length().is_some_and(|len| len > max_bytes) {
+        // Worded as `read_capped` words it, the two refusing the same thing from either side of
+        // the download.
+        return Err(AppError::network_msg(format!("{what} is larger than {max_bytes} bytes")));
+    }
+    read_capped(response, what, max_bytes).await
+}
+
+/// [`get_capped`] for a body that is text.
+///
+/// `from_utf8` *moves*, where `from_utf8_lossy` on an owned `Vec` copies the lot — once per
+/// playlist per reload, for the life of a station. Lossy stays on the error arm rather than being
+/// dropped for the cheaper spelling: one Latin-1 byte in a track title should cost a replacement
+/// character, not the station.
+pub(crate) async fn get_capped_text(
+    client: &reqwest::Client,
+    url: &reqwest::Url,
+    what: &str,
+    timeout: std::time::Duration,
+    max_bytes: u64,
+) -> Result<String, AppError> {
+    let body = get_capped(client, url, what, timeout, max_bytes).await?;
+    Ok(String::from_utf8(body)
+        .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
 }
 
 /// Ceiling on the capacity a `Content-Length` may claim before a byte has arrived. High enough to

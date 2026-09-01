@@ -117,7 +117,7 @@ Melodia is a modern, local-first desktop music player with a Material
 machine, and every online feature is a setting you control: scrobbling,
 Discord presence and internet radio all ship switched off. It pairs a
 Slint user interface with a pure-Rust backend: gapless playback via
-Rodio and Symphonia (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis,
+Symphonia and cpal (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis,
 WAV, AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
 full-text search, browsing by album, artist, genre and playlist, OS
 media controls (MPRIS), and pluggable themes including system light/dark
@@ -163,16 +163,24 @@ parking_lot = "0.12.5"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "derive", "macros"] }
 
 # Audio
-# `playback` only, and **no `symphonia-*` features**: every one of those pulls in rodio's own
-# Symphonia 0.5, which is the major this tree left behind. Nothing decodes through rodio any
-# more — `player::file_decode` and `player::stream_decode` both go through `player::decode` — so
-# what is left here is the mixer, the device stream and the two per-deck queues. Adding a
-# `symphonia-*` entry back compiles a second Symphonia beside ours and gives the same bytes two
-# different probes again, which is the whole fault this closed.
-rodio = { version = "0.22.2", default-features = false, features = ["playback"] }
+# The device stream `player::output` opens, and the `StreamError` variants
+# `player::stream_health` classifies. This is the whole output dependency now:
+# `output::{mixer,deck,convert}` own the sum, the two voices, the rate and channel
+# conversion and the clock, which is what rodio held until #90.
+#
+# **Held at 0.17 rather than the latest**, deliberately. 0.18 folds `StreamError`
+# into a unified `Error`/`ErrorKind` reached through `e.kind()`, which is a rework
+# of `stream_health`'s four-arm match and of the rate-based device-loss escalation
+# in `tasks::audio_health` — the part of this subsystem with no way to test it
+# short of unplugging a card. It also adds a retryable `DeviceBusy`, stops ALSA,
+# CoreAudio and JACK auto-starting a built stream, and reranks the integer sample
+# formats, all three of which land on `output::device`'s ladder. Worth doing;
+# worth doing alone. (`StreamTrait::play` -> `start` is the release after, not
+# this one.) A caret on a `0.x` is already an exact-minor pin, so no `=` needed.
+cpal = "0.17.3"
 # Everything decodes here — files through `player::file_decode`, live mounts through
 # `player::stream_decode` — and **deliberately against a newer Symphonia than the 0.5 rodio
-# pins**. 0.5's probe picks a demuxer off a two-byte marker with scoring still a TODO, and the
+# pinned**. 0.5's probe picks a demuxer off a two-byte marker with scoring still a TODO, and the
 # only ADTS marker it knows is `0xFFF1`, so an MPEG-2 ADTS stream matches nothing, the search
 # runs into the payload, and a stray `0xFFFB` there hands an AAC stream to the MP3 demuxer,
 # which then never syncs. 0.6 scores candidates against the frames that follow and registers
@@ -214,10 +222,10 @@ symphonia = { version = "0.6.1", default-features = false, features = [
     "id3v1",
     "id3v2",
 ] }
-# Rodio 0.22 ships only low/high-pass BLT filters, so the graphic EQ cascades
-# this crate's `Type::PeakingEQ` `DirectForm1` filters instead. `DirectForm1`
-# keeps past inputs/outputs in its delay line, so a live coefficient swap (a
-# slider drag) injects no transient.
+# The graphic EQ cascades this crate's `Type::PeakingEQ` filters: rodio 0.22
+# shipped only low/high-pass BLT ones, and nothing replaced them when it went.
+# `DirectForm1` keeps past inputs/outputs in its delay line, so a live
+# coefficient swap (a slider drag) injects no transient.
 biquad = "0.6.0"
 # Real-to-complex FFT for the spectrum visualizer. Over raw `rustfft` (which it
 # wraps) because a real input yields N/2+1 bins from a half-length complex FFT —

@@ -103,11 +103,9 @@ export component StationCard inherits Rectangle {
             || edit_btn.has-hover
             || remove_btn.has-hover;
 
-        // **The centre stays clear, and that is the part worth keeping.** The play control used
-        // to be a 48 px disc in the middle of the tile, which is exactly where a body click lands,
-        // so the card played instead of opening for anyone who aimed at the artwork. It is a
-        // corner control now like every other card's in the tree, so both actions are reachable
-        // and neither is in the other's way.
+        // **The centre stays clear.** A body click lands there, so a play control in the middle
+        // of the tile plays for anyone who aimed at the artwork. A corner control, as every other
+        // card in the tree draws one, leaves both actions reachable.
         //
         // **Above the link, and in its slot when the station has no site**: the right edge is a
         // stack off the bottom, so a control left hovering over a gap reads as a sibling that

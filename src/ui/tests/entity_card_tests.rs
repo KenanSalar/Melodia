@@ -7,7 +7,7 @@
 //! block, with a source that reads exactly like the one that was right.
 
 use crate::test_support::{
-    MIN_SLINT_SOURCES, UI_DIR, block_body, strip_line_comments, stripped_sources,
+    MIN_SLINT_SOURCES, UI_DIR, blocks_named, strip_line_comments, stripped_sources,
 };
 
 const ENTITY_CARD: &str = include_str!("../../../melodia-ui/ui/components/grid/entity-card.slint");
@@ -16,9 +16,9 @@ const ENTITY_CARD: &str = include_str!("../../../melodia-ui/ui/components/grid/e
 /// them — a third one is covered the day it is written.
 const OPENS_THE_SLOT: &str = "show-overlay-actions: true;";
 
-/// The head of a mount, up to and including the brace [`block_body`] counts from. The card's own
-/// declaration reads `EntityCard inherits Rectangle {` and is not one.
-const MOUNTS_THE_CARD: &str = "EntityCard {";
+/// The component the pins below read. [`blocks_named`] takes the name followed by `{`, so the
+/// card's own `EntityCard inherits Rectangle {` declaration is not a mount.
+const CARD: &str = "EntityCard";
 
 /// Every `EntityCard { … }` block in the tree that opens the overlay slot, paired with its file.
 ///
@@ -34,17 +34,14 @@ fn overlay_mounts() -> Vec<(String, String)> {
             continue;
         }
         let found_before = mounts.len();
-        for (at, head) in src.match_indices(MOUNTS_THE_CARD) {
-            let Some(body) = block_body(&src, at + head.len() - 1) else {
-                continue;
-            };
+        for body in blocks_named(&src, CARD) {
             if body.contains(OPENS_THE_SLOT) {
                 mounts.push((path.clone(), body.to_owned()));
             }
         }
         assert!(
             mounts.len() > found_before,
-            "{path} raises `{OPENS_THE_SLOT}` but no `{MOUNTS_THE_CARD}` block in it holds that \
+            "{path} raises `{OPENS_THE_SLOT}` but no `{CARD}` block in it holds that \
              line — the walk reads the mount's own braces, so a mount spelled any other way is \
              one the pins below never see"
         );

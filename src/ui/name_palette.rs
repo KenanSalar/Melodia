@@ -3,8 +3,8 @@
 //! Two views need this and want different gradients out of it: a genre card is a colour tile by
 //! design and goes vivid, a station tile has a monogram to keep legible and goes deep. So what is
 //! shared is the *derivation* — one hash, rotated views of it per axis, HSV out — and each caller
-//! composes its own stops on top. [`crate::ui::genres::color`] and [`crate::ui::radio::identity`]
-//! are those two.
+//! composes its own stops on top. [`crate::ui::genres::genre_accent`] and
+//! [`crate::ui::radio::station_tile`] are those two.
 //!
 //! [`hash_name`] is value-identical to the Tauri build's hash and may not change: a genre's colour
 //! is the same colour across the port only because of that.

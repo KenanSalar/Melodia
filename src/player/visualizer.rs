@@ -2,7 +2,7 @@
 //! to change it.
 //!
 //! [`VisualizerShared`] is the transport — a lock-free ring per deck, written by the audio thread
-//! and snapshotted by the UI as a mix — and [`VisualizerTap`] is a [`Source`] wrapping
+//! and snapshotted by the UI as a mix — and [`VisualizerTap`] is an [`AudioSource`] wrapping
 //! [`EqSource`] that copies one downmixed value out of each frame it forwards, leaving the audio
 //! bit-identical either way.
 //!
@@ -19,9 +19,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::time::Duration;
 
-use rodio::source::SeekError;
-use rodio::{ChannelCount, Sample, SampleRate, Source};
-
+use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
 use super::decks::DECK_COUNT;
 
 /// Ring capacity, in mono samples. A power of two so the wrap is a mask, and comfortably wider
@@ -172,6 +170,7 @@ impl VisualizerShared {
         DeckRun {
             viz: self.clone(),
             deck,
+            released: false,
         }
     }
 
@@ -220,7 +219,7 @@ impl VisualizerShared {
         self.enabled.load(Ordering::Relaxed)
     }
 
-    /// Publish the live playback speed. `RodioPlayer::set_speed` is the single writer — boot
+    /// Publish the live playback speed. `PlaybackEngine::set_speed` is the single writer — boot
     /// hydration goes through it and `play_media` / `begin_crossfade` only re-apply what it
     /// published, so don't add calls there.
     #[expect(
@@ -241,9 +240,9 @@ impl VisualizerShared {
     /// The rate the analyzer places its band edges against: the source's own rate scaled by the
     /// live playback speed.
     ///
-    /// The tap sits *inside* rodio's `Speed` wrapper, which forwards samples verbatim and
-    /// implements speed purely by reporting a multiplied `sample_rate()` upward. So the ring holds
-    /// media samples at the media rate, and analysing against that plots the *file's* pitch.
+    /// The tap sits *above* the deck's converter, which is where speed is applied. So the ring
+    /// holds media samples at the media rate, and analysing against that plots the *file's* pitch
+    /// rather than the one the ear hears.
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -272,7 +271,7 @@ const _: fn() = || {
 /// One source's claim on a deck's ring, held for exactly as long as that source is alive — and
 /// what tells the reader which rings to mix. A deck whose last source was dropped still holds a
 /// full window, and mixing that frozen tail into every later frame leaves a ghost of the track
-/// that ended. rodio drops a source as soon as it is exhausted or cleared, so the claim is
+/// that ended. A deck drops a source as soon as it is exhausted or cleared, so the claim is
 /// released within a frame of the audio stopping.
 ///
 /// It is not *strictly* ordered against a control op, and `src/player/CLAUDE.md` documents that
@@ -280,6 +279,8 @@ const _: fn() = || {
 pub struct DeckRun {
     viz: Arc<VisualizerShared>,
     deck: usize,
+    /// Whether [`Self::release`] has already closed the ring, so the drop behind it is a no-op.
+    released: bool,
 }
 
 impl DeckRun {
@@ -307,19 +308,32 @@ impl DeckRun {
     pub fn set_sample_rate(&self, hz: u32) {
         self.viz.set_sample_rate(hz);
     }
+
+    /// End the run now rather than at the drop.
+    ///
+    /// A spent source is freed off the audio callback and so outlives the audio it was making,
+    /// where this claim may not: the reader mixes every ring still claimed. Idempotent, because the
+    /// drop behind it runs either way.
+    pub fn release(&mut self) {
+        if self.released {
+            return;
+        }
+        if let Some(ring) = self.ring() {
+            ring.close();
+        }
+        self.released = true;
+    }
 }
 
 impl Drop for DeckRun {
     fn drop(&mut self) {
-        if let Some(ring) = self.ring() {
-            ring.close();
-        }
+        self.release();
     }
 }
 
-/// A transparent [`Source`] copying a downmixed sample out of every frame it forwards. Every
+/// A transparent [`AudioSource`] copying a downmixed sample out of every frame it forwards. Every
 /// source the decks play is wrapped in one by
-/// [`RodioPlayer::build_source`](super::rodio_backend::RodioPlayer), so the playing track, a
+/// [`PlaybackEngine::build_source`](super::backend::PlaybackEngine), so the playing track, a
 /// gapless successor and both sides of a crossfade each feed the ring of the deck they were built
 /// for.
 pub struct VisualizerTap<S> {
@@ -337,7 +351,7 @@ pub struct VisualizerTap<S> {
     rate_published: bool,
 }
 
-impl<S: Source> VisualizerTap<S> {
+impl<S: AudioSource> VisualizerTap<S> {
     pub fn new(input: S, viz: &Arc<VisualizerShared>, deck: usize) -> Self {
         let channels = input.channels().get();
         Self {
@@ -354,7 +368,7 @@ impl<S: Source> VisualizerTap<S> {
     }
 }
 
-impl<S: Source> Iterator for VisualizerTap<S> {
+impl<S: AudioSource> Iterator for VisualizerTap<S> {
     type Item = Sample;
 
     #[inline]
@@ -383,12 +397,7 @@ impl<S: Source> Iterator for VisualizerTap<S> {
     }
 }
 
-impl<S: Source> Source for VisualizerTap<S> {
-    #[inline]
-    fn current_span_len(&self) -> Option<usize> {
-        self.input.current_span_len()
-    }
-
+impl<S: AudioSource> AudioSource for VisualizerTap<S> {
     #[inline]
     fn channels(&self) -> ChannelCount {
         self.input.channels()
@@ -412,6 +421,13 @@ impl<S: Source> Source for VisualizerTap<S> {
         self.accum = 0.0;
         self.phase = 0;
         Ok(())
+    }
+
+    /// The claim this tap holds is exactly what the trait's default cannot know about: released
+    /// here, so a source freed off the callback stops being mixed the moment it stops playing.
+    fn release_claims(&mut self) {
+        self.run.release();
+        self.input.release_claims();
     }
 }
 

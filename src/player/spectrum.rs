@@ -1,10 +1,10 @@
 //! Spectrum analysis for the audio visualizer: a window of raw samples off the ring, into the
 //! per-band bar heights the UI draws.
 //!
-//! Pure DSP — nothing here knows about rodio, Slint or threads, and every step is a free function
-//! over slices, so the maths is unit-tested directly rather than through a running player. Hann
-//! window, two real FFTs (no single window serves both ends), [`NUM_BANDS`] geometric bands read
-//! off the bins, a tilt, a decibel compression, then peak-follow smoothing.
+//! Pure DSP — nothing here knows about the output layer, Slint or threads, and every step is a
+//! free function over slices, so the maths is unit-tested directly rather than through a running
+//! player. Hann window, two real FFTs (no single window serves both ends), [`NUM_BANDS`] geometric
+//! bands read off the bins, a tilt, a decibel compression, then peak-follow smoothing.
 //!
 //! [`SpectrumAnalyzer`] is the only stateful piece, holding what must not be rebuilt per frame.
 //! Nothing in the analysis path allocates.

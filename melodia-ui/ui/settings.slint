@@ -85,7 +85,7 @@ export global Settings {
     in-out property <bool> resume-on-startup: false;
     callback resume-on-startup-changed(bool);
 
-    // Each `*-changed` applies to the live Rodio backend synchronously before persisting on the
+    // Each `*-changed` applies to the live playback engine synchronously before persisting on the
     // blocking pool — the equalizer / ReplayGain two-phase shape. The duration is in **seconds**
     // here, the slider's natural unit; Rust converts to the milliseconds the backend and
     // `settings.json` use, and the bounds are seeded from `player::crossfade::{MIN,MAX}`.

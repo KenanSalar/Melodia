@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use rodio::cpal::{BackendSpecificError, StreamError};
+use cpal::{BackendSpecificError, StreamError};
 
 use super::{AudioStreamHealth, error_callback};
 
@@ -85,7 +85,7 @@ fn a_window_with_no_backend_error_carries_no_description() {
     assert!(report.first_backend_error.is_none());
 }
 
-/// `open_sink_or_fallback` clones the callback once per configuration it
+/// `output::device::open` clones the callback once per configuration its ladder
 /// retries, so every clone has to reach the same counters.
 #[test]
 fn a_cloned_callback_writes_to_the_same_counters() {

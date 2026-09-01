@@ -1,10 +1,10 @@
-//! Graphic-equalizer DSP — hand-rolled because rodio 0.22 ships only
+//! Graphic-equalizer DSP — hand-rolled because rodio 0.22 shipped only
 //! `low_pass` / `high_pass` BLT filters, no peaking ones.
 //!
-//! [`EqShared`] is the lock-free control state; [`EqSource`] is the rodio
-//! [`Source`] that reads it, one [`DirectForm1`] per band **per channel**.
-//! Per-channel state is the point — rodio's own `BltFilter` runs one state
-//! across interleaved channels and cross-contaminates them. `DirectForm1`
+//! [`EqShared`] is the lock-free control state; [`EqSource`] is the
+//! [`AudioSource`] that reads it, one [`DirectForm1`] per band **per channel**.
+//! Per-channel state is the point — rodio's own `BltFilter` ran one state
+//! across interleaved channels and cross-contaminated them. `DirectForm1`
 //! rather than `DirectForm2Transposed` because its delay line stays valid
 //! across a live coefficient swap, so slider drags don't inject transients.
 //!
@@ -12,19 +12,18 @@
 //! per-track `ReplayGain` pre-gain (baked at construction, *before* the bands,
 //! so the limiter guards a boost for free), and the deck's crossfade ramp
 //! (*after* the limiter's clamp, so two overlapping decks can't sum past unity
-//! in rodio's unclamped mixer). Each is polled through its own generation
+//! in the unclamped mixer). Each is polled through its own generation
 //! counter. With all three inert the source is a bit-identical passthrough.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use biquad::{Biquad, Coefficients, DirectForm1, Hertz, Type};
-use rodio::source::SeekError;
-use rodio::{ChannelCount, Sample, SampleRate, Source};
 
+use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
 use super::crossfade::{self, FadeShared};
-use super::dsp::{Generation, db_to_linear, linear_to_db};
+use super::dsp::{AtomicF32, Generation, db_to_linear, linear_to_db};
 use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
 
 /// Number of equalizer bands.
@@ -159,12 +158,11 @@ pub fn preset_index(name: &str) -> Option<usize> {
 }
 
 /// Lock-free equalizer state: the control layer writes, the audio thread reads.
-/// Gains and preamp live as `f32` bit patterns; every mutation bumps the
-/// [`Generation`] so [`EqSource`] knows to recompute.
+/// Every mutation bumps the [`Generation`] so [`EqSource`] knows to recompute.
 pub struct EqShared {
     enabled: AtomicBool,
-    gains_bits: [AtomicU32; NUM_BANDS],
-    preamp_bits: AtomicU32,
+    gains: [AtomicF32; NUM_BANDS],
+    preamp: AtomicF32,
     generation: Generation,
 }
 
@@ -176,8 +174,8 @@ impl EqShared {
         let norm = normalize_gains(gains);
         Arc::new(Self {
             enabled: AtomicBool::new(enabled),
-            gains_bits: std::array::from_fn(|i| AtomicU32::new(norm[i].to_bits())),
-            preamp_bits: AtomicU32::new(0.0_f32.to_bits()),
+            gains: std::array::from_fn(|i| AtomicF32::new(norm[i])),
+            preamp: AtomicF32::new(0.0),
             generation: Generation::new(),
         })
     }
@@ -193,22 +191,22 @@ impl EqShared {
     }
 
     pub fn set_gain(&self, index: usize, db: f32) {
-        if let Some(cell) = self.gains_bits.get(index) {
-            cell.store(clamp_gain(db).to_bits(), Ordering::Relaxed);
+        if let Some(cell) = self.gains.get(index) {
+            cell.store(clamp_gain(db));
             self.bump();
         }
     }
 
     pub fn set_all_gains(&self, gains: &[f32]) {
         let norm = normalize_gains(gains);
-        for (cell, g) in self.gains_bits.iter().zip(norm) {
-            cell.store(g.to_bits(), Ordering::Relaxed);
+        for (cell, g) in self.gains.iter().zip(norm) {
+            cell.store(g);
         }
         self.bump();
     }
 
     pub fn set_preamp(&self, db: f32) {
-        self.preamp_bits.store(clamp_preamp(db).to_bits(), Ordering::Relaxed);
+        self.preamp.store(clamp_preamp(db));
         self.bump();
     }
 
@@ -219,17 +217,17 @@ impl EqShared {
 
     #[must_use]
     pub fn gain(&self, index: usize) -> f32 {
-        self.gains_bits.get(index).map_or(0.0, |c| f32::from_bits(c.load(Ordering::Relaxed)))
+        self.gains.get(index).map_or(0.0, AtomicF32::load)
     }
 
     #[must_use]
     pub fn gains(&self) -> [f32; NUM_BANDS] {
-        std::array::from_fn(|i| f32::from_bits(self.gains_bits[i].load(Ordering::Relaxed)))
+        std::array::from_fn(|i| self.gains[i].load())
     }
 
     #[must_use]
     pub fn preamp(&self) -> f32 {
-        f32::from_bits(self.preamp_bits.load(Ordering::Relaxed))
+        self.preamp.load()
     }
 
     #[must_use]
@@ -272,6 +270,12 @@ struct Limiter {
     /// Knee's lower edge as a linear magnitude, precomputed so
     /// [`Self::target_gain`] can answer a quiet frame without a `log10`.
     knee_low_linear: f32,
+    /// Knee's upper edge, the same trick at the other end: past it the curve has a closed
+    /// linear form and [`Self::target_gain`] needs no `log10` there either.
+    knee_high_linear: f32,
+    /// The threshold as a linear magnitude, which above the knee *is* the numerator of the
+    /// gain. See [`Self::target_gain`].
+    threshold_linear: f32,
 }
 
 impl Limiter {
@@ -281,6 +285,8 @@ impl Limiter {
             attack_coeff: smoothing_coeff(LIMITER_ATTACK_S, frame_rate),
             release_coeff: smoothing_coeff(LIMITER_RELEASE_S, frame_rate),
             knee_low_linear: db_to_linear(LIMITER_THRESHOLD_DB - LIMITER_KNEE_DB / 2.0),
+            knee_high_linear: db_to_linear(LIMITER_THRESHOLD_DB + LIMITER_KNEE_DB / 2.0),
+            threshold_linear: db_to_linear(LIMITER_THRESHOLD_DB),
         }
     }
 
@@ -297,17 +303,17 @@ impl Limiter {
         if peak <= self.knee_low_linear {
             return 1.0;
         }
-        let peak_db = linear_to_db(peak);
-        let over = peak_db - LIMITER_THRESHOLD_DB;
-        let half_knee = LIMITER_KNEE_DB / 2.0;
-        let reduction_db = if over >= half_knee {
-            -over
-        } else {
-            // Within the knee — the guard above already excluded the low side.
-            let k = over + half_knee;
-            -(k * k) / (2.0 * LIMITER_KNEE_DB)
-        };
-        db_to_linear(reduction_db)
+        // Above the knee the ratio is unbounded, so the output pins at the threshold and the
+        // gain is the ratio that puts it there. Spelled in dB it is `10^(-over/20)`, which
+        // expands to exactly this, the `log10` and the `powf` having only undone each other.
+        if peak >= self.knee_high_linear {
+            return self.threshold_linear / peak;
+        }
+        // Inside the knee, where the quadratic has no linear form. Both guards above are
+        // edges of this curve, and it meets them at unity and at `threshold / peak`.
+        let over = linear_to_db(peak) - LIMITER_THRESHOLD_DB;
+        let k = over + LIMITER_KNEE_DB / 2.0;
+        db_to_linear(-(k * k) / (2.0 * LIMITER_KNEE_DB))
     }
 
     /// Advance the smoothed gain toward this frame's target: fast attack as the
@@ -324,7 +330,7 @@ impl Limiter {
     }
 }
 
-/// A rodio source applying the shared graphic EQ **and `ReplayGain`** to its
+/// An [`AudioSource`] applying the shared graphic EQ **and `ReplayGain`** to its
 /// inner decoder — one per decoded track.
 ///
 /// The playing and gapless-preloaded tracks share the same [`EqShared`] /
@@ -399,7 +405,7 @@ pub struct EqSource<S> {
     bypass: bool,
 }
 
-impl<S: Source> EqSource<S> {
+impl<S: AudioSource> EqSource<S> {
     pub fn new(
         input: S,
         shared: Arc<EqShared>,
@@ -417,10 +423,10 @@ impl<S: Source> EqSource<S> {
         let banks = (0..channels)
             .map(|_| std::array::from_fn(|_| DirectForm1::<f32>::new(identity_coeffs())))
             .collect();
-        // Frames elapse at the per-channel rate, which is exactly what rodio's
-        // `sample_rate()` already reports — do NOT divide by the channel count,
-        // or the limiter runs that many times too fast and desyncs from the
-        // biquads, which use the same value as their `fs`.
+        // Frames elapse at the per-channel rate, which is exactly what
+        // `AudioSource::sample_rate()` already reports — do NOT divide by the
+        // channel count, or the limiter runs that many times too fast and
+        // desyncs from the biquads, which use the same value as their `fs`.
         let frame_rate = sample_rate;
         // Seed off the live values so the first `next()` rebuilds. Same for the
         // fade cell, which is how a gapless successor appended to an
@@ -649,7 +655,7 @@ impl<S: Source> EqSource<S> {
 
     /// Bypass + fade: the EQ / `ReplayGain` stages are inert, so skip the frame
     /// machinery, but still clamp before the ramp — raw decoder output can
-    /// exceed full scale and rodio's mixer sums its voices unclamped.
+    /// exceed full scale and the mixer sums its voices unclamped.
     ///
     /// The ramp advances once per *frame*, so both channels share a gain;
     /// per-sample would shear the stereo image across the fade.
@@ -723,7 +729,7 @@ impl<S: Source> EqSource<S> {
     }
 }
 
-impl<S: Source> Iterator for EqSource<S> {
+impl<S: AudioSource> Iterator for EqSource<S> {
     type Item = Sample;
 
     fn next(&mut self) -> Option<Sample> {
@@ -750,12 +756,7 @@ impl<S: Source> Iterator for EqSource<S> {
     }
 }
 
-impl<S: Source> Source for EqSource<S> {
-    #[inline]
-    fn current_span_len(&self) -> Option<usize> {
-        self.input.current_span_len()
-    }
-
+impl<S: AudioSource> AudioSource for EqSource<S> {
     #[inline]
     fn channels(&self) -> ChannelCount {
         self.input.channels()
@@ -785,11 +786,15 @@ impl<S: Source> Source for EqSource<S> {
         }
         self.limiter.reset();
         // What is left of the frame being handed out drains rather than being dropped, and
-        // `frame_phase` is left alone for the same reason: those samples are ones the consumer is
-        // owed, and rodio's channel converter keeps its own phase across a seek. Drop them and
-        // every frame after this one is a channel out of step, for the rest of the track. The
-        // decoder puts the puller back on its channel so the two agree either way.
+        // `frame_phase` is left alone for the same reason: those samples are owed, and dropping
+        // them leaves every frame after this one a channel out of step for the rest of the track.
+        // The deck's converter never seeks part way through a frame, so this is for a caller
+        // pulling by hand — and the decoder restores its own phase, so the two agree either way.
         Ok(())
+    }
+
+    fn release_claims(&mut self) {
+        self.input.release_claims();
     }
 }
 

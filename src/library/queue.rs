@@ -151,7 +151,7 @@ pub fn queue_clear(state: &AppState) -> Result<(), AppError> {
 pub fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), AppError> {
     // The `play` line this produces names the file; only this names why.
     log::debug!("queue: skip to index {index}");
-    emit_and_execute(&*state.rodio, &state.db, &state.player_state, &state.sinks, |s| {
+    emit_and_execute(&*state.engine, &state.db, &state.player_state, &state.sinks, |s| {
         let track = s.queue.skip_to_index(index).cloned();
         match track {
             Some(t) => play_track_inner(s, t, None),
@@ -304,9 +304,9 @@ pub async fn restore_persisted_playback(state: &AppState) -> AppResult<()> {
         .await
         .map_err(|e| AppError::Settings(format!("restore_persisted_playback join: {e}")))??;
 
-    // `emit_and_execute` rather than a bare emit because a seated station may owe rodio a speed
+    // `emit_and_execute` rather than a bare emit because a seated station may owe the deck a speed
     // reset: `settings.json` hydrates the speed ahead of this and a station is pinned at 1.0.
-    emit_and_execute(&*state.rodio, &state.db, &state.player_state, &state.sinks, |s| {
+    emit_and_execute(&*state.engine, &state.db, &state.player_state, &state.sinks, |s| {
         if let Some(p) = persisted.as_ref() {
             restore_queue(s, summaries, &p.queue);
         }

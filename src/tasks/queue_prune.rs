@@ -17,8 +17,8 @@ use sqlx::FromRow;
 use crate::database::DbPool;
 use crate::error::AppResult;
 use crate::player::actions::emit_and_execute;
+use crate::player::backend::PlaybackEngine;
 use crate::player::event_sink::PlayerSinks;
-use crate::player::rodio_backend::RodioPlayer;
 use crate::player::state::{
     PlayerAction, PlayerStateHandle, lock_state, play_track_inner, stop_end_of_queue,
 };
@@ -36,7 +36,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let db = state.db.clone();
     let player_state = state.player_state.clone();
     let sinks = state.sinks.clone();
-    let rodio = state.rodio.clone();
+    let engine = state.engine.clone();
     let mut rx = state.library_changed_tx.subscribe();
 
     spawner.spawn_cancellable(move |shutdown| async move {
@@ -48,7 +48,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                         break;
                     }
                     let _ = rx.borrow_and_update();
-                    if let Err(e) = reconcile_once(&db, &player_state, &sinks, &rodio).await {
+                    if let Err(e) = reconcile_once(&db, &player_state, &sinks, &engine).await {
                         log::warn!("queue_prune reconcile failed: {e}");
                     }
                 }
@@ -69,7 +69,7 @@ async fn reconcile_once(
     db: &DbPool,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
-    rodio: &Arc<RodioPlayer>,
+    engine: &Arc<PlaybackEngine>,
 ) -> AppResult<()> {
     // Step 1: snapshot every track id currently referenced by the queue.
     // Brief read-only lock — no with_state_emit because we're not mutating;
@@ -108,7 +108,7 @@ async fn reconcile_once(
     // `with_state_emit` publishes the new queue VM on `sinks.queue` and the
     // light VM on `sinks.view_model`, so the queue sheet's subscriber
     // rebuilds rows automatically.
-    emit_and_execute(&**rodio, db, player_state, sinks, |s| {
+    emit_and_execute(&**engine, db, player_state, sinks, |s| {
         let outcome = s.queue.prune_missing(&to_remove);
         // A station leaves the queue seated underneath rather than playing from it, so a row
         // going missing out of it is not a playback event at all: reacting would stop the

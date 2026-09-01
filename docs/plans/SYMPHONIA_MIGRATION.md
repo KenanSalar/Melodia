@@ -1,15 +1,21 @@
 # Migrating off rodio, onto Symphonia and cpal
 
-Working doc. Background and shape for replacing rodio entirely. Delete it when the migration
-ships.
+Working doc. Background and shape for replacing rodio entirely.
 
-Status: **Phase 1 done, Phase 2 not started** · Issue:
+Status: **both phases done** · Issue:
 [#79](https://github.com/KenanSalar/Melodia/issues/79) · Created: 2026-08-20
 
-> **Phase 1 shipped**, so the tree now compiles one Symphonia and rodio is cut to `playback`.
-> Everything below about *two* majors is history rather than description; what is still live is
-> Phase 2 ([#90](https://github.com/KenanSalar/Melodia/issues/90)) and the prior art for it.
-> Six things the work found that this doc had wrong or did not know:
+> **Kept for [#84](https://github.com/KenanSalar/Melodia/issues/84)**, not because anything below
+> is still a plan. Both phases have landed and rodio is out of the manifest and the lock file, so
+> everything here is a record of *why* rather than a description of what to do — which is exactly
+> what the architecture-decision pass needs as a source. Delete it once #84 has taken what it wants.
+>
+> Read `src/player/CLAUDE.md` and `src/player/output/` for the tree as it actually is; where this
+> doc and the code disagree, the code is right.
+>
+> **Phase 1 shipped first**, so the tree compiled one Symphonia while rodio was cut to `playback`.
+> Everything below about *two* majors is history rather than description. Six things that work
+> found which this doc had wrong or did not know:
 >
 > 1. **`Track::num_frames` is the wrong field for a duration** and `Track::duration` alone is not
 >    enough either. Upstream's own note says to present `duration`; Matroska sets neither on the
@@ -50,10 +56,10 @@ The end state is no rodio: Symphonia decodes, cpal outputs, and everything betwe
 ours. Melodia already runs half of that today, because internet radio decodes on Symphonia
 0.6 and hands rodio nothing but samples.
 
-Right now the tree compiles **two major versions of Symphonia**. Local files decode through
-`rodio::Decoder`, which is Symphonia 0.5.5. Internet radio decodes through
-`player::stream_decode`, which is Symphonia 0.6.1. Nothing is broken by that and the split
-was deliberate, but it is the debt this migration clears.
+**That end state is now the tree.** What follows was written when it was not: at the time the
+build carried **two major versions of Symphonia**, local files decoding through `rodio::Decoder`
+(0.5.5) and internet radio through `player::stream_decode` (0.6.1). Nothing was broken by that and
+the split was deliberate, but it is the debt this migration cleared.
 
 **`rodio::Decoder` is not an alternative decoder.** Every rodio feature this tree enables is
 a `symphonia-*` one, so rodio is a wrapper around the same library. Dropping it means owning
@@ -114,7 +120,7 @@ ring sits below it either way.
 
 ---
 
-## What the split costs today
+## What the split cost, while it lasted
 
 - **Nine extra crates** in the build. Compile time and binary size, no runtime cost worth
   measuring: this is code pages, not heap, so it does not move RSS.
@@ -145,6 +151,12 @@ That last row is the reassuring one. cpal is already in the lock file and alread
 this tree through rodio's re-export, so depending on it directly is a manifest line rather
 than a new dependency, and the device loss classification in `tasks::audio_health` keeps
 working unchanged.
+
+Every row landed where it says. In order: `player::file_decode`, `player::audio::AudioSource`,
+`player::output::voice`, `player::output::mixer`, `player::output::device`, and a one-line import
+change in `player::stream_health`. The local trait does have four methods, though not the four this
+table meant — `current_span_len` turned out to exist only for rodio's rebuild policy and `try_seek`
+moved from provided to required.
 
 ---
 
@@ -313,6 +325,15 @@ whether we migrated or not.
 
 ## Two phases, and why that order
 
+> **Both landed, in this order.** Phase 1 as [#89](https://github.com/KenanSalar/Melodia/issues/89)
+> (with the HE-AAC fallback ahead of it as [#88](https://github.com/KenanSalar/Melodia/issues/88)),
+> Phase 2 as [#90](https://github.com/KenanSalar/Melodia/issues/90). The split held up: Phase 1
+> shipped on its own and left a surface small enough to replace deliberately, and Phase 2 arrived as
+> one variable in the part of the app with the least visible failure modes. **The A/B advice below
+> is the one piece that was not followed** — keeping both backends compiling would have meant two
+> copies of `decks.rs`, the file most likely to hold the bug, so the fallback was the previous
+> commit and a rebuild instead.
+
 `player::prebuffer`'s ring is what makes this two steps instead of one cutover. Radio already
 decodes on Symphonia 0.6, fills a ring, and hands rodio nothing but `f32`.
 
@@ -331,6 +352,50 @@ the app with the least visible failure modes.
 
 Each phase should keep the old path compiling alongside the new one long enough to A/B them,
 because most of what can go wrong here is audible rather than a compile error.
+
+## What Phase 2 found
+
+The counterpart to the six corrections at the top of this file. Seven things the work settled that
+this doc had wrong, or did not think to ask.
+
+1. **No rubato, and therefore no `unsafe` question.** The prior-art section below calls
+   `symphonia-play`'s `resampler.rs` "Phase 2's rate conversion, already written" and worries about
+   its three `unsafe impl` blocks. Neither applies. rox — the one reference that owns its output —
+   ships a hand-rolled linear resampler and defers rubato; the safe form of the symphonia-play glue
+   needs planar scratch, a de-interleave pair and truncation of the silence its flush pads with. And
+   we have a requirement neither reference has: speed is continuously variable over 0.25 to 2.0, so
+   the ratio moves at runtime, which a pull-driven linear converter answers per sample with no block
+   buffer. `output::convert` is that. The workspace `unsafe_code = "deny"` was never in tension.
+2. **The `Box::leak` retires; `process::exit(0)` does not.** This doc says owning the stream retires
+   the leak "and with it the `process::exit(0)` rationale that leak forced". Half right. `main()`
+   names *four* threads that never exit and only one was the leaked sink's — souvlaki's MPRIS
+   thread, accesskit's a11y thread and parked tokio workers are the others, so the call stays and
+   only its comment changed.
+3. **The clock needed no recalibration, because its meaning did not change.** Risk 1 below says the
+   clock "has to come from what the output callback consumed, not from what the decoder produced".
+   rodio's `get_pos` already was that: `track_position` counted frames the mixer pulled, and the
+   mixer is pulled from inside the cpal data callback. Nothing keyed off position needed retuning.
+   What *did* change is that speed moved below the frame counter, which deleted `compute_position`,
+   `media_to_output_ms`, `seek_to_media` and the re-anchoring seek in `set_speed` outright.
+4. **A whole-block deck opens a crossfade overshoot this doc never anticipated.** Rendering each
+   deck's entire block in turn means a fade armed between two decks' renders leaves the outgoing one
+   at full gain for that block while the incoming ramps up, so the unclamped sum passes unity by the
+   period over the fade — five percent at a 50 ms period and the shortest crossfade allowed. rodio
+   pulled one sample from every voice in turn and bounded it to a frame. `mixer::LOCKSTEP_FRAMES` is
+   the answer, and it was a tightened test that found it, not review.
+5. **The local trait needs four methods, not five.** `current_span_len` exists only for
+   `UniformSourceIterator`'s rebuild policy; a deck that owns its source list knows the boundary
+   exactly. It, `Cursor::span_len`, `prebuffer::span_samples` and two tests all went, and
+   `tests/stream_rate.rs` still pins the property they protected.
+6. **Retiring finished sources off the audio thread is not free — it breaks the visualizer.**
+   `decks.rs` had long documented freeing a decoder's 64 KiB buffer under the arena lock as an
+   accepted cost. It is more than accepted: the visualizer's per-deck liveness is scoped to the
+   source's *drop*, so deferring it leaves a dead deck's ring mixing into the analysis window. Tried,
+   caught by `tests/crossfade.rs`, reverted.
+7. **A mixer that zeroes the block and adds into it loses the sign of zero.** `0.0 + -0.0` is `0.0`,
+   so a lone deck at unity would not have been the passthrough `BIT_PERFECT.md`'s whole claim rests
+   on. The first contributing deck writes and the rest add; volume moved into the deck so unity is a
+   short circuit rather than a multiply by one. Also found by a test, not by reading the code.
 
 ## Prior art worth reading first
 
@@ -453,6 +518,18 @@ the work.
 
 ## Risks, in order
 
+> **How the four actually landed**, since a risk list is only worth keeping if it says whether it
+> was right. **1 was wrong about the mechanism and right about nothing needing to break** — rodio's
+> position already counted frames pulled inside the cpal callback, so the quantity never changed and
+> no consumer was recalibrated; what the rewrite bought was moving speed below the counter, which
+> deleted the two-timeline machinery. **2 was right and was already paid** in Phase 1, where the
+> unconditional reset, the head trim and the end margin all landed. **3 was right, and understated**:
+> the mixer does stay unclamped, but the identity that makes that safe needs both ramps to advance
+> together, which per-deck block rendering breaks — see item 4 of *What Phase 2 found*. **4 was
+> right and cost one import line**, since pinning cpal to the version rodio already resolved made
+> `rodio::cpal::StreamError` and `cpal::StreamError` the same type. The risk nobody listed is the one
+> that bit: the visualizer's liveness being scoped to a source's drop.
+
 1. **The playback clock.** Position, playback speed, crossfade timing, the sleep timer and
    gapless all key off `get_pos()` today. A ring puts distance between decoded and audible,
    so the clock has to come from what the output callback consumed, not from what the decoder
@@ -474,23 +551,35 @@ the work.
 
 ## Sequencing
 
+> **Spent.** Radio shipped, then the HE-AAC fallback (#88), then Phase 1 (#89), then Phase 2 (#90),
+> exactly in that order. Of the three things that would have changed the plan, only the second and
+> third are still open, and both are now easier than this section assumed.
+
 Radio ships first. After that, Phase 1, then Phase 2, with the HE-AAC fallback written before
 Phase 1 switches over so nothing that plays today stops playing.
 
 Three things would change the plan rather than cancel it:
 
-1. **rodio lands its own Symphonia 0.6 update.** Phase 1 becomes a version bump and you skip
-   to Phase 2. Their tracking issue is open and unassigned, tangled in a larger audio engine
-   rewrite, so watch it rather than wait on it.
+1. **rodio lands its own Symphonia 0.6 update.** ~~Phase 1 becomes a version bump and you skip
+   to Phase 2.~~ Moot — it never landed in time and rodio is out of the tree either way.
 2. **Symphonia PR #473 lands.** The HE-AAC fallback becomes unnecessary and HE-AAC gets
-   better than it is today, full band stereo instead of a half rate mono core.
+   better than it is today, full band stereo instead of a half rate mono core. Still open, and
+   `aac_config_tests` says in its own header that the answer then is to delete the module.
 3. **Opus.** It needs only our own codec registry, not the migration, so it can land on the
-   radio path at any point without waiting for either phase.
+   radio path at any point without waiting for either phase. **This turned out to understate it**:
+   `docs/plans/OPUS_SUPPORT.md` was written around rodio 0.23 registering the adapter behind a
+   feature flag, and with the registry ours the remaining work is four lines. That doc's header
+   now says so.
 
 Two features already documented elsewhere get easier once Phase 2 is done rather than
 requiring it: `BIT_PERFECT.md`, whose first three findings are all rodio workarounds, and CUE
 spans, which need a frame accurate seek and a bounded source. Both of those exist in rodio
 today, so **CUE does not depend on this migration** and should not be sequenced behind it.
+
+Both of those held. `BIT_PERFECT.md`'s findings 1 through 3 and most of its Phase 1 are spent, and
+each is marked there. CUE still does not depend on this: the frame-accurate seek is
+`file_decode::try_seek` now rather than rodio's `refine_position`, and the bounded source it wants
+is a span the deck can end — neither needed the output rewrite.
 
 ---
 

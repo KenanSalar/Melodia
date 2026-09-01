@@ -149,7 +149,7 @@ Melodia is a modern, local-first desktop music player with a Material
 machine, with no accounts, streaming or cloud.
 
 It pairs a Slint user interface with a pure-Rust backend: gapless
-playback via Rodio and Symphonia (MP3, FLAC, M4A/M4B with AAC and ALAC,
+playback via Symphonia and cpal (MP3, FLAC, M4A/M4B with AAC and ALAC,
 Ogg Vorbis, WAV, AIFF/AIFF-C, Matroska and CAF), a fast local SQLite
 library with full-text search, browsing by album, artist, genre and
 playlist, OS media controls (MPRIS), and pluggable themes including

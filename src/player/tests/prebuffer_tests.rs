@@ -1,21 +1,14 @@
-use std::num::NonZero;
 use std::sync::Arc;
 
-use rodio::{ChannelCount, SampleRate, Source};
-
+use crate::player::audio::AudioSource;
 use crate::player::prebuffer::{PrebufferSource, RingWriter, StreamShared};
+use crate::player::tests::helpers::shape;
 
-fn stereo_channels() -> ChannelCount {
-    NonZero::new(2).unwrap_or(NonZero::<u16>::MIN)
-}
-
-fn rate() -> SampleRate {
-    NonZero::new(48_000).unwrap_or(NonZero::<u32>::MIN)
-}
+const RATE: u32 = 48_000;
 
 fn stereo() -> (PrebufferSource, RingWriter, Arc<StreamShared>) {
     let shared = StreamShared::new();
-    let (source, writer) = PrebufferSource::new(shared.clone(), stereo_channels(), rate());
+    let (source, writer) = PrebufferSource::new(shared.clone(), shape(2, RATE));
     (source, writer, shared)
 }
 
@@ -100,7 +93,7 @@ fn a_partial_frame_is_never_split_across_the_ring_and_silence() {
 #[test]
 fn the_ring_wraps_without_losing_order() {
     let shared = StreamShared::new();
-    let (mut source, writer) = PrebufferSource::new(shared, NonZero::<u16>::MIN, rate());
+    let (mut source, writer) = PrebufferSource::new(shared, shape(1, RATE));
 
     // Well past the capacity the configured prebuffer window buys, so the cursors wrap repeatedly.
     for i in 0..500_000_u32 {
@@ -114,7 +107,7 @@ fn the_ring_wraps_without_losing_order() {
 #[test]
 fn a_blocked_writer_gives_up_once_the_source_is_dropped() {
     let shared = StreamShared::new();
-    let (source, writer) = PrebufferSource::new(shared, NonZero::<u16>::MIN, rate());
+    let (source, writer) = PrebufferSource::new(shared, shape(1, RATE));
 
     let feeder = std::thread::spawn(move || {
         let mut pushed = 0_u64;
@@ -142,28 +135,8 @@ fn a_live_stream_reports_no_length_and_refuses_to_seek() {
     let (mut source, _writer, _shared) = stereo();
 
     assert_eq!(source.total_duration(), None);
-    assert_eq!(source.channels(), stereo_channels());
-    assert_eq!(source.sample_rate(), rate());
+    assert_eq!(source.shape(), shape(2, RATE));
     assert!(source.try_seek(std::time::Duration::from_secs(1)).is_err());
-}
-
-/// A `None` span reaches rodio's mixer as an unbounded `Take`, pinning its `SampleRateConverter` to
-/// whichever source landed on the deck first — every station after that plays at the first one's
-/// rate, fast or slow, until the process restarts. Nothing else reports it, so the shape is pinned
-/// here rather than left to review; this test asserted the `None` before it was understood.
-#[test]
-fn a_live_stream_names_a_frame_aligned_span_for_the_resampler() {
-    for channels in [NonZero::<u16>::MIN, stereo_channels()] {
-        let (source, _writer) = PrebufferSource::new(StreamShared::new(), channels, rate());
-
-        let frame = usize::from(channels.get());
-        let span = source.current_span_len();
-        assert!(
-            span.is_some_and(|span| span > 0 && span.is_multiple_of(frame)),
-            "a live stream must name a positive, frame-aligned span, got {span:?} for {frame} \
-             channels — a `None` leaves the mixer's resampler pinned to the first station's rate"
-        );
-    }
 }
 
 #[test]

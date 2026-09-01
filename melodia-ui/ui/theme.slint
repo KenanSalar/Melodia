@@ -117,9 +117,10 @@ export global Theme {
     out property <length> resize-border: 4px;
     out property <length> resize-corner: 8px;
 
-    // The `OverlayScrollbar` *element's* slot, distinct from the 8 px it paints inside it. Three
+    // The `OverlayScrollbar` *element's* slot, distinct from the 8 px it paints inside it. Four
     // sides agree on it: both bar pairs size their elements by it, the horizontal bar subtracts it
-    // at its right end so the two don't meet in the corner, and a `TrackList` reserves it as a lane.
+    // at its right end so the two don't meet in the corner, a `TrackList` reserves it as a lane,
+    // and every hand-mounted bar takes its width from here rather than restating the number.
     out property <length> scrollbar-slot: 10px;
 
     // The one ink drawn on a name-hashed tile — the station monogram and the glyph beside it, on

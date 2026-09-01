@@ -1,13 +1,15 @@
 //! The segment scheduler, and the reader that hides it from the decoder.
 
 use std::io::{self, Read, Seek, SeekFrom};
+use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::Url;
 use tokio::sync::mpsc;
 
 use crate::error::AppError;
-use crate::player::stream_source::fetch_capped;
+use crate::player::prebuffer::StreamShared;
+use crate::player::stream_source::ABANDON_POLL;
 use crate::services::describe;
 
 use super::playlist::{self, MediaPlaylist, Playlist};
@@ -29,6 +31,16 @@ const SEGMENT_QUEUE_DEPTH: usize = 4;
 /// point is to refuse a mount serving something else entirely rather than to size a buffer.
 const SEGMENT_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const SEGMENT_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Ceiling on one manifest, and how long we wait for it.
+///
+/// **Deliberately its own cap rather than `stream_source`'s**, which bounds a `.pls` or `.m3u`
+/// *pointer* — a few hundred bytes naming one mount. A media playlist is a live document listing
+/// every segment still in the window and re-fetched twice a target duration, so the two answer
+/// different questions and only looked like one number. The wait beside it lands on the same
+/// figure, a manifest and a pointer being one request over one connection either way.
+const MANIFEST_MAX_BYTES: u64 = 256 * 1024;
+const MANIFEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Consecutive playlist failures before the stream is given up on.
 ///
@@ -63,6 +75,10 @@ pub struct HlsReader {
     held: Vec<u8>,
     offset: usize,
     position: u64,
+    /// Read only to end the wait below. The scheduler cannot do it: it learns the listener is gone
+    /// from `chunks.closed()`, which fires when this receiver drops, which needs this read to
+    /// return, so parking here unconditionally leaves the two waiting on each other.
+    shared: Arc<StreamShared>,
 }
 
 impl Read for HlsReader {
@@ -71,11 +87,23 @@ impl Read for HlsReader {
             return Ok(0);
         }
         while self.offset >= self.held.len() {
-            let Some(chunk) = self.chunks.blocking_recv() else {
-                return Ok(0);
-            };
-            self.held = chunk;
-            self.offset = 0;
+            match self.chunks.try_recv() {
+                Ok(chunk) => {
+                    self.held = chunk;
+                    self.offset = 0;
+                }
+                Err(mpsc::error::TryRecvError::Disconnected) => return Ok(0),
+                // Polled rather than parked, so a stopped station releases this thread, the
+                // decoder and the ring at once instead of after the scheduler has spent its
+                // stall budget, which on a playlist that answers but has stopped advancing runs to
+                // a couple of minutes. Costs a wake-up granularity the segment cadence cannot feel.
+                Err(mpsc::error::TryRecvError::Empty) => {
+                    if self.shared.is_abandoned() {
+                        return Ok(0);
+                    }
+                    std::thread::sleep(ABANDON_POLL);
+                }
+            }
         }
 
         let take = (self.held.len() - self.offset).min(buf.len());
@@ -102,7 +130,14 @@ impl Seek for HlsReader {
 /// a dead station fails here rather than at the first read.
 ///
 /// `body` is the already-fetched playlist at `url`, which the caller read to recognise it as HLS.
-pub async fn open(client: &reqwest::Client, url: &Url, body: &str) -> Result<HlsStream, AppError> {
+///
+/// `shared` is taken for one field of it, and [`HlsReader::shared`] says which and why.
+pub async fn open(
+    client: &reqwest::Client,
+    url: &Url,
+    body: &str,
+    shared: Arc<StreamShared>,
+) -> Result<HlsStream, AppError> {
     let resolved = resolve(client, url, body).await?;
 
     // The live edge, minus the cushion. Anything older is history nobody tuning in wants to hear
@@ -158,6 +193,7 @@ pub async fn open(client: &reqwest::Client, url: &Url, body: &str) -> Result<Hls
             held: Vec::new(),
             offset: 0,
             position: 0,
+            shared,
         },
         codec,
         bitrate_kbps: resolved.bitrate_kbps,
@@ -193,7 +229,7 @@ async fn resolve(client: &reqwest::Client, url: &Url, body: &str) -> Result<Reso
     } else {
         i32::try_from(variant.bandwidth / 1_000).unwrap_or(0)
     };
-    let body = fetch_capped(client, &variant.url).await?;
+    let body = fetch_manifest(client, &variant.url).await?;
     Ok(Resolved {
         playlist: media_playlist(&body, &variant.url)?,
         bitrate_kbps,
@@ -235,7 +271,7 @@ impl Scheduler {
                 () = self.chunks.closed() => return,
             }
 
-            let reloaded = fetch_capped(&self.client, &self.playlist_url)
+            let reloaded = fetch_manifest(&self.client, &self.playlist_url)
                 .await
                 .and_then(|body| media_playlist(&body, &self.playlist_url));
             let playlist = match reloaded {
@@ -311,20 +347,20 @@ impl Scheduler {
     }
 }
 
-/// Read at most [`SEGMENT_MAX_BYTES`] of one segment.
-///
-/// The bound is [`crate::services::read_capped`]'s, which argues why it is streamed.
-async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, AppError> {
-    let response =
-        client.get(url.clone()).timeout(SEGMENT_TIMEOUT).send().await.map_err(|e| {
-            AppError::network("Could not fetch a segment of the station's stream", e)
-        })?;
-    if !response.status().is_success() {
-        return Err(AppError::network_msg(format!(
-            "Station segment request returned HTTP {}",
-            response.status().as_u16()
-        )));
-    }
+/// Read at most [`MANIFEST_MAX_BYTES`] of one playlist, as text.
+async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
+    crate::services::get_capped_text(
+        client,
+        url,
+        "Station playlist",
+        MANIFEST_TIMEOUT,
+        MANIFEST_MAX_BYTES,
+    )
+    .await
+}
 
-    crate::services::read_capped(response, "Station segment", SEGMENT_MAX_BYTES).await
+/// Read at most [`SEGMENT_MAX_BYTES`] of one segment.
+async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, AppError> {
+    crate::services::get_capped(client, url, "Station segment", SEGMENT_TIMEOUT, SEGMENT_MAX_BYTES)
+        .await
 }

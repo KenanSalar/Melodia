@@ -103,7 +103,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Automatic pre-migration database backups, kept in a `backups/` folder beside the library database; the three most recent are retained and older ones retire themselves, so upgrading never accumulates copies of your library without bound
 
 ### Playback
-- Gapless playback with a 2-deep Rodio queue
+- Gapless playback, with the next track staged on the deck before the current one ends
 - Audio crossfade (1–12 s) that overlaps the end of one track with the start of the next, running the two on separate mixer decks with a sample-accurate complementary ramp so the sum can never clip; optionally skips same-album transitions to keep continuous mixes gapless, extends to manual track changes, and fades out on pause and stop
 - Queue management with shuffle and repeat modes (Off, All, One)
 - Playing a track from any list (an album, a playlist, a folder in Files, search results, Favorites) loads that whole list into the queue and starts on the track you picked, so the rest of the album or playlist follows on its own. With shuffle already on, the remaining tracks are shuffled behind your pick rather than played in order. **Play Next** and **Add to Queue** in the right-click menu still add to the existing queue without replacing it
@@ -335,7 +335,7 @@ cargo test                                     # run tests
 | UI | [Slint](https://slint.dev/) 1.16 (FemtoVG renderer) |
 | Backend | Pure Rust: direct calls + tokio channels, no IPC |
 | Async runtime | [Tokio](https://tokio.rs/) |
-| Audio | [Rodio](https://github.com/RustAudio/rodio) + [Symphonia](https://github.com/pdeljanov/Symphonia) |
+| Audio | [Symphonia](https://github.com/pdeljanov/Symphonia) + [cpal](https://github.com/RustAudio/cpal) |
 | Radio streaming | [stream-download](https://crates.io/crates/stream-download) + [icy-metadata](https://crates.io/crates/icy-metadata), decoded by Symphonia |
 | Station directory | [radio-browser.info](https://www.radio-browser.info) (no account, CC0 data) |
 | Equalizer DSP | [biquad](https://crates.io/crates/biquad) (peaking-filter bands) |
@@ -367,7 +367,7 @@ src/
 ├── entities/    domain model types (track, album, artist, genre, playlist, …)
 ├── library/     playback, queue, tracks, albums, artists, genres, playlists, search, settings
 ├── media/       scanner, metadata, artwork, cover-thumbnail cache, folder watcher
-├── player/      playback state machine + dual-deck Rodio backend + graphic equalizer, ReplayGain, crossfade, spectrum & waveform DSP, live-stream decode and buffering
+├── player/      playback state machine + dual-deck mixer over cpal + graphic equalizer, ReplayGain, crossfade, spectrum & waveform DSP, live-stream decode and buffering
 ├── tasks/       background tasks (playback monitor, file events, queue prune, Material You)
 ├── themes/      pluggable theme registry
 ├── services/    updater, desktop integration, system theme, radio directory client
@@ -489,7 +489,7 @@ every package ships alongside this file.
 ## Acknowledgments
 
 Built on the work of the [Slint](https://slint.dev/),
-[Rodio](https://github.com/RustAudio/rodio),
+[cpal](https://github.com/RustAudio/cpal),
 [Symphonia](https://github.com/pdeljanov/Symphonia), and
 [SQLx](https://github.com/launchbadge/sqlx) projects, the
 [Catppuccin](https://catppuccin.com/) palette, and

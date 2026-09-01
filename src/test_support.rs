@@ -243,6 +243,36 @@ pub(crate) fn strip_line_comments(src: &str) -> String {
     out
 }
 
+/// The body of every `component { … }` block in `src`, braces excluded.
+///
+/// A declaration is the name followed by `{`, which is what separates `sv := ScrollView {` from
+/// the `import { ScrollView } from …` line above it, and the byte before it is checked too, so a
+/// longer identifier ending in the same word is not one. Pair it with [`strip_line_comments`] for
+/// [`block_body`]'s reason.
+///
+/// Four pins walked for a named block before this existed and three of them spelled the walk out
+/// again; the fourth is `scrollbar_tests::scroller_blocks`, which is this over a list of names.
+pub(crate) fn blocks_named<'a>(src: &'a str, component: &str) -> Vec<&'a str> {
+    let bytes = src.as_bytes();
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(at) = src[from..].find(component).map(|rel| rel + from) {
+        from = at + component.len();
+        if at > 0 && (bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_') {
+            continue;
+        }
+        let Some(open) = (from..bytes.len()).find(|i| !bytes[*i].is_ascii_whitespace()) else {
+            continue;
+        };
+        if bytes[open] == b'{'
+            && let Some(body) = block_body(src, open)
+        {
+            out.push(body);
+        }
+    }
+    out
+}
+
 /// The body of the block whose `{` sits at `open`, braces excluded.
 ///
 /// Quote-aware, and pair it with [`strip_line_comments`] — an unbalanced `{` throws the count

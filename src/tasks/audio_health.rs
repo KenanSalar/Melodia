@@ -5,9 +5,10 @@
 //! this task exists: nothing else notices, so playback runs on with the position
 //! ticking and no sound.
 //!
-//! **Reopening the stream is deliberately not attempted** — the `MixerDeviceSink`
-//! is `Box::leak`'d and both decks hold its mixer, so recovery means rebuilding
-//! them and re-staging. Telling the user is the honest first step.
+//! **Reopening the stream is deliberately not attempted.** It is now possible — the output is
+//! owned rather than leaked, so the device can be released — but recovery still means rebuilding
+//! the decks against a new mixer and re-staging whatever was playing, which is the same structural
+//! work a bit-perfect reopen needs and belongs with it. Telling the user is the honest first step.
 //!
 //! **A lost device reaches here two different ways, and only one of them is a
 //! variant.** Core Audio and WASAPI report `DeviceNotAvailable` outright, and
@@ -31,17 +32,24 @@ const DRAIN_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Above this in one window, the backend is spinning rather than glitching.
 ///
-/// **Sized against the spinning backend, which is the only one that can reach
-/// it.** cpal reports one error per failed write, so a stream still being served
-/// tops out at its own write rate — a couple of dozen a second, every one of
-/// them failing — where the ALSA retry loop is ungated by the audio clock and
-/// runs as fast as the syscall returns. The other two hosts `break` after the
-/// first error and take the [`StreamError::DeviceNotAvailable`] arm instead, so
-/// their `other` can never exceed about one per window and this is a Linux
-/// escalation in practice.
+/// **Sized on the gap between the two, not on either end of it.** cpal reports
+/// one error per failed *write* and retries inside a single callback, so a card
+/// glitching and recovering runs to a few hundred a second at the smallest block
+/// a host picks for itself — where the retry loop against a device that is
+/// simply gone is ungated by the audio clock and runs as fast as the syscall
+/// returns, which is millions. The bar sits an order above the served ceiling
+/// rather than on it **because that ceiling is not a number this tree sets**:
+/// `output::device`'s second pass deliberately asks for no block size, so how
+/// often the callback runs is the host's choice. Detection costs nothing for
+/// the headroom — a spin clears any bar in this range within milliseconds of
+/// the window opening.
 ///
-/// [`StreamError::DeviceNotAvailable`]: rodio::cpal::StreamError::DeviceNotAvailable
-const BACKEND_ERROR_STORM: u64 = 1_000;
+/// The other two hosts `break` after the first error and take the
+/// [`StreamError::DeviceNotAvailable`] arm instead, so their `other` can never
+/// exceed about one per window and this is a Linux escalation in practice.
+///
+/// [`StreamError::DeviceNotAvailable`]: cpal::StreamError::DeviceNotAvailable
+const BACKEND_ERROR_STORM: u64 = 10_000;
 
 /// How many consecutive storms before the user hears about it, so a burst that
 /// clears on its own never raises a sticky toast.

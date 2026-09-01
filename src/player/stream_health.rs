@@ -14,7 +14,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use rodio::cpal::StreamError;
+use cpal::StreamError;
 
 /// Stream faults recorded since the last drain.
 ///
@@ -94,10 +94,10 @@ impl AudioStreamHealth {
     }
 }
 
-/// The callback to hand `DeviceSinkBuilder::with_error_callback`.
+/// The callback to hand `output::device::open`.
 ///
-/// `Clone` because `open_sink_or_fallback` clones it once per configuration it
-/// retries; the captured `Arc` is what supplies that.
+/// `Clone` because that ladder clones it once per configuration it retries; the
+/// captured `Arc` is what supplies that.
 pub fn error_callback(
     health: Arc<AudioStreamHealth>,
 ) -> impl FnMut(StreamError) + Clone + Send + 'static {

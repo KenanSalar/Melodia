@@ -5,9 +5,9 @@ use crate::database::DbPool;
 use crate::database::queries;
 use crate::error::AppError;
 
+use super::backend::PlayerBackend;
 use super::event_sink::PlayerSinks;
 use super::replaygain::TrackReplayGain;
-use super::rodio_backend::PlayerBackend;
 use super::state::{
     PlayerAction, PlayerState, PlayerStateHandle, play_track_inner, stop_end_of_queue,
     with_state_emit,
@@ -24,7 +24,7 @@ use super::state::{
 /// removes it.
 pub fn execute_actions<B: PlayerBackend>(
     actions: Vec<PlayerAction>,
-    rodio_player: &B,
+    engine: &B,
     db: &DbPool,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
@@ -45,20 +45,12 @@ pub fn execute_actions<B: PlayerBackend>(
             } => {
                 start_or_skip(
                     &mut pending,
-                    rodio_player,
+                    engine,
                     player_state,
                     sinks,
                     &file_path,
                     StartMode::Fresh,
-                    || {
-                        rodio_player.play_media(
-                            &file_path,
-                            volume,
-                            speed,
-                            start_position_ms,
-                            replaygain,
-                        )
-                    },
+                    || engine.play_media(&file_path, volume, speed, start_position_ms, replaygain),
                 );
             }
             PlayerAction::BeginCrossfade {
@@ -74,36 +66,40 @@ pub fn execute_actions<B: PlayerBackend>(
                 // track — rare enough (the file vanished mid-play) to accept.
                 start_or_skip(
                     &mut pending,
-                    rodio_player,
+                    engine,
                     player_state,
                     sinks,
                     &file_path,
                     StartMode::Crossfade,
-                    || rodio_player.begin_crossfade(&file_path, replaygain, fade_ms, volume, speed),
+                    || engine.begin_crossfade(&file_path, replaygain, fade_ms, volume, speed),
                 );
             }
-            PlayerAction::Resume => rodio_player.resume(),
-            PlayerAction::Pause { fade_ms } => rodio_player.pause_with_fade(fade_ms),
-            PlayerAction::Stop { fade_ms } => rodio_player.stop_with_fade(fade_ms),
-            PlayerAction::Seek { position_ms } => {
-                rodio_player.seek(position_ms);
+            PlayerAction::Resume => engine.resume(),
+            PlayerAction::Pause { fade_ms } => engine.pause_with_fade(fade_ms),
+            PlayerAction::Stop { fade_ms } => engine.stop_with_fade(fade_ms),
+            PlayerAction::Seek {
+                position_ms,
+                file_path,
+                replaygain,
+            } => {
+                engine.seek(&file_path, position_ms, replaygain);
             }
-            PlayerAction::SetVolume(v) => rodio_player.set_volume(v),
-            PlayerAction::SetSpeed(s) => rodio_player.set_speed(s),
+            PlayerAction::SetVolume(v) => engine.set_volume(v),
+            PlayerAction::SetSpeed(s) => engine.set_speed(s),
             PlayerAction::PreloadGapless(path) => {
                 // This action only ever *clears* a stale preload (`path` is
                 // `None`); the real gapless preload with baked ReplayGain happens
                 // directly in `spawn_playback_monitor`. A default (unity) RG here
                 // is harmless — the `None` path never builds an audio source.
-                rodio_player.preload_gapless(path.as_deref(), TrackReplayGain::default());
+                engine.preload_gapless(path.as_deref(), TrackReplayGain::default());
             }
             PlayerAction::PlayStream { generation, volume } => {
                 // Deliberately not through `start_or_skip`: there is no file to pre-flight with
                 // `Path::exists`, and nothing to auto-skip onto — a station is one source, not a
                 // position in a queue.
-                if let Err(e) = rodio_player.play_stream(generation, volume) {
+                if let Err(e) = engine.play_stream(generation, volume) {
                     log::error!("Failed to start the radio stream: {e}");
-                    rodio_player.stop();
+                    engine.stop();
                     enqueue_station_failure(&mut pending, player_state, sinks, generation);
                 }
             }
@@ -143,7 +139,7 @@ pub fn execute_actions<B: PlayerBackend>(
 /// `execute_actions(...)` pair. `with_state_emit` alone keeps each *mutation*
 /// atomic, but the `execute_actions` that follows runs on whatever worker the
 /// caller is on; two batches from different tasks (e.g. the playback monitor's
-/// EOS-advance and a UI `Stop`) could otherwise interleave their rodio effects
+/// EOS-advance and a UI `Stop`) could otherwise interleave their side effects
 /// and leave state and backend disagreeing (a rare TOCTOU). Holding `exec_lock`
 /// across both halves closes that window.
 ///
@@ -152,7 +148,7 @@ pub fn execute_actions<B: PlayerBackend>(
 /// `execute_actions` takes the *state* mutex, never `exec_lock`, so there is no
 /// re-entrancy.
 pub fn emit_and_execute<B, F>(
-    rodio_player: &B,
+    engine: &B,
     db: &DbPool,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
@@ -163,7 +159,7 @@ pub fn emit_and_execute<B, F>(
 {
     let _exec = player_state.lock_exec();
     let actions = with_state_emit(player_state, sinks, f);
-    execute_actions(actions, rodio_player, db, player_state, sinks);
+    execute_actions(actions, engine, db, player_state, sinks);
 }
 
 /// How a track is being started — the only thing that differs between the
@@ -214,7 +210,7 @@ impl StartMode {
 /// louder: the music silently stopping is otherwise invisible, so it toasts.
 fn start_or_skip<B: PlayerBackend>(
     pending: &mut VecDeque<PlayerAction>,
-    rodio_player: &B,
+    engine: &B,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
     file_path: &str,
@@ -224,7 +220,7 @@ fn start_or_skip<B: PlayerBackend>(
     if !Path::new(file_path).exists() {
         log::warn!("Skipping vanished file at {}: {file_path}", mode.at());
         if mode.stops_on_failure() {
-            rodio_player.stop();
+            engine.stop();
         }
         enqueue_auto_skip(pending, player_state, sinks);
         return;
@@ -236,7 +232,7 @@ fn start_or_skip<B: PlayerBackend>(
             toast_track_name(file_path),
         );
         if mode.stops_on_failure() {
-            rodio_player.stop();
+            engine.stop();
         }
         enqueue_auto_skip(pending, player_state, sinks);
     }

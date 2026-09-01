@@ -20,8 +20,8 @@ use std::sync::{Arc, OnceLock};
 
 use crate::config::Paths;
 use crate::database::DbPool;
+use crate::player::backend::PlaybackEngine;
 use crate::player::event_sink::PlayerSinks;
-use crate::player::rodio_backend::RodioPlayer;
 use crate::player::state::{PlayerAction, PlayerState, PlayerStateHandle};
 
 use super::AppState;
@@ -32,7 +32,7 @@ use super::AppState;
 pub struct PlaybackContext {
     pub player_state: Arc<PlayerStateHandle>,
     pub sinks: Arc<PlayerSinks>,
-    pub rodio: Arc<RodioPlayer>,
+    pub engine: Arc<PlaybackEngine>,
     pub db: DbPool,
     pub paths: Arc<Paths>,
     /// The same lazily-built client `AppState`, scrobbling and Discord presence share, so a
@@ -52,7 +52,7 @@ impl PlaybackContext {
         F: FnOnce(&mut PlayerState) -> Vec<PlayerAction>,
     {
         crate::player::actions::emit_and_execute(
-            &*self.rodio,
+            &*self.engine,
             &self.db,
             &self.player_state,
             &self.sinks,
@@ -69,7 +69,7 @@ impl AppState {
         PlaybackContext {
             player_state: self.player_state.clone(),
             sinks: self.sinks.clone(),
-            rodio: self.rodio.clone(),
+            engine: self.engine.clone(),
             db: self.db.clone(),
             paths: self.paths.clone(),
             http: self.http_client_cell(),

@@ -191,9 +191,10 @@ export component OverflowMenu inherits Rectangle {
                     trailing-text: root.current-speed-label();
                     trailing-icon: "chevron_left";
                     active: root.speed-flyout-open;
-                    // rodio implements speed by reporting a multiplied sample rate upward, which
-                    // against a fixed-rate live source drifts the buffer until it starves — so
-                    // `build_set_speed_actions` refuses it and a station runs pinned at 1.0.
+                    // Speed is a ratio on the deck's converter, so anything but 1.0 consumes a
+                    // fixed-rate live source faster or slower than it arrives and the buffer
+                    // starves or overruns — so `build_set_speed_actions` refuses it and a station
+                    // runs pinned at 1.0.
                     // This is that refusal made visible rather than silent.
                     button-enabled: !Player.vm.has_station;
                     clicked => {

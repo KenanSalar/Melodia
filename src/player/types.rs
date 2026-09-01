@@ -195,9 +195,9 @@ impl PlaybackSource {
 
     /// Whether playback speed may be varied.
     ///
-    /// rodio implements speed by reporting a multiplied sample rate upward, which against a
-    /// fixed-rate live source drifts the ring until it starves — so a station is pinned to 1.0
-    /// rather than merely discouraged from moving.
+    /// Speed is a ratio on the deck's converter, so anything but 1.0 consumes a source faster or
+    /// slower than real time. A live mount arrives at exactly real time, so the ring either starves
+    /// or overruns — a station is pinned to 1.0 rather than merely discouraged from moving.
     pub fn has_variable_speed(&self) -> bool {
         matches!(self, Self::Track(_))
     }

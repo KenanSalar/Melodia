@@ -28,9 +28,9 @@ mod playback;
 pub use authoring::{add_custom_station, set_station_overrides, update_custom_station};
 pub use directory::{facets, search, station_details, vote};
 pub use logos::{
-    AnswerSeed, SiteOrigin, answer_is_suppressed, artwork_is_present, discover_site_logo,
-    fetch_logo, heal_seed_urls, heal_station_logo, logo_answers, prune_logo_answers,
-    record_logo_outcome, set_artwork, site_origin,
+    AnswerSeed, LogoAnswer, SiteOrigin, artwork_is_present, classify_logo_answer,
+    discover_site_logo, fetch_logo, heal_seed_urls, heal_station_logo, logo_answers,
+    prune_logo_answers, record_logo_outcome, set_artwork, site_origin,
 };
 pub use playback::{
     mark_played, play_directory_station, play_station, set_directory_favorite, station_to_restore,

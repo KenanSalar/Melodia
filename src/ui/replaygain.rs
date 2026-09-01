@@ -3,11 +3,11 @@
 //! Seeds the `ReplayGain` global from `settings.json` at startup (enabled flag,
 //! mode dropdown index, preamp, prevent-clipping) and registers the callbacks.
 //! Each follows the two-phase shape (mirroring [`crate::ui::equalizer`]): apply
-//! to the live Rodio player synchronously, then persist on the blocking pool.
+//! to the live playback engine synchronously, then persist on the blocking pool.
 //! The preamp uses the live `set-preamp` / release `commit-preamp` split, like
 //! the EQ preamp and volume.
 //!
-//! `ReplayGain` master state lives on the Rodio backend's lock-free shared cell,
+//! `ReplayGain` master state lives on the playback engine's lock-free shared cell,
 //! not the `PlayerState` machine, so the runtime apply goes through the
 //! infallible `library::playback::player_set_replaygain_*` helpers.
 

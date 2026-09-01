@@ -7,6 +7,11 @@ taken the reasoning with it. The Decisions below are what #84 will harvest into 
 candidate list is at the bottom, under "For #84". Delete this file once those ADRs are written,
 not before.
 
+> **#90 removed rodio from the tree**, and several Decisions below were argued against its mixer.
+> Where that happened the *conclusion* stands and only the mechanism moved — the notes are marked
+> inline. Ahead of #84 harvesting these: read a rodio sentence here as history, and take the
+> current shape from `src/player/CLAUDE.md` and `src/player/output/`.
+
 Upstream facts verified **2026-08-20** against crate sources, the live API and this tree.
 Anything marked ⚠️ **re-verify** is expected to drift; check it on the day rather than
 trusting this doc.
@@ -198,10 +203,10 @@ Together those take the same page to **34 of 45**. The floor is one gate at the 
 (`media::station_logo::MIN_LOGO_DIM`) rather than one per surface, so nothing this small
 enters the store for a later tier to reject.
 
-**D8. The network never touches the audio callback thread.** rodio pulls `Source::next()`
-inside the cpal data callback (`rodio-0.22.2/src/stream.rs`, `init_stream`), so a blocking
-socket read would stall the whole mixer, local track included, for as long as the network
-is wedged. A decoupling ring buffer with its own feed thread sits between the decoder and
+**D8. The network never touches the audio callback thread.** The mixer pulls `AudioSource::next()`
+inside the cpal data callback, so a blocking socket read would stall the whole mixer, local track
+included, for as long as the network is wedged. *(Argued when that pull was rodio's `init_stream`;
+since #90 it is `output::mixer::fill`, and the hazard is identical.)* A decoupling ring buffer with its own feed thread sits between the decoder and
 the DSP chain, yields silence when starved, and publishes that starvation as the
 buffering state the UI already needs. This is a requirement, not a refinement.
 
@@ -215,9 +220,11 @@ Shortwave, Tuner and RadioDroid all do.
 are unchanged.** The first three are per-track transitions and per-track tags, neither of
 which a live stream has. The last three ride the shared `EqSource` chain and work for free.
 
-**D11. Playback speed is pinned to 1.0 while a station plays.** rodio implements speed by
-reporting a multiplied sample rate upward, which against a fixed-rate live source drifts
-the buffer until it starves. The control is disabled rather than silently ignored.
+**D11. Playback speed is pinned to 1.0 while a station plays.** Speed is a ratio on the deck's
+converter, so anything but 1.0 consumes a fixed-rate live source faster or slower than it arrives
+and the ring starves or overruns. The control is disabled rather than silently ignored. *(Argued
+when rodio expressed speed as a multiplied sample rate upward; #90 moved it into
+`output::convert`, and the conclusion is unchanged.)*
 
 **D12. Station logos go through the shared artwork store, and the sweep's reference set
 grows to five columns.** `tasks::artwork_sweep` deletes any stored file no column names,
@@ -336,7 +343,7 @@ the three it split into and Phase 7 having added the rest;
 | `src/database/queries/artwork.rs` | The fifth reference column (D12) |
 | `src/player/state.rs` | The radio arm of the state machine |
 | `src/player/types.rs` | `RadioNowPlaying`, the live source's answer to `TrackSummary` |
-| `src/player/rodio_backend.rs` | `play_stream` / `stage_stream`, and `build_source` made generic over its source |
+| `src/player/backend.rs` | `play_stream` / `stage_stream`, and `build_source` made generic over its source (`rodio_backend.rs` until #90) |
 | `src/player/handlers.rs` | The monitor's live-source arms |
 | `src/library/playback.rs` | `player_play_station`, and the radio branch on play / toggle |
 | `src/state/contexts.rs` | `PlaybackContext.http`, so a transport command can re-open a station |
@@ -345,9 +352,9 @@ the three it split into and Phase 7 having added the rest;
 
 ### What must not grow
 
-- **`src/player/rodio_backend.rs` does not learn HTTP.** It takes a reader that is already
+- **`src/player/backend.rs` does not learn HTTP.** It takes a reader that is already
   open. Everything network-shaped lives in `stream_source.rs`.
-- **No second `decode_file`.** `build_source` is generic over `S: Source`, and both callers
+- **No second `decode_file`.** `build_source` is generic over `S: AudioSource`, and both callers
   hand it what they have — a `Decoder` for a file, a `PrebufferSource` for a stream, since
   D8's ring sits between the stream's decoder and the DSP chain. A parallel
   `build_stream_source` is the duplication this note exists to prevent. The two *decoder*
@@ -652,7 +659,7 @@ What later phases reach for:
   dead until now: nothing in the tree set it, so `discord/model.rs`'s comment about track
   changes passing through it was already stale and is now true for stations.)
 - **Reconnect lives in the feed thread, not the monitor.** That thread already holds the
-  URL, the client and the ring, so it re-opens and keeps filling the *same* ring: the rodio
+  URL, the client and the ring, so it re-opens and keeps filling the *same* ring: the
   source never ends, the deck never blinks, and the state machine needs no reconnect path.
   The alternative would have handed `player/handlers.rs` an HTTP client and inverted the
   `library` → `player` dependency direction. The monitor's end-of-stream arm only sees a
@@ -950,7 +957,7 @@ the manual pass**, which is what six of the cross-cutting boxes above are now ti
 three guards, the facet code-vs-name split, the `radio_hide_segmented` / `radio_send_clicks` round
 trip, and a source walk holding the decoder probe inside `spawn_blocking`. The integration
 test is `tests/stream_rate.rs`, which plays two `PrebufferSource`s at different rates through
-one rodio `Player` on a device-free mixer and reads the rate back off a square wave. That is
+one deck on a device-free mixer and reads the rate back off a square wave. That is
 the one bug class no unit test on the source can see, the fault being in what the *mixer*
 built out of the answer. Mutation-checked: `current_span_len` back to `None` reads 96 output
 samples per half period where 48 is correct.
@@ -1341,7 +1348,8 @@ check on the first attempt, which is the reason the cursor test looks the way it
   doing separately.
 - **Chromecast and alarm clock.** Radio-first app features. Neither has a home in a
   library player's shape.
-- **Opus streams.** Blocked on #35 and on rodio 0.23, and unblocked by them for free.
+- **Opus streams.** Blocked on #35. *(This read "and on rodio 0.23" — that route died with #90;
+  `docs/plans/OPUS_SUPPORT.md` carries the current one.)*
 
 ---
 

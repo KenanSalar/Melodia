@@ -6,10 +6,9 @@
 
 use std::path::{Path, PathBuf};
 
-use rodio::Source;
-
 use super::{FileDecoder, probe_duration};
 use crate::error::AppError;
+use crate::player::audio::AudioSource;
 use crate::test_support::ASSETS_DIR;
 
 fn asset(name: &str) -> PathBuf {
@@ -64,18 +63,7 @@ fn every_scanned_extension_reaches_a_decoder() -> Result<(), AppError> {
     Ok(())
 }
 
-/// A span of zero would have the mixer rebuild its resampler against an empty `Take`, and `None`
-/// would pin it to whatever reached the deck first — the fault `tests/stream_rate.rs` covers for
-/// the ring, on the path that feeds the same mixer.
-#[test]
-fn the_span_names_a_real_packet() -> Result<(), AppError> {
-    let decoder = FileDecoder::open(&asset("silence.flac"))?;
-    let span = decoder.current_span_len();
-    assert!(span.is_some_and(|len| len > 0), "{span:?}");
-    Ok(())
-}
-
-/// `Source::try_seek` saturates wherever a length is known, and the caller asks past the end
+/// `AudioSource::try_seek` saturates wherever a length is known, and the caller asks past the end
 /// routinely: the position it seeks to comes off the tags, which overshoot the decoded length by a
 /// few frames often enough. Unclamped the demuxer answers out of range or parks at the end, and a
 /// deck draining reads to the monitor as the track finishing — the queue jumps, from a drag of the
@@ -128,5 +116,38 @@ fn a_seek_lands_on_the_frame_it_asked_for() -> Result<(), AppError> {
     let expected = rate - rate * SEEK_MS / 1000;
     let drift = remaining.abs_diff(expected);
     assert!(drift <= 1, "{remaining} frames left, expected about {expected}");
+    Ok(())
+}
+
+/// The seek puts the puller back on the channel it was part way through, and nothing downstream
+/// re-syncs, so getting this wrong swaps the stereo image for the rest of the track.
+///
+/// Driven by hand because the deck's converter cannot be the caller that reaches it — it takes
+/// whole frames and seeks between them. `stereo-dc.wav` carries a different constant per channel,
+/// which is the only way to tell which one a sample came from; every other fixture is mono, where
+/// the fault is invisible.
+#[test]
+fn a_seek_resumes_on_the_channel_it_was_part_way_through() -> Result<(), AppError> {
+    const LEFT: f32 = 0.5;
+    const RIGHT: f32 = 0.25;
+
+    let mut decoder = FileDecoder::open(&asset("stereo-dc.wav"))?;
+
+    // One sample leaves the puller owed channel 1.
+    let Some(first) = decoder.next() else {
+        return Err(AppError::Player("the fixture decoded nothing".to_owned()));
+    };
+    assert!((first - LEFT).abs() < 1e-3, "the fixture opened on {first}, not its left channel");
+    decoder
+        .try_seek(std::time::Duration::from_millis(500))
+        .map_err(|e| AppError::Player(e.to_string()))?;
+
+    let Some(resumed) = decoder.next() else {
+        return Err(AppError::Player("the seek left nothing to play".to_owned()));
+    };
+    assert!(
+        (resumed - RIGHT).abs() < 1e-3,
+        "resumed on {resumed}, which is the left channel where the right was due"
+    );
     Ok(())
 }

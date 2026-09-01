@@ -69,9 +69,9 @@ fn ramp_gain_saturates_past_the_end_and_on_zero_length() {
 
 #[test]
 fn complementary_ramps_always_sum_to_unity() {
-    // This is the property that lets two overlapping decks feed rodio's
-    // unclamped mixer without ever summing past full scale. Equal-power curves
-    // would peak at sqrt(2) here.
+    // This is the property that lets two overlapping decks feed the unclamped
+    // mixer without ever summing past full scale. Equal-power curves would peak
+    // at sqrt(2) here.
     const TOTAL: u64 = 4_096;
     for pos in (0..=TOTAL).step_by(37) {
         let out = ramp_gain(1.0, 0.0, pos, TOTAL);
@@ -330,9 +330,9 @@ fn never_fires_at_position_zero() {
 
 #[test]
 fn a_stale_high_position_read_is_rejected() {
-    // rodio only zeroes a Player's tracked position when `clear()` removes a
-    // source, so a just-started deck can briefly report the previous track's
-    // position. Too high → `remaining` saturates to zero, below MIN_FADE_MS.
+    // The monitor reads a position and acts on it a moment later, so the value
+    // reaching here can be past the track's end. Too high → `remaining`
+    // saturates to zero, below MIN_FADE_MS.
     assert_eq!(should_crossfade(true, false, false, 400_000, 180_000, 2_000), None);
 }
 

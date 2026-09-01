@@ -1,227 +1,63 @@
+//! The playback engine: the decks, the epoch that orders every op against them, and the transport
+//! the action layer drives.
+//!
+//! **Everything here races something else here, and that is the reason it is one file.** The
+//! transport ops, the fade gates, the gapless stage, the deferred pause/stop and the stream stage
+//! the transport claims from each carry an argument about one of the others, over the decks lock,
+//! [`PlaybackEngine::deck_epoch`] or the generation a station is opened under, and those read as
+//! arguments only while they sit next to each other. What moved out races nothing: the lock-free
+//! DSP setters ([`controls`]) and the trait a test mocks ([`player_backend`]).
+
+mod controls;
+mod player_backend;
+
+pub use player_backend::PlayerBackend;
+
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
-use parking_lot::Mutex;
-use rodio::mixer::Mixer;
-use rodio::{Player, Source};
-
 use crate::error::AppError;
+use crate::services::describe;
+use parking_lot::Mutex;
 
+use super::audio::AudioSource;
 use super::crossfade::{self, CrossfadeShared};
 use super::decks::{Deck, Decks, DeferredOp, lock_decks};
 use super::equalizer::{self, EqShared, EqSource};
 use super::file_decode::FileDecoder;
+use super::output::mixer::Mixer;
 use super::prebuffer::StreamShared;
-use super::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
+use super::replaygain::{ReplayGainShared, TrackReplayGain};
 use super::stream_source::PreparedStream;
 use super::visualizer::{VisualizerShared, VisualizerTap};
 
-/// Audio playback operations, so tests can stand a mock in for `RodioPlayer`.
-pub trait PlayerBackend: Send + Sync {
-    fn play_media(
-        &self,
-        file_path: &str,
-        volume: f64,
-        speed: f64,
-        start_position_ms: Option<u64>,
-        baked_rg: TrackReplayGain,
-    ) -> Result<(), AppError>;
-    /// Start the next track on the idle deck and cross-fade over `fade_ms`
-    /// **media** milliseconds; the outgoing deck ends itself when its ramp lands.
-    fn begin_crossfade(
-        &self,
-        file_path: &str,
-        baked_rg: TrackReplayGain,
-        fade_ms: u64,
-        volume: f64,
-        speed: f64,
-    ) -> Result<(), AppError>;
-    fn resume(&self);
-    /// Fade to silence over `fade_ms` and then pause. `0` is an immediate pause.
-    /// `PlayerAction::Pause` always carries a length, so the action layer needs
-    /// no unconditional `pause()` beside this.
-    fn pause_with_fade(&self, fade_ms: u64);
-    fn stop(&self);
-    /// Fade to silence over `fade_ms` and then stop. `0` is an immediate stop.
-    fn stop_with_fade(&self, fade_ms: u64);
-    fn seek(&self, position_ms: u64);
-    fn set_volume(&self, volume: f64);
-    fn set_speed(&self, speed: f64);
-    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain);
-    /// Start the live stream staged under `generation`, hard-cutting whatever was playing.
-    ///
-    /// Takes no path and no `ReplayGain`: the stream was opened asynchronously long before this
-    /// runs (a socket has no business on the action executor's thread), and a live source carries
-    /// no per-track tags to bake. Fails when nothing is staged under that generation, which is how
-    /// a station superseded mid-connect is refused rather than played late.
-    fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError>;
-}
-
-/// Blanket impl so an `Arc<RodioPlayer>` is itself a backend.
-impl<T: std::ops::Deref + Send + Sync> PlayerBackend for T
-where
-    T::Target: PlayerBackend,
-{
-    fn play_media(
-        &self,
-        file_path: &str,
-        volume: f64,
-        speed: f64,
-        start_position_ms: Option<u64>,
-        baked_rg: TrackReplayGain,
-    ) -> Result<(), AppError> {
-        (**self).play_media(file_path, volume, speed, start_position_ms, baked_rg)
-    }
-    fn begin_crossfade(
-        &self,
-        file_path: &str,
-        baked_rg: TrackReplayGain,
-        fade_ms: u64,
-        volume: f64,
-        speed: f64,
-    ) -> Result<(), AppError> {
-        (**self).begin_crossfade(file_path, baked_rg, fade_ms, volume, speed)
-    }
-    fn resume(&self) {
-        (**self).resume();
-    }
-    fn pause_with_fade(&self, fade_ms: u64) {
-        (**self).pause_with_fade(fade_ms);
-    }
-    fn stop(&self) {
-        (**self).stop();
-    }
-    fn stop_with_fade(&self, fade_ms: u64) {
-        (**self).stop_with_fade(fade_ms);
-    }
-    fn seek(&self, position_ms: u64) {
-        (**self).seek(position_ms);
-    }
-    fn set_volume(&self, volume: f64) {
-        (**self).set_volume(volume);
-    }
-    fn set_speed(&self, speed: f64) {
-        (**self).set_speed(speed);
-    }
-    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
-        (**self).preload_gapless(file_path, baked_rg);
-    }
-    fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError> {
-        (**self).play_stream(generation, volume)
-    }
-}
-
-impl PlayerBackend for RodioPlayer {
-    fn play_media(
-        &self,
-        file_path: &str,
-        volume: f64,
-        speed: f64,
-        start_position_ms: Option<u64>,
-        baked_rg: TrackReplayGain,
-    ) -> Result<(), AppError> {
-        self.play_media(file_path, volume, speed, start_position_ms, baked_rg)
-    }
-    fn begin_crossfade(
-        &self,
-        file_path: &str,
-        baked_rg: TrackReplayGain,
-        fade_ms: u64,
-        volume: f64,
-        speed: f64,
-    ) -> Result<(), AppError> {
-        self.begin_crossfade(file_path, baked_rg, fade_ms, volume, speed)
-    }
-    fn resume(&self) {
-        self.resume();
-    }
-    fn pause_with_fade(&self, fade_ms: u64) {
-        self.pause_with_fade(fade_ms);
-    }
-    fn stop(&self) {
-        self.stop();
-    }
-    fn stop_with_fade(&self, fade_ms: u64) {
-        self.stop_with_fade(fade_ms);
-    }
-    fn seek(&self, position_ms: u64) {
-        self.seek(position_ms);
-    }
-    fn set_volume(&self, volume: f64) {
-        self.set_volume(volume);
-    }
-    fn set_speed(&self, speed: f64) {
-        self.set_speed(speed);
-    }
-    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
-        self.preload_gapless(file_path, baked_rg);
-    }
-    fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError> {
-        self.play_stream(generation, volume)
-    }
-}
-
-/// Result of checking the Rodio player queue in a single lock acquisition.
+/// Result of checking what is on the active deck in a single lock acquisition.
 #[derive(Debug, PartialEq)]
 pub enum PlaybackCheck {
-    /// Queue depth dropped from 2 to 1 — the staged source took over.
+    /// The active voice dropped from two sources to one — the staged one took over.
     GaplessTransition,
     EndOfStream,
     Playing,
 }
 
-/// Pure half of [`RodioPlayer::check_playback_state`], split out for testability.
-pub fn evaluate_playback_check(
-    was_gapless: bool,
-    queue_len: usize,
-    is_empty: bool,
-) -> PlaybackCheck {
-    if was_gapless && queue_len <= 1 {
+/// Pure half of [`PlaybackEngine::check_playback_state`], split out for testability.
+///
+/// `sources` is what the active voice still holds; the caller reads it once, under one lock.
+pub fn evaluate_playback_check(was_gapless: bool, sources: usize) -> PlaybackCheck {
+    if was_gapless && sources <= 1 {
         return PlaybackCheck::GaplessTransition;
     }
-    if is_empty {
+    if sources == 0 {
         return PlaybackCheck::EndOfStream;
     }
     PlaybackCheck::Playing
 }
 
-/// Convert rodio's reported position into the media (source) position.
-///
-/// rodio inserts `track_position()` *after* `speed()`, so `Player::get_pos()`
-/// measures the *output* timeline (`media / speed`) and recovering the media
-/// position means multiplying back up. [`media_to_output_ms`] is the inverse.
-#[allow(
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "speed * ms math intentionally uses f64; result is non-negative, finite, and fits in u64 for any real audio duration"
-)]
-pub fn compute_position(wall_time: Duration, speed: f64) -> u64 {
-    let ms = u64::try_from(wall_time.as_millis()).unwrap_or(u64::MAX);
-    (ms as f64 * speed) as u64
-}
-
-/// Inverse of [`compute_position`]: a MEDIA position as the output-timeline
-/// value `try_seek` expects. A non-positive `speed` passes through unchanged.
-#[allow(
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "media_ms / speed is non-negative, finite, and fits in u64 for any real audio duration"
-)]
-pub fn media_to_output_ms(media_ms: u64, speed: f64) -> u64 {
-    if speed > 0.0 {
-        (media_ms as f64 / speed) as u64
-    } else {
-        media_ms
-    }
-}
-
-pub struct RodioPlayer {
-    // The mutex is what makes a multi-op sequence atomic (rodio's `Player` is
-    // already Send+Sync); `Arc` so a deferred pause/stop can hold the decks
+pub struct PlaybackEngine {
+    // The mutex is what makes a multi-op sequence atomic (a `Deck` is already
+    // Send+Sync on its own); `Arc` so a deferred pause/stop can hold the decks
     // after its sleep.
     decks: Arc<std::sync::Mutex<Decks>>,
     // `Arc` because the deferred clear of a faded stop must drop this flag
@@ -267,10 +103,13 @@ pub struct RodioPlayer {
     runtime: tokio::runtime::Handle,
 }
 
-impl RodioPlayer {
-    pub fn new(mixer: &Mixer, runtime: tokio::runtime::Handle) -> Self {
-        Self {
-            decks: Arc::new(std::sync::Mutex::new(Decks::connect(mixer))),
+impl PlaybackEngine {
+    /// # Errors
+    ///
+    /// [`AppError::Player`] if `mixer` carries fewer voices than the decks need.
+    pub fn new(mixer: &Mixer, runtime: tokio::runtime::Handle) -> Result<Self, AppError> {
+        Ok(Self {
+            decks: Arc::new(std::sync::Mutex::new(Decks::connect(mixer)?)),
             gapless_pending: Arc::new(AtomicBool::new(false)),
             crossfade_armed: AtomicBool::new(false),
             deck_epoch: Arc::new(AtomicU64::new(0)),
@@ -281,7 +120,7 @@ impl RodioPlayer {
             staged_stream: Mutex::new(None),
             live_stream: Arc::new(Mutex::new(None)),
             runtime,
-        }
+        })
     }
 
     /// Invalidate any deferred pause/stop *and* any in-flight gapless preload,
@@ -300,28 +139,35 @@ impl RodioPlayer {
         let live_stream = self.live_stream.clone();
         self.runtime.spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-            let guard = lock_decks(&decks);
-            if deck_epoch.load(Ordering::Acquire) != epoch {
-                return;
-            }
-            match op {
-                // A pause keeps the deck contents — staged gapless source
-                // included — so it must leave `gapless_pending` alone.
-                DeferredOp::PauseAll => guard.pause_all(),
-                // The deferred half of `stop()`, so it drops the flag the same
-                // way: *after* the decks, never before. A preload that entered
-                // behind the epoch bump can still have staged a source onto the
-                // deck this throws away, and clearing here is what stops the
-                // flag outliving it; one arriving after is refused by
-                // `preload_gapless`'s empty-deck gate.
-                DeferredOp::ClearAll => {
-                    guard.clear_all();
-                    gapless_pending.store(false, Ordering::Release);
-                    // The faded half of a stop, so it drops the live-stream cell alongside the
-                    // source it removes — the same pairing the flag above gets.
-                    *live_stream.lock() = None;
+            // The wait is async and the landing is not: `Deck::clear` blocks until the audio
+            // callback services it, twice over for `clear_all`, so it goes to the blocking pool
+            // rather than parking an async worker for two device periods — or, against a card that
+            // has stopped asking for samples, for `output::voice::SERVICE_TIMEOUT` apiece. Sleeping
+            // there instead would hold a pool slot for the whole fade, which is far longer.
+            tokio::task::spawn_blocking(move || {
+                let guard = lock_decks(&decks);
+                if deck_epoch.load(Ordering::Acquire) != epoch {
+                    return;
                 }
-            }
+                match op {
+                    // A pause keeps the deck contents — staged gapless source
+                    // included — so it must leave `gapless_pending` alone.
+                    DeferredOp::PauseAll => guard.pause_all(),
+                    // The deferred half of `stop()`, so it drops the flag the same
+                    // way: *after* the decks, never before. A preload that entered
+                    // behind the epoch bump can still have staged a source onto the
+                    // deck this throws away, and clearing here is what stops the
+                    // flag outliving it; one arriving after is refused by
+                    // `preload_gapless`'s empty-deck gate.
+                    DeferredOp::ClearAll => {
+                        guard.clear_all();
+                        gapless_pending.store(false, Ordering::Release);
+                        // The faded half of a stop, so it drops the live-stream cell alongside
+                        // the source it removes — the same pairing the flag above gets.
+                        *live_stream.lock() = None;
+                    }
+                }
+            });
         });
     }
 
@@ -382,7 +228,18 @@ impl RodioPlayer {
         // shares this mutex, so a synchronous Symphonia probe under it stalls
         // position publication. It is the only step that can be hoisted out;
         // everything depending on *which* deck we land on happens below.
-        let decoded = FileDecoder::open(Path::new(file_path))?;
+        let mut decoded = FileDecoder::open(Path::new(file_path))?;
+
+        // Seeked on the source we still own, rather than through the deck once it is mounted: a
+        // deck seek is serviced by the audio callback, so that spelling puts a demuxer scan on the
+        // real-time thread and parks this one on the callback with the decks lock held. Same
+        // reasoning as the hoisted open above, one step further.
+        if let Some(pos) = start_position_ms {
+            log::debug!("Resuming playback at {pos}ms");
+            if let Err(e) = decoded.try_seek(Duration::from_millis(pos)) {
+                log::warn!("Seek failed: {e}");
+            }
+        }
 
         self.bump_epoch();
         self.clear_live_stream();
@@ -409,20 +266,16 @@ impl RodioPlayer {
             self.crossfade_armed.store(false, Ordering::Release);
         }
         self.gapless_pending.store(false, Ordering::Release);
-        if let Some(pos) = start_position_ms {
-            log::debug!("Resuming playback at {pos}ms");
-            Self::seek_to_media(&decks.active().player, pos, speed);
-        }
         Ok(())
     }
 
     /// Playback speed while a station plays.
     ///
-    /// rodio implements speed by reporting a multiplied sample rate upward, which against a source
-    /// arriving at a fixed real-time rate drifts the ring until it starves. Pinned rather than
-    /// merely ignored, so what the deck runs at and what the transport claims stay the same
-    /// number — [`super::state::PlayerState::build_station_connecting_actions`] resets the state
-    /// side to match.
+    /// Speed is a ratio on the deck's converter, so anything but 1.0 consumes the source faster or
+    /// slower than real time, and a mount arriving at exactly real time starves or overruns its
+    /// ring. Pinned rather than merely ignored, so what the deck runs at and what the transport
+    /// claims stay the same — [`super::state::PlayerState::build_station_connecting_actions`]
+    /// resets the state side to match.
     const STREAM_SPEED: f64 = 1.0;
 
     /// Park an opened live stream for the `PlayStream` action that follows it.
@@ -531,16 +384,16 @@ impl RodioPlayer {
     /// `ReplayGain` and `deck`'s ramp cell, under a visualizer tap writing into `deck`'s own ring.
     ///
     /// Generic over the source rather than over a reader, because a live stream reaches here as a
-    /// [`super::prebuffer::PrebufferSource`] and a file as a [`FileDecoder`] — the ring sits between
-    /// the stream's decoder and the DSP chain, so the two only meet at `Source`. Everything downstream
-    /// is identical, which is the point: the EQ, the limiter and the visualizer work on a station
-    /// with no code of their own.
+    /// [`super::prebuffer::PrebufferSource`] and a file as a [`FileDecoder`] — the ring sits
+    /// between the stream's decoder and the DSP chain, so the two only meet at [`AudioSource`].
+    /// Everything downstream is identical, which is the point: the EQ, the limiter and the
+    /// visualizer work on a station with no code of their own.
     ///
     /// Always called with the deck the source is about to be appended to — see [`super::decks`]
     /// for why the two can't be split. Building the tap also *claims* that ring for the life of
     /// the value and stamps its history away if the deck was idle, both only correct for a source
     /// about to play, so don't build one anywhere it might be held or discarded instead.
-    fn build_source<S: Source + Send + 'static>(
+    fn build_source<S: AudioSource + 'static>(
         &self,
         input: S,
         baked_rg: TrackReplayGain,
@@ -555,14 +408,14 @@ impl RodioPlayer {
 
     /// Whether a crossfade's outgoing deck is still audible. Clearing the flag
     /// here once that deck drains doubles as the crossfade's completion hook —
-    /// no `Drop` impl or extra atomic needed. Safe because `Player::append`
-    /// bumps `sound_count` synchronously, so a just-fed deck never reports empty.
+    /// no `Drop` impl or extra atomic needed. Safe because `Deck::append` bumps
+    /// the source count before it sends, so a just-fed deck never reports empty.
     pub fn is_crossfading(&self) -> bool {
         if !self.crossfade_armed.load(Ordering::Acquire) {
             return false;
         }
         let decks = self.lock_decks();
-        if decks.idle().player.empty() {
+        if decks.idle().voice.is_empty() {
             drop(decks);
             self.crossfade_armed.store(false, Ordering::Release);
             return false;
@@ -570,9 +423,13 @@ impl RodioPlayer {
         true
     }
 
-    /// Cancel an in-flight crossfade: drop the outgoing deck and ramp the
-    /// survivor back to unity from wherever its fade-in reached. Called before
-    /// a seek, which would otherwise leave the new track stuck at partial gain.
+    /// Cancel an in-flight crossfade: drop the outgoing deck and return the survivor's cell to
+    /// unity. Called before a seek, which would otherwise leave the new track stuck at partial
+    /// gain — and, once the seek rebuilds that source, replay the whole fade-in from silence,
+    /// the cell still holding the ramp `crossfade_to` armed.
+    ///
+    /// The rebuilt source starts *at* unity rather than gliding to it, having no gain of its own
+    /// to resume from; [`crossfade::ABORT_RAMP_MS`] is the glide the seeks that bail still get.
     fn abort_crossfade(&self) {
         if !self.crossfade_armed.swap(false, Ordering::AcqRel) {
             return;
@@ -580,18 +437,6 @@ impl RodioPlayer {
         let decks = self.lock_decks();
         decks.idle().reset();
         decks.active().fade.arm(None, 1.0, crossfade::ABORT_RAMP_MS, false);
-    }
-
-    /// Seek the (already-locked) player to a MEDIA-time position.
-    ///
-    /// `try_seek` takes output time, which `Speed::try_seek` multiplies back up
-    /// to reach the decoder — so passing `media_ms` straight through would land
-    /// the decoder on `media_ms × speed` and read back wrong.
-    fn seek_to_media(player: &Player, media_ms: u64, speed: f64) {
-        let output_ms = media_to_output_ms(media_ms, speed);
-        if let Err(e) = player.try_seek(Duration::from_millis(output_ms)) {
-            log::warn!("Seek failed: {e}");
-        }
     }
 
     pub fn resume(&self) {
@@ -655,7 +500,7 @@ impl RodioPlayer {
         }
     }
 
-    /// Stop playback. `Player::clear()` removes all sources and pauses automatically.
+    /// Stop playback. `Deck::clear` removes all sources and pauses automatically.
     pub fn stop(&self) {
         self.bump_epoch();
         self.crossfade_armed.store(false, Ordering::Release);
@@ -681,94 +526,82 @@ impl RodioPlayer {
         }
     }
 
-    pub fn seek(&self, position_ms: u64) {
+    /// Move the playing track to `position_ms`, by building a source already there.
+    ///
+    /// **The scan a seek costs happens here, on the caller's thread.** Moving the *mounted* source
+    /// meant running the demuxer inside the audio callback — file I/O on the one thread that may
+    /// not do any, and the caller parked on it meanwhile. So the file is opened and positioned
+    /// first and the deck is handed the result, which leaves the callback a pointer swap.
+    /// `file_path` and `baked_rg` ride the action for that reason; the gain is re-baked because
+    /// the source carrying it is rebuilt.
+    ///
+    /// Costs a reopen, and a container with no seek index is walked from the top where the mounted
+    /// decoder could have walked from where it was. That is the trade: it buys a seek that cannot
+    /// glitch the audio, including the other deck's.
+    ///
+    /// **The deck is claimed before the open and the claim is checked after it**, because reading
+    /// the file takes long enough for a gapless successor to take the deck over — which happens in
+    /// the callback and so is under neither `exec_lock` nor [`Self::deck_epoch`]. Without the
+    /// ticket a seek landing in that window mounts the track that just ended over the one that
+    /// just started.
+    ///
+    /// The two lock acquisitions name the same voice because `Decks::crossfade_to` is the only
+    /// thing that moves `active` and it runs under the `exec_lock` this executes under. A ticket
+    /// read off one voice and compared against the other's counter would match by coincidence,
+    /// both being small and equal early in a session.
+    ///
+    /// Deliberately does **not** bump the epoch: a seek replaces no deck *contents*, and
+    /// cancelling a pending deferred pause would leave the decks running silently at the ramp's
+    /// zero gain while the UI reads Paused. Nothing here touches `paused` either, so seeking a
+    /// paused track leaves it paused.
+    pub fn seek(&self, file_path: &str, position_ms: u64, baked_rg: TrackReplayGain) {
         self.abort_crossfade();
-        // Deliberately does NOT bump the epoch: a seek replaces no deck
-        // contents, and cancelling a pending deferred pause would leave the
-        // decks running silently at the ramp's zero gain while the UI reads
-        // Paused — seeking a paused track is an ordinary thing to do.
+
+        // Nothing on the deck is nothing to seek, which is what moving the mounted source answered
+        // too. Asked before the open so a seek against a drained deck costs no I/O.
+        let mounted = {
+            let decks = self.lock_decks();
+            let voice = &decks.active().voice;
+            if voice.is_empty() {
+                return;
+            }
+            voice.mounted()
+        };
+
+        let position = Duration::from_millis(position_ms);
+        let mut decoded = match FileDecoder::open(Path::new(file_path)) {
+            Ok(decoded) => decoded,
+            Err(e) => {
+                log::warn!("Seek could not reopen the track: {}", describe(&e));
+                return;
+            }
+        };
+        if let Err(e) = decoded.try_seek(position) {
+            log::warn!("Seek failed: {e}");
+            return;
+        }
+
         let decks = self.lock_decks();
-        let player = &decks.active().player;
-        let speed = f64::from(player.speed());
-        Self::seek_to_media(player, position_ms, speed);
+        let deck = decks.active();
+        deck.voice.replace(self.build_source(decoded, baked_rg, deck), position, mounted);
     }
 
     pub fn set_volume(&self, volume: f64) {
         self.lock_decks().set_volume_all(volume);
     }
 
+    /// Both decks must run at the same speed or a crossfade would drift.
+    ///
+    /// **No re-anchoring seek.** rodio needed one because its position tracker sat after its speed
+    /// stage, so a change rescaled the elapsed portion too and the slider jumped; the deck counts
+    /// media frames the source actually handed over, which no later change to the ratio can
+    /// retroactively alter.
     pub fn set_speed(&self, speed: f64) {
-        let decks = self.lock_decks();
-        let player = &decks.active().player;
-        let old_speed = f64::from(player.speed());
-        let media_ms = compute_position(player.get_pos(), old_speed);
-        // Both decks must run at the same speed or a crossfade drifts, but only
-        // the active one carries a position worth re-anchoring.
-        decks.set_speed_all(speed);
-        // The tap sits *under* rodio's speed stage, so the analyzer needs the
-        // factor to place band edges on the pitch you hear. Sole writer of that
-        // cell — see `VisualizerShared::set_speed`.
+        self.lock_decks().set_speed_all(speed);
+        // The tap sits *above* the converter, so it sees media-rate samples while the ear hears
+        // them scaled: the analyzer needs the factor to place band edges on the pitch you hear.
+        // Sole writer of that cell — see `VisualizerShared::set_speed`.
         self.viz.set_speed(speed);
-        // Re-anchor rodio's position tracker, or `get_pos()` keeps the output
-        // time it accumulated at the old speed and `query_position` rescales
-        // that whole elapsed portion, jumping the UI position. Skipped at 0 to
-        // avoid a spurious decoder seek on boot.
-        if media_ms > 0 {
-            Self::seek_to_media(player, media_ms, speed);
-        }
-    }
-
-    /// Enable / disable the graphic equalizer. Lock-free — every `EqSource`
-    /// (playing + preloaded) picks the change up on its next sample.
-    pub fn set_eq_enabled(&self, enabled: bool) {
-        self.eq.set_enabled(enabled);
-    }
-
-    /// Set a single band's gain (dB). Out-of-range indices are ignored.
-    pub fn set_eq_band(&self, index: usize, gain_db: f32) {
-        self.eq.set_gain(index, gain_db);
-    }
-
-    /// Replace all band gains at once (preset / reset / boot hydration).
-    pub fn set_eq_gains(&self, gains: &[f32]) {
-        self.eq.set_all_gains(gains);
-    }
-
-    /// Set the EQ preamp / master gain (dB).
-    pub fn set_eq_preamp(&self, preamp_db: f32) {
-        self.eq.set_preamp(preamp_db);
-    }
-
-    /// Enable / disable `ReplayGain`. Lock-free, like the EQ setters.
-    pub fn set_replaygain_enabled(&self, enabled: bool) {
-        self.rg.set_enabled(enabled);
-    }
-
-    pub fn set_replaygain_mode(&self, mode: RgMode) {
-        self.rg.set_mode(mode);
-    }
-
-    /// Set the `ReplayGain` preamp (dB).
-    pub fn set_replaygain_preamp(&self, preamp_db: f32) {
-        self.rg.set_preamp(preamp_db);
-    }
-
-    /// Enable / disable the static peak-based clip guard.
-    pub fn set_replaygain_prevent_clipping(&self, on: bool) {
-        self.rg.set_prevent_clipping(on);
-    }
-
-    /// Arm / disarm the visualizer's sample tap; while off it never touches the
-    /// ring. The UI does not come through here — it already holds the cell via
-    /// [`Self::visualizer`] for snapshotting and arms it off the Now-Playing
-    /// view's visibility. This spelling exists for the crossfade integration test.
-    pub fn set_visualizer_enabled(&self, on: bool) {
-        self.viz.set_enabled(on);
-    }
-
-    /// The visualizer's sample ring, for the UI-side analyzer to snapshot.
-    pub fn visualizer(&self) -> Arc<VisualizerShared> {
-        self.viz.clone()
     }
 
     /// Whether a gapless source is currently staged behind the playing one.
@@ -778,7 +611,7 @@ impl RodioPlayer {
     }
 
     /// Stage the next track *behind* the current one on the **active** deck, so
-    /// rodio's queue plays them back-to-back. Mutually exclusive with a
+    /// the deck sequences them back-to-back. Mutually exclusive with a
     /// crossfade for a given transition — see `crossfade::crossfade_eligible`.
     pub fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
         let Some(path) = file_path else {
@@ -820,7 +653,7 @@ impl RodioPlayer {
         // Never rejects a legitimate stage: the only caller passing a path is
         // the monitor's late preload, from its `Playing` branch, and
         // `play_media` appends under this same lock.
-        if deck.player.empty() {
+        if deck.voice.is_empty() {
             log::debug!("Dropping gapless preload of {path}: nothing left to follow");
             return;
         }
@@ -830,11 +663,19 @@ impl RodioPlayer {
 
     /// Current playback position in milliseconds, on the media timeline.
     pub fn query_position(&self) -> u64 {
+        let position = self.lock_decks().active().voice.position();
+        u64::try_from(position.as_millis()).unwrap_or(u64::MAX)
+    }
+
+    /// Free the sources the audio callback has finished with.
+    ///
+    /// Rides the monitor's existing tick rather than a timer of its own: a track change is the
+    /// only thing that produces one, so anything faster would be polling an empty queue. See
+    /// `output::voice::Voice::collect_spent` for what it saves.
+    pub fn collect_spent(&self) {
         let decks = self.lock_decks();
-        let player = &decks.active().player;
-        let wall_time = player.get_pos();
-        let speed = f64::from(player.speed());
-        compute_position(wall_time, speed)
+        decks.active().voice.collect_spent();
+        decks.idle().voice.collect_spent();
     }
 
     /// One lock acquisition, so gapless-transition and end-of-stream detection
@@ -846,46 +687,14 @@ impl RodioPlayer {
     pub fn check_playback_state(&self) -> PlaybackCheck {
         let was_gapless = self.gapless_pending.load(Ordering::Acquire);
         let decks = self.lock_decks();
-        let player = &decks.active().player;
-        let queue_len = player.len();
-        let is_empty = player.empty();
+        let sources = decks.active().voice.len();
         drop(decks);
 
-        let result = evaluate_playback_check(was_gapless, queue_len, is_empty);
+        let result = evaluate_playback_check(was_gapless, sources);
         if result == PlaybackCheck::GaplessTransition {
             self.gapless_pending.store(false, Ordering::Release);
         }
         result
-    }
-
-    /// Snapshot the live crossfade settings for the playback monitor's decision.
-    pub fn crossfade_settings(&self) -> crossfade::CrossfadeSettings {
-        self.xf.snapshot()
-    }
-
-    /// Enable / disable crossfade. Lock-free, like the EQ setters.
-    pub fn set_crossfade_enabled(&self, enabled: bool) {
-        self.xf.set_enabled(enabled);
-    }
-
-    /// Set the crossfade length (ms), clamped to the supported range.
-    pub fn set_crossfade_duration_ms(&self, ms: u32) {
-        self.xf.set_duration_ms(ms);
-    }
-
-    /// Also crossfade when the user changes track manually.
-    pub fn set_crossfade_manual(&self, on: bool) {
-        self.xf.set_manual(on);
-    }
-
-    /// Leave same-album transitions gapless.
-    pub fn set_crossfade_skip_same_album(&self, on: bool) {
-        self.xf.set_skip_same_album(on);
-    }
-
-    /// Fade out on pause / user stop, fade back in on resume.
-    pub fn set_crossfade_fade_on_pause(&self, on: bool) {
-        self.xf.set_fade_on_pause(on);
     }
 
     /// Lock the decks mutex, recovering from poison rather than panicking.
@@ -895,5 +704,5 @@ impl RodioPlayer {
 }
 
 #[cfg(test)]
-#[path = "tests/rodio_backend_tests.rs"]
+#[path = "tests/backend_tests.rs"]
 mod tests;

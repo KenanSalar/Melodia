@@ -15,7 +15,7 @@
 //! which is exactly the arrangement every composite view has.
 
 use crate::test_support::{
-    MIN_SLINT_SOURCES, UI_DIR, block_body, normalize_ws as normalized, stripped_sources,
+    MIN_SLINT_SOURCES, UI_DIR, blocks_named, normalize_ws as normalized, stripped_sources,
 };
 
 /// The elements both block walks recognise. `Flickable` is deliberately absent, and
@@ -83,52 +83,17 @@ fn sources() -> Vec<(String, String)> {
     stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES)
 }
 
-/// The first index at or after `from` holding a non-whitespace byte.
-fn next_non_ws(bytes: &[u8], from: usize) -> Option<usize> {
-    (from..bytes.len()).find(|i| !bytes[*i].is_ascii_whitespace())
-}
-
-/// Whether `src` mounts `component` — the name followed by `{`, which is what separates a
-/// mount from the `import { … }` line and from the component's own `inherits` declaration.
+/// Whether `src` mounts `component` at all.
 fn mounts(src: &str, component: &str) -> bool {
-    let mut from = 0;
-    while let Some(at) = src[from..].find(component).map(|rel| rel + from) {
-        from = at + component.len();
-        if let Some(open) = next_non_ws(src.as_bytes(), from)
-            && src.as_bytes()[open] == b'{'
-        {
-            return true;
-        }
-    }
-    false
+    !blocks_named(src, component).is_empty()
 }
 
-/// Every scroller declared in `src`, as `(element, body)`. A declaration is the element
-/// name followed by `{`, which is what separates `sv := ScrollView {` from the
-/// `import { ScrollView } from …` line above it.
+/// Every scroller declared in `src`, as `(element, body)` — [`blocks_named`] over [`SCROLLERS`].
 fn scroller_blocks(src: &str) -> Vec<(&'static str, &str)> {
-    let bytes = src.as_bytes();
-    let mut out = Vec::new();
-    for name in SCROLLERS {
-        let mut from = 0;
-        while let Some(at) = src[from..].find(name).map(|rel| rel + from) {
-            from = at + name.len();
-            // A longer identifier ending in the same word isn't a declaration.
-            if at > 0 && (bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_') {
-                continue;
-            }
-            let Some(open) = next_non_ws(bytes, from) else {
-                continue;
-            };
-            if bytes[open] != b'{' {
-                continue;
-            }
-            if let Some(body) = block_body(src, open) {
-                out.push((name, body));
-            }
-        }
-    }
-    out
+    SCROLLERS
+        .iter()
+        .flat_map(|name| blocks_named(src, name).into_iter().map(move |body| (*name, body)))
+        .collect()
 }
 
 /// The values `body` binds `key` to at its **own** nesting depth. Depth is the whole
@@ -298,18 +263,7 @@ fn every_dialog_scrollbar_takes_the_track_that_reads_on_a_card() {
         if !in_dialog {
             continue;
         }
-        let mut from = 0;
-        while let Some(at) = src[from..].find("OverlayScrollbar").map(|rel| rel + from) {
-            from = at + "OverlayScrollbar".len();
-            let Some(open) = next_non_ws(src.as_bytes(), from) else {
-                continue;
-            };
-            if src.as_bytes()[open] != b'{' {
-                continue;
-            }
-            let Some(body) = block_body(src, open) else {
-                continue;
-            };
+        for body in blocks_named(src, "OverlayScrollbar") {
             bars += 1;
             if !normalized(body).contains(CARD_TRACK) {
                 offenders.push(format!("{path}: OverlayScrollbar does not set {CARD_TRACK}"));
@@ -389,18 +343,7 @@ fn no_page_hand_rolls_a_track_lists_scrollbars() {
         if SCROLLBAR_COMPONENTS.iter().any(|owner| path.ends_with(owner)) {
             continue;
         }
-        let mut from = 0;
-        while let Some(at) = src[from..].find("OverlayScrollbar").map(|rel| rel + from) {
-            from = at + "OverlayScrollbar".len();
-            let Some(open) = next_non_ws(src.as_bytes(), from) else {
-                continue;
-            };
-            if src.as_bytes()[open] != b'{' {
-                continue;
-            }
-            let Some(body) = block_body(src, open) else {
-                continue;
-            };
+        for body in blocks_named(src, "OverlayScrollbar") {
             bars += 1;
             if let Some(metric) = TRACK_LIST_V_METRICS.iter().find(|m| body.contains(**m)) {
                 offenders.push(format!("{path}: OverlayScrollbar binds {metric}"));

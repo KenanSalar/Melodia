@@ -2,7 +2,7 @@
 //! and the change-handler each toggle installs.
 //!
 //! Every audio toggle in Settings and in the Now-Playing dialogs is two-phase: apply to
-//! the live Rodio backend *synchronously*, so the sound changes before the callback
+//! the live playback engine *synchronously*, so the sound changes before the callback
 //! returns, then persist on the blocking pool. A failed disk write must not undo the
 //! applied value — the warn from [`AppState::persist_blocking`] is the only report.
 

@@ -153,8 +153,8 @@ fn pause_at_track_end_suppresses_the_gapless_preload() {
 fn a_zero_position_read_never_stages_a_preload() {
     let mut state = playing_state();
 
-    // A deck rodio hasn't re-anchored yet reports 0, which would otherwise read
-    // as a whole track's worth of remaining time.
+    // A deck reads 0 until it has been pulled for its new source, which would
+    // otherwise read as a whole track's worth of remaining time.
     let t = tick(&mut state, backend(0, crossfade_off()));
 
     assert_eq!(staged(t.as_ref()), None);

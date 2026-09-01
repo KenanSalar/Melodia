@@ -8,7 +8,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
         PlaybackMonitorContext {
             shutdown_token: spawner.shutdown.clone(),
             player_state: state.player_state.clone(),
-            rodio_player: state.rodio.clone(),
+            engine: state.engine.clone(),
             sinks: state.sinks.clone(),
             position_tx: state.position_tx.clone(),
             db: state.db.clone(),

@@ -81,7 +81,7 @@ fn spawn_love_backfill(state: &AppState, target: LoveTarget) {
 /// in a fresh flags snapshot, apply it to the shadow synchronously (so the
 /// detector/submitter see it at once), run the optional on-enable side-effect,
 /// then persist. Sibling of [`crate::ui::settings_bind::toggle_binding`] — that
-/// one applies to the Rodio backend, this one to the whole-struct `set_flags`.
+/// one applies to the playback engine, this one to the whole-struct `set_flags`.
 fn scrobble_toggle_binding(
     state: &AppState,
     label: &'static str,

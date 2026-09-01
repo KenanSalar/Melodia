@@ -24,9 +24,10 @@ pub const RESTART_THRESHOLD_MS: u64 = 3000;
 pub const MAX_VOLUME: u32 = 100;
 /// Minimum playback speed multiplier.
 pub const MIN_SPEED: f64 = 0.25;
-/// Maximum playback speed multiplier. Capped at 2× — rodio's `set_speed` is
-/// naive resampling (it shifts pitch), so beyond 2× the audio degrades into
-/// chipmunk territory with little practical use for music.
+/// Maximum playback speed multiplier. Capped at 2×: speed is a ratio on the
+/// deck's converter, which is naive resampling and shifts pitch with it, so
+/// beyond 2× the audio degrades into chipmunk territory with little practical
+/// use for music.
 pub const MAX_SPEED: f64 = 2.0;
 
 /// Single source of truth for converting a stored volume level (percent,
@@ -100,7 +101,7 @@ pub struct PlayerStateHandle {
     /// single state mutation atomic, but the `execute_actions` that follows runs
     /// on whatever tokio worker the caller happens to be on. Without this,
     /// two batches (e.g. the monitor's EOS-advance and a UI `Stop`) can interleave
-    /// their rodio side effects on separate workers and leave state and backend
+    /// their side effects on separate workers and leave state and backend
     /// disagreeing. `emit_and_execute` holds this across *both* the mutation and
     /// the execution so mutation order equals side-effect order. Held only across
     /// synchronous work (never an `.await`), so a blocking mutex is correct.
@@ -119,7 +120,7 @@ impl Default for PlayerStateHandle {
 
 impl PlayerStateHandle {
     /// Acquire the execution lock, recovering from poison rather than panicking
-    /// (mirrors [`lock_state`] / `RodioPlayer::lock_player`). The guarded unit
+    /// (mirrors [`lock_state`] / `PlaybackEngine::lock_decks`). The guarded unit
     /// carries no data — poison only means a prior holder panicked mid-batch, and
     /// the guard exists purely to serialize the next batch.
     pub fn lock_exec(&self) -> MutexGuard<'_, ()> {
@@ -242,8 +243,16 @@ pub enum PlayerAction {
     Stop {
         fade_ms: u64,
     },
+    /// Move the playing track's position.
+    ///
+    /// Carries the file and its gain for the same reason [`Self::PlayMedia`] does: the backend
+    /// seeks by building a source already at the target, so a seek rebuilds what the deck holds
+    /// and the new source needs its own baked values. Only ever emitted for a track, a live
+    /// source having no timeline to land on.
     Seek {
         position_ms: u64,
+        file_path: String,
+        replaygain: TrackReplayGain,
     },
     SetVolume(f64),
     SetSpeed(f64),
@@ -286,7 +295,7 @@ impl std::fmt::Display for PlayerAction {
             Self::Resume => f.write_str("resume"),
             Self::Pause { fade_ms } => write!(f, "pause (fade {fade_ms}ms)"),
             Self::Stop { fade_ms } => write!(f, "stop (fade {fade_ms}ms)"),
-            Self::Seek { position_ms } => write!(f, "seek to {position_ms}ms"),
+            Self::Seek { position_ms, .. } => write!(f, "seek to {position_ms}ms"),
             Self::SetVolume(v) => write!(f, "volume {v:.2}"),
             Self::SetSpeed(s) => write!(f, "speed {s:.2}"),
             Self::PreloadGapless(Some(path)) => write!(f, "preload gapless {path}"),
@@ -492,14 +501,38 @@ impl PlayerState {
         vec![PlayerAction::Stop { fade_ms }]
     }
 
+    /// The seek action for whatever track is on the deck, or nothing where none is.
+    ///
+    /// The track rides along because the backend rebuilds the source to move it; see
+    /// [`PlayerAction::Seek`].
+    fn seek_action(&self, position_ms: u64) -> Option<PlayerAction> {
+        let track = self.source.as_ref().and_then(PlaybackSource::track)?;
+        Some(PlayerAction::Seek {
+            position_ms,
+            file_path: track.file_path.clone(),
+            replaygain: track.replaygain(),
+        })
+    }
+
+    /// Move the position, and build the action that moves the deck with it.
+    ///
+    /// The position moves either way. Nothing seated is nothing for the backend to rebuild, but
+    /// `source_allows` passes on an absent source, so this is reachable before anything has
+    /// played — where the action the old in-place seek emitted was a no-op by the time it landed
+    /// on an empty deck.
+    fn build_move_to_actions(&mut self, position_ms: u64) -> Vec<PlayerAction> {
+        let seek = self.seek_action(position_ms);
+        self.position_ms = position_ms;
+        seek.into_iter().collect()
+    }
+
     /// Build actions for seek command.
     pub fn build_seek_actions(&mut self, position_ms: u64) -> Vec<PlayerAction> {
         // A live stream has no timeline to land on; the position is elapsed listening time.
         if !self.source_allows(PlaybackSource::is_seekable) {
             return vec![];
         }
-        self.position_ms = position_ms;
-        vec![PlayerAction::Seek { position_ms }]
+        self.build_move_to_actions(position_ms)
     }
 
     /// Build actions for next-track command.
@@ -549,8 +582,7 @@ impl PlayerState {
         let was_paused = self.status == PlaybackStatus::Paused;
 
         if self.position_ms > RESTART_THRESHOLD_MS {
-            self.position_ms = 0;
-            return vec![PlayerAction::Seek { position_ms: 0 }];
+            return self.build_move_to_actions(0);
         }
 
         if let Some(track) = self.queue.previous().cloned() {
@@ -558,8 +590,7 @@ impl PlayerState {
             self.restore_paused(was_paused, &mut actions);
             actions
         } else {
-            self.position_ms = 0;
-            vec![PlayerAction::Seek { position_ms: 0 }]
+            self.build_move_to_actions(0)
         }
     }
 
@@ -699,9 +730,10 @@ impl PlayerState {
 
     /// Build actions for set-playback-speed command.
     pub fn build_set_speed_actions(&mut self, speed: f64) -> Vec<PlayerAction> {
-        // rodio implements speed by reporting a multiplied sample rate upward, which against a
-        // source arriving in real time drifts the prebuffer until it starves. Refused rather than
-        // clamped, so the transport keeps showing the 1.0 the deck is actually running at.
+        // Speed is a ratio on the deck's converter, so anything but 1.0 consumes a source faster or
+        // slower than real time, and a live mount arriving at exactly real time starves or overruns
+        // its ring. Refused rather than clamped, so the transport keeps showing the 1.0 the deck is
+        // actually running at.
         if !self.source_allows(PlaybackSource::has_variable_speed) {
             return vec![];
         }
@@ -719,8 +751,7 @@ impl PlayerState {
     ///
     /// Speed is reset alongside, because [`Self::build_set_speed_actions`] refuses to move it
     /// while a station plays and the transport would otherwise claim a rate the deck is not
-    /// running at. The `SetSpeed` follows the `Stop` so it lands on emptied decks and skips the
-    /// re-anchoring seek.
+    /// running at. The `SetSpeed` follows the `Stop` so it lands on emptied decks.
     pub fn build_station_connecting_actions(
         &mut self,
         station: Arc<RadioNowPlaying>,
@@ -738,7 +769,7 @@ impl PlayerState {
     }
 
     /// Put the deck back on 1.0 for a station that is about to sit on it, and hand back the
-    /// action that lands it on rodio.
+    /// action that lands it on the deck.
     ///
     /// Shared with [`restore_station`], the one other way a station reaches the deck, because the
     /// state and the backend have to move together: skip the action and a stream opens against a
@@ -850,7 +881,7 @@ pub fn play_track_inner(
     // Gapless preload is staged late (by the playback monitor) when the
     // current track approaches its end — see `spawn_playback_monitor`. That
     // way mid-track repeat-mode / queue changes are reflected in what gets
-    // preloaded, instead of being clobbered by a stale Rodio queue entry.
+    // preloaded, instead of being clobbered by a source already staged on the deck.
     vec![PlayerAction::PlayMedia {
         file_path: start.file_path,
         volume: start.volume,
