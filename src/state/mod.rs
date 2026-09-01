@@ -54,8 +54,8 @@ pub struct AppState {
     pub cover_cache: CoverCache,
     pub player_state: Arc<PlayerStateHandle>,
     pub engine: Arc<PlaybackEngine>,
-    /// The open device. Held because dropping it stops the stream and releases the card — which is
-    /// the whole difference from the leaked sink this replaced, and what a device picker will need.
+    /// The open device. Held because dropping it stops the stream and releases the card, which is
+    /// what a device picker will need.
     pub audio_output: Arc<AudioOutput>,
     /// Fault counters the output device's error callback writes into, on the
     /// audio thread. Drained by `tasks::audio_health` and read nowhere else.
@@ -154,11 +154,6 @@ impl AppState {
     pub async fn init(paths: Paths, runtime: Handle) -> AppResult<(Self, StartupChannels)> {
         // The error callback records into counters rather than logging, because cpal calls it on
         // the output worker thread; `player::stream_health` argues that.
-        //
-        // The output is **owned rather than leaked**. rodio's sink had to outlive every deck and
-        // the only way to say so was `Box::leak`, which also meant the device could never be
-        // released; the decks hold reference-counted voices instead, so the handle can simply live
-        // on `AppState` and be dropped with it.
         let audio_health = Arc::new(AudioStreamHealth::default());
         let audio_output =
             AudioOutput::open(DECK_COUNT, stream_health::error_callback(audio_health.clone()))?;

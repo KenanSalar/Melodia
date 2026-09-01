@@ -112,6 +112,57 @@ pub(crate) fn http_url(candidate: &str) -> Option<reqwest::Url> {
     (matches!(parsed.scheme(), "http" | "https") && parsed.has_host()).then_some(parsed)
 }
 
+/// [`http_url`] where only the verdict is wanted. Two callers wrote this line out for themselves.
+pub(crate) fn is_http_url(candidate: &str) -> bool {
+    http_url(candidate).is_some()
+}
+
+/// An already-parsed URL held to the same rule.
+///
+/// `Url::join` returns an absolute URI unchanged, so a playlist line reading `file:///etc/passwd`
+/// or `data:…` comes back out of it as a `Url` like any other. Nothing downstream re-asks, and the
+/// text form is gone by then, so the check has to be available on the parsed value too.
+pub(crate) fn is_http(url: &reqwest::Url) -> bool {
+    matches!(url.scheme(), "http" | "https") && url.has_host()
+}
+
+/// GET `url` and read at most `max_bytes` of what comes back.
+///
+/// [`read_capped`] is the half that holds; this is the request around it, plus the two cheap
+/// refusals that come before a byte is read — a non-success status, and a `Content-Length` already
+/// over the cap. The header check is a courtesy a host can omit or lie about, which is why it sits
+/// here rather than instead of the streamed bound.
+///
+/// `what` names the thing in every message, so a refusal points at the right half of a two-request
+/// fetch. Timeout and cap are the caller's: a station's playlist and one of its segments differ by
+/// two orders of magnitude in both.
+pub(crate) async fn get_capped(
+    client: &reqwest::Client,
+    url: &reqwest::Url,
+    what: &str,
+    timeout: std::time::Duration,
+    max_bytes: u64,
+) -> Result<Vec<u8>, AppError> {
+    let response = client
+        .get(url.clone())
+        .timeout(timeout)
+        .send()
+        .await
+        .map_err(|e| AppError::network(format!("Could not fetch {what}"), e))?;
+    if !response.status().is_success() {
+        return Err(AppError::network_msg(format!(
+            "{what} request returned HTTP {}",
+            response.status().as_u16()
+        )));
+    }
+    if response.content_length().is_some_and(|len| len > max_bytes) {
+        // Worded as `read_capped` words it, the two refusing the same thing from either side of
+        // the download.
+        return Err(AppError::network_msg(format!("{what} is larger than {max_bytes} bytes")));
+    }
+    read_capped(response, what, max_bytes).await
+}
+
 /// Ceiling on the capacity a `Content-Length` may claim before a byte has arrived. High enough to
 /// skip the cheap end of the growth chain on every body here, low enough that a host overstating
 /// its length buys one hint rather than the caller's whole cap, which for the largest of them is

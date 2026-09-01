@@ -7,7 +7,6 @@ use reqwest::Url;
 use tokio::sync::mpsc;
 
 use crate::error::AppError;
-use crate::player::stream_source::fetch_capped;
 use crate::services::describe;
 
 use super::playlist::{self, MediaPlaylist, Playlist};
@@ -29,6 +28,15 @@ const SEGMENT_QUEUE_DEPTH: usize = 4;
 /// point is to refuse a mount serving something else entirely rather than to size a buffer.
 const SEGMENT_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const SEGMENT_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Ceiling on one manifest, and how long we wait for it.
+///
+/// **Deliberately its own pair rather than `stream_source`'s**, which bounds a `.pls` or `.m3u`
+/// *pointer* — a few hundred bytes naming one mount. A media playlist is a live document listing
+/// every segment still in the window and re-fetched twice a target duration, so the two answer
+/// different questions and only looked like one number.
+const MANIFEST_MAX_BYTES: u64 = 256 * 1024;
+const MANIFEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Consecutive playlist failures before the stream is given up on.
 ///
@@ -193,7 +201,7 @@ async fn resolve(client: &reqwest::Client, url: &Url, body: &str) -> Result<Reso
     } else {
         i32::try_from(variant.bandwidth / 1_000).unwrap_or(0)
     };
-    let body = fetch_capped(client, &variant.url).await?;
+    let body = fetch_manifest(client, &variant.url).await?;
     Ok(Resolved {
         playlist: media_playlist(&body, &variant.url)?,
         bitrate_kbps,
@@ -235,7 +243,7 @@ impl Scheduler {
                 () = self.chunks.closed() => return,
             }
 
-            let reloaded = fetch_capped(&self.client, &self.playlist_url)
+            let reloaded = fetch_manifest(&self.client, &self.playlist_url)
                 .await
                 .and_then(|body| media_playlist(&body, &self.playlist_url));
             let playlist = match reloaded {
@@ -311,20 +319,27 @@ impl Scheduler {
     }
 }
 
-/// Read at most [`SEGMENT_MAX_BYTES`] of one segment.
-///
-/// The bound is [`crate::services::read_capped`]'s, which argues why it is streamed.
-async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, AppError> {
-    let response =
-        client.get(url.clone()).timeout(SEGMENT_TIMEOUT).send().await.map_err(|e| {
-            AppError::network("Could not fetch a segment of the station's stream", e)
-        })?;
-    if !response.status().is_success() {
-        return Err(AppError::network_msg(format!(
-            "Station segment request returned HTTP {}",
-            response.status().as_u16()
-        )));
-    }
+/// Read at most [`MANIFEST_MAX_BYTES`] of one playlist, as text.
+async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
+    let body = crate::services::get_capped(
+        client,
+        url,
+        "the station's playlist",
+        MANIFEST_TIMEOUT,
+        MANIFEST_MAX_BYTES,
+    )
+    .await?;
+    Ok(String::from_utf8_lossy(&body).into_owned())
+}
 
-    crate::services::read_capped(response, "Station segment", SEGMENT_MAX_BYTES).await
+/// Read at most [`SEGMENT_MAX_BYTES`] of one segment.
+async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, AppError> {
+    crate::services::get_capped(
+        client,
+        url,
+        "a segment of the station's stream",
+        SEGMENT_TIMEOUT,
+        SEGMENT_MAX_BYTES,
+    )
+    .await
 }

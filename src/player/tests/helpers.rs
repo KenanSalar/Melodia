@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::entities::track::TrackSummary;
-use crate::player::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
+use crate::player::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape};
 use crate::player::state::PlayerViewModelLight;
 use crate::player::types::RadioNowPlaying;
 
@@ -35,6 +35,14 @@ pub(crate) fn nz_u32(v: u32) -> SampleRate {
     match NonZero::new(v) {
         Some(n) => n,
         None => NonZero::<u32>::MIN,
+    }
+}
+
+/// A [`Shape`] from the plain integers a test spells, over the two above.
+pub(crate) fn shape(channels: u16, rate: u32) -> Shape {
+    Shape {
+        channels: nz_u16(channels),
+        rate: nz_u32(rate),
     }
 }
 

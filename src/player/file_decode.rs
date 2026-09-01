@@ -16,10 +16,9 @@ use std::time::Duration;
 
 use symphonia::core::codecs::audio::AudioDecoder;
 use symphonia::core::formats::probe::Hint;
-use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, Track};
-use symphonia::core::io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions};
-use symphonia::core::meta::MetadataOptions;
-use symphonia::core::units::{Duration as SymphoniaDuration, TimeBase, Timestamp};
+use symphonia::core::formats::{FormatReader, SeekMode, SeekTo};
+use symphonia::core::io::MediaSource;
+use symphonia::core::units::{TimeBase, Timestamp};
 
 use crate::error::AppError;
 
@@ -106,40 +105,26 @@ impl FileDecoder {
     pub fn open(path: &Path) -> Result<Self, AppError> {
         let file = File::open(path)
             .map_err(|e| AppError::Player(format!("Cannot open {}: {e}", path.display())))?;
-        let mss = MediaSourceStream::new(
-            Box::new(FileSource::new(file)),
-            MediaSourceStreamOptions::default(),
-        );
 
         let mut hint = Hint::new();
         if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
             hint.with_extension(extension);
         }
 
-        let mut format = symphonia::default::get_probe()
-            .probe(&hint, mss, FormatOptions::default(), MetadataOptions::default())
-            .map_err(|e| AppError::Player(format!("Cannot read {}: {e}", path.display())))?;
-
-        let track = decode::audio_track(&*format)
-            .ok_or_else(|| AppError::Player(format!("{} has no audio", path.display())))?;
-        let params = decode::audio_params(track)
-            .ok_or_else(|| AppError::Player(format!("{} names no audio codec", path.display())))?
-            .clone();
-        let track_id = track.id;
-        let time_base = track.time_base;
-        let total_duration = playing_time(&*format, track);
-
-        let mut decoder = decode::make_decoder(params)
-            .map_err(|e| AppError::Player(format!("Decode error for {}: {e}", path.display())))?;
-
-        let cursor = decode::Cursor::open(&mut *format, &mut *decoder, track_id)
-            .map_err(|e| AppError::Player(format!("Cannot read {}: {e}", path.display())))?
-            .ok_or_else(|| AppError::Player(format!("{} decoded to nothing", path.display())))?;
+        let decode::Opened {
+            format,
+            decoder,
+            track,
+            cursor,
+            time_base,
+            total_duration,
+        } = decode::open(Box::new(FileSource::new(file)), &hint)
+            .map_err(|e| AppError::Player(format!("{} {e}", path.display())))?;
 
         Ok(Self {
             format,
             decoder,
-            track: track_id,
+            track,
             cursor,
             time_base,
             total_duration,
@@ -161,13 +146,13 @@ impl FileDecoder {
             return 0;
         };
 
-        let rate = u128::from(self.cursor.sample_rate().get());
+        let rate = u128::from(self.cursor.shape().rate.get());
         let ticks = ahead * u128::from(time_base.numer.get()) * rate;
         let frames = ticks.div_ceil(u128::from(time_base.denom.get()));
         let Ok(frames) = usize::try_from(frames) else {
             return 0;
         };
-        frames.saturating_mul(usize::from(self.cursor.channels().get()))
+        frames.saturating_mul(usize::from(self.cursor.shape().channels.get()))
     }
 
     /// Discard `count` interleaved samples, decoding as far as it takes.
@@ -178,33 +163,6 @@ impl FileDecoder {
             }
         }
     }
-}
-
-/// How long the track plays for.
-///
-/// Three sources, because no one of them answers for every container. `Track::duration` is the one
-/// upstream says to present, a timebase not having to be the reciprocal of the frame rate;
-/// `num_frames` is where a container states its length in frames instead; and Matroska states
-/// neither on the track, putting the segment's own duration on the media. A `.mka` reaching the
-/// library reading 0:00 is what this exists to prevent, and it is the container that needs the
-/// third.
-///
-/// A stated zero is the reader saying it doesn't know rather than the file being empty — a
-/// fragmented MP4 zeroes both track fields — so each one has to be discarded before the next is
-/// reached, or the first answers for all three.
-fn playing_time(format: &dyn FormatReader, track: &Track) -> Option<Duration> {
-    let from_track = track.time_base.and_then(|time_base| {
-        let frames = || track.num_frames.filter(|frames| *frames > 0).map(SymphoniaDuration::new);
-        let ticks = track.duration.filter(|stated| stated.get() > 0).or_else(frames)?;
-        time_base.calc_duration(ticks)
-    });
-    let from_media = || {
-        let media = format.media_info();
-        media.time_base?.calc_duration(media.duration.filter(|stated| stated.get() > 0)?)
-    };
-
-    let (seconds, nanos) = from_track.or_else(from_media)?.parts();
-    Some(Duration::new(u64::try_from(seconds).ok()?, nanos))
 }
 
 /// How long the file at `path` plays for, or `None` when it names no duration or no decoder is
@@ -231,12 +189,12 @@ impl Iterator for FileDecoder {
 impl AudioSource for FileDecoder {
     #[inline]
     fn channels(&self) -> ChannelCount {
-        self.cursor.channels()
+        self.cursor.shape().channels
     }
 
     #[inline]
     fn sample_rate(&self) -> SampleRate {
-        self.cursor.sample_rate()
+        self.cursor.shape().rate
     }
 
     #[inline]

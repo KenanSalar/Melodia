@@ -29,7 +29,7 @@ use stream_download::{Settings, StreamDownload};
 use crate::error::AppError;
 use crate::services::describe;
 
-use super::audio::{ChannelCount, SampleRate};
+use super::audio::Shape;
 use super::hls;
 use super::prebuffer::{PrebufferSource, RingWriter, StreamShared};
 use super::stream_decode::{LiveSource, StreamDecoder};
@@ -142,8 +142,7 @@ impl StreamClient for IcyClient {
 /// An opened stream, before it has a ring or a thread.
 struct OpenedStream {
     decoder: StreamDecoder,
-    channels: ChannelCount,
-    sample_rate: SampleRate,
+    shape: Shape,
     facts: StationFacts,
 }
 
@@ -232,8 +231,7 @@ pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream,
         reopen,
     } = connect_following_playlist(client, url, &shared).await?;
 
-    let (source, writer) =
-        PrebufferSource::new(shared.clone(), opened.channels, opened.sample_rate);
+    let (source, writer) = PrebufferSource::new(shared.clone(), opened.shape);
     spawn_feed(FeedContext {
         decoder: opened.decoder,
         writer,
@@ -241,8 +239,7 @@ pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream,
         client: client.clone(),
         url,
         reopen,
-        channels: opened.channels,
-        sample_rate: opened.sample_rate,
+        shape: opened.shape,
         runtime: tokio::runtime::Handle::current(),
     });
 
@@ -335,7 +332,7 @@ async fn reopen(
             }
         },
         Reopen::Segments => {
-            let body = fetch_capped(client, url).await?;
+            let body = fetch_playlist(client, url).await?;
             open_segments(client, url, &body).await
         }
     }
@@ -366,8 +363,7 @@ async fn open_segments(
     .map_err(AppError::io_source)??;
 
     Ok(OpenedStream {
-        channels: decoder.channels(),
-        sample_rate: decoder.sample_rate(),
+        shape: decoder.shape(),
         decoder,
         facts,
     })
@@ -431,8 +427,7 @@ async fn connect(
     .map_err(AppError::io_source)??;
 
     Ok(Opened::Audio(Box::new(OpenedStream {
-        channels: decoder.channels(),
-        sample_rate: decoder.sample_rate(),
+        shape: decoder.shape(),
         decoder,
         facts,
     })))
@@ -485,7 +480,7 @@ fn prefetch_bytes(bitrate_kbps: Option<u32>) -> u64 {
 /// valid Extended M3U, and read as a pointer its first segment opens, plays for a few seconds and
 /// stops.
 async fn follow_playlist(client: &reqwest::Client, url: &Url) -> Result<Followed, AppError> {
-    let body = fetch_capped(client, url).await?;
+    let body = fetch_playlist(client, url).await?;
     if hls::playlist::is_hls(&body) {
         return Ok(Followed::Segments(Box::new(open_segments(client, url, &body).await?)));
     }
@@ -498,38 +493,21 @@ async fn follow_playlist(client: &reqwest::Client, url: &Url) -> Result<Followed
 }
 
 /// Read at most [`PLAYLIST_MAX_BYTES`] of `url` as text.
-///
-/// The header check below is a cheap early bail on a server that is honest about the size; the
-/// bound that holds is [`crate::services::read_capped`]'s, which argues why it is streamed.
-pub(super) async fn fetch_capped(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    let response = client
-        .get(url.clone())
-        .timeout(PLAYLIST_TIMEOUT)
-        .send()
-        .await
-        .map_err(|e| AppError::network("Could not fetch the station's playlist", e))?;
-    if !response.status().is_success() {
-        return Err(AppError::network_msg(format!(
-            "Station playlist request returned HTTP {}",
-            response.status().as_u16()
-        )));
-    }
-    if response.content_length().is_some_and(|len| len > PLAYLIST_MAX_BYTES) {
-        // Worded as `read_capped` words it, the two refusing the same thing from either side of
-        // the download.
-        return Err(AppError::network_msg(format!(
-            "Station playlist is larger than {PLAYLIST_MAX_BYTES} bytes"
-        )));
-    }
-
-    let body =
-        crate::services::read_capped(response, "Station playlist", PLAYLIST_MAX_BYTES).await?;
+async fn fetch_playlist(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
+    let body = crate::services::get_capped(
+        client,
+        url,
+        "the station's playlist",
+        PLAYLIST_TIMEOUT,
+        PLAYLIST_MAX_BYTES,
+    )
+    .await?;
     Ok(String::from_utf8_lossy(&body).into_owned())
 }
 
 /// Does this URL's path end in a playlist extension? Query and fragment are stripped first, since
 /// a mount routinely carries a session parameter after the name.
-pub fn is_playlist_url(url: &Url) -> bool {
+fn is_playlist_url(url: &Url) -> bool {
     let path = url.path();
     let Some((_, ext)) = path.rsplit_once('.') else {
         return false;
@@ -540,7 +518,7 @@ pub fn is_playlist_url(url: &Url) -> bool {
 /// Does this response content type name a playlist? Parameters (`; charset=…`) are already gone by
 /// the time stream-download hands over a `ContentType`, but callers passing a raw header are
 /// tolerated.
-pub fn is_playlist_content_type(content_type: &str) -> bool {
+fn is_playlist_content_type(content_type: &str) -> bool {
     let bare = content_type.split(';').next().unwrap_or(content_type).trim();
     PLAYLIST_CONTENT_TYPES.iter().any(|known| bare.eq_ignore_ascii_case(known))
 }
@@ -558,7 +536,7 @@ pub fn is_playlist_content_type(content_type: &str) -> bool {
 /// depends on this module's crate half, not the other way round) and it answers a different
 /// question — track paths with BLAKE3 hashes and `#EXTINF` durations, none of which a stream
 /// playlist carries, and neither of the other two formats at all.
-pub fn first_stream_url(body: &str) -> Option<String> {
+fn first_stream_url(body: &str) -> Option<String> {
     let body = body.strip_prefix('\u{FEFF}').unwrap_or(body);
     for raw in body.lines() {
         let line = raw.trim();
@@ -570,7 +548,8 @@ pub fn first_stream_url(body: &str) -> Option<String> {
             line.split_once('=').map(|(_, value)| value.trim()),
             Some(line),
         ];
-        if let Some(url) = readings.into_iter().flatten().find(|c| is_http_url(c)) {
+        if let Some(url) = readings.into_iter().flatten().find(|c| crate::services::is_http_url(c))
+        {
             return Some(url.to_owned());
         }
     }
@@ -591,17 +570,11 @@ fn quoted_href(line: &str) -> Option<&str> {
     inner.split(quote).next()
 }
 
-/// Whether a playlist line is a URL worth following. A bare `http://` parses as a scheme and names
-/// no host, so it is not one — returning it hands the deck an address that cannot open.
-fn is_http_url(candidate: &str) -> bool {
-    crate::services::http_url(candidate).is_some()
-}
-
 /// How long to wait before reconnect attempt `attempt`, or `None` once the budget is spent.
 ///
 /// Exponential from [`RECONNECT_BASE_SECS`] and capped, so a station that drops for a moment is
 /// back almost immediately while one that has gone away is not hammered.
-pub fn reconnect_delay(attempt: u32) -> Option<Duration> {
+fn reconnect_delay(attempt: u32) -> Option<Duration> {
     if attempt >= RECONNECT_ATTEMPTS {
         return None;
     }
@@ -619,8 +592,7 @@ struct FeedContext {
     /// ordinary stream, the segment playlist for a segmented one.
     url: Url,
     reopen: Reopen,
-    channels: ChannelCount,
-    sample_rate: SampleRate,
+    shape: Shape,
     runtime: tokio::runtime::Handle,
 }
 
@@ -669,9 +641,7 @@ fn feed_loop(mut ctx: FeedContext) {
         }
 
         match ctx.runtime.block_on(reopen(&ctx.client, &ctx.url, &ctx.shared, ctx.reopen)) {
-            Ok(opened)
-                if opened.channels == ctx.channels && opened.sample_rate == ctx.sample_rate =>
-            {
+            Ok(opened) if opened.shape == ctx.shape => {
                 ctx.decoder = opened.decoder;
             }
             Ok(_) => {

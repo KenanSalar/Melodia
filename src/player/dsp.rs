@@ -2,7 +2,7 @@
 //! `ReplayGain` and crossfade state cells on the audio thread, and the
 //! visualizer's spectrum and waveform analysis on the UI thread.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 /// Fraction of its height a visualizer bar or trace keeps per frame while falling.
 /// Shared so the two styles fall by the same law rather than each carrying its own —
@@ -74,6 +74,50 @@ impl Generation {
     /// The current generation. Pairs with the `Release` in [`Self::bump`].
     pub(crate) fn get(&self) -> u64 {
         self.0.load(Ordering::Acquire)
+    }
+}
+
+/// A float in an atomic, which std does not offer.
+///
+/// **`Relaxed` on both halves, and that is the cell's whole ordering story.** Two kinds of reader
+/// share these: one polls a [`Generation`] and gets its ordering from the `Release`/`Acquire` pair
+/// there, so a stricter load here would only pay for a guarantee it already has; the other — a
+/// deck's volume and speed — is the audio callback reading a level nobody publishes alongside
+/// anything, where the worst a stale read costs is one block at the previous value.
+///
+/// Written out four times before this existed, each site re-deriving the bit-pattern round trip and
+/// picking an ordering of its own.
+macro_rules! atomic_float {
+    ($name:ident, $float:ty, $cell:ty) => {
+        pub(crate) struct $name($cell);
+
+        impl $name {
+            pub(crate) fn new(value: $float) -> Self {
+                Self(<$cell>::new(value.to_bits()))
+            }
+
+            pub(crate) fn store(&self, value: $float) {
+                self.0.store(value.to_bits(), Ordering::Relaxed);
+            }
+
+            pub(crate) fn load(&self) -> $float {
+                <$float>::from_bits(self.0.load(Ordering::Relaxed))
+            }
+        }
+    };
+}
+
+atomic_float!(AtomicF32, f32, AtomicU32);
+atomic_float!(AtomicF64, f64, AtomicU64);
+
+impl AtomicF64 {
+    /// Whether the cell holds *exactly* `value`, compared as a bit pattern.
+    ///
+    /// A deck skips its volume multiply on exact unity, which is what makes a lone deck through
+    /// the whole chain bit-identical to what the decoder produced. An epsilon would answer yes a
+    /// shade off it, so the question has to be asked of the pattern rather than of the value.
+    pub(crate) fn is_exactly(&self, value: f64) -> bool {
+        self.0.load(Ordering::Relaxed) == value.to_bits()
     }
 }
 

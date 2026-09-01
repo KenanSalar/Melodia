@@ -124,7 +124,7 @@ fn parse_renditions(body: &str, base: &Url) -> Vec<Variant> {
             }
         } else if !line.starts_with('#')
             && let Some((bandwidth, has_video)) = pending.take()
-            && let Ok(url) = base.join(line)
+            && let Some(url) = joined(base, line)
         {
             variants.push(Variant {
                 url,
@@ -179,11 +179,19 @@ fn audio_rendition(list: &str, base: &Url) -> Option<Url> {
 /// An empty `URI` is not the same as no `URI`: joined, it resolves to that playlist's own address.
 /// A rendition group then points back at the master it came from and beats every video rung in the
 /// pick, and an `EXT-X-MAP` makes the playlist text itself the first thing the demuxer is handed.
+///
+/// **Every URI in a playlist is resolved here**, including the bare lines that name a variant or a
+/// segment. `Url::join` hands an absolute URI back unchanged, so a `file://` or `data:` line comes
+/// out of it looking like any other address, and by the time one reaches the fetch its text form is
+/// gone — [`services::is_http`] is the same rule `stream_source` applies to a `.pls` line, asked of
+/// the parsed value.
+///
+/// [`services::is_http`]: crate::services::is_http
 fn joined(base: &Url, uri: &str) -> Option<Url> {
     if uri.is_empty() {
         return None;
     }
-    base.join(uri).ok()
+    base.join(uri).ok().filter(crate::services::is_http)
 }
 
 /// Split an attribute list on the commas that are not inside a quoted value, which is the one
@@ -244,7 +252,7 @@ fn parse_media(body: &str, base: &Url) -> Result<MediaPlaylist, AppError> {
         } else if line == ENDLIST_TAG {
             ended = true;
         } else if !line.starts_with('#')
-            && let Ok(url) = base.join(line)
+            && let Some(url) = joined(base, line)
         {
             segments.push(url);
         }

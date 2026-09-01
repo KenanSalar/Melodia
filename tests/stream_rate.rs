@@ -1,8 +1,8 @@
-//! Two stations at different sample rates through one deck, no audio device.
+//! Two stations at different sample rates through one voice, no audio device.
 //!
-//! A deck holds one converter per source and rebuilds it when it advances, so a second station is
+//! A voice holds one converter per source and rebuilds it when it advances, so a second station is
 //! resampled from the rate *it* reports. Under rodio that was one converter per *voice*, built out
-//! of whichever source reached the deck first and rebuilt only at a span boundary — so a source
+//! of whichever source reached the voice first and rebuilt only at a span boundary — so a source
 //! that reported no span pinned every station after the first to the first one's rate, for the life
 //! of the process.
 //!
@@ -11,13 +11,12 @@
 //! output samples per half period, which is the ratio of the two rates and nothing else. The span
 //! that used to be the mechanism is gone; the property it protected is what this still asserts.
 
-use std::num::NonZero;
-
-use melodia::player::audio::{ChannelCount, SampleRate};
 use melodia::player::decks::DECK_COUNT;
-use melodia::player::output::convert::Shape;
-use melodia::player::output::mixer::{self, MixerPull};
+use melodia::player::output::mixer;
 use melodia::player::prebuffer::{PrebufferSource, StreamShared};
+
+mod common;
+use common::{pull, shape};
 
 /// The device rate everything is resampled to.
 const OUT_RATE: u32 = 48_000;
@@ -47,19 +46,11 @@ const WINDOW: usize = 16_000;
 /// absorb the interpolated crossing and the partial runs at either end of the window.
 const TOLERANCE: f64 = 0.05;
 
-fn nz_u16(value: u16) -> ChannelCount {
-    NonZero::new(value).unwrap_or(NonZero::<u16>::MIN)
-}
-
-fn nz_u32(value: u32) -> SampleRate {
-    NonZero::new(value).unwrap_or(NonZero::<u32>::MIN)
-}
-
-/// A station already fully buffered and closed, so the deck plays it start to finish without ever
+/// A station already fully buffered and closed, so the voice plays it start to finish without ever
 /// reaching for the feed thread this test does not have.
 fn station(rate: u32, seconds: u32) -> PrebufferSource {
     let shared = StreamShared::new();
-    let (source, writer) = PrebufferSource::new(shared.clone(), nz_u16(CHANNELS), nz_u32(rate));
+    let (source, writer) = PrebufferSource::new(shared.clone(), shape(CHANNELS, rate));
 
     let total = usize::try_from(rate * seconds).unwrap_or(0);
     for index in 0..total {
@@ -72,12 +63,6 @@ fn station(rate: u32, seconds: u32) -> PrebufferSource {
     }
     shared.finish();
     source
-}
-
-fn pull(out: &mut MixerPull, count: usize) -> Vec<f32> {
-    let mut samples = vec![0.0; count];
-    out.fill(&mut samples);
-    samples
 }
 
 /// Mean output samples between polarity changes, or `None` if the window held no wave.
@@ -136,27 +121,23 @@ fn assert_reads_as(samples: &[f32], rate: u32, what: &str) {
 /// listener hears as the second station playing slow.
 #[test]
 fn a_second_station_plays_at_its_own_rate_rather_than_the_first_ones() -> std::io::Result<()> {
-    let device = Shape {
-        channels: nz_u16(CHANNELS),
-        rate: nz_u32(OUT_RATE),
-    };
-    let (mixer, mut out) = mixer::pair(DECK_COUNT, device);
-    let deck =
-        mixer.deck(0).ok_or_else(|| std::io::Error::other("a two-voice mixer has a deck 0"))?;
+    let (mixer, mut out) = mixer::pair(DECK_COUNT, shape(CHANNELS, OUT_RATE));
+    let voice =
+        mixer.voice(0).ok_or_else(|| std::io::Error::other("a two-voice mixer has a voice 0"))?;
 
-    deck.append(station(FIRST_RATE, STATION_SECONDS));
-    deck.play();
+    voice.append(station(FIRST_RATE, STATION_SECONDS));
+    voice.play();
 
     let _ = pull(&mut out, WARMUP);
     let first = pull(&mut out, WINDOW);
     assert_reads_as(&first, FIRST_RATE, "the first station");
 
-    // Drain what is left of it, so the second starts from the deck's own silence rather than
+    // Drain what is left of it, so the second starts from the voice's own silence rather than
     // mid-station. One second of source at either rate is one second of output.
     let drain = usize::try_from(OUT_RATE).unwrap_or(0);
     let _ = pull(&mut out, drain);
 
-    deck.append(station(SECOND_RATE, STATION_SECONDS));
+    voice.append(station(SECOND_RATE, STATION_SECONDS));
     let _ = pull(&mut out, WARMUP);
     let second = pull(&mut out, WINDOW);
     assert_reads_as(&second, SECOND_RATE, "the second station");

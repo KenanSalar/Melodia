@@ -1,3 +1,17 @@
+//! The playback engine: the decks, the epoch that orders every op against them, and the transport
+//! the action layer drives.
+//!
+//! **Everything here touches the decks lock or [`PlaybackEngine::deck_epoch`], and that is the
+//! reason it is one file.** Each of the transport ops, the fade gates, the gapless stage and the
+//! deferred pause/stop carries an argument about a race against one of the others, and those read
+//! as arguments only while they sit next to each other. What moved out is what could not be in one:
+//! the lock-free DSP setters ([`controls`]) and the trait a test mocks ([`player_backend`]).
+
+mod controls;
+mod player_backend;
+
+pub use player_backend::PlayerBackend;
+
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -11,177 +25,30 @@ use super::crossfade::{self, CrossfadeShared};
 use super::decks::{Deck, Decks, DeferredOp, lock_decks};
 use super::equalizer::{self, EqShared, EqSource};
 use super::file_decode::FileDecoder;
-use super::output::deck::Deck as Voice;
 use super::output::mixer::Mixer;
+use super::output::voice::Voice;
 use super::prebuffer::StreamShared;
-use super::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
+use super::replaygain::{ReplayGainShared, TrackReplayGain};
 use super::stream_source::PreparedStream;
 use super::visualizer::{VisualizerShared, VisualizerTap};
-
-/// Audio playback operations, so tests can stand a mock in for `PlaybackEngine`.
-pub trait PlayerBackend: Send + Sync {
-    fn play_media(
-        &self,
-        file_path: &str,
-        volume: f64,
-        speed: f64,
-        start_position_ms: Option<u64>,
-        baked_rg: TrackReplayGain,
-    ) -> Result<(), AppError>;
-    /// Start the next track on the idle deck and cross-fade over `fade_ms`
-    /// **media** milliseconds; the outgoing deck ends itself when its ramp lands.
-    fn begin_crossfade(
-        &self,
-        file_path: &str,
-        baked_rg: TrackReplayGain,
-        fade_ms: u64,
-        volume: f64,
-        speed: f64,
-    ) -> Result<(), AppError>;
-    fn resume(&self);
-    /// Fade to silence over `fade_ms` and then pause. `0` is an immediate pause.
-    /// `PlayerAction::Pause` always carries a length, so the action layer needs
-    /// no unconditional `pause()` beside this.
-    fn pause_with_fade(&self, fade_ms: u64);
-    fn stop(&self);
-    /// Fade to silence over `fade_ms` and then stop. `0` is an immediate stop.
-    fn stop_with_fade(&self, fade_ms: u64);
-    fn seek(&self, position_ms: u64);
-    fn set_volume(&self, volume: f64);
-    fn set_speed(&self, speed: f64);
-    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain);
-    /// Start the live stream staged under `generation`, hard-cutting whatever was playing.
-    ///
-    /// Takes no path and no `ReplayGain`: the stream was opened asynchronously long before this
-    /// runs (a socket has no business on the action executor's thread), and a live source carries
-    /// no per-track tags to bake. Fails when nothing is staged under that generation, which is how
-    /// a station superseded mid-connect is refused rather than played late.
-    fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError>;
-}
-
-/// Blanket impl so an `Arc<PlaybackEngine>` is itself a backend.
-impl<T: std::ops::Deref + Send + Sync> PlayerBackend for T
-where
-    T::Target: PlayerBackend,
-{
-    fn play_media(
-        &self,
-        file_path: &str,
-        volume: f64,
-        speed: f64,
-        start_position_ms: Option<u64>,
-        baked_rg: TrackReplayGain,
-    ) -> Result<(), AppError> {
-        (**self).play_media(file_path, volume, speed, start_position_ms, baked_rg)
-    }
-    fn begin_crossfade(
-        &self,
-        file_path: &str,
-        baked_rg: TrackReplayGain,
-        fade_ms: u64,
-        volume: f64,
-        speed: f64,
-    ) -> Result<(), AppError> {
-        (**self).begin_crossfade(file_path, baked_rg, fade_ms, volume, speed)
-    }
-    fn resume(&self) {
-        (**self).resume();
-    }
-    fn pause_with_fade(&self, fade_ms: u64) {
-        (**self).pause_with_fade(fade_ms);
-    }
-    fn stop(&self) {
-        (**self).stop();
-    }
-    fn stop_with_fade(&self, fade_ms: u64) {
-        (**self).stop_with_fade(fade_ms);
-    }
-    fn seek(&self, position_ms: u64) {
-        (**self).seek(position_ms);
-    }
-    fn set_volume(&self, volume: f64) {
-        (**self).set_volume(volume);
-    }
-    fn set_speed(&self, speed: f64) {
-        (**self).set_speed(speed);
-    }
-    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
-        (**self).preload_gapless(file_path, baked_rg);
-    }
-    fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError> {
-        (**self).play_stream(generation, volume)
-    }
-}
-
-impl PlayerBackend for PlaybackEngine {
-    fn play_media(
-        &self,
-        file_path: &str,
-        volume: f64,
-        speed: f64,
-        start_position_ms: Option<u64>,
-        baked_rg: TrackReplayGain,
-    ) -> Result<(), AppError> {
-        self.play_media(file_path, volume, speed, start_position_ms, baked_rg)
-    }
-    fn begin_crossfade(
-        &self,
-        file_path: &str,
-        baked_rg: TrackReplayGain,
-        fade_ms: u64,
-        volume: f64,
-        speed: f64,
-    ) -> Result<(), AppError> {
-        self.begin_crossfade(file_path, baked_rg, fade_ms, volume, speed)
-    }
-    fn resume(&self) {
-        self.resume();
-    }
-    fn pause_with_fade(&self, fade_ms: u64) {
-        self.pause_with_fade(fade_ms);
-    }
-    fn stop(&self) {
-        self.stop();
-    }
-    fn stop_with_fade(&self, fade_ms: u64) {
-        self.stop_with_fade(fade_ms);
-    }
-    fn seek(&self, position_ms: u64) {
-        self.seek(position_ms);
-    }
-    fn set_volume(&self, volume: f64) {
-        self.set_volume(volume);
-    }
-    fn set_speed(&self, speed: f64) {
-        self.set_speed(speed);
-    }
-    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
-        self.preload_gapless(file_path, baked_rg);
-    }
-    fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError> {
-        self.play_stream(generation, volume)
-    }
-}
 
 /// Result of checking what is on the active deck in a single lock acquisition.
 #[derive(Debug, PartialEq)]
 pub enum PlaybackCheck {
-    /// Queue depth dropped from 2 to 1 — the staged source took over.
+    /// The active voice dropped from two sources to one — the staged one took over.
     GaplessTransition,
     EndOfStream,
     Playing,
 }
 
 /// Pure half of [`PlaybackEngine::check_playback_state`], split out for testability.
-pub fn evaluate_playback_check(
-    was_gapless: bool,
-    queue_len: usize,
-    is_empty: bool,
-) -> PlaybackCheck {
-    if was_gapless && queue_len <= 1 {
+///
+/// `sources` is what the active voice still holds; the caller reads it once, under one lock.
+pub fn evaluate_playback_check(was_gapless: bool, sources: usize) -> PlaybackCheck {
+    if was_gapless && sources <= 1 {
         return PlaybackCheck::GaplessTransition;
     }
-    if is_empty {
+    if sources == 0 {
         return PlaybackCheck::EndOfStream;
     }
     PlaybackCheck::Playing
@@ -274,7 +141,7 @@ impl PlaybackEngine {
             // The wait is async and the landing is not: `Deck::clear` blocks until the audio
             // callback services it, twice over for `clear_all`, so it goes to the blocking pool
             // rather than parking an async worker for two device periods — or, against a card that
-            // has stopped asking for samples, for `output::deck::SERVICE_TIMEOUT` apiece. Sleeping
+            // has stopped asking for samples, for `output::voice::SERVICE_TIMEOUT` apiece. Sleeping
             // there instead would hold a pool slot for the whole fade, which is far longer.
             tokio::task::spawn_blocking(move || {
                 let guard = lock_decks(&decks);
@@ -389,7 +256,7 @@ impl PlaybackEngine {
         self.gapless_pending.store(false, Ordering::Release);
         if let Some(pos) = start_position_ms {
             log::debug!("Resuming playback at {pos}ms");
-            Self::seek_to(&decks.active().player, pos);
+            Self::seek_to(&decks.active().voice, pos);
         }
         Ok(())
     }
@@ -540,7 +407,7 @@ impl PlaybackEngine {
             return false;
         }
         let decks = self.lock_decks();
-        if decks.idle().player.is_empty() {
+        if decks.idle().voice.is_empty() {
             drop(decks);
             self.crossfade_armed.store(false, Ordering::Release);
             return false;
@@ -664,7 +531,7 @@ impl PlaybackEngine {
         // decks running silently at the ramp's zero gain while the UI reads
         // Paused — seeking a paused track is an ordinary thing to do.
         let decks = self.lock_decks();
-        Self::seek_to(&decks.active().player, position_ms);
+        Self::seek_to(&decks.active().voice, position_ms);
     }
 
     pub fn set_volume(&self, volume: f64) {
@@ -683,59 +550,6 @@ impl PlaybackEngine {
         // them scaled: the analyzer needs the factor to place band edges on the pitch you hear.
         // Sole writer of that cell — see `VisualizerShared::set_speed`.
         self.viz.set_speed(speed);
-    }
-
-    /// Enable / disable the graphic equalizer. Lock-free — every `EqSource`
-    /// (playing + preloaded) picks the change up on its next sample.
-    pub fn set_eq_enabled(&self, enabled: bool) {
-        self.eq.set_enabled(enabled);
-    }
-
-    /// Set a single band's gain (dB). Out-of-range indices are ignored.
-    pub fn set_eq_band(&self, index: usize, gain_db: f32) {
-        self.eq.set_gain(index, gain_db);
-    }
-
-    /// Replace all band gains at once (preset / reset / boot hydration).
-    pub fn set_eq_gains(&self, gains: &[f32]) {
-        self.eq.set_all_gains(gains);
-    }
-
-    /// Set the EQ preamp / master gain (dB).
-    pub fn set_eq_preamp(&self, preamp_db: f32) {
-        self.eq.set_preamp(preamp_db);
-    }
-
-    /// Enable / disable `ReplayGain`. Lock-free, like the EQ setters.
-    pub fn set_replaygain_enabled(&self, enabled: bool) {
-        self.rg.set_enabled(enabled);
-    }
-
-    pub fn set_replaygain_mode(&self, mode: RgMode) {
-        self.rg.set_mode(mode);
-    }
-
-    /// Set the `ReplayGain` preamp (dB).
-    pub fn set_replaygain_preamp(&self, preamp_db: f32) {
-        self.rg.set_preamp(preamp_db);
-    }
-
-    /// Enable / disable the static peak-based clip guard.
-    pub fn set_replaygain_prevent_clipping(&self, on: bool) {
-        self.rg.set_prevent_clipping(on);
-    }
-
-    /// Arm / disarm the visualizer's sample tap; while off it never touches the
-    /// ring. The UI does not come through here — it already holds the cell via
-    /// [`Self::visualizer`] for snapshotting and arms it off the Now-Playing
-    /// view's visibility. This spelling exists for the crossfade integration test.
-    pub fn set_visualizer_enabled(&self, on: bool) {
-        self.viz.set_enabled(on);
-    }
-
-    /// The visualizer's sample ring, for the UI-side analyzer to snapshot.
-    pub fn visualizer(&self) -> Arc<VisualizerShared> {
-        self.viz.clone()
     }
 
     /// Whether a gapless source is currently staged behind the playing one.
@@ -787,7 +601,7 @@ impl PlaybackEngine {
         // Never rejects a legitimate stage: the only caller passing a path is
         // the monitor's late preload, from its `Playing` branch, and
         // `play_media` appends under this same lock.
-        if deck.player.is_empty() {
+        if deck.voice.is_empty() {
             log::debug!("Dropping gapless preload of {path}: nothing left to follow");
             return;
         }
@@ -797,7 +611,7 @@ impl PlaybackEngine {
 
     /// Current playback position in milliseconds, on the media timeline.
     pub fn query_position(&self) -> u64 {
-        let position = self.lock_decks().active().player.position();
+        let position = self.lock_decks().active().voice.position();
         u64::try_from(position.as_millis()).unwrap_or(u64::MAX)
     }
 
@@ -810,46 +624,14 @@ impl PlaybackEngine {
     pub fn check_playback_state(&self) -> PlaybackCheck {
         let was_gapless = self.gapless_pending.load(Ordering::Acquire);
         let decks = self.lock_decks();
-        let player = &decks.active().player;
-        let queue_len = player.len();
-        let is_empty = player.is_empty();
+        let sources = decks.active().voice.len();
         drop(decks);
 
-        let result = evaluate_playback_check(was_gapless, queue_len, is_empty);
+        let result = evaluate_playback_check(was_gapless, sources);
         if result == PlaybackCheck::GaplessTransition {
             self.gapless_pending.store(false, Ordering::Release);
         }
         result
-    }
-
-    /// Snapshot the live crossfade settings for the playback monitor's decision.
-    pub fn crossfade_settings(&self) -> crossfade::CrossfadeSettings {
-        self.xf.snapshot()
-    }
-
-    /// Enable / disable crossfade. Lock-free, like the EQ setters.
-    pub fn set_crossfade_enabled(&self, enabled: bool) {
-        self.xf.set_enabled(enabled);
-    }
-
-    /// Set the crossfade length (ms), clamped to the supported range.
-    pub fn set_crossfade_duration_ms(&self, ms: u32) {
-        self.xf.set_duration_ms(ms);
-    }
-
-    /// Also crossfade when the user changes track manually.
-    pub fn set_crossfade_manual(&self, on: bool) {
-        self.xf.set_manual(on);
-    }
-
-    /// Leave same-album transitions gapless.
-    pub fn set_crossfade_skip_same_album(&self, on: bool) {
-        self.xf.set_skip_same_album(on);
-    }
-
-    /// Fade out on pause / user stop, fade back in on resume.
-    pub fn set_crossfade_fade_on_pause(&self, on: bool) {
-        self.xf.set_fade_on_pause(on);
     }
 
     /// Lock the decks mutex, recovering from poison rather than panicking.

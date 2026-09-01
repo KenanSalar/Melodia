@@ -24,9 +24,9 @@
 //! is enabled.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
-use super::dsp::{Generation, db_to_linear};
+use super::dsp::{AtomicF32, Generation, db_to_linear};
 
 /// Preamp (extra gain applied on top of the tag value) range, in decibels.
 /// Symmetric — unlike the EQ preamp — because the `ReplayGain` preamp is a
@@ -179,7 +179,7 @@ pub fn is_unity_gain(lin: f32) -> bool {
 pub struct ReplayGainShared {
     enabled: AtomicBool,
     mode: AtomicU8,
-    preamp_bits: AtomicU32,
+    preamp: AtomicF32,
     prevent_clipping: AtomicBool,
     generation: Generation,
 }
@@ -193,7 +193,7 @@ impl ReplayGainShared {
         Arc::new(Self {
             enabled: AtomicBool::new(false),
             mode: AtomicU8::new(RgMode::Album.to_u8()),
-            preamp_bits: AtomicU32::new(RG_DEFAULT_PREAMP_DB.to_bits()),
+            preamp: AtomicF32::new(RG_DEFAULT_PREAMP_DB),
             prevent_clipping: AtomicBool::new(true),
             generation: Generation::new(),
         })
@@ -215,7 +215,7 @@ impl ReplayGainShared {
     }
 
     pub fn set_preamp(&self, db: f32) {
-        self.preamp_bits.store(clamp_rg_preamp(db).to_bits(), Ordering::Relaxed);
+        self.preamp.store(clamp_rg_preamp(db));
         self.bump();
     }
 
@@ -236,7 +236,7 @@ impl ReplayGainShared {
 
     #[must_use]
     pub fn preamp(&self) -> f32 {
-        f32::from_bits(self.preamp_bits.load(Ordering::Relaxed))
+        self.preamp.load()
     }
 
     #[must_use]

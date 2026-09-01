@@ -383,7 +383,7 @@ fn parse(body: &str) -> Vec<StationEntry> {
         if let Some((key, value)) = line.split_once('=') {
             let value = value.trim();
             if let Some(index) = indexed_key(key.trim(), "File") {
-                if is_http_url(value) {
+                if crate::services::is_http_url(value) {
                     pls_slots.push((index, entries.len()));
                     entries.push(pending.claim(value.to_owned()));
                 }
@@ -403,7 +403,7 @@ fn parse(body: &str) -> Vec<StationEntry> {
             // through to the URL reading rather than being swallowed here.
         }
 
-        if is_http_url(line) {
+        if crate::services::is_http_url(line) {
             entries.push(pending.claim(line.to_owned()));
         }
     }
@@ -428,14 +428,6 @@ fn indexed_key(key: &str, prefix: &str) -> Option<u32> {
         return None;
     }
     index.parse().ok()
-}
-
-/// Whether `value` is an absolute `http`/`https` URL naming a host. A `file://` line in a playlist
-/// somebody sent you is not a station, and neither is a bare `http://` — this feeds
-/// [`StationEntry::url`] and on into the table, so it is the strictest of the reasons to parse
-/// rather than test a prefix.
-fn is_http_url(value: &str) -> bool {
-    crate::services::http_url(value).is_some()
 }
 
 #[cfg(test)]

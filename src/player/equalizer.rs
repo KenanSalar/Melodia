@@ -16,14 +16,14 @@
 //! counter. With all three inert the source is a bit-identical passthrough.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use biquad::{Biquad, Coefficients, DirectForm1, Hertz, Type};
 
 use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
 use super::crossfade::{self, FadeShared};
-use super::dsp::{Generation, db_to_linear, linear_to_db};
+use super::dsp::{AtomicF32, Generation, db_to_linear, linear_to_db};
 use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
 
 /// Number of equalizer bands.
@@ -158,12 +158,11 @@ pub fn preset_index(name: &str) -> Option<usize> {
 }
 
 /// Lock-free equalizer state: the control layer writes, the audio thread reads.
-/// Gains and preamp live as `f32` bit patterns; every mutation bumps the
-/// [`Generation`] so [`EqSource`] knows to recompute.
+/// Every mutation bumps the [`Generation`] so [`EqSource`] knows to recompute.
 pub struct EqShared {
     enabled: AtomicBool,
-    gains_bits: [AtomicU32; NUM_BANDS],
-    preamp_bits: AtomicU32,
+    gains: [AtomicF32; NUM_BANDS],
+    preamp: AtomicF32,
     generation: Generation,
 }
 
@@ -175,8 +174,8 @@ impl EqShared {
         let norm = normalize_gains(gains);
         Arc::new(Self {
             enabled: AtomicBool::new(enabled),
-            gains_bits: std::array::from_fn(|i| AtomicU32::new(norm[i].to_bits())),
-            preamp_bits: AtomicU32::new(0.0_f32.to_bits()),
+            gains: std::array::from_fn(|i| AtomicF32::new(norm[i])),
+            preamp: AtomicF32::new(0.0),
             generation: Generation::new(),
         })
     }
@@ -192,22 +191,22 @@ impl EqShared {
     }
 
     pub fn set_gain(&self, index: usize, db: f32) {
-        if let Some(cell) = self.gains_bits.get(index) {
-            cell.store(clamp_gain(db).to_bits(), Ordering::Relaxed);
+        if let Some(cell) = self.gains.get(index) {
+            cell.store(clamp_gain(db));
             self.bump();
         }
     }
 
     pub fn set_all_gains(&self, gains: &[f32]) {
         let norm = normalize_gains(gains);
-        for (cell, g) in self.gains_bits.iter().zip(norm) {
-            cell.store(g.to_bits(), Ordering::Relaxed);
+        for (cell, g) in self.gains.iter().zip(norm) {
+            cell.store(g);
         }
         self.bump();
     }
 
     pub fn set_preamp(&self, db: f32) {
-        self.preamp_bits.store(clamp_preamp(db).to_bits(), Ordering::Relaxed);
+        self.preamp.store(clamp_preamp(db));
         self.bump();
     }
 
@@ -218,17 +217,17 @@ impl EqShared {
 
     #[must_use]
     pub fn gain(&self, index: usize) -> f32 {
-        self.gains_bits.get(index).map_or(0.0, |c| f32::from_bits(c.load(Ordering::Relaxed)))
+        self.gains.get(index).map_or(0.0, AtomicF32::load)
     }
 
     #[must_use]
     pub fn gains(&self) -> [f32; NUM_BANDS] {
-        std::array::from_fn(|i| f32::from_bits(self.gains_bits[i].load(Ordering::Relaxed)))
+        std::array::from_fn(|i| self.gains[i].load())
     }
 
     #[must_use]
     pub fn preamp(&self) -> f32 {
-        f32::from_bits(self.preamp_bits.load(Ordering::Relaxed))
+        self.preamp.load()
     }
 
     #[must_use]

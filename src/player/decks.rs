@@ -19,8 +19,8 @@ use crate::error::AppError;
 
 use super::audio::AudioSource;
 use super::crossfade::FadeShared;
-use super::output::deck::Deck as Voice;
 use super::output::mixer::Mixer;
+use super::output::voice::Voice;
 
 /// How many voices the player alternates between. The visualizer keeps one sample ring per deck,
 /// so the two counts have to agree.
@@ -28,7 +28,7 @@ pub const DECK_COUNT: usize = 2;
 
 /// One voice on the shared mixer, plus the crossfade ramp cell every source appended to it reads.
 pub struct Deck {
-    pub player: Arc<Voice>,
+    pub voice: Arc<Voice>,
     pub fade: Arc<FadeShared>,
     /// Which of the visualizer's rings sources on this deck write into.
     pub viz_slot: usize,
@@ -40,10 +40,10 @@ impl Deck {
     where
         S: AudioSource + 'static,
     {
-        self.player.set_volume(volume);
-        self.player.set_speed(speed);
-        self.player.append(source);
-        self.player.play();
+        self.voice.set_volume(volume);
+        self.voice.set_speed(speed);
+        self.voice.append(source);
+        self.voice.play();
     }
 
     /// Queue a source *behind* whatever this deck is already playing — the gapless stage. A voice
@@ -55,12 +55,12 @@ impl Deck {
     where
         S: AudioSource + 'static,
     {
-        self.player.append(build(self));
+        self.voice.append(build(self));
     }
 
     /// Drop everything on this deck and disarm its ramp.
     pub fn reset(&self) {
-        self.player.clear();
+        self.voice.clear();
         self.fade.reset();
     }
 
@@ -69,7 +69,7 @@ impl Deck {
     /// A paused deck is still held for control but is never pulled, so a ramp armed on it can
     /// never advance; an empty one has nothing to fade at all.
     pub fn busy(&self) -> bool {
-        !self.player.is_empty() && !self.player.is_paused()
+        !self.voice.is_empty() && !self.voice.is_paused()
     }
 }
 
@@ -89,12 +89,12 @@ impl Decks {
     pub fn connect(mixer: &Mixer) -> Result<Self, AppError> {
         let mut decks = Vec::with_capacity(DECK_COUNT);
         for slot in 0..DECK_COUNT {
-            let player = mixer.deck(slot).ok_or_else(|| {
+            let voice = mixer.voice(slot).ok_or_else(|| {
                 AppError::Player(format!("The mixer has no voice {slot} for a deck"))
             })?;
-            player.pause();
+            voice.pause();
             decks.push(Deck {
-                player,
+                voice,
                 fade: FadeShared::idle(),
                 viz_slot: slot,
             });
@@ -124,26 +124,26 @@ impl Decks {
 
     pub fn pause_all(&self) {
         for deck in &self.decks {
-            deck.player.pause();
+            deck.voice.pause();
         }
     }
 
     pub fn play_all(&self) {
         for deck in &self.decks {
-            deck.player.play();
+            deck.voice.play();
         }
     }
 
     pub fn set_volume_all(&self, volume: f64) {
         for deck in &self.decks {
-            deck.player.set_volume(volume);
+            deck.voice.set_volume(volume);
         }
     }
 
     /// Both decks must run at the same speed or a crossfade would drift.
     pub fn set_speed_all(&self, speed: f64) {
         for deck in &self.decks {
-            deck.player.set_speed(speed);
+            deck.voice.set_speed(speed);
         }
     }
 
@@ -176,7 +176,7 @@ impl Decks {
     {
         let target = 1 - self.active;
         // The target deck may still hold a previous crossfade's outgoing track.
-        self.decks[target].player.clear();
+        self.decks[target].voice.clear();
         let source = build(&self.decks[target]);
         self.decks[target].fade.arm(Some(0.0), 1.0, fade_ms, false);
         // Both ramps armed before the incoming deck is *started*, because the sum is unclamped: a

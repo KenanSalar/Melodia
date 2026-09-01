@@ -92,10 +92,10 @@ pub fn announce_warm(ui: &AppWindow) {
 
 /// Decode `paths` off the UI thread, then run `then` and announce the tier on the UI thread.
 ///
-/// Both fill paths owe this exact pair and each had its own copy. The decode goes to
-/// `spawn_blocking` because it is a decode; the announce has to be back on the UI thread and has
-/// to re-check `section_active`, since a leave landing after the prewarm returned has handed the
-/// buffers back and bumping the generation over an emptied tier is what the gate exists to stop.
+/// Both fill paths owe this exact pair. The decode goes to `spawn_blocking` because it is a
+/// decode; the announce has to be back on the UI thread and has to re-check `section_active`,
+/// since a leave landing after the prewarm returned has handed the buffers back, and bumping the
+/// generation over an emptied tier is what the gate exists to stop.
 /// A `JoinError` reads the same as a released tier: we do not know, so we do not announce.
 ///
 /// `then` is whatever the caller owes on that same tick — Browse repaints its grid when a logo

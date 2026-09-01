@@ -15,17 +15,17 @@
 //! one keeps pulling. See [`drive_until`].
 
 use std::io::Write;
-use std::num::NonZero;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use melodia::player::audio::{ChannelCount, SampleRate};
 use melodia::player::backend::PlaybackEngine;
 use melodia::player::decks::DECK_COUNT;
-use melodia::player::output::convert::Shape;
 use melodia::player::output::mixer::{self, MixerPull};
 use melodia::player::replaygain::TrackReplayGain;
+
+mod common;
+use common::shape;
 
 const RATE: u32 = 44_100;
 const CHANNELS: u16 = 2;
@@ -79,14 +79,6 @@ fn frames_for_ms(ms: u64) -> usize {
     (ms * RATE as usize) / 1_000
 }
 
-fn nz_u16(v: u16) -> ChannelCount {
-    NonZero::new(v).unwrap_or(NonZero::<u16>::MIN)
-}
-
-fn nz_u32(v: u32) -> SampleRate {
-    NonZero::new(v).unwrap_or(NonZero::<u32>::MIN)
-}
-
 /// Write a 16-bit PCM WAV of constant amplitude. Hand-rolled — the project has
 /// no WAV encoder dependency and the canonical header is 44 bytes.
 /// `left` and `right` are separate so a fixture can tell its channels apart — the crossfade cases
@@ -127,14 +119,9 @@ fn pcm_sample(amplitude: f32) -> i16 {
     (amplitude * f32::from(i16::MAX)) as i16
 }
 
-/// Pull `frames` interleaved frames as the output callback would.
-///
-/// The mixer never ends — an idle deck contributes nothing rather than stopping the block — so a
-/// short read is not something a caller has to handle.
+/// [`common::pull`] in frames rather than samples, this suite counting the former throughout.
 fn fill(src: &mut MixerPull, frames: usize) -> Vec<f32> {
-    let mut block = vec![0.0; frames * usize::from(CHANNELS)];
-    src.fill(&mut block);
-    block
+    common::pull(src, frames * usize::from(CHANNELS))
 }
 
 /// Pull `frames` frames and return the per-frame amplitude of channel 0.
@@ -249,11 +236,7 @@ fn fixture() -> std::io::Result<Fixture> {
 /// The `Mixer` itself is dropped on the way out: the decks are reference-counted, so `Decks` keeps
 /// the two it took and the puller keeps the voices behind them.
 fn player() -> std::io::Result<(Arc<PlaybackEngine>, MixerPull)> {
-    let shape = Shape {
-        channels: nz_u16(CHANNELS),
-        rate: nz_u32(RATE),
-    };
-    let (mixer, pull) = mixer::pair(DECK_COUNT, shape);
+    let (mixer, pull) = mixer::pair(DECK_COUNT, shape(CHANNELS, RATE));
     let player = PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())
         .map_err(std::io::Error::other)?;
     Ok((Arc::new(player), pull))

@@ -11,7 +11,7 @@
 //! [`AudioSource::sample_rate`] meaning the source's own rate at every level, so frames pulled are
 //! media frames and the clock needs no conversion.
 
-use super::super::audio::{AudioSource, ChannelCount, Sample, SampleRate};
+use super::super::audio::{AudioSource, Sample, Shape};
 
 /// What one [`Converter::fill`] did.
 ///
@@ -23,13 +23,6 @@ pub struct Filled {
     pub samples: usize,
     /// Frames taken from the source, on its own timeline. This is what the clock counts.
     pub source_frames: u64,
-}
-
-/// One source's rate and channel count.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Shape {
-    pub channels: ChannelCount,
-    pub rate: SampleRate,
 }
 
 pub struct Converter {

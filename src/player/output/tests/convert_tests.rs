@@ -4,16 +4,9 @@
 //! long a track is: a ratio that rounds the wrong way drifts against the clock counting the frames
 //! it consumed, and the two are read against each other by every crossfade.
 
-use super::{Converter, Filled, Shape};
+use super::{Converter, Filled};
 use crate::player::audio::AudioSource;
-use crate::player::tests::helpers::{TestSource, bits, nz_u16, nz_u32};
-
-fn shape(channels: u16, rate: u32) -> Shape {
-    Shape {
-        channels: nz_u16(channels),
-        rate: nz_u32(rate),
-    }
-}
+use crate::player::tests::helpers::{TestSource, bits, shape};
 
 /// `count` distinct, exactly representable samples, so an output can be traced back to its input.
 fn ramp(count: usize) -> Vec<f32> {

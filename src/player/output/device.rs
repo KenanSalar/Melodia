@@ -28,8 +28,8 @@ use cpal::{FromSample, SizedSample};
 
 use crate::error::AppError;
 
-use super::super::audio::{ChannelCount, Sample, SampleRate};
-use super::convert::Shape;
+use super::super::audio::{ChannelCount, Sample, SampleRate, Shape};
+
 use super::mixer::MixerPull;
 
 /// Device frames the host is asked to hand over at a time.

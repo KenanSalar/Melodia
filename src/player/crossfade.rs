@@ -11,7 +11,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 
-use super::dsp::Generation;
+use super::dsp::{AtomicF32, Generation};
 use crate::entities::track::TrackSummary;
 
 /// Shortest crossfade the user can select.
@@ -137,9 +137,9 @@ pub struct FadeCmd {
 pub struct FadeShared {
     generation: Generation,
     kind: AtomicU8,
-    /// `f32` bit pattern, or `f32::NAN` for [`FadeCmd::start`] = `None`.
-    start_bits: AtomicU32,
-    target_bits: AtomicU32,
+    /// `f32::NAN` stands for [`FadeCmd::start`] = `None`.
+    start: AtomicF32,
+    target: AtomicF32,
     ramp_ms: AtomicU64,
     end_on_complete: AtomicBool,
 }
@@ -152,8 +152,8 @@ impl FadeShared {
         Arc::new(Self {
             generation: Generation::new(),
             kind: AtomicU8::new(KIND_IDLE),
-            start_bits: AtomicU32::new(f32::NAN.to_bits()),
-            target_bits: AtomicU32::new(1.0_f32.to_bits()),
+            start: AtomicF32::new(f32::NAN),
+            target: AtomicF32::new(1.0),
             ramp_ms: AtomicU64::new(0),
             end_on_complete: AtomicBool::new(false),
         })
@@ -166,8 +166,8 @@ impl FadeShared {
 
     /// Arm a ramp. Replaces any ramp already in flight on this deck.
     pub fn arm(&self, start: Option<f32>, target: f32, ramp_ms: u64, end_on_complete: bool) {
-        self.start_bits.store(start.unwrap_or(f32::NAN).to_bits(), Ordering::Relaxed);
-        self.target_bits.store(target.to_bits(), Ordering::Relaxed);
+        self.start.store(start.unwrap_or(f32::NAN));
+        self.target.store(target);
         self.ramp_ms.store(ramp_ms, Ordering::Relaxed);
         self.end_on_complete.store(end_on_complete, Ordering::Relaxed);
         self.kind.store(KIND_RAMP, Ordering::Relaxed);
@@ -192,10 +192,10 @@ impl FadeShared {
         if self.kind.load(Ordering::Relaxed) != KIND_RAMP {
             return None;
         }
-        let start = f32::from_bits(self.start_bits.load(Ordering::Relaxed));
+        let start = self.start.load();
         Some(FadeCmd {
             start: if start.is_nan() { None } else { Some(start) },
-            target: f32::from_bits(self.target_bits.load(Ordering::Relaxed)),
+            target: self.target.load(),
             ramp_ms: self.ramp_ms.load(Ordering::Relaxed),
             end_on_complete: self.end_on_complete.load(Ordering::Relaxed),
         })

@@ -7,24 +7,22 @@ use std::sync::Arc;
 
 use super::{Mixer, pair};
 use crate::error::AppError;
-use crate::player::output::convert::Shape;
-use crate::player::output::deck::Deck;
-use crate::player::tests::helpers::{TestSource, bits, nz_u16, nz_u32};
+use crate::player::audio::Shape;
+use crate::player::output::voice::Voice;
+use crate::player::tests::helpers::{TestSource, bits, shape};
 
 const RATE: u32 = 48_000;
 const VOICES: usize = 2;
 
-fn shape(channels: u16) -> Shape {
-    Shape {
-        channels: nz_u16(channels),
-        rate: nz_u32(RATE),
-    }
+/// `channels` at [`RATE`], which every device in this suite runs at.
+fn device(channels: u16) -> Shape {
+    shape(channels, RATE)
 }
 
-fn deck_at(mixer: &Mixer, index: usize) -> Result<Arc<Deck>, AppError> {
+fn voice_at(mixer: &Mixer, index: usize) -> Result<Arc<Voice>, AppError> {
     mixer
-        .deck(index)
-        .ok_or_else(|| AppError::Player(format!("a {VOICES}-voice mixer has no deck {index}")))
+        .voice(index)
+        .ok_or_else(|| AppError::Player(format!("a {VOICES}-voice mixer has no voice {index}")))
 }
 
 fn tone(level: f32, frames: usize, channels: u16) -> TestSource {
@@ -36,9 +34,9 @@ fn tone(level: f32, frames: usize, channels: u16) -> TestSource {
 /// is a bug upstream that has to stay audible rather than be quietly squashed.
 #[test]
 fn two_decks_sum_without_a_ceiling() -> Result<(), AppError> {
-    let (mixer, mut pull) = pair(VOICES, shape(1));
+    let (mixer, mut pull) = pair(VOICES, device(1));
     for (index, level) in [0.8, 0.7].into_iter().enumerate() {
-        deck_at(&mixer, index)?.append(tone(level, 16, 1));
+        voice_at(&mixer, index)?.append(tone(level, 16, 1));
     }
 
     let mut out = vec![0.0; 8];
@@ -50,9 +48,9 @@ fn two_decks_sum_without_a_ceiling() -> Result<(), AppError> {
 
 #[test]
 fn one_deck_alone_reaches_the_block_untouched() -> Result<(), AppError> {
-    let (mixer, mut pull) = pair(VOICES, shape(1));
+    let (mixer, mut pull) = pair(VOICES, device(1));
     let input = [0.25, -0.5, 0.125, -0.0];
-    deck_at(&mixer, 0)?.append(TestSource::new(input.to_vec(), 1, RATE));
+    voice_at(&mixer, 0)?.append(TestSource::new(input.to_vec(), 1, RATE));
 
     let mut out = vec![0.0; 4];
     pull.fill(&mut out);
@@ -63,10 +61,10 @@ fn one_deck_alone_reaches_the_block_untouched() -> Result<(), AppError> {
 
 #[test]
 fn a_paused_deck_contributes_nothing() -> Result<(), AppError> {
-    let (mixer, mut pull) = pair(VOICES, shape(1));
-    deck_at(&mixer, 0)?.append(tone(0.5, 16, 1));
+    let (mixer, mut pull) = pair(VOICES, device(1));
+    voice_at(&mixer, 0)?.append(tone(0.5, 16, 1));
 
-    let paused = deck_at(&mixer, 1)?;
+    let paused = voice_at(&mixer, 1)?;
     paused.append(tone(0.5, 16, 1));
     paused.pause();
 
@@ -79,7 +77,7 @@ fn a_paused_deck_contributes_nothing() -> Result<(), AppError> {
 
 #[test]
 fn nothing_playing_reads_as_silence_rather_than_ending() {
-    let (_mixer, mut pull) = pair(VOICES, shape(2));
+    let (_mixer, mut pull) = pair(VOICES, device(2));
 
     let mut out = vec![1.0; 16];
     pull.fill(&mut out);
@@ -91,8 +89,8 @@ fn nothing_playing_reads_as_silence_rather_than_ending() {
 /// wherever a deck has nothing to contribute.
 #[test]
 fn the_block_is_cleared_before_the_decks_add_into_it() -> Result<(), AppError> {
-    let (mixer, mut pull) = pair(VOICES, shape(1));
-    deck_at(&mixer, 0)?.append(tone(0.25, 4, 1));
+    let (mixer, mut pull) = pair(VOICES, device(1));
+    voice_at(&mixer, 0)?.append(tone(0.25, 4, 1));
 
     let mut out = vec![9.0; 8];
     pull.fill(&mut out);
@@ -107,8 +105,8 @@ fn the_block_is_cleared_before_the_decks_add_into_it() -> Result<(), AppError> {
 /// buffer it reuses and would otherwise pass the last block's samples through.
 #[test]
 fn a_partial_trailing_frame_is_silenced_rather_than_half_filled() -> Result<(), AppError> {
-    let (mixer, mut pull) = pair(VOICES, shape(2));
-    deck_at(&mixer, 0)?.append(tone(0.5, 8, 2));
+    let (mixer, mut pull) = pair(VOICES, device(2));
+    voice_at(&mixer, 0)?.append(tone(0.5, 8, 2));
 
     let mut out = vec![9.0; 5];
     pull.fill(&mut out);
@@ -120,6 +118,6 @@ fn a_partial_trailing_frame_is_silenced_rather_than_half_filled() -> Result<(), 
 
 #[test]
 fn a_deck_past_the_voice_count_is_not_there() {
-    let (mixer, _pull) = pair(VOICES, shape(2));
-    assert!(mixer.deck(VOICES).is_none());
+    let (mixer, _pull) = pair(VOICES, device(2));
+    assert!(mixer.voice(VOICES).is_none());
 }

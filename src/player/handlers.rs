@@ -306,7 +306,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             // Single lock acquisition to avoid TOCTOU between gapless and EOS checks
             match engine.check_playback_state() {
                 PlaybackCheck::GaplessTransition => {
-                    emit_and_execute(&engine, &db, &player_state, &sinks, |state| {
+                    emit_and_execute(&*engine, &db, &player_state, &sinks, |state| {
                         let mut actions = Vec::with_capacity(2);
 
                         // Update play count for the track that just finished
@@ -343,7 +343,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     // track" mode is armed, disarm it and stop instead). See
                     // `PlayerState::build_end_of_stream_actions`.
                     emit_and_execute(
-                        &engine,
+                        &*engine,
                         &db,
                         &player_state,
                         &sinks,
@@ -401,7 +401,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         // current track and the position under the exec lock, so
                         // anything that landed since the decision above can't be
                         // clobbered.
-                        emit_and_execute(&engine, &db, &player_state, &sinks, |state| {
+                        emit_and_execute(&*engine, &db, &player_state, &sinks, |state| {
                             state.build_crossfade_actions(decision)
                         });
                     } else if let Some((path, rg)) = late_preload {

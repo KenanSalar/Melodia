@@ -123,7 +123,13 @@ impl RadioUi {
         self.section.mark_dirty();
     }
 
-    /// Give the hero's decode tier back. The Slint image slots are the leave's own.
+    /// Give the hero's decode tier back, and walk the arena after it. The Slint image slots are
+    /// the leave's own.
+    ///
+    /// **The trim is part of the job, not a caller's follow-up**, which is why the one leave that
+    /// releases no tier (`callbacks::lifecycle`) has to ask for it separately. Every caller is
+    /// already on the blocking pool, where a `malloc_trim` may run; none may call this from the
+    /// event loop.
     pub(super) fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
         crate::tasks::heap_trim::trim();
