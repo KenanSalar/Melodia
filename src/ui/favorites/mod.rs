@@ -28,8 +28,6 @@ mod tabs;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
-use slint::ComponentHandle as _;
-
 use crate::entities::track::FavoriteStats;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::artists::ArtistsUi;
@@ -90,20 +88,6 @@ pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi>
     }
     if let Some(vs) = cx.view_state {
         seed_tab(cx.app, &favorites_ui, vs.favorites_tab);
-    }
-    // The Artists tab's card subtitle is a translated plural Rust renders through
-    // `Favorites.artist-favorite-subtitle` and stores, so a language switch leaves it behind.
-    let fav = favorites_ui.clone();
-    if let Err(e) =
-        crate::ui::locale_refresh::on_locale_changed(cx.state, cx.app.as_weak(), move |ui| {
-            if fav.section_active() {
-                grids::apply_filtered_grids_now(ui, &fav);
-            } else {
-                fav.mark_dirty();
-            }
-        })
-    {
-        log::warn!("favorites locale refresher: {e}");
     }
     favorites_ui
 }

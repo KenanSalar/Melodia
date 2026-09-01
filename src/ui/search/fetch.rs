@@ -124,10 +124,9 @@ async fn prewarm_result_covers(search_ui: &Arc<SearchUi>, results: &SearchResult
 }
 
 /// Re-derive everything visible from `last_results` — no DB hit, the apply step owning the
-/// slice, sort and label logic. Three callers, and the name follows the operation rather than
-/// any one of them: the `show-all-tracks` toggle and the sort want the *current* flag applied
-/// to unchanged results, and a language switch wants the strips' translated subtitles rendered
-/// again in the language now active.
+/// slice, sort and label logic. Named for the operation rather than for the
+/// `show-all-tracks` toggle it started as: the sort is the other caller, and it re-derives
+/// the two strips and the Top Result along with the Songs slice.
 pub fn reapply_cached_results(search_ui: &Arc<SearchUi>, weak: &Weak<AppWindow>) {
     let Some(results) = search_ui.state().last_results.lock().clone() else {
         return;

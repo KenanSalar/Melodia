@@ -99,12 +99,13 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
             log::warn!("select_bundled_translation({code}): {e:?}");
         }
 
-        // The switch above re-resolves every live `@tr` binding, and reaches nothing Rust
-        // rendered through a trampoline and stored. The hero band is the one such surface
-        // reachable from the window alone; the rest need their view handles, which don't
-        // exist yet when this is wired — `install_locale` runs ahead of `install_views` so
-        // the first frame resolves in the persisted language.
-        crate::ui::hero_chips::republish_for_locale(&ui);
+        // The switch above reaches every live `@tr` binding and nothing Rust rendered
+        // through a trampoline and stored. The band's chips are the one such surface that
+        // can outlive the page that published them — `clear_if_stale` deliberately keeps
+        // them while Now Playing covers a band, and clicking Settings from there leaves
+        // no gate edge to hand them back — so drop them rather than re-rendering: no band
+        // is mounted here, and every section-enter re-fetches and republishes.
+        crate::ui::hero_chips::clear(&ui);
         s.locale_changed_tx.send_modify(|v| *v = v.wrapping_add(1));
 
         // Keep `language-idx` in sync defensively — the dropdown's two-way

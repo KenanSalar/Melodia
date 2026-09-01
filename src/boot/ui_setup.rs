@@ -300,6 +300,18 @@ pub fn install_library_settings_and_friends(
     ui::settings::diagnostics::install(app, state, &notifications);
     ui::settings::settings_page::install(app, state);
     ui::hero_chips::install(app);
+    // The stack is the one surface a language switch can't reach on its own: its rows carry
+    // strings Rust resolved once, they outlive every navigation, and the file-watching
+    // toggle two cards from the language picker raises one. Wired here rather than inline in
+    // the locale callback because that runs before this handle exists.
+    {
+        let notifications = notifications.clone();
+        if let Err(e) = ui::locale_refresh::on_locale_changed(state, app.as_weak(), move |ui| {
+            notifications.refresh_for_locale(ui);
+        }) {
+            log::warn!("notifications locale refresher: {e}");
+        }
+    }
     Ok(notifications)
 }
 
@@ -555,7 +567,7 @@ pub fn install_rescan_notice_subscriber(
     notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
 ) -> Result<(), melodia::error::AppError> {
     use melodia::Settings;
-    use ui::shell::notifications::NotificationParams;
+    use ui::shell::notifications::RowText;
 
     let mut rx = state.rescan_notice_tx.subscribe();
     slint::spawn_local(async_compat::Compat::new(async move {
@@ -565,13 +577,12 @@ pub fn install_rescan_notice_subscriber(
             }
             let _ = rx.borrow_and_update();
             let Some(ui) = weak.upgrade() else { break };
-            let g = ui.global::<Settings>();
-            notifications.show(NotificationParams {
-                variant: "info".into(),
-                title: g.invoke_library_resyncing_title(),
-                message: g.invoke_library_resyncing_message(),
-                action_label: slint::SharedString::default(),
-                action_kind: "library-resyncing".into(),
+            notifications.show_localized(&ui, "info", "library-resyncing", |ui| {
+                let g = ui.global::<Settings>();
+                RowText::plain(
+                    g.invoke_library_resyncing_title(),
+                    g.invoke_library_resyncing_message(),
+                )
             });
         }
     }))
@@ -590,7 +601,7 @@ pub fn install_audio_device_lost_subscriber(
     notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
 ) -> Result<(), melodia::error::AppError> {
     use melodia::Settings;
-    use ui::shell::notifications::NotificationParams;
+    use ui::shell::notifications::RowText;
 
     let mut rx = state.audio_device_lost_tx.subscribe();
     slint::spawn_local(async_compat::Compat::new(async move {
@@ -600,13 +611,12 @@ pub fn install_audio_device_lost_subscriber(
             }
             let _ = rx.borrow_and_update();
             let Some(ui) = weak.upgrade() else { break };
-            let g = ui.global::<Settings>();
-            notifications.show(NotificationParams {
-                variant: "warning".into(),
-                title: g.invoke_audio_device_lost_title(),
-                message: g.invoke_audio_device_lost_message(),
-                action_label: slint::SharedString::default(),
-                action_kind: "audio-device-lost".into(),
+            notifications.show_localized(&ui, "warning", "audio-device-lost", |ui| {
+                let g = ui.global::<Settings>();
+                RowText::plain(
+                    g.invoke_audio_device_lost_title(),
+                    g.invoke_audio_device_lost_message(),
+                )
             });
         }
     }))
@@ -626,7 +636,7 @@ pub fn install_toast_bridge(
 ) -> Result<(), melodia::error::AppError> {
     use melodia::Settings;
     use melodia::services::toast::{self, ToastKind, ToastRequest};
-    use ui::shell::notifications::NotificationParams;
+    use ui::shell::notifications::{NotificationParams, RowText};
 
     // First installer owns delivery; a second call (shouldn't happen) is a no-op.
     let Some(mut rx) = toast::init() else {
@@ -638,16 +648,17 @@ pub fn install_toast_bridge(
             let g = ui.global::<Settings>();
             match kind {
                 ToastKind::PlaybackFailed | ToastKind::OperationFailed => {
-                    let title = match kind {
-                        ToastKind::PlaybackFailed => g.invoke_toast_playback_error_title(),
-                        _ => g.invoke_toast_operation_failed_title(),
-                    };
-                    notifications.show(NotificationParams {
-                        variant: "error".into(),
-                        title,
-                        message: detail.into(),
-                        action_label: slint::SharedString::default(),
-                        action_kind: "error".into(),
+                    // Only the title is ours to re-render; the detail is a Rust error
+                    // string that was never translated in the first place.
+                    notifications.show_localized(&ui, "error", "error", move |ui| {
+                        let g = ui.global::<Settings>();
+                        RowText::plain(
+                            match kind {
+                                ToastKind::PlaybackFailed => g.invoke_toast_playback_error_title(),
+                                _ => g.invoke_toast_operation_failed_title(),
+                            },
+                            detail.clone().into(),
+                        )
                     });
                 }
                 // The result of a user-triggered sweep, so it auto-dismisses
@@ -668,12 +679,12 @@ pub fn install_toast_bridge(
                 // detail, and it sticks because it asks the user to do
                 // something rather than reporting what happened.
                 ToastKind::RestartRequired => {
-                    notifications.show(NotificationParams {
-                        variant: "warning".into(),
-                        title: g.invoke_toast_restart_required_title(),
-                        message: g.invoke_toast_restart_required_message(),
-                        action_label: slint::SharedString::default(),
-                        action_kind: "warning".into(),
+                    notifications.show_localized(&ui, "warning", "warning", |ui| {
+                        let g = ui.global::<Settings>();
+                        RowText::plain(
+                            g.invoke_toast_restart_required_title(),
+                            g.invoke_toast_restart_required_message(),
+                        )
                     });
                 }
                 ToastKind::LoveSync => {

@@ -138,37 +138,7 @@ pub enum ChipOwner {
     Station,
 }
 
-/// The facts a band was built from, kept beside the strings they rendered to so a locale
-/// switch can re-render them. Rendered chips are exactly what goes stale:
-/// `select_bundled_translation` dirties a property every live `@tr` binding reads, and a
-/// `SharedString` Rust already stored reads nothing.
-#[derive(Clone, Debug, PartialEq)]
-enum ChipSource {
-    Album(AlbumStats, Option<String>),
-    Artist(ArtistStats, Option<(i32, i32)>),
-    Genre(GenreStats, HeroFold),
-    Playlist(PlaylistStats, HeroFold),
-    Station(StationFacts),
-    Favorites(FavoritesFacts),
-    RecentlyPlayed(RecentlyPlayedFacts),
-}
-
-impl ChipSource {
-    fn render(&self, labels: &impl ChipLabels) -> Vec<SharedString> {
-        match self {
-            Self::Album(album, genre) => album_chips(labels, album, genre.as_deref()),
-            Self::Artist(artist, years) => artist_chips(labels, artist, *years),
-            Self::Genre(genre, fold) => genre_chips(labels, genre, *fold),
-            Self::Playlist(playlist, fold) => playlist_chips(labels, playlist, *fold),
-            Self::Station(facts) => station_chips(facts),
-            Self::Favorites(facts) => favorites_chips(labels, facts),
-            Self::RecentlyPlayed(facts) => recently_played_chips(labels, facts),
-        }
-    }
-}
-
-/// The published chips, what they were built from, who published them, and the width they
-/// were chunked against.
+/// The published chips, who published them, and the width they were chunked against.
 ///
 /// UI-thread state, so a `thread_local` rather than something threaded through six call
 /// sites that only hold an `&AppWindow`. The width deliberately survives a hero swap: the
@@ -176,7 +146,6 @@ impl ChipSource {
 struct PublishedChips {
     width: f32,
     owner: Option<ChipOwner>,
-    source: Option<ChipSource>,
     chips: Vec<SharedString>,
     /// Row lengths of the split last handed to Slint — see
     /// [`chips::split_shape`] for what it buys and why the chips aren't in it.
@@ -188,7 +157,6 @@ thread_local! {
         RefCell::new(PublishedChips {
             width: 0.0,
             owner: None,
-            source: None,
             chips: Vec::new(),
             shape: Vec::new(),
         })
@@ -215,31 +183,14 @@ pub fn install(ui: &AppWindow) {
 /// of these land while a *different* hero owns the band and the last to finish wins. A
 /// view that drops its publish here re-publishes on section-enter, which always
 /// re-fetches — the contract `apply_detail_artwork` holds `hero_backdrop::apply` to.
-fn publish(ui: &AppWindow, owner: ChipOwner, source: ChipSource, section_active: bool) {
+fn publish(ui: &AppWindow, owner: ChipOwner, chips: Vec<SharedString>, section_active: bool) {
     if !section_active {
         return;
     }
-    let chips = source.render(&ui.global::<HeroChips>());
     PUBLISHED.with_borrow_mut(|p| {
         p.owner = Some(owner);
-        p.source = Some(source);
         p.chips = chips;
     });
-    write_rows(ui, true);
-}
-
-/// Re-render the band in the language now active, leaving the facts alone.
-///
-/// A locale switch re-resolves every live `@tr` binding, but these chips are strings Rust
-/// built through the trampolines above and handed to a model, so nothing re-reads them —
-/// without this the band keeps the language it was published in until some fetch happens to
-/// replace it.
-pub fn republish_for_locale(ui: &AppWindow) {
-    let Some(source) = PUBLISHED.with_borrow(|p| p.source.clone()) else {
-        return;
-    };
-    let chips = source.render(&ui.global::<HeroChips>());
-    PUBLISHED.with_borrow_mut(|p| p.chips = chips);
     write_rows(ui, true);
 }
 
@@ -252,7 +203,6 @@ pub fn republish_for_locale(ui: &AppWindow) {
 pub fn clear(ui: &AppWindow) {
     PUBLISHED.with_borrow_mut(|p| {
         p.owner = None;
-        p.source = None;
         p.chips.clear();
     });
     write_rows(ui, true);
@@ -397,8 +347,8 @@ pub fn publish_album(
     genre: Option<&str>,
     section_active: bool,
 ) {
-    let source = ChipSource::Album(album.clone(), genre.map(ToOwned::to_owned));
-    publish(ui, ChipOwner::Album(album.id), source, section_active);
+    let chips = album_chips(&ui.global::<HeroChips>(), album, genre);
+    publish(ui, ChipOwner::Album(album.id), chips, section_active);
 }
 
 pub fn publish_artist(
@@ -407,13 +357,13 @@ pub fn publish_artist(
     years: Option<(i32, i32)>,
     section_active: bool,
 ) {
-    let source = ChipSource::Artist(artist.clone(), years);
-    publish(ui, ChipOwner::Artist(artist.id), source, section_active);
+    let chips = artist_chips(&ui.global::<HeroChips>(), artist, years);
+    publish(ui, ChipOwner::Artist(artist.id), chips, section_active);
 }
 
 pub fn publish_genre(ui: &AppWindow, genre: &GenreStats, fold: HeroFold, section_active: bool) {
-    let source = ChipSource::Genre(genre.clone(), fold);
-    publish(ui, ChipOwner::Genre(genre.id), source, section_active);
+    let chips = genre_chips(&ui.global::<HeroChips>(), genre, fold);
+    publish(ui, ChipOwner::Genre(genre.id), chips, section_active);
 }
 
 pub fn publish_playlist(
@@ -422,8 +372,8 @@ pub fn publish_playlist(
     fold: HeroFold,
     section_active: bool,
 ) {
-    let source = ChipSource::Playlist(playlist.clone(), fold);
-    publish(ui, ChipOwner::Playlist(playlist.id), source, section_active);
+    let chips = playlist_chips(&ui.global::<HeroChips>(), playlist, fold);
+    publish(ui, ChipOwner::Playlist(playlist.id), chips, section_active);
 }
 
 /// The station hero's facts, gathered rather than read off one entity: a station opened from
@@ -448,7 +398,7 @@ pub struct StationFacts {
 }
 
 pub fn publish_station(ui: &AppWindow, facts: &StationFacts, section_active: bool) {
-    publish(ui, ChipOwner::Station, ChipSource::Station(facts.clone()), section_active);
+    publish(ui, ChipOwner::Station, station_chips(facts), section_active);
 }
 
 /// Favorites is assembled from three fetches, so it takes the handle and gathers rather
@@ -477,7 +427,8 @@ pub fn publish_favorites(ui: &AppWindow, fav_ui: &FavoritesUi) {
         most_played,
         artists,
     };
-    publish(ui, ChipOwner::Favorites, ChipSource::Favorites(facts), fav_ui.section_active());
+    let chips = favorites_chips(&ui.global::<HeroChips>(), &facts);
+    publish(ui, ChipOwner::Favorites, chips, fav_ui.section_active());
 }
 
 /// The second hero assembled from more than one fetch — the recency list and the Most
@@ -497,8 +448,8 @@ pub fn publish_recently_played(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
         songs,
         most_played,
     };
-    let source = ChipSource::RecentlyPlayed(facts);
-    publish(ui, ChipOwner::RecentlyPlayed, source, rp_ui.section_active());
+    let chips = recently_played_chips(&ui.global::<HeroChips>(), &facts);
+    publish(ui, ChipOwner::RecentlyPlayed, chips, rp_ui.section_active());
 }
 
 // --- Builders -----------------------------------------------------------

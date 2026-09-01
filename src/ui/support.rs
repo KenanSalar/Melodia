@@ -15,7 +15,7 @@ use slint::ComponentHandle;
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::ui::launcher;
-use crate::ui::shell::notifications::{NotificationParams, NotificationsUi};
+use crate::ui::shell::notifications::{NotificationsUi, RowText};
 use crate::{AppWindow, Settings};
 
 /// A literal rather than a manifest field — Cargo has no `funding` key to read it out
@@ -98,13 +98,13 @@ fn schedule_prompt(
 
         // Sticky, for the crash notice's reason: this fires once ever, so a notice the
         // user was looking away for is a notice that did nothing.
-        let g = ui.global::<Settings>();
-        notifications.show(NotificationParams {
-            variant: "info".into(),
-            title: g.invoke_support_prompt_title(),
-            message: g.invoke_support_prompt_message(),
-            action_label: g.invoke_support_prompt_action_label(),
-            action_kind: SUPPORT_TOAST_KIND.into(),
+        notifications.show_localized(&ui, "info", SUPPORT_TOAST_KIND, |ui| {
+            let g = ui.global::<Settings>();
+            RowText {
+                title: g.invoke_support_prompt_title(),
+                message: g.invoke_support_prompt_message(),
+                action_label: g.invoke_support_prompt_action_label(),
+            }
         });
     }))
     .map(|_| ())

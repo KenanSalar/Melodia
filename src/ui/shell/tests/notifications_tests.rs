@@ -1,4 +1,5 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use slint::{Model, SharedString, VecModel};
@@ -13,6 +14,7 @@ use crate::NotificationRow;
 fn make_ui() -> NotificationsUi {
     NotificationsUi {
         rows: Rc::new(VecModel::default()),
+        recipes: Rc::new(RefCell::new(HashMap::new())),
         next_id: Cell::new(0),
     }
 }

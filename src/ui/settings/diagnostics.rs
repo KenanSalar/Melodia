@@ -22,7 +22,9 @@ use slint::{ComponentHandle, SharedString, Weak};
 
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
-use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
+use crate::ui::shell::notifications::{
+    NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
+};
 use crate::ui::{file_dialog, launcher};
 use crate::{AppWindow, Settings};
 use crate::{library, services};
@@ -93,11 +95,13 @@ async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<N
         }
         Err(e) => {
             log::warn!("save-diagnostics-report: {e}");
-            notifications.show(NotificationParams::plain(
-                "error",
-                settings.invoke_diagnostics_failed_title(),
-                settings.invoke_diagnostics_failed_message(),
-            ));
+            notifications.show_localized(&ui, "error", "", |ui| {
+                let g = ui.global::<Settings>();
+                RowText::plain(
+                    g.invoke_diagnostics_failed_title(),
+                    g.invoke_diagnostics_failed_message(),
+                )
+            });
         }
     }
 }
@@ -143,13 +147,13 @@ fn notify_previous_crash(ui: &AppWindow, state: &AppState, notifications: &Notif
     };
     log::info!("previous run left a crash report: {}", report.display());
 
-    let settings = ui.global::<Settings>();
-    notifications.show(NotificationParams {
-        variant: "warning".into(),
-        title: settings.invoke_crash_report_title(),
-        message: settings.invoke_crash_report_message(),
-        action_label: settings.invoke_crash_report_action_label(),
-        action_kind: CRASH_TOAST_KIND.into(),
+    notifications.show_localized(ui, "warning", CRASH_TOAST_KIND, |ui| {
+        let g = ui.global::<Settings>();
+        RowText {
+            title: g.invoke_crash_report_title(),
+            message: g.invoke_crash_report_message(),
+            action_label: g.invoke_crash_report_action_label(),
+        }
     });
 }
 

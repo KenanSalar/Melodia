@@ -11,7 +11,9 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::file_dialog;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
+use crate::ui::shell::notifications::{
+    NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
+};
 use crate::ui::util::count_as_i32;
 use crate::{AppWindow, Playlists, Settings};
 
@@ -70,11 +72,13 @@ pub(super) fn wire(
             let Some(ui) = weak.upgrade() else { return };
             let settings = ui.global::<Settings>();
             if imported == 0 {
-                notifications.show(NotificationParams::plain(
-                    "error",
-                    settings.invoke_playlist_import_failed_title(),
-                    settings.invoke_playlist_import_failed_message(),
-                ));
+                notifications.show_localized(&ui, "error", "", |ui| {
+                    let g = ui.global::<Settings>();
+                    RowText::plain(
+                        g.invoke_playlist_import_failed_title(),
+                        g.invoke_playlist_import_failed_message(),
+                    )
+                });
             } else {
                 let variant = if missing > 0 || failures > 0 {
                     "warning"

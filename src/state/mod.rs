@@ -76,8 +76,9 @@ pub struct AppState {
     pub stats_changed_tx: watch::Sender<u64>,
     /// Bumped after the UI language changes. A locale switch re-resolves every live `@tr`
     /// binding on its own, so this exists only for the strings Rust renders through a
-    /// trampoline and stores in a model, which nothing re-reads. Subscribers rebuild those
-    /// from their caches — no DB round trip, the facts not having moved.
+    /// trampoline and stores in a model, which nothing re-reads. One subscriber: the
+    /// notification stack, whose rows outlive every navigation. Everything else so stored
+    /// sits behind a section that hands its models back on the way to Settings.
     pub locale_changed_tx: watch::Sender<u64>,
     /// Bumped whenever the watcher reports a kernel-queue overflow (notify
     /// `Flag::Rescan`). A UI-thread subscriber pushes a transient

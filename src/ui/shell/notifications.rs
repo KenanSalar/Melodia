@@ -1,12 +1,15 @@
 //! Transient in-app notification stack — Rust side.
 //!
 //! Owns the `Rc<VecModel<NotificationRow>>` behind the `Notifications` global's `rows`,
-//! plus a monotonic id counter and a visible cap.
+//! plus a monotonic id counter, a visible cap, and the relabel recipes the sticky rows are
+//! rebuilt from after a language switch — these strings are resolved once and stored, where
+//! the switch reaches only live `@tr` bindings.
 //!
 //! `Rc<VecModel<_>>` is UI-thread-only, so every `&self` method here must be called from
 //! a Slint callback context or through `upgrade_in_event_loop`.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
@@ -53,8 +56,33 @@ impl NotificationParams {
     }
 }
 
+/// The three translated strings a row paints, rebuilt in whatever language is active now.
+pub struct RowText {
+    pub title: SharedString,
+    pub message: SharedString,
+    /// Empty ⇒ no action button, as on [`NotificationParams`].
+    pub action_label: SharedString,
+}
+
+impl RowText {
+    /// A row with no action button — most of them.
+    pub fn plain(title: SharedString, message: SharedString) -> Self {
+        Self {
+            title,
+            message,
+            action_label: SharedString::default(),
+        }
+    }
+}
+
+/// Renders a row's strings from the `Settings.*` trampolines, so it can be run again after
+/// a language switch.
+type Relabel = Box<dyn Fn(&AppWindow) -> RowText>;
+
 pub struct NotificationsUi {
     rows: Rc<VecModel<NotificationRow>>,
+    /// Keyed by row id rather than position, positions moving under an eviction.
+    recipes: Rc<RefCell<HashMap<i32, Relabel>>>,
     next_id: Cell<i32>,
 }
 
@@ -69,7 +97,7 @@ impl NotificationsUi {
 
         // Down to `MAX_VISIBLE - 1`, leaving room for the push to settle at the cap.
         while self.rows.row_count() >= MAX_VISIBLE {
-            self.rows.remove(0);
+            self.remove_at(0);
         }
 
         self.rows.push(NotificationRow {
@@ -91,18 +119,78 @@ impl NotificationsUi {
     pub fn show_auto_dismiss(&self, p: NotificationParams, ms: u32) -> i32 {
         let id = self.show(p);
         let rows = self.rows.clone();
+        let recipes = self.recipes.clone();
         slint::Timer::single_shot(std::time::Duration::from_millis(u64::from(ms)), move || {
             if let Some(pos) = rows.iter().position(|r: NotificationRow| r.id == id) {
-                rows.remove(pos);
+                remove_at(&rows, &recipes, pos);
             }
         });
         id
     }
 
+    /// [`show`](Self::show) for a row that must survive a language switch: the recipe is
+    /// rendered once for the push and kept, so [`refresh_for_locale`](Self::refresh_for_locale)
+    /// can run it again. For the sticky rows only — an auto-dismissing toast is gone before
+    /// anyone reaches the language picker.
+    ///
+    /// An empty `action_kind` is a row that groups with nothing, as on
+    /// [`NotificationParams::plain`].
+    pub fn show_localized<F>(
+        &self,
+        ui: &AppWindow,
+        variant: &str,
+        action_kind: &str,
+        relabel: F,
+    ) -> i32
+    where
+        F: Fn(&AppWindow) -> RowText + 'static,
+    {
+        let text = relabel(ui);
+        let id = self.show(NotificationParams {
+            variant: variant.into(),
+            title: text.title,
+            message: text.message,
+            action_label: text.action_label,
+            action_kind: action_kind.into(),
+        });
+        self.recipes.borrow_mut().insert(id, Box::new(relabel));
+        id
+    }
+
+    /// Re-render every row carrying a recipe. The switch itself reaches only live `@tr`
+    /// bindings, and these strings were resolved once and stored.
+    ///
+    /// The rows are collected before any write: `set_row_data` notifies Slint, and a
+    /// handler that raised a toast would re-enter the `RefCell` this walk holds.
+    pub fn refresh_for_locale(&self, ui: &AppWindow) {
+        let updated: Vec<(usize, NotificationRow)> = {
+            let recipes = self.recipes.borrow();
+            self.rows
+                .iter()
+                .enumerate()
+                .filter_map(|(pos, row): (usize, NotificationRow)| {
+                    let text = recipes.get(&row.id)?(ui);
+                    Some((
+                        pos,
+                        NotificationRow {
+                            title: text.title,
+                            message: text.message,
+                            action_label: text.action_label,
+                            ..row
+                        },
+                    ))
+                })
+                .collect()
+        };
+        for (pos, row) in updated {
+            self.rows.set_row_data(pos, row);
+        }
+    }
+
     /// Remove the row with this id; a no-op if none matches.
     pub fn dismiss(&self, id: i32) {
         if let Some(pos) = self.rows.iter().position(|r: NotificationRow| r.id == id) {
-            self.rows.remove(pos);
+            self.remove_at(pos);
         }
     }
 
@@ -112,10 +200,29 @@ impl NotificationsUi {
     pub fn dismiss_by_kind(&self, kind: &str) {
         for i in (0..self.rows.row_count()).rev() {
             if self.rows.row_data(i).is_some_and(|r| r.action_kind.as_str() == kind) {
-                self.rows.remove(i);
+                self.remove_at(i);
             }
         }
     }
+
+    fn remove_at(&self, pos: usize) {
+        remove_at(&self.rows, &self.recipes, pos);
+    }
+}
+
+/// Drop a row and whatever recipe it carried. **Every removal goes through here** — a
+/// recipe outliving its row is a closure kept for the session, and the ids never come back.
+/// Free rather than a method so the auto-dismiss timer, which holds the two halves rather
+/// than the handle, shares it.
+fn remove_at(
+    rows: &VecModel<NotificationRow>,
+    recipes: &RefCell<HashMap<i32, Relabel>>,
+    pos: usize,
+) {
+    if let Some(row) = rows.row_data(pos) {
+        recipes.borrow_mut().remove(&row.id);
+    }
+    rows.remove(pos);
 }
 
 /// Install the `Notifications` global's row model and wire its `dismiss` callback,
@@ -130,6 +237,7 @@ pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
 
     let state = Rc::new(NotificationsUi {
         rows,
+        recipes: Rc::new(RefCell::new(HashMap::new())),
         next_id: Cell::new(0),
     });
 
