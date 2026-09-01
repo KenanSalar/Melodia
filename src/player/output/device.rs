@@ -198,11 +198,12 @@ fn target_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
 
 /// The period [`Buffer::Target`] asks for: [`target_frames`] held inside what the device reports.
 ///
-/// **Held under half the reported maximum, not under it.** cpal turns a `Fixed` period into a
-/// request for twice as much *buffer*, and the range here bounds the buffer, so asking for the whole
-/// of it lands on one period per buffer — a stream with nothing to refill from, underrunning for as
-/// long as it is open. A period cpal rejects outright is the better outcome: that rung just falls
-/// through to the next one.
+/// **Held under half the reported maximum, not under it.** On ALSA the range bounds the *buffer*
+/// while a `Fixed` is a period cpal doubles into a buffer request, so asking for the whole of it
+/// lands on one period per buffer. Nothing refuses that either — the `_near` setters take what they
+/// are given — so the stream opens and underruns for as long as it is held, where a rung that fails
+/// outright would just fall through to the next one. Core Audio's range is the callback size itself
+/// and WASAPI usually reports none, so there the halving costs a little latency and buys nothing.
 ///
 /// `min` last rather than `clamp`, which asserts its two bounds are the right way round: the pair
 /// comes straight off a driver, and one reporting them backwards would panic the boot.
@@ -216,15 +217,19 @@ fn period_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
 
 /// Samples the callback's staging buffer holds before it has ever run.
 ///
-/// [`TARGET_BUFFER`]'s worth either way, which on the [`Buffer::Target`] pass covers the block asked
-/// for and on [`Buffer::HostChoice`] is a floor under a block nobody named — comfortably over the
-/// 512–2048 frames the mainstream hosts pick for themselves. Sizing that pass from the request would
-/// size it from nothing, leaving the callback to allocate its way up to the host's own block, on the
-/// one thread in the process that must not wait for the arena lock. Deliberately **not** taken from
-/// [`period_frames`]: that is narrowed to what the device can double-buffer, which is a bound on
-/// what we may ask for rather than on what a host may hand over.
+/// [`TARGET_BUFFER`]'s worth as a floor, which on [`Buffer::HostChoice`] is a floor under a block
+/// nobody named — comfortably over the 512–2048 frames the mainstream hosts pick for themselves.
+/// Sizing that pass from the request would size it from nothing, leaving the callback to allocate
+/// its way up to the host's own block, on the one thread in the process that must not wait for the
+/// arena lock.
+///
+/// The larger of the two rather than [`period_frames`] alone, for the same reason in reverse: a
+/// period narrowed to what the device can double-buffer bounds what we may *ask* for, not what a
+/// host may hand over. A device whose floor sits above the target pushes the period the other way,
+/// and staging follows it up or the first callback allocates.
 fn staging_samples(supported: &cpal::SupportedStreamConfig) -> usize {
-    target_frames(supported) as usize * usize::from(supported.channels())
+    let frames = target_frames(supported).max(period_frames(supported));
+    frames as usize * usize::from(supported.channels())
 }
 
 /// One arm per sample format the host can ask for, because the callback is monomorphic in it.

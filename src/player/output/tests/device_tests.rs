@@ -46,8 +46,9 @@ fn a_period_the_device_can_carry_whole_is_left_at_the_target() {
 
 #[test]
 fn a_floor_above_half_the_ceiling_still_wins() {
-    // `min` is applied last, so a device whose window excludes half its own maximum gets a period
-    // cpal will at least accept rather than one below the floor it named.
+    // `min` is applied last because the two costs are not the same: cpal checks the request against
+    // the whole reported range before any backend sees it, so a period under the floor loses the
+    // rung outright, where one over half the ceiling only loses the second half of its buffer.
     assert_eq!(period_frames(&config(2, RATE, range(900, 1_024))), 900);
 }
 
@@ -75,13 +76,23 @@ fn the_widest_rate_a_config_can_name_does_not_wrap() {
 }
 
 /// Staging is what the callback writes into before the block is converted out, so it is sized
-/// against what a *host* may hand over — not against the period we asked for, which is narrowed to
-/// what the device can double-buffer and would leave the callback allocating its way back up.
+/// against what a *host* may hand over. A period narrowed to what the device can double-buffer
+/// cannot drag it down with it, or the host's own larger block allocates its way back up.
 #[test]
 fn staging_does_not_follow_the_period_down_a_tight_range() {
     let tight = config(2, RATE, range(64, 1_024));
     assert_eq!(period_frames(&tight), 512);
     assert_eq!(staging_samples(&tight), TARGET as usize * 2);
+}
+
+/// The other direction, which the floor reaches: a device that will not go below its own minimum
+/// gets a period *over* the target, and staging that stayed at the target would leave the very first
+/// callback resizing on the audio thread.
+#[test]
+fn staging_follows_a_period_the_devices_floor_pushed_above_the_target() {
+    let floored = config(2, RATE, range(8_192, 65_536));
+    assert_eq!(period_frames(&floored), 8_192);
+    assert_eq!(staging_samples(&floored), 8_192 * 2);
 }
 
 #[test]

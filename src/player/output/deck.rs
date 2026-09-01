@@ -110,18 +110,19 @@ impl Deck {
     /// Drop everything on this deck, pause it, and rewind its clock.
     ///
     /// The clock is zeroed on this side too, not only by the callback: a deck whose source drained
-    /// on its own is empty *and* still reporting that source's final position, so the short circuit
-    /// below would leave `Decks::{cut_to,crossfade_to}` starting a track whose position reads as the
-    /// previous one's end until the callback picks the append up.
+    /// on its own is empty *and* still reporting that source's final position, so a clear that only
+    /// asked the callback would leave `Decks::{cut_to,crossfade_to}` starting a track whose position
+    /// reads as the previous one's end until the append is picked up.
+    ///
+    /// Zeroed **last**, where the deck is quiet either way. Ahead of the count it races the
+    /// callback's own final `fetch_add`, which lands before the `sources` decrement that makes an
+    /// empty deck look empty; ahead of the send it can rewind a source still playing.
     pub fn clear(&self) {
         self.pause();
-        self.shared.frames.store(0, Ordering::Relaxed);
-        if self.shared.sources.load(Ordering::SeqCst) == 0 {
-            return;
-        }
-        if self.send(Command::Clear) {
+        if self.shared.sources.load(Ordering::SeqCst) != 0 && self.send(Command::Clear) {
             self.await_service();
         }
+        self.shared.frames.store(0, Ordering::Relaxed);
     }
 
     /// Seek the playing source. Nothing playing is not an error — there is simply nowhere to go.
@@ -159,7 +160,7 @@ impl Deck {
     /// Sources appended and not yet finished.
     ///
     /// `SeqCst` to match every write: this is what the transport reads to decide a deck has run dry,
-    /// and it is read beside `paused` and the fade cell, which have to agree about the same instant.
+    /// and `Decks::busy` pairs it with `paused`, which is already `SeqCst`.
     pub fn len(&self) -> usize {
         self.shared.sources.load(Ordering::SeqCst)
     }

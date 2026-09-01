@@ -167,9 +167,11 @@ impl Converter {
     ///
     /// A mono device is the ladder's *second* rung — cpal ranks stereo, then mono, ahead of every
     /// wider count — so its fold is the one that has to be right, and dropping to channel 0 would
-    /// play the left half of every stereo file. Everything else keeps the first `min(from, to)`
-    /// channels: [`Shape`] counts channels without naming them, and folding a layout you cannot read
-    /// routes LFE and surrounds into the mains at full scale, which is worse than leaving them out.
+    /// play the left half of every stereo file. The mean is what makes that fold safe: [`Shape`]
+    /// counts channels without naming them, so what goes into the sum is unknown, and at `1/n` an
+    /// unknown channel costs a wide source some level in its mains rather than routing LFE and
+    /// surrounds there at full scale. A device wider than mono has no such divisor to hide behind,
+    /// so it keeps the first `min(from, to)` channels and folds nothing.
     #[expect(
         clippy::cast_possible_truncation,
         reason = "the offset is bounded to [0, 1) by the loop that advances it"
