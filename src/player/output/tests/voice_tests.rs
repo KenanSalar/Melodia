@@ -282,11 +282,14 @@ fn a_replace_prepared_against_a_source_that_has_since_ended_mounts_nothing() {
     voice.append(TestSource::new(vec![0.25; FRAMES], 1, RATE));
     voice.append(TestSource::new(vec![0.75; FRAMES], 1, RATE));
 
-    // What a seek would have read before going off to open its file.
+    // Mount the first source and stage the second, then read what a seek would have seen before
+    // going off to open its file. Read before anything is mounted the ticket is only its initial
+    // value, which is not the observation being tested.
+    assert_eq!(pump(&mut pull, 64).len(), 64);
     let mounted = voice.mounted();
 
-    // Drain the first source, which hands the deck to the staged one.
-    assert_eq!(pump(&mut pull, FRAMES).len(), FRAMES);
+    // Drain the rest of the first source, which hands the deck to the staged one.
+    assert_eq!(pump(&mut pull, FRAMES - 64).len(), FRAMES - 64);
     assert_eq!(voice.len(), 1, "the staged source should have taken over");
 
     voice.replace(TestSource::new(vec![0.25; FRAMES], 1, RATE), Duration::ZERO, mounted);
@@ -297,6 +300,30 @@ fn a_replace_prepared_against_a_source_that_has_since_ended_mounts_nothing() {
         "the stale seek mounted the track the deck had already left"
     );
     assert_eq!(voice.len(), 1, "the refused source was not accounted for");
+}
+
+/// The other direction, which is what the ticket must not cost: a successor merely *staged* has
+/// not taken the deck, so the seek still lands. Stamping the ticket on arrival rather than on
+/// takeover would break every seek behind a gapless stage and leave the test above passing.
+#[test]
+fn a_replace_lands_while_a_successor_is_only_staged() {
+    const FRAMES: usize = 512;
+
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(TestSource::new(vec![0.25; FRAMES], 1, RATE));
+    voice.append(TestSource::new(vec![0.75; FRAMES], 1, RATE));
+
+    assert_eq!(pump(&mut pull, 64).len(), 64);
+    let mounted = voice.mounted();
+
+    voice.replace(TestSource::new(vec![0.5; FRAMES], 1, RATE), Duration::ZERO, mounted);
+
+    let after = pump(&mut pull, 64);
+    assert!(
+        after.iter().all(|s| (*s - 0.5).abs() < 1e-6),
+        "the seek was refused behind a source that had only been staged"
+    );
+    assert_eq!(voice.len(), 2, "the staged successor should still be waiting behind the seek");
 }
 
 /// The converter is built against the source's own shape, so a second source at a different rate

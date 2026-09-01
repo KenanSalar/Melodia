@@ -545,6 +545,11 @@ impl PlaybackEngine {
     /// ticket a seek landing in that window mounts the track that just ended over the one that
     /// just started.
     ///
+    /// The two lock acquisitions name the same voice because `Decks::crossfade_to` is the only
+    /// thing that moves `active` and it runs under the `exec_lock` this executes under. A ticket
+    /// read off one voice and compared against the other's counter would match by coincidence,
+    /// both being small and equal early in a session.
+    ///
     /// Deliberately does **not** bump the epoch: a seek replaces no deck *contents*, and
     /// cancelling a pending deferred pause would leave the decks running silently at the ramp's
     /// zero gain while the UI reads Paused. Nothing here touches `paused` either, so seeking a

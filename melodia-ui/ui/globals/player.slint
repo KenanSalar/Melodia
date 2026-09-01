@@ -66,6 +66,8 @@ export global Player {
     // Whether the target has moved since the last one was sent, so the trailing edge stays quiet
     // when the leading one already covered the whole run.
     in-out property <bool> seek-run-unsent: false;
+    // Timer ticks left before the run ends, reset by every keystroke. Non-zero is also what runs
+    // the timer, so clearing it is how an absolute seek drops the trailing edge.
     in-out property <int> seek-run-ticks: 0;
 
     // The dual-slot cross-fade: Rust writes the fresh blur into the *inactive* slot then flips

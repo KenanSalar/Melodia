@@ -430,9 +430,10 @@ impl VoicePull {
     /// dropped, which is the count `Voice::send_counted` added for.
     fn replace(&mut self, loaded: Loaded, frames: u64, mounted: u64) {
         let moved_on = self.shared.mounted.load(Ordering::Relaxed) != mounted;
+        let taken = if moved_on { None } else { self.current.take() };
         // Whichever source the swap leaves over: the one it displaces, or `loaded` itself where
         // there is nothing left to displace it against.
-        let spent = match self.current.take_if(|_| !moved_on) {
+        let spent = match taken {
             Some(displaced) => {
                 self.start_at(loaded, frames);
                 displaced

@@ -62,7 +62,7 @@ export component ShortcutScope inherits FocusScope {
         Player.end-seek-run();
     }
 
-    seek-debounce-timer := Timer {
+    seek-run-timer := Timer {
         interval: 100ms;
         running: Player.seek-run-ticks > 0;
         triggered => {
