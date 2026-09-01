@@ -6,7 +6,7 @@
 //! and handing out the samples it produces are the same questions for both, and the answers have
 //! to agree or the split this module closed grows back one function at a time.
 //!
-//! **Why Symphonia 0.6 rather than the 0.5 rodio pins.** 0.5's probe picks a demuxer by matching a
+//! **Why Symphonia 0.6 rather than the 0.5 rodio pinned.** 0.5's probe picks a demuxer by matching a
 //! two-byte marker and nothing else — its `format()` takes a `Hint` and discards it, and scoring is
 //! still a `TODO` there. The only ADTS marker it registers is `0xFFF1`, so MPEG-2 ADTS (`0xFFF9`)
 //! matches nothing at all, the search runs on into the payload, and the first stray `0xFFFB` in it

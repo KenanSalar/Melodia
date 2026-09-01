@@ -181,7 +181,7 @@ fn clear_returns_only_once_the_callback_has_serviced_it() {
 
     assert_eq!(deck.len(), 0, "clear returned while sources were still on the deck");
     assert_eq!(deck.position(), Duration::ZERO);
-    assert!(deck.is_paused(), "clear pauses the deck, as rodio's did");
+    assert!(deck.is_paused(), "clear pauses the deck");
 }
 
 #[test]
@@ -192,6 +192,26 @@ fn clearing_a_deck_with_nothing_on_it_does_not_wait_for_the_callback() {
     let started = std::time::Instant::now();
     deck.clear();
     assert!(started.elapsed() < Duration::from_millis(100));
+}
+
+/// A deck whose source ran out keeps reporting where that source ended, which is what the transport
+/// wants until it advances. What it must not do is carry that reading into the next track: both
+/// `Decks::cut_to` and `Decks::crossfade_to` clear before they append, and the clear is the only
+/// thing standing between a drained deck and a position that reads as the previous track's end for
+/// as long as it takes the callback to pick the append up.
+#[test]
+fn clearing_a_deck_that_drained_on_its_own_still_rewinds_the_clock() {
+    let (deck, mut voice) = pair(mono(RATE));
+    deck.append(silence(64, RATE));
+
+    pump(&mut voice, 256);
+    assert!(deck.is_empty(), "the source never drained");
+    assert!(deck.position() > Duration::ZERO, "a drained deck reports where its source ended");
+
+    // Empty, so this takes the short circuit that never reaches the callback.
+    deck.clear();
+
+    assert_eq!(deck.position(), Duration::ZERO, "the clear left the drained source's position");
 }
 
 #[test]

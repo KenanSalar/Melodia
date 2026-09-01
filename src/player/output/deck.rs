@@ -107,9 +107,15 @@ impl Deck {
         }
     }
 
-    /// Drop everything on this deck and pause it, as rodio's `clear` did.
+    /// Drop everything on this deck, pause it, and rewind its clock.
+    ///
+    /// The clock is zeroed on this side too, not only by the callback: a deck whose source drained
+    /// on its own is empty *and* still reporting that source's final position, so the short circuit
+    /// below would leave `Decks::{cut_to,crossfade_to}` starting a track whose position reads as the
+    /// previous one's end until the callback picks the append up.
     pub fn clear(&self) {
         self.pause();
+        self.shared.frames.store(0, Ordering::Relaxed);
         if self.shared.sources.load(Ordering::SeqCst) == 0 {
             return;
         }
@@ -151,8 +157,11 @@ impl Deck {
     }
 
     /// Sources appended and not yet finished.
+    ///
+    /// `SeqCst` to match every write: this is what the transport reads to decide a deck has run dry,
+    /// and it is read beside `paused` and the fade cell, which have to agree about the same instant.
     pub fn len(&self) -> usize {
-        self.shared.sources.load(Ordering::Relaxed)
+        self.shared.sources.load(Ordering::SeqCst)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -190,8 +199,14 @@ impl Deck {
     /// it will also find on the channel.
     fn send(&self, command: Command) -> bool {
         // Full means the callback has stopped draining, which a bounded wait is about to report
-        // anyway; blocking here would do it while holding the transport instead.
+        // anyway; blocking here would do it while holding the transport instead. Logged rather than
+        // returned, because the only thing that fills this queue is a device that has stopped asking
+        // for samples: `tasks::audio_health` is what tells the user, and auto-skipping the track
+        // would walk the whole queue against a card that is not going to take any of it.
         if self.commands.try_send(command).is_err() {
+            log::warn!(
+                "audio callback is not draining its control channel; a transport op was lost"
+            );
             return false;
         }
         self.shared.issued.fetch_add(1, Ordering::Release);
@@ -220,6 +235,7 @@ pub struct DeckVoice {
     commands: Receiver<Command>,
     current: Option<Voice>,
     staged: VecDeque<Voice>,
+    device: Shape,
 }
 
 impl DeckVoice {
@@ -237,6 +253,14 @@ impl DeckVoice {
         reason = "volume is bounded to 0.0..=1.0, whose round-trip through f32 is inaudible"
     )]
     pub fn render(&mut self, block: &mut [Sample]) -> usize {
+        // Not decoration: a block ending mid-frame leaves `Converter::fill` no whole chunk to write,
+        // so it returns nothing without ending the source and the loop below never advances — on the
+        // one thread that must not stall. The invariant is the mixer's, three frames up the stack.
+        debug_assert!(
+            block.len().is_multiple_of(usize::from(self.device.channels.get())),
+            "a voice is only ever handed whole device frames"
+        );
+
         self.service();
         if self.shared.paused.load(Ordering::SeqCst) {
             return 0;
@@ -369,6 +393,7 @@ pub fn pair(device: Shape) -> (Deck, DeckVoice) {
         commands: command_rx,
         current: None,
         staged: VecDeque::with_capacity(2),
+        device,
     };
     (deck, voice)
 }

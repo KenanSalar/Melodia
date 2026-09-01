@@ -1,17 +1,10 @@
 //! Everything below the DSP chain: the device stream, the decks, the sum, and the clock.
 //!
-//! This is what rodio used to hold. The chain above it is untouched — the ordering, the ramp, the
-//! tap and the limiter are all the same code reading the same samples — and what changes is that
-//! the four things underneath now answer to this tree:
-//!
-//! - **The rate conversion is visible.** rodio did it inside `Mixer::add`, once, against whichever
-//!   source reached a deck first, which is why a source that named no span pinned every later one
-//!   to the first's rate. [`convert`] is per source and rebuilt when a deck advances.
-//! - **Playback speed is a ratio rather than a lie about the sample rate**, so a position is media
-//!   time at every level and there is only one timeline to reason about.
-//! - **The device handle is owned.** rodio's had to be leaked to outlive the decks; the drop order
-//!   here says the same thing without giving up the ability to close the device.
-//! - **The sum is ours**, and stays unclamped — [`mixer`] argues why.
+//! The chain above is untouched by any of it — the ordering, the ramp, the tap and the limiter read
+//! the same samples either way. What this tree owns is the four things underneath, and each argues
+//! itself where it lives: [`convert`] for the rate, the channel map and the speed ratio, [`deck`]
+//! for pause, volume and the clock, [`mixer`] for the unclamped sum, [`device`] for the stream and
+//! the ladder that opens it.
 //!
 //! [`AudioOutput`] is the whole public surface: build it, hand [`Mixer`] to the decks, keep it
 //! alive. `tests/crossfade.rs` skips it and drives [`mixer::pair`] directly, which is what lets the

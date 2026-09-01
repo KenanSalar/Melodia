@@ -165,10 +165,11 @@ impl Converter {
 
     /// Interpolate the current source frame and map it onto the device's channels.
     ///
-    /// Channel mapping matches what rodio's converter did, because a change here is a change to
-    /// what every mono file and every surround file sounds like: the first `min(from, to)` channels
-    /// carry through, a mono source is duplicated across the pair, wider outputs are silent, and a
-    /// wider source has its extra channels dropped.
+    /// A mono device is the ladder's *second* rung — cpal ranks stereo, then mono, ahead of every
+    /// wider count — so its fold is the one that has to be right, and dropping to channel 0 would
+    /// play the left half of every stereo file. Everything else keeps the first `min(from, to)`
+    /// channels: [`Shape`] counts channels without naming them, and folding a layout you cannot read
+    /// routes LFE and surrounds into the mains at full scale, which is worse than leaving them out.
     #[expect(
         clippy::cast_possible_truncation,
         reason = "the offset is bounded to [0, 1) by the loop that advances it"
@@ -176,11 +177,21 @@ impl Converter {
     fn write_frame(&self, frame: &mut [Sample]) {
         let from = usize::from(self.source.channels.get());
         let position = self.position as Sample;
+        let source = |channel: usize| interpolate(self.prev[channel], self.next[channel], position);
+
+        if frame.len() == 1 && from > 1 {
+            let sum: Sample = (0..from).map(source).sum();
+            frame[0] = sum / Sample::from(self.source.channels.get());
+            return;
+        }
 
         for (channel, slot) in frame.iter_mut().enumerate() {
             *slot = match channel {
-                c if c < from => interpolate(self.prev[c], self.next[c], position),
-                1 if from == 1 => interpolate(self.prev[0], self.next[0], position),
+                c if c < from => source(c),
+                // Duplicated at unity, not attenuated: this is the path every mono file on an
+                // ordinary stereo device takes, so a pan-law trim here would quietly restage the
+                // whole library, and each channel would stop being the source's own sample.
+                1 if from == 1 => source(0),
                 _ => 0.0,
             };
         }

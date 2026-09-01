@@ -168,16 +168,19 @@ sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio
 # `output::{mixer,deck,convert}` own the sum, the two voices, the rate and channel
 # conversion and the clock, which is what rodio held until #90.
 #
-# **Pinned to 0.17.3 rather than the latest**, deliberately. 0.18 folds
-# `StreamError` into a unified `Error`/`ErrorKind`, which is a rework of
-# `stream_health`'s four-arm match and of the rate-based device-loss escalation
+# **Held at 0.17 rather than the latest**, deliberately. 0.18 folds `StreamError`
+# into a unified `Error`/`ErrorKind` reached through `e.kind()`, which is a rework
+# of `stream_health`'s four-arm match and of the rate-based device-loss escalation
 # in `tasks::audio_health` — the part of this subsystem with no way to test it
-# short of unplugging a card. It also renames `StreamTrait::play` to `start` and
-# stops streams auto-starting on build. Worth doing; worth doing alone.
+# short of unplugging a card. It also adds a retryable `DeviceBusy`, stops ALSA,
+# CoreAudio and JACK auto-starting a built stream, and reranks the integer sample
+# formats, all three of which land on `output::device`'s ladder. Worth doing;
+# worth doing alone. (`StreamTrait::play` -> `start` is the release after, not
+# this one.) A caret on a `0.x` is already an exact-minor pin, so no `=` needed.
 cpal = "0.17.3"
 # Everything decodes here — files through `player::file_decode`, live mounts through
 # `player::stream_decode` — and **deliberately against a newer Symphonia than the 0.5 rodio
-# pins**. 0.5's probe picks a demuxer off a two-byte marker with scoring still a TODO, and the
+# pinned**. 0.5's probe picks a demuxer off a two-byte marker with scoring still a TODO, and the
 # only ADTS marker it knows is `0xFFF1`, so an MPEG-2 ADTS stream matches nothing, the search
 # runs into the payload, and a stray `0xFFFB` there hands an AAC stream to the MP3 demuxer,
 # which then never syncs. 0.6 scores candidates against the frames that follow and registers

@@ -63,19 +63,22 @@ pub struct MixerPull {
 impl MixerPull {
     /// Write one block of interleaved device frames.
     ///
-    /// A partial trailing frame is left untouched: writing half of one would shear the channel
-    /// layout for the rest of the stream, and no host asks for one.
+    /// A partial trailing frame is zeroed but never written into: half a frame would shear the
+    /// channel layout for the rest of the stream. No host asks for one, and the zero is what makes
+    /// that survivable anyway — the caller stages into a buffer it reuses, so leaving the tail alone
+    /// would hand the device whatever the last block left there.
     ///
     /// **The first deck with anything to say writes; the rest add.** Summing into a zeroed block
     /// would be simpler and would cost the sign of zero — `0.0 + -0.0` is `0.0` — so a lone deck at
-    /// unity would not be the passthrough the bit-perfect claim rests on. It also saves a pass in
-    /// the case that is almost always the live one, a single deck playing.
+    /// unity would not be the passthrough the bit-perfect claim rests on.
     pub fn fill(&mut self, out: &mut [Sample]) {
         let width = usize::from(self.device.channels.get());
+
+        // Before the truncation, so the tail below is covered too.
+        out.fill(0.0);
+
         let whole = out.len() - out.len() % width;
         let out = &mut out[..whole];
-
-        out.fill(0.0);
 
         for step in out.chunks_mut(LOCKSTEP_FRAMES * width) {
             let mut written = false;

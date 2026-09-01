@@ -42,18 +42,24 @@ const FADE_MS: u64 = 2_000;
 /// own first steps and the decoder's first packet, neither of which is steady state.
 const WARMUP_FRAMES: usize = (RATE as usize) / 10;
 
-/// Fractional slack on the summed amplitude during an overlap.
+/// Fractional slack on the summed amplitude during an overlap, in parts per million.
 ///
 /// What it absorbs is the two ramps sitting a lockstep step apart: they are armed together but each
 /// advances as its own deck is pulled, so the deck already rendered for this step picks the arm up
 /// on the next one. `output::mixer::LOCKSTEP_FRAMES` is that bound and the assertion below keeps
-/// this clear of it — set it under and the suite goes flaky rather than red. It was nearly seven
-/// times wider while rodio's mixer resampled per voice, which left a newly appended deck a whole
-/// span behind the one already playing.
-const SKEW: f32 = 0.0015;
+/// this clear of it — set it under and the suite goes flaky rather than red.
+///
+/// An integer so that assertion can derive from it rather than restate it, and `u16` because that is
+/// the width a cast to `f32` cannot lose.
+const SKEW_PPM: u16 = 1_500;
 
+/// [`SKEW_PPM`] as the fraction the amplitude assertions actually compare against.
+const SKEW: f32 = SKEW_PPM as f32 / 1_000_000.0;
+
+/// Derived from [`SKEW_PPM`] rather than restating it: the pair of literals this used to compare
+/// against was the same number spelled again, so retuning the slack left the guard on the old one.
 const _: () = assert!(
-    (mixer::LOCKSTEP_FRAMES as u64) * 10_000 < FADE_MS * (RATE as u64) / 1_000 * 15,
+    (mixer::LOCKSTEP_FRAMES as u64) * 1_000_000 < FADE_MS * (RATE as u64) / 1_000 * SKEW_PPM as u64,
     "the summed-amplitude slack no longer covers the mixer's lockstep step"
 );
 
@@ -195,7 +201,7 @@ where
     assert!(handle.join().is_ok(), "control op panicked");
 }
 
-/// The load-bearing property: `MixerSource` sums its voices unclamped, so two
+/// The load-bearing property: `MixerPull` sums its voices unclamped, so two
 /// overlapping decks must never push it past the amplitude either carries alone
 /// — what a complementary linear curve buys and an equal-power one would not.
 /// Checked across the *whole* overlap, warmup included.

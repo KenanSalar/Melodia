@@ -121,8 +121,10 @@ fn a_mono_source_is_duplicated_across_a_stereo_device() {
     assert_eq!(bits(&out), bits(&[0.5, 0.5, 0.25, 0.25]));
 }
 
+/// A mono device is the config ladder's second rung, so this is the fold that has to be right:
+/// keeping channel 0 alone would play the left half of every stereo file.
 #[test]
-fn a_wider_source_has_its_extra_channels_dropped() {
+fn a_mono_device_is_handed_the_average_rather_than_the_left_channel() {
     let mut src = TestSource::new(vec![0.5, 0.25], 2, 48_000);
     let mut converter = Converter::new(shape(2, 48_000), shape(1, 48_000));
 
@@ -130,7 +132,36 @@ fn a_wider_source_has_its_extra_channels_dropped() {
     let filled = converter.fill(&mut out, &mut src, 1.0);
 
     assert_eq!(filled.samples, 1, "one stereo frame is one mono frame");
-    assert_eq!(bits(&out[..1]), bits(&[0.5]));
+    // (0.5 + 0.25) / 2 is exact in binary, so the mean can be pinned bit-for-bit like its neighbours.
+    assert_eq!(bits(&out[..1]), bits(&[0.375]), "the fold is the mean, not the left channel");
+}
+
+/// Nothing above a mono device folds: `Shape` counts channels without naming them, so there is no
+/// layout to fold along and a blind one would put LFE and surrounds into the mains at full scale.
+#[test]
+fn a_narrower_device_wider_than_mono_still_carries_the_channels_it_can() {
+    let mut src = TestSource::new(vec![0.5, 0.25, 0.125, 0.0625], 4, 48_000);
+    let mut converter = Converter::new(shape(4, 48_000), shape(2, 48_000));
+
+    let mut out = vec![0.0; 2];
+    let filled = converter.fill(&mut out, &mut src, 1.0);
+
+    assert_eq!(filled.samples, 2);
+    assert_eq!(bits(&out), bits(&[0.5, 0.25]));
+}
+
+/// The path every mono file on an ordinary stereo device takes — so each channel has to stay the
+/// source's own sample, with no pan-law trim between the decoder and the card.
+#[test]
+fn mono_reaches_a_stereo_device_at_unity_on_both_channels() {
+    let mut src = TestSource::new(vec![0.5, -0.25], 1, 48_000);
+    let mut converter = Converter::new(shape(1, 48_000), shape(2, 48_000));
+
+    let mut out = vec![0.0; 4];
+    let filled = converter.fill(&mut out, &mut src, 1.0);
+
+    assert_eq!(filled.samples, 4);
+    assert_eq!(bits(&out), bits(&[0.5, 0.5, -0.25, -0.25]));
 }
 
 #[test]

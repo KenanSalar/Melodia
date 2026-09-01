@@ -103,9 +103,10 @@ fn the_block_is_cleared_before_the_decks_add_into_it() -> Result<(), AppError> {
 }
 
 /// A block that is not a whole number of frames would shear the channel layout for everything after
-/// it, so the remainder is left rather than half-filled.
+/// it, so no deck writes the remainder — but it is still zeroed, because the caller stages into a
+/// buffer it reuses and would otherwise pass the last block's samples through.
 #[test]
-fn a_partial_trailing_frame_is_left_alone() -> Result<(), AppError> {
+fn a_partial_trailing_frame_is_silenced_rather_than_half_filled() -> Result<(), AppError> {
     let (mixer, mut pull) = pair(VOICES, shape(2));
     deck_at(&mixer, 0)?.append(tone(0.5, 8, 2));
 
@@ -113,7 +114,7 @@ fn a_partial_trailing_frame_is_left_alone() -> Result<(), AppError> {
     pull.fill(&mut out);
 
     assert!(out[..4].iter().all(|s| (*s - 0.5).abs() < 1e-6), "{out:?}");
-    assert_eq!(bits(&out[4..]), bits(&[9.0]), "the odd sample was written as half a frame");
+    assert_eq!(bits(&out[4..]), bits(&[0.0]), "the odd sample kept a stale value: {out:?}");
     Ok(())
 }
 

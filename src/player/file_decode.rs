@@ -3,9 +3,9 @@
 //! What is this module's own is everything a file has and a mount does not — a length, a seek that
 //! can land anywhere, and an end it reaches by itself. The probe, the codec registry and the packet
 //! cursor are [`super::decode`]'s, shared with [`super::stream_decode`], and the argument for
-//! decoding against Symphonia 0.6 rather than the 0.5 rodio pins is in that module's `//!`.
+//! decoding against Symphonia 0.6 rather than the 0.5 rodio pinned is in that module's `//!`.
 //!
-//! It replaces `rodio::Decoder`, so that type doubles as the specification: what must not be lost
+//! It replaced `rodio::Decoder`, so that type doubles as the specification: what must not be lost
 //! is the frame-accurate seek, which is the one thing here neither reference implementation does.
 
 use std::fs::{File, Metadata};
@@ -148,7 +148,7 @@ impl FileDecoder {
 
     /// Interleaved samples between where the demuxer landed and where the seek asked for, rounded
     /// up to a whole frame so the channels stay in step. Never under, so a seek cannot replay a
-    /// frame the listener already heard; rodio rounds the other way and can.
+    /// frame the listener already heard; rodio rounded the other way and could.
     ///
     /// Integer arithmetic against the timebase's own ratio rather than seconds, so a rate the
     /// timebase does not divide evenly cannot drift the answer by a frame.
@@ -284,8 +284,8 @@ impl AudioSource for FileDecoder {
 
         // A demuxer seek lands on a packet boundary, so without the trim every seek replays the
         // tail of what came before. Both reference players stop at the whole packet, and one says
-        // in its own comment that it should not; rodio trims to the frame today, and that is the
-        // behaviour this path has to keep.
+        // in its own comment that it should not. rodio trimmed to the frame, and that is the
+        // behaviour this path inherited and has to keep.
         let trim = self.samples_before(seeked.required_ts, seeked.actual_ts);
         self.skip(trim + channel_phase);
         Ok(())

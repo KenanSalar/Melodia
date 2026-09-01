@@ -50,7 +50,7 @@
     </p>
     <p>Features:</p>
     <ul>
-      <li>Gapless playback via Rodio and Symphonia — MP3, FLAC, M4A/M4B (AAC and ALAC), Ogg Vorbis, WAV, AIFF/AIFF-C, Matroska and CAF</li>
+      <li>Gapless playback via Symphonia and cpal — MP3, FLAC, M4A/M4B (AAC and ALAC), Ogg Vorbis, WAV, AIFF/AIFF-C, Matroska and CAF</li>
       <li>Fast local SQLite library with full-text search</li>
       <li>Browse by album, artist, genre and playlist, with file drag-and-drop</li>
       <li>Internet radio (off until you switch it on): a worldwide station directory, your own stream URLs, favorites and live track titles</li>

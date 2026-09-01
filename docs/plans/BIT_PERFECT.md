@@ -129,7 +129,7 @@ it is the half worth porting.
 | writer threads at default priority | `AvSetMmThreadCharacteristics("Pro Audio")` on Windows; `SCHED_FIFO` (best-effort, degrade quietly) on Linux | a hand-rolled writer thread is exactly where the OS expects you to ask for RT scheduling. Without it a 40 ms buffer is at CFS's mercy |
 | claims `hw:` with no coordination | acquire `org.freedesktop.ReserveDevice1` first, release on drop | on a stock PipeWire desktop — which is every Fedora/Ubuntu install — the card is already reserved. Without this, Linux exclusive fails for most users and the reason string blames the hardware |
 | `fill()` pops the ring one sample at a time, re-reads `slots()` per frame, matches on channel count per frame | drain in contiguous chunks, hoist the channel decision out of the loop | this is the measurable inefficiency. `rtrb::read_chunk` hands back slices; per-frame atomic loads and a per-frame `match` on a value that never changes are pure overhead on the RT thread |
-| bit-exactness argued in the ADR, tested only in `f32` | a round-trip test: known 16- and 24-bit fixtures → the full chain, bypassed → assert bit-identical | rox's hardware tests are `#[ignore]`d, so nothing in CI pins the claim. Melodia can pull `MixerSource` in a plain unit test and prove it without a device |
+| bit-exactness argued in the ADR, tested only in `f32` | a round-trip test: known 16- and 24-bit fixtures → the full chain, bypassed → assert bit-identical | rox's hardware tests are `#[ignore]`d, so nothing in CI pins the claim. Melodia can pull `MixerPull` in a plain unit test and prove it without a device |
 | `Result<_, String>` throughout | `AppError` with the boundary variants | the tree's error contract; `services::describe` needs a typed cause |
 | hand-declares ~300 lines of CoreAudio `extern "C"` + four-char constants | use `objc2-core-audio` | finding 4 — it's already in our lock file, needs no SDK and no bindgen, and covers the whole surface |
 
@@ -190,18 +190,29 @@ CPU does.
 
 ## Structure
 
-New directory, because this **is** a directory's worth of work and it cuts across
-nothing else:
+**The directory exists.** #90 built `src/player/output/` for the shared backend, so this is no
+longer a greenfield layout — it is four files to extend rather than one `shared.rs` to write:
 
 ```
 src/player/output/
-  mod.rs        the seam: OutputMode, OutputRequest, Negotiated, OutputBackend, pump()
-  shared.rs     today's MixerDeviceSink behind the trait
+  mod.rs        AudioOutput: the open handle, and the only door onto Mixer
+  device.rs     the cpal stream, the config ladder, Negotiated, the period math
+  mixer.rs      the unclamped sum, in LOCKSTEP_FRAMES steps
+  deck.rs       one voice: transport, the command channel, the clock
+  convert.rs    rate, channel map, the speed ratio
+  tests/        convert / deck / mixer / device, per the tree's `#[path]` convention
+```
+
+What this plan still adds, on top of that:
+
+```
+  mod.rs        + the seam: OutputMode, OutputRequest, OutputBackend, pump()
+                  (Negotiated is already device.rs's and moves or is re-exported)
+  device.rs     becomes the shared backend behind the trait
   alsa.rs       #[cfg(target_os = "linux")]
   reserve.rs    #[cfg(target_os = "linux")]  org.freedesktop.ReserveDevice1
   wasapi.rs     #[cfg(target_os = "windows")] — format ladder + period math above the cfg
   coreaudio.rs  #[cfg(target_os = "macos")]
-  tests/        bypass + ladder + period math, per the tree's `#[path]` convention
 ```
 
 Ownership rules, so this doesn't sprawl:
@@ -302,7 +313,8 @@ end of the phase).
    and either **Engaged** or the single reason it isn't, taken from
    `Negotiated::reason`. This is the deliverable that makes the claim checkable.
 4. **The round-trip test.** Fixtures: a short 16-bit and a short 24-bit WAV. Build
-   the full chain with everything bypassed, pull `MixerSource` directly, assert the
+   the full chain with everything bypassed, pull `MixerPull` directly (via
+   `output::mixer::pair`, as `tests/crossfade.rs` already does), assert the
    samples are bit-identical to the decoder's output. No device needed. This is the
    test rox doesn't have, and it's what stops a future DSP change quietly breaking
    the claim.

@@ -34,10 +34,11 @@ use super::mixer::MixerPull;
 
 /// Device frames the host is asked to hand over at a time.
 ///
-/// Latency against wakeup cost, and it is what the position lags the ear by. rodio asked for the
-/// same 50 ms; the value is a request rather than a promise, and a host outside its own reported
-/// range clamps or ignores it. The second pass doesn't ask at all, and keeps this only as the size
-/// the callback's staging buffer starts at.
+/// Latency against wakeup cost, and it is what the position runs *ahead of* the ear by: the clock
+/// counts frames handed to the device, which are audible a buffer later. rodio asked for the same
+/// 50 ms; the value is a request rather than a promise, and a host outside its own reported range
+/// clamps or ignores it. The second pass doesn't ask at all, and keeps this only as the size the
+/// callback's staging buffer starts at.
 const TARGET_BUFFER: Duration = Duration::from_millis(50);
 
 /// What the device actually agreed to, as opposed to what it was asked for.
@@ -183,31 +184,45 @@ enum Buffer {
 impl Buffer {
     fn size(self, supported: &cpal::SupportedStreamConfig) -> cpal::BufferSize {
         match self {
-            Self::Target => cpal::BufferSize::Fixed(target_frames(supported)),
+            Self::Target => cpal::BufferSize::Fixed(period_frames(supported)),
             Self::HostChoice => cpal::BufferSize::Default,
         }
     }
 }
 
-/// [`TARGET_BUFFER`] in frames, held inside whatever range the device reports.
-///
-/// `max` then `min` rather than `clamp`, which asserts its two bounds are the right way round: the
-/// pair comes straight off a driver, and one reporting them backwards would panic the boot.
+/// [`TARGET_BUFFER`] in frames at this config's rate, before any device range narrows it.
 fn target_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
     let target = u128::from(supported.sample_rate()) * TARGET_BUFFER.as_millis() / 1_000;
-    let target = cpal::FrameCount::try_from(target).unwrap_or(cpal::FrameCount::MAX);
+    cpal::FrameCount::try_from(target).unwrap_or(cpal::FrameCount::MAX)
+}
+
+/// The period [`Buffer::Target`] asks for: [`target_frames`] held inside what the device reports.
+///
+/// **Held under half the reported maximum, not under it.** cpal turns a `Fixed` period into a
+/// request for twice as much *buffer*, and the range here bounds the buffer, so asking for the whole
+/// of it lands on one period per buffer — a stream with nothing to refill from, underrunning for as
+/// long as it is open. A period cpal rejects outright is the better outcome: that rung just falls
+/// through to the next one.
+///
+/// `min` last rather than `clamp`, which asserts its two bounds are the right way round: the pair
+/// comes straight off a driver, and one reporting them backwards would panic the boot.
+fn period_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
+    let target = target_frames(supported);
     match supported.buffer_size() {
-        cpal::SupportedBufferSize::Range { min, max } => target.max(*min).min(*max),
+        cpal::SupportedBufferSize::Range { min, max } => target.min(max / 2).max(*min),
         cpal::SupportedBufferSize::Unknown => target,
     }
 }
 
 /// Samples the callback's staging buffer holds before it has ever run.
 ///
-/// [`TARGET_BUFFER`]'s worth either way, which on the [`Buffer::Target`] pass is exactly the block
-/// asked for and on [`Buffer::HostChoice`] is a floor under a block nobody named. Sizing that pass
-/// from the request would size it from nothing, leaving the callback to allocate its way up to the
-/// host's own block — on the one thread in the process that must not wait for the arena lock.
+/// [`TARGET_BUFFER`]'s worth either way, which on the [`Buffer::Target`] pass covers the block asked
+/// for and on [`Buffer::HostChoice`] is a floor under a block nobody named — comfortably over the
+/// 512–2048 frames the mainstream hosts pick for themselves. Sizing that pass from the request would
+/// size it from nothing, leaving the callback to allocate its way up to the host's own block, on the
+/// one thread in the process that must not wait for the arena lock. Deliberately **not** taken from
+/// [`period_frames`]: that is narrowed to what the device can double-buffer, which is a bound on
+/// what we may ask for rather than on what a host may hand over.
 fn staging_samples(supported: &cpal::SupportedStreamConfig) -> usize {
     target_frames(supported) as usize * usize::from(supported.channels())
 }
@@ -289,3 +304,7 @@ where
         )
         .map_err(|e| AppError::Player(format!("Failed to open the audio stream: {e}")))
 }
+
+#[cfg(test)]
+#[path = "tests/device_tests.rs"]
+mod tests;
