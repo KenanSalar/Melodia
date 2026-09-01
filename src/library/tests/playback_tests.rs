@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use super::{needs_station_reopen, resolve_start_slot};
 use crate::entities::track::TrackSummary;
+use crate::player::replaygain::TrackReplayGain;
 use crate::player::state::{
     MAX_VOLUME, PlayerAction, PlayerState, RESTART_THRESHOLD_MS, play_track_inner,
     resume_from_stopped,
@@ -205,6 +206,8 @@ fn stop_forwards_the_pause_fade_length() {
 #[test]
 fn seek_updates_position() {
     let mut state = state_with_queue(1);
+    // Seated, because the action carries the file the backend rebuilds to seek it.
+    play_track_inner(&mut state, make_summary(1, 180_000), None);
     state.position_ms = 0;
 
     let actions = state.build_seek_actions(45_000);
@@ -214,6 +217,8 @@ fn seek_updates_position() {
         actions,
         vec![PlayerAction::Seek {
             position_ms: 45_000,
+            file_path: "/music/1.mp3".to_owned(),
+            replaygain: TrackReplayGain::default(),
         }]
     );
 }
@@ -301,7 +306,14 @@ fn previous_restarts_after_threshold() {
     let actions = state.build_previous_actions();
 
     assert_eq!(state.position_ms, 0);
-    assert_eq!(actions, vec![PlayerAction::Seek { position_ms: 0 }]);
+    assert_eq!(
+        actions,
+        vec![PlayerAction::Seek {
+            position_ms: 0,
+            file_path: "/music/1.mp3".to_owned(),
+            replaygain: TrackReplayGain::default(),
+        }]
+    );
 }
 
 #[test]

@@ -243,8 +243,16 @@ pub enum PlayerAction {
     Stop {
         fade_ms: u64,
     },
+    /// Move the playing track's position.
+    ///
+    /// Carries the file and its gain for the same reason [`Self::PlayMedia`] does: the backend
+    /// seeks by building a source already at the target, so a seek rebuilds what the deck holds
+    /// and the new source needs its own baked values. Only ever emitted for a track, a live
+    /// source having no timeline to land on.
     Seek {
         position_ms: u64,
+        file_path: String,
+        replaygain: TrackReplayGain,
     },
     SetVolume(f64),
     SetSpeed(f64),
@@ -287,7 +295,7 @@ impl std::fmt::Display for PlayerAction {
             Self::Resume => f.write_str("resume"),
             Self::Pause { fade_ms } => write!(f, "pause (fade {fade_ms}ms)"),
             Self::Stop { fade_ms } => write!(f, "stop (fade {fade_ms}ms)"),
-            Self::Seek { position_ms } => write!(f, "seek to {position_ms}ms"),
+            Self::Seek { position_ms, .. } => write!(f, "seek to {position_ms}ms"),
             Self::SetVolume(v) => write!(f, "volume {v:.2}"),
             Self::SetSpeed(s) => write!(f, "speed {s:.2}"),
             Self::PreloadGapless(Some(path)) => write!(f, "preload gapless {path}"),
@@ -493,14 +501,32 @@ impl PlayerState {
         vec![PlayerAction::Stop { fade_ms }]
     }
 
+    /// The seek action for whatever track is on the deck, or nothing where none is.
+    ///
+    /// The track rides along because the backend rebuilds the source to move it; see
+    /// [`PlayerAction::Seek`].
+    fn seek_action(&self, position_ms: u64) -> Option<PlayerAction> {
+        let track = self.source.as_ref().and_then(PlaybackSource::track)?;
+        Some(PlayerAction::Seek {
+            position_ms,
+            file_path: track.file_path.clone(),
+            replaygain: track.replaygain(),
+        })
+    }
+
     /// Build actions for seek command.
     pub fn build_seek_actions(&mut self, position_ms: u64) -> Vec<PlayerAction> {
         // A live stream has no timeline to land on; the position is elapsed listening time.
         if !self.source_allows(PlaybackSource::is_seekable) {
             return vec![];
         }
+        // The position moves either way. Nothing seated is nothing for the backend to rebuild, but
+        // `source_allows` passes on an absent source, so this is reachable before anything has
+        // played — where the action the old in-place seek emitted was a no-op by the time it
+        // landed on an empty deck.
+        let seek = self.seek_action(position_ms);
         self.position_ms = position_ms;
-        vec![PlayerAction::Seek { position_ms }]
+        seek.into_iter().collect()
     }
 
     /// Build actions for next-track command.
@@ -550,8 +576,9 @@ impl PlayerState {
         let was_paused = self.status == PlaybackStatus::Paused;
 
         if self.position_ms > RESTART_THRESHOLD_MS {
+            let restart = self.seek_action(0);
             self.position_ms = 0;
-            return vec![PlayerAction::Seek { position_ms: 0 }];
+            return restart.into_iter().collect();
         }
 
         if let Some(track) = self.queue.previous().cloned() {
@@ -559,8 +586,9 @@ impl PlayerState {
             self.restore_paused(was_paused, &mut actions);
             actions
         } else {
+            let restart = self.seek_action(0);
             self.position_ms = 0;
-            vec![PlayerAction::Seek { position_ms: 0 }]
+            restart.into_iter().collect()
         }
     }
 

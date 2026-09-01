@@ -5,7 +5,6 @@
 //! it consumed, and the two are read against each other by every crossfade.
 
 use super::{Converter, Filled};
-use crate::player::audio::AudioSource;
 use crate::player::tests::helpers::{TestSource, bits, shape};
 
 /// `count` distinct, exactly representable samples, so an output can be traced back to its input.
@@ -199,27 +198,6 @@ fn a_block_boundary_is_not_a_source_boundary() {
     }
 
     assert_eq!(bits(&pieced), bits(&whole));
-}
-
-/// The held pair straddles wherever the source was, so a converter told nothing about a seek blends
-/// its first frame across the jump. Unequal rates are the whole test: at equal rates the offset is
-/// always zero and the fault has nothing to show.
-#[test]
-fn a_reanchored_converter_does_not_interpolate_across_the_seek() {
-    let mut src = TestSource::new(ramp(64), 1, 48_000);
-    let mut converter = Converter::new(shape(1, 48_000), shape(1, 44_100));
-
-    // Three frames at this ratio leave the offset part way between two source frames, which is the
-    // state that would smear.
-    let mut out = vec![0.0; 3];
-    converter.fill(&mut out, &mut src, 1.0);
-
-    let _ = src.try_seek(std::time::Duration::ZERO);
-    converter.reanchor();
-
-    let mut resumed = vec![0.0; 1];
-    converter.fill(&mut resumed, &mut src, 1.0);
-    assert_eq!(bits(&resumed), bits(&ramp(1)), "the first frame after a seek is a blend");
 }
 
 #[test]

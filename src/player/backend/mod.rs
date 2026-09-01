@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use crate::error::AppError;
+use crate::services::describe;
 use parking_lot::Mutex;
 
 use super::audio::AudioSource;
@@ -27,7 +28,6 @@ use super::decks::{Deck, Decks, DeferredOp, lock_decks};
 use super::equalizer::{self, EqShared, EqSource};
 use super::file_decode::FileDecoder;
 use super::output::mixer::Mixer;
-use super::output::voice::Voice;
 use super::prebuffer::StreamShared;
 use super::replaygain::{ReplayGainShared, TrackReplayGain};
 use super::stream_source::PreparedStream;
@@ -228,7 +228,18 @@ impl PlaybackEngine {
         // shares this mutex, so a synchronous Symphonia probe under it stalls
         // position publication. It is the only step that can be hoisted out;
         // everything depending on *which* deck we land on happens below.
-        let decoded = FileDecoder::open(Path::new(file_path))?;
+        let mut decoded = FileDecoder::open(Path::new(file_path))?;
+
+        // Seeked on the source we still own, rather than through the deck once it is mounted: a
+        // deck seek is serviced by the audio callback, so that spelling puts a demuxer scan on the
+        // real-time thread and parks this one on the callback with the decks lock held. Same
+        // reasoning as the hoisted open above, one step further.
+        if let Some(pos) = start_position_ms {
+            log::debug!("Resuming playback at {pos}ms");
+            if let Err(e) = decoded.try_seek(Duration::from_millis(pos)) {
+                log::warn!("Seek failed: {e}");
+            }
+        }
 
         self.bump_epoch();
         self.clear_live_stream();
@@ -255,10 +266,6 @@ impl PlaybackEngine {
             self.crossfade_armed.store(false, Ordering::Release);
         }
         self.gapless_pending.store(false, Ordering::Release);
-        if let Some(pos) = start_position_ms {
-            log::debug!("Resuming playback at {pos}ms");
-            Self::seek_to(&decks.active().voice, pos);
-        }
         Ok(())
     }
 
@@ -428,16 +435,6 @@ impl PlaybackEngine {
         decks.active().fade.arm(None, 1.0, crossfade::ABORT_RAMP_MS, false);
     }
 
-    /// Seek the (already-locked) deck.
-    ///
-    /// One timeline: speed is a ratio inside the deck's converter rather than a multiplier on the
-    /// rate reported upward, so a media position is what both the caller and the source mean.
-    fn seek_to(player: &Voice, media_ms: u64) {
-        if let Err(e) = player.try_seek(Duration::from_millis(media_ms)) {
-            log::warn!("Seek failed: {e}");
-        }
-    }
-
     pub fn resume(&self) {
         self.bump_epoch();
         // A crossfade in flight owns both decks' ramps; re-arming the active
@@ -525,14 +522,50 @@ impl PlaybackEngine {
         }
     }
 
-    pub fn seek(&self, position_ms: u64) {
+    /// Move the playing track to `position_ms`, by building a source already there.
+    ///
+    /// **The scan a seek costs happens here, on the caller's thread.** Symphonia seeks accurately
+    /// by parsing forward to the target, which for a backward seek means from the top of the file,
+    /// and moving the *mounted* source meant running that inside the audio callback: unbounded
+    /// file I/O on the one thread that may not do any, and the caller parked on it meanwhile. So
+    /// the file is opened and positioned first and the deck is handed the result, which leaves the
+    /// callback a pointer swap. `file_path` and `baked_rg` ride the action for that reason; the
+    /// gain is re-baked because the source carrying it is rebuilt.
+    ///
+    /// Costs a reopen, and a forward seek now scans from the top where the mounted decoder could
+    /// have scanned from where it was. That is the trade: it buys a seek that cannot glitch the
+    /// audio, including the other deck's.
+    ///
+    /// Deliberately does **not** bump the epoch: a seek replaces no deck *contents*, and
+    /// cancelling a pending deferred pause would leave the decks running silently at the ramp's
+    /// zero gain while the UI reads Paused. Nothing here touches `paused` either, so seeking a
+    /// paused track leaves it paused.
+    pub fn seek(&self, file_path: &str, position_ms: u64, baked_rg: TrackReplayGain) {
         self.abort_crossfade();
-        // Deliberately does NOT bump the epoch: a seek replaces no deck
-        // contents, and cancelling a pending deferred pause would leave the
-        // decks running silently at the ramp's zero gain while the UI reads
-        // Paused — seeking a paused track is an ordinary thing to do.
+
+        // Nothing on the deck is nothing to seek, which is what moving the mounted source answered
+        // too. Asked before the open so a seek against a drained deck costs no I/O; the callback
+        // asks again, since the deck can drain while the file is being read.
+        if self.lock_decks().active().voice.is_empty() {
+            return;
+        }
+
+        let position = Duration::from_millis(position_ms);
+        let mut decoded = match FileDecoder::open(Path::new(file_path)) {
+            Ok(decoded) => decoded,
+            Err(e) => {
+                log::warn!("Seek could not reopen the track: {}", describe(&e));
+                return;
+            }
+        };
+        if let Err(e) = decoded.try_seek(position) {
+            log::warn!("Seek failed: {e}");
+            return;
+        }
+
         let decks = self.lock_decks();
-        Self::seek_to(&decks.active().voice, position_ms);
+        let deck = decks.active();
+        deck.voice.replace(self.build_source(decoded, baked_rg, deck), position);
     }
 
     pub fn set_volume(&self, volume: f64) {
@@ -614,6 +647,17 @@ impl PlaybackEngine {
     pub fn query_position(&self) -> u64 {
         let position = self.lock_decks().active().voice.position();
         u64::try_from(position.as_millis()).unwrap_or(u64::MAX)
+    }
+
+    /// Free the sources the audio callback has finished with.
+    ///
+    /// Rides the monitor's existing tick rather than a timer of its own: a track change is the
+    /// only thing that produces one, so anything faster would be polling an empty queue. See
+    /// `output::voice::Voice::collect_spent` for what it saves.
+    pub fn collect_spent(&self) {
+        let decks = self.lock_decks();
+        decks.active().voice.collect_spent();
+        decks.idle().voice.collect_spent();
     }
 
     /// One lock acquisition, so gapless-transition and end-of-stream detection

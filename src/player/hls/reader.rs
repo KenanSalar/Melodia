@@ -1,12 +1,15 @@
 //! The segment scheduler, and the reader that hides it from the decoder.
 
 use std::io::{self, Read, Seek, SeekFrom};
+use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::Url;
 use tokio::sync::mpsc;
 
 use crate::error::AppError;
+use crate::player::prebuffer::StreamShared;
+use crate::player::stream_source::ABANDON_POLL;
 use crate::services::describe;
 
 use super::playlist::{self, MediaPlaylist, Playlist};
@@ -72,6 +75,10 @@ pub struct HlsReader {
     held: Vec<u8>,
     offset: usize,
     position: u64,
+    /// Read only to end the wait below. The scheduler cannot do it: it learns the listener is gone
+    /// from `chunks.closed()`, which fires when this receiver drops, which needs this read to
+    /// return, so parking here unconditionally leaves the two waiting on each other.
+    shared: Arc<StreamShared>,
 }
 
 impl Read for HlsReader {
@@ -80,11 +87,23 @@ impl Read for HlsReader {
             return Ok(0);
         }
         while self.offset >= self.held.len() {
-            let Some(chunk) = self.chunks.blocking_recv() else {
-                return Ok(0);
-            };
-            self.held = chunk;
-            self.offset = 0;
+            match self.chunks.try_recv() {
+                Ok(chunk) => {
+                    self.held = chunk;
+                    self.offset = 0;
+                }
+                Err(mpsc::error::TryRecvError::Disconnected) => return Ok(0),
+                // Polled rather than parked, so a stopped station releases this thread, the
+                // decoder and the ring at once instead of after the scheduler has spent its
+                // stall budget, which on a playlist that answers but has stopped advancing runs to
+                // a couple of minutes. Costs a wake-up granularity the segment cadence cannot feel.
+                Err(mpsc::error::TryRecvError::Empty) => {
+                    if self.shared.is_abandoned() {
+                        return Ok(0);
+                    }
+                    std::thread::sleep(ABANDON_POLL);
+                }
+            }
         }
 
         let take = (self.held.len() - self.offset).min(buf.len());
@@ -111,7 +130,14 @@ impl Seek for HlsReader {
 /// a dead station fails here rather than at the first read.
 ///
 /// `body` is the already-fetched playlist at `url`, which the caller read to recognise it as HLS.
-pub async fn open(client: &reqwest::Client, url: &Url, body: &str) -> Result<HlsStream, AppError> {
+///
+/// `shared` is taken for one field of it, and [`HlsReader::shared`] says which and why.
+pub async fn open(
+    client: &reqwest::Client,
+    url: &Url,
+    body: &str,
+    shared: Arc<StreamShared>,
+) -> Result<HlsStream, AppError> {
     let resolved = resolve(client, url, body).await?;
 
     // The live edge, minus the cushion. Anything older is history nobody tuning in wants to hear
@@ -167,6 +193,7 @@ pub async fn open(client: &reqwest::Client, url: &Url, body: &str) -> Result<Hls
             held: Vec::new(),
             offset: 0,
             position: 0,
+            shared,
         },
         codec,
         bitrate_kbps: resolved.bitrate_kbps,
@@ -322,15 +349,14 @@ impl Scheduler {
 
 /// Read at most [`MANIFEST_MAX_BYTES`] of one playlist, as text.
 async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    let body = crate::services::get_capped(
+    crate::services::get_capped_text(
         client,
         url,
         "Station playlist",
         MANIFEST_TIMEOUT,
         MANIFEST_MAX_BYTES,
     )
-    .await?;
-    Ok(String::from_utf8_lossy(&body).into_owned())
+    .await
 }
 
 /// Read at most [`SEGMENT_MAX_BYTES`] of one segment.

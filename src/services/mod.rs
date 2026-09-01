@@ -164,6 +164,26 @@ pub(crate) async fn get_capped(
     read_capped(response, what, max_bytes).await
 }
 
+/// [`get_capped`] for a body that is text.
+///
+/// **The fallback arm is the whole reason this is not one line at each call site.**
+/// `from_utf8` *moves* the bytes it was handed, so a well-formed body costs nothing, where
+/// `from_utf8_lossy` on an owned `Vec` borrows and then copies the lot, which is a copy of every
+/// playlist a station reloads for the life of it. The lossy path stays on the error arm rather
+/// than being dropped for the cheaper spelling: a mount serving one Latin-1 byte in a track title
+/// should get its replacement character, not a refusal that takes the station off the air.
+pub(crate) async fn get_capped_text(
+    client: &reqwest::Client,
+    url: &reqwest::Url,
+    what: &str,
+    timeout: std::time::Duration,
+    max_bytes: u64,
+) -> Result<String, AppError> {
+    let body = get_capped(client, url, what, timeout, max_bytes).await?;
+    Ok(String::from_utf8(body)
+        .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
+}
+
 /// Ceiling on the capacity a `Content-Length` may claim before a byte has arrived. High enough to
 /// skip the cheap end of the growth chain on every body here, low enough that a host overstating
 /// its length buys one hint rather than the caller's whole cap, which for the largest of them is

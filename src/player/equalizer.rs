@@ -270,6 +270,12 @@ struct Limiter {
     /// Knee's lower edge as a linear magnitude, precomputed so
     /// [`Self::target_gain`] can answer a quiet frame without a `log10`.
     knee_low_linear: f32,
+    /// Knee's upper edge, the same trick at the other end: past it the curve has a closed
+    /// linear form and [`Self::target_gain`] needs no `log10` there either.
+    knee_high_linear: f32,
+    /// The threshold as a linear magnitude, which above the knee *is* the numerator of the
+    /// gain. See [`Self::target_gain`].
+    threshold_linear: f32,
 }
 
 impl Limiter {
@@ -279,6 +285,8 @@ impl Limiter {
             attack_coeff: smoothing_coeff(LIMITER_ATTACK_S, frame_rate),
             release_coeff: smoothing_coeff(LIMITER_RELEASE_S, frame_rate),
             knee_low_linear: db_to_linear(LIMITER_THRESHOLD_DB - LIMITER_KNEE_DB / 2.0),
+            knee_high_linear: db_to_linear(LIMITER_THRESHOLD_DB + LIMITER_KNEE_DB / 2.0),
+            threshold_linear: db_to_linear(LIMITER_THRESHOLD_DB),
         }
     }
 
@@ -295,17 +303,17 @@ impl Limiter {
         if peak <= self.knee_low_linear {
             return 1.0;
         }
-        let peak_db = linear_to_db(peak);
-        let over = peak_db - LIMITER_THRESHOLD_DB;
-        let half_knee = LIMITER_KNEE_DB / 2.0;
-        let reduction_db = if over >= half_knee {
-            -over
-        } else {
-            // Within the knee — the guard above already excluded the low side.
-            let k = over + half_knee;
-            -(k * k) / (2.0 * LIMITER_KNEE_DB)
-        };
-        db_to_linear(reduction_db)
+        // Above the knee the ratio is unbounded, so the output pins at the threshold and the
+        // gain is the ratio that puts it there. Spelled in dB it is `10^(-over/20)`, which
+        // expands to exactly this, the `log10` and the `powf` having only undone each other.
+        if peak >= self.knee_high_linear {
+            return self.threshold_linear / peak;
+        }
+        // Inside the knee, where the quadratic has no linear form. Both guards above are
+        // edges of this curve, and it meets them at unity and at `threshold / peak`.
+        let over = linear_to_db(peak) - LIMITER_THRESHOLD_DB;
+        let k = over + LIMITER_KNEE_DB / 2.0;
+        db_to_linear(-(k * k) / (2.0 * LIMITER_KNEE_DB))
     }
 
     /// Advance the smoothed gain toward this frame's target: fast attack as the
@@ -783,6 +791,10 @@ impl<S: AudioSource> AudioSource for EqSource<S> {
         // The deck's converter never seeks part way through a frame, so this is for a caller
         // pulling by hand — and the decoder restores its own phase, so the two agree either way.
         Ok(())
+    }
+
+    fn release_claims(&mut self) {
+        self.input.release_claims();
     }
 }
 

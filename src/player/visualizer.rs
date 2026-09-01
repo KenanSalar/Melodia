@@ -170,6 +170,7 @@ impl VisualizerShared {
         DeckRun {
             viz: self.clone(),
             deck,
+            released: false,
         }
     }
 
@@ -278,6 +279,8 @@ const _: fn() = || {
 pub struct DeckRun {
     viz: Arc<VisualizerShared>,
     deck: usize,
+    /// Whether [`Self::release`] has already closed the ring, so the drop behind it is a no-op.
+    released: bool,
 }
 
 impl DeckRun {
@@ -305,13 +308,26 @@ impl DeckRun {
     pub fn set_sample_rate(&self, hz: u32) {
         self.viz.set_sample_rate(hz);
     }
+
+    /// End the run now rather than at the drop.
+    ///
+    /// A spent source is freed off the audio callback and so outlives the audio it was making,
+    /// where this claim may not: the reader mixes every ring still claimed. Idempotent, because the
+    /// drop behind it runs either way.
+    pub fn release(&mut self) {
+        if self.released {
+            return;
+        }
+        if let Some(ring) = self.ring() {
+            ring.close();
+        }
+        self.released = true;
+    }
 }
 
 impl Drop for DeckRun {
     fn drop(&mut self) {
-        if let Some(ring) = self.ring() {
-            ring.close();
-        }
+        self.release();
     }
 }
 
@@ -405,6 +421,13 @@ impl<S: AudioSource> AudioSource for VisualizerTap<S> {
         self.accum = 0.0;
         self.phase = 0;
         Ok(())
+    }
+
+    /// The claim this tap holds is exactly what the trait's default cannot know about: released
+    /// here, so a source freed off the callback stops being mixed the moment it stops playing.
+    fn release_claims(&mut self) {
+        self.run.release();
+        self.input.release_claims();
     }
 }
 

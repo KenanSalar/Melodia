@@ -5,11 +5,12 @@
 //! is all the rest of the tree ever sees; [`VoicePull`] is owned by the mixer and touched only from
 //! the audio callback. Between them sit a command channel and a pair of counters.
 //!
-//! **`clear` and `seek` block until the callback has serviced them**, which is not an accident of
-//! the implementation but the contract the layer above rests on: `Decks::cut_to` clears both decks
-//! and then starts a source on one, and a clear that had not landed yet would take the new source
-//! with it. `tests/crossfade.rs` is the audio thread while it pulls, which is why a control op that
-//! blocks has to be driven from another thread there.
+//! **`clear` blocks until the callback has serviced it**, which is not an accident of the
+//! implementation but the contract the layer above rests on: `Decks::cut_to` clears both decks and
+//! then starts a source on one, and a clear that had not landed yet would take the new source with
+//! it. `tests/crossfade.rs` is the audio thread while it pulls, which is why a control op that
+//! blocks has to be driven from another thread there. It is the only one: a seek is a `replace`,
+//! which carries a source the caller has already positioned and so has nothing to wait for.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -19,7 +20,7 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
-use super::super::audio::{AudioSource, Sample, SeekError, Shape};
+use super::super::audio::{AudioSource, Sample, SampleRate, Shape};
 use super::super::dsp::AtomicF64;
 use super::convert::{Converter, Filled};
 
@@ -46,16 +47,27 @@ const SERVICE_POLL: Duration = Duration::from_millis(1);
 /// drain, an allocation being the one thing that thread must not do.
 const COMMAND_SLOTS: usize = 8;
 
+/// How many spent sources may await collection before the callback frees one itself.
+///
+/// A clear retires the playing source and the staged one together, so two per voice covers the
+/// widest single op; the rest is slack for a collector that has not run yet. Full means falling
+/// back to the drop this exists to avoid, which is a worse tick rather than a broken one.
+const SPENT_SLOTS: usize = 8;
+
 /// A source and the converter that brings it to the device.
 ///
 /// Built on the control thread, because [`Converter::new`] allocates and the thread it would
 /// otherwise be built on is the one that must not.
 ///
-/// **Dropped on the audio thread**, which frees a decoder's 64 KiB read buffer there: too big for
-/// glibc's per-thread cache, so it takes the arena lock this process shares with the UI and tokio
-/// threads. Handing finished sources back to a control thread instead was tried and reverted — the
-/// visualizer keeps one ring per *deck* and scopes its liveness to the source's *drop*, so
-/// deferring that leaves a dead deck's ring mixing into the analysis window until someone collects.
+/// **Freed off the audio thread too**, through [`VoicePull::retire`]: dropping one here frees a
+/// decoder's 64 KiB read buffer, too big for glibc's per-thread cache, so it takes the arena lock
+/// this process shares with the UI and tokio threads.
+///
+/// Deferring the whole drop was tried once and reverted, because the visualizer scopes a deck's
+/// liveness to its source's *drop*, so a spent source awaiting collection kept a dead deck's ring
+/// in the analysis window. What makes it work now is that the two halves are separable:
+/// [`AudioSource::release_claims`] gives up the claim on the callback, where it is a counter
+/// decrement, and only the free is handed back.
 struct Loaded {
     source: Box<dyn AudioSource>,
     converter: Converter,
@@ -64,7 +76,17 @@ struct Loaded {
 enum Command {
     Append(Loaded),
     Clear,
-    Seek(Duration),
+    /// Swap the playing source for one the control thread has already positioned, anchoring the
+    /// clock at `frames` of it.
+    ///
+    /// This is what a seek is. Moving a *mounted* source meant running the demuxer's scan inside
+    /// the callback, on a thread that may not read a file, and blocking the caller on the result;
+    /// building the sought source first leaves this side a pointer swap. `frames` comes with it
+    /// because the clock is re-anchored by whoever knows where the source now is.
+    Replace {
+        loaded: Loaded,
+        frames: u64,
+    },
 }
 
 /// What both sides read without going through the channel.
@@ -92,27 +114,55 @@ struct VoiceShared {
     /// returns waits for the second to reach the first.
     issued: AtomicU64,
     serviced: AtomicU64,
-    /// Where the callback leaves a seek's outcome for the control thread waiting on it.
-    seek_result: Mutex<Option<Result<(), SeekError>>>,
 }
 
 /// The control side of one voice.
 pub struct Voice {
     shared: Arc<VoiceShared>,
     commands: SyncSender<Command>,
+    /// Spent sources the callback handed back, freed by whoever calls [`Self::collect_spent`].
+    /// Behind a lock because a `Receiver` is not `Sync` and this side is shared; nothing contends
+    /// it, the collector being one task.
+    spent: Mutex<Receiver<Loaded>>,
     device: Shape,
 }
 
 impl Voice {
     /// Queue `source` behind whatever is already on this voice.
     pub fn append<S: AudioSource + 'static>(&self, source: S) {
-        let loaded = Loaded {
+        let loaded = self.load(source);
+        self.send_counted(Command::Append(loaded));
+    }
+
+    /// Put `source` on this voice in place of what is playing, with the clock anchored at
+    /// `position` of it.
+    ///
+    /// How a seek is spelled: `source` is already positioned, so the callback does a pointer swap
+    /// rather than a demuxer scan, and nothing here waits on it. A voice with nothing playing
+    /// takes no source from this — the callback refuses it there, because a deck that drained
+    /// while this was in flight is one the monitor is about to advance past.
+    pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration) {
+        let frames = frames_at(position, source.sample_rate());
+        let loaded = self.load(source);
+        self.send_counted(Command::Replace { loaded, frames });
+    }
+
+    /// Pair `source` with the converter that brings it to this device.
+    fn load<S: AudioSource + 'static>(&self, source: S) -> Loaded {
+        Loaded {
             converter: Converter::new(source.shape(), self.device),
             source: Box::new(source),
-        };
-        // Before the send, so the count is never behind what the callback can already see.
+        }
+    }
+
+    /// Send a command carrying a source, counting it before the callback can see it.
+    ///
+    /// The bump leads the send so the count is never behind what the callback can already act on.
+    /// Both carriers pay it back the same way: `Append` when its source finishes, `Replace` when
+    /// the callback drops whichever source the swap leaves over.
+    fn send_counted(&self, command: Command) {
         self.shared.sources.fetch_add(1, Ordering::SeqCst);
-        if !self.send(Command::Append(loaded)) {
+        if !self.send(command) {
             self.shared.sources.fetch_sub(1, Ordering::SeqCst);
         }
     }
@@ -135,24 +185,14 @@ impl Voice {
         self.shared.frames.store(0, Ordering::Relaxed);
     }
 
-    /// Seek the playing source. Nothing playing is not an error — there is simply nowhere to go.
+    /// Free whatever the callback has finished with, here rather than there.
     ///
-    /// # Errors
-    ///
-    /// Whatever the source's own `try_seek` returned.
-    pub fn try_seek(&self, position: Duration) -> Result<(), SeekError> {
-        if self.shared.sources.load(Ordering::SeqCst) == 0 {
-            return Ok(());
-        }
-        *self.shared.seek_result.lock() = None;
-        if !self.send(Command::Seek(position)) {
-            return Ok(());
-        }
-        self.await_service();
-        // A timed-out wait leaves the slot empty, which reads as the seek having landed. That is
-        // the same answer rodio gave when its feedback channel closed, and the alternative is a
-        // warning about a stream that has already stopped producing audio.
-        self.shared.seek_result.lock().take().unwrap_or(Ok(()))
+    /// Cheap and idempotent, so it belongs on a timer the app already runs. Skipping it costs
+    /// nothing but a few spent sources held until the next call, and once the queue fills the
+    /// callback goes back to freeing its own.
+    pub fn collect_spent(&self) {
+        let spent = self.spent.lock();
+        while spent.try_recv().is_ok() {}
     }
 
     pub fn play(&self) {
@@ -243,6 +283,8 @@ pub struct VoicePull {
     commands: Receiver<Command>,
     current: Option<Loaded>,
     staged: VecDeque<Loaded>,
+    /// Where a spent source goes instead of being freed here. See [`Loaded`].
+    spent: SyncSender<Loaded>,
     device: Shape,
 }
 
@@ -313,11 +355,18 @@ impl VoicePull {
     /// late, and one step of skew between the voices is what `LOCKSTEP_FRAMES` already bounds.
     fn service(&mut self) {
         let seen = self.shared.issued.load(Ordering::Acquire);
+        // Nothing issued since the last drain, which is every step of every block but the ones
+        // carrying a transport op. Answering that from the counter keeps the channel, and the
+        // fence its `try_recv` issues even when empty, off the path the mixer runs dozens of
+        // times per callback. Only this thread writes `serviced`, so the load needs no ordering.
+        if seen == self.shared.serviced.load(Ordering::Relaxed) {
+            return;
+        }
         loop {
             match self.commands.try_recv() {
                 Ok(Command::Append(loaded)) => self.accept(loaded),
                 Ok(Command::Clear) => self.clear(),
-                Ok(Command::Seek(position)) => self.seek(position),
+                Ok(Command::Replace { loaded, frames }) => self.replace(loaded, frames),
                 Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
             }
         }
@@ -332,13 +381,38 @@ impl VoicePull {
         }
     }
 
-    /// Make `voice` the playing source and re-anchor the clock on it.
+    /// Make `loaded` the playing source, with the clock anchored `frames` into it.
     ///
     /// Count first, rate last — the pair's ordering is argued on [`VoiceShared::frames`].
-    fn start(&mut self, loaded: Loaded) {
-        self.shared.frames.store(0, Ordering::Relaxed);
+    fn start_at(&mut self, loaded: Loaded, frames: u64) {
+        self.shared.frames.store(frames, Ordering::Relaxed);
         self.shared.rate.store(loaded.source.sample_rate().get(), Ordering::Release);
         self.current = Some(loaded);
+    }
+
+    /// [`Self::start_at`] from the top, which is every arrival but a seek's.
+    fn start(&mut self, loaded: Loaded) {
+        self.start_at(loaded, 0);
+    }
+
+    /// Swap the playing source for `loaded`, which the control thread has already positioned.
+    ///
+    /// **Nothing playing takes nothing**: the deck drained while this was in flight, and mounting
+    /// a source here would restart a track the monitor is about to advance past — where the
+    /// in-place seek this replaced answered an empty voice by doing nothing at all. Either way one
+    /// source is dropped, which is the count `Voice::send_counted` added for.
+    fn replace(&mut self, loaded: Loaded, frames: u64) {
+        // Whichever source the swap leaves over: the one it displaces, or `loaded` itself where
+        // the deck drained under it and there is nothing to displace.
+        let spent = match self.current.take() {
+            Some(displaced) => {
+                self.start_at(loaded, frames);
+                displaced
+            }
+            None => loaded,
+        };
+        self.retire(spent);
+        self.shared.sources.fetch_sub(1, Ordering::SeqCst);
     }
 
     /// The playing source ran out: drop it and take the staged one, if any.
@@ -346,7 +420,8 @@ impl VoicePull {
     /// The drop is what releases the visualizer's claim on this deck's ring, so it happens here
     /// rather than being deferred — see [`Loaded`].
     fn finish_current(&mut self) {
-        if self.current.take().is_some() {
+        if let Some(spent) = self.current.take() {
+            self.retire(spent);
             self.shared.sources.fetch_sub(1, Ordering::SeqCst);
         }
         if let Some(next) = self.staged.pop_front() {
@@ -355,37 +430,40 @@ impl VoicePull {
     }
 
     fn clear(&mut self) {
-        let dropped = usize::from(self.current.take().is_some()) + self.staged.len();
-        self.staged.clear();
+        let dropped = usize::from(self.current.is_some()) + self.staged.len();
+        if let Some(spent) = self.current.take() {
+            self.retire(spent);
+        }
+        while let Some(spent) = self.staged.pop_front() {
+            self.retire(spent);
+        }
         self.shared.sources.fetch_sub(dropped, Ordering::SeqCst);
         self.shared.frames.store(0, Ordering::Relaxed);
     }
 
-    fn seek(&mut self, position: Duration) {
-        let Some(loaded) = self.current.as_mut() else {
-            return;
-        };
-        let result = loaded.source.try_seek(position);
-        if result.is_ok() {
-            loaded.converter.reanchor();
-            // Integer throughout: the count this re-anchors is what `Voice::position` divides back
-            // down, so a float round trip here would read back a millisecond off its own target.
-            let rate = u128::from(loaded.source.sample_rate().get());
-            let frames = position.as_micros().saturating_mul(rate) / 1_000_000;
-            self.shared.frames.store(u64::try_from(frames).unwrap_or(u64::MAX), Ordering::Relaxed);
-        }
-        // The audio thread may not block, hence `try_lock`. Nothing contends it: the waiter only
-        // reads the slot once `serviced` moves, which is after the whole drain. A result lost to a
-        // future contender would read as a landed seek, as a timed-out wait already does.
-        if let Some(mut slot) = self.shared.seek_result.try_lock() {
-            *slot = Some(result);
-        }
+    /// Give up `spent`'s claims here and hand the rest back to be freed elsewhere.
+    ///
+    /// The send is the whole point and the fallback is the status quo: a full queue frees it right
+    /// here, which is what every retirement used to do. See [`Loaded`].
+    fn retire(&mut self, mut spent: Loaded) {
+        spent.source.release_claims();
+        drop(self.spent.try_send(spent));
     }
+}
+
+/// Frames of a source running at `rate` that `position` is worth.
+///
+/// Integer throughout: this count is what [`Voice::position`] divides back down, so a float round
+/// trip would read back a millisecond off the target the caller asked for.
+fn frames_at(position: Duration, rate: SampleRate) -> u64 {
+    let frames = position.as_micros().saturating_mul(u128::from(rate.get())) / 1_000_000;
+    u64::try_from(frames).unwrap_or(u64::MAX)
 }
 
 /// Build one voice's two halves.
 pub fn pair(device: Shape) -> (Voice, VoicePull) {
     let (command_tx, command_rx) = sync_channel(COMMAND_SLOTS);
+    let (spent_tx, spent_rx) = sync_channel(SPENT_SLOTS);
 
     let shared = Arc::new(VoiceShared {
         paused: AtomicBool::new(false),
@@ -396,12 +474,12 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         rate: AtomicU32::new(0),
         issued: AtomicU64::new(0),
         serviced: AtomicU64::new(0),
-        seek_result: Mutex::new(None),
     });
 
     let voice = Voice {
         shared: shared.clone(),
         commands: command_tx,
+        spent: Mutex::new(spent_rx),
         device,
     };
     let pull = VoicePull {
@@ -409,6 +487,7 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         commands: command_rx,
         current: None,
         staged: VecDeque::with_capacity(COMMAND_SLOTS),
+        spent: spent_tx,
         device,
     };
     (voice, pull)

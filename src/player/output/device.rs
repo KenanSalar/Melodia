@@ -273,9 +273,10 @@ fn staging_samples(supported: &cpal::SupportedStreamConfig) -> usize {
 
 /// One arm per sample format the host can ask for, because the callback is monomorphic in it.
 ///
-/// Every arm stages in [`Sample`] and converts on the way out, so [`MixerPull::fill`] stays the one
-/// place samples are produced however the device wants them — the conversion is the only thing that
-/// differs between a shared stream and an exclusive one later.
+/// Every arm but one stages in [`Sample`] and converts on the way out, so [`MixerPull::fill`] stays
+/// the one place samples are produced however the device wants them — the conversion is the only
+/// thing that differs between a shared stream and an exclusive one later. The exception is the
+/// format that *is* [`Sample`], which needs neither half; [`direct_stream`] says what that saves.
 fn build_stream<E>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
@@ -287,6 +288,10 @@ fn build_stream<E>(
 where
     E: FnMut(cpal::StreamError) + Send + 'static,
 {
+    if format == cpal::SampleFormat::F32 {
+        return direct_stream(device, config, pull, error_callback);
+    }
+
     macro_rules! arms {
         ($($variant:ident => $ty:ty),+ $(,)?) => {
             match format {
@@ -298,11 +303,11 @@ where
         };
     }
 
-    // Every variant cpal 0.17 has, which is what rodio covered. The 24-bit pair is the one worth
-    // naming: cpal's own config ordering ranks it, and a card offering nothing else would otherwise
-    // fail every rung of the ladder and take the boot with it.
+    // Every variant cpal 0.17 has bar `F32` above, which together is what rodio covered. The
+    // 24-bit pair is the one worth naming: cpal's own config ordering ranks it, and a card
+    // offering nothing else would otherwise fail every rung of the ladder and take the boot
+    // with it.
     arms! {
-        F32 => f32,
         F64 => f64,
         I8 => i8,
         I16 => i16,
@@ -315,6 +320,36 @@ where
         U32 => u32,
         U64 => u64,
     }
+}
+
+/// The stream for a device that already speaks [`Sample`]: no staging buffer, no conversion pass,
+/// the mixer writing straight into the block cpal handed over.
+///
+/// This is the rung essentially every install lands on, the default config being `f32` on ALSA,
+/// `PipeWire`, `CoreAudio` and WASAPI shared mode, so what the other arms need is worth not paying
+/// here: a resident buffer the size of one period, and a full pass over every block to copy each
+/// sample onto itself. [`MixerPull::fill`] zeroes what it is handed before writing, partial
+/// trailing frame included, so nothing depended on owning that buffer first.
+fn direct_stream<E>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    mut pull: MixerPull,
+    error_callback: E,
+) -> Result<cpal::Stream, AppError>
+where
+    E: FnMut(cpal::StreamError) + Send + 'static,
+{
+    opened(device.build_output_stream::<Sample, _, _>(
+        config,
+        move |data, _| pull.fill(data),
+        error_callback,
+        None,
+    ))
+}
+
+/// The one wording for a stream that would not open, so the two builders can't drift.
+fn opened(built: Result<cpal::Stream, cpal::BuildStreamError>) -> Result<cpal::Stream, AppError> {
+    built.map_err(|e| AppError::Player(format!("Failed to open the audio stream: {e}")))
 }
 
 fn output_stream<T, E>(
@@ -330,23 +365,21 @@ where
 {
     // A host handing over more than `staging_samples` allowed for grows this once and keeps it.
     let mut staging: Vec<Sample> = vec![0.0; staging_samples];
-    device
-        .build_output_stream::<T, _, _>(
-            config,
-            move |data, _| {
-                if staging.len() < data.len() {
-                    staging.resize(data.len(), 0.0);
-                }
-                let block = &mut staging[..data.len()];
-                pull.fill(block);
-                for (slot, sample) in data.iter_mut().zip(block.iter()) {
-                    *slot = T::from_sample(*sample);
-                }
-            },
-            error_callback,
-            None,
-        )
-        .map_err(|e| AppError::Player(format!("Failed to open the audio stream: {e}")))
+    opened(device.build_output_stream::<T, _, _>(
+        config,
+        move |data, _| {
+            if staging.len() < data.len() {
+                staging.resize(data.len(), 0.0);
+            }
+            let block = &mut staging[..data.len()];
+            pull.fill(block);
+            for (slot, sample) in data.iter_mut().zip(block.iter()) {
+                *slot = T::from_sample(*sample);
+            }
+        },
+        error_callback,
+        None,
+    ))
 }
 
 #[cfg(test)]

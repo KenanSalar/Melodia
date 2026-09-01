@@ -23,7 +23,7 @@ struct MockBackendInner {
     stop_count: u32,
     /// `fade_ms` per `stop_with_fade`, including the `0`s that mean "immediate".
     stop_fade_calls: Vec<u64>,
-    seek_calls: Vec<u64>,
+    seek_calls: Vec<(String, u64)>,
     volume_calls: Vec<f64>,
     speed_calls: Vec<f64>,
     preload_calls: Vec<Option<String>>,
@@ -125,8 +125,8 @@ impl PlayerBackend for MockBackend {
         inner.stop_fade_calls.push(fade_ms);
         inner.stop_count += 1;
     }
-    fn seek(&self, position_ms: u64) {
-        self.inner().seek_calls.push(position_ms);
+    fn seek(&self, file_path: &str, position_ms: u64, _baked_rg: TrackReplayGain) {
+        self.inner().seek_calls.push((file_path.to_owned(), position_ms));
     }
     fn set_volume(&self, volume: f64) {
         self.inner().volume_calls.push(volume);
@@ -395,12 +395,14 @@ async fn execute_seek_calls_backend() -> Result<(), AppError> {
 
     let actions = vec![PlayerAction::Seek {
         position_ms: 30_000,
+        file_path: "/music/a.flac".to_owned(),
+        replaygain: TrackReplayGain::default(),
     }];
 
     crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
-    assert_eq!(inner.seek_calls, vec![30_000]);
+    assert_eq!(inner.seek_calls, vec![("/music/a.flac".to_owned(), 30_000)]);
     Ok(())
 }
 

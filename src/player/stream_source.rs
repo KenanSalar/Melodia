@@ -65,8 +65,9 @@ const RECONNECT_ATTEMPTS: u32 = 5;
 /// The first backoff step; each attempt doubles it up to [`RECONNECT_MAX_DELAY`].
 const RECONNECT_BASE_SECS: u64 = 1;
 const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(16);
-/// Granularity at which a backoff sleep notices the source was dropped.
-const ABANDON_POLL: Duration = Duration::from_millis(100);
+/// Granularity at which a blocking wait notices the source was dropped. Shared with
+/// [`super::hls`], whose reader parks on the same question from the same thread.
+pub(super) const ABANDON_POLL: Duration = Duration::from_millis(100);
 
 /// Whole-request ceiling for fetching a playlist file, which is a small text document nobody
 /// should be waiting on. The audio request itself is deliberately unbounded — it never ends.
@@ -275,7 +276,7 @@ async fn connect_following_playlist(
     // Extension first: a hand-typed `.pls` is worth spotting before opening a stream we would only
     // throw away, and it is the shape most custom stations arrive in.
     let url = if is_playlist_url(&url) {
-        match follow_playlist(client, &url).await? {
+        match follow_playlist(client, &url, shared).await? {
             Followed::Segments(opened) => {
                 return Ok(Resolved {
                     opened: *opened,
@@ -297,7 +298,7 @@ async fn connect_following_playlist(
         }),
         // An extensionless mount that turned out to be a pointer. Depth stays at one: what it
         // names is opened as audio or not at all.
-        Opened::Playlist => match follow_playlist(client, &url).await? {
+        Opened::Playlist => match follow_playlist(client, &url, shared).await? {
             Followed::Segments(opened) => Ok(Resolved {
                 opened: *opened,
                 url,
@@ -333,20 +334,22 @@ async fn reopen(
         },
         Reopen::Segments => {
             let body = fetch_playlist(client, url).await?;
-            open_segments(client, url, &body).await
+            open_segments(client, url, &body, shared).await
         }
     }
 }
 
 /// Open a segment playlist as a stream, which is the whole of [`hls`]'s job plus the probe.
 ///
-/// No `shared`: HLS carries no ICY metadata, so nothing here has a title to publish.
+/// `shared` reaches the reader for its abandon flag alone, never for a title: HLS carries no ICY
+/// metadata, so nothing here has one to publish.
 async fn open_segments(
     client: &reqwest::Client,
     url: &Url,
     body: &str,
+    shared: &Arc<StreamShared>,
 ) -> Result<OpenedStream, AppError> {
-    let stream = hls::open(client, url, body).await?;
+    let stream = hls::open(client, url, body, Arc::clone(shared)).await?;
     let facts = StationFacts {
         codec: stream.codec.to_owned(),
         bitrate: stream.bitrate_kbps,
@@ -479,10 +482,14 @@ fn prefetch_bytes(bitrate_kbps: Option<u32>) -> u64 {
 /// The HLS check comes first because the two overlap on the wire — a segment playlist is also a
 /// valid Extended M3U, and read as a pointer its first segment opens, plays for a few seconds and
 /// stops.
-async fn follow_playlist(client: &reqwest::Client, url: &Url) -> Result<Followed, AppError> {
+async fn follow_playlist(
+    client: &reqwest::Client,
+    url: &Url,
+    shared: &Arc<StreamShared>,
+) -> Result<Followed, AppError> {
     let body = fetch_playlist(client, url).await?;
     if hls::playlist::is_hls(&body) {
-        return Ok(Followed::Segments(Box::new(open_segments(client, url, &body).await?)));
+        return Ok(Followed::Segments(Box::new(open_segments(client, url, &body, shared).await?)));
     }
 
     let target = first_stream_url(&body)
@@ -494,15 +501,14 @@ async fn follow_playlist(client: &reqwest::Client, url: &Url) -> Result<Followed
 
 /// Read at most [`PLAYLIST_MAX_BYTES`] of `url` as text.
 async fn fetch_playlist(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    let body = crate::services::get_capped(
+    crate::services::get_capped_text(
         client,
         url,
         "Station playlist",
         PLAYLIST_TIMEOUT,
         PLAYLIST_MAX_BYTES,
     )
-    .await?;
-    Ok(String::from_utf8_lossy(&body).into_owned())
+    .await
 }
 
 /// Does this URL's path end in a playlist extension? Query and fragment are stripped first, since

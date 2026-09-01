@@ -104,19 +104,6 @@ impl Converter {
         self.done
     }
 
-    /// Forget where the source was, because it has just been moved.
-    ///
-    /// The held pair straddles the *old* position, so without this the first frame after a seek is
-    /// interpolated across the jump. The drained flags matter more than that: a seek landing while
-    /// the source's last frame was still being handed over would otherwise end the source again on
-    /// the next advance, dropping the very track the seek had just moved.
-    pub fn reanchor(&mut self) {
-        self.position = 0.0;
-        self.primed = false;
-        self.drained = false;
-        self.done = false;
-    }
-
     /// Take the first two frames. A source with none at all is already over.
     fn prime(&mut self, src: &mut dyn AudioSource) -> u64 {
         let mut taken = 0;

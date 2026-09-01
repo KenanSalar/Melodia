@@ -291,6 +291,10 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 _ = interval.tick() => {}
             }
 
+            // Ahead of the not-playing short circuit below, because a stop is what retires the
+            // most sources at once and it lands on exactly the ticks that circuit skips.
+            engine.collect_spent();
+
             // Quick check: skip tick when not playing (lock-free via atomic mirror)
             let is_playing = player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed)
                 == PlaybackStatus::Playing as u8;

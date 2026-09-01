@@ -1166,7 +1166,14 @@ fn every_player_action_names_what_it_did() {
         (PlayerAction::Resume, &["resume"]),
         (PlayerAction::Pause { fade_ms: 250 }, &["pause", "250"]),
         (PlayerAction::Stop { fade_ms: 0 }, &["stop", "0"]),
-        (PlayerAction::Seek { position_ms: 9_001 }, &["seek", "9001"]),
+        (
+            PlayerAction::Seek {
+                position_ms: 9_001,
+                file_path: "/music/e.flac".to_owned(),
+                replaygain: TrackReplayGain::default(),
+            },
+            &["seek", "9001"],
+        ),
         (PlayerAction::SetVolume(0.5), &["volume", "0.50"]),
         (PlayerAction::SetSpeed(1.25), &["speed", "1.25"]),
         (
@@ -1478,7 +1485,9 @@ fn the_transport_is_a_tracks_again_once_one_replaces_the_station() {
     assert_eq!(
         state.build_seek_actions(30_000),
         vec![PlayerAction::Seek {
-            position_ms: 30_000
+            position_ms: 30_000,
+            file_path: "/music/1.mp3".to_owned(),
+            replaygain: TrackReplayGain::default(),
         }]
     );
     assert_eq!(state.build_pause_actions(250), vec![PlayerAction::Pause { fade_ms: 250 }]);

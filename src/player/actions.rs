@@ -77,8 +77,12 @@ pub fn execute_actions<B: PlayerBackend>(
             PlayerAction::Resume => engine.resume(),
             PlayerAction::Pause { fade_ms } => engine.pause_with_fade(fade_ms),
             PlayerAction::Stop { fade_ms } => engine.stop_with_fade(fade_ms),
-            PlayerAction::Seek { position_ms } => {
-                engine.seek(position_ms);
+            PlayerAction::Seek {
+                position_ms,
+                file_path,
+                replaygain,
+            } => {
+                engine.seek(&file_path, position_ms, replaygain);
             }
             PlayerAction::SetVolume(v) => engine.set_volume(v),
             PlayerAction::SetSpeed(s) => engine.set_speed(s),

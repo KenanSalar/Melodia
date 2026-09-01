@@ -40,7 +40,9 @@ pub trait PlayerBackend: Send + Sync {
     fn stop(&self);
     /// Fade to silence over `fade_ms` and then stop. `0` is an immediate stop.
     fn stop_with_fade(&self, fade_ms: u64);
-    fn seek(&self, position_ms: u64);
+    /// Move the playing track to `position_ms`. Takes the file and its gain because the seek is
+    /// done by building a source already there; see `PlaybackEngine::seek`.
+    fn seek(&self, file_path: &str, position_ms: u64, baked_rg: TrackReplayGain);
     fn set_volume(&self, volume: f64);
     fn set_speed(&self, speed: f64);
     fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain);
@@ -86,8 +88,8 @@ impl PlayerBackend for PlaybackEngine {
     fn stop_with_fade(&self, fade_ms: u64) {
         self.stop_with_fade(fade_ms);
     }
-    fn seek(&self, position_ms: u64) {
-        self.seek(position_ms);
+    fn seek(&self, file_path: &str, position_ms: u64, baked_rg: TrackReplayGain) {
+        self.seek(file_path, position_ms, baked_rg);
     }
     fn set_volume(&self, volume: f64) {
         self.set_volume(volume);

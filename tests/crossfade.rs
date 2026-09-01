@@ -332,10 +332,11 @@ async fn seeking_mid_crossfade_drops_the_outgoing_deck_and_restores_unity() -> s
     // Land mid-overlap, where the incoming deck sits at ~half gain.
     let _ = pull(&mut mix, frames_for_ms(FADE_MS) / 2);
 
-    // `seek` clears the live outgoing deck and seeks the survivor; both calls
-    // block on the audio thread, which is us.
+    // The abort clears the live outgoing deck, which blocks on the audio thread, and that is us.
+    // The survivor is whatever `crossfade_into` brought in, so that is the file the seek rebuilds.
     let r = engine.clone();
-    drive_until(&mut mix, move || r.seek(0));
+    let survivor = fx.track_b.clone();
+    drive_until(&mut mix, move || r.seek(&survivor, 0, TrackReplayGain::default()));
     assert!(!engine.is_crossfading(), "a seek must abort the crossfade");
 
     // The survivor ramps back to unity from its partial fade-in gain. Had the
@@ -386,7 +387,8 @@ fn assert_seeking_keeps_the_image(eq_on: bool) -> std::io::Result<()> {
         // parity. Well inside the six-second fixture.
         let position_ms = 500 + step * 37;
         let r = engine.clone();
-        drive_until(&mut mix, move || r.seek(position_ms));
+        let seeked = path.clone();
+        drive_until(&mut mix, move || r.seek(&seeked, position_ms, TrackReplayGain::default()));
         pull_lenient(&mut mix, WARMUP_FRAMES);
 
         for (left, right) in pull_stereo(&mut mix, WARMUP_FRAMES) {

@@ -212,14 +212,18 @@ fn clearing_a_voice_that_drained_on_its_own_still_rewinds_the_clock() {
     assert_eq!(voice.position(), Duration::ZERO, "the clear left the drained source's position");
 }
 
+/// A seek is a `replace`, so the clock has to come from the caller's target rather than from the
+/// frames the incoming source has handed over, which at the swap is none.
 #[test]
-fn a_seek_re_anchors_the_clock_on_where_it_asked_to_be() {
-    let (voice, pull) = pair(mono(RATE));
-    let _callback = Callback::start(pull);
+fn a_replace_anchors_the_clock_where_the_caller_asked() {
+    let (voice, mut pull) = pair(mono(RATE));
 
     voice.append(seconds_of(4, RATE));
+    pump(&mut pull, 64);
+
     let seek = Duration::from_secs(2);
-    assert!(voice.try_seek(seek).is_ok());
+    voice.replace(seconds_of(4, RATE), seek);
+    pump(&mut pull, 64);
 
     let got = voice.position();
     assert!(
@@ -228,19 +232,23 @@ fn a_seek_re_anchors_the_clock_on_where_it_asked_to_be() {
     );
 }
 
+/// The counterpart to the in-place seek's "nothing playing is nowhere to go". A deck that drained
+/// while the seek was reading the file must not have that file mounted on it: the monitor is about
+/// to advance past the track, and a source arriving here would restart it under that.
 #[test]
-fn seeking_an_empty_voice_is_not_an_error() {
-    let (voice, _pull) = pair(mono(RATE));
-    assert!(voice.try_seek(Duration::from_secs(1)).is_ok());
+fn replacing_on_an_empty_voice_mounts_nothing() {
+    let (voice, mut pull) = pair(mono(RATE));
+
+    voice.replace(seconds_of(4, RATE), Duration::from_secs(1));
+    pump(&mut pull, 64);
+
+    assert!(voice.is_empty(), "a replace mounted a source on a voice with nothing playing");
+    assert_eq!(voice.position(), Duration::ZERO, "the clock moved for a source never mounted");
 }
 
 /// A seek can land on a source that has just handed over its last frame, the block boundary only
-/// having to fall one frame short of the end. Told nothing, the converter ends that source again on
-/// its next advance and the voice drops the very track the seek had moved.
-///
-/// Driven through `VoicePull::seek` rather than `Voice::try_seek` because the window is one frame
-/// wide and the public op blocks until a callback services it, which here would be the pump that
-/// closes the window.
+/// having to fall one frame short of the end. That source is drained but not finished, so the voice
+/// still counts it and the swap has to take it rather than read the deck as empty and refuse.
 #[test]
 fn a_seek_keeps_a_source_that_had_just_reached_its_end() {
     const FRAMES: usize = 4_410;
@@ -253,7 +261,7 @@ fn a_seek_keeps_a_source_that_had_just_reached_its_end() {
     assert_eq!(pump(&mut pull, FRAMES - 1).len(), FRAMES - 1);
     assert_eq!(voice.len(), 1, "the source must still be on the voice to be seekable");
 
-    pull.seek(Duration::ZERO);
+    voice.replace(TestSource::new(vec![0.5; FRAMES], 1, RATE), Duration::ZERO);
 
     assert_eq!(
         pump(&mut pull, 64).len(),

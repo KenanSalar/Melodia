@@ -77,4 +77,16 @@ pub trait AudioSource: Iterator<Item = Sample> + Send {
     /// [`SeekError::NotSupported`] when the source has no timeline to seek on, or whatever the
     /// decoder raised.
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError>;
+
+    /// Give up anything the rest of the app reads *liveness* from, ahead of the drop.
+    ///
+    /// A spent source is freed away from the audio callback, which means it outlives the moment it
+    /// stopped playing. Whatever answers "is this deck still making sound" cannot wait for that:
+    /// the visualizer mixes every claimed ring, so a claim held until collection leaves a finished
+    /// track's tail in the window. Releasing is a counter decrement, and freeing is what gets
+    /// deferred.
+    ///
+    /// Default is nothing, which is right for every source that owns no such claim. A wrapper owes
+    /// a forward to whatever it wraps.
+    fn release_claims(&mut self) {}
 }

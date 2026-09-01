@@ -314,7 +314,10 @@ fn fill(
 
         match decoder.decode(&packet) {
             Ok(decoded) => {
-                let spec = decoded.spec().clone();
+                // Borrowed, not cloned: `copy_to_vec_interleaved` takes `&self` too, and
+                // `Channels` has a boxed variant, so the clone was a latent per-packet
+                // allocation on the thread that decodes a local file, the audio callback.
+                let spec = decoded.spec();
                 decoded.copy_to_vec_interleaved(samples);
                 if !samples.is_empty() {
                     let channels =
