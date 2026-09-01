@@ -165,6 +165,14 @@ CPU does.
    decks, and corrected the `process::exit(0)` paragraph in `CLAUDE.md` — which stays,
    because three other threads never exit and only one of the four was the sink's.
 
+   **rox already ships the recovery half, so it need not be re-derived.** Its cpal error
+   callback only sets a `device_lost` flag (`crates/rox-playback/src/output.rs:381-389`)
+   and the UI pump polls it and calls `reopen_device`
+   (`crates/rox-services/src/player.rs:1345-1357`), rebuilding the session at the current
+   spot or clearing it with a reason. That is the shape `tasks::audio_health` defers here:
+   it already has the signal and deliberately only reports it, because acting on it means
+   the deck rebuild item 2 above owns.
+
 4. **Every platform binding we need is already in `Cargo.lock`,** pulled by
    `cpal 0.17.3`:
    - `alsa 0.11.0` — Linux. `libasound` is already linked; a direct dep is a manifest

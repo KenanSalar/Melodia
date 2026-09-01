@@ -33,15 +33,16 @@ const DRAIN_INTERVAL: Duration = Duration::from_secs(5);
 /// Above this in one window, the backend is spinning rather than glitching.
 ///
 /// **Sized on the gap between the two, not on either end of it.** cpal reports
-/// one error per failed write, so a stream still being served cannot exceed its
-/// own callback rate — a few hundred a second at the smallest block a host picks
-/// for itself, every one of them failing — where the ALSA retry loop is ungated
-/// by the audio clock and runs as fast as the syscall returns, which is
-/// millions. The bar sits an order above the served ceiling rather than on it
-/// **because that ceiling is not a number this tree sets**: `output::device`'s
-/// second pass deliberately asks for no block size, so how often the callback
-/// runs is the host's choice. Detection costs nothing for the headroom — a spin
-/// clears any bar in this range within milliseconds of the window opening.
+/// one error per failed *write* and retries inside a single callback, so a card
+/// glitching and recovering runs to a few hundred a second at the smallest block
+/// a host picks for itself — where the retry loop against a device that is
+/// simply gone is ungated by the audio clock and runs as fast as the syscall
+/// returns, which is millions. The bar sits an order above the served ceiling
+/// rather than on it **because that ceiling is not a number this tree sets**:
+/// `output::device`'s second pass deliberately asks for no block size, so how
+/// often the callback runs is the host's choice. Detection costs nothing for
+/// the headroom — a spin clears any bar in this range within milliseconds of
+/// the window opening.
 ///
 /// The other two hosts `break` after the first error and take the
 /// [`StreamError::DeviceNotAvailable`] arm instead, so their `other` can never

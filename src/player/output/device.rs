@@ -54,7 +54,7 @@ pub struct Negotiated {
     /// The request rather than the answer — cpal reports no block size back, and the only place
     /// the real one appears is `data.len()` inside the callback. Worth carrying anyway: it says
     /// which pass of the ladder won, which is the difference between a block this tree sized and
-    /// one nobody did, and `tasks::audio_health` reasons about exactly that distinction.
+    /// one nobody did, and the boot log line is where a bug report reads that back.
     pub period: Option<cpal::FrameCount>,
 }
 
@@ -144,6 +144,9 @@ fn ladder(device: &cpal::Device) -> Result<Vec<cpal::SupportedStreamConfig>, App
 /// tidiness one: `SupportedStreamConfigRange::with_sample_rate` is a `try_` plus an `expect`, so a
 /// rate outside the range takes the boot with it. Strict because the two endpoints are already the
 /// entries either side of it, which makes the guard free.
+///
+/// The floor is dropped where it *is* the top, which rodio's walk emitted twice: a rung costs a
+/// whole `build`, and that allocates the mixer the failed attempt then throws away.
 fn rates_for(
     min: cpal::SampleRate,
     max: cpal::SampleRate,
@@ -151,7 +154,8 @@ fn rates_for(
     const PREFERRED_RATE: cpal::SampleRate = 44_100;
 
     let preferred = (min < PREFERRED_RATE && PREFERRED_RATE < max).then_some(PREFERRED_RATE);
-    std::iter::once(max).chain(preferred).chain(std::iter::once(min))
+    let floor = (min < max).then_some(min);
+    std::iter::once(max).chain(preferred).chain(floor)
 }
 
 /// Build and start a stream for one config, or say why it could not be.
@@ -171,8 +175,9 @@ where
     };
     let (kept, pull) = build(shape);
 
+    let period = buffer.requested(supported);
     let mut config = supported.config();
-    config.buffer_size = buffer.size(supported);
+    config.buffer_size = period.map_or(cpal::BufferSize::Default, cpal::BufferSize::Fixed);
 
     let format = supported.sample_format();
     let staging = staging_samples(supported);
@@ -187,7 +192,7 @@ where
             negotiated: Negotiated {
                 shape,
                 format,
-                period: buffer.requested(supported),
+                period,
             },
         },
         kept,
@@ -218,10 +223,6 @@ impl Buffer {
             Self::HostChoice => None,
         }
     }
-
-    fn size(self, supported: &cpal::SupportedStreamConfig) -> cpal::BufferSize {
-        self.requested(supported).map_or(cpal::BufferSize::Default, cpal::BufferSize::Fixed)
-    }
 }
 
 /// [`TARGET_BUFFER`] in frames at this config's rate, before any device range narrows it.
@@ -247,8 +248,9 @@ fn period_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
         cpal::SupportedBufferSize::Range { min, max } => target.min(max / 2).max(*min),
         cpal::SupportedBufferSize::Unknown => target,
     };
-    // A `Fixed(0)` asks for a period of nothing, which a host that takes it opens a dead stream on
-    // rather than refusing, costing the rung its whole point. Only ALSA is known to clamp it.
+    // A driver reporting a zero floor and a ceiling under two lands this on zero — a request for a
+    // period of nothing, which cpal's range check waves through, zero being inside the range it
+    // checks. One frame either fails that check or gets rounded up, and both beat a dead stream.
     held.max(1)
 }
 

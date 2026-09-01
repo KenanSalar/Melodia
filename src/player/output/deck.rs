@@ -39,10 +39,10 @@ const SERVICE_POLL: Duration = Duration::from_millis(1);
 /// Bounded so the queue is allocated once rather than per send. Nothing issues ops faster than the
 /// transport can be clicked, so reaching this means the callback has stopped draining.
 ///
-/// It is also what [`DeckVoice::staged`] is sized against: the layer above stages one source
-/// behind the playing one and no more, but a `clear` whose wait timed out lets the append that
-/// follows it through anyway, so a callback that stalls and then recovers can drain more appends
-/// than the design admits — and growing a deque is the one thing that thread must not do.
+/// It is also what [`DeckVoice::staged`] is sized against. The layer above stages one source
+/// behind the playing one and no more, but a `clear` too full to send never reaches the callback,
+/// so the append behind it lands on a source that should already have gone. Sized to cover one
+/// drain, an allocation being the one thing that thread must not do.
 const COMMAND_SLOTS: usize = 8;
 
 /// A source and the converter that brings it to the device.
@@ -259,7 +259,7 @@ impl DeckVoice {
     /// be loaded or cleared without being played.
     #[expect(
         clippy::cast_possible_truncation,
-        reason = "the transport caps volume at unity, and `as` saturates the boost band a deck would otherwise accept, so no reachable value loses anything audible"
+        reason = "volume is an f64 the transport caps at unity, and even the boost band a deck would otherwise accept narrows to f32 with nothing audible lost"
     )]
     pub fn render(&mut self, block: &mut [Sample]) -> usize {
         // Not decoration: a block ending mid-frame leaves `Converter::fill` no whole chunk to
