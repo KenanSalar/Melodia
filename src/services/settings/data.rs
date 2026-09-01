@@ -417,7 +417,7 @@ impl Default for RadioFlags {
 #[serde(default)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "independent library toggles and one-shot markers, serde-flattened into settings.json — nesting would change the on-disk shape and break existing installs"
+    reason = "five independent settings.json keys, three of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
 )]
 pub struct LibraryFlags {
     pub folder_watching_enabled: bool,

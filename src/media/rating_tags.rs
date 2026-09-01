@@ -6,6 +6,11 @@
 //! [`ItemKey::Popularimeter`]. What it does *not* do is normalize the value, so both the shape
 //! that arrives and the shape to write back are ours to know.
 //!
+//! The MP4 arm reads narrower than it writes: `Ilst::split_tag` only lifts `UTF8`/`UTF16` atoms
+//! into the generic tag, so an integer `rate` — which is what `MusicBee` writes on M4A — stays in
+//! the remainder and never reaches [`stars_from_tag`]. What Melodia writes is text, so its own
+//! round trip holds; someone else's integer imports unrated.
+//!
 //! Deliberately no `FMPS_Rating`, the one carrier with a spec'd scale. It buys precision a
 //! whole-star strip can't show, and lofty has no mapping for it at all: an `ID3v2`
 //! `TXXX:FMPS_Rating` lands in a `pub(crate)` companion tag reachable only through a second

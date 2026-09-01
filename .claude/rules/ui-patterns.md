@@ -1040,7 +1040,7 @@ edit would otherwise reverse.
 
 ## The Settings page
 
-- **The page is tabbed** — 5 tabs over the same 13 section cards. `settings-view.slint` is page
+- **The page is tabbed** — 5 tabs over the same 15 section cards. `settings-view.slint` is page
   chrome only, `settings-tabs.slint` the router, `views/settings/pages/*.slint` the five pages,
   each owning its section list *and* an aggregate `has-matches`. **Search escapes the tabs**: a
   non-empty query mounts all five pages at once, which is how the cross-tab flat list comes back

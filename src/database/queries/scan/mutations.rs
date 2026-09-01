@@ -290,6 +290,13 @@ pub async fn update_track_location(
 /// filename-derived Matroska row, a file on read-only media, an install with the write-back
 /// turned off — where the row is the only copy there is. Hence the `CASE`: the tag wins whenever
 /// it says something, and silence leaves the row alone.
+///
+/// The tag winning is not confined to the write-back's own re-extract: this runs on every rescan
+/// and every Edit-Tags save. So with the write-back **off**, a star set here is replaced by
+/// whatever another player wrote, and a star *cleared* here comes back, the file still carrying
+/// the tag and a cleared row being indistinguishable from an untouched one. Deliberate, on the
+/// same reading of "tag-backed field" as the title above it, and the price of the column not
+/// being able to say "the user meant zero".
 pub async fn update_track_metadata(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,

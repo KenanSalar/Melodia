@@ -19,7 +19,6 @@ use std::path::Path;
 
 use lofty::file::TaggedFileExt;
 
-use crate::database::DbPool;
 use crate::database::queries;
 use crate::error::{AppError, AppResult};
 use crate::media::{metadata, rating_tags};
@@ -29,9 +28,14 @@ use crate::tasks::TaskSpawner;
 
 /// Run the import unless this install has already had one.
 ///
-/// The marker is set even when the pass fails part way: a half-imported library is still
-/// correct — every row either has its file's rating or the zero it started with — and the tracks
-/// it missed are reachable by rating them, which is the same button either way.
+/// The marker goes down only on a clean pass, which is where this parts company with
+/// [`super::artwork_renormalize`]'s otherwise identical shape. Two of the three ways this can
+/// fail write no rows at all, and the marker is the only gate there is, so recording one would
+/// put every rating in this library's files out of reach for the life of the install. A
+/// renormalize that half-ran is repaired by the next scan; this is not repaired by anything.
+///
+/// A half-imported library needs no marker either: the pass only ever reads unrated rows, so the
+/// retry picks up exactly where it stopped.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let state = state.clone();
     spawner.spawn(async move {
@@ -44,8 +48,9 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
             }
         }
 
-        if let Err(e) = import(&state.db).await {
+        if let Err(e) = import(&state).await {
             log::warn!("Rating import failed: {}", services::describe(&e));
+            return;
         }
 
         // Through `mutate_settings` rather than a write-back of the snapshot above: the pass
@@ -59,8 +64,8 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     });
 }
 
-async fn import(db: &DbPool) -> AppResult<()> {
-    let unrated = queries::track::get_unrated_track_paths(db).await?;
+async fn import(state: &AppState) -> AppResult<()> {
+    let unrated = queries::track::get_unrated_track_paths(&state.db).await?;
     if unrated.is_empty() {
         return Ok(());
     }
@@ -79,8 +84,13 @@ async fn import(db: &DbPool) -> AppResult<()> {
         by_rating.entry(*rating).or_default().push(*id);
     }
     for (rating, ids) in &by_rating {
-        queries::track::set_rating(db, ids, *rating).await?;
+        queries::track::set_rating(&state.db, ids, *rating).await?;
     }
+
+    // Nothing else will say so. This lands minutes into a session on a real library, by which
+    // time every mounted list is painting the zero these rows carried at fetch time, and the two
+    // views that retain their rows keep it until something unrelated refetches.
+    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
 
     log::info!("Imported {} rating(s) from file tags", found.len());
     Ok(())

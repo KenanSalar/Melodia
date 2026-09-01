@@ -30,10 +30,22 @@ static SENDER: OnceLock<UnboundedSender<(i64, i32)>> = OnceLock::new();
 
 /// How long the ratings have to stop moving before anything is written.
 ///
-/// Long enough to swallow a walk across the strip, short enough that a user who rates a track
-/// and immediately quits still gets the write — shutdown drains the queue, so the only way to
-/// lose one is a crash inside this window.
+/// Long enough to swallow a walk across the strip, short enough that a user who rates a track and
+/// immediately quits still gets the write: shutdown drains what it can pay for, which is
+/// [`SHUTDOWN_FLUSH_MAX`].
 const QUIET_PERIOD: Duration = Duration::from_secs(2);
+
+/// How many tracks the shutdown drain will still write.
+///
+/// `shutdown::flush_tasks_and_db` gives every tracked task three seconds *together* and then
+/// force-exits, and a tag write is a whole-file rewrite on a pool nothing can cancel. So a batch
+/// that overruns the budget does not cost a tag, it costs a track rewritten halfway. Rating an
+/// album and quitting inside the quiet period is exactly that batch, hence a cap rather than a
+/// timeout: abandoning the `await` would leave the rewrite running into the exit.
+///
+/// Sized so the whole set finishes well inside the budget. The rows keep their stars either way,
+/// and the tags the cap drops are one more click away.
+const SHUTDOWN_FLUSH_MAX: usize = 8;
 
 /// Queue `ids` for a write at `rating`. Silent no-op when the task was never spawned.
 pub fn enqueue(ids: &[i64], rating: i32) {
@@ -76,7 +88,7 @@ async fn run(mut rx: UnboundedReceiver<(i64, i32)>, shutdown: CancellationToken,
                 while let Ok((id, rating)) = rx.try_recv() {
                     pending.insert(id, rating);
                 }
-                flush(&state, &mut pending).await;
+                flush_at_exit(&state, &mut pending).await;
                 return;
             }
             event = rx.recv() => {
@@ -94,6 +106,27 @@ async fn run(mut rx: UnboundedReceiver<(i64, i32)>, shutdown: CancellationToken,
             }
         }
     }
+}
+
+/// The shutdown drain: write what the exit budget can cover, and say what it could not.
+///
+/// Which of an over-cap set survives is `HashMap` order, i.e. arbitrary. There is no better
+/// answer available: the queue coalesces per track, so by the time a burst arrives here the order
+/// the user clicked in is already gone, and every entry is worth the same.
+async fn flush_at_exit(state: &AppState, pending: &mut HashMap<i64, i32>) {
+    // The switch is read here as well as in `flush`, so a switched-off install doesn't announce
+    // dropping writes it was never going to make.
+    let over_budget = if state.write_ratings_to_tags() {
+        pending.len().saturating_sub(SHUTDOWN_FLUSH_MAX)
+    } else {
+        0
+    };
+    if over_budget > 0 {
+        let within_budget: HashMap<i64, i32> = pending.drain().take(SHUTDOWN_FLUSH_MAX).collect();
+        *pending = within_budget;
+        log::info!("rating: {over_budget} tag write(s) dropped at exit; the rows keep their stars");
+    }
+    flush(state, pending).await;
 }
 
 async fn flush(state: &AppState, pending: &mut HashMap<i64, i32>) {
