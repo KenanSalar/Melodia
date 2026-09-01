@@ -271,28 +271,35 @@ impl PlaybackEngine {
         let live_stream = self.live_stream.clone();
         self.runtime.spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-            let guard = lock_decks(&decks);
-            if deck_epoch.load(Ordering::Acquire) != epoch {
-                return;
-            }
-            match op {
-                // A pause keeps the deck contents — staged gapless source
-                // included — so it must leave `gapless_pending` alone.
-                DeferredOp::PauseAll => guard.pause_all(),
-                // The deferred half of `stop()`, so it drops the flag the same
-                // way: *after* the decks, never before. A preload that entered
-                // behind the epoch bump can still have staged a source onto the
-                // deck this throws away, and clearing here is what stops the
-                // flag outliving it; one arriving after is refused by
-                // `preload_gapless`'s empty-deck gate.
-                DeferredOp::ClearAll => {
-                    guard.clear_all();
-                    gapless_pending.store(false, Ordering::Release);
-                    // The faded half of a stop, so it drops the live-stream cell alongside the
-                    // source it removes — the same pairing the flag above gets.
-                    *live_stream.lock() = None;
+            // The wait is async and the landing is not: `Deck::clear` blocks until the audio
+            // callback services it, twice over for `clear_all`, so it goes to the blocking pool
+            // rather than parking an async worker for two device periods — or, against a card that
+            // has stopped asking for samples, for `output::deck::SERVICE_TIMEOUT` apiece. Sleeping
+            // there instead would hold a pool slot for the whole fade, which is far longer.
+            tokio::task::spawn_blocking(move || {
+                let guard = lock_decks(&decks);
+                if deck_epoch.load(Ordering::Acquire) != epoch {
+                    return;
                 }
-            }
+                match op {
+                    // A pause keeps the deck contents — staged gapless source
+                    // included — so it must leave `gapless_pending` alone.
+                    DeferredOp::PauseAll => guard.pause_all(),
+                    // The deferred half of `stop()`, so it drops the flag the same
+                    // way: *after* the decks, never before. A preload that entered
+                    // behind the epoch bump can still have staged a source onto the
+                    // deck this throws away, and clearing here is what stops the
+                    // flag outliving it; one arriving after is refused by
+                    // `preload_gapless`'s empty-deck gate.
+                    DeferredOp::ClearAll => {
+                        guard.clear_all();
+                        gapless_pending.store(false, Ordering::Release);
+                        // The faded half of a stop, so it drops the live-stream cell alongside
+                        // the source it removes — the same pairing the flag above gets.
+                        *live_stream.lock() = None;
+                    }
+                }
+            });
         });
     }
 
@@ -502,10 +509,10 @@ impl PlaybackEngine {
     /// `ReplayGain` and `deck`'s ramp cell, under a visualizer tap writing into `deck`'s own ring.
     ///
     /// Generic over the source rather than over a reader, because a live stream reaches here as a
-    /// [`super::prebuffer::PrebufferSource`] and a file as a [`FileDecoder`] — the ring sits between
-    /// the stream's decoder and the DSP chain, so the two only meet at `Source`. Everything downstream
-    /// is identical, which is the point: the EQ, the limiter and the visualizer work on a station
-    /// with no code of their own.
+    /// [`super::prebuffer::PrebufferSource`] and a file as a [`FileDecoder`] — the ring sits
+    /// between the stream's decoder and the DSP chain, so the two only meet at [`AudioSource`].
+    /// Everything downstream is identical, which is the point: the EQ, the limiter and the
+    /// visualizer work on a station with no code of their own.
     ///
     /// Always called with the deck the source is about to be appended to — see [`super::decks`]
     /// for why the two can't be split. Building the tap also *claims* that ring for the life of
@@ -526,8 +533,8 @@ impl PlaybackEngine {
 
     /// Whether a crossfade's outgoing deck is still audible. Clearing the flag
     /// here once that deck drains doubles as the crossfade's completion hook —
-    /// no `Drop` impl or extra atomic needed. Safe because `Player::append`
-    /// bumps `sound_count` synchronously, so a just-fed deck never reports empty.
+    /// no `Drop` impl or extra atomic needed. Safe because `Deck::append` bumps
+    /// the source count before it sends, so a just-fed deck never reports empty.
     pub fn is_crossfading(&self) -> bool {
         if !self.crossfade_armed.load(Ordering::Acquire) {
             return false;
@@ -624,7 +631,7 @@ impl PlaybackEngine {
         }
     }
 
-    /// Stop playback. `Player::clear()` removes all sources and pauses automatically.
+    /// Stop playback. `Deck::clear` removes all sources and pauses automatically.
     pub fn stop(&self) {
         self.bump_epoch();
         self.crossfade_armed.store(false, Ordering::Release);

@@ -123,9 +123,3 @@ fn a_deck_past_the_voice_count_is_not_there() {
     let (mixer, _pull) = pair(VOICES, shape(2));
     assert!(mixer.deck(VOICES).is_none());
 }
-
-#[test]
-fn the_mixer_reports_the_shape_it_was_built_for() {
-    let (mixer, _pull) = pair(VOICES, shape(2));
-    assert_eq!(mixer.device(), shape(2));
-}

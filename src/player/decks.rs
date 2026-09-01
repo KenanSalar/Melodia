@@ -179,8 +179,12 @@ impl Decks {
         self.decks[target].player.clear();
         let source = build(&self.decks[target]);
         self.decks[target].fade.arm(Some(0.0), 1.0, fade_ms, false);
-        self.decks[target].start(source, volume, speed);
+        // Both ramps armed before the incoming deck is *started*, because the sum is unclamped: a
+        // callback landing between the two would otherwise render an incoming track rising against
+        // an outgoing one still at unity, an overshoot bounded by control-thread preemption rather
+        // than by `output::mixer::LOCKSTEP_FRAMES`. This way round the same race costs a dip.
         self.active().fade.arm(None, 0.0, fade_ms, true);
+        self.decks[target].start(source, volume, speed);
         self.active = target;
     }
 }

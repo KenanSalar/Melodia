@@ -245,10 +245,10 @@ impl AudioSource for FileDecoder {
     }
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
-        // `AudioSource::try_seek` promises to saturate wherever a length is known, and the caller asks
-        // past the end routinely: the position it seeks to comes off the tags, which overshoot the
-        // decoded length by a few frames often enough. The ceiling is short of the end rather than
-        // on it, for [`SEEK_END_MARGIN`]'s reason.
+        // `AudioSource::try_seek` promises to saturate wherever a length is known, and the caller
+        // asks past the end routinely: the position it seeks to comes off the tags, which overshoot
+        // the decoded length by a few frames often enough. The ceiling is short of the end rather
+        // than on it, for [`SEEK_END_MARGIN`]'s reason.
         let pos =
             self.total_duration.map_or(pos, |total| pos.min(total.saturating_sub(SEEK_END_MARGIN)));
 

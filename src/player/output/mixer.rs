@@ -5,10 +5,10 @@
 //! been clamped to ±1 by the limiter, so the sum is inside ±1 by construction. A ceiling here would
 //! do nothing in the ordinary case and flatten the fade in the one case it fired.
 //!
-//! [`pair`] builds the two halves with no device between them, which is what lets `tests/crossfade.rs`
-//! and `tests/stream_rate.rs` drive the whole chain — decoder, EQ, ramp, tap, sum — by pulling
-//! [`MixerPull`] on the test thread. Anything that stops being reachable that way stops being
-//! testable without a sound card.
+//! [`pair`] builds the two halves with no device between them, which is what lets
+//! `tests/crossfade.rs` and `tests/stream_rate.rs` drive the whole chain — decoder, EQ, ramp, tap,
+//! sum — by pulling [`MixerPull`] on the test thread. Anything that stops being reachable that way
+//! stops being testable without a sound card.
 
 use std::sync::Arc;
 
@@ -29,25 +29,21 @@ use super::deck::{Deck, DeckVoice};
 /// chosen so the loop costs a few dozen iterations per callback rather than a few thousand.
 pub const LOCKSTEP_FRAMES: usize = 64;
 
-/// The control side: the decks, and the shape everything is brought to.
+/// The control side: the decks everything is summed from.
 ///
 /// The decks are shared rather than lent out, so `player::decks` can hold them for as long as it
 /// needs without borrowing from this. Reference counting is what replaces the `Box::leak` rodio's
 /// arrangement needed: a leaked handle outlives everything by never being dropped, and so never
-/// releases the device either.
+/// releases the device either. The negotiated shape is not repeated here —
+/// [`super::AudioOutput::negotiated`] is where it is asked for, and it carries the format too.
 pub struct Mixer {
     decks: Box<[Arc<Deck>]>,
-    device: Shape,
 }
 
 impl Mixer {
     /// The deck at `index`, or `None` past the voice count this mixer was built with.
     pub fn deck(&self, index: usize) -> Option<Arc<Deck>> {
         self.decks.get(index).map(Arc::clone)
-    }
-
-    pub fn device(&self) -> Shape {
-        self.device
     }
 }
 
@@ -65,8 +61,8 @@ impl MixerPull {
     ///
     /// A partial trailing frame is zeroed but never written into: half a frame would shear the
     /// channel layout for the rest of the stream. No host asks for one, and the zero is what makes
-    /// that survivable anyway — the caller stages into a buffer it reuses, so leaving the tail alone
-    /// would hand the device whatever the last block left there.
+    /// that survivable anyway — the caller stages into a buffer it reuses, so leaving the tail
+    /// alone would hand the device whatever the last block left there.
     ///
     /// **The first deck with anything to say writes; the rest add.** Summing into a zeroed block
     /// would be simpler and would cost the sign of zero — `0.0 + -0.0` is `0.0` — so a lone deck at
@@ -107,7 +103,6 @@ pub fn pair(voices: usize, device: Shape) -> (Mixer, MixerPull) {
     (
         Mixer {
             decks: decks.into_boxed_slice(),
-            device,
         },
         MixerPull {
             voices: pulls.into_boxed_slice(),

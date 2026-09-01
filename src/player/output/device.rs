@@ -49,6 +49,13 @@ const TARGET_BUFFER: Duration = Duration::from_millis(50);
 pub struct Negotiated {
     pub shape: Shape,
     pub format: cpal::SampleFormat,
+    /// The period that was asked for, or `None` where the host was left to name its own.
+    ///
+    /// The request rather than the answer — cpal reports no block size back, and the only place
+    /// the real one appears is `data.len()` inside the callback. Worth carrying anyway: it says
+    /// which pass of the ladder won, which is the difference between a block this tree sized and
+    /// one nobody did, and `tasks::audio_health` reasons about exactly that distinction.
+    pub period: Option<cpal::FrameCount>,
 }
 
 /// The live stream. Dropping it stops audio and releases the device.
@@ -71,8 +78,8 @@ impl DeviceStream {
 ///
 /// # Errors
 ///
-/// [`AppError::Player`] when there is no output device, when its configs cannot be listed, or when
-/// none of them opens.
+/// [`AppError::Player`] when there is no output device, when it cannot name its own default
+/// config, or when nothing opens.
 pub fn open<T, E, B>(mut build: B, error_callback: E) -> Result<(DeviceStream, T), AppError>
 where
     E: FnMut(cpal::StreamError) + Clone + Send + 'static,
@@ -86,12 +93,21 @@ where
         .default_output_config()
         .map_err(|e| AppError::Player(format!("Failed to read the output device's config: {e}")))?;
 
+    // Listed once for both passes, and **not** with `?`: a device that cannot enumerate can still
+    // open the config it just named as its default, which is the likeliest rung of all and the one
+    // rodio reached first — it only lists inside the fallback its default attempt failed into. A
+    // `?` here spends a listing failure on the whole boot without trying that config once.
+    let rungs = ladder(&device).unwrap_or_else(|e| {
+        log::warn!("Falling back to the default output config alone: {e}");
+        Vec::new()
+    });
+
     let mut first = None;
     for buffer in [Buffer::Target, Buffer::HostChoice] {
         // The device's own config leads each pass: it is the likeliest to open, and on the second
         // pass it has not been tried at that block size at all.
-        for candidate in std::iter::once(default.clone()).chain(ladder(&device)?) {
-            match attempt(&device, &candidate, buffer, &mut build, error_callback.clone()) {
+        for candidate in std::iter::once(&default).chain(&rungs) {
+            match attempt(&device, candidate, buffer, &mut build, error_callback.clone()) {
                 Ok(opened) => return Ok(opened),
                 Err(e) => {
                     first.get_or_insert(e);
@@ -99,34 +115,43 @@ where
             }
         }
     }
-    // The first failure, not the last: it is the one about the config the device itself named at the
-    // block we wanted, and the rest are about configs and sizes nobody asked for.
+    // The first failure, not the last: it is the one about the config the device itself named at
+    // the block we wanted, and the rest are about configs and sizes nobody asked for.
     Err(first.unwrap_or_else(|| AppError::Player("The output device offered no config".to_owned())))
 }
 
 /// Every config the device reports, best first, each at its top rate, then 44.1 kHz where that is
 /// in range, then its floor. cpal's own ordering, which is what rodio walked.
-fn ladder(
-    device: &cpal::Device,
-) -> Result<impl Iterator<Item = cpal::SupportedStreamConfig>, AppError> {
-    const PREFERRED_RATE: cpal::SampleRate = 44_100;
-
+fn ladder(device: &cpal::Device) -> Result<Vec<cpal::SupportedStreamConfig>, AppError> {
     let mut supported: Vec<_> = device
         .supported_output_configs()
         .map_err(|e| AppError::Player(format!("Failed to list the output device's configs: {e}")))?
         .collect();
     supported.sort_by(|a, b| b.cmp_default_heuristics(a));
 
-    Ok(supported.into_iter().flat_map(|range| {
-        let (min, max) = (range.min_sample_rate(), range.max_sample_rate());
-        let mut rates = vec![range.with_max_sample_rate()];
-        // Strictly inside, because the two endpoints are already the entries either side of it.
-        if min < PREFERRED_RATE && PREFERRED_RATE < max {
-            rates.push(range.with_sample_rate(PREFERRED_RATE));
-        }
-        rates.push(range.with_sample_rate(min));
-        rates
-    }))
+    Ok(supported
+        .into_iter()
+        .flat_map(|range| {
+            let (min, max) = (range.min_sample_rate(), range.max_sample_rate());
+            rates_for(min, max).map(move |rate| range.with_sample_rate(rate))
+        })
+        .collect())
+}
+
+/// The rates one reported range is tried at: its top, then 44.1 kHz, then its floor.
+///
+/// **44.1 kHz only when it falls strictly inside**, and that is a panic guard rather than a
+/// tidiness one: `SupportedStreamConfigRange::with_sample_rate` is a `try_` plus an `expect`, so a
+/// rate outside the range takes the boot with it. Strict because the two endpoints are already the
+/// entries either side of it, which makes the guard free.
+fn rates_for(
+    min: cpal::SampleRate,
+    max: cpal::SampleRate,
+) -> impl Iterator<Item = cpal::SampleRate> {
+    const PREFERRED_RATE: cpal::SampleRate = 44_100;
+
+    let preferred = (min < PREFERRED_RATE && PREFERRED_RATE < max).then_some(PREFERRED_RATE);
+    std::iter::once(max).chain(preferred).chain(std::iter::once(min))
 }
 
 /// Build and start a stream for one config, or say why it could not be.
@@ -159,7 +184,11 @@ where
     Ok((
         DeviceStream {
             _stream: stream,
-            negotiated: Negotiated { shape, format },
+            negotiated: Negotiated {
+                shape,
+                format,
+                period: buffer.requested(supported),
+            },
         },
         kept,
     ))
@@ -182,11 +211,16 @@ enum Buffer {
 }
 
 impl Buffer {
-    fn size(self, supported: &cpal::SupportedStreamConfig) -> cpal::BufferSize {
+    /// The period this rung asks for, or `None` where the host names its own.
+    fn requested(self, supported: &cpal::SupportedStreamConfig) -> Option<cpal::FrameCount> {
         match self {
-            Self::Target => cpal::BufferSize::Fixed(period_frames(supported)),
-            Self::HostChoice => cpal::BufferSize::Default,
+            Self::Target => Some(period_frames(supported)),
+            Self::HostChoice => None,
         }
+    }
+
+    fn size(self, supported: &cpal::SupportedStreamConfig) -> cpal::BufferSize {
+        self.requested(supported).map_or(cpal::BufferSize::Default, cpal::BufferSize::Fixed)
     }
 }
 
@@ -209,10 +243,13 @@ fn target_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
 /// comes straight off a driver, and one reporting them backwards would panic the boot.
 fn period_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
     let target = target_frames(supported);
-    match supported.buffer_size() {
+    let held = match supported.buffer_size() {
         cpal::SupportedBufferSize::Range { min, max } => target.min(max / 2).max(*min),
         cpal::SupportedBufferSize::Unknown => target,
-    }
+    };
+    // A `Fixed(0)` asks for a period of nothing, which a host that takes it opens a dead stream on
+    // rather than refusing, costing the rung its whole point. Only ALSA is known to clamp it.
+    held.max(1)
 }
 
 /// Samples the callback's staging buffer holds before it has ever run.

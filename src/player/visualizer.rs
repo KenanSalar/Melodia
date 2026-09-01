@@ -315,7 +315,7 @@ impl Drop for DeckRun {
     }
 }
 
-/// A transparent [`Source`] copying a downmixed sample out of every frame it forwards. Every
+/// A transparent [`AudioSource`] copying a downmixed sample out of every frame it forwards. Every
 /// source the decks play is wrapped in one by
 /// [`PlaybackEngine::build_source`](super::backend::PlaybackEngine), so the playing track, a
 /// gapless successor and both sides of a crossfade each feed the ring of the deck they were built

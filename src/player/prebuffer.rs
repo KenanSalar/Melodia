@@ -1,6 +1,6 @@
 //! The ring that keeps the network off the audio callback thread.
 //!
-//! The mixer pulls [`AudioSource::next`] from inside the cpal data callback, so a source that
+//! The mixer pulls each [`AudioSource`] from inside the cpal data callback, so a source that
 //! reads a socket stalls the whole block — the local track on the other deck included — for as
 //! long as the network is wedged. Everything here exists to make that impossible: a feed thread
 //! owns the decoder and fills [`SampleRing`] ahead of time, and [`PrebufferSource`] pops from it
@@ -213,8 +213,8 @@ impl RingWriter {
     }
 }
 
-/// The [`Source`] the decks play for a live stream: a ring pop per sample, silence when starved,
-/// and an end only once the feed thread has given up *and* the ring has drained.
+/// The [`AudioSource`] the decks play for a live stream: a ring pop per sample, silence when
+/// starved, and an end only once the feed thread has given up *and* the ring has drained.
 ///
 /// Everything it reports about the audio's shape is pinned at construction. A live mount does not
 /// renegotiate its format mid-stream, and a reconnect that comes back with a different one is

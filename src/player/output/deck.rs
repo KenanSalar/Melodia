@@ -38,6 +38,11 @@ const SERVICE_POLL: Duration = Duration::from_millis(1);
 ///
 /// Bounded so the queue is allocated once rather than per send. Nothing issues ops faster than the
 /// transport can be clicked, so reaching this means the callback has stopped draining.
+///
+/// It is also what [`DeckVoice::staged`] is sized against: the layer above stages one source
+/// behind the playing one and no more, but a `clear` whose wait timed out lets the append that
+/// follows it through anyway, so a callback that stalls and then recovers can drain more appends
+/// than the design admits — and growing a deque is the one thing that thread must not do.
 const COMMAND_SLOTS: usize = 8;
 
 /// A source and the converter that brings it to the device.
@@ -72,6 +77,12 @@ struct DeckShared {
     sources: AtomicUsize,
     /// Frames the current source has been pulled for, on its own timeline, and that source's rate.
     /// The pair is the clock: media position is one divided by the other.
+    ///
+    /// **`rate` is the published half and carries the pair's ordering.** Both are written when a
+    /// source takes over, and a reader that saw the new rate against the old source's frame count
+    /// would report the previous track's end as this one's start. `rate` is stored last under
+    /// `Release` and loaded first under `Acquire`, so seeing it means seeing the zeroed count
+    /// behind it; the reverse pairing only ever mis-scales a count near zero.
     frames: AtomicU64,
     rate: AtomicU32,
     /// Commands sent, and commands the callback has drained. A control op that must land before it
@@ -111,8 +122,8 @@ impl Deck {
     ///
     /// The clock is zeroed on this side too, not only by the callback: a deck whose source drained
     /// on its own is empty *and* still reporting that source's final position, so a clear that only
-    /// asked the callback would leave `Decks::{cut_to,crossfade_to}` starting a track whose position
-    /// reads as the previous one's end until the append is picked up.
+    /// asked the callback would leave `Decks::{cut_to,crossfade_to}` starting a track whose
+    /// position reads as the previous one's end until the append is picked up.
     ///
     /// Zeroed **last**, where the deck is quiet either way. Ahead of the count it races the
     /// callback's own final `fetch_add`, which lands before the `sources` decrement that makes an
@@ -159,8 +170,8 @@ impl Deck {
 
     /// Sources appended and not yet finished.
     ///
-    /// `SeqCst` to match every write: this is what the transport reads to decide a deck has run dry,
-    /// and `Decks::busy` pairs it with `paused`, which is already `SeqCst`.
+    /// `SeqCst` to match every write: this is what the transport reads to decide a deck has run
+    /// dry, and `Decks::busy` pairs it with `paused`, which is already `SeqCst`.
     pub fn len(&self) -> usize {
         self.shared.sources.load(Ordering::SeqCst)
     }
@@ -177,16 +188,12 @@ impl Deck {
         self.shared.speed.store(speed.to_bits(), Ordering::Relaxed);
     }
 
-    pub fn speed(&self) -> f64 {
-        f64::from_bits(self.shared.speed.load(Ordering::Relaxed))
-    }
-
     /// Where the playing source has been pulled to, on its own timeline.
     ///
     /// Media time directly: the frames counted are the source's, and playback speed is applied
     /// below this by the converter rather than by inflating the rate reported upward.
     pub fn position(&self) -> Duration {
-        let rate = u64::from(self.shared.rate.load(Ordering::Relaxed));
+        let rate = u64::from(self.shared.rate.load(Ordering::Acquire));
         if rate == 0 {
             return Duration::ZERO;
         }
@@ -200,10 +207,11 @@ impl Deck {
     /// it will also find on the channel.
     fn send(&self, command: Command) -> bool {
         // Full means the callback has stopped draining, which a bounded wait is about to report
-        // anyway; blocking here would do it while holding the transport instead. Logged rather than
-        // returned, because the only thing that fills this queue is a device that has stopped asking
-        // for samples: `tasks::audio_health` is what tells the user, and auto-skipping the track
-        // would walk the whole queue against a card that is not going to take any of it.
+        // anyway; blocking here would do it while holding the transport instead. Dropped rather
+        // than returned because there is no answer worth giving: the only thing that fills this
+        // queue is a device that has stopped asking for samples, and a lost `Append` leaves the
+        // deck empty, which the monitor reads as end-of-stream and advances on regardless. What
+        // tells the user is `tasks::audio_health`, off the fault counters, not this line.
         if self.commands.try_send(command).is_err() {
             log::warn!(
                 "audio callback is not draining its control channel; a transport op was lost"
@@ -251,12 +259,12 @@ impl DeckVoice {
     /// be loaded or cleared without being played.
     #[expect(
         clippy::cast_possible_truncation,
-        reason = "volume is bounded to 0.0..=1.0, whose round-trip through f32 is inaudible"
+        reason = "the transport caps volume at unity, and `as` saturates the boost band a deck would otherwise accept, so no reachable value loses anything audible"
     )]
     pub fn render(&mut self, block: &mut [Sample]) -> usize {
-        // Not decoration: a block ending mid-frame leaves `Converter::fill` no whole chunk to write,
-        // so it returns nothing without ending the source and the loop below never advances — on the
-        // one thread that must not stall. The invariant is the mixer's, three frames up the stack.
+        // Not decoration: a block ending mid-frame leaves `Converter::fill` no whole chunk to
+        // write, so it returns nothing without ending the source and the loop below never advances
+        // — on the one thread that must not stall. The invariant is the mixer's, three frames up.
         debug_assert!(
             block.len().is_multiple_of(usize::from(self.device.channels.get())),
             "a voice is only ever handed whole device frames"
@@ -296,8 +304,12 @@ impl DeckVoice {
         written
     }
 
-    /// Drain the control side's commands. First thing in every fill, so an op issued between two
-    /// callbacks lands at the head of the next one rather than part way through it.
+    /// Drain the control side's commands.
+    ///
+    /// First thing in every render, which the mixer runs once per lockstep step rather than once
+    /// per callback — so an op lands at the head of the next *step*, part way through a block. That
+    /// is the cheap direction: a waiting control thread is released a step early instead of a block
+    /// late, and one step of skew between the decks is what `LOCKSTEP_FRAMES` already bounds.
     fn service(&mut self) {
         let seen = self.shared.issued.load(Ordering::Acquire);
         loop {
@@ -320,9 +332,11 @@ impl DeckVoice {
     }
 
     /// Make `voice` the playing source and re-anchor the clock on it.
+    ///
+    /// Count first, rate last — the pair's ordering is argued on [`DeckShared::frames`].
     fn start(&mut self, voice: Voice) {
-        self.shared.rate.store(voice.source.sample_rate().get(), Ordering::Relaxed);
         self.shared.frames.store(0, Ordering::Relaxed);
+        self.shared.rate.store(voice.source.sample_rate().get(), Ordering::Release);
         self.current = Some(voice);
     }
 
@@ -393,7 +407,7 @@ pub fn pair(device: Shape) -> (Deck, DeckVoice) {
         shared,
         commands: command_rx,
         current: None,
-        staged: VecDeque::with_capacity(2),
+        staged: VecDeque::with_capacity(COMMAND_SLOTS),
         device,
     };
     (deck, voice)

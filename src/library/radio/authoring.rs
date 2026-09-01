@@ -129,8 +129,8 @@ pub async fn add_custom_station(
 /// [`ensure_editable`].
 ///
 /// **The fetch is this door's and not the import's**, and the asymmetry is not an optimization: a
-/// station whose row already points at a logo is one [`heal_station_logo`] skips, so a
-/// *replacement* URL typed here would never land on its own. Every row an import creates is new
+/// station whose row already points at a logo is one [`super::logos::heal_station_logo`] skips,
+/// so a *replacement* URL typed here would never land on its own. Every row an import creates is new
 /// and logo-less, so the refresh behind its toast heals the lot four at a time — which is why
 /// `radio_files` composes [`validated_overrides`] with the write itself rather than calling this.
 pub async fn set_station_overrides(
