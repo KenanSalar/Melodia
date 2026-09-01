@@ -443,8 +443,8 @@ silently miss the other.
   commit live in `files.rs` (commit needs `Rc<NotificationsUi>`), the opener in `dialog.rs`.
 
 - **Notifications stack** mirrors `Dialog`'s `kind`-routing — a new action is one branch plus one
-  `show(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as the iter
-  var), and translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
+  `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as
+  the iter var), and translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
 
 - **Backend-thread toasts via `services::toast`.** `NotificationsUi` is `Rc`, so failures on tokio
   workers surface through a neutral `OnceLock<UnboundedSender<…>>` — no-op when uninstalled,

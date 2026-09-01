@@ -149,7 +149,11 @@ fn every_translated_literal_has_a_msgid_in_every_catalogue() {
 
     // Floors, so a walk that silently found nothing can't pass vacuously. The
     // tree is well past all three; these only catch a broken traversal.
-    assert!(sources.len() > 100, "only {} .slint files found under {UI_DIR}", sources.len());
+    assert!(
+        sources.len() >= MIN_SLINT_SOURCES,
+        "only {} .slint files found under {UI_DIR}",
+        sources.len()
+    );
     assert!(wanted.singular.len() > 400, "only {} msgids extracted", wanted.singular.len());
     assert!(wanted.plural.len() >= 10, "only {} plural pairs extracted", wanted.plural.len());
 

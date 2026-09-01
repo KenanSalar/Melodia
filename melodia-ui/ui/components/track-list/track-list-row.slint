@@ -462,7 +462,9 @@ export component TrackListRowItem inherits Rectangle {
             }
             if root.show-album: DataCell {
                 cell-width: root.w-album;
-                text-content: root.row-data.album != "" ? root.row-data.album : @tr("Unknown album");
+                text-content: root.row-data.album != ""
+                    ? root.row-data.album
+                    : @tr("Unknown album");
                 playing: root.playing;
             }
             if root.show-genre: DataCell {

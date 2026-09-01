@@ -236,8 +236,8 @@ fn remove_at(
 /// returning the handle the caller threads into the modules that raise toasts.
 ///
 /// The `action` callback is deliberately left to the Slint-side dispatcher in
-/// `globals/updater.slint` — a new action flow is one branch there plus a `show(…)`
-/// call, with no closure threading.
+/// `globals/updater.slint` — a new action flow is one branch there plus a
+/// `show_localized(…)` call, with no closure threading.
 pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
     let rows: Rc<VecModel<NotificationRow>> = Rc::new(VecModel::default());
     ui.global::<Notifications>().set_rows(ModelRc::from(rows.clone()));
