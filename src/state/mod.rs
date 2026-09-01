@@ -74,6 +74,11 @@ pub struct AppState {
     /// (Tracks/Browse refreshers, `queue_prune`, the folder list) stays on
     /// `library_changed_tx` and no longer fires per played song.
     pub stats_changed_tx: watch::Sender<u64>,
+    /// Bumped after the UI language changes. A locale switch re-resolves every live `@tr`
+    /// binding on its own, so this exists only for the strings Rust renders through a
+    /// trampoline and stores in a model, which nothing re-reads. Subscribers rebuild those
+    /// from their caches — no DB round trip, the facts not having moved.
+    pub locale_changed_tx: watch::Sender<u64>,
     /// Bumped whenever the watcher reports a kernel-queue overflow (notify
     /// `Flag::Rescan`). A UI-thread subscriber pushes a transient
     /// "library re-syncing" toast through the notifications stack so the
@@ -196,6 +201,7 @@ impl AppState {
         let (position_tx, _) = watch::channel::<Option<PositionTick>>(None);
         let (library_changed_tx, _) = watch::channel::<u64>(0);
         let (stats_changed_tx, _) = watch::channel::<u64>(0);
+        let (locale_changed_tx, _) = watch::channel::<u64>(0);
         let (rescan_notice_tx, _) = watch::channel::<u64>(0);
         let (audio_device_lost_tx, _) = watch::channel::<u64>(0);
         let (scan_progress_tx, _) = watch::channel::<Option<ScanProgressTick>>(None);
@@ -247,6 +253,7 @@ impl AppState {
             position_tx,
             library_changed_tx,
             stats_changed_tx,
+            locale_changed_tx,
             rescan_notice_tx,
             audio_device_lost_tx,
             scan_progress_tx,

@@ -123,11 +123,12 @@ async fn prewarm_result_covers(search_ui: &Arc<SearchUi>, results: &SearchResult
     true
 }
 
-/// Cached-results swap: re-derive the visible Songs slice from
-/// `last_results` according to the *current* `show-all-tracks` flag
-/// and active sort. Called from the `toggle-show-all-tracks` callback
-/// — no DB hit; the apply step owns the slice/sort logic.
-pub fn swap_tracks_compact_or_full(search_ui: &Arc<SearchUi>, weak: &Weak<AppWindow>) {
+/// Re-derive everything visible from `last_results` — no DB hit, the apply step owning the
+/// slice, sort and label logic. Three callers, and the name follows the operation rather than
+/// any one of them: the `show-all-tracks` toggle and the sort want the *current* flag applied
+/// to unchanged results, and a language switch wants the strips' translated subtitles rendered
+/// again in the language now active.
+pub fn reapply_cached_results(search_ui: &Arc<SearchUi>, weak: &Weak<AppWindow>) {
     let Some(results) = search_ui.state().last_results.lock().clone() else {
         return;
     };

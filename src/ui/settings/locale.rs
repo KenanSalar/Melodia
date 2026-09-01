@@ -99,6 +99,14 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
             log::warn!("select_bundled_translation({code}): {e:?}");
         }
 
+        // The switch above re-resolves every live `@tr` binding, and reaches nothing Rust
+        // rendered through a trampoline and stored. The hero band is the one such surface
+        // reachable from the window alone; the rest need their view handles, which don't
+        // exist yet when this is wired — `install_locale` runs ahead of `install_views` so
+        // the first frame resolves in the persisted language.
+        crate::ui::hero_chips::republish_for_locale(&ui);
+        s.locale_changed_tx.send_modify(|v| *v = v.wrapping_add(1));
+
         // Keep `language-idx` in sync defensively — the dropdown's two-way
         // bind already writes it, but a future code path could call the
         // callback programmatically without touching the dropdown.

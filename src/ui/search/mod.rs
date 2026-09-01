@@ -61,6 +61,20 @@ pub fn install(
     install_models(cx.app);
     let search_ui = Arc::new(SearchUi::new(cx.cover_thumbs.clone()));
     callbacks::wire(cx.app, cx.state, &search_ui, albums_ui, artists_ui);
+    // The two strips' card subtitles and the Top Result's are translated plurals Rust renders
+    // through `Search.album-count-label` / `track-count-label` and stores, so a language switch
+    // leaves them behind. Nothing to mark dirty on the hidden branch: a section leave drops
+    // `last_results`, so the next visit re-queries and renders in the new language anyway.
+    let su = search_ui.clone();
+    if let Err(e) =
+        crate::ui::locale_refresh::on_locale_changed(cx.state, cx.app.as_weak(), move |ui| {
+            if su.section_active() {
+                fetch::reapply_cached_results(&su, &ui.as_weak());
+            }
+        })
+    {
+        log::warn!("search locale refresher: {e}");
+    }
     search_ui
 }
 

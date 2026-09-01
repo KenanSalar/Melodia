@@ -194,7 +194,7 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
     // gate and holds it, true of `publish` at any visibility.
     assert!(
         HERO_CHIPS.contains(
-            "fn publish(ui: &AppWindow, owner: ChipOwner, chips: Vec<SharedString>, \
+            "fn publish(ui: &AppWindow, owner: ChipOwner, source: ChipSource, \
              section_active: bool)"
         ) && HERO_CHIPS.contains("if !section_active {"),
         "hero_chips::publish is the single seam every chip publisher shares, and it must hold \

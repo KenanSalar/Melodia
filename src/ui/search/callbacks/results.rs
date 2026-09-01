@@ -191,7 +191,7 @@ pub(super) fn wire(
             // Re-derive the visible Songs slice from the cached
             // results — no DB hit. If there are no cached results
             // yet (no commit ran since startup) this is a no-op.
-            fetch::swap_tracks_compact_or_full(&su, &weak);
+            fetch::reapply_cached_results(&su, &weak);
         });
     }
     {

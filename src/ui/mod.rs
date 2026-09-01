@@ -23,6 +23,7 @@ pub mod hero_chips;
 pub mod hero_folds;
 pub mod launcher;
 pub mod list_selection;
+pub mod locale_refresh;
 pub mod model_diff;
 pub mod model_patch;
 pub mod mosaic_hero;
