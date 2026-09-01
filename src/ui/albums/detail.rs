@@ -1,11 +1,10 @@
 //! Album Detail header + track list: fetch, artwork pair decode, re-sort,
 //! refresh-preserving, startup seed.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 
 use super::selection::{apply_selection_to_rows, write_selection};
 use super::{AlbumsUi, to_slint_album_row};
@@ -16,6 +15,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::FilterRefs;
+use crate::ui::detail_selection::prune_selection_to;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
@@ -170,12 +170,11 @@ where
     Ok(())
 }
 
-/// Re-fetch an open album after a library change, **preserving** the sort column
-/// and selection: the library-changed subscriber fires on every watcher and scan
-/// tick, so it must not silently reset either. The model swap is skipped
-/// entirely when this album's track ids under the current sort are unchanged —
-/// the common case when a scan touched unrelated files. Bails if the detail was
-/// closed or navigated away while the fetch was in flight.
+/// Re-fetch an open album after a library change, **preserving** the sort column, the filter
+/// and the selection: the library-changed subscriber fires on every watcher and scan tick, so
+/// it must not silently reset any of them. The shared filter pass diffs, so a scan that touched
+/// unrelated files writes back only the rows whose content moved and leaves the delegate cache
+/// standing. Bails if the detail was closed or navigated away while the fetch was in flight.
 pub async fn refresh_detail(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -217,69 +216,13 @@ pub async fn refresh_detail(
         // the cover/blur is being replaced in place.
         apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
-        // Under a filter the displayed model is a subset, so the id-slice fast
-        // path below — which assumes it isn't — would drop the needle.
-        if !albums_ui.detail.filter.lock().is_empty() {
-            let valid: std::collections::HashSet<i32> =
-                tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect();
-            let pruned: Vec<i32> =
-                g.get_selected_ids().iter().filter(|id| valid.contains(id)).collect();
-            write_selection(&g, pruned);
-            // `apply_filtered_detail` re-derives the displayed cache and model
-            // from the canonical set.
-            *albums_ui.detail.all_tracks.lock() = tracks;
-            apply_filtered_detail(&ui, &albums_ui);
-            return;
-        }
-
-        // The cheap in-place path, taken when the visible id slice is unchanged.
-        let new_ids: Vec<i32> = tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect();
-        let cur_ids: Vec<i32> = {
-            let model = g.get_tracks();
-            model
-                .as_any()
-                .downcast_ref::<VecModel<UiTrackListRow>>()
-                .map(|vm| {
-                    (0..vm.row_count()).filter_map(|i| vm.row_data(i)).map(|r| r.id).collect()
-                })
-                .unwrap_or_default()
-        };
-        if new_ids == cur_ids {
-            // Order is unchanged, so every `selected` flag still holds — but row
-            // *content* may have moved (a tag edit, a favourite toggled
-            // elsewhere). Rebuild each row carrying its flag over and write back
-            // only what differs, so the cost is O(changed) rather than O(rows).
-            let model = g.get_tracks();
-            if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-                for (i, t) in tracks.iter().enumerate() {
-                    let Some(old) = vm.row_data(i) else { continue };
-                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t);
-                    fresh.selected = old.selected;
-                    if fresh != old {
-                        vm.set_row_data(i, fresh);
-                    }
-                }
-            }
-            albums_ui.detail.all_tracks.lock().clone_from(&tracks);
-            *albums_ui.detail.tracks.lock() = tracks;
-        } else {
-            let ui_tracks: Vec<UiTrackListRow> =
-                tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
-            replace_tracks_model(&g, ui_tracks);
-            // Fresh rows all carry `selected: false`, so the shadow resets to
-            // match *before* re-applying — and the cache must already hold the
-            // sorted tracks for `apply_selection_to_rows` to resolve ids.
-            albums_ui.detail.applied_selection.lock().clear();
-            albums_ui.detail.all_tracks.lock().clone_from(&tracks);
-            *albums_ui.detail.tracks.lock() = tracks;
-            // Indices shifted: prune to surviving ids, reset the anchor, re-apply.
-            let valid: std::collections::HashSet<i32> = new_ids.iter().copied().collect();
-            let pruned: Vec<i32> =
-                g.get_selected_ids().iter().filter(|id| valid.contains(id)).collect();
-            write_selection(&g, pruned);
-            g.set_selection_anchor(-1);
-            apply_selection_to_rows(&g, &albums_ui);
-        }
+        // Prune `selected-ids` to ids that still exist, then let the shared filter pass
+        // re-derive the displayed cache and the model from the canonical set. It diffs, so a
+        // refresh that leaves the id order alone patches only the rows whose content moved —
+        // a tag edit, a favourite toggled elsewhere — and keeps the shift-range anchor.
+        prune_selection_to(&g, &tracks);
+        *albums_ui.detail.all_tracks.lock() = tracks;
+        apply_filtered_detail(&ui, &albums_ui);
     });
     Ok(())
 }
@@ -304,20 +247,7 @@ pub fn resort_detail(ui: &AppWindow, albums_ui: &AlbumsUi) {
         tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
     };
 
-    // Pulling each row out and re-emitting it in the new order moves the
-    // refcounted struct — no decode, no `format!`, no `SharedString` alloc.
-    let model = g.get_tracks();
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-        let mut by_id: HashMap<i32, UiTrackListRow> = HashMap::with_capacity(vm.row_count());
-        for i in 0..vm.row_count() {
-            if let Some(r) = vm.row_data(i) {
-                by_id.insert(r.id, r);
-            }
-        }
-        let reordered: Vec<UiTrackListRow> =
-            order.iter().filter_map(|id| by_id.remove(id)).collect();
-        vm.set_vec(reordered);
-    }
+    crate::ui::model_diff::permute_rows_by_id(&g.get_tracks(), &order, |r| r.id);
     // A no-op in the steady state, the reordered structs keeping their flags;
     // kept as a cheap re-sync.
     apply_selection_to_rows(&g, albums_ui);

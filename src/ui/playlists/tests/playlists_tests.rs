@@ -210,11 +210,12 @@ fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
 /// `tracks` is a subset of `position_order`, so a display index is still in
 /// range and the DB write lands on a different track than the one dragged.
 ///
-/// Scoped to the guard rather than searched for over the file: `refresh_detail`
-/// asks the same question a few lines up, so a whole-file `contains` would pass
-/// on its copy. Each needle carries its operator for the same reason the
-/// drag-pan pin above matches a binding — a dropped `!` or an `&&` in place of
-/// the `||` inverts the guard, and a bare token match can't see either.
+/// Scoped to the guard rather than searched for over the file, so a later site
+/// reading the same field elsewhere in `detail.rs` can't satisfy the assertion
+/// while the guard itself has stopped asking. Each needle carries its operator
+/// for the same reason the drag-pan pin above matches a binding — a dropped `!`
+/// or an `&&` in place of the `||` inverts the guard, and a bare token match
+/// can't see either.
 #[test]
 fn the_optimistic_reorder_refuses_a_filtered_list() {
     let src = normalize_ws(&strip_line_comments(DETAIL));

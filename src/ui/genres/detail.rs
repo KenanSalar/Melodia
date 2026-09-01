@@ -4,11 +4,10 @@
 //! [`apply_genre_hero`] hands the name-hashed colours to the backdrop, which paints them as its
 //! gradient floor or washes them as an aurora depending on the arm.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 
 use super::selection::{apply_selection_to_rows, write_selection};
 use super::{GenresUi, genre_accent, to_slint_genre_row};
@@ -19,6 +18,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::themes::color_to_rgb;
 use crate::ui::detail_filter::FilterRefs;
+use crate::ui::detail_selection::prune_selection_to;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::hero_backdrop::GenreStops;
 use crate::ui::model_patch;
@@ -204,72 +204,13 @@ pub async fn refresh_detail(
         g.set_genre(header);
         crate::ui::hero_chips::publish_genre(&ui, &detail, fold, on_screen);
 
-        // With an active filter the displayed model is a subset, so the id-slice fast path below
-        // (which assumes an unfiltered model) would drop the needle. Route the swap through
-        // `apply_filtered_detail` instead so the filter survives.
-        if !genres_ui.detail.filter.lock().is_empty() {
-            let valid: std::collections::HashSet<i32> =
-                tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect();
-            let pruned: Vec<i32> =
-                g.get_selected_ids().iter().filter(|id| valid.contains(id)).collect();
-            write_selection(&g, pruned);
-            // Refresh the canonical full set; `apply_filtered_detail` re-derives the displayed
-            // `tracks` cache + model from it.
-            *genres_ui.detail.all_tracks.lock() = tracks;
-            apply_filtered_detail(&ui, &genres_ui);
-            return;
-        }
-
-        // Take the cheap in-place path when the visible id slice is unchanged — the common case
-        // when a scan touched unrelated files, or edited a track already on screen.
-        let new_ids: Vec<i32> = tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect();
-        let cur_ids: Vec<i32> = {
-            let model = g.get_tracks();
-            model
-                .as_any()
-                .downcast_ref::<VecModel<UiTrackListRow>>()
-                .map(|vm| {
-                    (0..vm.row_count()).filter_map(|i| vm.row_data(i)).map(|r| r.id).collect()
-                })
-                .unwrap_or_default()
-        };
-        if new_ids == cur_ids {
-            // Id slice + order unchanged: surgical row updates only.
-            let model = g.get_tracks();
-            if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-                for (i, t) in tracks.iter().enumerate() {
-                    let Some(old) = vm.row_data(i) else { continue };
-                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t);
-                    // Selection is unchanged on this branch, so keep it.
-                    fresh.selected = old.selected;
-                    if fresh != old {
-                        vm.set_row_data(i, fresh);
-                    }
-                }
-            }
-            // No filter on this path — displayed cache equals canonical.
-            genres_ui.detail.all_tracks.lock().clone_from(&tracks);
-            *genres_ui.detail.tracks.lock() = tracks;
-        } else {
-            let ui_tracks: Vec<UiTrackListRow> =
-                tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
-            replace_tracks_model(&g, ui_tracks);
-            // The fresh rows all carry `selected: false`, so the `applied` shadow must be reset to
-            // match *before* re-applying — and the Rust-side cache must already hold the new
-            // (sorted) tracks so `apply_selection_to_rows` can resolve ids → row indices.
-            genres_ui.detail.applied_selection.lock().clear();
-            // No filter on this path — displayed cache equals canonical.
-            genres_ui.detail.all_tracks.lock().clone_from(&tracks);
-            *genres_ui.detail.tracks.lock() = tracks;
-            // Indices shifted — prune the selection to surviving ids and reset the anchor, then
-            // re-apply to the fresh rows.
-            let valid: std::collections::HashSet<i32> = new_ids.iter().copied().collect();
-            let pruned: Vec<i32> =
-                g.get_selected_ids().iter().filter(|id| valid.contains(id)).collect();
-            write_selection(&g, pruned);
-            g.set_selection_anchor(-1);
-            apply_selection_to_rows(&g, &genres_ui);
-        }
+        // Prune `selected-ids` to ids that still exist, then let the shared filter pass
+        // re-derive the displayed cache and the model from the canonical set. It diffs, so a
+        // scan that touched unrelated files writes back only the rows whose content moved and
+        // keeps the shift-range anchor.
+        prune_selection_to(&g, &tracks);
+        *genres_ui.detail.all_tracks.lock() = tracks;
+        apply_filtered_detail(&ui, &genres_ui);
     });
     Ok(())
 }
@@ -291,20 +232,7 @@ pub fn resort_detail(ui: &AppWindow, genres_ui: &GenresUi) {
         tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
     };
 
-    // Reorder the existing Slint rows to match. Pulling each row out of the model and re-emitting
-    // it in the new order just moves the refcounted struct — no decode, no `format!`.
-    let model = g.get_tracks();
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-        let mut by_id: HashMap<i32, UiTrackListRow> = HashMap::with_capacity(vm.row_count());
-        for i in 0..vm.row_count() {
-            if let Some(r) = vm.row_data(i) {
-                by_id.insert(r.id, r);
-            }
-        }
-        let reordered: Vec<UiTrackListRow> =
-            order.iter().filter_map(|id| by_id.remove(id)).collect();
-        vm.set_vec(reordered);
-    }
+    crate::ui::model_diff::permute_rows_by_id(&g.get_tracks(), &order, |r| r.id);
     // Reordered structs keep their `selected` flags — defensive re-sync.
     apply_selection_to_rows(&g, genres_ui);
 }

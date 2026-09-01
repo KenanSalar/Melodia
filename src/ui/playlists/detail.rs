@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 
 use super::selection::{apply_selection_to_rows, write_selection};
 use super::{PlaylistsUi, to_slint_playlist_row};
@@ -17,6 +17,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::FilterRefs;
+use crate::ui::detail_selection::prune_selection_to;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
@@ -231,72 +232,14 @@ pub async fn refresh_detail(
         crate::ui::hero_chips::publish_playlist(&ui, &detail, fold, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
-        // With an active filter the displayed model is a subset, so the id-slice fast path below
-        // (which assumes an unfiltered model) would drop the needle. Route the swap through
-        // `apply_filtered_detail` instead so the filter survives.
-        if !playlists_ui.detail.filter.lock().is_empty() {
-            let valid: std::collections::HashSet<i32> =
-                tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect();
-            let pruned: Vec<i32> =
-                g.get_selected_ids().iter().filter(|id| valid.contains(id)).collect();
-            write_selection(&g, pruned);
-            // Refresh the canonical full set; `apply_filtered_detail` re-derives the displayed
-            // `tracks` cache and model from it.
-            *playlists_ui.detail.all_tracks.lock() = tracks;
-            *playlists_ui.detail.position_order.lock() = position_order_snapshot;
-            apply_filtered_detail(&ui, &playlists_ui);
-            return;
-        }
-
-        let new_ids: Vec<i32> = tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect();
-        let cur_ids: Vec<i32> = {
-            let model = g.get_tracks();
-            model
-                .as_any()
-                .downcast_ref::<VecModel<UiTrackListRow>>()
-                .map(|vm| {
-                    (0..vm.row_count()).filter_map(|i| vm.row_data(i)).map(|r| r.id).collect()
-                })
-                .unwrap_or_default()
-        };
-        if new_ids == cur_ids {
-            let model = g.get_tracks();
-            if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-                for (i, t) in tracks.iter().enumerate() {
-                    let Some(old) = vm.row_data(i) else { continue };
-                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t);
-                    fresh.selected = old.selected;
-                    if fresh != old {
-                        vm.set_row_data(i, fresh);
-                    }
-                }
-            }
-            // No filter on this path — displayed cache equals canonical.
-            playlists_ui.detail.all_tracks.lock().clone_from(&tracks);
-            *playlists_ui.detail.tracks.lock() = tracks;
-            *playlists_ui.detail.position_order.lock() = position_order_snapshot;
-        } else {
-            let ui_tracks: Vec<UiTrackListRow> =
-                tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
-            replace_tracks_model(&g, ui_tracks);
-            // Abort any in-flight drag-reorder: the row indices it was computed against no longer
-            // describe the playlist, and the model swap destroys the row instance holding the
-            // pointer grab, so it can never clear this state itself. Left set, the source row
-            // stays ghosted and the drop line stranded.
-            g.set_drag_source(-1);
-            g.set_drop_slot(-1);
-            playlists_ui.detail.applied_selection.lock().clear();
-            // No filter on this path — displayed cache equals canonical.
-            playlists_ui.detail.all_tracks.lock().clone_from(&tracks);
-            *playlists_ui.detail.tracks.lock() = tracks;
-            *playlists_ui.detail.position_order.lock() = position_order_snapshot;
-            let valid: std::collections::HashSet<i32> = new_ids.iter().copied().collect();
-            let pruned: Vec<i32> =
-                g.get_selected_ids().iter().filter(|id| valid.contains(id)).collect();
-            write_selection(&g, pruned);
-            g.set_selection_anchor(-1);
-            apply_selection_to_rows(&g, &playlists_ui);
-        }
+        // Prune `selected-ids` to ids that still exist, then let the shared filter pass
+        // re-derive the displayed cache and the model from the canonical set. It diffs, so a
+        // scan that touched unrelated files writes back only the rows whose content moved and
+        // keeps both the shift-range anchor and an in-flight drag.
+        prune_selection_to(&g, &tracks);
+        *playlists_ui.detail.all_tracks.lock() = tracks;
+        *playlists_ui.detail.position_order.lock() = position_order_snapshot;
+        apply_filtered_detail(&ui, &playlists_ui);
     });
     Ok(())
 }
@@ -323,18 +266,7 @@ fn reapply_order(g: &PlaylistDetail, playlists_ui: &PlaylistsUi, field: &str, di
         tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
     };
 
-    let model = g.get_tracks();
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-        let mut by_id: HashMap<i32, UiTrackListRow> = HashMap::with_capacity(vm.row_count());
-        for i in 0..vm.row_count() {
-            if let Some(r) = vm.row_data(i) {
-                by_id.insert(r.id, r);
-            }
-        }
-        let reordered: Vec<UiTrackListRow> =
-            order.iter().filter_map(|id| by_id.remove(id)).collect();
-        vm.set_vec(reordered);
-    }
+    crate::ui::model_diff::permute_rows_by_id(&g.get_tracks(), &order, |r| r.id);
 }
 
 /// Re-sort the cached detail tracks to the current `PlaylistDetail` sort state,
@@ -432,7 +364,7 @@ pub fn set_filter(playlists_ui: &PlaylistsUi, needle: &str) {
 /// refresh-with-filter).
 pub fn apply_filtered_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
     let g = ui.global::<PlaylistDetail>();
-    crate::ui::detail_filter::apply_filtered_detail(
+    let was_reset = crate::ui::detail_filter::apply_filtered_detail(
         &g,
         &FilterRefs {
             all_tracks: &playlists_ui.detail.all_tracks,
@@ -441,6 +373,15 @@ pub fn apply_filtered_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
             filter: &playlists_ui.detail.filter,
         },
     );
+    if was_reset {
+        // Abort any in-flight drag-reorder: the row indices it was computed against no longer
+        // describe the playlist, and the reset destroyed the row instance holding the pointer
+        // grab, so it can never clear this state itself. Left set, the source row stays ghosted
+        // and the drop line stranded. This is the only detail view that drags, so the abort
+        // lives here rather than in the shared pass.
+        g.set_drag_source(-1);
+        g.set_drop_slot(-1);
+    }
 }
 
 pub fn apply_detail_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {

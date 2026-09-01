@@ -2,7 +2,6 @@
 //! refresh-preserving, startup seed. Mirrors `src/ui/albums/detail.rs`, plus an `albums` slice
 //! driving the horizontal Albums strip above the all-tracks `TrackList`.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -19,6 +18,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::restamp_selection;
+use crate::ui::detail_selection::prune_selection_to;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
@@ -210,19 +210,12 @@ pub async fn refresh_detail(
         crate::ui::hero_chips::publish_artist(&ui, &detail, years, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
+        prune_selection_to(&g, &tracks);
         // Refresh the canonical Rust caches with the freshly-fetched data. The displayed `tracks`
         // cache and the Slint models are then rewritten through `apply_filtered_detail` so the
         // user's existing filter survives the refresh, with no flash of unfiltered rows.
         *artists_ui.detail.all_tracks.lock() = tracks;
         *artists_ui.detail.albums.lock() = albums;
-        // Prune `selected-ids` to ids that still exist after the refresh — otherwise the chip and
-        // the applied-selection shadow drift out of sync with reality.
-        let valid: std::collections::HashSet<i32> =
-            artists_ui.detail.all_tracks.lock().iter().map(|t| clamp_i64_to_i32(t.id)).collect();
-        let pruned: Vec<i32> =
-            g.get_selected_ids().iter().filter(|id| valid.contains(id)).collect();
-        write_selection(&g, pruned);
-        artists_ui.detail.applied_selection.lock().clear();
 
         // Hand the model swap to `apply_filtered_detail` so the filter and selection re-stamp pass
         // runs in one place.
@@ -248,18 +241,7 @@ pub fn resort_detail(ui: &AppWindow, artists_ui: &ArtistsUi) {
         tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
     };
 
-    let model = g.get_tracks();
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-        let mut by_id: HashMap<i32, UiTrackListRow> = HashMap::with_capacity(vm.row_count());
-        for i in 0..vm.row_count() {
-            if let Some(r) = vm.row_data(i) {
-                by_id.insert(r.id, r);
-            }
-        }
-        let reordered: Vec<UiTrackListRow> =
-            order.iter().filter_map(|id| by_id.remove(id)).collect();
-        vm.set_vec(reordered);
-    }
+    crate::ui::model_diff::permute_rows_by_id(&g.get_tracks(), &order, |r| r.id);
     apply_selection_to_rows(&g, artists_ui);
 }
 
