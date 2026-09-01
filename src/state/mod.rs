@@ -124,6 +124,11 @@ pub struct AppState {
     /// Whether playing a station reports a click back to the directory. Read on
     /// the play path, which is already on a worker.
     radio_send_clicks: Arc<AtomicBool>,
+    /// Whether a star rating is also written into the file's own tag, on the same
+    /// terms as [`Self::radio_enabled`]: `tasks::rating_writeback` asks once per
+    /// coalesced burst, and a `settings.json` read there would be a file read on
+    /// the path a rating click already paid for.
+    write_ratings_to_tags: Arc<AtomicBool>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Shared `reqwest::Client`, built lazily on first use via
     /// [`AppState::http_client`]. Only the updater and the post-scan Deezer
@@ -267,6 +272,9 @@ impl AppState {
             radio_enabled: Arc::new(AtomicBool::new(settings.radio.radio_enabled)),
             radio_hide_segmented: Arc::new(AtomicBool::new(settings.radio.radio_hide_segmented)),
             radio_send_clicks: Arc::new(AtomicBool::new(settings.radio.radio_send_clicks)),
+            write_ratings_to_tags: Arc::new(AtomicBool::new(
+                settings.library.write_ratings_to_tags,
+            )),
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),
@@ -359,6 +367,14 @@ impl AppState {
 
     pub fn set_radio_send_clicks(&self, send: bool) {
         self.radio_send_clicks.store(send, Ordering::Relaxed);
+    }
+
+    pub fn write_ratings_to_tags(&self) -> bool {
+        self.write_ratings_to_tags.load(Ordering::Relaxed)
+    }
+
+    pub fn set_write_ratings_to_tags(&self, write: bool) {
+        self.write_ratings_to_tags.store(write, Ordering::Relaxed);
     }
 }
 

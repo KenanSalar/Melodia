@@ -38,7 +38,7 @@ use lofty::prelude::{Accessor, ItemKey};
 use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
-use super::{image_decode, metadata};
+use super::{image_decode, metadata, rating_tags};
 use crate::error::AppError;
 
 /// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and a tag holding a
@@ -89,6 +89,9 @@ pub struct TagEdit {
     pub musicbrainz_track_id: FieldEdit<String>,
     pub bpm: FieldEdit<f64>,
     pub lyrics: FieldEdit<String>,
+    /// Written by the rating write-back, not the Edit-Tags dialog. Stars, 0–5; `Clear` and
+    /// `Set(0)` mean the same thing and both remove the tag.
+    pub rating: FieldEdit<i32>,
     pub artwork: ArtworkEdit,
 }
 
@@ -111,6 +114,7 @@ impl TagEdit {
             && self.musicbrainz_track_id == FieldEdit::Keep
             && self.bpm == FieldEdit::Keep
             && self.lyrics == FieldEdit::Keep
+            && self.rating == FieldEdit::Keep
             && self.artwork == ArtworkEdit::Keep
     }
 }
@@ -268,6 +272,23 @@ fn apply_lyrics(tag: &mut Tag, edit: &FieldEdit<String>, out: &mut Vec<&'static 
     }
 }
 
+/// Rating: only the tri-state. Which key holds it and on what scale is per-format and argued in
+/// [`rating_tags`], where every format's shape is in view at once.
+///
+/// `Set(0)` folds into the clear there — an unrated track and a zero-star one are the same thing,
+/// and the star strip's top star toggles between them.
+fn apply_rating(tag: &mut Tag, edit: &FieldEdit<i32>, out: &mut Vec<&'static str>) {
+    match edit {
+        FieldEdit::Keep => {}
+        FieldEdit::Clear => rating_tags::clear(tag),
+        FieldEdit::Set(stars) => {
+            if !rating_tags::write_stars(tag, *stars) {
+                out.push("rating");
+            }
+        }
+    }
+}
+
 /// Year, done by hand: [`Accessor`] exposes `date: Timestamp` rather than `year`, and `set_date`
 /// discards the `insert_text` bool — so do what it does with the bool visible.
 ///
@@ -313,6 +334,7 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
     apply_year(tag, &edit.year, &mut out);
     apply_bpm(tag, &edit.bpm, &mut out);
     apply_lyrics(tag, &edit.lyrics, &mut out);
+    apply_rating(tag, &edit.rating, &mut out);
 
     match edit.artwork {
         ArtworkEdit::Keep => {}

@@ -582,6 +582,17 @@ msgstr "Dosya değişikliklerini izle"
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Kitaplık klasörlerinde dosyaların ne zaman eklendiğini, kaldırıldığını veya değiştirildiğini otomatik olarak algıla."
 
+# ---- Ratings section --------------------------------------------------------
+
+msgid "Ratings"
+msgstr "Puanlar"
+
+msgid "Save ratings to files"
+msgstr "Puanları dosyalara kaydet"
+
+msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
+msgstr "Yıldız puanlarını her dosyanın etiketlerine yazar; böylece yeniden tarama sonrasında korunur ve diğer oynatıcılar bunları okuyabilir."
+
 # ---- Updates section --------------------------------------------------------
 
 msgid "Updates"

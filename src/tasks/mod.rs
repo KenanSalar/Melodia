@@ -19,6 +19,8 @@ pub mod play_count_flusher;
 pub mod playback_monitor;
 pub mod queue_prune;
 pub mod radio_logo_cache;
+pub mod rating_import;
+pub mod rating_writeback;
 pub mod retroactive_hash;
 pub mod rss_sampler;
 pub mod scrobble;

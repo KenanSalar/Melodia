@@ -523,6 +523,19 @@ pub async fn get_unhashed_track_paths(db: &DbPool) -> Result<Vec<(i64, String)>,
     Ok(rows)
 }
 
+/// Every unrated track's path — the work-list for the one-shot rating import.
+///
+/// `rating = 0` is the only marker there is: the column is `NOT NULL DEFAULT 0`, so an untouched
+/// row and a deliberately cleared one look identical. That is why the sweep this feeds runs once
+/// and records the fact in `settings.json` rather than re-deriving it from the table.
+pub async fn get_unrated_track_paths(db: &DbPool) -> Result<Vec<(i64, String)>, AppError> {
+    let rows: Vec<(i64, String)> =
+        sqlx::query_as("SELECT id, file_path FROM tracks WHERE rating = 0")
+            .fetch_all(db.read())
+            .await?;
+    Ok(rows)
+}
+
 /// Tracks with no `MusicBrainz` Recording ID that carry enough metadata to be
 /// looked up — the work-list for the auto-tag backfill. Rows without an artist
 /// or title can't be resolved, so they're excluded rather than attempted and

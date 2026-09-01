@@ -2,6 +2,7 @@ import { Theme } from "../../../theme.slint";
 import { SettingsPage } from "../../../globals/settings-page.slint";
 import { LibrarySection } from "../library-section.slint";
 import { FileWatchingSection } from "../file-watching-section.slint";
+import { RatingsSection } from "../ratings-section.slint";
 
 // Where music comes from and how it stays in sync. `has-matches` ORs the cards' own verdicts, so
 // the router can tell whether the page filtered itself away; every tab page carries it.
@@ -16,7 +17,7 @@ export component LibraryPage inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    out property <bool> has-matches: lib.has-matches || fw.has-matches;
+    out property <bool> has-matches: lib.has-matches || fw.has-matches || ratings.has-matches;
 
     GridLayout {
         spacing: Theme.pad-lg;
@@ -35,6 +36,7 @@ export component LibraryPage inherits Rectangle {
             spacing: Theme.pad-lg;
 
             fw := FileWatchingSection { tab-name: @tr("Library"); }
+            ratings := RatingsSection { tab-name: @tr("Library"); }
         }
     }
 }

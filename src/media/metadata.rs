@@ -6,7 +6,7 @@ use lofty::file::{FileType, TaggedFile, TaggedFileExt};
 use lofty::prelude::*;
 use lofty::properties::FileProperties;
 
-use super::artwork;
+use super::{artwork, rating_tags};
 use crate::error::AppError;
 
 #[derive(Debug, Clone)]
@@ -30,6 +30,10 @@ pub struct ExtractedMetadata {
     pub replaygain_track_peak: Option<f64>,
     pub replaygain_album_gain: Option<f64>,
     pub replaygain_album_peak: Option<f64>,
+    /// Stars the file's own tag carries, `None` when it carries none. Seeds a new row and,
+    /// through `update_track_metadata`, overwrites an existing one — but only when it is
+    /// `Some`, a rating with no carrier having nowhere else to live.
+    pub rating: Option<i32>,
     pub duration_ms: i64,
     pub codec: Option<String>,
     pub bitrate: Option<i32>,
@@ -328,6 +332,10 @@ fn extract(
         (None, None, None, None, None, None, None, None, None)
     };
 
+    // Its own line rather than a tenth slot in the tuple above: the whole read is one call, and
+    // the conversion it fronts is argued in `rating_tags` where every format's shape is in view.
+    let rating = tag.and_then(rating_tags::stars_from_tag);
+
     Ok(ExtractedMetadata {
         title,
         artist,
@@ -348,6 +356,7 @@ fn extract(
         replaygain_track_peak,
         replaygain_album_gain,
         replaygain_album_peak,
+        rating,
         duration_ms,
         codec,
         bitrate,

@@ -31,6 +31,7 @@ pub mod folders;
 pub mod motion;
 pub mod playback;
 pub mod radio;
+pub mod ratings;
 pub mod replaygain;
 pub mod scrobble;
 pub mod support;
@@ -60,6 +61,7 @@ pub use playback::{
     set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
 };
 pub use radio::{set_radio_enabled, set_radio_hide_segmented, set_radio_send_clicks};
+pub use ratings::set_write_ratings_to_tags;
 pub use replaygain::{
     set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
     set_replaygain_prevent_clipping,

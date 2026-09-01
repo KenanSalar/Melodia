@@ -132,7 +132,7 @@ pub async fn insert_track(
     let result = q
         .bind(0i32) // play_count
         .bind(0i32) // skip_count
-        .bind(0i32) // rating
+        .bind(meta.rating.unwrap_or(0)) // rating — seeded from the file's own tag
         .bind(false) // is_favorite
         .bind(None::<String>) // last_played
         .bind(0i64) // last_position
@@ -151,10 +151,15 @@ pub struct NewTrackRow<'a> {
     pub ids: ResolvedIds,
 }
 
-/// Rows per multi-row INSERT statement: 37 binds each (`file_path` +
-/// `file_name` + the 34-column shared block + `date_added`; the six
-/// playback defaults are SQL literals), kept under `SQLite`'s bind cap.
-pub const INSERT_CHUNK_ROWS: usize = SQLITE_BIND_LIMIT / 37;
+/// Rows per multi-row INSERT statement: 38 binds each (`file_path` +
+/// `file_name` + the 34-column shared block + `rating` + `date_added`; the
+/// five remaining playback defaults are SQL literals), kept under `SQLite`'s
+/// bind cap.
+///
+/// The rating is bound rather than pushed as a literal like its neighbours
+/// because it is the one of the six that carries a *value* — the file's own
+/// tag — and data never rides in the statement text.
+pub const INSERT_CHUNK_ROWS: usize = SQLITE_BIND_LIMIT / 38;
 
 /// Multi-row variant of [`insert_track`] for the scan/import ingest hot
 /// path: one `INSERT … VALUES (…), (…), … RETURNING id, file_path` per
@@ -216,10 +221,16 @@ pub async fn insert_tracks_batch(
                 .push_bind(row.ids.folder_id)
                 .push_bind(&meta.date_modified)
                 .push_bind(sort_key);
-            // Playback defaults as SQL literals (play_count,
-            // skip_count, rating, is_favorite, last_played,
-            // last_position) — keeps the per-row bind count at 37.
-            b.push("0").push("0").push("0").push("0").push("NULL").push("0").push_bind(now);
+            // Playback defaults as SQL literals (play_count, skip_count,
+            // is_favorite, last_played, last_position); the rating comes off
+            // the file's tag, so it binds.
+            b.push("0")
+                .push("0")
+                .push_bind(meta.rating.unwrap_or(0))
+                .push("0")
+                .push("NULL")
+                .push("0")
+                .push_bind(now);
         });
         qb.push(" RETURNING id, file_path");
 
@@ -271,7 +282,14 @@ pub async fn update_track_location(
 }
 
 /// Update all metadata columns for an existing track that has changed on disk.
-/// Preserves playback state (`play_count`, rating, `is_favorite`, `last_played`, `last_position`).
+/// Preserves playback state (`play_count`, `is_favorite`, `last_played`, `last_position`).
+///
+/// The rating is the exception, and it is a tag-backed field like any other: retag a title
+/// elsewhere and a rescan shows the new title, so a star set elsewhere has to land the same way.
+/// What stops that being a plain `rating = ?` is the track whose file cannot carry one — a
+/// filename-derived Matroska row, a file on read-only media, an install with the write-back
+/// turned off — where the row is the only copy there is. Hence the `CASE`: the tag wins whenever
+/// it says something, and silence leaves the row alone.
 pub async fn update_track_metadata(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
@@ -292,11 +310,13 @@ pub async fn update_track_metadata(
             channels = ?, sample_rate = ?, bit_depth = ?,
             artwork_path = COALESCE(?, artwork_path),
             album_id = ?, artist_id = ?, genre_id = ?, folder_id = ?,
-            date_modified = ?, sort_key = ?
+            date_modified = ?, sort_key = ?,
+            rating = CASE WHEN ? = 0 THEN rating ELSE ? END
          WHERE file_path = ?",
     );
     let q = bind_track_columns(q, meta, ids, &sort_key);
-    q.bind(file_path).execute(&mut **tx).await?;
+    let tag_rating = meta.rating.unwrap_or(0);
+    q.bind(tag_rating).bind(tag_rating).bind(file_path).execute(&mut **tx).await?;
     Ok(())
 }
 

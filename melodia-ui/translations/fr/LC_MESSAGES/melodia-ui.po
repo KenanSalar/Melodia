@@ -577,6 +577,17 @@ msgstr "Surveiller les modifications de fichiers"
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Détecter automatiquement quand des fichiers sont ajoutés, supprimés ou modifiés dans tes dossiers de bibliothèque."
 
+# ---- Ratings section --------------------------------------------------------
+
+msgid "Ratings"
+msgstr "Notes"
+
+msgid "Save ratings to files"
+msgstr "Enregistrer les notes dans les fichiers"
+
+msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
+msgstr "Écrit les notes en étoiles dans les tags de chaque fichier, afin qu'elles survivent à une nouvelle analyse et que d'autres lecteurs puissent les lire."
+
 # ---- Updates section --------------------------------------------------------
 
 msgid "Updates"

@@ -292,6 +292,7 @@ pub fn install_library_settings_and_friends(
     ui::settings::radio_settings::install_radio(app, state);
     let notifications = ui::shell::notifications::install(app);
     ui::settings::file_watching::install(app, state, &notifications);
+    ui::settings::rating_writeback::install(app, state);
     ui::settings::updater_settings::install(app, state);
     ui::settings::motion::install(app, state);
     ui::settings::about::install(app, state);
