@@ -148,6 +148,9 @@ msgstr "Δεν παίζει κομμάτι"
 msgid "Unknown artist"
 msgstr "Άγνωστος καλλιτέχνης"
 
+msgid "Unknown album"
+msgstr "Άγνωστο άλμπουμ"
+
 # ---- Now Playing view -------------------------------------------------------
 
 msgid "Up Next"

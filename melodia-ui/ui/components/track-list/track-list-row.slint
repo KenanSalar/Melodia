@@ -452,12 +452,17 @@ export component TrackListRowItem inherits Rectangle {
             // inline below.
             if root.show-artist: DataCell {
                 cell-width: root.w-artist;
-                text-content: root.row-data.artist != "" ? root.row-data.artist : "Unknown Artist";
+                // Sentence case rather than title, to share `Unknown artist`'s msgid with the
+                // grid card and the now-playing line — a second casing is a second catalogue
+                // entry saying the same thing.
+                text-content: root.row-data.artist != ""
+                    ? root.row-data.artist
+                    : @tr("Unknown artist");
                 playing: root.playing;
             }
             if root.show-album: DataCell {
                 cell-width: root.w-album;
-                text-content: root.row-data.album != "" ? root.row-data.album : "Unknown Album";
+                text-content: root.row-data.album != "" ? root.row-data.album : @tr("Unknown album");
                 playing: root.playing;
             }
             if root.show-genre: DataCell {

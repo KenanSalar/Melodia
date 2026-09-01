@@ -89,7 +89,14 @@ pub struct NotificationsUi {
 impl NotificationsUi {
     /// Push a new notification, returning its id so the caller can `dismiss` it later.
     /// Past `MAX_VISIBLE` the oldest is evicted before the new one lands.
-    pub fn show(&self, p: NotificationParams) -> i32 {
+    ///
+    /// **Private, and that is the whole enforcement of the locale rule**: the two public
+    /// pushes are [`show_auto_dismiss`](Self::show_auto_dismiss), whose row is gone before
+    /// anyone reaches the language picker, and [`show_localized`](Self::show_localized),
+    /// whose row keeps the recipe that re-renders it. A sticky push taking rendered strings
+    /// is the regression, it fails only in a locale nobody reviews in, and there is nothing
+    /// at runtime to catch it — so it is spelled out of reach rather than tested for.
+    fn show(&self, p: NotificationParams) -> i32 {
         let id = self.next_id.get();
         // Saturating, against the wrap-to-negative on a session that somehow pushes
         // 2^31 notifications.

@@ -148,6 +148,9 @@ msgstr "Aucune piste en cours de lecture"
 msgid "Unknown artist"
 msgstr "Artiste inconnu"
 
+msgid "Unknown album"
+msgstr "Album inconnu"
+
 # ---- Now Playing view -------------------------------------------------------
 
 msgid "Up Next"

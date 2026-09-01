@@ -148,6 +148,9 @@ msgstr "Kein Titel wird abgespielt"
 msgid "Unknown artist"
 msgstr "Unbekannter Künstler"
 
+msgid "Unknown album"
+msgstr "Unbekanntes Album"
+
 # ---- Now Playing view -------------------------------------------------------
 
 msgid "Up Next"

@@ -148,6 +148,9 @@ msgstr "Çalan parça yok"
 msgid "Unknown artist"
 msgstr "Bilinmeyen sanatçı"
 
+msgid "Unknown album"
+msgstr "Bilinmeyen albüm"
+
 # ---- Now Playing view -------------------------------------------------------
 
 msgid "Up Next"

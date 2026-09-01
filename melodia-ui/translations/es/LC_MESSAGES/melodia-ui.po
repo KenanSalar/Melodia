@@ -148,6 +148,9 @@ msgstr "No hay ninguna pista en reproducción"
 msgid "Unknown artist"
 msgstr "Artista desconocido"
 
+msgid "Unknown album"
+msgstr "Álbum desconocido"
+
 # ---- Now Playing view -------------------------------------------------------
 
 msgid "Up Next"

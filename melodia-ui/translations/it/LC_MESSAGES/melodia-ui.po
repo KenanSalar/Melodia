@@ -148,6 +148,9 @@ msgstr "Nessun brano in riproduzione"
 msgid "Unknown artist"
 msgstr "Artista sconosciuto"
 
+msgid "Unknown album"
+msgstr "Album sconosciuto"
+
 # ---- Now Playing view -------------------------------------------------------
 
 msgid "Up Next"
