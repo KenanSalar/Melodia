@@ -166,12 +166,10 @@ pub(crate) async fn get_capped(
 
 /// [`get_capped`] for a body that is text.
 ///
-/// **The fallback arm is the whole reason this is not one line at each call site.**
-/// `from_utf8` *moves* the bytes it was handed, so a well-formed body costs nothing, where
-/// `from_utf8_lossy` on an owned `Vec` borrows and then copies the lot, which is a copy of every
-/// playlist a station reloads for the life of it. The lossy path stays on the error arm rather
-/// than being dropped for the cheaper spelling: a mount serving one Latin-1 byte in a track title
-/// should get its replacement character, not a refusal that takes the station off the air.
+/// `from_utf8` *moves*, where `from_utf8_lossy` on an owned `Vec` copies the lot — once per
+/// playlist per reload, for the life of a station. Lossy stays on the error arm rather than being
+/// dropped for the cheaper spelling: one Latin-1 byte in a track title should cost a replacement
+/// character, not the station.
 pub(crate) async fn get_capped_text(
     client: &reqwest::Client,
     url: &reqwest::Url,

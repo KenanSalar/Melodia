@@ -514,19 +514,25 @@ impl PlayerState {
         })
     }
 
+    /// Move the position, and build the action that moves the deck with it.
+    ///
+    /// The position moves either way. Nothing seated is nothing for the backend to rebuild, but
+    /// `source_allows` passes on an absent source, so this is reachable before anything has
+    /// played — where the action the old in-place seek emitted was a no-op by the time it landed
+    /// on an empty deck.
+    fn build_move_to_actions(&mut self, position_ms: u64) -> Vec<PlayerAction> {
+        let seek = self.seek_action(position_ms);
+        self.position_ms = position_ms;
+        seek.into_iter().collect()
+    }
+
     /// Build actions for seek command.
     pub fn build_seek_actions(&mut self, position_ms: u64) -> Vec<PlayerAction> {
         // A live stream has no timeline to land on; the position is elapsed listening time.
         if !self.source_allows(PlaybackSource::is_seekable) {
             return vec![];
         }
-        // The position moves either way. Nothing seated is nothing for the backend to rebuild, but
-        // `source_allows` passes on an absent source, so this is reachable before anything has
-        // played — where the action the old in-place seek emitted was a no-op by the time it
-        // landed on an empty deck.
-        let seek = self.seek_action(position_ms);
-        self.position_ms = position_ms;
-        seek.into_iter().collect()
+        self.build_move_to_actions(position_ms)
     }
 
     /// Build actions for next-track command.
@@ -576,9 +582,7 @@ impl PlayerState {
         let was_paused = self.status == PlaybackStatus::Paused;
 
         if self.position_ms > RESTART_THRESHOLD_MS {
-            let restart = self.seek_action(0);
-            self.position_ms = 0;
-            return restart.into_iter().collect();
+            return self.build_move_to_actions(0);
         }
 
         if let Some(track) = self.queue.previous().cloned() {
@@ -586,9 +590,7 @@ impl PlayerState {
             self.restore_paused(was_paused, &mut actions);
             actions
         } else {
-            let restart = self.seek_action(0);
-            self.position_ms = 0;
-            restart.into_iter().collect()
+            self.build_move_to_actions(0)
         }
     }
 

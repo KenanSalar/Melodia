@@ -82,10 +82,12 @@ enum Command {
     /// This is what a seek is. Moving a *mounted* source meant running the demuxer's scan inside
     /// the callback, on a thread that may not read a file, and blocking the caller on the result;
     /// building the sought source first leaves this side a pointer swap. `frames` comes with it
-    /// because the clock is re-anchored by whoever knows where the source now is.
+    /// because the clock is re-anchored by whoever knows where the source now is, and `mounted`
+    /// because the swap has to be refused if what it was built against has since been replaced.
     Replace {
         loaded: Loaded,
         frames: u64,
+        mounted: u64,
     },
 }
 
@@ -114,6 +116,13 @@ struct VoiceShared {
     /// returns waits for the second to reach the first.
     issued: AtomicU64,
     serviced: AtomicU64,
+    /// A ticket per source that has taken over as the playing one, so a control op prepared
+    /// against what was mounted can be refused if something else has since taken the deck.
+    ///
+    /// The seek is why it exists: it reads the file on its own thread, and the source under it can
+    /// be replaced meanwhile by a *gapless* handover, which happens in this callback and so is
+    /// under neither `exec_lock` nor `deck_epoch`. Written by the callback alone.
+    mounted: AtomicU64,
 }
 
 /// The control side of one voice.
@@ -134,17 +143,27 @@ impl Voice {
         self.send_counted(Command::Append(loaded));
     }
 
-    /// Put `source` on this voice in place of what is playing, with the clock anchored at
+    /// Put `source` on this voice in place of the one `mounted` names, with the clock anchored at
     /// `position` of it.
     ///
     /// How a seek is spelled: `source` is already positioned, so the callback does a pointer swap
-    /// rather than a demuxer scan, and nothing here waits on it. A voice with nothing playing
-    /// takes no source from this — the callback refuses it there, because a deck that drained
-    /// while this was in flight is one the monitor is about to advance past.
-    pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration) {
+    /// rather than a demuxer scan, and nothing here waits on it. The ticket is what makes that
+    /// safe over the gap — see [`VoiceShared::mounted`] — and a voice that has moved on, or run
+    /// dry, takes no source from this.
+    pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration, mounted: u64) {
         let frames = frames_at(position, source.sample_rate());
         let loaded = self.load(source);
-        self.send_counted(Command::Replace { loaded, frames });
+        self.send_counted(Command::Replace {
+            loaded,
+            frames,
+            mounted,
+        });
+    }
+
+    /// The ticket of the source last mounted here, for a later [`Self::replace`] to be matched
+    /// against. Read it against the same observation of the deck the seek is decided on.
+    pub fn mounted(&self) -> u64 {
+        self.shared.mounted.load(Ordering::Acquire)
     }
 
     /// Pair `source` with the converter that brings it to this device.
@@ -366,7 +385,11 @@ impl VoicePull {
             match self.commands.try_recv() {
                 Ok(Command::Append(loaded)) => self.accept(loaded),
                 Ok(Command::Clear) => self.clear(),
-                Ok(Command::Replace { loaded, frames }) => self.replace(loaded, frames),
+                Ok(Command::Replace {
+                    loaded,
+                    frames,
+                    mounted,
+                }) => self.replace(loaded, frames, mounted),
                 Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
             }
         }
@@ -383,10 +406,12 @@ impl VoicePull {
 
     /// Make `loaded` the playing source, with the clock anchored `frames` into it.
     ///
-    /// Count first, rate last — the pair's ordering is argued on [`VoiceShared::frames`].
+    /// Count first, rate last — the pair's ordering is argued on [`VoiceShared::frames`]. The
+    /// ticket is its own `Release`, the control side comparing it and nothing else.
     fn start_at(&mut self, loaded: Loaded, frames: u64) {
         self.shared.frames.store(frames, Ordering::Relaxed);
         self.shared.rate.store(loaded.source.sample_rate().get(), Ordering::Release);
+        self.shared.mounted.fetch_add(1, Ordering::Release);
         self.current = Some(loaded);
     }
 
@@ -395,16 +420,19 @@ impl VoicePull {
         self.start_at(loaded, 0);
     }
 
-    /// Swap the playing source for `loaded`, which the control thread has already positioned.
+    /// Swap the source `mounted` names for `loaded`, which the control thread has already
+    /// positioned.
     ///
-    /// **Nothing playing takes nothing**: the deck drained while this was in flight, and mounting
-    /// a source here would restart a track the monitor is about to advance past — where the
-    /// in-place seek this replaced answered an empty voice by doing nothing at all. Either way one
-    /// source is dropped, which is the count `Voice::send_counted` added for.
-    fn replace(&mut self, loaded: Loaded, frames: u64) {
+    /// **A deck that moved on takes nothing.** It drained, or a staged gapless successor took it
+    /// over from under the caller — and a swap there would restart a track that is either already
+    /// over or not the one the caller was looking at. The ticket catches both, where the
+    /// in-place seek this replaced silently moved whatever it found. Either way one source is
+    /// dropped, which is the count `Voice::send_counted` added for.
+    fn replace(&mut self, loaded: Loaded, frames: u64, mounted: u64) {
+        let moved_on = self.shared.mounted.load(Ordering::Relaxed) != mounted;
         // Whichever source the swap leaves over: the one it displaces, or `loaded` itself where
-        // the deck drained under it and there is nothing to displace.
-        let spent = match self.current.take() {
+        // there is nothing left to displace it against.
+        let spent = match self.current.take_if(|_| !moved_on) {
             Some(displaced) => {
                 self.start_at(loaded, frames);
                 displaced
@@ -415,10 +443,10 @@ impl VoicePull {
         self.shared.sources.fetch_sub(1, Ordering::SeqCst);
     }
 
-    /// The playing source ran out: drop it and take the staged one, if any.
+    /// The playing source ran out: retire it and take the staged one, if any.
     ///
-    /// The drop is what releases the visualizer's claim on this deck's ring, so it happens here
-    /// rather than being deferred — see [`Loaded`].
+    /// Retiring rather than dropping is what keeps the free off this thread while the visualizer's
+    /// claim is still given up on it — see [`Loaded`].
     fn finish_current(&mut self) {
         if let Some(spent) = self.current.take() {
             self.retire(spent);
@@ -474,6 +502,7 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         rate: AtomicU32::new(0),
         issued: AtomicU64::new(0),
         serviced: AtomicU64::new(0),
+        mounted: AtomicU64::new(0),
     });
 
     let voice = Voice {

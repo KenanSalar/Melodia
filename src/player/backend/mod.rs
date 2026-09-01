@@ -423,9 +423,13 @@ impl PlaybackEngine {
         true
     }
 
-    /// Cancel an in-flight crossfade: drop the outgoing deck and ramp the
-    /// survivor back to unity from wherever its fade-in reached. Called before
-    /// a seek, which would otherwise leave the new track stuck at partial gain.
+    /// Cancel an in-flight crossfade: drop the outgoing deck and return the survivor's cell to
+    /// unity. Called before a seek, which would otherwise leave the new track stuck at partial
+    /// gain — and, once the seek rebuilds that source, replay the whole fade-in from silence,
+    /// the cell still holding the ramp `crossfade_to` armed.
+    ///
+    /// The rebuilt source starts *at* unity rather than gliding to it, having no gain of its own
+    /// to resume from; [`crossfade::ABORT_RAMP_MS`] is the glide the seeks that bail still get.
     fn abort_crossfade(&self) {
         if !self.crossfade_armed.swap(false, Ordering::AcqRel) {
             return;
@@ -524,17 +528,22 @@ impl PlaybackEngine {
 
     /// Move the playing track to `position_ms`, by building a source already there.
     ///
-    /// **The scan a seek costs happens here, on the caller's thread.** Symphonia seeks accurately
-    /// by parsing forward to the target, which for a backward seek means from the top of the file,
-    /// and moving the *mounted* source meant running that inside the audio callback: unbounded
-    /// file I/O on the one thread that may not do any, and the caller parked on it meanwhile. So
-    /// the file is opened and positioned first and the deck is handed the result, which leaves the
-    /// callback a pointer swap. `file_path` and `baked_rg` ride the action for that reason; the
-    /// gain is re-baked because the source carrying it is rebuilt.
+    /// **The scan a seek costs happens here, on the caller's thread.** Moving the *mounted* source
+    /// meant running the demuxer inside the audio callback — file I/O on the one thread that may
+    /// not do any, and the caller parked on it meanwhile. So the file is opened and positioned
+    /// first and the deck is handed the result, which leaves the callback a pointer swap.
+    /// `file_path` and `baked_rg` ride the action for that reason; the gain is re-baked because
+    /// the source carrying it is rebuilt.
     ///
-    /// Costs a reopen, and a forward seek now scans from the top where the mounted decoder could
-    /// have scanned from where it was. That is the trade: it buys a seek that cannot glitch the
-    /// audio, including the other deck's.
+    /// Costs a reopen, and a container with no seek index is walked from the top where the mounted
+    /// decoder could have walked from where it was. That is the trade: it buys a seek that cannot
+    /// glitch the audio, including the other deck's.
+    ///
+    /// **The deck is claimed before the open and the claim is checked after it**, because reading
+    /// the file takes long enough for a gapless successor to take the deck over — which happens in
+    /// the callback and so is under neither `exec_lock` nor [`Self::deck_epoch`]. Without the
+    /// ticket a seek landing in that window mounts the track that just ended over the one that
+    /// just started.
     ///
     /// Deliberately does **not** bump the epoch: a seek replaces no deck *contents*, and
     /// cancelling a pending deferred pause would leave the decks running silently at the ramp's
@@ -544,11 +553,15 @@ impl PlaybackEngine {
         self.abort_crossfade();
 
         // Nothing on the deck is nothing to seek, which is what moving the mounted source answered
-        // too. Asked before the open so a seek against a drained deck costs no I/O; the callback
-        // asks again, since the deck can drain while the file is being read.
-        if self.lock_decks().active().voice.is_empty() {
-            return;
-        }
+        // too. Asked before the open so a seek against a drained deck costs no I/O.
+        let mounted = {
+            let decks = self.lock_decks();
+            let voice = &decks.active().voice;
+            if voice.is_empty() {
+                return;
+            }
+            voice.mounted()
+        };
 
         let position = Duration::from_millis(position_ms);
         let mut decoded = match FileDecoder::open(Path::new(file_path)) {
@@ -565,7 +578,7 @@ impl PlaybackEngine {
 
         let decks = self.lock_decks();
         let deck = decks.active();
-        deck.voice.replace(self.build_source(decoded, baked_rg, deck), position);
+        deck.voice.replace(self.build_source(decoded, baked_rg, deck), position, mounted);
     }
 
     pub fn set_volume(&self, volume: f64) {

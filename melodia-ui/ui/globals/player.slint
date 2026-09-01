@@ -58,6 +58,16 @@ export global Player {
     // ≥ 0 the slider prefers it over `position-ms`, so the thumb doesn't snap back for a frame.
     in-out property <int> seek_pending_ms: -1;
 
+    // Where a run of *relative* seek keystrokes is walking to, or -1 between runs; `ShortcutScope`
+    // owns the timer that lands it, a global holding no elements. The state lives here rather than
+    // beside that timer so `seek-to` can cancel a run, which is the only way an absolute seek is
+    // safe from a trailing edge landing back on the target it just abandoned.
+    in-out property <int> seek-run-target-ms: -1;
+    // Whether the target has moved since the last one was sent, so the trailing edge stays quiet
+    // when the leading one already covered the whole run.
+    in-out property <bool> seek-run-unsent: false;
+    in-out property <int> seek-run-ticks: 0;
+
     // The dual-slot cross-fade: Rust writes the fresh blur into the *inactive* slot then flips
     // `blur-use-a`. **Neither slot is ever cleared** — the outgoing layer stays painted for the
     // whole fade. Written only on track change, so these don't re-invalidate per tick.
@@ -161,6 +171,21 @@ export global Player {
     callback next();
     callback previous();
     callback seek(int);          // position in ms
+
+    // Drop the relative-seek run, so the next press reads a fresh position.
+    public function end-seek-run() {
+        root.seek-run-target-ms = -1;
+        root.seek-run-unsent = false;
+        root.seek-run-ticks = 0;
+    }
+
+    // The one spelling for a seek that names a position rather than a step. Every slider and the
+    // percentage shortcuts go through it; only the relative run's own flush calls `seek` bare.
+    public function seek-to(ms: int) {
+        root.end-seek-run();
+        root.seek(ms);
+    }
+
     callback set-volume(int);    // 0..100, fires continuously during drag
     callback commit-volume();    // fires on slider release; persists to settings.json
     // Applies to the live player immediately *and* persists; reads back through `vm.playback_speed`.

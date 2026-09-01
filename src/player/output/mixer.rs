@@ -61,8 +61,8 @@ impl MixerPull {
     ///
     /// A partial trailing frame is zeroed but never written into: half a frame would shear the
     /// channel layout for the rest of the stream. No host asks for one, and the zero is what makes
-    /// that survivable anyway — the caller stages into a buffer it reuses, so leaving the tail
-    /// alone would hand the device whatever the last block left there.
+    /// that survivable anyway — neither buffer this is handed arrives clean: a staged one holds
+    /// the last block, and cpal promises nothing about its own.
     ///
     /// **The first voice with anything to say writes; the rest add.** Summing into a zeroed block
     /// would be simpler and would cost the sign of zero — `0.0 + -0.0` is `0.0` — so a lone voice at

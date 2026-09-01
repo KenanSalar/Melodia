@@ -222,7 +222,7 @@ fn a_replace_anchors_the_clock_where_the_caller_asked() {
     pump(&mut pull, 64);
 
     let seek = Duration::from_secs(2);
-    voice.replace(seconds_of(4, RATE), seek);
+    voice.replace(seconds_of(4, RATE), seek, voice.mounted());
     pump(&mut pull, 64);
 
     let got = voice.position();
@@ -239,7 +239,7 @@ fn a_replace_anchors_the_clock_where_the_caller_asked() {
 fn replacing_on_an_empty_voice_mounts_nothing() {
     let (voice, mut pull) = pair(mono(RATE));
 
-    voice.replace(seconds_of(4, RATE), Duration::from_secs(1));
+    voice.replace(seconds_of(4, RATE), Duration::from_secs(1), voice.mounted());
     pump(&mut pull, 64);
 
     assert!(voice.is_empty(), "a replace mounted a source on a voice with nothing playing");
@@ -261,7 +261,7 @@ fn a_seek_keeps_a_source_that_had_just_reached_its_end() {
     assert_eq!(pump(&mut pull, FRAMES - 1).len(), FRAMES - 1);
     assert_eq!(voice.len(), 1, "the source must still be on the voice to be seekable");
 
-    voice.replace(TestSource::new(vec![0.5; FRAMES], 1, RATE), Duration::ZERO);
+    voice.replace(TestSource::new(vec![0.5; FRAMES], 1, RATE), Duration::ZERO, voice.mounted());
 
     assert_eq!(
         pump(&mut pull, 64).len(),
@@ -269,6 +269,34 @@ fn a_seek_keeps_a_source_that_had_just_reached_its_end() {
         "the voice stopped at the pre-seek end of the source"
     );
     assert!(!voice.is_empty(), "the seek's own source was dropped");
+}
+
+/// The window the ticket is for: a staged gapless successor takes the deck over inside the
+/// callback, so a seek that read the deck before its file was opened comes back naming a source
+/// that has already ended. Mounting it would restart the track the deck just left.
+#[test]
+fn a_replace_prepared_against_a_source_that_has_since_ended_mounts_nothing() {
+    const FRAMES: usize = 512;
+
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(TestSource::new(vec![0.25; FRAMES], 1, RATE));
+    voice.append(TestSource::new(vec![0.75; FRAMES], 1, RATE));
+
+    // What a seek would have read before going off to open its file.
+    let mounted = voice.mounted();
+
+    // Drain the first source, which hands the deck to the staged one.
+    assert_eq!(pump(&mut pull, FRAMES).len(), FRAMES);
+    assert_eq!(voice.len(), 1, "the staged source should have taken over");
+
+    voice.replace(TestSource::new(vec![0.25; FRAMES], 1, RATE), Duration::ZERO, mounted);
+
+    let after = pump(&mut pull, 64);
+    assert!(
+        after.iter().all(|s| (*s - 0.75).abs() < 1e-6),
+        "the stale seek mounted the track the deck had already left"
+    );
+    assert_eq!(voice.len(), 1, "the refused source was not accounted for");
 }
 
 /// The converter is built against the source's own shape, so a second source at a different rate

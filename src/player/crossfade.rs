@@ -32,9 +32,15 @@ pub const DEFAULT_CROSSFADE_MS: u32 = 2_000;
 /// which would cut the outgoing track at a non-zero gain (an audible click).
 pub const MIN_FADE_MS: u64 = 250;
 
-/// How long the surviving deck takes to climb back to unity when a crossfade is aborted (seek, or
-/// a new track picked mid-overlap). Long enough to avoid a step discontinuity, short enough to be
-/// imperceptible.
+/// How long the surviving deck takes to climb back to unity when a crossfade is aborted. Long
+/// enough to avoid a step discontinuity, short enough to be imperceptible.
+///
+/// Only reaches the ear when the seek that aborted then *bails* — an empty deck, a file that
+/// would not reopen. A seek that lands rebuilds the source, and a fresh [`EqSource`] has no gain
+/// of its own for [`FadeCmd::start`] = `None` to resume from, so it opens at unity. Nothing is
+/// lost there: the audio either side of a seek is a splice already.
+///
+/// [`EqSource`]: super::equalizer::EqSource
 pub const ABORT_RAMP_MS: u64 = 40;
 
 /// Fade length for pause / resume / user-initiated stop when [`CrossfadeSettings::fade_on_pause`]

@@ -297,7 +297,7 @@ export component NowPlayingBar inherits Rectangle {
 
                     committed(v) => {
                         if (Player.duration-ms > 0) {
-                            Player.seek(round(v * Player.duration-ms));
+                            Player.seek-to(round(v * Player.duration-ms));
                         }
                     }
                 }

@@ -260,9 +260,8 @@ impl PrebufferSource {
 }
 
 impl Drop for PrebufferSource {
-    /// An exhausted source is dropped **on the audio thread**, so this stores a flag and does
-    /// nothing else. Joining the feed thread here would block the callback for as long as a socket
-    /// read takes, which is the whole thing this module exists to prevent.
+    /// Stores a flag and does nothing else. Joining the feed thread here would block for as long
+    /// as a socket read takes, and the drop happens wherever a spent source is collected.
     fn drop(&mut self) {
         self.shared.abandon();
     }
@@ -319,6 +318,13 @@ impl AudioSource for PrebufferSource {
         Err(SeekError::NotSupported {
             underlying_source: "live stream",
         })
+    }
+
+    /// A live socket is the kind of claim this exists for, and the flag is one the drop already
+    /// sets — so setting it here is the difference between a station releasing its connection when
+    /// it stops and when someone next collects it.
+    fn release_claims(&mut self) {
+        self.shared.abandon();
     }
 }
 
