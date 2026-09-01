@@ -54,8 +54,8 @@ const COMMAND_SLOTS: usize = 8;
 /// **Dropped on the audio thread**, which frees a decoder's 64 KiB read buffer there: too big for
 /// glibc's per-thread cache, so it takes the arena lock this process shares with the UI and tokio
 /// threads. Handing finished sources back to a control thread instead was tried and reverted — the
-/// visualizer's per-deck liveness is scoped to the source's *drop*, so deferring it leaves a
-/// finished deck's ring mixing into the analysis window until someone collects.
+/// visualizer keeps one ring per *deck* and scopes its liveness to the source's *drop*, so
+/// deferring that leaves a dead deck's ring mixing into the analysis window until someone collects.
 struct Loaded {
     source: Box<dyn AudioSource>,
     converter: Converter,
@@ -274,7 +274,11 @@ impl VoicePull {
             return 0;
         }
         let speed = self.shared.speed.load();
-        let at_unity = self.shared.volume.is_exactly(1.0);
+        // Read once, so the whole block renders against one observation, and compared as a bit
+        // pattern because the short circuit above has to be exact: an epsilon would take it a shade
+        // off unity.
+        let volume = self.shared.volume.load();
+        let at_unity = volume.to_bits() == 1.0_f64.to_bits();
 
         let mut written = 0;
         while written < block.len() {
@@ -293,7 +297,7 @@ impl VoicePull {
         }
 
         if !at_unity {
-            let volume = self.shared.volume.load() as Sample;
+            let volume = volume as Sample;
             for slot in &mut block[..written] {
                 *slot *= volume;
             }

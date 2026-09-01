@@ -319,9 +319,9 @@ export component Sidebar inherits Rectangle {
         x: parent.width - self.width
             - (Nav.sidebar-collapsed ? 0px : 4px);
         y: nav-scroll.absolute-position.y - root.absolute-position.y;
-        // Slimmer on the collapsed rail so the bar doesn't crowd the icons; full-size
-        // expanded, matching every other view's.
-        width: Nav.sidebar-collapsed ? 6px : 10px;
+        // Slimmer on the collapsed rail so the bar doesn't crowd the icons; the shared slot
+        // expanded, like every other view's.
+        width: Nav.sidebar-collapsed ? 6px : Theme.scrollbar-slot;
         height: nav-scroll.height;
         bar-thickness: Nav.sidebar-collapsed ? 4px : 8px;
         bar-radius: Nav.sidebar-collapsed ? 2px : 4px;

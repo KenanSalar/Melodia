@@ -32,7 +32,7 @@ pub struct AudioOutput {
 }
 
 impl AudioOutput {
-    /// Open the default device and build `voices` of them against whatever it negotiated.
+    /// Open the default device and build `voices` many against whatever it negotiated.
     ///
     /// # Errors
     ///

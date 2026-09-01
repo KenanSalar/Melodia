@@ -110,17 +110,6 @@ macro_rules! atomic_float {
 atomic_float!(AtomicF32, f32, AtomicU32);
 atomic_float!(AtomicF64, f64, AtomicU64);
 
-impl AtomicF64 {
-    /// Whether the cell holds *exactly* `value`, compared as a bit pattern.
-    ///
-    /// A deck skips its volume multiply on exact unity, which is what makes a lone deck through
-    /// the whole chain bit-identical to what the decoder produced. An epsilon would answer yes a
-    /// shade off it, so the question has to be asked of the pattern rather than of the value.
-    pub(crate) fn is_exactly(&self, value: f64) -> bool {
-        self.0.load(Ordering::Relaxed) == value.to_bits()
-    }
-}
-
 #[cfg(test)]
 #[path = "tests/dsp_tests.rs"]
 mod tests;

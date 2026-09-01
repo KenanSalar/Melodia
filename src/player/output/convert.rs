@@ -1,6 +1,6 @@
 //! Bringing one source's samples to the device's rate and channel count.
 //!
-//! Pull-driven, because the whole chain above it is: the deck asks for a block and this reaches
+//! Pull-driven, because the whole chain above it is: the voice asks for a block and this reaches
 //! back through the source for however many frames that takes. Linear interpolation, which is what
 //! rodio did and what the one reference player that owns its output ships; a better kernel is a
 //! change to [`Converter::fill`] and nothing else.
@@ -201,7 +201,7 @@ fn interpolate(a: Sample, b: Sample, t: Sample) -> Sample {
 }
 
 /// Take one whole frame, or nothing. A partial frame is dropped rather than padded: half a frame
-/// would flip the deck's channel parity for everything that plays after it.
+/// would flip this voice's channel parity for everything that plays on it after.
 fn pull_frame(src: &mut dyn AudioSource, frame: &mut [Sample]) -> bool {
     for slot in frame.iter_mut() {
         match src.next() {

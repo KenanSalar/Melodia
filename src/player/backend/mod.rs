@@ -1,11 +1,12 @@
 //! The playback engine: the decks, the epoch that orders every op against them, and the transport
 //! the action layer drives.
 //!
-//! **Everything here touches the decks lock or [`PlaybackEngine::deck_epoch`], and that is the
-//! reason it is one file.** Each of the transport ops, the fade gates, the gapless stage and the
-//! deferred pause/stop carries an argument about a race against one of the others, and those read
-//! as arguments only while they sit next to each other. What moved out is what could not be in one:
-//! the lock-free DSP setters ([`controls`]) and the trait a test mocks ([`player_backend`]).
+//! **Everything here races something else here, and that is the reason it is one file.** The
+//! transport ops, the fade gates, the gapless stage, the deferred pause/stop and the stream stage
+//! the transport claims from each carry an argument about one of the others, over the decks lock,
+//! [`PlaybackEngine::deck_epoch`] or the generation a station is opened under, and those read as
+//! arguments only while they sit next to each other. What moved out races nothing: the lock-free
+//! DSP setters ([`controls`]) and the trait a test mocks ([`player_backend`]).
 
 mod controls;
 mod player_backend;

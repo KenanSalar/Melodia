@@ -169,8 +169,8 @@ fn a_wider_device_leaves_the_channels_the_source_has_no_answer_for_silent() {
     assert_eq!(bits(&out), bits(&[0.5, 0.25, 0.0, 0.0]));
 }
 
-/// A partial trailing frame would flip the deck's channel parity for whatever plays next, which is
-/// the same hazard the ring's whole-frame pop and `EqSource`'s frame gate exist for.
+/// A partial trailing frame would flip the voice's channel parity for whatever plays on it next,
+/// which is the same hazard the ring's whole-frame pop and `EqSource`'s frame gate exist for.
 #[test]
 fn a_trailing_partial_frame_is_dropped_rather_than_padded() {
     let mut src = TestSource::new(vec![0.5, 0.25, 0.125], 2, 48_000);

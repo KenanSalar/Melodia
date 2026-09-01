@@ -153,7 +153,7 @@ than a new dependency, and the device loss classification in `tasks::audio_healt
 working unchanged.
 
 Every row landed where it says. In order: `player::file_decode`, `player::audio::AudioSource`,
-`player::output::deck`, `player::output::mixer`, `player::output::device`, and a one-line import
+`player::output::voice`, `player::output::mixer`, `player::output::device`, and a one-line import
 change in `player::stream_health`. The local trait does have four methods, though not the four this
 table meant — `current_span_len` turned out to exist only for rodio's rebuild policy and `try_seek`
 moved from provided to required.

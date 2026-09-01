@@ -109,7 +109,7 @@ pub(crate) fn build_http_client() -> reqwest::Client {
 /// its logo URL, and the lines of a `.pls`/`.m3u`/`.asx` pointer.
 pub(crate) fn http_url(candidate: &str) -> Option<reqwest::Url> {
     let parsed = reqwest::Url::parse(candidate.trim()).ok()?;
-    (matches!(parsed.scheme(), "http" | "https") && parsed.has_host()).then_some(parsed)
+    is_http(&parsed).then_some(parsed)
 }
 
 /// [`http_url`] where only the verdict is wanted. Two callers wrote this line out for themselves.
@@ -117,11 +117,11 @@ pub(crate) fn is_http_url(candidate: &str) -> bool {
     http_url(candidate).is_some()
 }
 
-/// An already-parsed URL held to the same rule.
+/// The rule itself, asked of a URL already parsed. [`http_url`] is this plus the parse.
 ///
 /// `Url::join` returns an absolute URI unchanged, so a playlist line reading `file:///etc/passwd`
 /// or `data:…` comes back out of it as a `Url` like any other. Nothing downstream re-asks, and the
-/// text form is gone by then, so the check has to be available on the parsed value too.
+/// text form is gone by then, so the check has to be reachable on the parsed value too.
 pub(crate) fn is_http(url: &reqwest::Url) -> bool {
     matches!(url.scheme(), "http" | "https") && url.has_host()
 }
@@ -133,9 +133,10 @@ pub(crate) fn is_http(url: &reqwest::Url) -> bool {
 /// over the cap. The header check is a courtesy a host can omit or lie about, which is why it sits
 /// here rather than instead of the streamed bound.
 ///
-/// `what` names the thing in every message, so a refusal points at the right half of a two-request
-/// fetch. Timeout and cap are the caller's: a station's playlist and one of its segments differ by
-/// two orders of magnitude in both.
+/// `what` is a noun phrase, capitalized as every [`read_capped`] caller passes one: it is the
+/// subject of all four messages the two halves can raise, so a refusal points at the right half of
+/// a two-request fetch. Timeout and cap are the caller's, a station's playlist and one of its
+/// segments being two orders of magnitude apart on the cap.
 pub(crate) async fn get_capped(
     client: &reqwest::Client,
     url: &reqwest::Url,
@@ -148,7 +149,7 @@ pub(crate) async fn get_capped(
         .timeout(timeout)
         .send()
         .await
-        .map_err(|e| AppError::network(format!("Could not fetch {what}"), e))?;
+        .map_err(|e| AppError::network(format!("{what} could not be fetched"), e))?;
     if !response.status().is_success() {
         return Err(AppError::network_msg(format!(
             "{what} request returned HTTP {}",

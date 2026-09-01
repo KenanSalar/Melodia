@@ -30,10 +30,10 @@ fn tone(level: f32, frames: usize, channels: u16) -> TestSource {
 }
 
 /// **The sum does not clamp**, and a ceiling here would be invisible until a crossfade needed it.
-/// Two decks under complementary linear ramps are inside unity by construction, so anything past it
-/// is a bug upstream that has to stay audible rather than be quietly squashed.
+/// Two voices under complementary linear ramps are inside unity by construction, so anything past
+/// it is a bug upstream that has to stay audible rather than be quietly squashed.
 #[test]
-fn two_decks_sum_without_a_ceiling() -> Result<(), AppError> {
+fn two_voices_sum_without_a_ceiling() -> Result<(), AppError> {
     let (mixer, mut pull) = pair(VOICES, device(1));
     for (index, level) in [0.8, 0.7].into_iter().enumerate() {
         voice_at(&mixer, index)?.append(tone(level, 16, 1));
@@ -47,7 +47,7 @@ fn two_decks_sum_without_a_ceiling() -> Result<(), AppError> {
 }
 
 #[test]
-fn one_deck_alone_reaches_the_block_untouched() -> Result<(), AppError> {
+fn one_voice_alone_reaches_the_block_untouched() -> Result<(), AppError> {
     let (mixer, mut pull) = pair(VOICES, device(1));
     let input = [0.25, -0.5, 0.125, -0.0];
     voice_at(&mixer, 0)?.append(TestSource::new(input.to_vec(), 1, RATE));
@@ -55,12 +55,12 @@ fn one_deck_alone_reaches_the_block_untouched() -> Result<(), AppError> {
     let mut out = vec![0.0; 4];
     pull.fill(&mut out);
 
-    assert_eq!(bits(&out), bits(&input), "a lone deck at unity is not a passthrough");
+    assert_eq!(bits(&out), bits(&input), "a lone voice at unity is not a passthrough");
     Ok(())
 }
 
 #[test]
-fn a_paused_deck_contributes_nothing() -> Result<(), AppError> {
+fn a_paused_voice_contributes_nothing() -> Result<(), AppError> {
     let (mixer, mut pull) = pair(VOICES, device(1));
     voice_at(&mixer, 0)?.append(tone(0.5, 16, 1));
 
@@ -85,10 +85,10 @@ fn nothing_playing_reads_as_silence_rather_than_ending() {
     assert!(out.iter().all(|s| *s == 0.0), "an idle mixer left the block alone: {out:?}");
 }
 
-/// The block is cleared before the decks add into it, or the previous callback's samples play again
-/// wherever a deck has nothing to contribute.
+/// The block is cleared before the voices add into it, or the previous callback's samples play
+/// again wherever a voice has nothing to contribute.
 #[test]
-fn the_block_is_cleared_before_the_decks_add_into_it() -> Result<(), AppError> {
+fn the_block_is_cleared_before_the_voices_add_into_it() -> Result<(), AppError> {
     let (mixer, mut pull) = pair(VOICES, device(1));
     voice_at(&mixer, 0)?.append(tone(0.25, 4, 1));
 
@@ -101,7 +101,7 @@ fn the_block_is_cleared_before_the_decks_add_into_it() -> Result<(), AppError> {
 }
 
 /// A block that is not a whole number of frames would shear the channel layout for everything after
-/// it, so no deck writes the remainder — but it is still zeroed, because the caller stages into a
+/// it, so no voice writes the remainder — but it is still zeroed, because the caller stages into a
 /// buffer it reuses and would otherwise pass the last block's samples through.
 #[test]
 fn a_partial_trailing_frame_is_silenced_rather_than_half_filled() -> Result<(), AppError> {
@@ -117,7 +117,7 @@ fn a_partial_trailing_frame_is_silenced_rather_than_half_filled() -> Result<(), 
 }
 
 #[test]
-fn a_deck_past_the_voice_count_is_not_there() {
+fn a_voice_past_the_count_is_not_there() {
     let (mixer, _pull) = pair(VOICES, device(2));
     assert!(mixer.voice(VOICES).is_none());
 }

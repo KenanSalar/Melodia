@@ -497,7 +497,7 @@ async fn fetch_playlist(client: &reqwest::Client, url: &Url) -> Result<String, A
     let body = crate::services::get_capped(
         client,
         url,
-        "the station's playlist",
+        "Station playlist",
         PLAYLIST_TIMEOUT,
         PLAYLIST_MAX_BYTES,
     )

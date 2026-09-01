@@ -31,10 +31,11 @@ const SEGMENT_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Ceiling on one manifest, and how long we wait for it.
 ///
-/// **Deliberately its own pair rather than `stream_source`'s**, which bounds a `.pls` or `.m3u`
+/// **Deliberately its own cap rather than `stream_source`'s**, which bounds a `.pls` or `.m3u`
 /// *pointer* — a few hundred bytes naming one mount. A media playlist is a live document listing
 /// every segment still in the window and re-fetched twice a target duration, so the two answer
-/// different questions and only looked like one number.
+/// different questions and only looked like one number. The wait beside it lands on the same
+/// figure, a manifest and a pointer being one request over one connection either way.
 const MANIFEST_MAX_BYTES: u64 = 256 * 1024;
 const MANIFEST_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -324,7 +325,7 @@ async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, A
     let body = crate::services::get_capped(
         client,
         url,
-        "the station's playlist",
+        "Station playlist",
         MANIFEST_TIMEOUT,
         MANIFEST_MAX_BYTES,
     )
@@ -334,12 +335,6 @@ async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, A
 
 /// Read at most [`SEGMENT_MAX_BYTES`] of one segment.
 async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, AppError> {
-    crate::services::get_capped(
-        client,
-        url,
-        "a segment of the station's stream",
-        SEGMENT_TIMEOUT,
-        SEGMENT_MAX_BYTES,
-    )
-    .await
+    crate::services::get_capped(client, url, "Station segment", SEGMENT_TIMEOUT, SEGMENT_MAX_BYTES)
+        .await
 }
