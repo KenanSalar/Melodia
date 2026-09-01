@@ -2,7 +2,7 @@
 //! and the walk holding the module's own reach prohibition.
 
 use super::{ApiStation, DEFAULT_PAGE_LIMIT, FALLBACK_HOST, SERVERS_URL, page_from, url_for};
-use crate::test_support::{SRC_DIR, stripped_sources};
+use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
 
 /// A bare name, so [`url_for`] stays the one place a scheme or a separator is
 /// spelled. A host carrying either would produce `https://https://…` or a
@@ -103,9 +103,6 @@ const CALLER_TREE: &str = "library/radio/";
 /// This module's own tree. A prefix rather than a file list, so a fourth source
 /// beside the three needs no edit.
 const OWN_TREE: &str = "services/radio_browser/";
-
-/// A floor, so a walk that silently found nothing can't pass vacuously.
-const MIN_SOURCES: usize = 200;
 
 /// The module doc's "nothing outside `library::radio` should reach here" is what
 /// leaves the setting that turns radio off one place to guard rather than one

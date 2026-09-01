@@ -8,7 +8,7 @@
 //! `src/` is the whole reach it needs: `melodia-ui` depends on `slint` alone, so the
 //! other package has no `rfd` to build a dialog with.
 
-use crate::test_support::{SRC_DIR, stripped_sources};
+use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
 
 /// The two names nothing outside the helper may spell: the crate the dialogs come from,
 /// and the parenting call the helper exists for.
@@ -35,9 +35,6 @@ const EXEMPT: [(&str, &str); 2] = [
 /// A floor rather than an equality, so a genuine sixth dialog needs no edit here — but a
 /// caller that stops opening one, or a walk that silently found nothing, still trips it.
 const MIN_CALLERS: usize = 5;
-
-/// A floor, so a walk that silently found nothing can't pass vacuously.
-const MIN_SOURCES: usize = 200;
 
 /// The whole Rust tree, comment-stripped and paired with the path it came from. Stripped
 /// because prose about the rule reads exactly like a violation of it — this file's own

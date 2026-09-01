@@ -4,13 +4,10 @@ use std::collections::BTreeSet;
 
 use super::*;
 use crate::test_support::{
-    SRC_DIR, stripped_sources, write_test_jpeg, write_test_jpeg_sized, write_test_png,
+    MIN_SOURCES, SRC_DIR, stripped_sources, write_test_jpeg, write_test_jpeg_sized, write_test_png,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
-
-/// A floor, so a walk that silently found nothing can't pass vacuously.
-const MIN_SOURCES: usize = 200;
 
 /// `image`'s own resamplers, by the spelling a call site uses.
 ///

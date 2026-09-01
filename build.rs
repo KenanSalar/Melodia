@@ -82,8 +82,8 @@ const BLOCKLIST_HASHED_FILE: &str = ".env.radio.hashed.local";
 ///
 /// **Nothing here may print a term.** Build logs are public on a public repository,
 /// so a message quoting the line it choked on would hand over the entry it was
-/// protecting — hence line numbers and counts only, both here and in
-/// `blocklist::parse_source`.
+/// protecting — hence line numbers and counts only. The parser's half is structural:
+/// `blocklist::Refusal` is fieldless and has nowhere to put one.
 fn write_blocklist() {
     println!("cargo:rerun-if-env-changed={BLOCKLIST_ENV}");
     println!("cargo:rerun-if-changed={BLOCKLIST_FILE}");

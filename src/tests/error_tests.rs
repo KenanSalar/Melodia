@@ -5,7 +5,7 @@
 //! absent.
 
 use super::*;
-use crate::test_support::{SRC_DIR, stripped_sources};
+use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
 
 #[test]
 fn display_io() {
@@ -95,9 +95,6 @@ fn io_other_helper_wraps_message() {
     assert!(matches!(err, AppError::Io(_)));
 }
 
-/// A floor, so a walk that silently found nothing can't pass vacuously.
-const MIN_SOURCES: usize = 200;
-
 /// An error carried as a `String` keeps its message and drops its cause, which is the whole of
 /// what `services::describe` walks. Nothing under [`SRC_DIR`] needs to: [`AppError`] reaches
 /// everywhere, and where it cannot (`radio_blocklist::source` is `include!`d into `build.rs`, so
@@ -121,7 +118,9 @@ fn no_result_carries_its_error_as_a_string() {
 
 /// How many of `code`'s `Result`s close on a bare `String` error argument.
 fn string_errored_results(code: &str) -> usize {
-    const OPENER: &str = "Result<";
+    // In halves so this file isn't its own first hit. The alternative its neighbours reach for,
+    // skipping the file that spells the needle, would stop it covering itself.
+    const OPENER: &str = concat!("Result", "<");
 
     let mut found = 0;
     let mut rest = code;

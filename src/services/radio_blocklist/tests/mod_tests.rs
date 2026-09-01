@@ -295,15 +295,18 @@ fn a_pattern_blocks_a_tag_facet_and_leaves_the_others() -> Result<(), ParseError
 #[test]
 fn a_pattern_under_the_floor_is_refused() {
     let short = "x".repeat(MIN_PATTERN_CHARS - 1);
-    assert!(blocklist(&format!("tag-contains: {short}\n")).is_err());
+    let refused = blocklist(&format!("tag-contains: {short}\n")).err();
+    assert_eq!(refused_at(refused), Some((2, Refusal::ShortPattern)));
     assert!(blocklist(&format!("tag-contains: {}\n", "x".repeat(MIN_PATTERN_CHARS))).is_ok());
 }
 
 #[test]
 fn only_the_free_text_axes_take_a_pattern() {
     for exact_only in ["country", "language", "codec", "station"] {
-        assert!(
-            blocklist(&format!("{exact_only}-contains: something\n")).is_err(),
+        let refused = blocklist(&format!("{exact_only}-contains: something\n")).err();
+        assert_eq!(
+            refused_at(refused),
+            Some((2, Refusal::UnknownKind)),
             "{exact_only}-contains should not be a kind"
         );
     }
@@ -320,6 +323,7 @@ fn a_malformed_line_is_refused_rather_than_skipped() {
         ("tag:\n", (1, Refusal::EmptyValue)),
         ("tag: rock  # why\n", (1, Refusal::InlineComment)),
         ("country: DEU\n", (1, Refusal::CountryCode)),
+        ("key:\n", (1, Refusal::EmptyKey)),
         ("key: a\nkey: b\n", (2, Refusal::SecondKey)),
     ] {
         assert_eq!(refused_at(source::parse_source(broken).err()), Some(expected), "{broken:?}");
@@ -419,6 +423,10 @@ fn a_malformed_pre_hashed_source_is_refused() {
         (
             format!("{marker}\nkey = abcd\nterms =\npatterns =\nlengths =\n"),
             (2, Refusal::KeyDigits),
+        ),
+        (
+            format!("{marker}\nkey = {key}\nterms =\npatterns =\nlengths\n"),
+            (5, Refusal::HashedShape),
         ),
         (
             format!("{marker}\nkey = {key}\nterms = abc\npatterns =\nlengths =\n"),

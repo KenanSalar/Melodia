@@ -9,10 +9,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::test_support::{SRC_DIR, stripped_sources};
-
-/// A floor, so a walk that silently found nothing can't pass vacuously.
-const MIN_SOURCES: usize = 200;
+use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
 
 /// This file, which spells the needles below and would otherwise be its own first hit. Skipped
 /// rather than forgiven, and held to still naming one.

@@ -5,7 +5,7 @@ use reqwest::Url;
 use crate::player::stream_source::{
     first_stream_url, is_playlist_content_type, is_playlist_url, reconnect_delay,
 };
-use crate::test_support::{SRC_DIR, stripped_sources};
+use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
 
 /// `Some(verdict)` when `raw` parsed, `None` when it didn't — so a typo in a test URL fails the
 /// assertion instead of quietly satisfying a negative one.
@@ -151,9 +151,6 @@ fn the_backoff_grows_and_then_gives_up() {
     }
     assert!(grew, "the backoff must actually back off");
 }
-
-/// A floor, so a walk that silently found nothing can't pass vacuously.
-const MIN_SOURCES: usize = 200;
 
 /// The one file allowed to name them, because naming them is how it forbids them.
 const EXEMPT: &str = "player/tests/stream_source_tests.rs";

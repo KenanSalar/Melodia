@@ -7,7 +7,9 @@ use super::{describe, redact_prefix, undeleted_exe};
 use crate::error::AppError;
 #[cfg(unix)]
 use crate::test_support::with_env_var;
-use crate::test_support::{REPO_ROOT, SRC_DIR, font_sources, rel_path, stripped_sources};
+use crate::test_support::{
+    MIN_SOURCES, REPO_ROOT, SRC_DIR, font_sources, rel_path, stripped_sources,
+};
 
 /// A Windows home directory, spelled the way `Path::display` spells it. Nothing on a Linux runner
 /// can exercise `dirs::home_dir`'s Windows arm, so the *shape* is pinned here instead.
@@ -120,9 +122,6 @@ const EXEMPT: [(&str, usize); 2] = [
     // This pin, which has to spell the needle to grep for it.
     ("services/tests/mod_tests.rs", 1),
 ];
-
-/// A floor, so a walk that silently found nothing can't pass vacuously.
-const MIN_SOURCES: usize = 200;
 
 /// A test comparing `install_target()` against `services::current_exe()` cannot fail: with no
 /// marker in the test process the two agree, so it passes just as well against the raw call it

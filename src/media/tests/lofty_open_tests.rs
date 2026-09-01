@@ -8,7 +8,7 @@
 //! `src/` is the whole reach it needs — `melodia-ui` depends on `slint` alone, so the other
 //! package has no lofty to open a file with.
 
-use crate::test_support::{SRC_DIR, stripped_sources};
+use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
 
 /// What an exempt file has to keep spelling: the type rather than the module path, so it holds
 /// under either import shape.
@@ -35,9 +35,6 @@ const EXEMPT: [(&str, &str); 2] = [
 /// A floor rather than an equality, so a genuine third caller needs no edit here — but a
 /// caller that stops reading tags, or a walk that silently found nothing, still trips it.
 const MIN_CALLERS: usize = 2;
-
-/// A floor, so a walk that silently found nothing can't pass vacuously.
-const MIN_SOURCES: usize = 200;
 
 /// Lofty resolves a format from the extension and stops there, which is a narrower question
 /// than its parsers answer. `read_tags` asks the header when the extension resolved to
