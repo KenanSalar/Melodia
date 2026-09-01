@@ -335,8 +335,8 @@ cargo test                                     # run tests
 | UI | [Slint](https://slint.dev/) 1.16 (FemtoVG renderer) |
 | Backend | Pure Rust: direct calls + tokio channels, no IPC |
 | Async runtime | [Tokio](https://tokio.rs/) |
-| Audio | [Symphonia](https://github.com/pdeljanov/Symphonia) + [cpal](https://github.com/RustAudio/cpal) |
-| Radio streaming | [stream-download](https://crates.io/crates/stream-download) + [icy-metadata](https://crates.io/crates/icy-metadata), decoded by Symphonia |
+| Audio | [Symphonia](https://github.com/pdeljanov/Symphonia) decoding, [cpal](https://github.com/RustAudio/cpal) device output; the mixer, rate and channel conversion, playback speed and clock in between are Melodia's own |
+| Radio streaming | [stream-download](https://crates.io/crates/stream-download) + [icy-metadata](https://crates.io/crates/icy-metadata), decoded on the same Symphonia path as local files |
 | Station directory | [radio-browser.info](https://www.radio-browser.info) (no account, CC0 data) |
 | Equalizer DSP | [biquad](https://crates.io/crates/biquad) (peaking-filter bands) |
 | Spectrum analysis | [`realfft`](https://crates.io/crates/realfft) (real-to-complex FFT) |
@@ -353,12 +353,17 @@ cargo test                                     # run tests
 ## Architecture
 
 Melodia runs the Slint UI on the main thread and a single multi-threaded Tokio
-runtime for all backend work (database, scanner, file watcher, player, HTTP).
-There is no WebView and no IPC boundary:
+runtime for all backend work (database, scanner, file watcher, player control,
+HTTP). There is no WebView and no IPC boundary:
 
 - **UI → backend**: Slint callbacks spawn `async` work on the Tokio runtime.
 - **Backend → UI**: state flows back over `tokio::sync::watch` / `mpsc`
   channels, consumed by UI-thread tasks that update Slint properties.
+- **Audio**: cpal's device callback pulls the mixer directly, so decoding, the
+  DSP chain and the mix run on the audio thread rather than on the runtime. A
+  live stream is the one thing that needs a thread of its own, keeping the
+  blocking socket read off that callback and feeding a ring the decoder pulls
+  from.
 
 ```
 src/
@@ -367,7 +372,7 @@ src/
 ├── entities/    domain model types (track, album, artist, genre, playlist, …)
 ├── library/     playback, queue, tracks, albums, artists, genres, playlists, search, settings
 ├── media/       scanner, metadata, artwork, cover-thumbnail cache, folder watcher
-├── player/      playback state machine + dual-deck mixer over cpal + graphic equalizer, ReplayGain, crossfade, spectrum & waveform DSP, live-stream decode and buffering
+├── player/      playback state machine + Symphonia decode + output layer (cpal device, dual-deck mixer, rate and channel conversion, clock) + graphic equalizer, ReplayGain, crossfade, spectrum & waveform DSP, live-stream buffering
 ├── tasks/       background tasks (playback monitor, file events, queue prune, Material You)
 ├── themes/      pluggable theme registry
 ├── services/    updater, desktop integration, system theme, radio directory client
