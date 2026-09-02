@@ -163,18 +163,17 @@ impl FileDecoder {
             return;
         };
 
-        let channels = u64::from(shape.channels.get());
-        let head = frames_to_duration(trim.head, shape.rate);
-        self.skip(usize::try_from(trim.head * channels).unwrap_or(usize::MAX));
+        self.trim = Some(trim);
+        self.skip(usize::try_from(interleaved(trim.head, shape.channels)).unwrap_or(usize::MAX));
 
         // A file stating a head and no length still plays for that much less than the container
         // says, and the seek clamp reads this.
+        let head = self.head_duration();
         self.total_duration = match trim.playable {
             Some(playable) => Some(frames_to_duration(playable, shape.rate)),
             None => self.total_duration.map(|total| total.saturating_sub(head)),
         };
-        self.remaining = trim.playable.map(|playable| playable * channels);
-        self.trim = Some(trim);
+        self.remaining = trim.playable.map(|playable| interleaved(playable, shape.channels));
         log::debug!(
             "AAC encoder padding: {} priming frames dropped, {:?} of audio",
             trim.head,
@@ -226,11 +225,17 @@ impl FileDecoder {
         let shape = self.cursor.shape();
         let playable = self.trim?.playable?;
         let played = frames_in(pos, shape.rate);
-        Some(playable.saturating_sub(played) * u64::from(shape.channels.get()))
+        Some(interleaved(playable.saturating_sub(played), shape.channels))
     }
 }
 
 const NANOS_PER_SEC: u64 = 1_000_000_000;
+
+/// `frames` as interleaved samples. Saturating, because the only bound on a length read back out of
+/// a container is what fits a `u64`, and a corrupt one states whatever it likes.
+fn interleaved(frames: u64, channels: ChannelCount) -> u64 {
+    frames.saturating_mul(u64::from(channels.get()))
+}
 
 /// How long `frames` play for. Seconds and nanoseconds separately, so a rate that does not divide
 /// a second evenly cannot cost the answer a frame the way a float round trip would.
@@ -304,7 +309,7 @@ impl AudioSource for FileDecoder {
 
         // The demuxer's timeline still opens on the encoder's priming, so a position on the
         // trimmed one sits that far short of the timestamp to ask it for.
-        let target = pos + self.head_duration();
+        let target = pos.saturating_add(self.head_duration());
 
         let time = symphonia::core::units::Time::try_new(
             i64::try_from(target.as_secs()).map_err(other)?,
@@ -336,6 +341,11 @@ impl AudioSource for FileDecoder {
         // `AudioSource`, so anything driving this iterator by hand can be.
         let channel_phase = self.cursor.discard_buffered();
 
+        // Cleared around the skip below, which pulls through `next`: the count still describes the
+        // position being left, and one that ran out there would end the skip early and leave the
+        // channel phase unrestored.
+        self.remaining = None;
+
         // A demuxer seek lands on a packet boundary, so without the trim every seek replays the
         // tail of what came before. Both reference players stop at the whole packet, and one says
         // in its own comment that it should not. rodio trimmed to the frame, and that is the
@@ -343,8 +353,6 @@ impl AudioSource for FileDecoder {
         let trim = self.samples_before(seeked.required_ts, seeked.actual_ts);
         self.skip(trim + channel_phase);
 
-        // Set after the skip, which pulls through `next` and would otherwise spend the count on
-        // the frames it is discarding.
         self.remaining = self.playable_after(pos);
         Ok(())
     }

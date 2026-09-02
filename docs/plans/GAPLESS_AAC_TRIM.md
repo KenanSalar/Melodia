@@ -49,9 +49,11 @@ equal to the media one, where it is exact and excludes the trailing padding; `md
 is a whole number of 1024-frame packets and still carries it. Deriving the length as
 `duration - media_time` left 106 frames of padding at precisely the boundary those files exist to
 test. So the edit's own length wins where its timescale converts exactly, and the derived one is
-both the fallback and the ceiling. It has to be a fallback rather than the answer: a movie timescale
-of 1000 against 44100 media, which is what ffmpeg writes, rounds by up to a millisecond, and cutting
-real audio is the worse failure.
+both the fallback and the ceiling. The rule is divisibility, not equal timescales: ffmpeg's 1000
+against 44100 media rounds every segment duration to the millisecond and most of those do not
+divide, so the derived length answers for them; one that does divide still carries that rounding and
+is taken anyway, capped at the derived length, because cutting a millisecond beats leaving a
+packet's worth of padding.
 
 Measured on this tree's own fixture, so the scale is not hypothetical. `tests/assets/silence.m4a`
 declares `elst media_time = 1024` over `mdhd timescale 44100, duration 45124`, and its AAC stream

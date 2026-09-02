@@ -134,8 +134,12 @@ pub(super) fn resolve(
 ///
 /// The two agree for almost every AAC file, and the one case where they don't is the one this
 /// cannot skip: [`super::aac_config`] rewrites an HE-AAC config to its LC core, so the decoder runs
-/// at half the rate the container declares, while both the edit list and `iTunSMPB` are written
-/// against the declared one.
+/// at half the rate the container declares, while the edit list is written against the declared one.
+///
+/// `iTunSMPB` counts PCM samples rather than ticks, and takes this same conversion because the
+/// encoder writing the tag writes the media timescale as the sample rate. Reading it off
+/// `AudioCodecParameters::sample_rate` instead would not be safer: that field is the `stsd` entry's
+/// 16.16 rate, which for HE-AAC names the core layer about as often as the doubled one.
 fn to_frames(ticks: u64, time_base: TimeBase, rate: SampleRate) -> Option<u64> {
     let scaled = u128::from(ticks) * u128::from(time_base.numer.get()) * u128::from(rate.get());
     u64::try_from(scaled / u128::from(time_base.denom.get())).ok()
@@ -175,8 +179,12 @@ fn parse_smpb(value: &str) -> Option<Smpb> {
 
 /// Every edit list in the file, keyed by the track it belongs to.
 ///
-/// Keyed rather than taken as the file's one answer because a multi-track MP4 is ordinary here: a
-/// cover-art track sits beside the audio one, and its own edit list means nothing to the decoder.
+/// Keyed rather than taken as the file's one answer because an MP4 may hold more than one track: an
+/// audiobook carries a chapter track beside the audio, and a `.m4v` a video one, neither of whose
+/// edit list means anything to the track being decoded. Cover art is not one of them, being an
+/// `ilst` atom rather than a track, so no fixture here states the case and
+/// `an_edit_list_belonging_to_another_track_is_not_taken_for_this_ones` builds it.
+///
 /// The handle is rewound before this returns, the caller handing the same one to the demuxer.
 pub(super) fn edit_lists(file: &mut File) -> Vec<Edit> {
     let mut edits = Vec::new();
@@ -308,12 +316,13 @@ fn trak_edit(
     })
 }
 
-/// Restates a movie-timescale count in media ticks, or `None` where that loses precision.
+/// Restates a movie-timescale count in media ticks, or `None` where the conversion would round.
 ///
-/// A movie timescale is routinely coarser than the media one, 1000 against 44100 being the common
-/// pairing, and at that ratio the rounding is worth more frames than the padding the number is
-/// wanted for. Where the two are equal, which is what an encoder writing exact edit points does,
-/// this is the only statement of the presentation length that excludes the trailing padding.
+/// The rule is divisibility rather than equal timescales. A movie timescale is routinely coarser
+/// than the media one, 1000 against 44100 being ffmpeg's pairing, so most segment durations do not
+/// divide and the derived length answers for them instead. One that does still carries whatever the
+/// muxer rounded away writing it, and is taken anyway: it is the only statement of the presentation
+/// length that excludes the trailing padding, and [`resolve`] caps it at the derived one.
 fn exact_media_ticks(ticks: u64, movie_timescale: u32, media_timescale: u32) -> Option<u64> {
     let scaled = u128::from(ticks) * u128::from(media_timescale);
     let movie = u128::from(movie_timescale);
@@ -326,6 +335,11 @@ fn exact_media_ticks(ticks: u64, movie_timescale: u32, media_timescale: u32) -> 
 /// The `u32` a header box states after its two timestamps: the track id in a `tkhd`, the timescale
 /// in an `mvhd` or `mdhd`. All three sit at the same offset, under the same version rule.
 fn header_u32(file: &mut File, header: &BoxHeader) -> Option<u32> {
+    let stated = usize::try_from(header.end.checked_sub(header.payload)?).unwrap_or(usize::MAX);
+    if stated < HEADER_BOX_PREFIX {
+        return None;
+    }
+
     let mut buf = [0u8; HEADER_BOX_PREFIX];
     read_at(file, header.payload, &mut buf)?;
 
@@ -346,14 +360,18 @@ struct ElstEntry {
     segment_duration: u64,
 }
 
-/// The first edit that starts partway into the media, which is where a muxer writes the priming.
+/// The first edit that presents media, which is where a muxer writes the priming.
 ///
 /// Scanned rather than taken from entry zero: an empty edit, spelled with a media time of -1, can
-/// sit ahead of the real one to delay the presentation.
+/// sit ahead of the real one to delay the presentation. A media time of zero is not empty, and its
+/// segment duration still bounds the tail.
 fn first_edit(file: &mut File, elst: &BoxHeader) -> Option<ElstEntry> {
     let mut buf = [0u8; ELST_HEADER + MAX_EDIT_ENTRIES * ELST_ENTRY_V1];
     let stated = usize::try_from(elst.end.checked_sub(elst.payload)?).unwrap_or(buf.len());
     let read = stated.min(buf.len());
+    if read < ELST_HEADER {
+        return None;
+    }
     read_at(file, elst.payload, buf.get_mut(..read)?)?;
 
     let (width, wide) = match buf.first()? {
@@ -374,7 +392,7 @@ fn first_edit(file: &mut File, elst: &BoxHeader) -> Option<ElstEntry> {
             (u64::from(be_u32(&buf, at)?), i64::from(be_i32(&buf, at + 4)?))
         };
         Some(ElstEntry {
-            media_time: u64::try_from(media_time).ok().filter(|time| *time > 0)?,
+            media_time: u64::try_from(media_time).ok()?,
             segment_duration,
         })
     })

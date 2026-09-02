@@ -4,11 +4,13 @@
 //! `pcm` or `adpcm` from the manifest and the matching case goes red rather than the format quietly
 //! scanning, listing, and then refusing to play.
 
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::{FileDecoder, probe_duration};
 use crate::error::AppError;
+use crate::player::aac_trim;
 use crate::player::audio::AudioSource;
 use crate::test_support::ASSETS_DIR;
 
@@ -215,6 +217,14 @@ fn itunsmpb_is_read_off_the_file_and_beats_the_edit_list_under_it() -> Result<()
     let tagged = tmp.path().join("smpb.m4a");
     write_smpb(&tagged, SMPB)?;
 
+    // The tag write rewrites `moov`, and a copy that came back without its edit list would leave
+    // nothing here for the tag to have precedence over.
+    let edits = aac_trim::edit_lists(&mut File::open(&tagged)?);
+    let [edit] = edits.as_slice() else {
+        return Err(AppError::Player("the tag write dropped the edit list".to_owned()));
+    };
+    assert_eq!(edit.delay, 1024);
+
     let (frames, _) = decoded(&tagged)?;
     assert_eq!(frames, 40_000, "the tag's own sample count did not win");
     Ok(())
@@ -241,28 +251,62 @@ fn the_priming_is_dropped_even_when_nothing_bounds_the_tail() -> Result<(), AppE
     Ok(())
 }
 
-/// A seek is expressed on the trimmed timeline while the demuxer still counts from the priming, so
-/// the head has to be added back on the way in. Without it every seek into a trimmed file lands
-/// early by the priming, which is inaudible on one track and cumulative across a queue.
+/// The tail is recounted against where the seek landed rather than carried over from the open, so
+/// what is left is half of the *playable* second and not half of the 1.023 s the packets hold.
 #[test]
-fn a_seek_into_a_trimmed_file_lands_on_the_trimmed_timeline() -> Result<(), AppError> {
+fn a_seek_recounts_the_playable_tail_from_where_it_landed() -> Result<(), AppError> {
     const SEEK_MS: u64 = 500;
 
     let mut decoder = FileDecoder::open(&asset("silence.m4a"))?;
     let rate = u64::from(decoder.sample_rate().get());
-    let channels = u64::from(decoder.channels().get());
-    decoder
-        .try_seek(Duration::from_millis(SEEK_MS))
-        .map_err(|e| AppError::Player(e.to_string()))?;
+    let frames = frames_left_after_seeking(&mut decoder, SEEK_MS)?;
 
-    // Half of the *playable* second, not of the 1.023 s the packets hold.
-    let remaining = u64::try_from(decoder.count()).unwrap_or(u64::MAX) / channels;
     let expected = rate - rate * SEEK_MS / 1000;
     assert!(
-        remaining.abs_diff(expected) <= 1,
-        "{remaining} frames left after seeking to {SEEK_MS}ms, expected about {expected}"
+        frames.abs_diff(expected) <= 1,
+        "{frames} frames left after seeking to {SEEK_MS}ms, expected about {expected}"
     );
     Ok(())
+}
+
+/// A seek is expressed on the trimmed timeline while the demuxer still counts from the priming, so
+/// the head has to be added back on the way in. Without it every seek into a trimmed file lands
+/// early by the priming, which is inaudible on one track and cumulative across a queue.
+///
+/// Read through an overstated `iTunSMPB` because the test above cannot see this: its tail cap is a
+/// function of the position asked for, so it holds the count at the same number wherever the
+/// demuxer actually put the reader. With the cap past the end of the file, what is left to decode
+/// is the answer.
+#[test]
+fn a_seek_into_a_trimmed_file_steps_over_the_priming() -> Result<(), AppError> {
+    // Priming 0x840 (2112), against a count far past what the file holds.
+    const OVERSTATED: &str = " 00000000 00000840 00000000 00000000000F4240";
+    const SEEK_MS: u64 = 500;
+
+    let tmp = tempfile::TempDir::new()?;
+    let tagged = tmp.path().join("seek.m4a");
+    write_smpb(&tagged, OVERSTATED)?;
+
+    let mut decoder = FileDecoder::open(&tagged)?;
+    let rate = u64::from(decoder.sample_rate().get());
+    let frames = frames_left_after_seeking(&mut decoder, SEEK_MS)?;
+
+    // The 45 packets the file holds, less half a second and the priming ahead of it.
+    let expected = 46_080 - (rate * SEEK_MS / 1000 + 2112);
+    assert!(
+        frames.abs_diff(expected) <= 1,
+        "{frames} frames left after seeking to {SEEK_MS}ms, expected about {expected}"
+    );
+    Ok(())
+}
+
+/// Frames the source still hands over once it has been seeked to `seek_ms`.
+fn frames_left_after_seeking(decoder: &mut FileDecoder, seek_ms: u64) -> Result<u64, AppError> {
+    let channels = u64::from(decoder.channels().get());
+    decoder
+        .try_seek(Duration::from_millis(seek_ms))
+        .map_err(|e| AppError::Player(e.to_string()))?;
+    Ok(u64::try_from(decoder.by_ref().count()).unwrap_or(u64::MAX) / channels)
 }
 
 /// A copy of the AAC fixture carrying `value` as its `iTunSMPB`.

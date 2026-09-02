@@ -72,6 +72,9 @@ fn a_segment_duration_is_only_converted_where_it_loses_nothing() {
 
 /// The number the fixtures were generated with, and the reason the end-to-end counts in
 /// `file_decode_tests` are what they are.
+///
+/// Exactly one edit, keyed to the audio track: an entry emitted for a track that states none is
+/// what would put a cover-art or chapter track's numbers on the one being decoded.
 #[test]
 fn the_walk_reads_the_edit_list_the_fixtures_carry() -> Result<(), AppError> {
     for fixture in ["silence.m4a", "silence.m4b", "silence-cover.m4a"] {
@@ -87,21 +90,6 @@ fn the_walk_reads_the_edit_list_the_fixtures_carry() -> Result<(), AppError> {
         // timescale, and agrees with the derived length the resolution would otherwise fall back on.
         assert_eq!(edit.playable, Some(44_100), "{fixture}");
     }
-    Ok(())
-}
-
-/// A cover-art track sits beside the audio one, and only the audio track's own numbers may reach
-/// the decoder. Keyed rather than positional, so a file listing them the other way round is the
-/// same answer.
-#[test]
-fn an_edit_list_is_keyed_to_the_track_that_states_it() -> Result<(), AppError> {
-    let mut file = File::open(asset("silence-cover.m4a"))?;
-    let edits = edit_lists(&mut file);
-
-    assert!(
-        edits.iter().all(|edit| edit.track_id == 1),
-        "a track with no edit list of its own must contribute none"
-    );
     Ok(())
 }
 
@@ -225,4 +213,205 @@ fn resolved(duration: Option<u64>, delay: u64, playable: Option<u64>) -> Option<
     }];
     let mut log = MetadataLog::default();
     super::resolve(&timing, &log.metadata(), &edits, rate)
+}
+
+/// The walk's branches that no fixture states.
+///
+/// ffmpeg writes one shape and it is the only one in `tests/assets/`: a version 0 edit list of a
+/// single entry, under 32-bit box headers, in a file with one track. Everything below is legal MP4
+/// the walk has to read the same way, so the boxes are written out here the way
+/// `tests/crossfade.rs` writes its WAV headers.
+mod synthetic {
+    use super::{asset, edit_lists};
+    use crate::error::AppError;
+    use std::fs::File;
+
+    /// Rate 1.0 in the 16.16 fixed point an edit list entry ends on.
+    const NORMAL_RATE: u32 = 0x0001_0000;
+
+    fn mp4_box(kind: [u8; 4], payload: &[u8]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(8 + payload.len());
+        out.extend_from_slice(&u32::try_from(8 + payload.len()).unwrap_or(u32::MAX).to_be_bytes());
+        out.extend_from_slice(&kind);
+        out.extend_from_slice(payload);
+        out
+    }
+
+    /// An `mvhd`, `tkhd` or `mdhd`, carrying `field` where all three state their one.
+    fn header_box(kind: [u8; 4], field: u32) -> Vec<u8> {
+        header_box_of_len(kind, field, super::super::HEADER_BOX_PREFIX)
+    }
+
+    fn header_box_of_len(kind: [u8; 4], field: u32, len: usize) -> Vec<u8> {
+        let mut payload = vec![0u8; len];
+        if let Some(slot) = payload.get_mut(12..16) {
+            slot.copy_from_slice(&field.to_be_bytes());
+        }
+        mp4_box(kind, &payload)
+    }
+
+    fn elst_v0(entries: &[(u32, i32)]) -> Vec<u8> {
+        let mut payload = vec![0u8; 4];
+        payload.extend_from_slice(&u32::try_from(entries.len()).unwrap_or(0).to_be_bytes());
+        for (segment_duration, media_time) in entries {
+            payload.extend_from_slice(&segment_duration.to_be_bytes());
+            payload.extend_from_slice(&media_time.to_be_bytes());
+            payload.extend_from_slice(&NORMAL_RATE.to_be_bytes());
+        }
+        mp4_box(*b"elst", &payload)
+    }
+
+    fn elst_v1(entries: &[(u64, i64)]) -> Vec<u8> {
+        let mut payload = vec![1u8, 0, 0, 0];
+        payload.extend_from_slice(&u32::try_from(entries.len()).unwrap_or(0).to_be_bytes());
+        for (segment_duration, media_time) in entries {
+            payload.extend_from_slice(&segment_duration.to_be_bytes());
+            payload.extend_from_slice(&media_time.to_be_bytes());
+            payload.extend_from_slice(&NORMAL_RATE.to_be_bytes());
+        }
+        mp4_box(*b"elst", &payload)
+    }
+
+    /// One track, with `tkhd` written at `tkhd_len` so a short one can be stated too.
+    fn trak(track_id: u32, media_timescale: u32, elst: Option<&[u8]>, tkhd_len: usize) -> Vec<u8> {
+        let mut payload = header_box_of_len(*b"tkhd", track_id, tkhd_len);
+        payload.extend_from_slice(&mp4_box(*b"mdia", &header_box(*b"mdhd", media_timescale)));
+        if let Some(elst) = elst {
+            payload.extend_from_slice(&mp4_box(*b"edts", elst));
+        }
+        mp4_box(*b"trak", &payload)
+    }
+
+    fn mp4(movie_timescale: u32, traks: &[Vec<u8>]) -> Vec<u8> {
+        let mut moov = header_box(*b"mvhd", movie_timescale);
+        for trak in traks {
+            moov.extend_from_slice(trak);
+        }
+        let mut file = mp4_box(*b"ftyp", b"M4A \0\0\x02\0");
+        file.extend_from_slice(&mp4_box(*b"moov", &moov));
+        file
+    }
+
+    /// The bytes, through a real file, since the walk seeks rather than parsing a slice.
+    fn walked(bytes: &[u8]) -> Result<Vec<super::super::Edit>, AppError> {
+        let tmp = tempfile::TempDir::new()?;
+        let path = tmp.path().join("synthetic.m4a");
+        std::fs::write(&path, bytes)?;
+        Ok(edit_lists(&mut File::open(&path)?))
+    }
+
+    fn single(bytes: &[u8]) -> Result<super::super::Edit, AppError> {
+        let edits = walked(bytes)?;
+        let [edit] = edits.as_slice() else {
+            return Err(AppError::Player(format!("expected one edit, got {}", edits.len())));
+        };
+        Ok(super::super::Edit {
+            track_id: edit.track_id,
+            delay: edit.delay,
+            playable: edit.playable,
+        })
+    }
+
+    /// A media time of zero is a track with no priming, not an absent edit, and its segment
+    /// duration is still the only statement of the presentation that excludes the trailing padding.
+    #[test]
+    fn an_edit_starting_at_zero_still_bounds_the_tail() -> Result<(), AppError> {
+        let elst = elst_v0(&[(44_100, 0)]);
+        let edit = single(&mp4(44_100, &[trak(1, 44_100, Some(&elst), 24)]))?;
+
+        assert_eq!(edit.delay, 0);
+        assert_eq!(edit.playable, Some(44_100));
+        Ok(())
+    }
+
+    /// An empty edit delays the presentation and states no media time at all, so the priming is on
+    /// whatever entry follows it.
+    #[test]
+    fn an_empty_edit_is_stepped_over_to_reach_the_one_that_states_the_priming()
+    -> Result<(), AppError> {
+        let elst = elst_v0(&[(500, -1), (44_100, 1024)]);
+        let edit = single(&mp4(44_100, &[trak(1, 44_100, Some(&elst), 24)]))?;
+
+        assert_eq!(edit.delay, 1024);
+        assert_eq!(edit.playable, Some(44_100));
+        Ok(())
+    }
+
+    /// The 64-bit entries a version 1 edit list carries, which every field is a different width in.
+    #[test]
+    fn a_version_1_edit_list_reads_the_same_as_a_version_0_one() -> Result<(), AppError> {
+        let elst = elst_v1(&[(44_100, 1024)]);
+        let edit = single(&mp4(44_100, &[trak(1, 44_100, Some(&elst), 24)]))?;
+
+        assert_eq!(edit.delay, 1024);
+        assert_eq!(edit.playable, Some(44_100));
+        Ok(())
+    }
+
+    /// The case the fixtures cannot state, cover art being an `ilst` atom rather than a track: an
+    /// edit list on a neighbouring track must not be handed to the one being decoded.
+    #[test]
+    fn an_edit_list_belonging_to_another_track_is_not_taken_for_this_ones() -> Result<(), AppError>
+    {
+        let elst = elst_v0(&[(44_100, 1024)]);
+        let bytes = mp4(44_100, &[trak(1, 44_100, None, 24), trak(2, 44_100, Some(&elst), 24)]);
+
+        let edit = single(&bytes)?;
+        assert_eq!(edit.track_id, 2, "the edit was keyed to the track that states none");
+        Ok(())
+    }
+
+    /// A header box too short to hold the field read out of it is refused rather than read past
+    /// into whatever box follows, which is a track id or a timescale made of the next box's length.
+    #[test]
+    fn a_header_box_too_short_for_its_field_states_nothing() -> Result<(), AppError> {
+        let elst = elst_v0(&[(44_100, 1024)]);
+        let bytes = mp4(44_100, &[trak(1, 44_100, Some(&elst), 12)]);
+
+        assert!(walked(&bytes)?.is_empty(), "a truncated tkhd named a track anyway");
+        Ok(())
+    }
+
+    /// The fixtures are all 32-bit headers, so the escape that moves a box's length into the eight
+    /// bytes after its type is walked here or nowhere.
+    #[test]
+    fn a_64_bit_box_header_is_walked_like_any_other() -> Result<(), AppError> {
+        let elst = elst_v0(&[(44_100, 1024)]);
+        let inner = trak(1, 44_100, Some(&elst), 24);
+
+        let mut moov = header_box(*b"mvhd", 44_100);
+        moov.extend_from_slice(&inner);
+
+        // Size 1, the type, then the real 64-bit length.
+        let mut wide = 1u32.to_be_bytes().to_vec();
+        wide.extend_from_slice(b"moov");
+        wide.extend_from_slice(&(16 + moov.len() as u64).to_be_bytes());
+        wide.extend_from_slice(&moov);
+
+        let mut bytes = mp4_box(*b"ftyp", b"M4A \0\0\x02\0");
+        bytes.extend_from_slice(&wide);
+
+        let edit = single(&bytes)?;
+        assert_eq!(edit.delay, 1024);
+        Ok(())
+    }
+
+    /// The fixture the rest of the suite leans on, read through this builder's own expectations, so
+    /// a builder that writes boxes nothing else would accept fails here rather than silently
+    /// pinning the walk against itself.
+    #[test]
+    fn the_builder_agrees_with_the_fixture_it_imitates() -> Result<(), AppError> {
+        let real = edit_lists(&mut File::open(asset("silence.m4a"))?);
+        let elst = elst_v0(&[(1_000, 1024)]);
+        let built = walked(&mp4(1_000, &[trak(1, 44_100, Some(&elst), 24)]))?;
+
+        let ([real], [built]) = (real.as_slice(), built.as_slice()) else {
+            return Err(AppError::Player("expected one edit from each".to_owned()));
+        };
+        assert_eq!(
+            (built.track_id, built.delay, built.playable),
+            (real.track_id, real.delay, real.playable)
+        );
+        Ok(())
+    }
 }
