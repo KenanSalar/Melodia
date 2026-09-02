@@ -13,6 +13,7 @@ mod tracklist;
 use std::sync::Arc;
 
 use crate::AppWindow;
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::tracks::TracksUi;
 
@@ -22,8 +23,13 @@ use crate::ui::tracks::TracksUi;
 /// Called by [`super::install`], which is what guarantees the models are in place first — a
 /// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
 /// have run before it.
-pub(super) fn wire(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
+pub(super) fn wire(
+    ui: &AppWindow,
+    state: &AppState,
+    view_state: Option<&ViewStateData>,
+    tracks_ui: &Arc<TracksUi>,
+) {
     lifecycle::wire(ui, state, tracks_ui);
-    tracklist::wire(ui, state, tracks_ui);
+    tracklist::wire(ui, state, view_state, tracks_ui);
     columns::wire(ui, state);
 }

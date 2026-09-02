@@ -15,6 +15,7 @@ mod lifecycle;
 use std::sync::Arc;
 
 use crate::AppWindow;
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
@@ -29,10 +30,11 @@ use crate::ui::artists::ArtistsUi;
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,
+    view_state: Option<&ViewStateData>,
     artists_ui: &Arc<ArtistsUi>,
     albums_ui: &Arc<AlbumsUi>,
 ) {
-    grid::wire(ui, state, artists_ui);
+    grid::wire(ui, state, view_state, artists_ui);
     detail::wire(ui, state, artists_ui, albums_ui);
     cross_tab::wire(ui, state, albums_ui);
     lifecycle::wire(ui, state, artists_ui, albums_ui);

@@ -158,7 +158,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RadioUi> {
     // signals and the generation is what re-runs it. Never off `0`: a batch landing after a
     // leave cleared the tier would otherwise read as warm.
     crate::ui::cover_generation::notify_on_decode(&radio_ui.covers, cx.app, covers::repaint);
-    callbacks::wire(cx.app, cx.state, &radio_ui);
+    callbacks::wire(cx.app, cx.state, cx.view_state, &radio_ui);
     radio_ui
 }
 

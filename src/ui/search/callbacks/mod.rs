@@ -26,11 +26,12 @@ use std::sync::Arc;
 use slint::{ComponentHandle, SharedString};
 
 use crate::library;
-use crate::services::settings::{SortDir, ViewSort};
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::search::{SearchUi, fetch::push_recent_rows_to_slint};
+use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Search};
 
 /// Nav-sidebar index of the Search tab. Used by the cross-tab
@@ -49,13 +50,14 @@ pub(super) const NAV_SEARCH: i32 = 0;
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,
+    view_state: Option<&ViewStateData>,
     search_ui: &Arc<SearchUi>,
     albums_ui: &Arc<AlbumsUi>,
     artists_ui: &Arc<ArtistsUi>,
 ) {
     let weak = ui.as_weak();
 
-    hydrate_sort_from_settings(state, search_ui, &ui.global::<Search>());
+    hydrate_sort_from_settings(view_state, search_ui, &ui.global::<Search>());
     hydrate_recent_on_install(state, search_ui, &weak);
 
     covers::wire(ui, search_ui);
@@ -68,22 +70,17 @@ pub(super) fn wire(
 /// Read the persisted sort from settings and seed both the Rust cache
 /// and the Slint properties. `None` (never persisted) leaves the
 /// defaults in place.
-fn hydrate_sort_from_settings(state: &AppState, search_ui: &SearchUi, g: &Search<'_>) {
-    let Some(sort) = library::settings::get_view_sort(state, "search") else {
+fn hydrate_sort_from_settings(
+    view_state: Option<&ViewStateData>,
+    search_ui: &SearchUi,
+    g: &Search<'_>,
+) {
+    let Some(sort) = view_state.and_then(|vs| vs.view_sort.get(view_id::SEARCH)) else {
         return;
     };
     g.set_sort_field(SharedString::from(sort.field.as_str()));
-    g.set_sort_dir(SharedString::from(match sort.dir {
-        SortDir::Asc => "asc",
-        SortDir::Desc => "desc",
-    }));
-    *search_ui.state().sort.lock() = ViewSort {
-        field: sort.field,
-        dir: match sort.dir {
-            SortDir::Asc => SortDir::Asc,
-            SortDir::Desc => SortDir::Desc,
-        },
-    };
+    g.set_sort_dir(SharedString::from(sort.dir.as_str()));
+    *search_ui.state().sort.lock() = sort.clone();
 }
 
 /// Synchronously load the persisted recent-searches list and push it

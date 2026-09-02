@@ -72,7 +72,7 @@ pub(super) use selection::{clear_selection, handle_select_row};
 pub fn install(cx: ViewCtx<'_>) -> Arc<GenresUi> {
     install_models(cx.app);
     let genres_ui = Arc::new(GenresUi::new(cx.cover_thumbs.clone()));
-    callbacks::wire(cx.app, cx.state, &genres_ui);
+    callbacks::wire(cx.app, cx.state, cx.view_state, &genres_ui);
     genres_ui
 }
 

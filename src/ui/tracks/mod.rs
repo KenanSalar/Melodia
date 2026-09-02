@@ -54,7 +54,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<TracksUi> {
     install_tracks_model(cx.app);
     install_selection_model(cx.app);
     let tracks_ui = Arc::new(TracksUi::new(cx.cover_thumbs.clone()));
-    callbacks::wire(cx.app, cx.state, &tracks_ui);
+    callbacks::wire(cx.app, cx.state, cx.view_state, &tracks_ui);
     tracks_ui
 }
 

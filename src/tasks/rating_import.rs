@@ -25,6 +25,14 @@ use crate::media::{metadata, rating_tags};
 use crate::state::AppState;
 use crate::tasks::{TaskSpawner, one_shot};
 
+/// Tracks whose paths are held in memory at once, and whose tags are parsed in one fan-out.
+///
+/// The predicate selects the whole library on the run that matters, so the page size is what keeps
+/// this pass off the RSS budget. Wide enough that the per-page round trip is noise beside the tag
+/// parses it feeds, and narrow enough to hand the global Rayon pool back between pages: the boot
+/// this runs on is the one the first-launch reconcile scan wants that pool for too.
+const PAGE_ROWS: i64 = 2_000;
+
 /// Run the import unless this install has already had one.
 ///
 /// [`OnFailure::Retry`], which is where this parts company with [`super::artwork_renormalize`]'s
@@ -51,47 +59,60 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
 }
 
 async fn import(state: &AppState) -> AppResult<()> {
-    let unrated = queries::track::get_unrated_track_paths(&state.db).await?;
-    if unrated.is_empty() {
-        return Ok(());
+    let mut after_id = 0;
+    let mut imported = 0;
+
+    loop {
+        let page =
+            queries::track::get_unrated_track_paths_after(&state.db, after_id, PAGE_ROWS).await?;
+        let Some(last_id) = page.last().map(|(id, _)| *id) else {
+            break;
+        };
+        after_id = last_id;
+
+        let found = tokio::task::spawn_blocking(move || read_each(&page))
+            .await
+            .map_err(|e| AppError::scanner("Rating import task panicked", e))?;
+        if found.is_empty() {
+            continue;
+        }
+
+        // Grouped by value so a page is at most five UPDATEs, each already chunked against the
+        // bind cap by `set_rating`.
+        let mut by_rating: HashMap<i32, Vec<i64>> = HashMap::new();
+        for (id, rating) in &found {
+            by_rating.entry(*rating).or_default().push(*id);
+        }
+        for (rating, ids) in &by_rating {
+            queries::track::set_rating(&state.db, ids, *rating).await?;
+        }
+        imported += found.len();
     }
 
-    let found = tokio::task::spawn_blocking(move || read_each(&unrated))
-        .await
-        .map_err(|e| AppError::scanner("Rating import task panicked", e))?;
-    if found.is_empty() {
+    if imported == 0 {
         return Ok(());
-    }
-
-    // Grouped by value so the whole pass is at most five UPDATEs, each already chunked against
-    // the bind cap by `set_rating`.
-    let mut by_rating: HashMap<i32, Vec<i64>> = HashMap::new();
-    for (id, rating) in &found {
-        by_rating.entry(*rating).or_default().push(*id);
-    }
-    for (rating, ids) in &by_rating {
-        queries::track::set_rating(&state.db, ids, *rating).await?;
     }
 
     // Nothing else will say so. This lands minutes into a session on a real library, by which
     // time every mounted list is painting the zero these rows carried at fetch time, and the two
-    // views that retain their rows keep it until something unrelated refetches.
+    // views that retain their rows keep it until something unrelated refetches. Once at the end
+    // rather than per page: each bump costs the mounted section a whole re-query.
     state.library_changed.bump();
 
-    log::info!("Imported {} rating(s) from file tags", found.len());
+    log::info!("Imported {imported} rating(s) from file tags");
     Ok(())
 }
 
 /// **Blocking** — one tag parse per row, fanned out the way `retroactive_hash` fans out its
-/// hashes. Artwork is skipped: the rating is a text item, and decoding a cover to read one is
-/// the expensive half of a parse for no answer.
+/// hashes. The rating is a text item, so this asks for neither of the two halves lofty would
+/// otherwise compute: a cover decode, and the frame scan a headerless VBR MP3's duration costs.
 fn read_each(unrated: &[(i64, String)]) -> Vec<(i64, i32)> {
     use rayon::prelude::*;
 
     unrated
         .par_iter()
         .filter_map(|(id, path)| {
-            let tagged = metadata::read_tags(Path::new(path), true).ok()?;
+            let tagged = metadata::read_tags(Path::new(path), metadata::TagScope::TagsOnly).ok()?;
             let tag = tagged.primary_tag().or_else(|| tagged.first_tag())?;
             rating_tags::stars_from_tag(tag).map(|stars| (*id, stars))
         })

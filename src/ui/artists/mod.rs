@@ -81,7 +81,7 @@ pub fn install(cx: ViewCtx<'_>, albums_ui: &Arc<AlbumsUi>) -> Arc<ArtistsUi> {
         albums_ui.grid_thumbs(),
         detail_artwork::blur_spec(cx.app),
     ));
-    callbacks::wire(cx.app, cx.state, &artists_ui, albums_ui);
+    callbacks::wire(cx.app, cx.state, cx.view_state, &artists_ui, albums_ui);
     artists_ui
 }
 

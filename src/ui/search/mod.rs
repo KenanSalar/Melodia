@@ -60,7 +60,7 @@ pub fn install(
 ) -> Arc<SearchUi> {
     install_models(cx.app);
     let search_ui = Arc::new(SearchUi::new(cx.cover_thumbs.clone()));
-    callbacks::wire(cx.app, cx.state, &search_ui, albums_ui, artists_ui);
+    callbacks::wire(cx.app, cx.state, cx.view_state, &search_ui, albums_ui, artists_ui);
     search_ui
 }
 

@@ -79,7 +79,7 @@ pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi>
     rows::install_favorites_models(cx.app);
     let favorites_ui =
         Arc::new(FavoritesUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
-    callbacks::wire(cx.app, cx.state, &favorites_ui, artists_ui);
+    callbacks::wire(cx.app, cx.state, cx.view_state, &favorites_ui, artists_ui);
     for tier in [
         &favorites_ui.most_played_thumbs,
         &favorites_ui.artist_thumbs,

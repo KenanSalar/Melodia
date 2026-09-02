@@ -6,6 +6,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, SharedString};
 
 use crate::library;
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::spawn_logged;
@@ -14,13 +15,18 @@ use crate::ui::track_list_view::view_id;
 use crate::{AlbumDetail, Albums, AppWindow};
 
 /// Wire the `Albums` grid callbacks. See [`super::wire`].
-pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
+pub(super) fn wire(
+    ui: &AppWindow,
+    state: &AppState,
+    view_state: Option<&ViewStateData>,
+    albums_ui: &Arc<AlbumsUi>,
+) {
     let albums = ui.global::<Albums>();
     let weak = ui.as_weak();
 
     // Seed the grid's sort pill from the persisted `view_sort["albums"]`
     // so the initial grid build (and the pill) use the remembered order.
-    if let Some((field, dir)) = persisted_sort(state, view_id::ALBUMS) {
+    if let Some((field, dir)) = persisted_sort(view_state, view_id::ALBUMS) {
         albums.set_sort_field(SharedString::from(field.as_str()));
         albums.set_sort_dir(SharedString::from(dir));
     }

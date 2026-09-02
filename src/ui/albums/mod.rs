@@ -75,7 +75,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<AlbumsUi> {
     install_models(cx.app);
     let albums_ui =
         Arc::new(AlbumsUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
-    callbacks::wire(cx.app, cx.state, &albums_ui);
+    callbacks::wire(cx.app, cx.state, cx.view_state, &albums_ui);
     albums_ui
 }
 

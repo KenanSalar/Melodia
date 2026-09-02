@@ -523,16 +523,30 @@ pub async fn get_unhashed_track_paths(db: &DbPool) -> Result<Vec<(i64, String)>,
     Ok(rows)
 }
 
-/// Every unrated track's path — the work-list for the one-shot rating import.
+/// One page of unrated track paths, by ascending id and starting past `after_id`. The work-list
+/// for the one-shot rating import.
 ///
 /// `rating = 0` is the only marker there is: the column is `NOT NULL DEFAULT 0`, so an untouched
 /// row and a deliberately cleared one look identical. That is why the sweep this feeds runs once
 /// and records the fact in `settings.json` rather than re-deriving it from the table.
-pub async fn get_unrated_track_paths(db: &DbPool) -> Result<Vec<(i64, String)>, AppError> {
-    let rows: Vec<(i64, String)> =
-        sqlx::query_as("SELECT id, file_path FROM tracks WHERE rating = 0")
-            .fetch_all(db.read())
-            .await?;
+///
+/// Paged by keyset rather than `OFFSET`, and rated in whole pages rather than in one pass, because
+/// on the first run after ratings shipped the predicate selects the entire library: a `String` per
+/// track, resident at once. Keyset is also the only form that stays correct here, since the import
+/// writes ratings back as it goes, so rows leave `rating = 0` between pages and an offset would
+/// step over their neighbours.
+pub async fn get_unrated_track_paths_after(
+    db: &DbPool,
+    after_id: i64,
+    limit: i64,
+) -> Result<Vec<(i64, String)>, AppError> {
+    let rows: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT id, file_path FROM tracks WHERE rating = 0 AND id > ? ORDER BY id LIMIT ?",
+    )
+    .bind(after_id)
+    .bind(limit)
+    .fetch_all(db.read())
+    .await?;
     Ok(rows)
 }
 

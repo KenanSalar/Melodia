@@ -100,6 +100,21 @@ fn sniff_file_type(path: &Path) -> Option<FileType> {
     FileType::from_buffer(&head)
 }
 
+/// How much of a file [`read_tags`] is being asked for.
+///
+/// Both halves lofty can be talked out of are expensive and neither is optional by default:
+/// embedded pictures are the larger part of a parse, and `read_properties` costs a full frame
+/// scan on a headerless VBR MP3, which is the shape a duration has to be counted out of.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TagScope {
+    /// Tags, embedded pictures and the technical properties: what the scanner ingests.
+    Full,
+    /// Tags and properties. For a rescan, which already has the pictures.
+    NoArtwork,
+    /// Tags alone: no pictures, and no frame scan for duration or bitrate.
+    TagsOnly,
+}
+
 /// Probe `path` for tags.
 ///
 /// lofty keys `Probe::open` on the extension, and its map of those is narrower than what
@@ -111,9 +126,10 @@ fn sniff_file_type(path: &Path) -> Option<FileType> {
 /// Every lofty open in the tree comes through here, `media::tag_writer` included: a file the
 /// scan identifies by its header and the tag editor refuses by its extension is a track whose
 /// tags are visible and unsavable.
-pub(crate) fn read_tags(path: &Path, skip_artwork: bool) -> Result<TaggedFile, AppError> {
-    // Embedded pictures are the expensive half of a parse, and a rescan already has them.
-    let parse_opts = lofty::config::ParseOptions::new().read_cover_art(!skip_artwork);
+pub(crate) fn read_tags(path: &Path, scope: TagScope) -> Result<TaggedFile, AppError> {
+    let parse_opts = lofty::config::ParseOptions::new()
+        .read_cover_art(scope == TagScope::Full)
+        .read_properties(scope != TagScope::TagsOnly);
 
     let mut probe = lofty::probe::Probe::open(path)
         .map_err(|e| AppError::metadata(format!("Failed to open {}", path.display()), e))?
@@ -207,7 +223,12 @@ fn extract(
 
     let file_hash = compute_file_hash(path)?;
 
-    let tagged_file = match read_tags(path, skip_artwork) {
+    let scope = if skip_artwork {
+        TagScope::NoArtwork
+    } else {
+        TagScope::Full
+    };
+    let tagged_file = match read_tags(path, scope) {
         Ok(tagged) => Some(tagged),
         Err(e) => match on_unreadable {
             OnUnreadableTags::Fail => return Err(e),

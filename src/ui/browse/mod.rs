@@ -74,7 +74,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<BrowseUi> {
     install_models(cx.app);
     install_selection_model(cx.app);
     let browse_ui = Arc::new(BrowseUi::new(cx.cover_thumbs.clone()));
-    callbacks::wire(cx.app, cx.state, &browse_ui);
+    callbacks::wire(cx.app, cx.state, cx.view_state, &browse_ui);
     crate::ui::cover_generation::notify_on_decode(
         &browse_ui.grid_covers,
         cx.app,

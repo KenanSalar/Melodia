@@ -24,6 +24,7 @@ use slint::{ComponentHandle, Model, ModelRc};
 
 use crate::library;
 use crate::services::settings::{SortDir, ViewSort};
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::{AppWindow, Nav, Player};
 
@@ -156,8 +157,16 @@ pub(super) fn persist_view_sort(
 /// `view_id`'s persisted sort as `(field, dir)` display strings, or `None` on a fresh
 /// install, where the caller keeps its Slint-declared default. Each view's `wire_*` uses
 /// it to seed the sort header at startup.
-pub(super) fn persisted_sort(state: &AppState, view_id: &str) -> Option<(String, &'static str)> {
-    library::settings::get_view_sort(state, view_id).map(|s| (s.field, s.dir.as_str()))
+///
+/// Takes the state `boot` already read rather than reaching for `views.json` itself: this runs
+/// once per view on the main thread ahead of `app.show()`, and the file has been parsed since
+/// `main`, so a second read per view buys nothing but the chance to disagree with the first.
+pub(super) fn persisted_sort(
+    view_state: Option<&ViewStateData>,
+    view_id: &str,
+) -> Option<(String, &'static str)> {
+    let sort = view_state?.view_sort.get(view_id)?;
+    Some((sort.field.clone(), sort.dir.as_str()))
 }
 
 /// Wire every Slint `Player.*` callback to its `library::*` counterpart.

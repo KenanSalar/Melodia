@@ -17,7 +17,7 @@ use tempfile::TempDir;
 use super::*;
 use crate::error::AppError;
 use crate::media::artwork;
-use crate::media::metadata::{extract_metadata, read_tags};
+use crate::media::metadata::{TagScope, extract_metadata, read_tags};
 use crate::test_support::{ASSETS_DIR, UNBOUNDED};
 
 // ---------------------------------------------------------------- helpers
@@ -41,7 +41,7 @@ fn missing(what: &str) -> AppError {
 /// Re-read a file's **primary** tag through the reader the writer now shares, so a fixture
 /// whose extension lofty's own map misses re-reads here too.
 fn read_primary(path: &Path) -> Result<Tag, AppError> {
-    let tagged = read_tags(path, false)?;
+    let tagged = read_tags(path, TagScope::Full)?;
     let tag = tagged.primary_tag().ok_or_else(|| missing("primary tag"))?.clone();
     Ok(tag)
 }
@@ -643,7 +643,7 @@ fn an_id3v1_only_mp3_gains_a_fresh_id3v2_tag_and_loses_nothing() -> Result<(), A
 
     // Precondition: the fixture really has ID3v1 and no ID3v2, else this proves
     // nothing.
-    let tagged = read_tags(&audio, false)?;
+    let tagged = read_tags(&audio, TagScope::Full)?;
     assert!(tagged.tag(TagType::Id3v2).is_none(), "fixture must not already carry an ID3v2 tag");
     assert!(tagged.tag(TagType::Id3v1).is_some(), "fixture must carry an ID3v1 tag");
 

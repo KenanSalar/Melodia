@@ -7,6 +7,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, SharedString};
 
 use crate::library;
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
@@ -15,12 +16,17 @@ use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, GenreDetail, Genres};
 
 /// Wire the `Genres` grid callbacks. See [`super::wire`].
-pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
+pub(super) fn wire(
+    ui: &AppWindow,
+    state: &AppState,
+    view_state: Option<&ViewStateData>,
+    genres_ui: &Arc<GenresUi>,
+) {
     let genres = ui.global::<Genres>();
     let weak = ui.as_weak();
 
     // Seed the grid's sort pill from the persisted `view_sort["genres"]`.
-    if let Some((field, dir)) = persisted_sort(state, view_id::GENRES) {
+    if let Some((field, dir)) = persisted_sort(view_state, view_id::GENRES) {
         genres.set_sort_field(SharedString::from(field.as_str()));
         genres.set_sort_dir(SharedString::from(dir));
     }
