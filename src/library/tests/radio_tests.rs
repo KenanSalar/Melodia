@@ -14,7 +14,7 @@ use super::is_listed;
 /// that re-anchored them onto `mod.rs` alone would have left four fifths of it unmeasured — a
 /// refactor that looks like an improvement and quietly disables a check.
 fn facade_source() -> String {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src/library/radio");
+    let dir = concat!(env!("MELODIA_REPO_ROOT"), "src/library/radio");
     let mut entries: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()

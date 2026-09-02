@@ -29,6 +29,41 @@ pub struct Shape {
     pub rate: SampleRate,
 }
 
+const NANOS_PER_SEC: u64 = 1_000_000_000;
+
+/// Frames of a source running at `rate` that `span` is worth, rounded **down**.
+///
+/// Seconds and nanoseconds separately, so a rate that does not divide a second evenly cannot cost
+/// the answer a frame the way a float round trip or a microsecond truncation would.
+///
+/// [`frames_to_duration`] is the way back but not an inverse: both floor, so a value off a frame
+/// boundary loses its remainder and a round trip loses it twice. The bound is one frame, downward
+/// — which is all the transport needs, every `Duration` it produces being a whole number of
+/// milliseconds, and dozens of frames at any rate. `player::tests::dsp_tests` pins both halves.
+pub(crate) fn frames_in(span: Duration, rate: SampleRate) -> u64 {
+    let rate = u64::from(rate.get());
+    let subsec = u64::from(span.subsec_nanos()) * rate / NANOS_PER_SEC;
+    span.as_secs().saturating_mul(rate).saturating_add(subsec)
+}
+
+/// How long `frames` at `rate` play for — [`frames_in`]'s counterpart, with the same flooring.
+pub(crate) fn frames_to_duration(frames: u64, rate: SampleRate) -> Duration {
+    let rate = u64::from(rate.get());
+    let nanos = (frames % rate) * NANOS_PER_SEC / rate;
+    Duration::new(frames / rate, u32::try_from(nanos).unwrap_or(0))
+}
+
+/// `frames` as interleaved samples.
+///
+/// Saturating, because the only bound on a length read back out of a container is what fits a
+/// `u64`, and a corrupt one states whatever it likes.
+///
+/// The third term of the vocabulary this file is — frames, the time they play for, and the samples
+/// they occupy — which is why it sits beside its two siblings rather than beside its one caller.
+pub(crate) fn interleaved(frames: u64, channels: ChannelCount) -> u64 {
+    frames.saturating_mul(u64::from(channels.get()))
+}
+
 /// Why a [`AudioSource::try_seek`] could not land.
 ///
 /// Two variants rather than rodio's five: the three it kept for its own bundled decoders describe

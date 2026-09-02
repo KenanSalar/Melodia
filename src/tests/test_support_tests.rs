@@ -1,4 +1,4 @@
-use super::{RULES_DIR, reading_env, with_env_set};
+use super::{REPO_ROOT, RULES_DIR, reading_env, with_env_set};
 
 /// Names nothing real, so a leak is unambiguous and no sibling test can be the
 /// one that set it.
@@ -31,28 +31,28 @@ fn a_panicking_body_still_restores_what_it_was_handed() {
     );
 }
 
-/// Every literal path a `.claude/rules/*.md` `paths:` glob names still exists.
+/// Every path a `.claude/rules/*.md` `paths:` entry names still matches something.
 ///
 /// A rule loads when Claude *reads* a file its globs match, so a path that has
 /// moved doesn't fail loudly — that rule silently stops reaching the code it
 /// governs, and the next person to touch that subsystem does so without its
 /// contract. Nothing else in the build looks at these files.
 ///
-/// **Entries containing `*` are skipped**, and deliberately: a glob is allowed
-/// to describe a tree that is currently empty, so asserting on one would fail
-/// for a reason that isn't a bug. What the literals cover is exactly the case
-/// that broke — a rule pinned to one named file, which a re-home moves.
+/// Globs are matched rather than skipped. Skipping them was defensible while a
+/// glob could be read as describing a tree that is merely empty for now, but
+/// every one in the ruleset names a tree that exists, and a skipped entry is
+/// indistinguishable from a rotted one — which is the whole failure this pin is
+/// here to catch.
 ///
-/// The walk is by hand rather than through a YAML crate because the frontmatter
-/// is four lines of one shape and the crate would be a dependency for a test.
+/// The frontmatter walk is by hand because it is four lines of one shape and a
+/// YAML crate would be a dependency for a test; the *matching* is not, because
+/// `**` is exactly the kind of thing that goes subtly wrong when hand-rolled.
 #[test]
-fn every_literal_path_a_rule_names_still_exists() {
-    /// A glob is written relative to the repo root, which is the manifest dir.
-    const REPO_ROOT: &str = env!("CARGO_MANIFEST_DIR");
-    /// Sixty literal paths across the ruleset today. Loose enough that adding or
-    /// retiring a rule doesn't trip it, tight enough that a frontmatter parse
-    /// which stopped matching would be caught rather than passing vacuously.
-    const MIN_LITERALS: usize = 40;
+fn every_path_a_rule_names_still_matches_something() {
+    /// The ruleset holds 165 entries today, 96 of them literal. Loose enough that
+    /// adding or retiring a rule doesn't trip it, tight enough that a frontmatter
+    /// parse which stopped matching would be caught rather than passing vacuously.
+    const MIN_PATHS: usize = 100;
 
     let root = std::path::Path::new(RULES_DIR);
     let listing = std::fs::read_dir(root);
@@ -63,6 +63,7 @@ fn every_literal_path_a_rule_names_still_exists() {
 
     let mut checked = 0_usize;
     let mut missing: Vec<String> = Vec::new();
+    let mut malformed: Vec<String> = Vec::new();
     let mut unreadable: Vec<String> = Vec::new();
 
     for entry in listing.into_iter().flatten().flatten() {
@@ -86,26 +87,33 @@ fn every_literal_path_a_rule_names_still_exists() {
             let Some(glob) = line.trim().strip_prefix("- ") else {
                 continue;
             };
-            if glob.contains('*') {
-                continue;
-            }
             checked += 1;
-            if !std::path::Path::new(REPO_ROOT).join(glob).exists() {
+            // A trailing `/**` means "everything under here" to the rule loader, but `glob`
+            // reads it as subdirectories alone — so `licenses/**`, which has none, would look
+            // like a rule that had rotted. `/**/*` asks the same question in its dialect.
+            // `REPO_ROOT` carries its own trailing separator.
+            let pattern = match glob.strip_suffix("/**") {
+                Some(dir) => format!("{REPO_ROOT}{dir}/**/*"),
+                None => format!("{REPO_ROOT}{glob}"),
+            };
+            let Ok(matches) = glob::glob(&pattern) else {
+                malformed.push(format!("{name}: {glob}"));
+                continue;
+            };
+            if matches.flatten().next().is_none() {
                 missing.push(format!("{name}: {glob}"));
             }
         }
     }
 
     assert!(unreadable.is_empty(), "unreadable rules: {unreadable:?}");
+    assert!(malformed.is_empty(), "these rules name unparseable patterns: {malformed:?}");
     assert!(
         missing.is_empty(),
-        "these rules name paths that no longer exist, so each one has silently stopped \
+        "these rules name paths that match nothing, so each one has silently stopped \
          loading for the code it governs: {missing:?}",
     );
-    assert!(
-        checked >= MIN_LITERALS,
-        "only {checked} literal rule paths found — the frontmatter parse broke",
-    );
+    assert!(checked >= MIN_PATHS, "only {checked} rule paths found — the frontmatter parse broke");
 }
 
 #[test]

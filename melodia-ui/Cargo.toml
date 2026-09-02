@@ -12,6 +12,11 @@ publish = false
 # lib is `slint::include_modules!()` over a ~390k-line generated file. Without
 # it, the first `cargo test --workspace` sends rustdoc walking all of it.
 doctest = false
+# There is no `#[test]` here to run, and `--workspace` would otherwise compile
+# that generated file a second time as a test target — the one thing this crate
+# exists to avoid. Clippy still lints the lib through `RUSTC_WORKSPACE_WRAPPER`,
+# so nothing is dropped from the gate.
+test = false
 
 [dependencies]
 slint.workspace = true

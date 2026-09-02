@@ -20,8 +20,8 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
-use super::super::audio::{AudioSource, Sample, SampleRate, Shape};
-use super::super::dsp::{self, AtomicF64};
+use super::super::audio::{AudioSource, Sample, SampleRate, Shape, frames_in, frames_to_duration};
+use super::super::dsp::AtomicF64;
 use super::convert::{Converter, Filled};
 
 /// How long a control op waits for the callback before giving up.
@@ -164,7 +164,7 @@ impl Voice {
     /// which this cannot copy: the anchor is a pair with the rate, and the callback owns the
     /// ordering between them.
     pub fn append_at<S: AudioSource + 'static>(&self, source: S, position: Duration) {
-        let frames = dsp::frames_in(position, source.sample_rate());
+        let frames = frames_in(position, source.sample_rate());
         let loaded = self.load(source);
         self.send_counted(Command::Append { loaded, frames });
     }
@@ -177,7 +177,7 @@ impl Voice {
     /// safe over the gap — see [`VoiceShared::mounted`] — and a voice that has moved on, or run
     /// dry, takes no source from this.
     pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration, mounted: u64) {
-        let frames = dsp::frames_in(position, source.sample_rate());
+        let frames = frames_in(position, source.sample_rate());
         let loaded = self.load(source);
         self.send_counted(Command::Replace {
             loaded,
@@ -280,7 +280,7 @@ impl Voice {
         let Some(rate) = SampleRate::new(self.shared.rate.load(Ordering::Acquire)) else {
             return Duration::ZERO;
         };
-        dsp::frames_to_duration(self.shared.frames.load(Ordering::Relaxed), rate)
+        frames_to_duration(self.shared.frames.load(Ordering::Relaxed), rate)
     }
 
     /// Whether the callback will see `command`.

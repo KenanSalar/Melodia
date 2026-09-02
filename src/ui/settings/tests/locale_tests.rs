@@ -19,7 +19,7 @@ use crate::test_support::{
     MIN_SLINT_SOURCES, UI_DIR, slint_sources, strip_line_comments, stripped_sources,
 };
 
-const TRANSLATIONS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/translations");
+const TRANSLATIONS_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "melodia-ui/translations");
 
 /// The gettext ids one source — a `.slint` file or a `.po` — declares.
 #[derive(Default)]

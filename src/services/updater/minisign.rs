@@ -32,7 +32,7 @@ use minisign_verify::{Error as MinisignVerifyError, PublicKey, Signature};
 ///      release signed with the new key. Clients on prior releases stay stuck on their installed
 ///      version until the user manually downloads and installs from the GitHub release page.
 const EMBEDDED_PUBKEY: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/updater-pubkey.b64"));
+    include_str!(concat!(env!("MELODIA_REPO_ROOT"), "assets/updater-pubkey.b64"));
 
 #[derive(Debug, thiserror::Error)]
 pub enum MinisignError {

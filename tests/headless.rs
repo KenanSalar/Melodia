@@ -30,7 +30,7 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
     let runtime = tokio::runtime::Handle::current();
     let (state, _channels) = AppState::init(paths, runtime).await?;
 
-    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let fixtures = PathBuf::from(env!("MELODIA_REPO_ROOT")).join("tests/fixtures");
     assert!(fixtures.join("silence-1s.flac").exists(), "fixture missing — regenerate with ffmpeg");
 
     let folder =

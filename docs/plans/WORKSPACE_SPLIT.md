@@ -438,11 +438,12 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
       `include_str!("../../nav_history.rs")` with source-text assertions at `:1010` and `:1024`, so
       it needs re-pathing. This is the one that actually stops `melodia-views` existing, and the only
       one with structural work in it.
-- [ ] **A8. `dsp.rs`'s numeric helpers move into `audio.rs`.** `frames_in`, `frames_to_duration` and
+- [x] **A8. `dsp.rs`'s numeric helpers move into `audio.rs`.** `frames_in`, `frames_to_duration` and
       `interleaved`, whose only cross-tier consumer is `file_decode.rs:28`. That is the one
       wrong-direction edge inside `src/player/`, and removing it is what makes the audio/playback
-      seam a manifest line rather than a refactor.
-- [ ] **A9. Anchor the test corpus on the workspace root.** `.cargo/config.toml` already has an
+      seam a manifest line rather than a refactor. `output/voice.rs`'s three calls are same-tier and
+      were never edges; they lose their `dsp::` qualifier and nothing else.
+- [x] **A9. Anchor the test corpus on the workspace root.** `.cargo/config.toml` already has an
       `[env]` table, and `relative = true` resolves against the config file's parent directory on
       stable:
 
@@ -451,10 +452,12 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
       MELODIA_REPO_ROOT = { value = "", relative = true }
       ```
 
-      `""` and not `"."`, measured rather than reasoned. Cargo resolves the value against the parent
-      of `.cargo` and never hands the empty string to `Path::join`, so `""` yields `<root>/` and
-      joins to `<root>/src`, while `"."` yields a literal `<root>/.` and drags a `CurDir` component
-      through every path derived from it and every assertion message that prints one.
+      `""` and not `"."`, measured rather than reasoned. Cargo joins the value onto the parent of
+      `.cargo`, so `""` yields `<root>/` **with a trailing separator** while `"."` yields a literal
+      `<root>/.` and drags a `CurDir` component through every derived path and every assertion
+      message that prints one. Measured again on the way in, because the shape decides the call
+      sites: the suffixes spell no leading separator of their own (`concat!(env!(…), "src")`), one
+      being what turns `<root>/src` into `<root>//src`.
 
       All seven constants in `test_support.rs` take it, as does `minisign.rs:34-35`'s `include_str!`
       and the two directory anchors (`locale_tests.rs:22`, `radio_tests.rs:17`). So does the fourth
@@ -462,17 +465,33 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
       `REPO_ROOT` shadowing the shared constant, so re-pointing the seven leaves the rules-glob pin
       looking at whichever crate it lands in. Landing it before anything
       moves is what stops `SRC_DIR` ever meaning "one crate".
-- [ ] **A10. Make the rules-glob pin honest.** Drop `if glob.contains('*') { continue; }` at
-      `test_support_tests.rs:89` and fix whatever it was hiding. On its own commit, before the split,
-      so a glob that had already rotted cannot be mistaken for one the split broke. The floor's
-      comment at `:52` is stale while you are in there: it says sixty literal paths, and the ruleset
-      holds 96.
-- [ ] **A11. `[lib] test = false` on `melodia-ui`.** `melodia-ui/src/lib.rs` is
+
+      Twelve sites, not eleven: `tests/headless.rs:33` is the one this list missed, and it is the
+      one the approach does not cover for free — an integration test outside `src/` cannot reach a
+      `pub(crate)` constant, so it spells `env!("MELODIA_REPO_ROOT")` itself.
+- [x] **A10. Make the rules-glob pin honest.** ~~Drop `if glob.contains('*') { continue; }` at
+      `test_support_tests.rs:89` and fix whatever it was hiding.~~ **Both halves of that were
+      wrong.** Nothing was hidden: all 69 globs matched and all 96 literals existed. And dropping
+      the skip alone breaks the test, because `:93` is `Path::join(glob).exists()` — a literal path
+      check with no glob semantics, which all 69 would have failed. The item is *implementing a
+      matcher*: one question asked of all 165 entries, over a `glob = "0.3.4"` dev-dependency,
+      rather than hand-rolling `**` inside the one test that exists to catch silent drift.
+
+      What that surfaced, and the reason it was worth its own commit: **`glob` reads a trailing
+      `/**` as subdirectories alone**, so `packaging/**` and `licenses/**` — neither of which has a
+      subdirectory — read as rules that had rotted. The rule loader means "everything under here",
+      so the pin normalises that one shape to `/**/*`. Three entries use it; every other glob in
+      the ruleset is `dir/**/*.ext` or `dir/*.ext` and needs nothing.
+
+      The floor's comment at `:52` was stale as noted (sixty against 96) and is now stated as 165.
+- [x] **A11. `[lib] test = false` on `melodia-ui`.** `melodia-ui/src/lib.rs` is
       `slint::include_modules!()` and a re-export with no `#[test]` in it, but `--workspace` selects
       it and both `cargo test` and `--all-targets` then build its lib as a unit test, which is a
       second compilation of the 411,428-line generated file the crate exists to build once. Clippy
       still lints the lib through `RUSTC_WORKSPACE_WRAPPER`, so this loses no coverage, and it is
-      what makes carrying `--workspace` from the first commit actually free.
+      what makes carrying `--workspace` from the first commit actually free. Note it changes
+      nothing *today*: no CI command passes `--workspace`, and with no `default-members` a bare
+      `cargo test` selects the root package alone. It is entirely a prerequisite.
 
 ## Phase B: reshape in place, still one crate
 

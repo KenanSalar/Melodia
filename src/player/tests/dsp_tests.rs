@@ -2,10 +2,8 @@
 
 use std::time::Duration;
 
-use super::{
-    Generation, db_to_linear, frames_in, frames_to_duration, index_to_f32, interleaved,
-    linear_to_db,
-};
+use super::{Generation, db_to_linear, index_to_f32, linear_to_db};
+use crate::player::audio::{frames_in, frames_to_duration, interleaved};
 use crate::player::tests::helpers::{approx_eq as approx, nz_u16 as channels, nz_u32 as rate};
 
 #[test]

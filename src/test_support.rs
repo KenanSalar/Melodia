@@ -10,8 +10,11 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::config::Paths;
 
+// `MELODIA_REPO_ROOT` (`.cargo/config.toml`) already ends in a separator, so the suffixes
+// below spell none of their own.
+
 /// The root of the Slint tree, for the pins that walk it rather than naming files.
-pub(crate) const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui");
+pub(crate) const UI_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "melodia-ui/ui");
 
 /// Vacuity floor for a walk over [`UI_DIR`], so a traversal that found nothing can't pass
 /// every pin standing on it. Loose on purpose — one tight enough to matter would trip on an
@@ -21,7 +24,7 @@ pub(crate) const MIN_SLINT_SOURCES: usize = 100;
 
 /// The root of the Rust tree, for the pins answering "does anything in the tree do X" rather
 /// than "do these named files do X" — what they guard against is a *new* call site.
-pub(crate) const SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+pub(crate) const SRC_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "src");
 
 /// Vacuity floor for a walk over [`SRC_DIR`], loose for [`MIN_SLINT_SOURCES`]' reason. Shared
 /// rather than declared per pin: ten files stand on this corpus, and a copy apiece is a copy
@@ -30,25 +33,25 @@ pub(crate) const MIN_SOURCES: usize = 200;
 
 /// The bundled font faces, which the Slint build compiles into the binary — so every
 /// artifact this repo ships redistributes them and owes their licence text.
-pub(crate) const FONTS_DIR: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui/assets/fonts");
+pub(crate) const FONTS_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "melodia-ui/ui/assets/fonts");
 
 /// The repo root, for the pins that reach packaging — it lives beside `src/`, not under it.
-pub(crate) const REPO_ROOT: &str = env!("CARGO_MANIFEST_DIR");
+pub(crate) const REPO_ROOT: &str = env!("MELODIA_REPO_ROOT");
 
 /// The checked-in fixtures, for the tests that need a real file rather than a synthesized one.
-/// Anchored on the manifest dir for the reason [`UI_SRC_DIR`] gives.
-pub(crate) const ASSETS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/assets");
+/// Anchored on the repo root for the reason [`UI_SRC_DIR`] gives.
+pub(crate) const ASSETS_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "tests/assets");
 
 /// The Rust UI tree, for the pins asking the same question of every slice's wiring. Anchored
-/// on the manifest dir like its siblings: a bare `"src/ui"` resolves against the harness's
-/// working directory, which is the package root only because that is what `cargo test` sets.
-pub(crate) const UI_SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/ui");
+/// on the repo root like its siblings: a bare `"src/ui"` resolves against the harness's working
+/// directory, which is the package root only because that is what `cargo test` sets — and the
+/// package root stops being the tree root the moment `src/` becomes several crates.
+pub(crate) const UI_SRC_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "src/ui");
 
 /// The subsystem-contract rules, whose `paths:` frontmatter decides which loads for which
 /// file. Pinned because a stale glob fails *silently* — the rule stops loading for the code
 /// it governs and nothing in the build, the lint gate or the test suite is looking.
-pub(crate) const RULES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.claude/rules");
+pub(crate) const RULES_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), ".claude/rules");
 
 /// The unbounded float fed to the guards that reject nonsense input. `f64::from` widens it
 /// where the guard under test takes an `f64`.

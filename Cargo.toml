@@ -306,6 +306,10 @@ winresource = "0.1.31"
 
 [dev-dependencies]
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "test-util"] }
+# The rules-frontmatter pin asks whether each `paths:` entry still matches anything, and half
+# of them are globs. Hand-rolling `**` inside the one test that exists to catch silent drift is
+# the wrong place to be clever; this crate has no dependencies of its own.
+glob = "0.3.4"
 
 # Workspace-level and inherited by both packages, so `melodia-ui` can't sit outside
 # the gate; its generated module carries a blanket `#[allow]`.

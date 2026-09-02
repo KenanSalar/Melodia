@@ -23,9 +23,11 @@ use symphonia::core::units::{TimeBase, Timestamp};
 use crate::error::AppError;
 
 use super::aac_trim::{self, Trim};
-use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
+use super::audio::{
+    AudioSource, ChannelCount, Sample, SampleRate, SeekError, frames_in, frames_to_duration,
+    interleaved,
+};
 use super::decode::{self, Rounding};
-use super::dsp::{frames_in, frames_to_duration, interleaved};
 
 /// How far short of a stated length a seek is allowed to land.
 ///
