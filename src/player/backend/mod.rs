@@ -232,7 +232,7 @@ impl PlaybackEngine {
 
         // One value for the decoder's seek and the deck's clock anchor both, so the two cannot
         // disagree about where this source begins.
-        let start = start_position_ms.map_or(Duration::ZERO, Duration::from_millis);
+        let mut start = start_position_ms.map_or(Duration::ZERO, Duration::from_millis);
 
         // Seeked on the source we still own, rather than through the deck once it is mounted: a
         // deck seek is serviced by the audio callback, so that spelling puts a demuxer scan on the
@@ -242,6 +242,9 @@ impl PlaybackEngine {
             log::debug!("Resuming playback at {}ms", start.as_millis());
             if let Err(e) = decoded.try_seek(start) {
                 log::warn!("Seek failed: {e}");
+                // The anchor goes with it: the clock counts frames handed out, and a source the
+                // seek refused to move hands out its first one from wherever it still is.
+                start = Duration::ZERO;
             }
         }
 

@@ -13,11 +13,12 @@ Status: **proposed** · Created: 2026-08-14
 > `src/player/output/` exists, so findings 1 through 3 and Phase 1 are largely spent —
 > each is marked where it changed. Everything about exclusive mode is untouched.
 >
-> **cpal has since moved to 0.18.2**, which changes two premises below: the buffer size
-> is still the host's choice but a built stream now stays paused until `play()`, and a
-> lost device arrives as `ErrorKind::DeviceNotAvailable` on ALSA too, so finding 3's
-> "already has the signal" is now true on every host rather than inferred on Linux.
-> The binding versions in finding 4 survived the bump; re-check them anyway.
+> **cpal has since moved to 0.18.2**, which changes three premises below: a built stream now
+> stays paused until `play()`; the block size is still the host's choice but is finally
+> *readable*, through `StreamTrait::buffer_size`, which `Negotiated` now carries beside the
+> request; and a lost device arrives as `ErrorKind::DeviceNotAvailable` on ALSA too, so
+> finding 3's "already has the signal" is now true on every host rather than inferred on
+> Linux. Finding 4's three bindings all survived the bump.
 
 ---
 
@@ -179,8 +180,14 @@ CPU does.
    it already has the signal and deliberately only reports it, because acting on it means
    the deck rebuild item 2 above owns.
 
+   **Take the reopen, not the callback.** rox is on 0.18.1 and still classifies nothing: one
+   `device_lost` store for every kind it receives, including the three 0.18 documents as
+   non-fatal (`Xrun`, `RealtimeDenied`, `DeviceChanged`, the last saying outright that the
+   stream stays active). So it rebuilds a whole session on an xrun. `stream_health`'s
+   three-way split is the half to keep when the reopen lands on top of it.
+
 4. **Every platform binding we need is already in `Cargo.lock`,** pulled by
-   `cpal 0.17.3`:
+   `cpal 0.18.2`:
    - `alsa 0.11.0` — Linux. `libasound` is already linked; a direct dep is a manifest
      line, not a new C dependency.
    - `windows 0.62.2` — Windows. **Pin exactly this version** so the two share one
@@ -212,9 +219,9 @@ src/player/output/
   mod.rs        AudioOutput: the open handle, and the only door onto Mixer
   device.rs     the cpal stream, the config ladder, Negotiated, the period math
   mixer.rs      the unclamped sum, in LOCKSTEP_FRAMES steps
-  deck.rs       one voice: transport, the command channel, the clock
+  voice.rs      one voice: transport, the command channel, the clock
   convert.rs    rate, channel map, the speed ratio
-  tests/        convert / deck / mixer / device, per the tree's `#[path]` convention
+  tests/        convert / voice / mixer / device, per the tree's `#[path]` convention
 ```
 
 What this plan still adds, on top of that:

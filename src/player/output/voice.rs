@@ -157,6 +157,12 @@ impl Voice {
     /// hand out start part way in — and the clock counts what it hands out. Without the anchor the
     /// deck reports a position of zero for audio that is minutes deep, which is what the restored
     /// position turned into on the first tick after mounting.
+    ///
+    /// **The anchor lands on the callback**, so [`Self::position`] still reads zero for up to one
+    /// device period after this returns; a monitor tick inside that window republishes zero and
+    /// the next one corrects it. [`Self::clear`] zeroes its half of the clock on this side too,
+    /// which this cannot copy: the anchor is a pair with the rate, and the callback owns the
+    /// ordering between them.
     pub fn append_at<S: AudioSource + 'static>(&self, source: S, position: Duration) {
         let frames = frames_at(position, source.sample_rate());
         let loaded = self.load(source);

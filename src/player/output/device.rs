@@ -41,7 +41,7 @@ use super::mixer::MixerPull;
 /// callback's staging buffer starts at.
 const TARGET_BUFFER: Duration = Duration::from_millis(50);
 
-/// What the device actually agreed to, as opposed to what it was asked for.
+/// What the device actually agreed to, beside what it was asked for.
 ///
 /// Reported rather than assumed because every part of it can differ from the request, and because a
 /// bit-perfect mode is only checkable if the negotiated end of it is visible.
@@ -51,10 +51,15 @@ pub struct Negotiated {
     pub format: cpal::SampleFormat,
     /// The period that was asked for, or `None` where the host was left to name its own.
     ///
-    /// The request rather than the answer — cpal reports no block size back, and the only place
-    /// the real one appears is `data.len()` inside the callback. Worth carrying anyway: it says
-    /// which pass of the ladder won, which is the difference between a block this tree sized and
-    /// one nobody did, and the boot log line is where a bug report reads that back.
+    /// Kept beside the answer because it is the one of the two that says which pass of the ladder
+    /// won, which is the difference between a block this tree sized and one nobody did.
+    pub requested_period: Option<cpal::FrameCount>,
+    /// What the host says it will hand the callback at a time, or `None` where it cannot say.
+    ///
+    /// Asked rather than inferred: `StreamTrait::buffer_size` arrived in cpal 0.18, and before it
+    /// the only place the real block appeared was `data.len()` inside the callback. cpal calls it
+    /// advisory and the hosts that don't track one answer `UnsupportedOperation`, so this is where
+    /// a bug report reads the block back, not a bound anything sizes against.
     pub period: Option<cpal::FrameCount>,
 }
 
@@ -177,9 +182,10 @@ where
     };
     let (kept, pull) = build(shape);
 
-    let period = buffer.requested(supported);
+    let requested_period = buffer.requested(supported);
     let mut config = supported.config();
-    config.buffer_size = period.map_or(cpal::BufferSize::Default, cpal::BufferSize::Fixed);
+    config.buffer_size =
+        requested_period.map_or(cpal::BufferSize::Default, cpal::BufferSize::Fixed);
 
     let format = supported.sample_format();
     let staging = staging_samples(supported);
@@ -187,6 +193,8 @@ where
     stream
         .play()
         .map_err(|e| AppError::Player(format!("Failed to start the audio stream: {e}")))?;
+    // A host with no answer is a log line missing one term, never a rung that fails.
+    let period = stream.buffer_size().ok();
 
     Ok((
         DeviceStream {
@@ -194,6 +202,7 @@ where
             negotiated: Negotiated {
                 shape,
                 format,
+                requested_period,
                 period,
             },
         },
@@ -250,9 +259,9 @@ fn period_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
         cpal::SupportedBufferSize::Range { min, max } => target.min(max / 2).max(*min),
         cpal::SupportedBufferSize::Unknown => target,
     };
-    // A driver reporting a zero floor and a ceiling under two lands this on zero — a request for a
-    // period of nothing, which cpal's range check waves through, zero being inside the range it
-    // checks. One frame either fails that check or gets rounded up, and both beat a dead stream.
+    // A driver reporting a zero floor and a ceiling under two lands this on zero, which cpal 0.18
+    // refuses before the driver sees it — so the rung would fail on the request rather than on the
+    // device. One frame is something a driver can round up, which beats not asking.
     held.max(1)
 }
 
@@ -305,10 +314,13 @@ where
         };
     }
 
-    // Every variant cpal 0.18 has bar `F32` above, which together is what rodio covered. The
-    // 24-bit pair is the one worth naming: cpal's own config ordering ranks it, and a card
-    // offering nothing else would otherwise fail every rung of the ladder and take the boot
-    // with it.
+    // Every format `SizedSample` names bar `F32` above, which together is what rodio covered.
+    // The three DSD ones are outside it by construction — nothing implements `SizedSample` for
+    // them, so only `build_output_stream_raw` could carry one — and `SampleFormat` is
+    // `#[non_exhaustive]` besides, which is what makes `other` the compiler's requirement rather
+    // than a courtesy. The 24-bit pair is the one worth naming: cpal's own config ordering ranks
+    // it above `I16` now, so a card offering nothing else is no longer the edge case it was, and
+    // without an arm it would fail every rung of the ladder and take the boot with it.
     arms! {
         F64 => f64,
         I8 => i8,
