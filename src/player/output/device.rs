@@ -82,7 +82,7 @@ impl DeviceStream {
 /// config, or when nothing opens.
 pub fn open<T, E, B>(mut build: B, error_callback: E) -> Result<(DeviceStream, T), AppError>
 where
-    E: FnMut(cpal::StreamError) + Clone + Send + 'static,
+    E: FnMut(cpal::Error) + Clone + Send + 'static,
     B: FnMut(Shape) -> (T, MixerPull),
 {
     let device = cpal::default_host()
@@ -120,8 +120,8 @@ where
     Err(first.unwrap_or_else(|| AppError::Player("The output device offered no config".to_owned())))
 }
 
-/// Every config the device reports, best first, each at its top rate, then 44.1 kHz where that is
-/// in range, then its floor. cpal's own ordering, which is what rodio walked.
+/// Every config the device reports, best first, each at its top rate, then the two standard rates
+/// where those are in range, then its floor. cpal's own ordering, which is what rodio walked.
 fn ladder(device: &cpal::Device) -> Result<Vec<cpal::SupportedStreamConfig>, AppError> {
     let mut supported: Vec<_> = device
         .supported_output_configs()
@@ -133,29 +133,31 @@ fn ladder(device: &cpal::Device) -> Result<Vec<cpal::SupportedStreamConfig>, App
         .into_iter()
         .flat_map(|range| {
             let (min, max) = (range.min_sample_rate(), range.max_sample_rate());
-            rates_for(min, max).map(move |rate| range.with_sample_rate(rate))
+            // `try_` rather than `with_sample_rate`, whose out-of-range arm is an `expect` that
+            // would take the boot with it. Unreachable by construction below is still one
+            // argument further from the code than a rate the range simply answers `None` to.
+            rates_for(min, max).filter_map(move |rate| range.try_with_sample_rate(rate))
         })
         .collect())
 }
 
-/// The rates one reported range is tried at: its top, then 44.1 kHz, then its floor.
+/// The rates one reported range is tried at: its top, the two standard rates, then its floor.
 ///
-/// **44.1 kHz only when it falls strictly inside**, and that is a panic guard rather than a
-/// tidiness one: `SupportedStreamConfigRange::with_sample_rate` is a `try_` plus an `expect`, so a
-/// rate outside the range takes the boot with it. Strict because the two endpoints are already the
-/// entries either side of it, which makes the guard free.
-///
-/// The floor is dropped where it *is* the top, which rodio's walk emitted twice: a rung costs a
-/// whole `build`, and that allocates the mixer the failed attempt then throws away.
+/// **A standard rate only when it falls strictly inside.** The endpoints are already the rungs
+/// either side of it, so the strict test is what stops a duplicate, and a rung costs a whole
+/// `build` — which allocates the mixer the failed attempt then throws away. The floor drops the
+/// same way where it *is* the top, which rodio's walk emitted twice.
 fn rates_for(
     min: cpal::SampleRate,
     max: cpal::SampleRate,
 ) -> impl Iterator<Item = cpal::SampleRate> {
-    const PREFERRED_RATE: cpal::SampleRate = 44_100;
-
-    let preferred = (min < PREFERRED_RATE && PREFERRED_RATE < max).then_some(PREFERRED_RATE);
+    // 48 kHz ahead of 44.1: cpal's own default config prefers it, and it is what current hardware
+    // runs natively, so it is the likelier of the two to open.
+    let standard = [cpal::SAMPLE_RATE_48K, cpal::SAMPLE_RATE_CD]
+        .into_iter()
+        .filter(move |&rate| min < rate && rate < max);
     let floor = (min < max).then_some(min);
-    std::iter::once(max).chain(preferred).chain(floor)
+    std::iter::once(max).chain(standard).chain(floor)
 }
 
 /// Build and start a stream for one config, or say why it could not be.
@@ -167,7 +169,7 @@ fn attempt<T, E, B>(
     error_callback: E,
 ) -> Result<(DeviceStream, T), AppError>
 where
-    E: FnMut(cpal::StreamError) + Send + 'static,
+    E: FnMut(cpal::Error) + Send + 'static,
     B: FnMut(Shape) -> (T, MixerPull),
 {
     let Some(shape) = shape_of(supported) else {
@@ -181,7 +183,7 @@ where
 
     let format = supported.sample_format();
     let staging = staging_samples(supported);
-    let stream = build_stream(device, &config, format, staging, pull, error_callback)?;
+    let stream = build_stream(device, config, format, staging, pull, error_callback)?;
     stream
         .play()
         .map_err(|e| AppError::Player(format!("Failed to start the audio stream: {e}")))?;
@@ -279,14 +281,14 @@ fn staging_samples(supported: &cpal::SupportedStreamConfig) -> usize {
 /// format that *is* [`Sample`], which needs neither half; [`direct_stream`] says what that saves.
 fn build_stream<E>(
     device: &cpal::Device,
-    config: &cpal::StreamConfig,
+    config: cpal::StreamConfig,
     format: cpal::SampleFormat,
     staging_samples: usize,
     pull: MixerPull,
     error_callback: E,
 ) -> Result<cpal::Stream, AppError>
 where
-    E: FnMut(cpal::StreamError) + Send + 'static,
+    E: FnMut(cpal::Error) + Send + 'static,
 {
     if format == cpal::SampleFormat::F32 {
         return direct_stream(device, config, pull, error_callback);
@@ -303,7 +305,7 @@ where
         };
     }
 
-    // Every variant cpal 0.17 has bar `F32` above, which together is what rodio covered. The
+    // Every variant cpal 0.18 has bar `F32` above, which together is what rodio covered. The
     // 24-bit pair is the one worth naming: cpal's own config ordering ranks it, and a card
     // offering nothing else would otherwise fail every rung of the ladder and take the boot
     // with it.
@@ -332,12 +334,12 @@ where
 /// trailing frame included, so nothing depended on owning that buffer first.
 fn direct_stream<E>(
     device: &cpal::Device,
-    config: &cpal::StreamConfig,
+    config: cpal::StreamConfig,
     mut pull: MixerPull,
     error_callback: E,
 ) -> Result<cpal::Stream, AppError>
 where
-    E: FnMut(cpal::StreamError) + Send + 'static,
+    E: FnMut(cpal::Error) + Send + 'static,
 {
     opened(device.build_output_stream::<Sample, _, _>(
         config,
@@ -348,20 +350,20 @@ where
 }
 
 /// The one wording for a stream that would not open, so the two builders can't drift.
-fn opened(built: Result<cpal::Stream, cpal::BuildStreamError>) -> Result<cpal::Stream, AppError> {
+fn opened(built: Result<cpal::Stream, cpal::Error>) -> Result<cpal::Stream, AppError> {
     built.map_err(|e| AppError::Player(format!("Failed to open the audio stream: {e}")))
 }
 
 fn output_stream<T, E>(
     device: &cpal::Device,
-    config: &cpal::StreamConfig,
+    config: cpal::StreamConfig,
     staging_samples: usize,
     mut pull: MixerPull,
     error_callback: E,
 ) -> Result<cpal::Stream, AppError>
 where
     T: SizedSample + FromSample<Sample>,
-    E: FnMut(cpal::StreamError) + Send + 'static,
+    E: FnMut(cpal::Error) + Send + 'static,
 {
     // A host handing over more than `staging_samples` allowed for grows this once and keeps it.
     let mut staging: Vec<Sample> = vec![0.0; staging_samples];

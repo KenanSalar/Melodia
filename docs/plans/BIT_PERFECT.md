@@ -12,6 +12,12 @@ Status: **proposed** · Created: 2026-08-14
 > **Re-read against #90 before acting on any of it.** rodio is gone and
 > `src/player/output/` exists, so findings 1 through 3 and Phase 1 are largely spent —
 > each is marked where it changed. Everything about exclusive mode is untouched.
+>
+> **cpal has since moved to 0.18.2**, which changes two premises below: the buffer size
+> is still the host's choice but a built stream now stays paused until `play()`, and a
+> lost device arrives as `ErrorKind::DeviceNotAvailable` on ALSA too, so finding 3's
+> "already has the signal" is now true on every host rather than inferred on Linux.
+> The binding versions in finding 4 survived the bump; re-check them anyway.
 
 ---
 

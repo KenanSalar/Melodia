@@ -10,51 +10,31 @@ homepage = "https://github.com/KenanSalar/Melodia"
 authors = ["Kenan Salar <kenansalar@users.noreply.github.com>"]
 keywords = ["music", "player", "audio", "slint"]
 categories = ["multimedia::audio"]
-# Unpublishable anyway — `melodia-ui` is `publish = false` and depended on by
-# path with no version — so say so rather than letting `cargo publish` find out
-# late. The metadata above still documents the repo.
+# `melodia-ui` is depended on by path with no version, so a publish could never work.
 publish = false
 
-# `melodia-ui` holds nothing but the Slint compiler's output, split off because
-# `cargo test` builds this package twice — rlib and `--test` harness — and the
-# generated unit dwarfs the rest. As a dependency it builds once, and only when
-# a `.slint` file or a catalog changes.
-#
-# `winit` already carries its own `[workspace]`; excluding it explicitly stops a
-# future upstream re-sync that drops that table from pulling it in as a member.
+# `melodia-ui` is the Slint compiler's output, split off so it builds once rather
+# than twice per `cargo test` (rlib plus `--test` harness). `winit` carries its own
+# `[workspace]`; excluding it survives an upstream re-sync that drops that table.
 [workspace]
 members = ["melodia-ui"]
 exclude = ["winit"]
 
 [workspace.package]
-# Inherited by both packages, so `melodia-ui` can't drift from the app. The
-# four toolchain-less scrapes (`release-prepare.yml`, `build-rpm.sh`,
-# `build-appimage.sh`, `build-tarball.sh`) anchor on this table by name, not by
-# position.
+# Inherited by both packages. Four toolchain-less scrapes (`release-prepare.yml`,
+# `build-{rpm,appimage,tarball}.sh`) anchor on this table by name.
 version = "0.12.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
-# Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
+# Lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
 rust-version = "1.97"
 
-# Declared once rather than in both manifests, because a drifted *version*
-# resolves two `slint` crates: the types `melodia-ui` generates then implement a
-# different `ComponentHandle` than every file in `src/ui/` names, and the build
-# dies in a wall of `expected slint::Weak, found slint::Weak`.
-#
-# `raw-window-handle-06` makes `Window::window_handle()` implement
-# `HasWindowHandle` + `HasDisplayHandle`, which `ui::file_dialog` needs to parent
-# the rfd pickers (Windows + macOS only; the Linux portal parents OS-side).
-#
-# `unstable-winit-030` exposes `WinitWindowAccessor`, for winit's `drag_window()`
-# and `WindowEvent::Resized`. Slint 1.16 has no `start_system_move`
-# (slint-ui#2521) and manual `set_position` math is broken on Wayland
-# (slint-ui#6273) and `no-frame` windows (slint-ui#4817). Upstream may rename the
-# feature in 1.17+.
-#
-# `renderer-femtovg`: the software renderer can't clip to `border-radius`
-# (slint#4176), and its one advantage — lower idle RSS — stopped mattering once
-# the `M_ARENA_MAX` cap in `main()` landed.
+# Declared once rather than in both manifests: a drifted version resolves two
+# `slint` crates and the build dies in a wall of `expected slint::Weak, found
+# slint::Weak`. `raw-window-handle-06` parents the rfd pickers;
+# `unstable-winit-030` exposes `WinitWindowAccessor` for `drag_window()` and
+# `WindowEvent::Resized` (slint-ui#2521, #6273, #4817); `renderer-femtovg` because
+# the software renderer can't clip to `border-radius` (slint#4176).
 [workspace.dependencies]
 slint = { version = "1.16.1", default-features = false, features = [
     "std",
@@ -65,51 +45,33 @@ slint = { version = "1.16.1", default-features = false, features = [
     "unstable-winit-030",
     "renderer-femtovg",
 ] }
-# Only `melodia-ui` builds with this, but it has to match the `slint` version
-# above — declaring the pair adjacently is the whole point of it being here.
+# Must match the `slint` version above; the pair is declared adjacently for that.
 slint-build = "1.16.1"
 
-# Lowercase so `use melodia::…` stays idiomatic; the capitalised *package* name
-# is what drives `target/release/Melodia` and `cargo run -p Melodia`.
+# Lowercase so `use melodia::…` stays idiomatic; the package name drives the binary.
 [lib]
 name = "melodia"
-# Nothing consumes `melodia` as a library and every doc example is an
-# `ignore` fence, so this only bought a rustdoc build per `cargo test`.
+# Nothing consumes this as a library and every doc example is an `ignore` fence.
 doctest = false
 
-# cargo-deb metadata — drives the `.deb` build in release CI. The polkit helper
-# + policy are what `services/updater/install/swap.rs` looks for at
-# `/usr/libexec/melodia-update-helper`, for a branded auth dialog on updates.
-#
-# Dest paths follow the Debian FHS and match the RPM `%files` layout — except
-# licences, where the distros' rules conflict and the divergence is deliberate:
-# Policy 12.5 mandates `/usr/share/doc/<pkg>/copyright` and Debian has no
-# `/usr/share/licenses`, while RPM's `%license` tags files `RPMFILE_LICENSE`
-# rather than `RPMFILE_DOC` so they survive `--excludedocs`.
+# Drives the `.deb` in release CI; the polkit helper and policy are what
+# `updater/install/swap.rs` looks for at `/usr/libexec/melodia-update-helper`. Dest
+# paths follow the Debian FHS and match the RPM `%files` layout, except licences:
+# Policy 12.5 wants `/usr/share/doc/<pkg>/copyright` and Debian has no
+# `/usr/share/licenses`, while RPM's `%license` tag survives `--excludedocs`.
 [package.metadata.deb]
 section = "sound"
 priority = "optional"
-# cargo-deb ships a licence file into `usr/share/doc/melodia/copyright` verbatim
-# only when it opens with DEP-5 keys (`has_copyright_metadata`, first ten lines);
-# otherwise it *prepends* a header generated from `license` + `authors`, and the
-# stanzas below become a second, contradictory declaration — one author, whole
-# package AGPL, which the bundled fonts and the vendored winit falsify. Bare
-# string rather than the `[path, skip-lines]` pair: cargo-deb models the pair as
-# `Vec<String>`, so a numeric `0` there fails to deserialize.
+# Copied verbatim only because it opens with DEP-5 keys (cargo-deb reads the first
+# ten lines); otherwise it prepends a generated header declaring one author and a
+# whole-package AGPL, which the fonts and the vendored winit falsify. Bare string,
+# not the `[path, skip-lines]` pair: that is a `Vec<String>`, so a `0` won't parse.
 license-file = "packaging/debian-copyright"
-# `$auto` keeps cargo-deb's detected shared-library deps. The OR-alternative is
-# forward compat: the updater invokes `pkexec` (which pulls `polkitd`), but
-# `policykit-1` is transitional in Trixie and slated for removal, so apt picks
-# `pkexec` there and falls back on Bookworm and older Ubuntu. The updater
-# degrades to a "polkit not installed" error without it; declaring it is what
-# Policy expects.
+# `$auto` keeps the detected shared-library deps. `policykit-1` is transitional in
+# Trixie, so apt takes `pkexec` there and falls back on Bookworm and older Ubuntu.
 depends = "$auto, pkexec | policykit-1"
-# `recommends`, not `depends`: both ship `debian/triggers` declaring
-# `interest-noawait` on `/usr/share/{applications,icons/hicolor}`, so dpkg
-# refreshes those caches once per transaction whenever any package lands files
-# there — no maintainer scripts of our own. Minimal/server installs that never
-# launch a GUI skip them, and the path activation is then a no-op.
-# `scripts/build-rpm.sh`'s `%post`/`%postun` cover the Fedora equivalent.
+# Not `depends`: both ship `debian/triggers` on the two cache directories, so dpkg
+# refreshes them per transaction and a server install that skips them is a no-op.
 recommends = "desktop-file-utils, hicolor-icon-theme"
 extended-description = """
 Melodia is a modern, local-first desktop music player with a Material
@@ -122,18 +84,16 @@ WAV, AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
 full-text search, browsing by album, artist, genre and playlist, OS
 media controls (MPRIS), and pluggable themes including system light/dark
 and Material You."""
-# The reverse-DNS dest names match the AppStream component id, which is what
-# makes KDE Discover / GNOME Software merge the desktop entry with the MetaInfo
-# component instead of listing them separately.
+# The reverse-DNS dest names match the AppStream component id, which is what makes
+# Discover / GNOME Software merge the desktop entry with the MetaInfo component.
 assets = [
     ["target/release/Melodia", "usr/bin/melodia", "755"],
     ["scripts/Melodia.desktop", "usr/share/applications/com.github.kenansalar.melodia.desktop", "644"],
     ["packaging/com.github.kenansalar.melodia.metainfo.xml", "usr/share/metainfo/com.github.kenansalar.melodia.metainfo.xml", "644"],
     ["assets/icons/logo-with-background.svg", "usr/share/icons/hicolor/scalable/apps/melodia.svg", "644"],
     ["LICENSE", "usr/share/doc/melodia/LICENSE", "644"],
-    # The fonts and the vendored winit fork are compiled into the binary, so this
-    # package redistributes them and owes their licence text. Glob + trailing
-    # slash, so a fourth file in `licenses/` needs no edit here — unlike
+    # The fonts and the vendored winit compile into the binary, so this package owes
+    # their licence text. Globbed, so a fourth file needs no edit here, unlike
     # `wix/main.wxs`, which has to name each one.
     ["licenses/*", "usr/share/doc/melodia/licenses/", "644"],
     ["packaging/melodia-update-helper", "usr/libexec/melodia-update-helper", "755"],
@@ -141,12 +101,10 @@ assets = [
 ]
 
 [dependencies]
-# The Slint compiler's output, re-exported wholesale by `src/lib.rs` so the
-# generated types stay reachable as `crate::AppWindow`, `crate::TrackRow`, ….
+# The Slint compiler's output, re-exported by `src/lib.rs` so the generated types
+# stay reachable as `crate::AppWindow`, `crate::TrackRow`, ….
 melodia-ui = { path = "melodia-ui" }
 
-# Version and features in `[workspace.dependencies]`; `melodia-ui` takes the
-# same line and the two must not drift.
 slint.workspace = true
 
 # Async runtime / utilities
@@ -155,56 +113,34 @@ tokio-util = { version = "0.7.19", features = ["rt"] }
 async-compat = "0.2.5"
 parking_lot = "0.12.5"
 
-# `default-features = false` drops the unused `any` + `json`. `macros` stays
-# despite every query going through runtime `query_as::<_, T>()` /
-# `query_scalar`: `sqlx::migrate!` is re-exported only under
-# `all(feature = "macros", feature = "migrate")`, so dropping it breaks
-# `database/mod.rs`. `derive` covers `#[derive(sqlx::FromRow)]`.
+# `macros` stays despite every query going through runtime `query_as`, because
+# `sqlx::migrate!` is re-exported only under `all(macros, migrate)`.
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "derive", "macros"] }
 
 # Audio
-# The device stream `player::output` opens, and the `StreamError` variants
-# `player::stream_health` classifies. This is the whole output dependency now:
-# `output::{mixer,deck,convert}` own the sum, the two voices, the rate and channel
-# conversion and the clock, which is what rodio held until #90.
-#
-# **Held at 0.17 rather than the latest**, deliberately. 0.18 folds `StreamError`
-# into a unified `Error`/`ErrorKind` reached through `e.kind()`, which is a rework
-# of `stream_health`'s four-arm match and of the rate-based device-loss escalation
-# in `tasks::audio_health` — the part of this subsystem with no way to test it
-# short of unplugging a card. It also adds a retryable `DeviceBusy`, stops ALSA,
-# CoreAudio and JACK auto-starting a built stream, and reranks the integer sample
-# formats, all three of which land on `output::device`'s ladder. Worth doing;
-# worth doing alone. (`StreamTrait::play` -> `start` is the release after, not
-# this one.) A caret on a `0.x` is already an exact-minor pin, so no `=` needed.
-cpal = "0.17.3"
-# Everything decodes here — files through `player::file_decode`, live mounts through
-# `player::stream_decode` — and **deliberately against a newer Symphonia than the 0.5 rodio
-# pinned**. 0.5's probe picks a demuxer off a two-byte marker with scoring still a TODO, and the
-# only ADTS marker it knows is `0xFFF1`, so an MPEG-2 ADTS stream matches nothing, the search
-# runs into the payload, and a stray `0xFFFB` there hands an AAC stream to the MP3 demuxer,
-# which then never syncs. 0.6 scores candidates against the frames that follow and registers
-# all four ADTS sync words.
-#
-# The list is the union of what stations serve and what `media::AUDIO_EXTENSIONS` ingests, and
-# has to stay that way: an entry missing here is a format the scanner offers and nothing plays.
-# Breadth used to be the risk — every entry is another demuxer the probe considers, and under
-# 0.5's marker match a format nothing streams was another way to guess wrong — but scoring is
-# what retired that argument, and one dependency now answers for both paths.
+# The device stream `player::output` opens, and the `ErrorKind`s
+# `player::stream_health` classifies; with rodio gone (#90) it is the whole output
+# dependency. 0.18 is a floor: `tasks::audio_health` reads device loss off
+# `DeviceNotAvailable`, which the ALSA host only began reporting there, and
+# `output::device`'s ladder assumes its paused-until-`play()` streams.
+cpal = "0.18.2"
+# Everything decodes here, and deliberately against a newer Symphonia than the 0.5
+# rodio pinned: 0.5 picks a demuxer off a two-byte marker and hands an MPEG-2 ADTS
+# stream to the MP3 demuxer, where 0.6 scores candidates against the frames that
+# follow. The feature list is the union of what stations serve and what
+# `media::AUDIO_EXTENSIONS` ingests: a gap is a format the scanner offers and
+# nothing plays.
 symphonia = { version = "0.6.1", default-features = false, features = [
-    # `aac` carries the ADTS demuxer as well as the codec.
+    # The ADTS demuxer as well as the codec.
     "aac",
     "alac",
     "flac",
-    # Also fragmented MP4, which is what a segmented station serves when it is not MPEG-TS. Only
-    # reachable with the playlist's own init segment spliced in front — a media segment opens
-    # with `styp`/`moof` and this demuxer requires `ftyp` then `moov`, which the init supplies.
+    # Also fragmented MP4, reachable only with the playlist's init segment spliced in
+    # front: a media segment opens with `styp`/`moof` and this wants `ftyp` then `moov`.
     "isomp4",
     "mkv",
-    # `mpa` over `mp3`: same crate either way, and the wider one adds the Layer I and II
-    # decoders. Neither layer has an extension of its own and neither needs one — they arrive as
-    # an `.mka` track, or as an `.mp3` whose frames say Layer II, the reader taking the layer off
-    # the frame header rather than off the name.
+    # Wider than `mp3`, same crate: Layer I and II have no extension of their own and
+    # arrive as an `.mka` track or an `.mp3` whose frame headers say so.
     "mpa",
     "ogg",
     "vorbis",
@@ -212,25 +148,20 @@ symphonia = { version = "0.6.1", default-features = false, features = [
     "aiff",
     "caf",
     "pcm",
-    # The RIFF demuxer resolves the two ADPCM wave formats to their codec types and would then
-    # find no decoder registered for either, so this is the missing half of a path that otherwise
-    # demuxes and dies. It does *not* reach `.aifc` ADPCM, which the AIFC common chunk rejects
-    # before any codec is looked up.
+    # The RIFF demuxer resolves both ADPCM wave formats to codec types that would
+    # otherwise have no decoder. Doesn't reach `.aifc` ADPCM, which the AIFC common
+    # chunk rejects before any codec is looked up.
     "adpcm",
-    # A file or mount that opens with a tag, which the probe chains past rather than mistaking
-    # for audio.
+    # A file or mount that opens with a tag, which the probe chains past.
     "id3v1",
     "id3v2",
 ] }
-# The graphic EQ cascades this crate's `Type::PeakingEQ` filters: rodio 0.22
-# shipped only low/high-pass BLT ones, and nothing replaced them when it went.
-# `DirectForm1` keeps past inputs/outputs in its delay line, so a live
-# coefficient swap (a slider drag) injects no transient.
+# The graphic EQ cascades this crate's `Type::PeakingEQ` filters. `DirectForm1` keeps
+# its delay line across a coefficient swap, so a slider drag injects no transient.
 biquad = "0.6.0"
-# Real-to-complex FFT for the spectrum visualizer. Over raw `rustfft` (which it
-# wraps) because a real input yields N/2+1 bins from a half-length complex FFT —
-# no manual packing, half the work — and its planner hands out reusable scratch,
-# which is what lets the per-frame analysis allocate nothing.
+# Over the `rustfft` it wraps: a real input yields N/2+1 bins from a half-length
+# transform, and its reusable scratch is what lets the per-frame analysis allocate
+# nothing.
 realfft = "3.5.0"
 lofty = "0.24.0"
 
@@ -242,14 +173,11 @@ notify-debouncer-full = "0.7"
 rayon = "1.12"
 blake3 = "1.8.5"
 natord = "1.0.9"
-# Accent folding for the in-memory filter boxes, so they narrow on the same
-# spellings `tracks_fts`'s `remove_diacritics 2` tokenizer does. Already in the
-# lock file transitively, so this line costs no extra build.
+# Accent folding, so filter boxes narrow on the same spellings `tracks_fts`'s
+# `remove_diacritics 2` tokenizer does.
 unicode-normalization = "0.1.25"
-# The format list is what a lofty picture's MIME type can name plus what the
-# cover pickers accept, so it has to be the superset `media::artwork`'s
-# `STORED_EXTENSIONS` is written against — a format the store may name but this
-# list omits is one written to disk and never drawable.
+# The superset of what a lofty picture's MIME type can name and what the cover
+# pickers accept, which `media::artwork`'s `STORED_EXTENSIONS` is written against.
 image = { version = "0.25.10", default-features = false, features = [
     "jpeg",
     "png",
@@ -257,43 +185,26 @@ image = { version = "0.25.10", default-features = false, features = [
     "gif",
     "bmp",
     "tiff",
-    # The odd one out, and only `media::station_logo` produces it — a station's logo
-    # field is a favicon field. Argued at that module's `extension_for`.
+    # Only `media::station_logo` produces this; a logo field is a favicon field.
     "ico",
 ] }
-# Every cover the app draws is resized, most of them more than once, and
-# `image`'s own resamplers go through `get_pixel` — bounds-checked per output
-# pixel, with the output size as their floor, so no store cap reaches them. This
-# is the same convolution written over the flat slice with SIMD. It carries
-# `unsafe` internally, which `unsafe_code = "deny"` doesn't reach and which is
-# the reason the choice is written down here rather than arrived at by
-# `cargo add`; `media::image_decode::resize_rgb8` is the only place it is named.
-#
-# The `image` feature is the compat layer that lets it read and write this tree's
-# own buffers in place. Its `image` requirement is `0.25.6` against the `0.25.10`
-# above, so it unifies rather than resolving a second copy, and it enables no
-# format features of its own.
+# `image`'s resamplers go through `get_pixel`; this is the same convolution over the
+# flat slice with SIMD. It carries `unsafe` internally, which `unsafe_code = "deny"`
+# can't reach; `media::image_decode::resize_rgb8` is the only place it is named.
 fast_image_resize = { version = "6.1.0", features = ["image"] }
-# Scale-on-decode, which `image`'s JPEG path cannot reach: it decodes through
-# `zune-jpeg`, whose reduced IDCTs are chosen by coefficient content and whose
-# `DecoderOptions` exposes only size *limits*. Every tier draws a cover far
-# smaller than the store holds, so decoding at 1/8 or 1/4 and resizing from
-# there is work the full decode was always going to throw away — and it is
-# nearly the whole store, JPEG being what the normalizer re-encodes to.
-# `media::image_decode::decode_capped_to` is the only place it is named, and it
-# falls back to `image` for every format and colour space this doesn't cover.
+# Scale-on-decode, which `image`'s JPEG path can't reach (`zune-jpeg` picks reduced
+# IDCTs by coefficient content, not by request). Every tier draws a cover far smaller
+# than the store holds; `image_decode::decode_capped_to` falls back to `image`.
 jpeg-decoder = "0.3.2"
 lru = "0.18.2"
 
-# Material 3 dynamic colour (Material You). Its optional `image`/`serde`/`libm`
-# features stay off — we feed it quantized pixel data ourselves.
+# Material 3 dynamic colour. Its `image`/`serde`/`libm` features stay off; we feed
+# it quantized pixel data ourselves.
 material-colors = "0.4.2"
 
-# The backdrop's own quantizer, beside rather than instead of the one above: the
-# two answer different questions, and only one of them is "what is this cover
-# mostly made of". Median-cut over a fixed histogram, so it costs a fraction of
-# a millisecond where Celebi's k-means costs tens on photographic art. Its one
-# dependency, `rgb`, is already in the lock file.
+# The backdrop's quantizer, beside rather than instead of the one above: median-cut
+# over a fixed histogram answers "what is this cover mostly made of" in a fraction of
+# a millisecond, where Celebi's k-means costs tens on photographic art.
 color-thief = "0.2.2"
 
 # Serde / config
@@ -305,38 +216,23 @@ dirs = "6.0.0"
 # HTTP (Deezer artist images, scrobbling, the radio directory and its streams)
 reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "query", "rustls", "stream"] }
 
-# `Read` + `Seek` over an HTTP response, backed by a circular buffer an endless
-# stream can't outgrow — what lets a radio station reach Symphonia at all, since
-# `Decoder` wants a seekable reader and a live mount is neither finite nor
-# rewindable.
-#
-# `default-features = false` is the load-bearing half. The default set carries
-# `reqwest/default-tls`, which is OpenSSL on Linux: it would resolve a second TLS
-# stack beside the `rustls` above and land in `cargo-deb`'s `$auto` dependency
-# set. `reqwest-rustls` already implies `reqwest`, which implies `http`, so the
-# one entry is the whole list. Turning defaults off also drops
-# `reqwest/system-proxy`, so this path ignores `HTTP_PROXY` where the shared
-# client honours it; restore it explicitly if that gap ever matters.
+# `Read` plus `Seek` over an HTTP response, backed by a ring an endless stream can't
+# outgrow: `Decoder` wants a seekable reader, a live mount is neither finite nor
+# rewindable. `default-features = false` is load-bearing: the default set pulls
+# `reqwest/default-tls`, a second TLS stack (OpenSSL) landing in cargo-deb's `$auto`
+# deps, and turning it off also drops `system-proxy`, so this path ignores `HTTP_PROXY`.
 stream-download = { version = "0.24.3", default-features = false, features = ["reqwest-rustls"] }
 
-# Icecast/SHOUTcast in-band metadata: the `Icy-MetaData` request header, the
-# `icy-*` response headers, and the reader that strips the interleaved metadata
-# blocks back out so the decoder sees audio only. Same author as
-# `stream-download` and designed to compose with it; its default feature set is
-# already `["reqwest"]`.
+# Icecast in-band metadata: the request header, the `icy-*` response headers, and the
+# reader that strips the interleaved blocks so the decoder sees audio only.
 icy-metadata = "0.6.0"
 
-# MD5 for Last.fm `api_sig` request signing (scrobbling). Last.fm mandates MD5;
-# not used for anything security-sensitive.
+# Last.fm mandates MD5 for `api_sig`; nothing security-sensitive.
 md5 = "0.8.1"
 
-# `flexi_logger` replaced `env_logger` when logs had to reach a file: it is the
-# only candidate with size *and* age rotation in one criterion, and retention
-# that needs no background thread. `services::logging` argues the rest.
-#
-# `textfilter` (its `regex` feature) stays off — we never match a regex inside a
-# `RUST_LOG` directive. `colors` pulls `nu-ansi-term`, the only crate the swap
-# adds against thirteen it retires, so don't "restore" env_logger for weight.
+# Replaced `env_logger` when logs had to reach a file: the only candidate with size
+# and age rotation in one criterion and no background thread. `colors` pulls
+# `nu-ansi-term`, the only crate the swap adds against thirteen it retires.
 log = "0.4.33"
 flexi_logger = { version = "0.31.9", default-features = false, features = ["colors"] }
 
@@ -349,95 +245,70 @@ tempfile = "3.27.0"
 # OS integrations
 souvlaki = "0.8.3"
 rfd = "0.17.2"
-# Hands a path to the OS default handler — used by the track-row
-# "Open Containing Folder" context-menu action.
+# Hands a path to the OS default handler, for "Open Containing Folder".
 open = "5.4.0"
 
-# The single-instance socket (`services::single_instance`). One abstraction over
-# a Linux abstract unix socket and a Windows named pipe, which is the whole
-# reason for the dependency: `discord::ipc` hand-rolls the *client* half in std,
-# but a named-pipe **server** means `CreateNamedPipeW` — an eighth FFI site no
-# Linux runner ever compiles. Default features only; `tokio` would pull in
-# `tokio/net`, which the runtime above deliberately leaves off.
+# The single-instance socket: one abstraction over a Linux abstract unix socket and
+# a Windows named pipe, whose *server* half would otherwise be `CreateNamedPipeW`, an
+# FFI site no Linux runner compiles. `tokio` would pull `tokio/net`, left off above.
 interprocess = "2.4.3"
 
-# Auto-updater — see `src/services/updater/`. `minisign-verify` is zero-dep and
-# verify-only. `semver` powers `is_upgrade()`, so an older-or-equal manifest
-# reports `UpToDate`; string equality on `version` would let a rolled-back
-# `latest.json` force a downgrade. `futures-util`'s `StreamExt` lets the download
-# `.next().await` reqwest's `bytes_stream()` rather than buffering 80–150 MiB.
+# `minisign-verify` is zero-dep and verify-only. `semver` powers `is_upgrade()`, so a
+# rolled-back `latest.json` reports `UpToDate` where string equality would downgrade.
+# `futures-util` lets the download `.next().await` rather than buffer the asset.
 minisign-verify = "0.2.5"
 semver = "1.0.28"
 futures-util = { version = "0.3.33", default-features = false, features = ["std"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# Do NOT enable the `tokio` feature. Cargo unifies it onto Slint's transitive
-# accesskit_unix → atspi → zbus chain, and Slint's a11y thread has no tokio
-# context — it panics at startup with "there is no reactor running". Always-on-
-# top goes through `zbus::blocking::*` inside `spawn_blocking`, which needs
-# neither executor flavour.
+# Do NOT enable the `tokio` feature: cargo unifies it onto Slint's accesskit_unix →
+# atspi → zbus chain, whose a11y thread has no tokio context and panics at startup.
+# Always-on-top uses `zbus::blocking::*` inside `spawn_blocking`.
 zbus = "5.18.0"
 
-# Linux tray (StatusNotifierItem over D-Bus, no GTK). See `src/services/tray/`;
-# Windows/macOS use `tray-icon` below. `default-features = false` drops ksni's
-# default `tokio` feature, which turns on `zbus/tokio` and so walks straight into
-# the footgun above. `async-io` is mandatory — ksni's `compat` module
-# `compile_error!`s without an executor feature — and matches accesskit's;
-# `blocking` gives the sync API the tray's own thread needs.
+# Linux tray (StatusNotifierItem, no GTK); Windows/macOS take `tray-icon` below.
+# Defaults off: ksni's default `tokio` feature turns on `zbus/tokio` and walks into
+# the footgun above. `async-io` is mandatory (`compat` won't compile without an
+# executor feature) and matches accesskit's.
 ksni = { version = "0.3.6", default-features = false, features = ["blocking", "async-io"] }
 
-# Two glibc-only malloc knobs, cfg-gated at their call sites since musl exposes
-# neither. `mallopt` in `main.rs` caps the per-thread arenas — long-lived threads
-# otherwise get one each, all committed slack on a mostly-idle player — and pins
-# the mmap/trim thresholds, which otherwise ratchet up on every large free until
-# nothing returns to the kernel. `malloc_trim` in `tasks/heap_trim.rs` hands
-# retained pages back, once after startup churn and again after a bulk free.
+# Two glibc-only knobs, cfg-gated at their call sites since musl has neither:
+# `mallopt` caps the per-thread arenas and pins the mmap/trim thresholds, which
+# otherwise ratchet up until nothing returns to the kernel, and `malloc_trim` hands
+# retained pages back.
 libc = "0.2.189"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-# `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, the
-# fallback for when `Melodia.exe.old` is still loaded (a second window open at
-# quit). `main()`'s early `remove_file` clears the stale rename otherwise.
-# `Win32_Globalization` covers `GetUserDefaultLocaleName`: the declaration is the
-# half of an FFI site nothing checks, so it comes from here rather than a
-# hand-rolled `extern` block whose signature only review can keep true.
+# `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, for when
+# `Melodia.exe.old` is still loaded, and `GetUserDefaultLocaleName`. Declarations
+# from here rather than a hand-rolled `extern` block only review can keep true.
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem", "Win32_Graphics_Dwm", "Win32_Foundation", "Win32_Globalization"] }
 
-# `std::fs::canonicalize` returns the extended-length form (`\\?\C:\...`) on
-# Windows, which lands in `folders.path` / `tracks.file_path` and then fails to
-# match the plain `C:\...` paths `read_dir` yields — Browse rows go grey as
-# "disk-only". `dunce` strips the prefix where the path fits in `MAX_PATH`.
-# Reached through `utils::canonicalize_path`, which forwards to std elsewhere.
+# `canonicalize` returns the extended-length form (`\\?\C:\...`), which lands in
+# `folders.path` and then fails to match the plain paths `read_dir` yields, greying
+# Browse rows out as disk-only. Reached through `utils::canonicalize_path`.
 dunce = "1.0.5"
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
-# `default-features = false` drops the `gtk` + `libxdo` features, which are the
-# Linux paths (libappindicator / X11 `xdotool`) that `ksni` covers instead. The
-# icon is created on the main thread and its menu events pumped from the winit
-# loop Slint owns. See `src/services/tray/`.
+# Defaults off to drop `gtk` and `libxdo`, the Linux paths `ksni` covers. The icon is
+# created on the main thread, its menu events pumped from Slint's winit loop.
 tray-icon = { version = "0.24.2", default-features = false }
 
-# The build script hashes with the same primitive the crate looks up with, by
-# compiling the one shared file twice — see `src/services/radio_blocklist/source.rs`.
-# Pinned to the version the runtime dependency already carries, since two of them
-# would be two different hashes.
+# The build script hashes with the same primitive the crate looks up with, compiling
+# one shared file twice; pinned to the runtime version, two of them being two hashes.
 [build-dependencies]
 blake3 = "1.8.5"
 
-# Embeds an `ICON` resource into Melodia.exe, so the taskbar, Alt-Tab thumbnail
-# and Explorer entry aren't the generic placeholder. A maintained fork of
-# `winres` (which broke on rustc ≥ 1.61); works from MSVC and GNU alike.
-# `wix/main.wxs` reads the same `assets/melodia.ico` for its shortcut and
-# Add/Remove entry, so the EXE icon has one source.
+# Embeds the `ICON` resource so the taskbar and Explorer entries aren't the generic
+# placeholder. `wix/main.wxs` reads the same `assets/melodia.ico`.
 [target.'cfg(target_os = "windows")'.build-dependencies]
 winresource = "0.1.31"
 
 [dev-dependencies]
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "test-util"] }
 
-# Defined at workspace level and inherited by both packages, so `melodia-ui`
-# can't quietly sit outside the gate. Its generated module carries its own
-# blanket `#[allow]` block, which already covers `unsafe_code`.
+# Workspace-level and inherited by both packages, so `melodia-ui` can't sit outside
+# the gate; its generated module carries a blanket `#[allow]`.
 [lints]
 workspace = true
 
@@ -446,9 +317,8 @@ unused = { level = "warn", priority = -1 }
 unsafe_code = "deny"
 rust_2024_compatibility = { level = "warn", priority = -1 }
 # Deliberately NOT enabling 1.97's `dead_code_pub_in_binary`: a test harness is
-# itself an executable, so under `--all-targets` it treats every `pub` item
-# reachable only from `main.rs` as dead and flags the whole library API. Measured
-# 670 hits, all from the test targets — 0 on `--lib`, 0 on `--bin`.
+# itself an executable, so under `--all-targets` every `pub` item reachable only
+# from `main.rs` reads as dead and the whole library API gets flagged.
 
 [workspace.lints.clippy]
 correctness = { level = "deny", priority = -1 }
@@ -489,30 +359,19 @@ io_other_error              = "warn"
 lto = "fat"
 codegen-units = 1
 panic = "abort"
-# DWARF is most of the size win; the symbol table stays because `strip = true`
-# (alias for "symbols") leaves panic backtraces as raw hex, useless in the crash
-# reports users attach. rustc's own docs say to avoid it when crash-reporting.
+# DWARF is most of the size win; symbols stay because `strip = true` leaves panic
+# backtraces as raw hex, useless in the crash reports users attach.
 strip = "debuginfo"
 
-# The `"*"` glob is "all dependencies (but not any workspace member)", so this
-# never reaches `melodia-ui`. Raising it for that crate specifically
-# (`[profile.dev.package.melodia-ui]`) would be nearly free on rebuild time, but
-# that crate is also the build-memory peak the CI `CARGO_BUILD_JOBS` cap holds
-# down — measure before making the trade.
+# The `"*"` glob excludes workspace members, so this never reaches `melodia-ui`,
+# which is also the build-memory peak the CI `CARGO_BUILD_JOBS` cap holds down.
 [profile.dev.package."*"]
 opt-level = 3
 
-# winit 0.30.13 has no `wl_data_device` handling, so `WindowEvent::DroppedFile`
-# and friends fire everywhere but Wayland (rust-windowing/winit#1881, open since
-# 2021, not being worked on). `winit/` is that tag plus 3 commits — PR #4009 by
-# PeakKS, a WindowId fixup, URI percent-decoding — reaching
-# `WinitWindowAccessor::on_winit_window_event` in
-# `src/ui/window_chrome/winit_filter.rs`. The additions are cfg-gated to Linux, so
-# every platform builds the fork.
-#
-# In-tree rather than a path to an external checkout, so a fresh clone and every
-# CI runner build identically with no setup. To follow an upstream bump, rebase
-# the fork onto the new tag and re-sync `winit/`; delete both once upstream
+# winit 0.30.13 has no `wl_data_device` handling, so `WindowEvent::DroppedFile` fires
+# everywhere but Wayland (rust-windowing/winit#1881). `winit/` is that tag plus 3
+# commits reaching `ui::window_chrome::winit_filter`, cfg-gated to Linux and in-tree
+# so a fresh clone and every CI runner build identically. Delete both once upstream
 # lands native Wayland DnD.
 [patch.crates-io]
 winit = { path = "winit" }

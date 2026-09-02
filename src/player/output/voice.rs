@@ -74,7 +74,16 @@ struct Loaded {
 }
 
 enum Command {
-    Append(Loaded),
+    /// Queue a source, anchoring the clock at `frames` of it if it mounts straight away.
+    ///
+    /// `frames` is non-zero for a resume, whose source the control thread positioned before
+    /// handing it over — the same reason [`Command::Replace`] carries one. A source that lands
+    /// behind something still playing is a gapless stage, which starts from its own top whenever
+    /// the current one drains, so the anchor only applies to an immediate mount.
+    Append {
+        loaded: Loaded,
+        frames: u64,
+    },
     Clear,
     /// Swap the playing source for one the control thread has already positioned, anchoring the
     /// clock at `frames` of it.
@@ -137,10 +146,21 @@ pub struct Voice {
 }
 
 impl Voice {
-    /// Queue `source` behind whatever is already on this voice.
+    /// Queue `source` behind whatever is already on this voice, starting it from its top.
     pub fn append<S: AudioSource + 'static>(&self, source: S) {
+        self.append_at(source, Duration::ZERO);
+    }
+
+    /// [`Self::append`], with the clock anchored at `position` of `source` when it mounts.
+    ///
+    /// A resume hands over a source the control thread has already seeked, so the frames it will
+    /// hand out start part way in — and the clock counts what it hands out. Without the anchor the
+    /// deck reports a position of zero for audio that is minutes deep, which is what the restored
+    /// position turned into on the first tick after mounting.
+    pub fn append_at<S: AudioSource + 'static>(&self, source: S, position: Duration) {
+        let frames = frames_at(position, source.sample_rate());
         let loaded = self.load(source);
-        self.send_counted(Command::Append(loaded));
+        self.send_counted(Command::Append { loaded, frames });
     }
 
     /// Put `source` on this voice in place of the one `mounted` names, with the clock anchored at
@@ -383,7 +403,7 @@ impl VoicePull {
         }
         loop {
             match self.commands.try_recv() {
-                Ok(Command::Append(loaded)) => self.accept(loaded),
+                Ok(Command::Append { loaded, frames }) => self.accept(loaded, frames),
                 Ok(Command::Clear) => self.clear(),
                 Ok(Command::Replace {
                     loaded,
@@ -396,9 +416,11 @@ impl VoicePull {
         self.shared.serviced.store(seen, Ordering::Release);
     }
 
-    fn accept(&mut self, loaded: Loaded) {
+    /// A staged source drops the anchor on purpose: it mounts from
+    /// [`Self::finish_current`] whenever the current one drains, which is its own top.
+    fn accept(&mut self, loaded: Loaded, frames: u64) {
         if self.current.is_none() {
-            self.start(loaded);
+            self.start_at(loaded, frames);
         } else {
             self.staged.push_back(loaded);
         }
@@ -415,7 +437,7 @@ impl VoicePull {
         self.current = Some(loaded);
     }
 
-    /// [`Self::start_at`] from the top, which is every arrival but a seek's.
+    /// [`Self::start_at`] from the top, which is where a staged successor begins.
     fn start(&mut self, loaded: Loaded) {
         self.start_at(loaded, 0);
     }

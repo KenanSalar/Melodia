@@ -14,6 +14,7 @@
 
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};
+use std::time::Duration;
 
 use crate::error::AppError;
 
@@ -35,14 +36,19 @@ pub struct Deck {
 }
 
 impl Deck {
-    /// Apply the transport parameters and start `source` on this deck.
-    pub fn start<S>(&self, source: S, volume: f64, speed: f64)
+    /// Apply the transport parameters and start `source` on this deck, with its clock anchored at
+    /// `start` — [`Duration::ZERO`] for anything beginning at its own top.
+    ///
+    /// The anchor is a parameter rather than an invariant because the deck cannot see it: a resume
+    /// hands over a source already seeked, and one mounted at zero reports minutes-deep audio as
+    /// position zero.
+    pub fn start<S>(&self, source: S, volume: f64, speed: f64, start: Duration)
     where
         S: AudioSource + 'static,
     {
         self.voice.set_volume(volume);
         self.voice.set_speed(speed);
-        self.voice.append(source);
+        self.voice.append_at(source, start);
         self.voice.play();
     }
 
@@ -149,14 +155,19 @@ impl Decks {
 
     /// Hard cut: clear **both** decks — so a crossfade in flight can't leave its outgoing track
     /// playing behind the new one — and start the source on the (still) active deck.
-    pub fn cut_to<S>(&self, volume: f64, speed: f64, build: impl FnOnce(&Deck) -> S)
-    where
+    pub fn cut_to<S>(
+        &self,
+        volume: f64,
+        speed: f64,
+        start: Duration,
+        build: impl FnOnce(&Deck) -> S,
+    ) where
         S: AudioSource + 'static,
     {
         self.clear_all();
         let target = self.active();
         let source = build(target);
-        target.start(source, volume, speed);
+        target.start(source, volume, speed, start);
     }
 
     /// Overlap: start the source on the idle deck ramping up from silence, fade the active deck
@@ -184,7 +195,10 @@ impl Decks {
         // an outgoing one still at unity, an overshoot bounded by control-thread preemption rather
         // than by `output::mixer::LOCKSTEP_FRAMES`. This way round the same race costs a dip.
         self.active().fade.arm(None, 0.0, fade_ms, true);
-        self.decks[target].start(source, volume, speed);
+        // Always from the top: a crossfade is a track *change*, and the one path that mounts a
+        // pre-seeked source hard-cuts instead (`crossfade::manual_fade_ms` returns 0 while
+        // resuming at a position).
+        self.decks[target].start(source, volume, speed, Duration::ZERO);
         self.active = target;
     }
 }

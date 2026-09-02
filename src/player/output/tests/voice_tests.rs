@@ -212,6 +212,45 @@ fn clearing_a_voice_that_drained_on_its_own_still_rewinds_the_clock() {
     assert_eq!(voice.position(), Duration::ZERO, "the clear left the drained source's position");
 }
 
+/// A resume mounts onto a *cleared* deck, so it is an `append` rather than a `replace` — and it
+/// carries the same already-positioned source, so it owes the same anchor.
+///
+/// Without one the deck reports zero for audio minutes deep, the next position tick writes that
+/// back over the restored position, and the save on exit persists it: the resume point walks to
+/// the top of the track over a couple of launches. The `replace` above was anchored when the seek
+/// moved off the audio thread and this path was left behind it.
+#[test]
+fn an_append_anchors_the_clock_where_the_caller_asked() {
+    let (voice, mut pull) = pair(mono(RATE));
+
+    let resume = Duration::from_secs(2);
+    voice.append_at(seconds_of(4, RATE), resume);
+    pump(&mut pull, 64);
+
+    let got = voice.position();
+    assert!(
+        got.abs_diff(resume) < Duration::from_millis(50),
+        "the voice read {got:?} after resuming at {resume:?}"
+    );
+}
+
+/// The anchor belongs to the mount, not to the queue behind it: a staged source is a gapless
+/// successor, which begins at its own top whenever the one ahead of it drains.
+#[test]
+fn an_anchor_does_not_follow_a_source_that_only_staged() {
+    let (voice, mut pull) = pair(mono(RATE));
+
+    voice.append(silence(1_000, RATE));
+    voice.append_at(seconds_of(4, RATE), Duration::from_secs(2));
+
+    pump(&mut pull, 1_200);
+    let position = voice.position();
+    assert!(
+        position < Duration::from_millis(10),
+        "the staged successor started at {position:?} rather than at its own beginning"
+    );
+}
+
 /// A seek is a `replace`, so the clock has to come from the caller's target rather than from the
 /// frames the incoming source has handed over, which at the swap is none.
 #[test]
