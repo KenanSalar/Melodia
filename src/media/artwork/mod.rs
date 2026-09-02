@@ -425,13 +425,13 @@ fn resize_to_cover(
     Some(image::imageops::crop_imm(&resized, x, y, width, height).to_image())
 }
 
-/// Saturating `f64` → pixel count, for the two resamplers' scale arithmetic.
+/// Saturating `f64` → pixel count, for [`resize_to_cover`]'s two scaled sides.
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "image dimensions stay well below u32::MAX in practice; this helper is the saturating boundary"
 )]
-pub(super) fn f64_to_pixel(v: f64) -> u32 {
+fn f64_to_pixel(v: f64) -> u32 {
     if v.is_nan() || v <= 0.0 {
         0
     } else if v >= f64::from(u32::MAX) {

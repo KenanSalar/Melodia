@@ -285,9 +285,9 @@ impl FavoritesUi {
     }
 }
 
-// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 impl_section_state_helpers!(FavoritesUi);
 
+// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<FavoritesUi>();

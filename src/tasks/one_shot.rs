@@ -29,8 +29,11 @@ pub enum OnFailure {
 /// What distinguishes one sweep from the other: its marker, and what a failure costs.
 #[derive(Clone, Copy)]
 pub struct Sweep {
-    /// Names the pass in its log lines and in `persist_blocking`'s.
+    /// Names the pass in the two lines below. Prose rather than the flag name, these landing in
+    /// the log tail a bug report carries.
     pub label: &'static str,
+    /// The `settings.json` flag [`mark`](Self::mark) raises, for `persist_blocking`'s own line.
+    pub marker: &'static str,
     pub done: fn(&LibraryFlags) -> bool,
     pub mark: fn(&mut LibraryFlags),
     pub on_failure: OnFailure,
@@ -64,7 +67,7 @@ where
             }
         }
 
-        state.persist_blocking(sweep.label, move |state| {
+        state.persist_blocking(sweep.marker, move |state| {
             services::settings::mutate_settings(&state.paths, |settings| {
                 (sweep.mark)(&mut settings.library);
             })

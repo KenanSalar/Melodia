@@ -40,7 +40,8 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
         spawner,
         state,
         one_shot::Sweep {
-            label: "ratings_imported_from_tags",
+            label: "Rating import",
+            marker: "ratings_imported_from_tags",
             done: |flags| flags.ratings_imported_from_tags,
             mark: |flags| flags.ratings_imported_from_tags = true,
             on_failure: one_shot::OnFailure::Retry,

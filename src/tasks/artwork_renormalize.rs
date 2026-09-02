@@ -42,7 +42,8 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
         spawner,
         state,
         one_shot::Sweep {
-            label: "artwork_store_normalized",
+            label: "Artwork renormalize",
+            marker: "artwork_store_normalized",
             done: |flags| flags.artwork_store_normalized,
             mark: |flags| flags.artwork_store_normalized = true,
             on_failure: one_shot::OnFailure::Mark,

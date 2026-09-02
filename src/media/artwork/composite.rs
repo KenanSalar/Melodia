@@ -21,6 +21,7 @@ use super::{
     resize_to_cover, stored_name,
 };
 
+/// Side of the collage [`compose_artwork`] persists.
 ///
 /// **Derived from [`STORE_MAX_DIM`] rather than spelled beside it**: the composite is written
 /// *into* the store, so a larger canvas would be encoded once and immediately re-encoded by the

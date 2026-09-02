@@ -5,8 +5,12 @@ import { Settings } from "../settings.slint";
 // cross-global action target is the updater, keeping that edge inside one file.
 
 // In-app auto-update state, owned by `src/ui/settings/updater_settings.rs` and
-// `src/ui/callbacks/updater/`. `UpdaterState` in `src/services/updater/state.rs` is the source of
-// truth and these are its projection; `update-section.slint` imports it aliased back to `Updater`.
+// `src/ui/callbacks/updater/`. The `in-out` half is the check/install lifecycle, written directly
+// by `ui::callbacks::updater::paint` and, for the background check, by `tasks::updater_daily`; the
+// `in` half is capability, seeded once at startup by `updater_settings`. `UpdaterEvent`
+// (`src/services/updater/event.rs`) is a *parallel* channel carrying the same moments to the toast
+// stack below rather than a source these properties are projected from.
+// `update-section.slint` imports this aliased back to `Updater`.
 //
 // The prefix is not cosmetic: Slint's codegen mangles a bare `Updater` with an internal `_NNNN`
 // suffix and doesn't re-export it, so `crate::Updater` won't resolve. `notes-short` is plain text,

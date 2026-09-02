@@ -81,7 +81,7 @@ fn a_kind_without_a_message_still_names_itself() {
 /// Everything after the first is the same fault repeating, and keeping it would
 /// trade one allocation for another on the audio thread.
 #[test]
-fn the_first_backend_description_is_the_one_kept() {
+fn the_first_unclassified_description_is_the_one_kept() {
     let health = AudioStreamHealth::default();
     health.record(&backend("first"));
     health.record(&backend("second"));
@@ -97,7 +97,7 @@ fn the_first_backend_description_is_the_one_kept() {
 }
 
 #[test]
-fn a_window_with_no_backend_error_carries_no_description() {
+fn a_window_with_no_unclassified_error_carries_no_description() {
     let health = AudioStreamHealth::default();
     health.record(&ErrorKind::Xrun.into());
 

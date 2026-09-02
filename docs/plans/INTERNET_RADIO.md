@@ -335,7 +335,7 @@ the three it split into and Phase 7 having added the rest;
 | `melodia-ui/ui/settings.slint` | `radio-enabled` and its changed callback on the `Settings` global |
 | `melodia-ui/ui/views/settings/pages/services-page.slint` | A third card, and one more term in `has-matches` |
 | `src/services/settings/data.rs` | `RadioFlags`, flattened into `SettingsData`, defaulting off |
-| `src/boot/ui_setup.rs` | The nav-index guard, the tab seed, the slice install; later, folding a persisted 10 when radio is off |
+| `src/boot/ui_setup/views.rs` | The nav-index guard, the tab seed, the slice install; later, folding a persisted 10 when radio is off |
 | `src/services/view_state.rs` | `radio_tab: i32`, and `MAX_NAV_INDEX` — the bound the persisted nav index's write clamp and read guard now share |
 | `src/library/settings/view.rs` | `set_radio_tab`, and `set_last_nav_index`'s clamp off that const |
 | `src/ui/view_tag.rs` | The nav-10 arm, naming the tab like the other three tabbed pages |
@@ -499,7 +499,7 @@ and the fifth artwork reference column in both halves of the ledger.
   `models.slint` and `to_slint_radio_station_row` in `src/ui/radio/mod.rs`.
 
 **Two things Phase 5 inherits.** `library::radio` is already the single door D15's guard
-needs, and it deliberately does not bump `library_changed_tx`, no library view showing a
+needs, and it deliberately does not bump `library_changed`, no library view showing a
 station.
 
 **Gates run:** clippy, fmt, full `cargo test` (1792 unit + 16 integration, green). The

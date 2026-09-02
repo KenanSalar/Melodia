@@ -372,9 +372,9 @@ pub fn to_slint_browse_track_row(f: &BrowseFile) -> UiTrackListRow {
     }
 }
 
-// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 impl_section_state_helpers!(BrowseUi);
 
+// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<BrowseUi>();
