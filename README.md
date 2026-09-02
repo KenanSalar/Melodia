@@ -103,7 +103,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Automatic pre-migration database backups, kept in a `backups/` folder beside the library database; the three most recent are retained and older ones retire themselves, so upgrading never accumulates copies of your library without bound
 
 ### Playback
-- Gapless playback, with the next track staged on the deck before the current one ends
+- Gapless playback, with the next track staged on the deck before the current one ends. AAC albums run edge to edge too: an AAC encoder pads the start of every track and writes down how much, and Melodia reads that back from either the `iTunSMPB` tag or the MP4 edit list and drops those frames, along with the padding at the end
 - Audio crossfade (1–12 s) that overlaps the end of one track with the start of the next, running the two on separate mixer decks with a sample-accurate complementary ramp so the sum can never clip; optionally skips same-album transitions to keep continuous mixes gapless, extends to manual track changes, and fades out on pause and stop
 - Queue management with shuffle and repeat modes (Off, All, One)
 - Playing a track from any list (an album, a playlist, a folder in Files, search results, Favorites) loads that whole list into the queue and starts on the track you picked, so the rest of the album or playlist follows on its own. With shuffle already on, the remaining tracks are shuffled behind your pick rather than played in order. **Play Next** and **Add to Queue** in the right-click menu still add to the existing queue without replacing it
