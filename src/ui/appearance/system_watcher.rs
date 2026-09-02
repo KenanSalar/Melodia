@@ -6,7 +6,6 @@
 use std::sync::Arc;
 
 use parking_lot::RwLock;
-use tokio::sync::watch;
 
 use crate::AppWindow;
 use crate::state::{AppState, Signal};
@@ -14,6 +13,8 @@ use crate::themes::SystemColorState;
 
 #[cfg(target_os = "linux")]
 use slint::ComponentHandle;
+#[cfg(target_os = "linux")]
+use tokio::sync::watch;
 
 #[cfg(target_os = "linux")]
 use crate::library;
