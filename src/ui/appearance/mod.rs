@@ -24,7 +24,7 @@ use tokio::sync::watch;
 use crate::library;
 #[cfg(target_os = "linux")]
 use crate::services;
-use crate::state::AppState;
+use crate::state::{AppState, Signal};
 use crate::themes::{self, SystemColorState, ThemeDef};
 use crate::{AppWindow, Settings};
 
@@ -39,11 +39,9 @@ pub struct AppearanceHandles {
     /// You palette into `material_you` and triggers a repaint by sending
     /// a fresh snapshot through [`Self::repaint_tx`].
     pub os_state: Arc<parking_lot::RwLock<SystemColorState>>,
-    /// Counter-style watch channel — every appearance callback (theme /
-    /// variant / accent / colour-style click) increments the counter so
-    /// the coordinator wakes and re-evaluates against the latest settings
-    /// snapshot.
-    pub kick_tx: watch::Sender<u64>,
+    /// Every appearance callback (theme / variant / accent / colour-style click) bumps this so
+    /// the coordinator wakes and re-evaluates against the latest settings snapshot.
+    pub kick: Signal,
     /// Snapshot-style repaint channel — the Material You coordinator
     /// publishes the fresh [`SystemColorState`] after each palette
     /// generation; a UI-thread subscriber spawned inside [`fn@install`]
@@ -135,16 +133,16 @@ pub(super) fn persist_and_kick(
     theme_id: &str,
     variant_id: &str,
     accent_id: &str,
-    kick_tx: &watch::Sender<u64>,
+    kick: &Signal,
 ) {
     let s = state.clone();
     let theme_id = theme_id.to_owned();
     let variant_id = variant_id.to_owned();
     let accent_id = accent_id.to_owned();
-    let kick = kick_tx.clone();
+    let kick = kick.clone();
     state.runtime.spawn_blocking(move || {
         match library::settings::set_appearance(&s, theme_id, variant_id, accent_id) {
-            Ok(()) => kick.send_modify(|n| *n = n.wrapping_add(1)),
+            Ok(()) => kick.bump(),
             Err(e) => log::warn!(
                 "persist appearance: {e}; suppressing Material You kick (disk write failed, \
                  coordinator would observe stale settings)"

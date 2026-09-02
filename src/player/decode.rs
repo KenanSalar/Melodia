@@ -69,6 +69,35 @@ pub(super) fn audio_params(track: &Track) -> Option<&AudioCodecParameters> {
         .filter(|params| params.codec != CODEC_ID_NULL_AUDIO)
 }
 
+/// Which way [`ticks_to_frames`] resolves a count the timebase does not divide evenly.
+#[derive(Clone, Copy)]
+pub(super) enum Rounding {
+    /// Never claim more frames than the count is worth — a trim that overshoots cuts real audio.
+    Down,
+    /// Never claim fewer — a post-seek trim that undershoots replays the tail of the last packet.
+    Up,
+}
+
+/// Restates `ticks`, counted against `time_base`, in frames decoded at `rate`.
+///
+/// `u128` throughout: the product of a tick count, a timebase numerator and a sample rate overflows
+/// `u64` for lengths a container can legitimately state. `None` where the result does not fit back
+/// into one, which is a container stating nonsense rather than a case to round.
+pub(super) fn ticks_to_frames(
+    ticks: u64,
+    time_base: TimeBase,
+    rate: SampleRate,
+    rounding: Rounding,
+) -> Option<u64> {
+    let scaled = u128::from(ticks) * u128::from(time_base.numer.get()) * u128::from(rate.get());
+    let denom = u128::from(time_base.denom.get());
+    let frames = match rounding {
+        Rounding::Down => scaled / denom,
+        Rounding::Up => scaled.div_ceil(denom),
+    };
+    u64::try_from(frames).ok()
+}
+
 /// Build a decoder for `params`, taking them by value because it rewrites an HE-AAC config on the
 /// way past ([`super::aac_config`]).
 ///
@@ -338,3 +367,7 @@ fn fill(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/decode_tests.rs"]
+mod tests;

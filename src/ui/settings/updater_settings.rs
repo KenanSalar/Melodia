@@ -12,9 +12,9 @@
 //!   which takes the whole section rather than trading its buttons.
 //! - [`install_event_subscriber`] hooks `event_rx` onto a UI-thread
 //!   `slint::spawn_local` loop that translates each `UpdaterEvent`
-//!   variant into a [`NotificationsUi::show`] call. Strings come from
-//!   the `Settings.invoke_update_*()` callbacks so they re-resolve in
-//!   the currently-selected locale on each push.
+//!   variant into a [`NotificationsUi::show_localized`] call. All three
+//!   rows are sticky, so the `Settings.invoke_update_*()` callbacks are
+//!   kept as a recipe rather than resolved once at push time.
 
 use std::rc::Rc;
 
@@ -25,7 +25,7 @@ use tokio::sync::watch;
 use crate::services::settings;
 use crate::services::updater::{UpdaterEvent, is_available, is_system_install};
 use crate::state::AppState;
-use crate::ui::shell::notifications::{NotificationParams, NotificationsUi};
+use crate::ui::shell::notifications::{NotificationsUi, RowText};
 use crate::{AppWindow, MelodiaUpdater, Settings};
 
 // (FailureKind classification is performed at the send site in
@@ -89,29 +89,30 @@ pub fn install_event_subscriber(
 }
 
 fn dispatch(ui: &AppWindow, notifications: &NotificationsUi, event: UpdaterEvent) {
-    let settings = ui.global::<Settings>();
     match event {
         UpdaterEvent::Available { version, .. } => {
             // Replace any prior update-available toast — only show the
             // most-recently-reported version. (Without this, two
             // successive daily checks could stack two cards.)
             notifications.dismiss_by_kind("install-update");
-            notifications.show(NotificationParams {
-                variant: "info".into(),
-                title: settings.invoke_update_available_title(),
-                message: settings.invoke_update_available_message(version.into()),
-                action_label: settings.invoke_update_install_action_label(),
-                action_kind: "install-update".into(),
+            notifications.show_localized(ui, "info", "install-update", move |ui| {
+                let g = ui.global::<Settings>();
+                RowText {
+                    title: g.invoke_update_available_title(),
+                    message: g.invoke_update_available_message(version.clone().into()),
+                    action_label: g.invoke_update_install_action_label(),
+                }
             });
         }
         UpdaterEvent::Installed => {
             notifications.dismiss_by_kind("install-update");
-            notifications.show(NotificationParams {
-                variant: "success".into(),
-                title: settings.invoke_update_installed_title(),
-                message: settings.invoke_update_installed_message(),
-                action_label: settings.invoke_update_restart_action_label(),
-                action_kind: "update-restart".into(),
+            notifications.show_localized(ui, "success", "update-restart", |ui| {
+                let g = ui.global::<Settings>();
+                RowText {
+                    title: g.invoke_update_installed_title(),
+                    message: g.invoke_update_installed_message(),
+                    action_label: g.invoke_update_restart_action_label(),
+                }
             });
         }
         UpdaterEvent::Failed { kind } => {
@@ -119,13 +120,12 @@ fn dispatch(ui: &AppWindow, notifications: &NotificationsUi, event: UpdaterEvent
             // (e.g. the daily task wakes up to a still-broken DNS)
             // would otherwise stack identical error cards.
             notifications.dismiss_by_kind("update-failed");
-            notifications.show(NotificationParams {
-                variant: "error".into(),
-                title: settings.invoke_update_failed_title(),
-                message: settings
-                    .invoke_update_failed_reason(SharedString::from(kind.as_kind_str())),
-                action_label: SharedString::default(),
-                action_kind: "update-failed".into(),
+            notifications.show_localized(ui, "error", "update-failed", move |ui| {
+                let g = ui.global::<Settings>();
+                RowText::plain(
+                    g.invoke_update_failed_title(),
+                    g.invoke_update_failed_reason(SharedString::from(kind.as_kind_str())),
+                )
             });
         }
     }

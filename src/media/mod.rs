@@ -6,6 +6,7 @@ pub mod itunes;
 pub mod logo_discovery;
 pub mod logo_tile;
 pub mod metadata;
+pub mod rating_tags;
 pub mod scanner;
 pub mod self_writes;
 pub mod station_logo;

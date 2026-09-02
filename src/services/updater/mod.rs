@@ -24,7 +24,6 @@ pub mod linux_pkg;
 pub mod manifest;
 pub mod minisign;
 mod probe;
-pub mod state;
 pub mod system_install;
 pub mod target;
 pub mod version;
@@ -32,7 +31,6 @@ pub mod version;
 pub use check::{CheckOutcome, check_for_update};
 pub use event::{FailureKind, UpdaterEvent};
 pub use install::{download_and_install, prune_stale_staging};
-pub use state::UpdaterState;
 pub use system_install::is_system_install;
 
 /// Whether this build has an in-app updater at all.

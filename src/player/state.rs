@@ -601,15 +601,6 @@ impl PlayerState {
         vec![PlayerAction::SetVolume(self.effective_volume())]
     }
 
-    /// Build actions for set-muted command.
-    pub fn build_set_muted_actions(&mut self, muted: bool) -> Vec<PlayerAction> {
-        if muted && !self.is_muted {
-            self.pre_mute_volume = self.volume;
-        }
-        self.is_muted = muted;
-        vec![PlayerAction::SetVolume(self.effective_volume())]
-    }
-
     /// Build actions for toggle-mute command.
     pub fn build_toggle_mute_actions(&mut self) -> Vec<PlayerAction> {
         let new_muted = !self.is_muted;

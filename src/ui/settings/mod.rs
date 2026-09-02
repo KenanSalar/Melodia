@@ -1,4 +1,4 @@
-//! The Settings page: its chrome, and eleven of the fourteen section cards.
+//! The Settings page: its chrome, and twelve of the fifteen section cards.
 //!
 //! The other three are [`crate::ui::appearance`]'s — Appearance and Window Chrome because
 //! they write `Theme` brushes and the window-chrome globals rather than a settings row,
@@ -21,6 +21,7 @@ pub mod locale;
 pub mod motion;
 pub mod playback_settings;
 pub mod radio_settings;
+pub mod rating_writeback;
 pub mod scrobbling_settings;
 pub mod settings_page;
 pub mod updater_settings;

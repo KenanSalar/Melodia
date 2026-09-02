@@ -99,6 +99,15 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
             log::warn!("select_bundled_translation({code}): {e:?}");
         }
 
+        // The switch above reaches every live `@tr` binding and nothing Rust rendered
+        // through a trampoline and stored. The band's chips are the one such surface that
+        // can outlive the page that published them — `clear_if_stale` deliberately keeps
+        // them while Now Playing covers a band, and clicking Settings from there leaves
+        // no gate edge to hand them back — so drop them rather than re-rendering: no band
+        // is mounted here, and every section-enter re-fetches and republishes.
+        crate::ui::hero_chips::clear(&ui);
+        s.locale_changed.bump();
+
         // Keep `language-idx` in sync defensively — the dropdown's two-way
         // bind already writes it, but a future code path could call the
         // callback programmatically without touching the dropdown.

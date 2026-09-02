@@ -5,6 +5,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Model, SharedString};
 
 use crate::library;
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
@@ -15,16 +16,21 @@ use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Browse};
 
 /// Wire the list's own callbacks, and seed the sort the first navigation applies.
-pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
+pub(super) fn wire(
+    ui: &AppWindow,
+    state: &AppState,
+    view_state: Option<&ViewStateData>,
+    browse_ui: &Arc<BrowseUi>,
+) {
     let g = ui.global::<Browse>();
     let weak = ui.as_weak();
 
     // Seed the sort header + the `BrowseUi` sort cache from the persisted
     // `view_sort["browse"]` so the first folder navigation sorts with it.
-    if let Some((field, dir)) = persisted_sort(state, view_id::BROWSE) {
-        g.set_sort_field(SharedString::from(field.as_str()));
-        g.set_sort_dir(SharedString::from(dir));
-        browse_ui.set_sort(field, dir.to_owned());
+    if let Some(sort) = persisted_sort(view_state, view_id::BROWSE) {
+        g.set_sort_field(SharedString::from(sort.field.as_str()));
+        g.set_sort_dir(SharedString::from(sort.dir.as_str()));
+        browse_ui.set_sort(sort.field.clone(), sort.dir.as_str().to_owned());
     }
 
     // play-row: double-click loads every in-library file in this folder into

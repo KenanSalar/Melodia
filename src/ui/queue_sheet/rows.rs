@@ -74,21 +74,8 @@ pub(super) fn rebuild_rows(
     // Snapshot the old selection bits into a map so the per-row lookup
     // below is O(1) — a linear `.find()` per row made this O(n²) overall,
     // re-run on every queue mutation (including each frame of a drag).
-    //
-    // `row_set_changed` rides along on the same lock: the shadow's ids
-    // mirror the model's while the sheet is open, so comparing them
-    // against the incoming order says whether the rows moved, arrived or
-    // left — which is exactly when `apply_rows_keyed` resets the model
-    // instead of patching it. `skip_to_index` bumps the queue version
-    // without touching the row set, so a plain track advance takes the
-    // patch path and must *not* count.
-    let (row_set_changed, old_sel) = {
-        let guard = shadow.lock();
-        let changed = guard.iter().map(|e| e.id).ne(qvm.queue_tracks.iter().map(|t| t.id));
-        let sel: std::collections::HashMap<i64, bool> =
-            guard.iter().map(|e| (e.id, e.selected)).collect();
-        (changed, sel)
-    };
+    let old_sel: std::collections::HashMap<i64, bool> =
+        shadow.lock().iter().map(|e| (e.id, e.selected)).collect();
     let mut new_shadow: Vec<ShadowEntry> = Vec::with_capacity(qvm.queue_tracks.len());
     let mut new_rows: Vec<QueueRow> = Vec::with_capacity(qvm.queue_tracks.len());
     for t in &qvm.queue_tracks {
@@ -97,7 +84,10 @@ pub(super) fn rebuild_rows(
         new_rows.push(to_slint_queue_row(t.as_ref(), selected));
     }
 
-    crate::ui::model_diff::apply_rows_keyed(queue_model, new_rows, |r| r.id);
+    // The swap's own verdict rather than the shadow's, which only mirrors the model. It resets
+    // when the rows moved, arrived or left and patches otherwise, so a `skip_to_index` that
+    // bumps the queue version without touching the row set doesn't count as a change.
+    let row_set_changed = crate::ui::model_diff::apply_rows_keyed(queue_model, new_rows, |r| r.id);
     let selected_count =
         i32::try_from(new_shadow.iter().filter(|e| e.selected).count()).unwrap_or(i32::MAX);
     *shadow.lock() = new_shadow;

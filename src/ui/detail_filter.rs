@@ -5,10 +5,9 @@
 //! per-view Slint global and the `*Ui` holding the caches differ. Captured once here over
 //! the [`RowSelectionView`] trait and a [`FilterRefs`] borrow.
 //!
-//! Album / Genre / Playlist run the whole pass on the UI thread through
-//! [`apply_filtered_detail`]. Artist does its own worker-thread row prep, also rebuilding
-//! an Albums strip, so it reuses only [`restamp_selection`] and the predicate from
-//! [`crate::ui::row_match`].
+//! All four run the whole pass on the UI thread through [`apply_filtered_detail`]. Artist
+//! calls it and then narrows its own Albums strip, that carousel being the one thing the
+//! four do not share.
 
 use std::collections::HashSet;
 
@@ -51,9 +50,13 @@ pub struct FilterRefs<'a> {
 
 /// Re-walk `all_tracks` through the current needle, push the survivors into the Slint
 /// model, and store the filtered subset back into `tracks` so it stays in lockstep.
-/// Selection is re-stamped, the shift-range anchor dropped — the model changed shape — and
-/// the applied-selection shadow re-synced. UI thread.
-pub fn apply_filtered_detail<V: RowSelectionView>(view: &V, refs: &FilterRefs<'_>) {
+/// Selection is re-stamped, the shift-range anchor dropped if row positions moved, and the
+/// applied-selection shadow re-synced. UI thread.
+///
+/// Returns whether the model was reset. Anything a caller holds that is keyed on a row index
+/// rather than an id — Playlist Detail's in-flight drag — is stale exactly then, and the reset
+/// destroyed the row instance that would otherwise have cleared it.
+pub fn apply_filtered_detail<V: RowSelectionView>(view: &V, refs: &FilterRefs<'_>) -> bool {
     let needle = refs.filter.lock().clone();
 
     let displayed: Vec<RsTrackListRow> = {
@@ -64,21 +67,29 @@ pub fn apply_filtered_detail<V: RowSelectionView>(view: &V, refs: &FilterRefs<'_
         displayed.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
     restamp_selection(view, &mut rows);
     *refs.tracks.lock() = displayed;
-    install_tracks(view, rows);
-    // A stale shift-range anchor would now index the wrong row; the `applied` shadow just
-    // mirrors `selected-ids` for the next incremental click diff.
-    view.set_anchor(-1);
+    // The anchor is a row index, so it only goes stale when positions moved — a refresh that
+    // lands the same ids in the same slots leaves the user's shift range intact. The `applied`
+    // shadow just mirrors `selected-ids` for the next incremental click diff.
+    let was_reset = install_tracks(view, rows);
+    if was_reset {
+        view.set_anchor(-1);
+    }
     *refs.applied.lock() = view.selected_ids().iter().collect();
+    was_reset
 }
 
-/// Swap the view's `tracks` `VecModel` contents in place, falling back to a fresh model if
-/// the downcast fails — never expected, but it keeps the model from desyncing from the
-/// cache on the dead path.
-fn install_tracks<V: RowSelectionView>(view: &V, rows: Vec<UiTrackListRow>) {
+/// Swap the view's `tracks` `VecModel` contents in place through the keyed diff, returning
+/// whether the model was reset. Falling back to a fresh model on a failed downcast — never
+/// expected — keeps it from desyncing from the cache, and counts as a reset.
+///
+/// Diffing is only correct here because the caller re-stamps selection onto `rows` first: the
+/// comparison is whole-row, so a caller stamping afterwards would have its write skipped.
+fn install_tracks<V: RowSelectionView>(view: &V, rows: Vec<UiTrackListRow>) -> bool {
     let model = view.track_rows();
     if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-        vm.set_vec(rows);
+        crate::ui::model_diff::apply_rows_keyed(vm, rows, |r| r.id)
     } else {
         view.replace_track_rows(ModelRc::new(VecModel::from(rows)));
+        true
     }
 }

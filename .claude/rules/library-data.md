@@ -26,7 +26,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   file_path` via `insert_tracks_batch` — ids mapped back **by path**, RETURNING order being
   unspecified while DnD import relies on input order. Small deltas keep the stats triggers enabled
   and skip `recalculate_all_stats` entirely. Orphans + artwork rollup + recalc land in one final
-  tx; `library_changed_tx` bumps once after it.
+  tx; `library_changed` bumps once after it.
 
 - **The artwork sweep runs *after* that tx commits, never inside it** (`tasks::artwork_sweep`,
   spawned beside `retroactive_hash`). It deletes by reference rather than by refcount — artwork is
@@ -47,10 +47,10 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `UPDATE`s the renormalize pass re-points with, pinned against one column ledger — a missing
   column is silent one way and destructive the other.
 
-- **`stats_changed_tx` vs `library_changed_tx`.** Play-count flushes bump the stats channel only;
+- **`stats_changed` vs `library_changed`.** Play-count flushes bump the stats channel only;
   its two subscribers are Favorites (hero mosaic + Most Played rank by `play_count`) and
   Recently-Played (ordered by `last_played`, written on the same flush). Everything structural —
-  scans, watcher, imports, favorite toggles — stays on `library_changed_tx`.
+  scans, watcher, imports, favorite toggles — stays on `library_changed`.
 
 - **First launch** auto-adds `dirs::audio_dir()` and scans. The same `first_launch::run` then
   starts the watcher and calls `reconcile_watched_folders`, which re-runs `scan_folder_internal`
@@ -163,7 +163,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `extract_metadata` (**never hand-build the UPDATE** — a fresh mtime beside a stale hash is the
   one state `track_is_current` can't repair) → `update_track_metadata`. Own writes stay out of the
   watcher via `SelfWrites` (TTL 30 s, `mark` per-file *before* its write). Post-commit refresh is
-  the `library_changed_tx` bump, **not** an optimistic patch — a retag can change list membership.
+  the `library_changed` bump, **not** an optimistic patch — a retag can change list membership.
 
 - **Playlist import/export = Extended M3U8** (`src/library/playlist_files.rs` + the pure `m3u`
   submodule; hand-rolled writer/parser, no crate). One `.m3u8` per playlist; writer emits
@@ -189,7 +189,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   the same grid + detail** (My Library's Playlists tab, where the retired nav 7 folds):
   `PlaylistRow.is_smart` **gates off every manual-membership edit** — reorder, remove, file-drop,
   Add-to-Playlist, adding being a write of orphan `playlist_items` a smart list never reads.
-  `DurationMs` stores **whole seconds**, scaled ×1000 to the ms column. A **`stats_changed_tx`
+  `DurationMs` stores **whole seconds**, scaled ×1000 to the ms column. A **`stats_changed`
   subscriber** gated on `has_stat_dependent_smart_playlists()` recounts only smart lists whose
   criteria `depends_on_play_stats`. `rating` rules need the **full** `idx_tracks_rating` (a partial
   `WHERE rating > 0` index is *not* used for `rating >= N`). **Load-bearing index alignment:** the

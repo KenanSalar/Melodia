@@ -20,9 +20,8 @@ use slint::ComponentHandle;
 use crate::library;
 use crate::services::settings;
 use crate::state::AppState;
-use slint::SharedString;
 
-use crate::ui::shell::notifications::{NotificationParams, NotificationsUi};
+use crate::ui::shell::notifications::{NotificationsUi, RowText};
 use crate::{AppWindow, Settings};
 
 pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
@@ -48,18 +47,15 @@ pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<Notification
         if on {
             notifications.dismiss_by_kind("watcher-disabled");
         } else {
-            // Strings come from the `Settings.watcher-disabled-*` pure callbacks, so they
-            // resolve through Slint's bundled-translation pipeline.
+            // Strings come from the `Settings.watcher-disabled-*` pure callbacks, and the row
+            // is sticky on the page carrying the language picker, so the recipe is kept.
             let Some(ui) = ui_weak.upgrade() else { return };
-            let g = ui.global::<Settings>();
-            let title = g.invoke_watcher_disabled_title();
-            let message = g.invoke_watcher_disabled_message();
-            notifications.show(NotificationParams {
-                variant: "warning".into(),
-                title,
-                message,
-                action_label: SharedString::default(),
-                action_kind: "watcher-disabled".into(),
+            notifications.show_localized(&ui, "warning", "watcher-disabled", |ui| {
+                let g = ui.global::<Settings>();
+                RowText::plain(
+                    g.invoke_watcher_disabled_title(),
+                    g.invoke_watcher_disabled_message(),
+                )
             });
         }
     });

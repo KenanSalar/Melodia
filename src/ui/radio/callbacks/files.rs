@@ -14,7 +14,9 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::file_dialog;
 use crate::ui::radio::{RadioUi, kept};
-use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
+use crate::ui::shell::notifications::{
+    NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
+};
 use crate::ui::util::count_as_i32;
 use crate::{AppWindow, Radio, Settings};
 
@@ -80,11 +82,13 @@ pub fn wire(
                 // Nothing added and something refused to parse is the only outright failure; a
                 // file of stations already kept is a successful no-op and says so.
                 if imported == 0 && failures > 0 {
-                    notifications.show(NotificationParams::plain(
-                        "error",
-                        settings.invoke_station_import_failed_title(),
-                        settings.invoke_station_import_failed_message(),
-                    ));
+                    notifications.show_localized(&ui, "error", "", |ui| {
+                        let g = ui.global::<Settings>();
+                        RowText::plain(
+                            g.invoke_station_import_failed_title(),
+                            g.invoke_station_import_failed_message(),
+                        )
+                    });
                     return;
                 }
                 let variant = if failures > 0 { "warning" } else { "success" };
@@ -136,11 +140,13 @@ pub fn wire(
                     }
                     Err(e) => {
                         log::warn!("radio: export: {}", crate::services::describe(&e));
-                        notifications.show(NotificationParams::plain(
-                            "error",
-                            settings.invoke_station_export_failed_title(),
-                            settings.invoke_station_export_failed_message(),
-                        ));
+                        notifications.show_localized(&ui, "error", "", |ui| {
+                            let g = ui.global::<Settings>();
+                            RowText::plain(
+                                g.invoke_station_export_failed_title(),
+                                g.invoke_station_export_failed_message(),
+                            )
+                        });
                     }
                 }
             }));

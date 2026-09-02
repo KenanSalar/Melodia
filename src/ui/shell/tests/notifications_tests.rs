@@ -1,4 +1,5 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use slint::{Model, SharedString, VecModel};
@@ -13,6 +14,7 @@ use crate::NotificationRow;
 fn make_ui() -> NotificationsUi {
     NotificationsUi {
         rows: Rc::new(VecModel::default()),
+        recipes: Rc::new(RefCell::new(HashMap::new())),
         next_id: Cell::new(0),
     }
 }
@@ -100,4 +102,65 @@ fn max_visible_evicts_oldest_on_overflow() {
     assert!(!live_ids.contains(&ids[0]));
     assert_eq!(live_ids.first().copied(), Some(ids[1]));
     assert_eq!(live_ids.last().copied(), Some(ids[total - 1]));
+}
+
+/// A stub recipe. Never run — these pins are about the map's *lifetime*, and rendering
+/// needs an `AppWindow` that a unit test has no way to build.
+fn stub_recipe() -> Relabel {
+    Box::new(|_ui: &AppWindow| RowText::plain(SharedString::default(), SharedString::default()))
+}
+
+/// Push a row and register a recipe against it, the two halves `show_localized` pairs.
+fn show_with_recipe(ui: &NotificationsUi, kind: &str) -> i32 {
+    let id = ui.show(make_params(kind));
+    ui.recipes.borrow_mut().insert(id, stub_recipe());
+    id
+}
+
+/// A recipe is a closure kept for the session, and ids are monotonic and never reused, so a
+/// recipe outliving its row is a leak nothing else can collect. Each removal path is its own
+/// call to `remove_at`, so each is worth its own pin — the eviction inside `show` is the one
+/// that had no caller to notice it.
+#[test]
+fn dismiss_drops_the_rows_recipe() {
+    let ui = make_ui();
+    let kept = show_with_recipe(&ui, "a");
+    let gone = show_with_recipe(&ui, "b");
+
+    ui.dismiss(gone);
+
+    assert_eq!(ui.recipes.borrow().len(), 1);
+    assert!(ui.recipes.borrow().contains_key(&kept));
+}
+
+#[test]
+fn dismiss_by_kind_drops_every_matching_recipe() {
+    let ui = make_ui();
+    show_with_recipe(&ui, "watcher-disabled");
+    let kept = show_with_recipe(&ui, "install-update");
+    show_with_recipe(&ui, "watcher-disabled");
+
+    ui.dismiss_by_kind("watcher-disabled");
+
+    assert_eq!(ui.recipes.borrow().len(), 1);
+    assert!(ui.recipes.borrow().contains_key(&kept));
+}
+
+#[test]
+fn the_cap_eviction_drops_the_evicted_rows_recipe() {
+    let ui = make_ui();
+    let ids: Vec<i32> = (0..=super::MAX_VISIBLE).map(|_| show_with_recipe(&ui, "x")).collect();
+
+    assert_eq!(ui.recipes.borrow().len(), super::MAX_VISIBLE);
+    assert!(!ui.recipes.borrow().contains_key(&ids[0]));
+}
+
+/// A row pushed without a recipe — every `show_auto_dismiss` — must stay untouched by the
+/// relabel walk rather than being skipped into an empty string.
+#[test]
+fn a_row_with_no_recipe_registers_none() {
+    let ui = make_ui();
+    ui.show(make_params("a"));
+
+    assert!(ui.recipes.borrow().is_empty());
 }

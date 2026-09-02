@@ -231,7 +231,7 @@ silently miss the other.
   free option it reads as**: `Brush::is_transparent()` (`i-slint-core/graphics/brush.rs`) answers
   `false` for every gradient whatever its stop alphas, and femtovg's `draw_rectangle` tessellates
   the path before `brush_to_paint` looks at it, so a stack faded to nothing still filled the whole
-  surface every frame — four of them on the blur arm, which is the shipped default.
+  surface every frame — four of them on the blur arm.
   What the gate does **not** retire is `shown`: the mounted stack still drains to its idle colours
   through it (below), which is why each stack's `shown: false` arm stays a *gradient of the same
   shape* — `Brush::interpolate` blends stop-for-stop and only between matching types, so
@@ -443,8 +443,8 @@ silently miss the other.
   commit live in `files.rs` (commit needs `Rc<NotificationsUi>`), the opener in `dialog.rs`.
 
 - **Notifications stack** mirrors `Dialog`'s `kind`-routing — a new action is one branch plus one
-  `show(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as the iter
-  var), and translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
+  `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as
+  the iter var), and translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
 
 - **Backend-thread toasts via `services::toast`.** `NotificationsUi` is `Rc`, so failures on tokio
   workers surface through a neutral `OnceLock<UnboundedSender<…>>` — no-op when uninstalled,
@@ -501,7 +501,7 @@ silently miss the other.
 
 - **No row struct carries a decoded cover; every one asks for it.** `TrackListRow` has no `image`
   field — `TrackListRowItem` resolves per *instantiated* row through
-  `RowCovers.request(path, generation)`, wired once in `boot/ui_setup.rs`. New TrackList consumers
+  `RowCovers.request(path, generation)`, wired once in `boot/ui_setup/views.rs`. New TrackList consumers
   need zero cover plumbing. `CoverThumbs::prewarm` dedupes and caps at LRU capacity — pass paths in
   **display order** so the kept prefix paints first.
 
@@ -1040,7 +1040,7 @@ edit would otherwise reverse.
 
 ## The Settings page
 
-- **The page is tabbed** — 5 tabs over the same 13 section cards. `settings-view.slint` is page
+- **The page is tabbed** — 5 tabs over the same 15 section cards. `settings-view.slint` is page
   chrome only, `settings-tabs.slint` the router, `views/settings/pages/*.slint` the five pages,
   each owning its section list *and* an aggregate `has-matches`. **Search escapes the tabs**: a
   non-empty query mounts all five pages at once, which is how the cross-tab flat list comes back
@@ -1064,6 +1064,16 @@ edit would otherwise reverse.
   lives in the global instead of twelve copies, and no card can match a substring spanning the
   seam. A mount that forgets `tab-name:` still matches its own title, so the page looks right and
   only the tab-name query comes up empty.
+
+- **A row's label and description are declared once, as properties the visibility term and the row
+  both read.** The section's local `row-visible(label, desc)` is fed `label + " " + desc`, so a pair
+  spelled at both sites lets a reworded description stop its own row matching — invisible until
+  someone types a word from it. The other half is the one to check on a **cluster**: a toggle whose
+  sub-rows hang off its own visibility owes every sub-row's pair as a term (`playback-section`'s
+  crossfade `||` chain, `discord-section`'s concatenated haystack), or a sub-row is reachable only
+  by scrolling to it. Untranslated brands and SPDX ids take a property too — the drift hazard is
+  the double spelling, not the `@tr`. Nothing enforces any of this, and a fresh section is exactly
+  where it comes back.
 
 - **Anything that has to fit a width reads `SettingsPage`, and never measures.**
   `settings-view.slint` publishes `page-w` (the panel width it already mirrors — a live

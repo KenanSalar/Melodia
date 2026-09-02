@@ -17,7 +17,7 @@ use super::{
 use crate::error::AppError;
 use crate::library;
 use crate::services;
-use crate::state::AppState;
+use crate::state::{AppState, Signal};
 use crate::{AppWindow, Settings, Theme};
 
 /// Hydrate the Settings global from `settings.json`, paint the resolved
@@ -35,9 +35,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     let initial_state = read_initial_system_state();
     let os_state = Arc::new(RwLock::new(initial_state.clone()));
 
-    // Material You kick channel. Initial value 0; senders use
-    // `send_modify(|n| *n = n.wrapping_add(1))` to coalesce bursts.
-    let (kick_tx, _) = watch::channel(0u64);
+    let kick = Signal::new();
 
     // Repaint channel — the Material You coordinator writes the latest
     // `SystemColorState` snapshot here after each palette generation;
@@ -66,7 +64,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         state,
         os_state.clone(),
         initial_state.clone(),
-        kick_tx.clone(),
+        kick.clone(),
     );
 
     seed_theme_names(ui);
@@ -167,28 +165,28 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         ui,
         state,
         os_state.clone(),
-        kick_tx.clone(),
+        kick.clone(),
         persisted_accent.clone(),
     );
     theme_picker::wire_variant_changed(
         ui,
         state,
         os_state.clone(),
-        kick_tx.clone(),
+        kick.clone(),
         persisted_accent.clone(),
     );
     accent_picker::wire_accent_changed(
         ui,
         state,
         os_state.clone(),
-        kick_tx.clone(),
+        kick.clone(),
         persisted_accent.clone(),
     );
     material_you_sync::wire_color_style_changed(
         ui,
         state,
         os_state.clone(),
-        kick_tx.clone(),
+        kick.clone(),
         persisted_accent,
     );
     window_settings::wire_match_unfocused_bg_changed(ui, state);
@@ -200,7 +198,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
 
     Ok(AppearanceHandles {
         os_state,
-        kick_tx,
+        kick,
         repaint_tx,
     })
 }

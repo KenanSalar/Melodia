@@ -3,6 +3,9 @@
 //! visualizer's spectrum and waveform analysis on the UI thread.
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::time::Duration;
+
+use super::audio::{ChannelCount, SampleRate};
 
 /// Fraction of its height a visualizer bar or trace keeps per frame while falling.
 /// Shared so the two styles fall by the same law rather than each carrying its own —
@@ -43,6 +46,42 @@ pub(crate) fn db_to_linear(db: f32) -> f32 {
 /// analyzer floors quiet bins at zero.
 pub(crate) fn linear_to_db(lin: f32) -> f32 {
     20.0 * lin.log10()
+}
+
+const NANOS_PER_SEC: u64 = 1_000_000_000;
+
+/// Frames of a source running at `rate` that `span` is worth, rounded **down**.
+///
+/// Seconds and nanoseconds separately, so a rate that does not divide a second evenly cannot cost
+/// the answer a frame the way a float round trip or a microsecond truncation would.
+///
+/// [`frames_to_duration`] is the way back but not an inverse: both floor, so a value off a frame
+/// boundary loses its remainder and a round trip loses it twice. The bound is one frame, downward
+/// — which is all the transport needs, every `Duration` it produces being a whole number of
+/// milliseconds, and dozens of frames at any rate. `player::tests::dsp_tests` pins both halves.
+pub(crate) fn frames_in(span: Duration, rate: SampleRate) -> u64 {
+    let rate = u64::from(rate.get());
+    let subsec = u64::from(span.subsec_nanos()) * rate / NANOS_PER_SEC;
+    span.as_secs().saturating_mul(rate).saturating_add(subsec)
+}
+
+/// How long `frames` at `rate` play for — [`frames_in`]'s counterpart, with the same flooring.
+pub(crate) fn frames_to_duration(frames: u64, rate: SampleRate) -> Duration {
+    let rate = u64::from(rate.get());
+    let nanos = (frames % rate) * NANOS_PER_SEC / rate;
+    Duration::new(frames / rate, u32::try_from(nanos).unwrap_or(0))
+}
+
+/// `frames` as interleaved samples.
+///
+/// Saturating, because the only bound on a length read back out of a container is what fits a
+/// `u64`, and a corrupt one states whatever it likes.
+///
+/// Here rather than beside its one caller because it is the third term of the same vocabulary as
+/// [`frames_in`] and [`frames_to_duration`] — frames, the time they play for, and the samples
+/// they occupy — and splitting the trio costs more than the single consumer saves.
+pub(crate) fn interleaved(frames: u64, channels: ChannelCount) -> u64 {
+    frames.saturating_mul(u64::from(channels.get()))
 }
 
 /// A lock-free change counter for state shared with the audio thread.

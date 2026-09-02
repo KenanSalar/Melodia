@@ -8,13 +8,13 @@
 //! deadline caused the xrun it was reporting.
 //!
 //! **Every arm is a storm vector, hence no logging at all**: an xrun per failed
-//! `snd_pcm_writei`, and cpal's two `BackendSpecific` sites `continue` inside its
-//! worker loop. [`crate::tasks::audio_health`] drains and decides.
+//! `snd_pcm_writei`, and an unclassified error `continue`s inside cpal's worker
+//! loop. [`crate::tasks::audio_health`] drains and decides.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use cpal::StreamError;
+use cpal::{Error, ErrorKind};
 
 /// Stream faults recorded since the last drain.
 ///
@@ -26,7 +26,7 @@ pub struct AudioStreamHealth {
     other: AtomicU64,
     device_lost: AtomicBool,
     /// Kept because the counter alone says nothing actionable.
-    first_backend_error: parking_lot::Mutex<Option<String>>,
+    first_other_error: parking_lot::Mutex<Option<String>>,
 }
 
 /// Everything [`AudioStreamHealth::drain`] found.
@@ -34,63 +34,69 @@ pub struct AudioStreamHealth {
 pub struct StreamHealthReport {
     /// Buffer under/overruns. cpal recovers from these itself.
     pub underruns: u64,
-    /// Backend errors that are neither an xrun nor a lost device.
+    /// Stream errors that are neither an xrun nor a lost device. `ErrorKind::BackendError` is one
+    /// of the several kinds that land here, which is why neither this nor the field below is named
+    /// after it.
     pub other: u64,
     /// The description of the first `other`, when one was captured.
-    pub first_backend_error: Option<String>,
+    pub first_other_error: Option<String>,
     /// The device went away, or its configuration stopped being valid.
     pub device_lost: bool,
 }
 
 impl AudioStreamHealth {
-    /// Record one stream error. No blocking lock, no formatting, no I/O.
+    /// Record one stream error. No blocking lock, no I/O.
     ///
-    /// By value because that is how the callback receives it, so the
-    /// `BackendSpecific` description is moved into the slot rather than cloned.
-    pub fn record(&self, err: StreamError) {
-        match err {
-            StreamError::BufferUnderrun => {
+    /// The catch-all arm does format, once per window: both gates below have to pass, so a storm
+    /// pays for one short string and then nothing.
+    pub fn record(&self, err: &Error) {
+        match err.kind() {
+            ErrorKind::Xrun => {
                 self.underruns.fetch_add(1, Ordering::Relaxed);
             }
             // Both mean the stream won't produce sound again on its own and both
             // reach the user the same way, so `StreamInvalidated` earns no
             // counter of its own.
-            //
-            // **Neither arm is reachable on Linux**: cpal's ALSA host folds every
-            // `alsa::Error` into `BackendSpecific`, so the same unplugged device
-            // arrives below, as an `other` count that never stops climbing.
-            // `tasks::audio_health` reads that rate as the second half of this.
-            StreamError::DeviceNotAvailable | StreamError::StreamInvalidated => {
+            ErrorKind::DeviceNotAvailable | ErrorKind::StreamInvalidated => {
                 self.device_lost.store(true, Ordering::Relaxed);
             }
-            StreamError::BackendSpecific { err } => {
+            // `ErrorKind` is `#[non_exhaustive]`, so this is a catch-all rather
+            // than the rest of the variants spelled out: a kind added upstream
+            // that this tree has no answer for still belongs in the count.
+            _ => {
                 self.other.fetch_add(1, Ordering::Relaxed);
                 // First of the window only: `try_lock` because a blocking one
                 // here is what this module exists to avoid, and only-if-empty so
                 // a spin frees a short string rather than trading one for another.
-                if let Some(mut slot) = self.first_backend_error.try_lock()
+                // The `to_string` is inside both gates for the same reason.
+                if let Some(mut slot) = self.first_other_error.try_lock()
                     && slot.is_none()
                 {
-                    *slot = Some(err.description);
+                    *slot = Some(err.to_string());
                 }
             }
         }
     }
 
-    /// Take everything recorded since the last call, or `None` if nothing was.
-    pub fn drain(&self) -> Option<StreamHealthReport> {
+    /// Take everything recorded since the last call.
+    ///
+    /// A quiet window is a zeroed report rather than an absence, and that is the whole of why
+    /// this returns no `Option`: [`crate::tasks::audio_health`]'s warn latch re-arms on the zero,
+    /// so a caller that could skip an empty window would leave the first fault of a session the
+    /// only one ever warned about. The early return keeps the lock off that path either way.
+    pub fn drain(&self) -> StreamHealthReport {
         let underruns = self.underruns.swap(0, Ordering::Relaxed);
         let other = self.other.swap(0, Ordering::Relaxed);
         let device_lost = self.device_lost.swap(false, Ordering::Relaxed);
         if underruns == 0 && other == 0 && !device_lost {
-            return None;
+            return StreamHealthReport::default();
         }
-        Some(StreamHealthReport {
+        StreamHealthReport {
             underruns,
             other,
-            first_backend_error: self.first_backend_error.lock().take(),
+            first_other_error: self.first_other_error.lock().take(),
             device_lost,
-        })
+        }
     }
 }
 
@@ -100,8 +106,8 @@ impl AudioStreamHealth {
 /// captured `Arc` is what supplies that.
 pub fn error_callback(
     health: Arc<AudioStreamHealth>,
-) -> impl FnMut(StreamError) + Clone + Send + 'static {
-    move |err| health.record(err)
+) -> impl FnMut(Error) + Clone + Send + 'static {
+    move |err| health.record(&err)
 }
 
 #[cfg(test)]

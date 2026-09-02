@@ -121,7 +121,7 @@ pub(super) fn wire_callbacks(
 
     // Hover-swap favorite toggle from a queue row. Three updates:
     //   1. DB write via `library::favorites::set_favorite` (also bumps
-    //      `library_changed_tx` so other tracklist views refetch).
+    //      `library_changed` so other tracklist views refetch).
     //   2. In-memory flip on `PlayerState.queue.tracks` (so the next
     //      sheet open / view-model emit reads the fresh value) and on
     //      `current_track` (so the Now Playing heart reflects it via

@@ -3,14 +3,14 @@
 //! empty in CI — a test asserting against them would pass here and prove nothing
 //! there, or worse, start failing the day a term happened to match a fixture.
 
-use super::source::{self, MIN_PATTERN_CHARS, TermKind};
+use super::source::{self, MIN_PATTERN_CHARS, ParseError, Refusal, TermKind};
 use super::{Blocklist, StationTerms};
 use crate::entities::radio::{Facet, FacetKind};
 
 /// The key every fixture hashes under, so a pinned fingerprint stays pinned.
 const SOURCE_KEY: &str = "key: test-key\n";
 
-fn blocklist(rules: &str) -> Result<Blocklist, String> {
+fn blocklist(rules: &str) -> Result<Blocklist, ParseError> {
     let source = format!("{SOURCE_KEY}{rules}");
     source::parse_source(&source).map(Blocklist::from_terms)
 }
@@ -25,6 +25,15 @@ fn station() -> StationTerms<'static> {
         language: "",
         codec: "",
         tags: "",
+    }
+}
+
+/// The line and reason a refusal names, so a table can pin both without spelling the variant
+/// per row. `None` where the parse succeeded or blamed the file rather than a line.
+fn refused_at(refused: Option<ParseError>) -> Option<(usize, Refusal)> {
+    match refused {
+        Some(ParseError::Line { number, refusal }) => Some((number, refusal)),
+        _ => None,
     }
 }
 
@@ -64,7 +73,7 @@ fn two_keys_disagree_about_one_term() {
 }
 
 #[test]
-fn case_and_whitespace_fold_away() -> Result<(), String> {
+fn case_and_whitespace_fold_away() -> Result<(), ParseError> {
     let list = blocklist("tag: classic rock\n")?;
 
     for spelling in [
@@ -85,7 +94,7 @@ fn case_and_whitespace_fold_away() -> Result<(), String> {
 }
 
 #[test]
-fn each_exact_axis_blocks_its_own_field() -> Result<(), String> {
+fn each_exact_axis_blocks_its_own_field() -> Result<(), ParseError> {
     let list = blocklist(
         "country: XX\nlanguage: klingon\ncodec: WMA\nstation: abc-123\n\
          name: Some Station\nurl: http://example.invalid/s\ntag: polka\n",
@@ -124,7 +133,7 @@ fn each_exact_axis_blocks_its_own_field() -> Result<(), String> {
 }
 
 #[test]
-fn an_exact_term_does_not_match_a_value_containing_it() -> Result<(), String> {
+fn an_exact_term_does_not_match_a_value_containing_it() -> Result<(), ParseError> {
     let list = blocklist("name: Some Station\ntag: rock\n")?;
 
     assert!(!list.blocks_station(&StationTerms {
@@ -139,7 +148,7 @@ fn an_exact_term_does_not_match_a_value_containing_it() -> Result<(), String> {
 }
 
 #[test]
-fn countries_match_a_facet_on_the_code_and_never_on_the_name() -> Result<(), String> {
+fn countries_match_a_facet_on_the_code_and_never_on_the_name() -> Result<(), ParseError> {
     let list = blocklist("country: XX\n")?;
 
     assert!(list.blocks_facet(FacetKind::Countries, &facet("Faraway", Some("XX"))));
@@ -149,7 +158,7 @@ fn countries_match_a_facet_on_the_code_and_never_on_the_name() -> Result<(), Str
 }
 
 #[test]
-fn the_other_curated_facets_match_on_their_name() -> Result<(), String> {
+fn the_other_curated_facets_match_on_their_name() -> Result<(), ParseError> {
     let list = blocklist("language: klingon\ntag: polka\ncodec: WMA\n")?;
 
     assert!(list.blocks_facet(FacetKind::Languages, &facet("klingon", Some("tlh"))));
@@ -159,7 +168,7 @@ fn the_other_curated_facets_match_on_their_name() -> Result<(), String> {
 }
 
 #[test]
-fn a_station_level_term_matches_no_facet() -> Result<(), String> {
+fn a_station_level_term_matches_no_facet() -> Result<(), ParseError> {
     let list = blocklist("name: polka\nurl: polka\nstation: polka\n")?;
 
     for kind in [
@@ -174,7 +183,7 @@ fn a_station_level_term_matches_no_facet() -> Result<(), String> {
 }
 
 #[test]
-fn a_build_with_no_source_blocks_nothing() -> Result<(), String> {
+fn a_build_with_no_source_blocks_nothing() -> Result<(), ParseError> {
     let list = blocklist("")?;
 
     assert!(!list.blocks_station(&StationTerms {
@@ -186,7 +195,7 @@ fn a_build_with_no_source_blocks_nothing() -> Result<(), String> {
 }
 
 #[test]
-fn parsing_leaves_every_list_sorted() -> Result<(), String> {
+fn parsing_leaves_every_list_sorted() -> Result<(), ParseError> {
     // Both lookups binary-search, so an unsorted list would miss rather than fail,
     // and `build.rs` emits these in the order it is handed them. Asserted on parsed
     // output rather than on the baked arrays: those come from a source outside the
@@ -210,7 +219,7 @@ fn parsing_leaves_every_list_sorted() -> Result<(), String> {
 }
 
 #[test]
-fn a_pattern_matches_wherever_it_sits() -> Result<(), String> {
+fn a_pattern_matches_wherever_it_sits() -> Result<(), ParseError> {
     let list = blocklist("tag-contains: polka\n")?;
 
     for tags in [
@@ -230,7 +239,7 @@ fn a_pattern_matches_wherever_it_sits() -> Result<(), String> {
 }
 
 #[test]
-fn a_pattern_folds_like_an_exact_term() -> Result<(), String> {
+fn a_pattern_folds_like_an_exact_term() -> Result<(), ParseError> {
     let list = blocklist("tag-contains: classic rock\n")?;
 
     assert!(list.blocks_station(&StationTerms {
@@ -241,7 +250,7 @@ fn a_pattern_folds_like_an_exact_term() -> Result<(), String> {
 }
 
 #[test]
-fn a_pattern_walks_characters_rather_than_bytes() -> Result<(), String> {
+fn a_pattern_walks_characters_rather_than_bytes() -> Result<(), ParseError> {
     // Windows are sliced at character boundaries; stepping by bytes would either
     // panic on a multi-byte value or silently compare the wrong window.
     let list = blocklist("tag-contains: über\n")?;
@@ -258,7 +267,7 @@ fn a_pattern_walks_characters_rather_than_bytes() -> Result<(), String> {
 }
 
 #[test]
-fn a_pattern_reaches_the_name_and_url_axes_too() -> Result<(), String> {
+fn a_pattern_reaches_the_name_and_url_axes_too() -> Result<(), ParseError> {
     let list = blocklist("name-contains: polka\nurl-contains: badhost\n")?;
 
     assert!(list.blocks_station(&StationTerms {
@@ -273,7 +282,7 @@ fn a_pattern_reaches_the_name_and_url_axes_too() -> Result<(), String> {
 }
 
 #[test]
-fn a_pattern_blocks_a_tag_facet_and_leaves_the_others() -> Result<(), String> {
+fn a_pattern_blocks_a_tag_facet_and_leaves_the_others() -> Result<(), ParseError> {
     let list = blocklist("tag-contains: polka\n")?;
 
     assert!(list.blocks_facet(FacetKind::Tags, &facet("old polka music", None)));
@@ -286,15 +295,18 @@ fn a_pattern_blocks_a_tag_facet_and_leaves_the_others() -> Result<(), String> {
 #[test]
 fn a_pattern_under_the_floor_is_refused() {
     let short = "x".repeat(MIN_PATTERN_CHARS - 1);
-    assert!(blocklist(&format!("tag-contains: {short}\n")).is_err());
+    let refused = blocklist(&format!("tag-contains: {short}\n")).err();
+    assert_eq!(refused_at(refused), Some((2, Refusal::ShortPattern)));
     assert!(blocklist(&format!("tag-contains: {}\n", "x".repeat(MIN_PATTERN_CHARS))).is_ok());
 }
 
 #[test]
 fn only_the_free_text_axes_take_a_pattern() {
     for exact_only in ["country", "language", "codec", "station"] {
-        assert!(
-            blocklist(&format!("{exact_only}-contains: something\n")).is_err(),
+        let refused = blocklist(&format!("{exact_only}-contains: something\n")).err();
+        assert_eq!(
+            refused_at(refused),
+            Some((2, Refusal::UnknownKind)),
             "{exact_only}-contains should not be a kind"
         );
     }
@@ -303,21 +315,23 @@ fn only_the_free_text_axes_take_a_pattern() {
 #[test]
 fn a_malformed_line_is_refused_rather_than_skipped() {
     // A skipped line unblocks a station with nothing anywhere to report it, so every
-    // one of these has to stop the build.
-    for broken in [
-        "genre: rock\n",      // unknown kind
-        "just some text\n",   // no separator
-        "tag:\n",             // empty value
-        "tag: rock  # why\n", // inline comment would join the value
-        "country: DEU\n",     // not a two-letter code
-        "key: a\nkey: b\n",   // a second key
+    // one of these has to stop the build. Pinned to the refusal rather than to `is_err`,
+    // since a fixture failing for the wrong reason stops covering the one it names.
+    for (broken, expected) in [
+        ("genre: rock\n", (1, Refusal::UnknownKind)),
+        ("just some text\n", (1, Refusal::Shape)),
+        ("tag:\n", (1, Refusal::EmptyValue)),
+        ("tag: rock  # why\n", (1, Refusal::InlineComment)),
+        ("country: DEU\n", (1, Refusal::CountryCode)),
+        ("key:\n", (1, Refusal::EmptyKey)),
+        ("key: a\nkey: b\n", (2, Refusal::SecondKey)),
     ] {
-        assert!(source::parse_source(broken).is_err(), "{broken:?}");
+        assert_eq!(refused_at(source::parse_source(broken).err()), Some(expected), "{broken:?}");
     }
 }
 
 #[test]
-fn comments_and_blank_lines_carry_nothing() -> Result<(), String> {
+fn comments_and_blank_lines_carry_nothing() -> Result<(), ParseError> {
     let list = blocklist("# a note\n\n   \ntag: polka\n# another\n")?;
 
     assert!(list.blocks_station(&StationTerms {
@@ -333,8 +347,9 @@ fn comments_and_blank_lines_carry_nothing() -> Result<(), String> {
 
 #[test]
 fn no_error_quotes_the_line_it_refused() {
-    // These reach a public CI log, so a message carrying the term would hand over
-    // the entry it was protecting.
+    // `Refusal` has nowhere to put the term, so what is left to check is the rendering:
+    // these reach a public CI log, and a `Display` arm interpolating a value would put it
+    // back in one.
     let secret = "verysecrettermnobodyshouldsee";
     for broken in [
         format!("wrongkind: {secret}\n"),
@@ -344,12 +359,13 @@ fn no_error_quotes_the_line_it_refused() {
         let Err(reason) = source::parse_source(&broken) else {
             continue;
         };
-        assert!(!reason.contains(secret), "{reason}");
+        let rendered = reason.to_string();
+        assert!(!rendered.contains(secret), "{rendered}");
     }
 }
 
 #[test]
-fn hashed_output_reads_back_as_the_same_terms() -> Result<(), String> {
+fn hashed_output_reads_back_as_the_same_terms() -> Result<(), ParseError> {
     let source = format!(
         "{SOURCE_KEY}country: XX\ntag: polka\ntag-contains: something\nname-contains: elsewhere\n"
     );
@@ -364,7 +380,7 @@ fn hashed_output_reads_back_as_the_same_terms() -> Result<(), String> {
 }
 
 #[test]
-fn a_hashed_source_blocks_what_the_list_it_came_from_blocked() -> Result<(), String> {
+fn a_hashed_source_blocks_what_the_list_it_came_from_blocked() -> Result<(), ParseError> {
     let source = format!("{SOURCE_KEY}tag: polka\ntag-contains: something\n");
     let hashed = source::render_hashed(&source::parse_source(&source)?);
     let list = Blocklist::from_terms(source::parse_any(&hashed)?);
@@ -385,7 +401,7 @@ fn a_hashed_source_blocks_what_the_list_it_came_from_blocked() -> Result<(), Str
 }
 
 #[test]
-fn parse_any_dispatches_on_the_marker() -> Result<(), String> {
+fn parse_any_dispatches_on_the_marker() -> Result<(), ParseError> {
     let plaintext = source::parse_any(&format!("{SOURCE_KEY}tag: polka\n"))?;
     assert_eq!(plaintext.fingerprints.len(), 1);
 
@@ -397,15 +413,30 @@ fn parse_any_dispatches_on_the_marker() -> Result<(), String> {
 #[test]
 fn a_malformed_pre_hashed_source_is_refused() {
     let key = "0".repeat(64);
-    for broken in [
-        format!("{}\nkey = {key}\nterms =\n", source::HASHED_MARKER), // missing fields
-        format!("{}\nkey = abcd\nterms =\npatterns =\nlengths =\n", source::HASHED_MARKER),
-        format!("{}\nkey = {key}\nterms = abc\npatterns =\nlengths =\n", source::HASHED_MARKER),
-        format!(
-            "{}\nkey = {key}\nterms =\npatterns =\nlengths =\nbogus = 1\n",
-            source::HASHED_MARKER
+    let marker = source::HASHED_MARKER;
+
+    // A field left out is a fault of the file rather than of any one line.
+    let short = format!("{marker}\nkey = {key}\nterms =\n");
+    assert_eq!(source::parse_hashed(&short).err(), Some(ParseError::MissingField));
+
+    for (broken, expected) in [
+        (
+            format!("{marker}\nkey = abcd\nterms =\npatterns =\nlengths =\n"),
+            (2, Refusal::KeyDigits),
+        ),
+        (
+            format!("{marker}\nkey = {key}\nterms =\npatterns =\nlengths\n"),
+            (5, Refusal::HashedShape),
+        ),
+        (
+            format!("{marker}\nkey = {key}\nterms = abc\npatterns =\nlengths =\n"),
+            (3, Refusal::NotANumber),
+        ),
+        (
+            format!("{marker}\nkey = {key}\nterms =\npatterns =\nlengths =\nbogus = 1\n"),
+            (6, Refusal::UnknownField),
         ),
     ] {
-        assert!(source::parse_hashed(&broken).is_err(), "{broken:?}");
+        assert_eq!(refused_at(source::parse_hashed(&broken).err()), Some(expected), "{broken:?}");
     }
 }

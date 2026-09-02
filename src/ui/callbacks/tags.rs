@@ -33,7 +33,7 @@ use crate::media::image_decode::{
 use crate::media::tag_writer::{self, ArtworkEdit, FieldEdit, TagEdit};
 use crate::state::AppState;
 use crate::ui::file_dialog;
-use crate::ui::shell::notifications::{NotificationParams, NotificationsUi};
+use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, RowText};
 use crate::ui::util::{COVER_SIZE, buffer_from_rgb};
 use crate::{AppWindow, Dialog, Settings, TagEditor};
 
@@ -428,13 +428,13 @@ fn show_report_toast(
         Ok(report) => report,
         Err(e) => {
             log::warn!("apply_tag_edit: {e}");
-            notifications.show(failure_toast(&settings));
+            show_failure_toast(ui, notifications);
             return;
         }
     };
 
     if report.updated == 0 {
-        notifications.show(failure_toast(&settings));
+        show_failure_toast(ui, notifications);
         return;
     }
 
@@ -455,12 +455,12 @@ fn show_report_toast(
     );
 }
 
-fn failure_toast(settings: &Settings) -> NotificationParams {
-    NotificationParams::plain(
-        "error",
-        settings.invoke_tag_edit_failed_title(),
-        settings.invoke_tag_edit_failed_message(),
-    )
+/// Sticky, hence the recipe: a row still up when the language changes has to follow it.
+fn show_failure_toast(ui: &AppWindow, notifications: &NotificationsUi) {
+    notifications.show_localized(ui, "error", "", |ui| {
+        let g = ui.global::<Settings>();
+        RowText::plain(g.invoke_tag_edit_failed_title(), g.invoke_tag_edit_failed_message())
+    });
 }
 
 /// Build the `TagEdit` by diffing each current field value against the

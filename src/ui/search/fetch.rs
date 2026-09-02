@@ -80,10 +80,9 @@ pub async fn kick_search(
 /// whether it actually yielded, which is what obliges the caller to re-check
 /// its fetch token.
 ///
-/// Track rows finish on the UI thread (`finish_track_list_row`) and the Album
-/// / Artist strip cards resolve via lazy `request-*-cover` lookups that decode
-/// on miss *on the UI thread* — without this, a cold cache pays one
-/// synchronous decode per card at paint time.
+/// Track rows resolve their thumbnail per mounted row through `RowCovers.request`, and the
+/// Album / Artist strip cards via lazy `request-*-cover` lookups that decode on miss *on the
+/// UI thread* — without this, a cold cache pays one synchronous decode per card at paint time.
 ///
 /// Three prewarms rather than one because the three lists land in three
 /// different tiers, so each is capped against its own capacity. Result sets
@@ -123,11 +122,11 @@ async fn prewarm_result_covers(search_ui: &Arc<SearchUi>, results: &SearchResult
     true
 }
 
-/// Cached-results swap: re-derive the visible Songs slice from
-/// `last_results` according to the *current* `show-all-tracks` flag
-/// and active sort. Called from the `toggle-show-all-tracks` callback
-/// — no DB hit; the apply step owns the slice/sort logic.
-pub fn swap_tracks_compact_or_full(search_ui: &Arc<SearchUi>, weak: &Weak<AppWindow>) {
+/// Re-derive everything visible from `last_results` — no DB hit, the apply step owning the
+/// slice, sort and label logic. Named for the operation rather than for the
+/// `show-all-tracks` toggle it started as: the sort is the other caller, and it re-derives
+/// the two strips and the Top Result along with the Songs slice.
+pub fn reapply_cached_results(search_ui: &Arc<SearchUi>, weak: &Weak<AppWindow>) {
     let Some(results) = search_ui.state().last_results.lock().clone() else {
         return;
     };

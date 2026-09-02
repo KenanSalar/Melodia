@@ -16,7 +16,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use rayon::prelude::*;
 
@@ -35,6 +35,17 @@ use crate::state::AppState;
 /// resident at once — a memory regression in a project that exists because of
 /// them. Tag writing is I/O-bound, so extra width buys nothing anyway.
 const TAG_WRITE_THREADS: usize = 4;
+
+/// The fan-out pool itself, built once. A rating write reaches here on a single click and usually
+/// carries one file, where building and joining four OS threads per call is most of the work, and
+/// the thread churn lands on the same glibc arena the audio callback allocates from.
+static TAG_WRITE_POOL: LazyLock<Option<rayon::ThreadPool>> = LazyLock::new(|| {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(TAG_WRITE_THREADS)
+        .build()
+        .inspect_err(|e| log::warn!("tag-write pool build failed ({e}); writing sequentially"))
+        .ok()
+});
 
 /// Outcome of applying a [`TagEdit`] to a batch of tracks. Partial success is
 /// reported, never rolled back — a read-only file or an unsupported container
@@ -59,7 +70,7 @@ pub async fn get_tag_edit_rows(state: &AppState, ids: &[i64]) -> Result<Vec<TagE
 }
 
 /// Apply `edit` to `ids`, then refresh the player's cached summaries and bump
-/// `library_changed_tx` so the visibility-gated list views re-fetch.
+/// `library_changed` so the visibility-gated list views re-fetch.
 ///
 /// `artwork_source` is `Some(path)` iff `edit.artwork == ArtworkEdit::Replace`
 /// (the picked image file): the writer's `Replace` is a unit variant, so the
@@ -102,7 +113,7 @@ pub async fn apply_tag_edit(
             crate::player::state::sync_track_summaries(&state.player_state, &state.sinks, &map);
         }
 
-        state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+        state.library_changed.bump();
     }
 
     Ok(report)
@@ -226,39 +237,41 @@ fn run_write_pass(
     // On a Replace the re-extract's artwork is discarded: `apply_replace_artwork`
     // overwrites every row (and album) with the batch's single `cached_artwork`,
     // so reading the just-embedded cover back (a full decode + a redundant BLAKE3
-    // pass + an artwork-dir write, per track, un-memoized) is pure waste. Skip it
-    // for Replace only — `Remove` needs the external-cover fallback and `Keep`'s
-    // COALESCE backfills a missing `artwork_path`.
-    let skip_artwork = edit.artwork == ArtworkEdit::Replace;
-    let map_files = || {
-        rows.par_iter()
-            .map(|(id, path)| {
-                let p = Path::new(path);
-                // Mark BEFORE the write, per file, so the TTL clock tracks the
-                // event this write is about to fire — and with the DB `file_path`
-                // (the set keys on exact `PathBuf` equality).
-                self_writes.mark(p);
-                let outcome = tag_writer::apply_to_file(p, edit, picture).and_then(|unsupported| {
-                    extract_metadata(p, artwork_dir, cover_cache, skip_artwork)
-                        .map(|meta| (meta, unsupported.0))
-                });
-                FileWrite {
-                    id: *id,
-                    path: path.clone(),
-                    outcome,
-                }
-            })
-            .collect::<Vec<FileWrite>>()
+    // pass + an artwork-dir write, per track, un-memoized) is pure waste.
+    //
+    // A rating-only edit skips it for a different reason and gives something up
+    // to do so: nothing it writes can change the cover, so parsing the embedded
+    // picture back out costs a decode per track for an answer already on the row.
+    // What that gives up is `Keep`'s COALESCE, which also backfills a missing
+    // `artwork_path`, so a track that has none keeps none until the next scan.
+    // `Remove` still needs the external-cover fallback, and a real Edit-Tags
+    // `Keep` can arrive beside a field that re-homes the track, so both stay on
+    // the full path.
+    let skip_artwork = edit.artwork == ArtworkEdit::Replace || edit.is_rating_only();
+    let write_one = |(id, path): &(i64, String)| {
+        let p = Path::new(path);
+        // Mark BEFORE the write, per file, so the TTL clock tracks the
+        // event this write is about to fire — and with the DB `file_path`
+        // (the set keys on exact `PathBuf` equality).
+        self_writes.mark(p);
+        let outcome = tag_writer::apply_to_file(p, edit, picture).and_then(|unsupported| {
+            extract_metadata(p, artwork_dir, cover_cache, skip_artwork)
+                .map(|meta| (meta, unsupported.0))
+        });
+        FileWrite {
+            id: *id,
+            path: path.clone(),
+            outcome,
+        }
     };
 
-    match rayon::ThreadPoolBuilder::new().num_threads(TAG_WRITE_THREADS).build() {
-        Ok(pool) => pool.install(map_files),
-        Err(e) => {
-            // Extremely unlikely; fall back to the global pool rather than
-            // aborting the edit.
-            log::warn!("tag-write pool build failed ({e}); using the global pool");
-            map_files()
-        }
+    // Sequentially, rather than on the global pool, where the build failed. That pool is
+    // `num_cpus` wide, which is the number `TAG_WRITE_THREADS` exists to hold down, and it panics
+    // on first use if it could not build either. Both matter for the same reason: thread
+    // starvation is the only realistic way to arrive here.
+    match TAG_WRITE_POOL.as_ref() {
+        Some(pool) => pool.install(|| rows.par_iter().map(write_one).collect()),
+        None => rows.iter().map(write_one).collect(),
     }
 }
 
@@ -379,16 +392,29 @@ async fn run_commit(
         ArtworkEdit::Keep => {}
     }
 
-    // Backfill album covers from their tracks (null-only, never an overwrite), so
-    // retagging a track into a different album lets that album inherit the track's
-    // existing artwork — the scan/import/reconcile paths already do this, but the
-    // tag editor didn't, leaving a moved track's new album with a blank cover.
-    queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+    // Both passes answer to a track that changed parents, and both are whole-table:
+    // the rollup is a window CTE over every row in `tracks`, the sweep three
+    // correlated deletes plus a rewrite of every `artists` row, all of it inside
+    // this transaction on a single-writer pool. A rating write reaches here on one
+    // click and can move nothing, so gating them is most of what that click costs.
+    //
+    // The residue is that a file whose tags had already drifted from the database
+    // can be re-homed by the re-extract above: its old parent is left stranded, and
+    // the album row it lands in instead gets no cover. The next scan runs both
+    // passes and repairs both, on the pass it always did.
+    if edit.moves_between_parents() {
+        // Backfill album covers from their tracks (null-only, never an overwrite),
+        // so retagging a track into a different album lets that album inherit the
+        // track's existing artwork — the scan/import/reconcile paths already do
+        // this, but the tag editor didn't, leaving a moved track's new album with
+        // a blank cover.
+        queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
 
-    // Retagging a track into a different album or genre can strand its old album
-    // (and that album's artist) or old genre with zero tracks; nothing else deletes
-    // an emptied row, so sweep orphans here before committing.
-    queries::scan::prune_orphans(&mut tx).await?;
+        // Retagging a track into a different album or genre can strand its old
+        // album (and that album's artist) or old genre with zero tracks; nothing
+        // else deletes an emptied row, so sweep orphans before committing.
+        queries::scan::prune_orphans(&mut tx).await?;
+    }
 
     tx.commit().await?;
     Ok(updated_ids)

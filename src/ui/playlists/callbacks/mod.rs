@@ -26,7 +26,7 @@ use crate::ui::shell::notifications::NotificationsUi;
 
 /// Wire every `Playlists.*` / `PlaylistDetail.*` callback to its
 /// `library::*` counterpart and the `playlists_ui` shared state, plus a
-/// `library_changed_tx` subscriber that re-fetches the grid (and refreshes
+/// `library_changed` subscriber that re-fetches the grid (and refreshes
 /// an open detail) on watcher / scan / CRUD events.
 ///
 /// Called by [`super::install`], which is what guarantees the models are in place first — a

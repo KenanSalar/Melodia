@@ -53,7 +53,7 @@ pub async fn play_station(state: &AppState, id: i64) -> Result<(), AppError> {
 /// Nothing has been asked for at this point in the boot, so there is nothing to report to
 /// somebody who may not have been thinking about the station at all.
 pub async fn station_to_restore(state: &AppState, id: i64) -> Option<Arc<RadioNowPlaying>> {
-    if !state.radio_enabled() {
+    if !state.radio_enabled.get() {
         return None;
     }
     match get_station(state, id).await {
@@ -120,7 +120,7 @@ pub async fn play_directory_station(
 /// line — there is nothing for a user to do about one, and the call is deduplicated server-side
 /// so a repeat is not an error either.
 fn spawn_click(state: &AppState, station_uuid: Option<&str>) {
-    if !state.radio_send_clicks() {
+    if !state.radio_send_clicks.get() {
         return;
     }
     let Some(uuid) = station_uuid.filter(|uuid| !uuid.is_empty()) else {

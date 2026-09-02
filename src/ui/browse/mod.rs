@@ -42,7 +42,7 @@ use crate::entities::browse::{BrowseFile, BrowseFolder};
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::services::view_state;
 use crate::state::AppState;
-use crate::ui::section_state::SectionState;
+use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
 use crate::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
@@ -74,7 +74,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<BrowseUi> {
     install_models(cx.app);
     install_selection_model(cx.app);
     let browse_ui = Arc::new(BrowseUi::new(cx.cover_thumbs.clone()));
-    callbacks::wire(cx.app, cx.state, &browse_ui);
+    callbacks::wire(cx.app, cx.state, cx.view_state, &browse_ui);
     crate::ui::cover_generation::notify_on_decode(
         &browse_ui.grid_covers,
         cx.app,
@@ -141,26 +141,6 @@ impl BrowseUi {
             fetch_token: AtomicU64::new(0),
             section: SectionState::new(),
         }
-    }
-
-    pub fn set_section_active(&self, active: bool) {
-        self.section.set_active(active);
-    }
-
-    pub fn section_active(&self) -> bool {
-        self.section.active()
-    }
-
-    /// Mark the cached listing stale — a `library_changed` bump arrived while
-    /// the section was hidden.
-    pub fn mark_dirty(&self) {
-        self.section.mark_dirty();
-    }
-
-    /// Atomically read-and-clear. `true` on a section enter means the current
-    /// directory must be re-fetched.
-    pub fn take_dirty(&self) -> bool {
-        self.section.take_dirty()
     }
 
     /// Which presentation is mounted.
@@ -391,6 +371,8 @@ pub fn to_slint_browse_track_row(f: &BrowseFile) -> UiTrackListRow {
         }
     }
 }
+
+impl_section_state_helpers!(BrowseUi);
 
 // `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {

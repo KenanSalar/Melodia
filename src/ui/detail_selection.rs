@@ -7,8 +7,9 @@
 //! Rust-side track list / applied-selection shadow. This module captures
 //! that logic once, parameterised over the [`RowSelectionView`] trait
 //! (the handful of Slint accessors it touches) and a [`SelectionRefs`]
-//! borrow of the two caches. Each view's `selection.rs` is a thin adapter
-//! that supplies those.
+//! borrow of the two caches. Each view's `selection.rs` supplies those
+//! through [`impl_detail_selection`], the adapter having been four
+//! byte-identical files before it.
 //!
 //! The trait itself lives in [`crate::ui::list_selection`], the layer under this one. It is
 //! re-exported for [`crate::ui::detail_filter`], the one importer outside these two files, whose
@@ -128,6 +129,28 @@ pub fn apply_selection_to_rows<V: RowSelectionView>(view: &V, refs: &SelectionRe
     *applied = desired;
 }
 
+/// Drop from `selected-ids` every id `tracks` no longer carries. Each detail view's
+/// re-fetch owes this before it hands the model swap on: the swap re-stamps the rows from
+/// this set, so an id whose track is gone would otherwise keep the "{n} selected" pill and
+/// the applied shadow describing a track nothing can show.
+///
+/// Bails on an empty selection, the steady state on the watcher tick that runs this, rather
+/// than building a set over every track in the entity to prove nothing needed dropping. And
+/// having built it, only writes when it actually dropped something: the write resets the
+/// `[int]` model, which every mounted row reads the length of, so a tick that prunes nothing
+/// would dirty a binding per visible row to store what was already there.
+pub fn prune_selection_to<V: RowSelectionView>(view: &V, tracks: &[RsTrackListRow]) {
+    let selected = view.selected_ids();
+    if selected.row_count() == 0 {
+        return;
+    }
+    let valid: HashSet<i32> = tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect();
+    let kept: Vec<i32> = selected.iter().filter(|id| valid.contains(id)).collect();
+    if kept.len() != selected.row_count() {
+        write_selection(view, kept);
+    }
+}
+
 /// Mutate the persistent `selected-ids` `VecModel<i32>` in place. Falls
 /// back to a fresh `ModelRc` only if the install step somehow didn't run.
 pub fn write_selection<V: RowSelectionView>(view: &V, ids: Vec<i32>) {
@@ -138,3 +161,54 @@ pub fn write_selection<V: RowSelectionView>(view: &V, ids: Vec<i32>) {
         view.replace_selected_ids(ModelRc::new(VecModel::from(ids)));
     }
 }
+
+/// Generate a detail view's selection adapter: the [`SelectionRefs`] borrow plus the four
+/// entry points its callbacks and `detail.rs` reach for.
+///
+/// `$Ui` is the view's handle, `$Global` its Slint global. Both are named because the two are
+/// the only things the four adapters ever differed in.
+macro_rules! impl_detail_selection {
+    ($Ui:ty, $Global:ty) => {
+        /// Borrow the detail caches the generic selection logic mutates.
+        fn refs(view: &$Ui) -> $crate::ui::detail_selection::SelectionRefs<'_> {
+            $crate::ui::detail_selection::SelectionRefs {
+                tracks: &view.detail.tracks,
+                applied: &view.detail.applied_selection,
+            }
+        }
+
+        /// Compute the new selection state for a detail-row click and apply it.
+        pub fn handle_select_row(
+            ui: &$crate::AppWindow,
+            view: &$Ui,
+            idx: i32,
+            id: i32,
+            shift: bool,
+            ctrl: bool,
+        ) {
+            use slint::ComponentHandle as _;
+            let g = ui.global::<$Global>();
+            $crate::ui::detail_selection::handle_select_row(&g, &refs(view), idx, id, shift, ctrl);
+        }
+
+        /// Reset selection (called from the action-pill "Clear" button).
+        pub fn clear_selection(ui: &$crate::AppWindow, view: &$Ui) {
+            use slint::ComponentHandle as _;
+            let g = ui.global::<$Global>();
+            $crate::ui::detail_selection::clear_selection(&g, &refs(view));
+        }
+
+        /// Re-stamp the `selected` flag on the rows whose selection membership flipped.
+        /// See [`crate::ui::detail_selection::apply_selection_to_rows`].
+        pub(super) fn apply_selection_to_rows(g: &$Global, view: &$Ui) {
+            $crate::ui::detail_selection::apply_selection_to_rows(g, &refs(view));
+        }
+
+        /// Mutate the persistent `selected-ids` `VecModel<i32>` in place.
+        pub(super) fn write_selection(g: &$Global, ids: Vec<i32>) {
+            $crate::ui::detail_selection::write_selection(g, ids);
+        }
+    };
+}
+
+pub(crate) use impl_detail_selection;

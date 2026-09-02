@@ -1,6 +1,6 @@
 //! Songs tab: fetch, sort persistence, in-memory filter, model apply.
 //!
-//! The Tracks view's fetch shape — one SQL fetch of the whole set per `library_changed_tx` tick,
+//! The Tracks view's fetch shape — one SQL fetch of the whole set per `library_changed` tick,
 //! with both the per-keystroke filter walk and the per-header-click re-sort running in memory off
 //! [`crate::ui::track_list_cache`].
 

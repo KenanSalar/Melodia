@@ -12,27 +12,31 @@ export component FileWatchingSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> card-title: @tr("File Watching");
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, @tr("File Watching"),
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
-    out property <bool> has-matches:
-        row-visible(@tr("Watch for file changes"),
-            @tr("Automatically detect when files are added, removed, or changed in your library folders."));
+    property <string> watch-label: @tr("Watch for file changes");
+    property <string> watch-desc: @tr("Automatically detect when files are added, removed, or changed in your library folders.");
+
+    property <bool> show-watch: row-visible(watch-label, watch-desc);
+
+    out property <bool> has-matches: show-watch;
 
     // Wrapper so the root's preferred-height tracks the card's natural height —
     // see `language-section.slint`.
     VerticalLayout {
         if has-matches: SectionCard {
-            title: @tr("File Watching");
+            title: root.card-title;
 
-            if root.row-visible(@tr("Watch for file changes"),
-                    @tr("Automatically detect when files are added, removed, or changed in your library folders.")): SettingRow {
+            if root.show-watch: SettingRow {
                 icon: "visibility";
-                label: @tr("Watch for file changes");
-                description: @tr("Automatically detect when files are added, removed, or changed in your library folders.");
+                label: root.watch-label;
+                description: root.watch-desc;
                 ToggleSwitch {
                     checked <=> Settings.watch-for-file-changes;
                     toggled(v) => { Settings.watch-for-file-changes-changed(v); }

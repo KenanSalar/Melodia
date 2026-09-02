@@ -150,41 +150,6 @@ pub struct LookupQuery<'a> {
     pub release: Option<&'a str>,
 }
 
-/// Resolve a single recording's MBID via `GET /1/metadata/lookup/`. A track the
-/// mapper can't place returns an object with no `recording_mbid` → `Ok(None)`.
-pub async fn lookup_recording_mbid(
-    client: &reqwest::Client,
-    token: &str,
-    query: &LookupQuery<'_>,
-) -> Result<Option<MbidMatch>, ListenBrainzError> {
-    let mut params: Vec<(&str, &str)> = vec![
-        ("artist_name", query.artist),
-        ("recording_name", query.title),
-    ];
-    if let Some(release) = query.release {
-        params.push(("release_name", release));
-    }
-    let response = client
-        .get(format!("{LB_API_BASE}/1/metadata/lookup/"))
-        .header(reqwest::header::AUTHORIZATION, format!("Token {token}"))
-        .query(&params)
-        .send()
-        .await
-        .map_err(|e| AppError::network("ListenBrainz metadata-lookup request failed", e))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        return Err(error_for(status, response).await);
-    }
-    let bytes =
-        crate::services::read_capped(response, "ListenBrainz metadata-lookup", ANSWER_MAX_BYTES)
-            .await?;
-    let result: LookupResult = serde_json::from_slice(&bytes).map_err(|e| {
-        AppError::network("Failed to parse ListenBrainz metadata-lookup response", e)
-    })?;
-    Ok(mbid_match(result.recording_mbid, result.release_mbid))
-}
-
 /// Resolve up to [`MAX_LOOKUPS_PER_POST`] recordings in one `POST
 /// /1/metadata/lookup/`. Returns a vec aligned 1:1 with `queries` (unmatched
 /// slots are `None`), keyed off each result's echoed `index` so a reordered or
@@ -419,15 +384,6 @@ struct LookupRecording<'a> {
     recording: &'a str,
     #[serde(rename = "release_name", skip_serializing_if = "Option::is_none")]
     release: Option<&'a str>,
-}
-
-/// A single `GET /1/metadata/lookup/` body. An unmatched track omits both mbids.
-#[derive(Deserialize)]
-struct LookupResult {
-    #[serde(default)]
-    recording_mbid: Option<String>,
-    #[serde(default)]
-    release_mbid: Option<String>,
 }
 
 /// One entry of a `POST /1/metadata/lookup/` array. `index` echoes the input

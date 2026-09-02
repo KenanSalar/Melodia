@@ -77,11 +77,9 @@ fn compute_hash_empty_input() {
 /// added next, in a file the ledger has never heard of.
 #[test]
 fn nothing_writes_into_the_store_without_staging_and_renaming() {
-    use crate::test_support::{SRC_DIR, stripped_sources};
+    use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
 
-    /// A floor, so a walk that silently found nothing can't pass vacuously.
-    const MIN_SOURCES: usize = 200;
-    /// The same, for the sources that reach a store directory — most only pass one along, so this
+    /// A floor for the sources that reach a store directory — most only pass one along, so this
     /// stays a floor rather than becoming an equality that fails on every new courier.
     const MIN_STORE_TOUCHING: usize = 8;
 

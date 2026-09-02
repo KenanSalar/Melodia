@@ -5,6 +5,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Model, SharedString};
 
 use crate::library;
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{
@@ -15,15 +16,20 @@ use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
 use crate::{AppWindow, Tracks};
 
 /// Wire the list's own callbacks, and seed the sort header they persist through.
-pub(super) fn wire(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
+pub(super) fn wire(
+    ui: &AppWindow,
+    state: &AppState,
+    view_state: Option<&ViewStateData>,
+    tracks_ui: &Arc<TracksUi>,
+) {
     let tracks = ui.global::<Tracks>();
     let weak = ui.as_weak();
 
     // Seed the sort header from the persisted `view_sort["tracks"]` so the
     // arrow matches the order `spawn_initial_tracks_fetch` fetches with.
-    if let Some((field, dir)) = persisted_sort(state, view_id::TRACKS) {
-        tracks.set_sort_field(SharedString::from(field.as_str()));
-        tracks.set_sort_dir(SharedString::from(dir));
+    if let Some(sort) = persisted_sort(view_state, view_id::TRACKS) {
+        tracks.set_sort_field(SharedString::from(sort.field.as_str()));
+        tracks.set_sort_dir(SharedString::from(sort.dir.as_str()));
     }
 
     // request-sort: clicking a header column. Same field flips dir; new field

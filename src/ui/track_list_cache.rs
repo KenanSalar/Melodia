@@ -96,7 +96,7 @@ struct SortRow<'a> {
     key: &'a TrackSortKey,
 }
 
-/// Every conversion here undoes one [`crate::ui::tracks::prepare_track_list_row`] made, so
+/// Every conversion here undoes one [`crate::ui::tracks::to_slint_track_list_row`] made, so
 /// this produces the order the DB rows produce — `the_cache_sorts_exactly_as_the_db_rows_do`
 /// holds it to that. `track_number` is the one needing work: it arrives `unwrap_or(0)` and
 /// the sort's arm reads `0` as "unnumbered", so the sentinel has to be rebuilt or an

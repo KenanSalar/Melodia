@@ -111,7 +111,7 @@ pub(super) fn schedule_drop_flush(state: &AppState, path: PathBuf) {
                 Ok(_) => {
                     // The queue itself updates through `sinks.queue`, but no other
                     // view sees freshly-imported tracks without this bump.
-                    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+                    state.library_changed.bump();
                 }
                 Err(e) => {
                     log::warn!("queue_import_files (drop): {e}");
@@ -131,7 +131,7 @@ pub(super) fn schedule_drop_flush(state: &AppState, path: PathBuf) {
                     Ok(_) => {
                         // Refreshes the open detail's track list *and* the grid — a
                         // previously-empty playlist has a new count and thumbnail.
-                        state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+                        state.library_changed.bump();
                     }
                     Err(e) => log::warn!("import_files_to_playlist (drop): {e}"),
                 }

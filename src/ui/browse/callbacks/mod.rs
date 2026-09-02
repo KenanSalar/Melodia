@@ -18,20 +18,26 @@ mod view_mode;
 use std::sync::Arc;
 
 use crate::AppWindow;
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::browse::BrowseUi;
 
 /// Wire every `Browse.*` callback to its `library::*` counterpart and the `browse_ui`
-/// shared state, plus a `library_changed_tx` subscriber that re-fetches the current path
+/// shared state, plus a `library_changed` subscriber that re-fetches the current path
 /// on watcher events.
 ///
 /// Called by [`super::install`], which is what guarantees the models are in place first — a
 /// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
 /// have run before it.
-pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
+pub(super) fn wire(
+    ui: &AppWindow,
+    state: &AppState,
+    view_state: Option<&ViewStateData>,
+    browse_ui: &Arc<BrowseUi>,
+) {
     lifecycle::wire(ui, state, browse_ui);
     navigation::wire(ui, state, browse_ui);
-    tracklist::wire(ui, state, browse_ui);
+    tracklist::wire(ui, state, view_state, browse_ui);
     columns::wire(ui, state);
     view_mode::wire(ui, state, browse_ui);
 }

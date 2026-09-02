@@ -18,7 +18,6 @@ use crate::library::search::SearchResults;
 use crate::services::settings::SortDir;
 use crate::ui::genres::genre_accent;
 use crate::ui::track_sort::sort_track_rows_by;
-use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{
     AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
@@ -36,7 +35,7 @@ pub fn apply_results_to_slint(
     query: &str,
 ) {
     let sort = search_ui.state().sort.lock().clone();
-    let (prepared, total) = sort_and_prepare(&results.tracks, &sort);
+    let (rows, total) = sort_track_rows(&results.tracks, &sort);
     let top = compute_top_result(results, query);
 
     let album_rows: Vec<UiEntityStripRow> =
@@ -51,23 +50,22 @@ pub fn apply_results_to_slint(
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Search>();
-        write_tracks(&g, prepared, total);
+        write_tracks(&g, rows, total);
         write_strips(&g, album_rows, &artists);
         write_top_result(&g, top);
     });
 }
 
-/// Sort a result set's tracks into display order and prepare the `Send` half
-/// of each row. Runs on the worker, so the event-loop closure only pays for
-/// the `!Send` cover lookups.
+/// Sort a result set's tracks into display order and build their rows. Runs on the worker, so
+/// the event-loop closure only pays for the model write.
 ///
-/// Result sets are LIMIT-bounded, so preparing the *full* set — rather than
-/// just the compact slice, which can't be sized off-thread because
-/// `show-all-tracks` is UI-thread state — is cheap.
-fn sort_and_prepare(
+/// Result sets are LIMIT-bounded, so building the *full* set — rather than just the compact
+/// slice, which can't be sized off-thread because `show-all-tracks` is UI-thread state — is
+/// cheap.
+fn sort_track_rows(
     tracks: &[RsTrackListRow],
     sort: &crate::services::settings::ViewSort,
-) -> (Vec<PreparedTrackRow>, i32) {
+) -> (Vec<UiTrackListRow>, i32) {
     // The FTS5 `ORDER BY rank` lands these rank-ordered, but the user may
     // have picked a different sort after the fact.
     let mut sorted: Vec<RsTrackListRow> = tracks.to_vec();
@@ -89,22 +87,21 @@ fn sort_and_prepare(
     }
 
     let total = len_as_i32(sorted.len());
-    let prepared = sorted.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
-    (prepared, total)
+    let rows = sorted.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
+    (rows, total)
 }
 
-/// Finish the Songs rows against the live `show-all-tracks` flag and write
+/// Truncate the Songs rows against the live `show-all-tracks` flag and write
 /// them, with the untruncated total beside them.
-fn write_tracks(g: &Search, prepared: Vec<PreparedTrackRow>, total: i32) {
+fn write_tracks(g: &Search, rows: Vec<UiTrackListRow>, total: i32) {
     let take = if g.get_show_all_tracks() {
-        prepared.len()
+        rows.len()
     } else {
-        prepared.len().min(COMPACT_TRACK_LIMIT)
+        rows.len().min(COMPACT_TRACK_LIMIT)
     };
-    let mut rendered: Vec<UiTrackListRow> =
-        prepared.into_iter().take(take).map(finish_track_list_row).collect();
-    restamp_rows(g, &mut rendered);
-    write_track_model(g, rendered);
+    let mut shown: Vec<UiTrackListRow> = rows.into_iter().take(take).collect();
+    restamp_rows(g, &mut shown);
+    write_track_model(g, shown);
     g.set_tracks_total(total);
 }
 

@@ -168,6 +168,13 @@ export global Settings {
     in-out property <bool> watch-for-file-changes: true;
     callback watch-for-file-changes-changed(bool);
 
+    // Whether a star also lands in the file's own tag. **On by default**: a rating that lives
+    // only in the database is one a library rebuild loses and no other player can see, which is
+    // the reason the write path exists at all. The cost it buys is real though — lofty
+    // re-serializes the whole tag, so a rating rewrites the file — hence the switch.
+    in-out property <bool> write-ratings-to-tags: true;
+    callback write-ratings-to-tags-changed(bool);
+
     // Logical pixels, mirrored into `Theme.shell-radius` on every change so the mantle shell and
     // content panel repaint reactively. Rust clamps and snaps to the nearest chip preset on read,
     // so the chip selection matches what's painted even after a hand-edited `settings.json`.

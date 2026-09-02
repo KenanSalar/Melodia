@@ -493,17 +493,16 @@ fn no_leave_clears_the_chips_behind_the_macro() {
 /// `applied_track_id`. The wrapper is what pairs the write with the two re-solves.
 #[test]
 fn the_palette_is_never_written_without_re_solving_the_backdrops() {
-    /// Floor on the walk, so a broken corpus reads as a broken corpus.
-    const MIN_SOURCES: usize = 200;
-
     // This file spells the needle, so it is its own first hit — comment-stripping doesn't help
     // when the string lives in the assertion.
     const SELF: &str = "ui/tests/hero_backdrop_tests.rs";
 
     let mut callers = Vec::new();
-    for (rel, code) in
-        crate::test_support::stripped_sources(crate::test_support::SRC_DIR, "rs", MIN_SOURCES)
-    {
+    for (rel, code) in crate::test_support::stripped_sources(
+        crate::test_support::SRC_DIR,
+        "rs",
+        crate::test_support::MIN_SOURCES,
+    ) {
         if rel != SELF && code.contains("themes::apply(") {
             callers.push(rel);
         }

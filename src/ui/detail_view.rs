@@ -110,16 +110,20 @@ macro_rules! impl_detail_view_helpers {
         impl_detail_view_helpers!(@artwork $Global);
     };
     (@tracks_model $Global:ty) => {
-        /// Swap the detail global's `tracks` `VecModel` contents in place, falling back
-        /// to a fresh model if the downcast fails — never expected, the model always
-        /// being installed as a `VecModel`.
+        /// Swap the detail global's `tracks` `VecModel` contents in place, through the keyed
+        /// diff so re-opening the entity already on screen patches rather than resetting.
+        /// Falls back to a fresh model if the downcast fails — never expected, the model
+        /// always being installed as a `VecModel`.
+        ///
+        /// `rows` must already carry the selection it should end up with; the diff compares
+        /// whole rows, so a caller that stamps selection afterwards would have it skipped.
         fn replace_tracks_model(g: &$Global, rows: Vec<$crate::TrackListRow>) {
             use slint::Model as _;
             let model = g.get_tracks();
             if let Some(vm) =
                 model.as_any().downcast_ref::<slint::VecModel<$crate::TrackListRow>>()
             {
-                vm.set_vec(rows);
+                $crate::ui::model_diff::apply_rows_keyed(vm, rows, |r| r.id);
             } else {
                 g.set_tracks(slint::ModelRc::new(slint::VecModel::from(rows)));
             }
@@ -131,8 +135,9 @@ pub(crate) use impl_detail_view_helpers;
 
 /// A view's sort as `(field, dir)` display strings from the persisted
 /// `view_sort[view_id]`, falling back to `default_field` ascending on a fresh install.
-/// Every detail `open_*` uses it, so reopening any entity restores the last sort picked
-/// for that view type, as does the Tracks cold fetch.
+/// Every detail `open_*` uses it, so reopening any entity restores the last sort picked for that
+/// view type. It reads the file each call, which is what those want and what a boot-time seed
+/// does not: reach for [`crate::ui::callbacks::persisted_sort`] there instead.
 pub fn resolve_view_sort(
     state: &crate::state::AppState,
     view_id: &str,

@@ -24,7 +24,7 @@ pub async fn set_favorite(state: &AppState, ids: Vec<i64>, favorite: bool) -> Re
     // flag onto `current_track` so the Now-Playing heart updates without waiting
     // for the next track load (parity with `toggle_current_favorite`).
     sync_current_track_favorite(state, &ids, favorite);
-    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed.bump();
     sync_love(state, &ids, favorite).await;
     Ok(())
 }
@@ -132,7 +132,7 @@ pub async fn toggle_current_favorite(state: &AppState) -> Result<Option<(i64, bo
         Vec::<PlayerAction>::new()
     });
 
-    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed.bump();
 
     sync_love(state, &[id], new_fav).await;
 

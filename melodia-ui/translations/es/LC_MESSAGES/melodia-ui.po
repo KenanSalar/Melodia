@@ -148,6 +148,9 @@ msgstr "No hay ninguna pista en reproducción"
 msgid "Unknown artist"
 msgstr "Artista desconocido"
 
+msgid "Unknown album"
+msgstr "Álbum desconocido"
+
 # ---- Now Playing view -------------------------------------------------------
 
 msgid "Up Next"
@@ -573,6 +576,17 @@ msgstr "Vigilar cambios en archivos"
 
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Detecta automáticamente cuando se añaden, eliminan o modifican archivos en tus carpetas de la biblioteca."
+
+# ---- Ratings section --------------------------------------------------------
+
+msgid "Ratings"
+msgstr "Valoraciones"
+
+msgid "Save ratings to files"
+msgstr "Guardar las valoraciones en los archivos"
+
+msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
+msgstr "Escribe las valoraciones con estrellas en las etiquetas de cada archivo, para que sobrevivan a un nuevo análisis y otros reproductores puedan leerlas."
 
 # ---- Updates section --------------------------------------------------------
 

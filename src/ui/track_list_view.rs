@@ -53,13 +53,6 @@ pub fn hydrate(view_id: &str, vs: &ViewStateData, h: &dyn TrackListColumnState) 
     }
 }
 
-/// The current column widths, for `view_column_widths[view_id]` on shutdown. The
-/// resize-handle drag clamps to each column's min/max in `track-list-header.slint`, so
-/// the persisted values are always in range.
-pub fn snapshot_widths(h: &dyn TrackListColumnState) -> ColumnWidths {
-    h.get_widths()
-}
-
 /// Snapshot both widths and visibility into `view_id`'s `views.json` entries, mutating
 /// `vs` in place — the caller writes it back to disk.
 pub fn snapshot_into_view_state(

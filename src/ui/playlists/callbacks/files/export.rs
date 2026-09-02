@@ -11,7 +11,9 @@ use super::{refresh_export_selection_meta, set_all_picks, toggle_pick};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::file_dialog;
-use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
+use crate::ui::shell::notifications::{
+    NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
+};
 use crate::ui::util::count_as_i32;
 use crate::{
     AppWindow, Dialog, PlaylistExportPickRow as UiPlaylistExportPickRow, Playlists, Settings,
@@ -124,11 +126,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
                         );
                     }
                     Ok(_) => {
-                        notifications.show(export_failed_toast(&settings));
+                        show_export_failed(&ui, &notifications);
                     }
                     Err(e) => {
                         log::warn!("export_playlists_to_folder: {e}");
-                        notifications.show(export_failed_toast(&settings));
+                        show_export_failed(&ui, &notifications);
                     }
                 }
             }));
@@ -174,10 +176,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
 /// Nothing was written. The two ways that happens — an `Ok` reporting zero
 /// exports, and an outright failure — say the same thing to the user and differ
 /// only in whether there is an error worth logging.
-fn export_failed_toast(settings: &Settings) -> NotificationParams {
-    NotificationParams::plain(
-        "error",
-        settings.invoke_playlist_export_failed_title(),
-        settings.invoke_playlist_export_failed_message(),
-    )
+fn show_export_failed(ui: &AppWindow, notifications: &NotificationsUi) {
+    notifications.show_localized(ui, "error", "", |ui| {
+        let g = ui.global::<Settings>();
+        RowText::plain(
+            g.invoke_playlist_export_failed_title(),
+            g.invoke_playlist_export_failed_message(),
+        )
+    });
 }

@@ -3,7 +3,7 @@
 //! Nothing at runtime can catch what these hold: the app builds, boots and
 //! paints either way, and only the *section it boots into* behaves wrongly.
 
-const UI_SETUP: &str = include_str!("../ui_setup.rs");
+const UI_SETUP: &str = include_str!("../ui_setup/views.rs");
 const MAIN: &str = include_str!("../../main.rs");
 
 /// The persisted nav index has to reach `Nav.selected-index` before any

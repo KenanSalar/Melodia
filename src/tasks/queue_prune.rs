@@ -1,4 +1,4 @@
-//! Subscriber on `state.library_changed_tx` that reconciles the playback
+//! Subscriber on `state.library_changed` that reconciles the playback
 //! queue against the live `tracks` table. When the file watcher (or any
 //! other library mutation) removes a row, this task drops the matching
 //! `Arc<TrackSummary>` out of the queue. If the currently-playing track
@@ -37,7 +37,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let player_state = state.player_state.clone();
     let sinks = state.sinks.clone();
     let engine = state.engine.clone();
-    let mut rx = state.library_changed_tx.subscribe();
+    let mut rx = state.library_changed.subscribe();
 
     spawner.spawn_cancellable(move |shutdown| async move {
         loop {
@@ -47,7 +47,6 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                     if changed.is_err() {
                         break;
                     }
-                    let _ = rx.borrow_and_update();
                     if let Err(e) = reconcile_once(&db, &player_state, &sinks, &engine).await {
                         log::warn!("queue_prune reconcile failed: {e}");
                     }

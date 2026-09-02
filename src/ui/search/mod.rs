@@ -14,7 +14,7 @@
 //!
 //! Cache discipline is `src/ui/favorites`': per-strip `CoverThumbs` LRUs
 //! released on section leave. There is deliberately **no**
-//! `library_changed_tx` subscriber — Search is query-driven, and a scan
+//! `library_changed` subscriber — Search is query-driven, and a scan
 //! completing mid-query must not swap results out from under the user.
 
 mod apply;
@@ -60,7 +60,7 @@ pub fn install(
 ) -> Arc<SearchUi> {
     install_models(cx.app);
     let search_ui = Arc::new(SearchUi::new(cx.cover_thumbs.clone()));
-    callbacks::wire(cx.app, cx.state, &search_ui, albums_ui, artists_ui);
+    callbacks::wire(cx.app, cx.state, cx.view_state, &search_ui, albums_ui, artists_ui);
     search_ui
 }
 

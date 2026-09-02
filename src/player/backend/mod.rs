@@ -230,14 +230,21 @@ impl PlaybackEngine {
         // everything depending on *which* deck we land on happens below.
         let mut decoded = FileDecoder::open(Path::new(file_path))?;
 
+        // One value for the decoder's seek and the deck's clock anchor both, so the two cannot
+        // disagree about where this source begins.
+        let mut start = start_position_ms.map_or(Duration::ZERO, Duration::from_millis);
+
         // Seeked on the source we still own, rather than through the deck once it is mounted: a
         // deck seek is serviced by the audio callback, so that spelling puts a demuxer scan on the
         // real-time thread and parks this one on the callback with the decks lock held. Same
         // reasoning as the hoisted open above, one step further.
-        if let Some(pos) = start_position_ms {
-            log::debug!("Resuming playback at {pos}ms");
-            if let Err(e) = decoded.try_seek(Duration::from_millis(pos)) {
+        if !start.is_zero() {
+            log::debug!("Resuming playback at {}ms", start.as_millis());
+            if let Err(e) = decoded.try_seek(start) {
                 log::warn!("Seek failed: {e}");
+                // The anchor goes with it: the clock counts frames handed out, and a source the
+                // seek refused to move hands out its first one from wherever it still is.
+                start = Duration::ZERO;
             }
         }
 
@@ -262,7 +269,9 @@ impl PlaybackEngine {
             decks.crossfade_to(fade_ms, volume, speed, build);
             self.crossfade_armed.store(true, Ordering::Release);
         } else {
-            decks.cut_to(volume, speed, build);
+            // The clock is anchored where the decoder was seeked to above, not at zero: the deck
+            // counts frames handed out, and a resumed source hands out its first frame minutes in.
+            decks.cut_to(volume, speed, start, build);
             self.crossfade_armed.store(false, Ordering::Release);
         }
         self.gapless_pending.store(false, Ordering::Release);
@@ -334,7 +343,8 @@ impl PlaybackEngine {
         *self.live_stream.lock() = Some(shared);
         self.bump_epoch();
         let decks = self.lock_decks();
-        decks.cut_to(volume, Self::STREAM_SPEED, |deck| {
+        // A live mount has no timeline to resume on, so its clock starts where the connection did.
+        decks.cut_to(volume, Self::STREAM_SPEED, Duration::ZERO, |deck| {
             self.build_source(source, TrackReplayGain::default(), deck)
         });
         self.crossfade_armed.store(false, Ordering::Release);

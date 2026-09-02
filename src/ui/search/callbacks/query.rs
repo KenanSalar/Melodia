@@ -85,7 +85,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
                 let g = ui.global::<Search>();
                 g.set_show_all_tracks(!g.get_show_all_tracks());
             }
-            fetch::swap_tracks_compact_or_full(&su, &weak);
+            fetch::reapply_cached_results(&su, &weak);
         });
     }
 }

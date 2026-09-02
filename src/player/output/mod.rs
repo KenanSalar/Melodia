@@ -39,7 +39,7 @@ impl AudioOutput {
     /// [`AppError::Player`] when no config the device offers can be opened.
     pub fn open<E>(voices: usize, error_callback: E) -> Result<Self, AppError>
     where
-        E: FnMut(cpal::StreamError) + Clone + Send + 'static,
+        E: FnMut(cpal::Error) + Clone + Send + 'static,
     {
         let (stream, mixer) =
             device::open(|shape: Shape| mixer::pair(voices, shape), error_callback)?;

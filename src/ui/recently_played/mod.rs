@@ -30,7 +30,7 @@ use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
-use crate::ui::section_state::SectionState;
+use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
 
 use state::{GRID_THUMB_CAP, RecentlyPlayedUiState, SongsTotals};
@@ -131,14 +131,6 @@ impl RecentlyPlayedUi {
         }
     }
 
-    pub fn set_section_active(&self, active: bool) {
-        self.section.set_active(active);
-    }
-
-    pub fn section_active(&self) -> bool {
-        self.section.active()
-    }
-
     /// Mirror the mounted sub-view. Written on the UI thread, from the tab bar's pick and from the
     /// section-lifecycle seed.
     pub fn set_active_tab(&self, tab: RecentlyPlayedTab) {
@@ -147,14 +139,6 @@ impl RecentlyPlayedUi {
 
     pub fn active_tab(&self) -> RecentlyPlayedTab {
         RecentlyPlayedTab::from_code(self.active_tab.load(Ordering::Relaxed))
-    }
-
-    pub fn mark_dirty(&self) {
-        self.section.mark_dirty();
-    }
-
-    pub fn take_dirty(&self) -> bool {
-        self.section.take_dirty()
     }
 
     /// Remember that a refresh tick reached the page with Most Played not mounted.
@@ -275,6 +259,8 @@ impl RecentlyPlayedUi {
         }
     }
 }
+
+impl_section_state_helpers!(RecentlyPlayedUi);
 
 // `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {

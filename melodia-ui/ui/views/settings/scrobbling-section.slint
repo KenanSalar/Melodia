@@ -22,35 +22,50 @@ export component ScrobblingSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> card-title: @tr("Scrobbling");
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, @tr("Scrobbling"),
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
+    // Each row's strings, declared once and read by both the visibility term and the row.
+    property <string> lastfm-label: @tr("Last.fm");
+    property <string> lastfm-scrobble-label: @tr("Scrobble to Last.fm");
+    property <string> lastfm-scrobble-desc: @tr("Report each play to your Last.fm account");
+    property <string> lastfm-loves-label: @tr("Sync loved tracks to Last.fm");
+    property <string> lastfm-loves-desc: @tr("Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites");
+    property <string> lb-label: @tr("ListenBrainz");
+    property <string> lb-scrobble-label: @tr("Scrobble to ListenBrainz");
+    property <string> lb-scrobble-desc: @tr("Report each play to your ListenBrainz account");
+    property <string> lb-loves-label: @tr("Sync loved tracks to ListenBrainz");
+    property <string> lb-loves-desc: @tr("Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)");
+    property <string> mbid-label: @tr("Add MusicBrainz IDs to your music");
+    property <string> mbid-desc: @tr("Look up and tag files so loves work on ListenBrainz");
+
     // A cluster searches as one unit: the toggles' labels fold into the status
     // row's text, so matching any of them reveals the whole thing.
     property <bool> show-lastfm: row-visible(
-        @tr("Last.fm") + " " + @tr("Scrobble to Last.fm") + " " + @tr("Sync loved tracks to Last.fm"),
-        @tr("Report each play to your Last.fm account"));
+        lastfm-label + " " + lastfm-scrobble-label + " " + lastfm-loves-label,
+        lastfm-scrobble-desc);
     property <bool> show-listenbrainz: row-visible(
-        @tr("ListenBrainz") + " " + @tr("Scrobble to ListenBrainz") + " " + @tr("Sync loved tracks to ListenBrainz"),
-        @tr("Report each play to your ListenBrainz account"));
+        lb-label + " " + lb-scrobble-label + " " + lb-loves-label,
+        lb-scrobble-desc);
     // MusicBrainz auto-tagging rides on the ListenBrainz token.
-    property <bool> show-mbid: Settings.scrobble-listenbrainz-connected && row-visible(
-        @tr("Add MusicBrainz IDs to your music"),
-        @tr("Look up and tag files so loves work on ListenBrainz"));
+    property <bool> show-mbid: Settings.scrobble-listenbrainz-connected
+        && row-visible(mbid-label, mbid-desc);
 
     out property <bool> has-matches: show-lastfm || show-listenbrainz || show-mbid;
 
     VerticalLayout {
     if has-matches: SectionCard {
-        title: @tr("Scrobbling");
+        title: root.card-title;
 
         // Last.fm.
         if root.show-lastfm: SettingRow {
             icon: "history";
-            label: @tr("Last.fm");
+            label: root.lastfm-label;
             description: Settings.scrobble-lastfm-connected
                 ? @tr("Connected as {}", Settings.scrobble-lastfm-username)
                 : (Settings.scrobble-lastfm-configured
@@ -85,8 +100,8 @@ export component ScrobblingSection inherits Rectangle {
 
         if root.show-lastfm && Settings.scrobble-lastfm-connected: SettingRow {
             icon: "upload";
-            label: @tr("Scrobble to Last.fm");
-            description: @tr("Report each play to your Last.fm account");
+            label: root.lastfm-scrobble-label;
+            description: root.lastfm-scrobble-desc;
             ToggleSwitch {
                 checked <=> Settings.scrobble-lastfm-enabled;
                 toggled(v) => { Settings.scrobble-lastfm-enabled-changed(v); }
@@ -95,8 +110,8 @@ export component ScrobblingSection inherits Rectangle {
 
         if root.show-lastfm && Settings.scrobble-lastfm-connected: SettingRow {
             icon: "favorite";
-            label: @tr("Sync loved tracks to Last.fm");
-            description: @tr("Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites");
+            label: root.lastfm-loves-label;
+            description: root.lastfm-loves-desc;
             ToggleSwitch {
                 checked <=> Settings.scrobble-lastfm-love;
                 toggled(v) => { Settings.scrobble-lastfm-love-changed(v); }
@@ -108,7 +123,7 @@ export component ScrobblingSection inherits Rectangle {
         // ListenBrainz.
         if root.show-listenbrainz: SettingRow {
             icon: "history";
-            label: @tr("ListenBrainz");
+            label: root.lb-label;
             description: Settings.scrobble-listenbrainz-connected
                 ? @tr("Connected as {}", Settings.scrobble-listenbrainz-username)
                 : @tr("Not connected");
@@ -140,8 +155,8 @@ export component ScrobblingSection inherits Rectangle {
 
         if root.show-listenbrainz && Settings.scrobble-listenbrainz-connected: SettingRow {
             icon: "upload";
-            label: @tr("Scrobble to ListenBrainz");
-            description: @tr("Report each play to your ListenBrainz account");
+            label: root.lb-scrobble-label;
+            description: root.lb-scrobble-desc;
             ToggleSwitch {
                 checked <=> Settings.scrobble-listenbrainz-enabled;
                 toggled(v) => { Settings.scrobble-listenbrainz-enabled-changed(v); }
@@ -150,8 +165,8 @@ export component ScrobblingSection inherits Rectangle {
 
         if root.show-listenbrainz && Settings.scrobble-listenbrainz-connected: SettingRow {
             icon: "favorite";
-            label: @tr("Sync loved tracks to ListenBrainz");
-            description: @tr("Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)");
+            label: root.lb-loves-label;
+            description: root.lb-loves-desc;
             ToggleSwitch {
                 checked <=> Settings.scrobble-listenbrainz-love;
                 toggled(v) => { Settings.scrobble-listenbrainz-love-changed(v); }
@@ -162,8 +177,8 @@ export component ScrobblingSection inherits Rectangle {
         // token is what resolves the ids.
         if root.show-mbid: SettingRow {
             icon: "auto_awesome";
-            label: @tr("Add MusicBrainz IDs to your music");
-            description: @tr("Look up and tag files so loves work on ListenBrainz");
+            label: root.mbid-label;
+            description: root.mbid-desc;
             ToggleSwitch {
                 checked <=> Settings.scrobble-mbid-auto-tag;
                 toggled(v) => { Settings.scrobble-mbid-auto-tag-changed(v); }

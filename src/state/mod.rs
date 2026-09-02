@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use souvlaki::MediaControlEvent;
@@ -8,7 +7,9 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 pub mod contexts;
+pub mod signal;
 pub use contexts::PlaybackContext;
+pub use signal::{SharedFlag, Signal};
 
 use crate::config::Paths;
 use crate::database::{self, DbPool};
@@ -64,16 +65,22 @@ pub struct AppState {
     pub position_tx: watch::Sender<Option<PositionTick>>,
     /// Bumped whenever the track library is mutated by a scan or watcher
     /// event. UI subscribers re-fetch the Tracks model on each tick.
-    pub library_changed_tx: watch::Sender<u64>,
-    /// Bumped after every play-count flush. Split from `library_changed_tx`
+    pub library_changed: Signal,
+    /// Bumped after every play-count flush. Split from `library_changed`
     /// so the per-song flush (every track completion) doesn't imply
     /// "library structure changed" — the only views that depend on
     /// play-driven data subscribe here: Favorites (hero mosaic + Most Played
     /// strip, ranked by `play_count`) and Recently-Played (ordered by
     /// `last_played`, written on the same flush). Everything else
     /// (Tracks/Browse refreshers, `queue_prune`, the folder list) stays on
-    /// `library_changed_tx` and no longer fires per played song.
-    pub stats_changed_tx: watch::Sender<u64>,
+    /// `library_changed` and no longer fires per played song.
+    pub stats_changed: Signal,
+    /// Bumped after the UI language changes. A locale switch re-resolves every live `@tr`
+    /// binding on its own, so this exists only for the strings Rust renders through a
+    /// trampoline and stores in a model, which nothing re-reads. One subscriber: the
+    /// notification stack, whose rows outlive every navigation. Everything else so stored
+    /// sits behind a section that hands its models back on the way to Settings.
+    pub locale_changed: Signal,
     /// Bumped whenever the watcher reports a kernel-queue overflow (notify
     /// `Flag::Rescan`). A UI-thread subscriber pushes a transient
     /// "library re-syncing" toast through the notifications stack so the
@@ -82,12 +89,12 @@ pub struct AppState {
     /// land in the same `watch` slot only paints one toast — which is
     /// also what `RECONCILE_IN_FLIGHT` does to the reconcile spawn
     /// itself.
-    pub rescan_notice_tx: watch::Sender<u64>,
+    pub rescan_notice: Signal,
     /// Bumped by `tasks::audio_health` when the output device goes away. A
     /// UI-thread subscriber pushes a sticky warning toast — nothing else
     /// notices, so playback runs on with the position ticking and no sound.
-    /// Coalesces like `rescan_notice_tx`: a burst paints one toast.
-    pub audio_device_lost_tx: watch::Sender<u64>,
+    /// Coalesces like `rescan_notice`: a burst paints one toast.
+    pub audio_device_lost: Signal,
     /// Live progress for the folder scan in flight. `None` means idle; the UI
     /// uses that to hide the progress bar in the Library settings section.
     pub scan_progress_tx: watch::Sender<Option<ScanProgressTick>>,
@@ -109,15 +116,21 @@ pub struct AppState {
     /// rather than a read at the decision point because every reader is on a
     /// path a file read has no business being on: `library::radio`'s guard runs
     /// on a tokio worker per directory call, and `boot::ui_setup` asks before
-    /// the window is shown. [`AppState::set_radio_enabled`] owns when it moves.
-    radio_enabled: Arc<AtomicBool>,
+    /// the window is shown. Every writer moves it *before* spawning the persist — the rule
+    /// [`SharedFlag`] carries — so a directory call racing the disk write sees the new answer.
+    pub radio_enabled: SharedFlag,
     /// Whether directory results drop segmented stations, on the same terms as
     /// [`Self::radio_enabled`]: `library::radio::search` reads it per page, on a
     /// worker.
-    radio_hide_segmented: Arc<AtomicBool>,
+    pub radio_hide_segmented: SharedFlag,
     /// Whether playing a station reports a click back to the directory. Read on
     /// the play path, which is already on a worker.
-    radio_send_clicks: Arc<AtomicBool>,
+    pub radio_send_clicks: SharedFlag,
+    /// Whether a star rating is also written into the file's own tag, on the same
+    /// terms as [`Self::radio_enabled`]: `tasks::rating_writeback` asks once per
+    /// coalesced burst, and a `settings.json` read there would be a file read on
+    /// the path a rating click already paid for.
+    pub write_ratings_to_tags: SharedFlag,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Shared `reqwest::Client`, built lazily on first use via
     /// [`AppState::http_client`]. Only the updater and the post-scan Deezer
@@ -194,10 +207,6 @@ impl AppState {
         let (vm_tx, _) = watch::channel::<Option<PlayerViewModelLight>>(None);
         let (q_tx, _) = watch::channel::<Option<QueueViewModel>>(None);
         let (position_tx, _) = watch::channel::<Option<PositionTick>>(None);
-        let (library_changed_tx, _) = watch::channel::<u64>(0);
-        let (stats_changed_tx, _) = watch::channel::<u64>(0);
-        let (rescan_notice_tx, _) = watch::channel::<u64>(0);
-        let (audio_device_lost_tx, _) = watch::channel::<u64>(0);
         let (scan_progress_tx, _) = watch::channel::<Option<ScanProgressTick>>(None);
 
         let (mc_handle, mc_rx) = media_controls::init_media_controls();
@@ -245,10 +254,11 @@ impl AppState {
             audio_health,
             sinks,
             position_tx,
-            library_changed_tx,
-            stats_changed_tx,
-            rescan_notice_tx,
-            audio_device_lost_tx,
+            library_changed: Signal::new(),
+            stats_changed: Signal::new(),
+            locale_changed: Signal::new(),
+            rescan_notice: Signal::new(),
+            audio_device_lost: Signal::new(),
             scan_progress_tx,
             watcher,
             self_writes: Arc::new(SelfWrites::default()),
@@ -256,9 +266,10 @@ impl AppState {
             search_history,
             scrobble,
             discord,
-            radio_enabled: Arc::new(AtomicBool::new(settings.radio.radio_enabled)),
-            radio_hide_segmented: Arc::new(AtomicBool::new(settings.radio.radio_hide_segmented)),
-            radio_send_clicks: Arc::new(AtomicBool::new(settings.radio.radio_send_clicks)),
+            radio_enabled: SharedFlag::new(settings.radio.radio_enabled),
+            radio_hide_segmented: SharedFlag::new(settings.radio.radio_hide_segmented),
+            radio_send_clicks: SharedFlag::new(settings.radio.radio_send_clicks),
+            write_ratings_to_tags: SharedFlag::new(settings.library.write_ratings_to_tags),
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),
@@ -318,39 +329,6 @@ impl AppState {
     /// the construction lazy — a player that never tunes to a station still never loads rustls.
     pub fn http_client_cell(&self) -> Arc<OnceLock<reqwest::Client>> {
         self.http_client.clone()
-    }
-
-    /// Whether the Radio section is switched on. The cheap synchronous gate
-    /// `library::radio` gives every outbound call, and what `boot::ui_setup`
-    /// folds a persisted nav index against.
-    pub fn radio_enabled(&self) -> bool {
-        self.radio_enabled.load(Ordering::Relaxed)
-    }
-
-    /// Mirror a flipped Radio toggle into the shadow, ahead of the disk write —
-    /// a directory call racing the persist must see the new answer, not the one
-    /// still on disk.
-    pub fn set_radio_enabled(&self, enabled: bool) {
-        self.radio_enabled.store(enabled, Ordering::Relaxed);
-    }
-
-    /// Whether a directory page drops its segmented stations before the grid
-    /// sees it.
-    pub fn radio_hide_segmented(&self) -> bool {
-        self.radio_hide_segmented.load(Ordering::Relaxed)
-    }
-
-    pub fn set_radio_hide_segmented(&self, hide: bool) {
-        self.radio_hide_segmented.store(hide, Ordering::Relaxed);
-    }
-
-    /// Whether tuning in tells the directory so.
-    pub fn radio_send_clicks(&self) -> bool {
-        self.radio_send_clicks.load(Ordering::Relaxed)
-    }
-
-    pub fn set_radio_send_clicks(&self, send: bool) {
-        self.radio_send_clicks.store(send, Ordering::Relaxed);
     }
 }
 

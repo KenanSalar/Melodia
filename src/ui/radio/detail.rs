@@ -261,7 +261,7 @@ where
     let votes = source.votes();
     let pair =
         decode_detail_pair(state, radio_ui.detail_artwork.clone(), source.artwork_path()).await;
-    let votable = state.radio_enabled() && !station.uuid.is_empty();
+    let votable = state.radio_enabled.get() && !station.uuid.is_empty();
 
     let landed_state = state.clone();
     let paint_ui = radio_ui.clone();

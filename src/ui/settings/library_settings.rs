@@ -71,7 +71,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
     // 3. Library-changed subscriber: refetch folder list so `last_scanned`
     //    updates after each scan completion (own scans + watcher batches).
     {
-        let mut rx = state.library_changed_tx.subscribe();
+        let mut rx = state.library_changed.subscribe();
         let weak = weak.clone();
         let s = state.clone();
         slint::spawn_local(Compat::new(async move {
@@ -79,7 +79,6 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
                 if rx.changed().await.is_err() {
                     break;
                 }
-                let _ = rx.borrow_and_update();
                 refresh_folders(weak.clone(), s.clone()).await;
             }
             log::debug!("ui::settings::library_settings library-changed subscriber stopped");

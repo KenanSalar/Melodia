@@ -83,7 +83,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
             if batch.iter().any(|e| matches!(e, FileEvent::RescanNeeded)) {
                 log::warn!("Rescan requested via watcher overflow flag");
                 crate::library::settings::reconcile_watched_folders(&state);
-                state.rescan_notice_tx.send_modify(|n| *n = n.wrapping_add(1));
+                state.rescan_notice.bump();
                 continue;
             }
 
@@ -110,7 +110,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
             // commit so we don't leave orphan rows behind.
             match process_batch(&state.db, &state.paths, &state.cover_cache, batch).await {
                 Ok(()) => {
-                    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+                    state.library_changed.bump();
                 }
                 Err(e) => log::error!("File event batch processing failed: {e}"),
             }

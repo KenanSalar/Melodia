@@ -24,16 +24,21 @@ export component LibrarySection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> manage-label: @tr("Manage Folders");
+    property <string> add-label: @tr("Add Folder");
+
+    property <string> card-title: @tr("Library Folders");
+
     out property <bool> has-matches:
-        SettingsPage.row-visible(root.tab-name, @tr("Library Folders"),
-                                 @tr("Manage Folders") + " " + @tr("Add Folder"),
+        SettingsPage.row-visible(root.tab-name, root.card-title,
+                                 manage-label + " " + add-label,
                                  SettingsPage.search-query);
 
     // Wrapper so the root's preferred-height tracks the card's natural height —
     // see `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
-        title: @tr("Library Folders");
+        title: root.card-title;
 
         // `SettingRow`'s chrome without the icon column — a card-internal
         // sub-header, not a setting row.
@@ -48,7 +53,7 @@ export component LibrarySection inherits Rectangle {
                     alignment: center;
                     horizontal-stretch: 1;
                     Text {
-                        text: @tr("Manage Folders");
+                        text: root.manage-label;
                         color: Theme.text;
                         font-size: Theme.font-size-md;
                         font-weight: 600;
@@ -61,7 +66,7 @@ export component LibrarySection inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     SectionButton {
-                        label: @tr("Add Folder");
+                        label: root.add-label;
                         icon: "create_new_folder";
                         button-enabled: !LibrarySettings.scanning;
                         primary: true;

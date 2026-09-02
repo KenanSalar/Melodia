@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 use parking_lot::Mutex;
 
 use super::super::audio::{AudioSource, Sample, SampleRate, Shape};
-use super::super::dsp::AtomicF64;
+use super::super::dsp::{self, AtomicF64};
 use super::convert::{Converter, Filled};
 
 /// How long a control op waits for the callback before giving up.
@@ -74,7 +74,16 @@ struct Loaded {
 }
 
 enum Command {
-    Append(Loaded),
+    /// Queue a source, anchoring the clock at `frames` of it if it mounts straight away.
+    ///
+    /// `frames` is non-zero for a resume, whose source the control thread positioned before
+    /// handing it over — the same reason [`Command::Replace`] carries one. A source that lands
+    /// behind something still playing is a gapless stage, which starts from its own top whenever
+    /// the current one drains, so the anchor only applies to an immediate mount.
+    Append {
+        loaded: Loaded,
+        frames: u64,
+    },
     Clear,
     /// Swap the playing source for one the control thread has already positioned, anchoring the
     /// clock at `frames` of it.
@@ -137,10 +146,27 @@ pub struct Voice {
 }
 
 impl Voice {
-    /// Queue `source` behind whatever is already on this voice.
+    /// Queue `source` behind whatever is already on this voice, starting it from its top.
     pub fn append<S: AudioSource + 'static>(&self, source: S) {
+        self.append_at(source, Duration::ZERO);
+    }
+
+    /// [`Self::append`], with the clock anchored at `position` of `source` when it mounts.
+    ///
+    /// A resume hands over a source the control thread has already seeked, so the frames it will
+    /// hand out start part way in — and the clock counts what it hands out. Without the anchor the
+    /// deck reports a position of zero for audio that is minutes deep, which is what the restored
+    /// position turned into on the first tick after mounting.
+    ///
+    /// **The anchor lands on the callback**, so [`Self::position`] still reads zero for up to one
+    /// device period after this returns; a monitor tick inside that window republishes zero and
+    /// the next one corrects it. [`Self::clear`] zeroes its half of the clock on this side too,
+    /// which this cannot copy: the anchor is a pair with the rate, and the callback owns the
+    /// ordering between them.
+    pub fn append_at<S: AudioSource + 'static>(&self, source: S, position: Duration) {
+        let frames = dsp::frames_in(position, source.sample_rate());
         let loaded = self.load(source);
-        self.send_counted(Command::Append(loaded));
+        self.send_counted(Command::Append { loaded, frames });
     }
 
     /// Put `source` on this voice in place of the one `mounted` names, with the clock anchored at
@@ -151,7 +177,7 @@ impl Voice {
     /// safe over the gap — see [`VoiceShared::mounted`] — and a voice that has moved on, or run
     /// dry, takes no source from this.
     pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration, mounted: u64) {
-        let frames = frames_at(position, source.sample_rate());
+        let frames = dsp::frames_in(position, source.sample_rate());
         let loaded = self.load(source);
         self.send_counted(Command::Replace {
             loaded,
@@ -251,12 +277,10 @@ impl Voice {
     /// Media time directly: the frames counted are the source's, and playback speed is applied
     /// below this by the converter rather than by inflating the rate reported upward.
     pub fn position(&self) -> Duration {
-        let rate = u64::from(self.shared.rate.load(Ordering::Acquire));
-        if rate == 0 {
+        let Some(rate) = SampleRate::new(self.shared.rate.load(Ordering::Acquire)) else {
             return Duration::ZERO;
-        }
-        let frames = self.shared.frames.load(Ordering::Relaxed);
-        Duration::from_micros(frames.saturating_mul(1_000_000) / rate)
+        };
+        dsp::frames_to_duration(self.shared.frames.load(Ordering::Relaxed), rate)
     }
 
     /// Whether the callback will see `command`.
@@ -383,7 +407,7 @@ impl VoicePull {
         }
         loop {
             match self.commands.try_recv() {
-                Ok(Command::Append(loaded)) => self.accept(loaded),
+                Ok(Command::Append { loaded, frames }) => self.accept(loaded, frames),
                 Ok(Command::Clear) => self.clear(),
                 Ok(Command::Replace {
                     loaded,
@@ -396,9 +420,11 @@ impl VoicePull {
         self.shared.serviced.store(seen, Ordering::Release);
     }
 
-    fn accept(&mut self, loaded: Loaded) {
+    /// A staged source drops the anchor on purpose: it mounts from
+    /// [`Self::finish_current`] whenever the current one drains, which is its own top.
+    fn accept(&mut self, loaded: Loaded, frames: u64) {
         if self.current.is_none() {
-            self.start(loaded);
+            self.start_at(loaded, frames);
         } else {
             self.staged.push_back(loaded);
         }
@@ -415,7 +441,7 @@ impl VoicePull {
         self.current = Some(loaded);
     }
 
-    /// [`Self::start_at`] from the top, which is every arrival but a seek's.
+    /// [`Self::start_at`] from the top, which is where a staged successor begins.
     fn start(&mut self, loaded: Loaded) {
         self.start_at(loaded, 0);
     }
@@ -478,15 +504,6 @@ impl VoicePull {
         spent.source.release_claims();
         drop(self.spent.try_send(spent));
     }
-}
-
-/// Frames of a source running at `rate` that `position` is worth.
-///
-/// Integer throughout: this count is what [`Voice::position`] divides back down, so a float round
-/// trip would read back a millisecond off the target the caller asked for.
-fn frames_at(position: Duration, rate: SampleRate) -> u64 {
-    let frames = position.as_micros().saturating_mul(u128::from(rate.get())) / 1_000_000;
-    u64::try_from(frames).unwrap_or(u64::MAX)
 }
 
 /// Build one voice's two halves.

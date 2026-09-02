@@ -18,9 +18,8 @@ use crate::database::DbPool;
 use crate::database::queries;
 use crate::error::{AppError, AppResult};
 use crate::media::artwork;
-use crate::services;
 use crate::state::AppState;
-use crate::tasks::TaskSpawner;
+use crate::tasks::{TaskSpawner, one_shot};
 
 /// What the pass did, for one log line at the end.
 #[derive(Default)]
@@ -36,34 +35,21 @@ struct Outcome {
 
 /// Run the pass unless this install has already had one.
 ///
-/// The marker is set even when the pass fails part way: a store that half-normalized is still
-/// correct — every row points at a file that exists — and retrying the same failure on every
-/// launch buys nothing a re-scan wouldn't.
+/// [`OnFailure::Mark`]: a store that half-normalized is still correct — every row points at a file
+/// that exists — and retrying the same failure on every launch buys nothing a re-scan wouldn't.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
-    let state = state.clone();
-    spawner.spawn(async move {
-        match services::settings::read_settings(&state.paths) {
-            Ok(settings) if settings.library.artwork_store_normalized => return,
-            Ok(_) => {}
-            Err(e) => {
-                log::warn!("Artwork renormalize skipped: {}", services::describe(&e));
-                return;
-            }
-        }
-
-        if let Err(e) = renormalize(&state.db, &state.paths).await {
-            log::warn!("Artwork renormalize failed: {}", services::describe(&e));
-        }
-
-        // Through `mutate_settings` rather than writing back the snapshot above: the pass between
-        // the two is minutes long on a real library, and a full-file write of a read that old
-        // reverts every theme, volume and playback change made while it ran.
-        state.persist_blocking("artwork_store_normalized", |state| {
-            services::settings::mutate_settings(&state.paths, |settings| {
-                settings.library.artwork_store_normalized = true;
-            })
-        });
-    });
+    one_shot::spawn(
+        spawner,
+        state,
+        one_shot::Sweep {
+            label: "Artwork renormalize",
+            marker: "artwork_store_normalized",
+            done: |flags| flags.artwork_store_normalized,
+            mark: |flags| flags.artwork_store_normalized = true,
+            on_failure: one_shot::OnFailure::Mark,
+        },
+        |state| async move { renormalize(&state.db, &state.paths).await },
+    );
 }
 
 async fn renormalize(db: &DbPool, paths: &Paths) -> AppResult<()> {

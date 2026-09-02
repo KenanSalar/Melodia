@@ -40,7 +40,7 @@ use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
-use crate::ui::section_state::SectionState;
+use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
 use crate::ui::util::clamp_i64_to_i32;
 use crate::ui::view_ctx::ViewCtx;
 use crate::{
@@ -137,14 +137,6 @@ impl PlaylistsUi {
         }
     }
 
-    pub fn set_section_active(&self, active: bool) {
-        self.section.set_active(active);
-    }
-
-    pub fn section_active(&self) -> bool {
-        self.section.active()
-    }
-
     /// Drop everything resident in the Playlists section — grid covers,
     /// detail artwork pair, canonical grid data, memoized indices,
     /// cached detail tracks, applied-selection shadow — then return the
@@ -170,14 +162,6 @@ impl PlaylistsUi {
             self.detail.applied_selection.lock().clear();
         }
         crate::tasks::heap_trim::trim();
-    }
-
-    pub fn mark_dirty(&self) {
-        self.section.mark_dirty();
-    }
-
-    pub fn take_dirty(&self) -> bool {
-        self.section.take_dirty()
     }
 
     /// Drop just the grid-tier cover cache — called when the user opens
@@ -208,7 +192,7 @@ impl PlaylistsUi {
     }
 
     /// Whether the cached grid holds any smart playlist whose criteria depend on
-    /// play stats. Gates the `stats_changed_tx` subscriber so a play-count flush
+    /// play stats. Gates the `stats_changed` subscriber so a play-count flush
     /// only refreshes when a smart playlist could actually have changed — a
     /// static-rule ("Genre is Rock") smart playlist is skipped entirely. Stricter
     /// than a plain "any smart playlist?" check, and the correct gate for the
@@ -226,44 +210,6 @@ impl PlaylistsUi {
             .lock()
             .row_stats_by_id(id)
             .is_some_and(|(_, _, stat_dependent)| stat_dependent)
-    }
-
-    /// Track ids of the **displayed** detail list, in display order — the
-    /// filter-applied subset when a search is active, otherwise the full
-    /// playlist. `play-row` / shuffle / add-to-queue pass these to
-    /// `player_play_tracks`, so those actions operate on the visible rows.
-    pub fn detail_track_ids(&self) -> Vec<i64> {
-        self.detail.tracks.lock().iter().map(|r| r.id).collect()
-    }
-
-    /// Track ids in canonical position (insertion) order — used by the
-    /// "play in position order" path and by the `DnD` coalescer when it
-    /// needs to identify the visible playlist.
-    pub fn detail_position_order(&self) -> Vec<i64> {
-        self.detail.position_order.lock().clone()
-    }
-
-    /// Surgically flip `is_favorite` on the cached detail row. Both the
-    /// displayed `tracks` cache and the canonical `all_tracks` set are
-    /// touched so a later `apply_filtered_detail` rebuild keeps the star.
-    pub fn flip_detail_favorite(&self, id: i64, fav: bool) {
-        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.is_favorite = fav;
-        }
-        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.is_favorite = fav;
-        }
-    }
-
-    /// Star-rating analogue of [`Self::flip_detail_favorite`] — set `rating`
-    /// on both the displayed `tracks` cache and the canonical `all_tracks` set.
-    pub fn flip_detail_rating(&self, id: i64, rating: i32) {
-        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
-        }
-        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
-        }
     }
 
     /// Lazy cover lookup for a Playlists **grid card** — backs
@@ -339,6 +285,9 @@ pub fn to_slint_playlist_row(p: &PlaylistStats) -> UiPlaylistRow {
         is_smart: p.is_smart,
     }
 }
+
+impl_section_state_helpers!(PlaylistsUi);
+impl_detail_row_cache!(PlaylistsUi);
 
 // `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {

@@ -26,13 +26,18 @@ pub fn spawn_background_tasks(
     tasks::retroactive_hash::spawn(spawner, state);
     // One-shot, and gated on its own settings marker rather than on anything here.
     tasks::artwork_renormalize::spawn(spawner, state);
+    // The other one-shot: reads the ratings a library already carried in before the scan
+    // learned to look for them, which no rescan can reach.
+    tasks::rating_import::spawn(spawner, state);
+    // Carries a star back out into the file. Before any callback can set one.
+    tasks::rating_writeback::spawn(spawner, state);
     tasks::heap_trim::spawn(spawner);
     // Folds the output device's fault counters into one line per window, and is
     // the only thing watching for a device that goes away mid-session.
     tasks::audio_health::spawn(spawner, state);
     // Batches `play_count` / `skip_count` UPDATEs so a fast skip burst is one
     // write. Before any playback can fire an `UpdatePlayCount`.
-    tasks::play_count_flusher::spawn(spawner, state.db.clone(), state.stats_changed_tx.clone());
+    tasks::play_count_flusher::spawn(spawner, state.db.clone(), state.stats_changed.clone());
     // Watches the view-model/position seam, enqueues qualifying plays and
     // drains the durable queue. Inert until a provider is connected.
     tasks::scrobble::spawn(spawner, state);

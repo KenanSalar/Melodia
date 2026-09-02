@@ -97,8 +97,10 @@ async fn add_tracks_empty_is_noop() -> Result<(), AppError> {
     Ok(())
 }
 
+/// One id through the batch path, which is the only remover there is — the singular
+/// `remove_track_from_playlist` went with its last caller.
 #[tokio::test]
-async fn remove_track_from_playlist() -> Result<(), AppError> {
+async fn remove_one_track_leaves_the_rest_renumbered() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
     let all_tracks = queries::track::get_all_tracks(&db).await?;
@@ -106,7 +108,7 @@ async fn remove_track_from_playlist() -> Result<(), AppError> {
 
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
 
-    queries::playlist::remove_track_from_playlist(&db, pl.id, track_ids[0]).await?;
+    queries::playlist::remove_tracks_from_playlist_batch(&db, pl.id, &track_ids[0..1]).await?;
 
     let tracks = queries::playlist::get_playlist_tracks(&db, pl.id).await?;
     assert_eq!(tracks.len(), 2);

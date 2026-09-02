@@ -23,6 +23,11 @@ pub(crate) const MIN_SLINT_SOURCES: usize = 100;
 /// than "do these named files do X" — what they guard against is a *new* call site.
 pub(crate) const SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
 
+/// Vacuity floor for a walk over [`SRC_DIR`], loose for [`MIN_SLINT_SOURCES`]' reason. Shared
+/// rather than declared per pin: ten files stand on this corpus, and a copy apiece is a copy
+/// that can disagree about how much of it has to be there.
+pub(crate) const MIN_SOURCES: usize = 200;
+
 /// The bundled font faces, which the Slint build compiles into the binary — so every
 /// artifact this repo ships redistributes them and owes their licence text.
 pub(crate) const FONTS_DIR: &str =

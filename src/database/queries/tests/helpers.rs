@@ -26,6 +26,7 @@ pub fn make_test_metadata(title: &str) -> ExtractedMetadata {
         replaygain_track_peak: None,
         replaygain_album_gain: None,
         replaygain_album_peak: None,
+        rating: None,
         duration_ms: 180_000,
         codec: Some("Mpeg".to_owned()),
         bitrate: Some(320),

@@ -21,6 +21,7 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::library;
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::view_tag;
@@ -49,7 +50,12 @@ fn persist_tab(state: &AppState, persist: &Arc<IndexPersist>, tab: i32) {
     });
 }
 
-pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
+pub(super) fn wire(
+    ui: &AppWindow,
+    state: &AppState,
+    view_state: Option<&ViewStateData>,
+    radio_ui: &Arc<RadioUi>,
+) {
     let g = ui.global::<Radio>();
 
     {
@@ -105,5 +111,5 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     detail::wire(ui, state, radio_ui);
     facets::wire(ui, state, radio_ui);
     stations::wire(ui, state, radio_ui);
-    kept::wire(ui, state, radio_ui);
+    kept::wire(ui, state, view_state, radio_ui);
 }

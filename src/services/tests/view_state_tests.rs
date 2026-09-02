@@ -131,7 +131,7 @@ fn the_nav_bound_reaches_the_highest_section_that_routes() {
 #[test]
 fn both_ends_of_the_round_trip_take_the_bound_from_one_const() {
     const WRITE: &str = include_str!("../../library/settings/view.rs");
-    const READ: &str = include_str!("../../boot/ui_setup.rs");
+    const READ: &str = include_str!("../../boot/ui_setup/views.rs");
 
     let clamp = crate::test_support::strip_line_comments(WRITE)
         .split_once("pub fn set_last_nav_index")

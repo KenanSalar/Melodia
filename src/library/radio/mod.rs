@@ -4,7 +4,7 @@
 //! module rather than side by side, so a callback never has to know which one
 //! did, and so the toggle that turns radio off has one place to guard.
 //!
-//! Writes here deliberately do not bump `library_changed_tx`. Its subscribers
+//! Writes here deliberately do not bump `library_changed`. Its subscribers
 //! are the library views, none of which shows a station; the Radio section
 //! refreshes through its own global.
 //!
@@ -69,7 +69,7 @@ pub const RECENT_STATIONS_LIMIT: i64 = 50;
 /// readable through the getters below: hiding a feature is not deleting what the user
 /// kept, and nothing but the section itself asks for them.
 pub(super) fn ensure_enabled(state: &AppState) -> Result<(), AppError> {
-    if state.radio_enabled() {
+    if state.radio_enabled.get() {
         return Ok(());
     }
     Err(AppError::Settings("Radio is switched off".to_owned()))

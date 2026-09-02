@@ -14,6 +14,11 @@ import { Dropdown } from "../../components/settings/dropdown.slint";
 // `visible: false` would keep its slot. The flag is an `out property` so the page can spot the
 // all-hidden state. The matching rule lives on `SettingsPage`; the local wrapper binds this
 // section's title once, so the per-row call sites stay two arguments.
+//
+// **A row's label and description are declared once, as properties, and read by both the
+// visibility term and the row itself.** The predicate is fed `label + " " + desc`, so spelling the
+// pair at each site lets a reworded description desync from what search matches on — invisible
+// until someone types a word from it and the card doesn't come up.
 export component LanguageSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -21,14 +26,17 @@ export component LanguageSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> card-title: @tr("Language");
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, @tr("Language"),
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
-    out property <bool> has-matches:
-        row-visible(@tr("Choose your preferred language"), "");
+    property <string> locale-label: @tr("Choose your preferred language");
+
+    out property <bool> has-matches: row-visible(locale-label, "");
 
     // **The wrapper every section needs.** A `Rectangle` sizes to a layout
     // child, never to a conditional one, so around a bare `if` it reports 0
@@ -36,11 +44,11 @@ export component LanguageSection inherits Rectangle {
     // collapses to nothing when the filter hides it.
     VerticalLayout {
         if has-matches: SectionCard {
-            title: @tr("Language");
+            title: root.card-title;
 
-            if root.row-visible(@tr("Choose your preferred language"), ""): SettingRow {
+            if root.has-matches: SettingRow {
                 icon: "translate";
-                label: @tr("Choose your preferred language");
+                label: root.locale-label;
                 description: "";
                 Dropdown {
                     options: Settings.language-names;

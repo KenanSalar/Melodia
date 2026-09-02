@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::services::settings::SortDir;
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::persisted_sort;
@@ -43,10 +43,11 @@ use crate::{AppWindow, Favorites};
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,
+    view_state: Option<&ViewStateData>,
     fav_ui: &Arc<FavoritesUi>,
     artists_ui: &Arc<ArtistsUi>,
 ) {
-    hydrate_sort_from_settings(state, fav_ui, &ui.global::<Favorites>());
+    hydrate_sort_from_settings(view_state, fav_ui, &ui.global::<Favorites>());
 
     covers::wire(ui, fav_ui);
     hero::wire(ui, state, fav_ui);
@@ -62,18 +63,22 @@ pub(super) fn wire(
 /// Two, because the page has two independently sortable sub-views: the Songs
 /// tab's `TrackList` and the Favorite Artists grid. They share the `view_sort`
 /// map under separate keys.
-fn hydrate_sort_from_settings(state: &AppState, fav_ui: &FavoritesUi, g: &Favorites<'_>) {
-    if let Some((field, dir)) = persisted_sort(state, view_id::FAVORITES) {
-        g.set_sort_field(SharedString::from(field.as_str()));
-        g.set_sort_dir(SharedString::from(dir));
-        favorites_ui_mod::set_sort(fav_ui, field, SortDir::from_token(dir));
+fn hydrate_sort_from_settings(
+    view_state: Option<&ViewStateData>,
+    fav_ui: &FavoritesUi,
+    g: &Favorites<'_>,
+) {
+    if let Some(sort) = persisted_sort(view_state, view_id::FAVORITES) {
+        g.set_sort_field(SharedString::from(sort.field.as_str()));
+        g.set_sort_dir(SharedString::from(sort.dir.as_str()));
+        favorites_ui_mod::set_sort(fav_ui, sort.field.clone(), sort.dir);
     }
 
     // Sorts an empty cache — the fetch hasn't run yet — but going through the
     // one setter is what keeps "shadow and rows move together" unconditional.
-    if let Some((field, dir)) = persisted_sort(state, view_id::FAVORITE_ARTISTS) {
-        g.set_artist_sort_field(SharedString::from(field.as_str()));
-        g.set_artist_sort_dir(SharedString::from(dir));
-        favorites_ui_mod::set_artist_sort(fav_ui, field, SortDir::from_token(dir));
+    if let Some(sort) = persisted_sort(view_state, view_id::FAVORITE_ARTISTS) {
+        g.set_artist_sort_field(SharedString::from(sort.field.as_str()));
+        g.set_artist_sort_dir(SharedString::from(sort.dir.as_str()));
+        favorites_ui_mod::set_artist_sort(fav_ui, sort.field.clone(), sort.dir);
     }
 }

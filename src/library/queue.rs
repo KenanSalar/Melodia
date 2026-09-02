@@ -69,7 +69,7 @@ pub async fn open_files(state: &AppState, file_paths: Vec<String>) -> AppResult<
 
     // An opened file is usually new to the library, so every view re-fetches —
     // the same bump the drag-and-drop import does.
-    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed.bump();
     Ok(())
 }
 
@@ -199,15 +199,6 @@ pub fn queue_toggle_shuffle(state: &AppState) -> Result<(), AppError> {
     });
     log::debug!("queue: shuffle {new_shuffle}");
     persist_shuffle(state, new_shuffle);
-    Ok(())
-}
-
-pub fn queue_set_repeat(state: &AppState, mode: RepeatMode) -> Result<(), AppError> {
-    log::debug!("queue: repeat → {mode:?}");
-    with_state_emit(&state.player_state, &state.sinks, |s| {
-        s.queue.set_repeat_mode(mode);
-    });
-    persist_repeat(state, mode);
     Ok(())
 }
 

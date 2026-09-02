@@ -15,7 +15,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::services::settings::SUPPORTED_LOCALES;
-use crate::test_support::{UI_DIR, slint_sources, strip_line_comments};
+use crate::test_support::{
+    MIN_SLINT_SOURCES, UI_DIR, slint_sources, strip_line_comments, stripped_sources,
+};
 
 const TRANSLATIONS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/translations");
 
@@ -147,7 +149,11 @@ fn every_translated_literal_has_a_msgid_in_every_catalogue() {
 
     // Floors, so a walk that silently found nothing can't pass vacuously. The
     // tree is well past all three; these only catch a broken traversal.
-    assert!(sources.len() > 100, "only {} .slint files found under {UI_DIR}", sources.len());
+    assert!(
+        sources.len() >= MIN_SLINT_SOURCES,
+        "only {} .slint files found under {UI_DIR}",
+        sources.len()
+    );
     assert!(wanted.singular.len() > 400, "only {} msgids extracted", wanted.singular.len());
     assert!(wanted.plural.len() >= 10, "only {} plural pairs extracted", wanted.plural.len());
 
@@ -190,4 +196,43 @@ fn every_supported_locale_but_english_ships_a_catalogue() {
             path.display()
         );
     }
+}
+
+/// Every `"Unknown …"` field fallback goes through `@tr`.
+///
+/// The class the pin above structurally cannot see: an unwrapped literal declares no msgid,
+/// so a catalogue that never hears of it is not a gap a msgid walk can find. Both track-list
+/// cells shipped as bare `"Unknown Artist"` / `"Unknown Album"` while the grid card and the
+/// now-playing line beside them already said `@tr("Unknown artist")` — English on all six
+/// locales, and invisible to a reviewer reading either site on its own.
+///
+/// Scoped to this one phrase rather than "every literal": most string literals in the tree
+/// are icon ligatures, theme tokens, asset paths and view-context tags that must *not* be
+/// translated, so a general rule would be a list of exemptions wearing a walk's clothes.
+#[test]
+fn every_unknown_field_fallback_is_translated() {
+    const FALLBACK: &str = "\"Unknown ";
+
+    let mut offenders: Vec<String> = Vec::new();
+    for (path, src) in stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES) {
+        let mut at = 0;
+        while let Some(offset) = src.get(at..).and_then(|rest| rest.find(FALLBACK)) {
+            let quote = at + offset;
+            at = quote + FALLBACK.len();
+            // `trim_end` rather than an exact prefix: three `@tr(` calls in the tree put
+            // their literal on the next line.
+            if src.get(..quote).is_some_and(|head| head.trim_end().ends_with("@tr(")) {
+                continue;
+            }
+            let shown = read_literal(&src, quote).map_or_else(String::new, |(body, _)| body.into());
+            offenders.push(format!("{path}: \"{shown}\""));
+        }
+    }
+
+    assert!(
+        offenders.is_empty(),
+        "{offenders:?} paint an untranslated fallback — wrap it in `@tr(…)` and add the msgid \
+         to all six catalogues. Reuse `Unknown artist` / `Unknown album` verbatim rather than \
+         title-casing a second entry that says the same thing."
+    );
 }

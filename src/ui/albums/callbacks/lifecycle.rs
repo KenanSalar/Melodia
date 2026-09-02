@@ -159,7 +159,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
         let s = state.clone();
         let au = albums_ui.clone();
         let weak = weak.clone();
-        let mut rx = state.library_changed_tx.subscribe();
+        let mut rx = state.library_changed.subscribe();
         let _ = slint::spawn_local(Compat::new(async move {
             rx.mark_unchanged();
             while rx.changed().await.is_ok() {

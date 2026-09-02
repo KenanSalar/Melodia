@@ -1,4 +1,5 @@
 mod aac_config;
+mod aac_trim;
 pub mod actions;
 pub mod audio;
 pub mod backend;

@@ -272,7 +272,7 @@ fn main() -> AppResult<()> {
             state.clone(),
             h.os_state.clone(),
             state.sinks.view_model.subscribe(),
-            h.kick_tx.subscribe(),
+            h.kick.subscribe(),
             h.repaint_tx.clone(),
             views.cover_thumbs.clone(),
         );
@@ -330,7 +330,12 @@ fn main() -> AppResult<()> {
 
     boot::ui_setup::seed_initial_view_model(&app, &state, &views.cover_thumbs);
 
-    boot::ui_setup::spawn_initial_tracks_fetch(&state, &views.tracks_ui, weak.clone());
+    boot::ui_setup::spawn_initial_tracks_fetch(
+        &state,
+        &views.tracks_ui,
+        startup_view_state.as_ref(),
+        weak.clone(),
+    );
     boot::ui_setup::spawn_initial_albums_fetch(&state, &views.albums_ui, weak.clone());
     boot::ui_setup::spawn_initial_artists_fetch(&state, &views.artists_ui, weak.clone());
     boot::ui_setup::spawn_initial_genres_fetch(&state, &views.genres_ui, weak.clone());

@@ -22,8 +22,10 @@ use symphonia::core::units::{TimeBase, Timestamp};
 
 use crate::error::AppError;
 
+use super::aac_trim::{self, Trim};
 use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
-use super::decode;
+use super::decode::{self, Rounding};
+use super::dsp::{frames_in, frames_to_duration, interleaved};
 
 /// How far short of a stated length a seek is allowed to land.
 ///
@@ -97,14 +99,22 @@ pub struct FileDecoder {
     cursor: decode::Cursor,
     time_base: Option<TimeBase>,
     total_duration: Option<Duration>,
+    /// The encoder padding this file states, for the seek that has to add its head back on.
+    trim: Option<Trim>,
+    /// Interleaved samples of real audio left ahead of that padding.
+    remaining: Option<u64>,
 }
 
 impl FileDecoder {
     /// Probe `path`, build a decoder for its audio track, and decode enough of it to know the
     /// shape of what follows.
     pub fn open(path: &Path) -> Result<Self, AppError> {
-        let file = File::open(path)
+        let mut file = File::open(path)
             .map_err(|e| AppError::Player(format!("Cannot open {}: {e}", path.display())))?;
+
+        // Read while the handle is still ours: the edit list is the half of an AAC file's encoder
+        // padding that the demuxer parses and keeps to itself, and it is the same open either way.
+        let edits = aac_trim::edit_lists(&mut file);
 
         let mut hint = Hint::new();
         if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
@@ -121,14 +131,55 @@ impl FileDecoder {
         } = decode::open(Box::new(FileSource::new(file)), &hint)
             .map_err(|e| AppError::Player(format!("{} {e}", path.display())))?;
 
-        Ok(Self {
+        let mut decoded = Self {
             format,
             decoder,
             track,
             cursor,
             time_base,
             total_duration,
-        })
+            trim: None,
+            remaining: None,
+        };
+        decoded.install_trim(&edits);
+        Ok(decoded)
+    }
+
+    /// Drops the encoder priming ahead of the first real sample and arms the end of the real audio.
+    ///
+    /// Every other codec, and every AAC file stating nothing, leaves here untouched. The head goes
+    /// through [`Self::skip`] rather than through a window inside the cursor, since the cursor is
+    /// shared with the stream decoder and a live mount has neither a container header to state a
+    /// delay nor a gapless transition to spoil.
+    ///
+    /// Runs on the thread that opened the file, which is never the audio callback: all three call
+    /// sites hoist the open off the deck lock for the position monitor's sake.
+    fn install_trim(&mut self, edits: &[aac_trim::Edit]) {
+        let shape = self.cursor.shape();
+        let Some(timing) = decode::audio_track(&*self.format).and_then(aac_trim::aac_timing) else {
+            return;
+        };
+        let Some(trim) = aac_trim::resolve(&timing, &self.format.metadata(), edits, shape.rate)
+        else {
+            return;
+        };
+
+        self.trim = Some(trim);
+        self.skip(usize::try_from(interleaved(trim.head, shape.channels)).unwrap_or(usize::MAX));
+
+        // A file stating a head and no length still plays for that much less than the container
+        // says, and the seek clamp reads this.
+        let head = self.head_duration();
+        self.total_duration = match trim.playable {
+            Some(playable) => Some(frames_to_duration(playable, shape.rate)),
+            None => self.total_duration.map(|total| total.saturating_sub(head)),
+        };
+        self.remaining = trim.playable.map(|playable| interleaved(playable, shape.channels));
+        log::debug!(
+            "AAC encoder padding: {} priming frames dropped, {:?} of audio",
+            trim.head,
+            self.total_duration
+        );
     }
 
     /// Interleaved samples between where the demuxer landed and where the seek asked for, rounded
@@ -141,18 +192,21 @@ impl FileDecoder {
         let Some(time_base) = self.time_base else {
             return 0;
         };
-        let ahead = required.get().saturating_sub(actual.get());
-        let Ok(ahead) = u128::try_from(ahead) else {
+        let shape = self.cursor.shape();
+        // A demuxer that landed *past* what was asked for has nothing to trim, and `Timestamp` is
+        // signed, so the negative case falls out here rather than being handled below.
+        let Ok(ahead) = u64::try_from(required.get().saturating_sub(actual.get())) else {
             return 0;
         };
-
-        let rate = u128::from(self.cursor.shape().rate.get());
-        let ticks = ahead * u128::from(time_base.numer.get()) * rate;
-        let frames = ticks.div_ceil(u128::from(time_base.denom.get()));
+        // Rounded up: a trim short by a frame replays the tail of the packet the seek landed in.
+        let Some(frames) = decode::ticks_to_frames(ahead, time_base, shape.rate, Rounding::Up)
+        else {
+            return 0;
+        };
         let Ok(frames) = usize::try_from(frames) else {
             return 0;
         };
-        frames.saturating_mul(usize::from(self.cursor.shape().channels.get()))
+        frames.saturating_mul(usize::from(shape.channels.get()))
     }
 
     /// Discard `count` interleaved samples, decoding as far as it takes.
@@ -162,6 +216,20 @@ impl FileDecoder {
                 return;
             }
         }
+    }
+
+    /// How far the demuxer's timeline runs ahead of the one the source hands out.
+    fn head_duration(&self) -> Duration {
+        self.trim
+            .map_or(Duration::ZERO, |trim| frames_to_duration(trim.head, self.cursor.shape().rate))
+    }
+
+    /// Interleaved samples of real audio left once `pos` on the trimmed timeline has played.
+    fn playable_after(&self, pos: Duration) -> Option<u64> {
+        let shape = self.cursor.shape();
+        let playable = self.trim?.playable?;
+        let played = frames_in(pos, shape.rate);
+        Some(interleaved(playable.saturating_sub(played), shape.channels))
     }
 }
 
@@ -182,7 +250,17 @@ impl Iterator for FileDecoder {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.cursor.next_sample(&mut *self.format, &mut *self.decoder, self.track)
+        // The trailing padding is inside the last packet rather than beyond it, so the source ends
+        // on a count instead of on the demuxer running out. Saturated at zero, so a re-poll past
+        // the end stays ended the way the cursor's own latch does.
+        if self.remaining == Some(0) {
+            return None;
+        }
+        let sample = self.cursor.next_sample(&mut *self.format, &mut *self.decoder, self.track)?;
+        if let Some(remaining) = &mut self.remaining {
+            *remaining -= 1;
+        }
+        Some(sample)
     }
 }
 
@@ -210,9 +288,13 @@ impl AudioSource for FileDecoder {
         let pos =
             self.total_duration.map_or(pos, |total| pos.min(total.saturating_sub(SEEK_END_MARGIN)));
 
+        // The demuxer's timeline still opens on the encoder's priming, so a position on the
+        // trimmed one sits that far short of the timestamp to ask it for.
+        let target = pos.saturating_add(self.head_duration());
+
         let time = symphonia::core::units::Time::try_new(
-            i64::try_from(pos.as_secs()).map_err(other)?,
-            pos.subsec_nanos(),
+            i64::try_from(target.as_secs()).map_err(other)?,
+            target.subsec_nanos(),
         )
         .ok_or_else(|| other(AppError::Player("Seek position out of range".to_owned())))?;
 
@@ -240,12 +322,19 @@ impl AudioSource for FileDecoder {
         // `AudioSource`, so anything driving this iterator by hand can be.
         let channel_phase = self.cursor.discard_buffered();
 
+        // Cleared around the skip below, which pulls through `next`: the count still describes the
+        // position being left, and one that ran out there would end the skip early and leave the
+        // channel phase unrestored.
+        self.remaining = None;
+
         // A demuxer seek lands on a packet boundary, so without the trim every seek replays the
         // tail of what came before. Both reference players stop at the whole packet, and one says
         // in its own comment that it should not. rodio trimmed to the frame, and that is the
         // behaviour this path inherited and has to keep.
         let trim = self.samples_before(seeked.required_ts, seeked.actual_ts);
         self.skip(trim + channel_phase);
+
+        self.remaining = self.playable_after(pos);
         Ok(())
     }
 }

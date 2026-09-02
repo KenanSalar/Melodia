@@ -1,8 +1,7 @@
 //! Material You coordinator task. Single tokio task that:
 //!
-//! 1. Subscribes to `view_model_rx` (current artwork path) and a
-//!    `watch::<u64>` kick channel from `ui::appearance` (theme / variant /
-//!    style / system-theme changes).
+//! 1. Subscribes to `view_model_rx` (current artwork path) and `ui::appearance`'s kick
+//!    [`crate::state::Signal`] (theme / variant / style / system-theme changes).
 //! 2. Keeps a cached `(theme_id, dynamic_color_style, theme_variant)`
 //!    snapshot, re-read from `settings.json` only on kick wakes (every
 //!    write to those fields kicks after persisting). On any wake it
@@ -143,7 +142,6 @@ async fn run(
             }
             res = kick_rx.changed() => {
                 if res.is_err() { break; }
-                let _ = kick_rx.borrow_and_update();
                 // Keep the previous snapshot on a transient read failure —
                 // the next kick re-attempts.
                 if let Some(fresh) = read_appearance(&state).await {

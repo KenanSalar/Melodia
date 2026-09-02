@@ -17,15 +17,15 @@ use crate::{AppWindow, Settings, library};
 
 pub fn install_radio(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Settings>();
-    g.set_radio_enabled(state.radio_enabled());
-    g.set_radio_hide_segmented(state.radio_hide_segmented());
-    g.set_radio_send_clicks(state.radio_send_clicks());
+    g.set_radio_enabled(state.radio_enabled.get());
+    g.set_radio_hide_segmented(state.radio_hide_segmented.get());
+    g.set_radio_send_clicks(state.radio_send_clicks.get());
 
     {
         let s = state.clone();
         let weak = ui.as_weak();
         g.on_radio_enabled_changed(move |on| {
-            s.set_radio_enabled(on);
+            s.radio_enabled.set(on);
             if !on && let Some(app) = weak.upgrade() {
                 crate::ui::radio::disable(&app, &s);
             }
@@ -47,7 +47,7 @@ pub fn install_radio(ui: &AppWindow, state: &AppState) {
         let s = state.clone();
         let weak = ui.as_weak();
         g.on_radio_hide_segmented_changed(move |hide| {
-            s.set_radio_hide_segmented(hide);
+            s.radio_hide_segmented.set(hide);
             if let Some(app) = weak.upgrade() {
                 crate::ui::radio::forget_facets(&app, &s);
             }
@@ -60,7 +60,7 @@ pub fn install_radio(ui: &AppWindow, state: &AppState) {
     {
         let s = state.clone();
         g.on_radio_send_clicks_changed(move |send| {
-            s.set_radio_send_clicks(send);
+            s.radio_send_clicks.set(send);
             s.persist_blocking("set_radio_send_clicks", move |st| {
                 library::settings::set_radio_send_clicks(st, send)
             });

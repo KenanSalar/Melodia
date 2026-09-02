@@ -38,7 +38,7 @@ use lofty::prelude::{Accessor, ItemKey};
 use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
-use super::{image_decode, metadata};
+use super::{image_decode, metadata, rating_tags};
 use crate::error::AppError;
 
 /// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and a tag holding a
@@ -89,6 +89,9 @@ pub struct TagEdit {
     pub musicbrainz_track_id: FieldEdit<String>,
     pub bpm: FieldEdit<f64>,
     pub lyrics: FieldEdit<String>,
+    /// Written by the rating write-back, not the Edit-Tags dialog. Stars, 0–5; `Clear` and
+    /// `Set(0)` mean the same thing and both remove the tag.
+    pub rating: FieldEdit<i32>,
     pub artwork: ArtworkEdit,
 }
 
@@ -97,6 +100,29 @@ impl TagEdit {
     /// the tag whether or not anything differs, so a reflexive open-then-Save on a 200-track album
     /// would otherwise rewrite 200 files — and, through the watcher, risk re-ingesting them.
     pub fn is_noop(&self) -> bool {
+        self.rating == FieldEdit::Keep && self.no_field_but_rating()
+    }
+
+    /// True when the rating is the only thing being written, which is the whole of what
+    /// [`crate::library::ratings`]'s write-back sends. Such an edit can neither re-home the track
+    /// nor touch its artwork, so the commit skips the work that answers to both.
+    pub fn is_rating_only(&self) -> bool {
+        self.rating != FieldEdit::Keep && self.no_field_but_rating()
+    }
+
+    /// Whether this edit can move the track to a different album, artist or genre. These five are
+    /// the FK-resolution key `library::tags`'s commit is built from, minus the folder, which comes
+    /// off the path and so no tag edit can move.
+    pub fn moves_between_parents(&self) -> bool {
+        self.artist != FieldEdit::Keep
+            || self.album_artist != FieldEdit::Keep
+            || self.album != FieldEdit::Keep
+            || self.genre != FieldEdit::Keep
+            || self.year != FieldEdit::Keep
+    }
+
+    /// Every field except `rating` left at [`FieldEdit::Keep`].
+    fn no_field_but_rating(&self) -> bool {
         self.title == FieldEdit::Keep
             && self.artist == FieldEdit::Keep
             && self.album_artist == FieldEdit::Keep
@@ -268,6 +294,23 @@ fn apply_lyrics(tag: &mut Tag, edit: &FieldEdit<String>, out: &mut Vec<&'static 
     }
 }
 
+/// Rating: only the tri-state. Which key holds it and on what scale is per-format and argued in
+/// [`rating_tags`], where every format's shape is in view at once.
+///
+/// `Set(0)` folds into the clear there — an unrated track and a zero-star one are the same thing,
+/// and the star strip's top star toggles between them.
+fn apply_rating(tag: &mut Tag, edit: &FieldEdit<i32>, out: &mut Vec<&'static str>) {
+    match edit {
+        FieldEdit::Keep => {}
+        FieldEdit::Clear => rating_tags::clear(tag),
+        FieldEdit::Set(stars) => {
+            if !rating_tags::write_stars(tag, *stars) {
+                out.push("rating");
+            }
+        }
+    }
+}
+
 /// Year, done by hand: [`Accessor`] exposes `date: Timestamp` rather than `year`, and `set_date`
 /// discards the `insert_text` bool — so do what it does with the bool visible.
 ///
@@ -313,6 +356,7 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
     apply_year(tag, &edit.year, &mut out);
     apply_bpm(tag, &edit.bpm, &mut out);
     apply_lyrics(tag, &edit.lyrics, &mut out);
+    apply_rating(tag, &edit.rating, &mut out);
 
     match edit.artwork {
         ArtworkEdit::Keep => {}
@@ -338,10 +382,10 @@ pub fn apply_to_file(
     edit: &TagEdit,
     picture: Option<&Picture>,
 ) -> Result<UnsupportedFields, AppError> {
-    // `skip_artwork: false` is load-bearing rather than a default: skipping picture frames at
-    // *parse* leaves `Tag.pictures` empty, and `save_to_path` writes that emptiness back over
-    // every embedded picture the file had.
-    let mut tagged = metadata::read_tags(path, false)?;
+    // `Full` is load-bearing rather than a default: skipping picture frames at *parse* leaves
+    // `Tag.pictures` empty, and `save_to_path` writes that emptiness back over every embedded
+    // picture the file had.
+    let mut tagged = metadata::read_tags(path, metadata::TagScope::Full)?;
 
     let tag_type = tagged.primary_tag_type();
 
@@ -428,7 +472,7 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
 /// falling back to `UnsyncLyrics` — the mirror of what [`apply_edit`] writes,
 /// `ID3v2` having no `Lyrics` mapping. Blocking; call under `spawn_blocking`.
 pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
-    let tagged = metadata::read_tags(path, true)?;
+    let tagged = metadata::read_tags(path, metadata::TagScope::TagsOnly)?;
     let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {
         return Ok(None);
     };

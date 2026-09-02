@@ -11,21 +11,27 @@ use slint::{ComponentHandle, SharedString, Weak};
 use crate::entities::radio;
 use crate::error::AppError;
 use crate::library;
+use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::radio::{RadioTab, RadioUi, kept};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Dialog, Radio, RadioForm};
 
-pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
+pub(super) fn wire(
+    ui: &AppWindow,
+    state: &AppState,
+    view_state: Option<&ViewStateData>,
+    radio_ui: &Arc<RadioUi>,
+) {
     let g = ui.global::<Radio>();
     let weak = ui.as_weak();
 
     // The persisted sort, ahead of the first apply. A fresh install keeps the Slint-declared
     // default rather than being handed one from Rust.
-    if let Some((field, dir)) = persisted_sort(state, view_id::RADIO_FAVORITES) {
-        g.set_sort_field(SharedString::from(field.as_str()));
-        g.set_sort_dir(SharedString::from(dir));
+    if let Some(sort) = persisted_sort(view_state, view_id::RADIO_FAVORITES) {
+        g.set_sort_field(SharedString::from(sort.field.as_str()));
+        g.set_sort_dir(SharedString::from(sort.dir.as_str()));
     }
 
     {

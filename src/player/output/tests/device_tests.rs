@@ -1,11 +1,12 @@
-//! Tests for the block sizes the device negotiation asks for.
+//! Tests for what each rung of the device negotiation asks for.
 //!
-//! Opening a stream needs a card, so the ladder and the attempt loop are out of reach here. The two
-//! functions that decide *what* each rung asks for are not: they are pure functions of a config, and
-//! each carries an argument — the halved maximum, the ordering-free clamp, the staging floor that
-//! deliberately does not follow the request down — that nothing else in the tree can check.
+//! Opening a stream needs a card, so the ladder's walk and the attempt loop are out of reach here.
+//! What each rung *asks for* is not: the block sizes and the rate list are pure functions, and each
+//! carries an argument — the halved maximum, the ordering-free clamp, the staging floor that
+//! deliberately does not follow the request down, the strict test that stops a standard rate
+//! duplicating an endpoint — that nothing else in the tree can check.
 
-use super::{period_frames, staging_samples, target_frames};
+use super::{period_frames, rates_for, staging_samples, target_frames};
 
 const RATE: u32 = 48_000;
 
@@ -99,4 +100,23 @@ fn staging_follows_a_period_the_devices_floor_pushed_above_the_target() {
 fn staging_covers_every_channel_of_the_block() {
     let surround = config(6, RATE, range(64, 65_536));
     assert_eq!(staging_samples(&surround), TARGET as usize * 6);
+}
+
+/// The top first, since a device reporting a range is likeliest to run at it, then 48 kHz ahead of
+/// 44.1 — the order cpal's own `try_with_standard_sample_rate` walks, and the one its default
+/// config now prefers.
+#[test]
+fn a_wide_range_tries_both_standard_rates_between_its_ends() {
+    let rungs: Vec<_> = rates_for(8_000, 192_000).collect();
+    assert_eq!(rungs, [192_000, cpal::SAMPLE_RATE_48K, cpal::SAMPLE_RATE_CD, 8_000]);
+}
+
+/// A rung costs a whole `build`, which allocates the mixer the failed attempt then throws away, so
+/// a standard rate only earns one where it falls *strictly* inside: on an endpoint it is already
+/// the rung either side, and outside the range `try_with_sample_rate` would drop it anyway.
+#[test]
+fn a_standard_rate_only_earns_a_rung_strictly_inside_the_range() {
+    assert_eq!(rates_for(44_100, 48_000).collect::<Vec<_>>(), [48_000, 44_100]);
+    assert_eq!(rates_for(48_000, 48_000).collect::<Vec<_>>(), [48_000]);
+    assert_eq!(rates_for(96_000, 192_000).collect::<Vec<_>>(), [192_000, 96_000]);
 }

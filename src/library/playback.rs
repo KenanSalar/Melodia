@@ -296,12 +296,6 @@ pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppErr
     Ok(())
 }
 
-pub async fn player_set_muted(ctx: &PlaybackContext, muted: bool) -> Result<(), AppError> {
-    ctx.emit_and_execute(|s| s.build_set_muted_actions(muted));
-    // Mute is single-tap; commit inline.
-    commit_player_settings(ctx).await
-}
-
 pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
     ctx.emit_and_execute(crate::player::state::PlayerState::build_toggle_mute_actions);
     commit_player_settings(ctx).await

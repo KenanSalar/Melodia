@@ -156,15 +156,87 @@ pub fn normalize(value: &str) -> String {
     folded
 }
 
+/// Why a line was refused.
+///
+/// **Fieldless on purpose.** A refusal surfaces in a public CI log, so an error able to
+/// carry the offending text would hand over the entry it was protecting. A reason and a
+/// line number are the whole of what one may say, and keeping the text out of the type is
+/// what makes that checkable rather than a rule to remember.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Refusal {
+    /// Not `kind: value`.
+    Shape,
+    InlineComment,
+    UnknownKind,
+    EmptyValue,
+    CountryCode,
+    ShortPattern,
+    SecondKey,
+    EmptyKey,
+    /// Not `field = value`, in a pre-hashed source.
+    HashedShape,
+    UnknownField,
+    NotANumber,
+    KeyDigits,
+}
+
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Shape => f.write_str("expected `kind: value`"),
+            Self::InlineComment => f.write_str("comments go on their own line"),
+            Self::UnknownKind => f.write_str("unknown kind"),
+            Self::EmptyValue => f.write_str("empty value"),
+            Self::CountryCode => f.write_str("country wants a two-letter ISO 3166-1 code"),
+            Self::ShortPattern => {
+                write!(f, "a contains pattern needs at least {MIN_PATTERN_CHARS} characters")
+            }
+            Self::SecondKey => f.write_str("a second key line"),
+            Self::EmptyKey => f.write_str("empty key"),
+            Self::HashedShape => f.write_str("expected `field = value`"),
+            Self::UnknownField => f.write_str("unknown field"),
+            Self::NotANumber => f.write_str("not a number"),
+            Self::KeyDigits => f.write_str("key wants 64 hex characters"),
+        }
+    }
+}
+
+/// A [`Refusal`] and the line it happened on.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ParseError {
+    Line {
+        number: usize,
+        refusal: Refusal,
+    },
+    /// A pre-hashed source missing a field names no line to blame.
+    MissingField,
+}
+
+impl ParseError {
+    /// A refusal on a 1-based line number.
+    const fn at(number: usize, refusal: Refusal) -> Self {
+        Self::Line { number, refusal }
+    }
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Line { number, refusal } => write!(f, "line {number}: {refusal}"),
+            Self::MissingField => f.write_str("pre-hashed source is missing a field"),
+        }
+    }
+}
+
+impl std::error::Error for ParseError {}
+
 /// Parse a blocklist source into the key and the fingerprints it names.
 ///
 /// # Errors
 ///
 /// Every malformed line is refused rather than skipped: a dropped entry unblocks a
-/// station with nothing anywhere to notice. **No error carries the offending text**,
-/// only its line number — these surface in a public CI log, and a message quoting
-/// the line would hand over the entry it was protecting.
-pub fn parse_source(text: &str) -> Result<Terms, String> {
+/// station with nothing anywhere to notice. See [`Refusal`] for what an error may say.
+pub fn parse_source(text: &str) -> Result<Terms, ParseError> {
     let key = key_from(key_material(text)?);
 
     let mut fingerprints = Vec::new();
@@ -177,13 +249,13 @@ pub fn parse_source(text: &str) -> Result<Terms, String> {
             continue;
         }
         let Some(kind) = TermKind::from_label(label) else {
-            return Err(format!("line {number}: unknown kind"));
+            return Err(ParseError::at(number, Refusal::UnknownKind));
         };
         if value.is_empty() {
-            return Err(format!("line {number}: empty value"));
+            return Err(ParseError::at(number, Refusal::EmptyValue));
         }
         if kind == TermKind::Country && !is_country_code(value) {
-            return Err(format!("line {number}: country wants a two-letter ISO 3166-1 code"));
+            return Err(ParseError::at(number, Refusal::CountryCode));
         }
 
         if !kind.is_pattern() {
@@ -196,9 +268,7 @@ pub fn parse_source(text: &str) -> Result<Terms, String> {
         let normalized = normalize(value);
         let length = normalized.chars().count();
         if length < MIN_PATTERN_CHARS {
-            return Err(format!(
-                "line {number}: a contains pattern needs at least {MIN_PATTERN_CHARS} characters"
-            ));
+            return Err(ParseError::at(number, Refusal::ShortPattern));
         }
         patterns.push(fingerprint_normalized(&key, kind, &normalized));
         pattern_lengths.push(u32::try_from(length).unwrap_or(u32::MAX));
@@ -229,9 +299,8 @@ pub const HASHED_MARKER: &str = "melodia-blocklist-hashed-v1";
 ///
 /// # Errors
 ///
-/// Whatever the chosen parser reports, under [`parse_source`]'s rule about never
-/// quoting the line.
-pub fn parse_any(text: &str) -> Result<Terms, String> {
+/// Whatever the chosen parser reports.
+pub fn parse_any(text: &str) -> Result<Terms, ParseError> {
     if entries(text).next().is_some_and(|(_, line)| line == HASHED_MARKER) {
         return parse_hashed(text);
     }
@@ -268,9 +337,9 @@ pub fn render_hashed(terms: &Terms) -> String {
 ///
 /// # Errors
 ///
-/// A missing field, an unknown one, a key that is not 32 bytes of hex, or a list
-/// carrying something that is not a number.
-pub fn parse_hashed(text: &str) -> Result<Terms, String> {
+/// The [`Refusal`]s a `field = value` line can earn, plus [`ParseError::MissingField`]
+/// for one left out entirely.
+pub fn parse_hashed(text: &str) -> Result<Terms, ParseError> {
     let (mut key, mut fingerprints, mut patterns, mut pattern_lengths) = (None, None, None, None);
 
     for (number, line) in entries(text) {
@@ -278,7 +347,7 @@ pub fn parse_hashed(text: &str) -> Result<Terms, String> {
             continue;
         }
         let Some((field, value)) = line.split_once('=') else {
-            return Err(format!("line {number}: expected `field = value`"));
+            return Err(ParseError::at(number, Refusal::HashedShape));
         };
         let value = value.trim();
         match field.trim() {
@@ -286,16 +355,15 @@ pub fn parse_hashed(text: &str) -> Result<Terms, String> {
             "terms" => fingerprints = Some(numbers(value, number)?),
             "patterns" => patterns = Some(numbers(value, number)?),
             "lengths" => pattern_lengths = Some(numbers::<u32>(value, number)?),
-            _ => return Err(format!("line {number}: unknown field")),
+            _ => return Err(ParseError::at(number, Refusal::UnknownField)),
         }
     }
 
-    let missing = || "pre-hashed source is missing a field".to_owned();
     let mut terms = Terms {
-        key: key.ok_or_else(missing)?,
-        fingerprints: fingerprints.ok_or_else(missing)?,
-        patterns: patterns.ok_or_else(missing)?,
-        pattern_lengths: pattern_lengths.ok_or_else(missing)?,
+        key: key.ok_or(ParseError::MissingField)?,
+        fingerprints: fingerprints.ok_or(ParseError::MissingField)?,
+        patterns: patterns.ok_or(ParseError::MissingField)?,
+        pattern_lengths: pattern_lengths.ok_or(ParseError::MissingField)?,
     };
 
     // Sorted here rather than trusted: a lookup binary-searches, so an out-of-order
@@ -306,14 +374,12 @@ pub fn parse_hashed(text: &str) -> Result<Terms, String> {
     Ok(terms)
 }
 
-fn numbers<T: std::str::FromStr>(value: &str, number: usize) -> Result<Vec<T>, String> {
+fn numbers<T: std::str::FromStr>(value: &str, number: usize) -> Result<Vec<T>, ParseError> {
     if value.is_empty() {
         return Ok(Vec::new());
     }
-    value
-        .split(',')
-        .map(|item| item.trim().parse::<T>().map_err(|_| format!("line {number}: not a number")))
-        .collect()
+    let not_a_number = ParseError::at(number, Refusal::NotANumber);
+    value.split(',').map(|item| item.trim().parse::<T>().map_err(|_| not_a_number)).collect()
 }
 
 /// [`hex_key`]'s inverse, written by hand because both idiomatic spellings are
@@ -330,15 +396,15 @@ fn hex(key: &[u8; 32]) -> String {
     encoded
 }
 
-fn hex_key(value: &str, number: usize) -> Result<[u8; 32], String> {
-    let invalid = || format!("line {number}: key wants 64 hex characters");
+fn hex_key(value: &str, number: usize) -> Result<[u8; 32], ParseError> {
+    let invalid = ParseError::at(number, Refusal::KeyDigits);
     if value.len() != 64 {
-        return Err(invalid());
+        return Err(invalid);
     }
     let mut key = [0u8; 32];
     for (index, byte) in key.iter_mut().enumerate() {
-        let pair = value.get(index * 2..index * 2 + 2).ok_or_else(invalid)?;
-        *byte = u8::from_str_radix(pair, 16).map_err(|_| invalid())?;
+        let pair = value.get(index * 2..index * 2 + 2).ok_or(invalid)?;
+        *byte = u8::from_str_radix(pair, 16).map_err(|_| invalid)?;
     }
     Ok(key)
 }
@@ -359,7 +425,7 @@ const KEY_LABEL: &str = "key";
 /// Its own pass because a key may legally sit below the terms it applies to, and a
 /// term hashed under the default before the real key was read would be a fingerprint
 /// nothing ever matches.
-fn key_material(text: &str) -> Result<Option<&str>, String> {
+fn key_material(text: &str) -> Result<Option<&str>, ParseError> {
     let mut material = None;
     for (number, line) in entries(text) {
         let (label, value) = split_entry(line, number)?;
@@ -367,10 +433,10 @@ fn key_material(text: &str) -> Result<Option<&str>, String> {
             continue;
         }
         if material.is_some() {
-            return Err(format!("line {number}: a second key line"));
+            return Err(ParseError::at(number, Refusal::SecondKey));
         }
         if value.is_empty() {
-            return Err(format!("line {number}: empty key"));
+            return Err(ParseError::at(number, Refusal::EmptyKey));
         }
         material = Some(value);
     }
@@ -392,13 +458,13 @@ fn entries(text: &str) -> impl Iterator<Item = (usize, &str)> {
 /// that legitimately contains one, and a truncated term matches nothing — the exact
 /// quiet failure this parser exists to prevent. A station whose name needs a `#` is
 /// reachable by its uuid or its stream URL instead.
-fn split_entry(line: &str, number: usize) -> Result<(&str, &str), String> {
+fn split_entry(line: &str, number: usize) -> Result<(&str, &str), ParseError> {
     let Some((label, value)) = line.split_once(':') else {
-        return Err(format!("line {number}: expected `kind: value`"));
+        return Err(ParseError::at(number, Refusal::Shape));
     };
     let value = value.trim();
     if value.contains('#') {
-        return Err(format!("line {number}: comments go on their own line"));
+        return Err(ParseError::at(number, Refusal::InlineComment));
     }
     Ok((label.trim(), value))
 }

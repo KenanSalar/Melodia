@@ -24,23 +24,32 @@ export component UpdateSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> card-title: @tr("Updates");
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, @tr("Updates"),
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
-    property <bool> show-software: row-visible(
-        @tr("Software Updates"), @tr("Current version: {}", MelodiaUpdater.current-version));
+    property <string> software-label: @tr("Software Updates");
+    property <string> software-desc: @tr("Current version: {}", MelodiaUpdater.current-version);
+    property <string> up-to-date-label: @tr("You're up to date!");
+    property <string> up-to-date-desc: @tr("Melodia {} is the latest version.", MelodiaUpdater.current-version);
+    property <string> restart-label: @tr("Update Installed");
+    property <string> restart-desc: @tr("Restart Melodia to apply the update");
+    property <string> available-label: @tr("Version {} Available", MelodiaUpdater.available-version);
+    property <string> managed-label: @tr("Updates managed by your package manager");
+
+    property <bool> show-software: row-visible(software-label, software-desc);
     property <bool> show-up-to-date:
         MelodiaUpdater.up-to-date && !MelodiaUpdater.update-available && !MelodiaUpdater.restart-needed
-        && row-visible(@tr("You're up to date!"),
-            @tr("Melodia {} is the latest version.", MelodiaUpdater.current-version));
+        && row-visible(up-to-date-label, up-to-date-desc);
     property <bool> show-restart: MelodiaUpdater.restart-needed
-        && row-visible(@tr("Update Installed"), @tr("Restart Melodia to apply the update"));
+        && row-visible(restart-label, restart-desc);
     property <bool> show-update-available:
         MelodiaUpdater.update-available && !MelodiaUpdater.restart-needed
-        && row-visible(@tr("Version {} Available", MelodiaUpdater.available-version), MelodiaUpdater.notes-short);
+        && row-visible(available-label, MelodiaUpdater.notes-short);
     property <bool> show-error: MelodiaUpdater.error-message != ""
         && row-visible("", MelodiaUpdater.error-message);
     // A ternary, so each branch's literal stays inside `@tr()` and re-resolves
@@ -52,7 +61,7 @@ export component UpdateSection inherits Rectangle {
             ? @tr("Use brew upgrade melodia.")
         : @tr("Use sudo dnf update melodia (or your distro equivalent).");
     property <bool> show-package-managed: MelodiaUpdater.system-managed
-        && row-visible(@tr("Updates managed by your package manager"), pkg-manager-hint);
+        && row-visible(managed-label, pkg-manager-hint);
 
     // Gated as a whole rather than per row: an unsupported build has no state worth a card, and
     // routing it through `has-matches` is also what keeps a search for "update" from landing on
@@ -65,12 +74,12 @@ export component UpdateSection inherits Rectangle {
     // see `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
-        title: @tr("Updates");
+        title: root.card-title;
 
         if root.show-software: SettingRow {
             icon: "system_update";
-            label: @tr("Software Updates");
-            description: @tr("Current version: {}", MelodiaUpdater.current-version);
+            label: root.software-label;
+            description: root.software-desc;
             SectionButton {
                 label: MelodiaUpdater.is-checking ? @tr("Checking...") : @tr("Check for Updates");
                 icon: "";
@@ -85,22 +94,22 @@ export component UpdateSection inherits Rectangle {
         if root.show-software && root.show-package-managed: SectionDivider {}
         if root.show-package-managed: SettingRow {
             icon: "package_2";
-            label: @tr("Updates managed by your package manager");
+            label: root.managed-label;
             description: pkg-manager-hint;
         }
 
         if root.show-software && root.show-up-to-date: SectionDivider {}
         if root.show-up-to-date: SettingRow {
             icon: "check_circle";
-            label: @tr("You're up to date!");
-            description: @tr("Melodia {} is the latest version.", MelodiaUpdater.current-version);
+            label: root.up-to-date-label;
+            description: root.up-to-date-desc;
         }
 
         if root.show-software && root.show-restart: SectionDivider {}
         if root.show-restart: SettingRow {
             icon: "restart_alt";
-            label: @tr("Update Installed");
-            description: @tr("Restart Melodia to apply the update");
+            label: root.restart-label;
+            description: root.restart-desc;
             SectionButton {
                 label: @tr("Restart Now");
                 icon: "";
@@ -114,7 +123,7 @@ export component UpdateSection inherits Rectangle {
         if root.show-software && root.show-update-available: SectionDivider {}
         if root.show-update-available: SettingRow {
             icon: "new_releases";
-            label: @tr("Version {} Available", MelodiaUpdater.available-version);
+            label: root.available-label;
             description: MelodiaUpdater.notes-short;
             // The changelog arrives as one long line; capped to a reading
             // column it wraps early instead of widening the card.

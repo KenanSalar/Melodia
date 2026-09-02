@@ -83,7 +83,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         let s = state.clone();
         let bu = browse_ui.clone();
         let weak = weak.clone();
-        let mut rx = state.library_changed_tx.subscribe();
+        let mut rx = state.library_changed.subscribe();
         let _ = slint::spawn_local(Compat::new(async move {
             // The initial `borrow()` value is whatever the channel started at; mark it
             // seen so we don't re-fetch immediately.

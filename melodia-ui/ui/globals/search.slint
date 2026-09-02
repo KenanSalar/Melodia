@@ -8,7 +8,7 @@ import { TrackListRow, EntityStripRow } from "../models.slint";
 // Both strips match through their own tracks as well as by name, so a query reaching only track
 // metadata still fills them — and with them the Top Result, which ranks over those two plus genres.
 // Genres have no strip. **The query is the only driver**: Rust never auto-refreshes on
-// `library_changed_tx`, a scan finishing mid-query not being allowed to swap results out from under
+// `library_changed`, a scan finishing mid-query not being allowed to swap results out from under
 // the user. Tab-leave releases the strip cover LRUs but keeps `query` and `recent-rows`.
 export global Search {
     // Each keystroke bumps `pending`; a Timer in the view fires `commit-search` once it diverges

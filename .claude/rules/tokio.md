@@ -26,7 +26,8 @@ paths:
 - For request/response: combine `mpsc` (send request) + `oneshot` (receive reply)
 - Use `watch` for ViewModel updates from backend to frontend listeners
 - `Receiver::recv_many(&mut buf, limit)` batch-drains an `mpsc` in one await — cancel-safe (a losing `select!` branch consumed nothing) and returns 0 only when the channel is closed *and* empty. Fits coalescing patterns (file-event batches, drop floods)
-- `watch` consumer loops should be do-while shaped: process `rx.borrow_and_update()` first, *then* `await changed()` — handles the initial value and can't miss an update that landed between subscribe and first await
+- **A `watch` consumer's shape follows what the channel carries, and the two answers are opposite.** For a **payload** channel (a view model, a snapshot) go do-while: process `rx.borrow_and_update()` first, *then* `await changed()` — the initial value is real state the subscriber owes a pass over. For a **tick** channel (`state::Signal`, whose `u64` means only that something moved) go `changed()`-first: the initial `0` describes nothing and processing it double-fires against whatever explicit initial fetch the subscriber sits beside. Neither shape can miss an update landing between subscribe and first await — `Sender::subscribe` captures the current version as already-seen, so a send in that window resolves `changed()` immediately.
+- **Nothing owes a `borrow_and_update` *after* a successful `changed()`.** `changed()` marks the newest value seen itself (`maybe_changed` assigns the version before it returns `Ok`), so the extra call is a no-op — reach for it only where there was no `changed()` to mark it, as when priming or deliberately discarding a value. `ui::signal::on_signal` is the tick loop written once; a subscriber that spells its own is a subscriber to read twice.
 
 ## Mutex & Locking
 

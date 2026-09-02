@@ -2,7 +2,7 @@
 //! `AppState`, no player) against a `test_pool` and real fixtures copied out of
 //! `tests/assets/` into a `TempDir`. Never write to the checked-in asset.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tempfile::TempDir;
@@ -172,6 +172,124 @@ async fn album_rename_moves_track_to_new_album_id() -> Result<(), AppError> {
         .fetch_one(db.read())
         .await?;
     assert_eq!(name, "A Totally Different Album");
+    Ok(())
+}
+
+/// Seed the file's own genre so a later re-extract has nothing to disagree with. Without it the
+/// fixture's tags decide where the track lands and "the parent did not move" proves nothing.
+async fn set_genre(
+    db: &DbPool,
+    artwork_dir: &Path,
+    cover_cache: &artwork::CoverCache,
+    self_writes: &Arc<SelfWrites>,
+    id: i64,
+    genre: &str,
+) -> Result<(String, i64), AppError> {
+    let edit = TagEdit {
+        genre: FieldEdit::Set(genre.to_owned()),
+        ..TagEdit::default()
+    };
+    write_tag_edit(db, artwork_dir, cover_cache, self_writes, &[id], &edit, None).await?;
+
+    let row: (String, i64) = sqlx::query_as("SELECT genre, genre_id FROM tracks WHERE id = ?")
+        .bind(id)
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(row.0, genre, "the genre write has to land, or the caller is testing nothing");
+    Ok(row)
+}
+
+/// A rating write reaches `run_commit` on a single click, so both whole-table passes are gated
+/// off it. What that gate has to be worth: an orphan left by something else survives, and the
+/// re-extract it also skips does not take the cover with it.
+#[tokio::test]
+async fn a_rating_only_edit_sweeps_nothing_and_keeps_its_cover() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let folder = tmp.path().to_string_lossy().into_owned();
+    queries::folder::insert_folder(&db, &folder, true).await?;
+
+    let path = stage(&tmp, "silence.flac")?;
+    let id = seed_track(&db, &path.to_string_lossy()).await?;
+
+    // An external cover the re-extract *would* find, so the artwork assertion below fails when
+    // the skip stops happening rather than passing because there was no art to find either way.
+    // Ahead of every write: `find_external_cover` memoizes per directory on the first pass, so a
+    // cover dropped in later is one the cache has already answered `None` for.
+    std::fs::copy(assets_dir().join("cover.jpg"), tmp.path().join("cover.jpg"))?;
+
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let cover_cache = artwork::new_cover_cache();
+    let self_writes = Arc::new(SelfWrites::default());
+
+    let (_, genre_before) =
+        set_genre(&db, &artwork_dir, &cover_cache, &self_writes, id, "Kept Genre").await?;
+
+    // A cover on the row and an orphan beside it: the two things the gated passes would reach.
+    sqlx::query("UPDATE tracks SET artwork_path = ? WHERE id = ?")
+        .bind("/covers/kept.jpg")
+        .bind(id)
+        .execute(db.write())
+        .await?;
+    sqlx::query("INSERT INTO genres (name) VALUES ('Stray Genre')").execute(db.write()).await?;
+
+    let edit = TagEdit {
+        rating: FieldEdit::Set(4),
+        ..TagEdit::default()
+    };
+    let (report, _) =
+        write_tag_edit(&db, &artwork_dir, &cover_cache, &self_writes, &[id], &edit, None).await?;
+    assert_eq!(report.updated, 1);
+    assert!(report.failures.is_empty());
+
+    let (artwork_path, genre_after, rating): (String, i64, i64) =
+        sqlx::query_as("SELECT artwork_path, genre_id, rating FROM tracks WHERE id = ?")
+            .bind(id)
+            .fetch_one(db.read())
+            .await?;
+
+    assert_eq!(rating, 4, "the star still reaches the row through the re-extract");
+    assert_eq!(artwork_path, "/covers/kept.jpg", "the skipped re-extract must not null the cover");
+    assert_eq!(genre_after, genre_before, "a rating write re-homes nothing");
+
+    let strays: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM genres WHERE name = 'Stray Genre'")
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(strays, 1, "a rating write must not pay for a whole-table orphan sweep");
+    Ok(())
+}
+
+/// The other half of the gate: an edit that really does re-home the track still sweeps the parent
+/// it emptied. A field dropping out of `moves_between_parents` leaves orphans and nothing else
+/// notices, `prune_orphans` being the only thing in the tree that deletes an emptied row.
+#[tokio::test]
+async fn a_genre_edit_still_sweeps_the_genre_it_emptied() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let folder = tmp.path().to_string_lossy().into_owned();
+    queries::folder::insert_folder(&db, &folder, true).await?;
+
+    let path = stage(&tmp, "silence.flac")?;
+    let id = seed_track(&db, &path.to_string_lossy()).await?;
+
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let cover_cache = artwork::new_cover_cache();
+    let self_writes = Arc::new(SelfWrites::default());
+
+    let (_, emptied_id) =
+        set_genre(&db, &artwork_dir, &cover_cache, &self_writes, id, "Genre Before").await?;
+    let (_, landed_id) =
+        set_genre(&db, &artwork_dir, &cover_cache, &self_writes, id, "Genre After").await?;
+
+    assert_ne!(landed_id, emptied_id, "the genre rename must repoint genre_id");
+
+    let survivors: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM genres WHERE id = ?")
+        .bind(emptied_id)
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(survivors, 0, "the genre the move emptied is swept in the same transaction");
     Ok(())
 }
 

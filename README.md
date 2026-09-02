@@ -103,7 +103,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Automatic pre-migration database backups, kept in a `backups/` folder beside the library database; the three most recent are retained and older ones retire themselves, so upgrading never accumulates copies of your library without bound
 
 ### Playback
-- Gapless playback, with the next track staged on the deck before the current one ends
+- Gapless playback, with the next track staged on the deck before the current one ends. AAC albums run edge to edge too: an AAC encoder pads the start of every track and writes down how much, and Melodia reads that back from either the `iTunSMPB` tag or the MP4 edit list and drops those frames, along with the padding at the end
 - Audio crossfade (1–12 s) that overlaps the end of one track with the start of the next, running the two on separate mixer decks with a sample-accurate complementary ramp so the sum can never clip; optionally skips same-album transitions to keep continuous mixes gapless, extends to manual track changes, and fades out on pause and stop
 - Queue management with shuffle and repeat modes (Off, All, One)
 - Playing a track from any list (an album, a playlist, a folder in Files, search results, Favorites) loads that whole list into the queue and starts on the track you picked, so the rest of the album or playlist follows on its own. With shuffle already on, the remaining tracks are shuffled behind your pick rather than played in order. **Play Next** and **Add to Queue** in the right-click menu still add to the existing queue without replacing it
@@ -143,7 +143,7 @@ Six theme families, each with light and dark variants and configurable accent co
 
 Automatic system dark/light mode detection is supported. Material You dynamic theming derives a palette from the current track's artwork, with selectable color styles (Tonal Spot, Vibrant, Expressive, Fidelity, Content, Monochrome, Neutral). On KDE, color schemes are read from `kdeglobals` for native palette integration, and the sidebar and now-playing bar can be tinted toward the content background when the window loses focus. A custom transparent titlebar is used by default, with an adjustable window corner radius, alongside an option to fall back to native window decorations.
 
-Every header (Now Playing and the six library heroes) can be painted two ways. By default the cover art is blurred behind them; **Aurora Backdrop** instead sweeps the album's own colors broadly across the surface over the theme's background, so the header follows the theme's light or dark polarity. Headers with no cover to draw from still get one: a genre washes the colors of its own name-derived gradient, and anything untagged washes your accent. It skips the per-cover blur entirely, and takes effect on the next launch.
+Every header (Now Playing and the six library heroes) can be painted two ways. By default **Aurora Backdrop** sweeps the album's own colors broadly across the surface over the theme's background, so the header follows the theme's light or dark polarity; turn it off and the cover art is blurred behind them instead. Headers with no cover to draw from still get one: a genre washes the colors of its own name-derived gradient, and anything untagged washes your accent. The aurora skips the per-cover blur entirely, and switching either way takes effect on the next launch.
 
 ### Supported Audio Formats
 MP3, FLAC, M4A/M4B (AAC and ALAC), raw AAC (`.aac`), Ogg Vorbis (`.ogg`, `.oga`), WAV (PCM and ADPCM), AIFF/AIFF-C, Matroska (`.mka`) and CAF
@@ -335,8 +335,8 @@ cargo test                                     # run tests
 | UI | [Slint](https://slint.dev/) 1.16 (FemtoVG renderer) |
 | Backend | Pure Rust: direct calls + tokio channels, no IPC |
 | Async runtime | [Tokio](https://tokio.rs/) |
-| Audio | [Symphonia](https://github.com/pdeljanov/Symphonia) + [cpal](https://github.com/RustAudio/cpal) |
-| Radio streaming | [stream-download](https://crates.io/crates/stream-download) + [icy-metadata](https://crates.io/crates/icy-metadata), decoded by Symphonia |
+| Audio | [Symphonia](https://github.com/pdeljanov/Symphonia) decoding, [cpal](https://github.com/RustAudio/cpal) device output; the mixer, rate and channel conversion, playback speed and clock in between are Melodia's own |
+| Radio streaming | [stream-download](https://crates.io/crates/stream-download) + [icy-metadata](https://crates.io/crates/icy-metadata), decoded on the same Symphonia path as local files |
 | Station directory | [radio-browser.info](https://www.radio-browser.info) (no account, CC0 data) |
 | Equalizer DSP | [biquad](https://crates.io/crates/biquad) (peaking-filter bands) |
 | Spectrum analysis | [`realfft`](https://crates.io/crates/realfft) (real-to-complex FFT) |
@@ -353,12 +353,17 @@ cargo test                                     # run tests
 ## Architecture
 
 Melodia runs the Slint UI on the main thread and a single multi-threaded Tokio
-runtime for all backend work (database, scanner, file watcher, player, HTTP).
-There is no WebView and no IPC boundary:
+runtime for all backend work (database, scanner, file watcher, player control,
+HTTP). There is no WebView and no IPC boundary:
 
 - **UI → backend**: Slint callbacks spawn `async` work on the Tokio runtime.
 - **Backend → UI**: state flows back over `tokio::sync::watch` / `mpsc`
   channels, consumed by UI-thread tasks that update Slint properties.
+- **Audio**: cpal's device callback pulls the mixer directly, so decoding, the
+  DSP chain and the mix run on the audio thread rather than on the runtime. A
+  live stream is the one thing that needs a thread of its own, keeping the
+  blocking socket read off that callback and feeding a ring the decoder pulls
+  from.
 
 ```
 src/
@@ -367,7 +372,7 @@ src/
 ├── entities/    domain model types (track, album, artist, genre, playlist, …)
 ├── library/     playback, queue, tracks, albums, artists, genres, playlists, search, settings
 ├── media/       scanner, metadata, artwork, cover-thumbnail cache, folder watcher
-├── player/      playback state machine + dual-deck mixer over cpal + graphic equalizer, ReplayGain, crossfade, spectrum & waveform DSP, live-stream decode and buffering
+├── player/      playback state machine + Symphonia decode + output layer (cpal device, dual-deck mixer, rate and channel conversion, clock) + graphic equalizer, ReplayGain, crossfade, spectrum & waveform DSP, live-stream buffering
 ├── tasks/       background tasks (playback monitor, file events, queue prune, Material You)
 ├── themes/      pluggable theme registry
 ├── services/    updater, desktop integration, system theme, radio directory client

@@ -9,11 +9,10 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 use slint::ComponentHandle;
-use tokio::sync::watch;
 
 use crate::library;
 use crate::services::material_you::SchemeStyle;
-use crate::state::AppState;
+use crate::state::{AppState, Signal};
 use crate::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState};
 use crate::{AppWindow, Settings};
 
@@ -23,7 +22,7 @@ pub(super) fn wire_color_style_changed(
     ui: &AppWindow,
     state: &AppState,
     _os_state: Arc<RwLock<SystemColorState>>,
-    kick_tx: watch::Sender<u64>,
+    kick: Signal,
     persisted_accent: PersistedAccent,
 ) {
     let weak = ui.as_weak();
@@ -97,7 +96,7 @@ pub(super) fn wire_color_style_changed(
         // lock, so a kick raced ahead of the write would let the
         // coordinator regenerate against a stale style.
         let s_clone = s.clone();
-        let kick_clone = kick_tx.clone();
+        let kick_clone = kick.clone();
         let style_owned = style.as_id().to_owned();
         let persisted_accent_for_blocking = persisted_accent.clone();
         s.runtime.spawn_blocking(move || {
@@ -148,7 +147,7 @@ pub(super) fn wire_color_style_changed(
             // settings, regenerates against a frozen-in-time pair, and
             // goes back to sleep until the next user action.
             if all_persists_ok {
-                kick_clone.send_modify(|n| *n = n.wrapping_add(1));
+                kick_clone.bump();
             } else {
                 log::warn!(
                     "material3 colour-style persist had write failures; \
