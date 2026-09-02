@@ -78,20 +78,25 @@ impl AudioStreamHealth {
         }
     }
 
-    /// Take everything recorded since the last call, or `None` if nothing was.
-    pub fn drain(&self) -> Option<StreamHealthReport> {
+    /// Take everything recorded since the last call.
+    ///
+    /// A quiet window is a zeroed report rather than an absence, and that is the whole of why
+    /// this returns no `Option`: [`crate::tasks::audio_health`]'s warn latch re-arms on the zero,
+    /// so a caller that could skip an empty window would leave the first fault of a session the
+    /// only one ever warned about. The early return keeps the lock off that path either way.
+    pub fn drain(&self) -> StreamHealthReport {
         let underruns = self.underruns.swap(0, Ordering::Relaxed);
         let other = self.other.swap(0, Ordering::Relaxed);
         let device_lost = self.device_lost.swap(false, Ordering::Relaxed);
         if underruns == 0 && other == 0 && !device_lost {
-            return None;
+            return StreamHealthReport::default();
         }
-        Some(StreamHealthReport {
+        StreamHealthReport {
             underruns,
             other,
             first_other_error: self.first_other_error.lock().take(),
             device_lost,
-        })
+        }
     }
 }
 

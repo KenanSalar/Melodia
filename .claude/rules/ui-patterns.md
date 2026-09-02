@@ -1065,6 +1065,16 @@ edit would otherwise reverse.
   seam. A mount that forgets `tab-name:` still matches its own title, so the page looks right and
   only the tab-name query comes up empty.
 
+- **A row's label and description are declared once, as properties the visibility term and the row
+  both read.** The section's local `row-visible(label, desc)` is fed `label + " " + desc`, so a pair
+  spelled at both sites lets a reworded description stop its own row matching — invisible until
+  someone types a word from it. The other half is the one to check on a **cluster**: a toggle whose
+  sub-rows hang off its own visibility owes every sub-row's pair as a term (`playback-section`'s
+  crossfade `||` chain, `discord-section`'s concatenated haystack), or a sub-row is reachable only
+  by scrolling to it. Untranslated brands and SPDX ids take a property too — the drift hazard is
+  the double spelling, not the `@tr`. Nothing enforces any of this, and a fresh section is exactly
+  where it comes back.
+
 - **Anything that has to fit a width reads `SettingsPage`, and never measures.**
   `settings-view.slint` publishes `page-w` (the panel width it already mirrors — a live
   `root.width` read feeding a child's size re-enters layout) and `body-cols`; the global derives

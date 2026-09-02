@@ -17,12 +17,15 @@ export component DiscordSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> card-title: "Discord";
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, "Discord",
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
+    property <string> enable-label: "Discord Rich Presence";
     property <string> artwork-label: @tr("Show album artwork");
     property <string> artwork-desc: @tr("Look up cover art online (via Deezer or iTunes) to show on the card");
     property <string> paused-label: @tr("Hide while paused");
@@ -32,18 +35,18 @@ export component DiscordSection inherits Rectangle {
     // The section searches as one unit: the sub-options' labels fold in here, so
     // matching either reveals the whole thing rather than just the enable row.
     property <bool> show-discord: row-visible(
-        "Discord Rich Presence" + " " + artwork-label + " " + paused-label,
+        enable-label + " " + artwork-label + " " + paused-label,
         enable-desc);
 
     out property <bool> has-matches: show-discord;
 
     VerticalLayout {
     if has-matches: SectionCard {
-        title: "Discord";
+        title: root.card-title;
 
         if root.show-discord: SettingRow {
             icon: "chat";
-            label: "Discord Rich Presence";
+            label: root.enable-label;
             description: root.enable-desc;
             ToggleSwitch {
                 checked <=> Settings.discord-rpc-enabled;

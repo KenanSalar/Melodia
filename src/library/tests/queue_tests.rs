@@ -147,20 +147,6 @@ fn queue_toggle_shuffle_enables_then_disables() {
 }
 
 #[test]
-fn queue_set_repeat_all_modes() {
-    let mut state = PlayerState::default();
-
-    state.queue.set_repeat_mode(RepeatMode::Off);
-    assert_eq!(state.queue.repeat_mode, RepeatMode::Off);
-
-    state.queue.set_repeat_mode(RepeatMode::All);
-    assert_eq!(state.queue.repeat_mode, RepeatMode::All);
-
-    state.queue.set_repeat_mode(RepeatMode::One);
-    assert_eq!(state.queue.repeat_mode, RepeatMode::One);
-}
-
-#[test]
 fn queue_cycle_repeat_cycles_correctly() {
     let mut state = PlayerState::default();
     assert_eq!(state.queue.repeat_mode, RepeatMode::Off);

@@ -6,7 +6,7 @@ import { Settings } from "../settings.slint";
 
 // In-app auto-update state, owned by `src/ui/settings/updater_settings.rs` and
 // `src/ui/callbacks/updater/`. The `in-out` half is the check/install lifecycle, written directly
-// by `ui::callbacks::updater::paint` and, for the background check, by `tasks::updater_daily`; the
+// from that directory and, for the background check, by `tasks::updater_daily`; the
 // `in` half is capability, seeded once at startup by `updater_settings`. `UpdaterEvent`
 // (`src/services/updater/event.rs`) is a *parallel* channel carrying the same moments to the toast
 // stack below rather than a source these properties are projected from.

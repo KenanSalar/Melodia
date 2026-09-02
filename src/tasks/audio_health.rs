@@ -61,10 +61,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
             tokio::select! {
                 () = shutdown.cancelled() => break,
                 _ = ticker.tick() => {
-                    // Defaulted rather than `let else`-skipped, so an empty window reaches the
-                    // latch — a quiet window is the only thing that re-arms it. Every arm below
-                    // is zero-gated, so the empty case costs nothing whatever the order.
-                    let report = health.drain().unwrap_or_default();
+                    let report = health.drain();
                     let warn = warned.should_warn(report.other);
 
                     if report.underruns > 0 {

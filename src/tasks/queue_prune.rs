@@ -47,7 +47,6 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                     if changed.is_err() {
                         break;
                     }
-                    let _ = rx.borrow_and_update();
                     if let Err(e) = reconcile_once(&db, &player_state, &sinks, &engine).await {
                         log::warn!("queue_prune reconcile failed: {e}");
                     }

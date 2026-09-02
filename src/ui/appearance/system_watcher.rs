@@ -9,7 +9,7 @@ use parking_lot::RwLock;
 use tokio::sync::watch;
 
 use crate::AppWindow;
-use crate::state::AppState;
+use crate::state::{AppState, Signal};
 use crate::themes::SystemColorState;
 
 #[cfg(target_os = "linux")]
@@ -35,7 +35,7 @@ pub(super) fn spawn_os_state_watcher(
     state: &AppState,
     os_state: Arc<RwLock<SystemColorState>>,
     initial: SystemColorState,
-    kick_tx: watch::Sender<u64>,
+    kick: Signal,
 ) {
     let (tx, mut rx) = watch::channel(initial);
     services::system_theme::spawn_color_watcher(tx);
@@ -60,7 +60,7 @@ pub(super) fn spawn_os_state_watcher(
             // `is_dark` (matters when the user's variant is "system" and
             // the OS just flipped dark/light) and regenerates the
             // palette.
-            kick_tx.send_modify(|n| *n = n.wrapping_add(1));
+            kick.bump();
 
             let Some(ui) = weak.upgrade() else { return };
             // Only repaint when the *persisted* variant is "system" —
@@ -102,6 +102,6 @@ pub(super) fn spawn_os_state_watcher(
     _state: &AppState,
     _os_state: Arc<RwLock<SystemColorState>>,
     _initial: SystemColorState,
-    _kick_tx: watch::Sender<u64>,
+    _kick: Signal,
 ) {
 }

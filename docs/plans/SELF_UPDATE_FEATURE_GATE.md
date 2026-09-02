@@ -127,14 +127,13 @@ but don't re-add the submodule when working through this plan.)*
 
 | Item | Gate | Why |
 |---|---|---|
-| `install_target()` (mod.rs:85) | **ungated** | std-only (`current_exe`/`$APPIMAGE`); used by `system_install.rs:55` + `linux_pkg.rs:40` |
-| `install_target_old()` (mod.rs:74) | **gated** | calls `install::old_path()` — depends on the gated `install` submodule |
+| `install_target()` (`mod.rs`) | **ungated** | std-only (`current_exe`/`$APPIMAGE`); used by `system_install.rs` + `linux_pkg.rs` |
+| `install_target_old()` (`mod.rs`) | **gated** | calls `install::old_path()` — depends on the gated `install` submodule |
 
-`mod.rs` re-exports (lines 52-56):
+`mod.rs` re-exports:
 - **Ungated:** `pub use system_install::is_system_install;`
 - **Gated** (`#[cfg(feature = "self-update")]`): `check::{CheckOutcome, check_for_update}`,
-  `event::{FailureKind, UpdaterEvent}`, `install::{download_and_install, prune_stale_staging}`,
-  `state::UpdaterState`.
+  `event::{FailureKind, UpdaterEvent}`, `install::{download_and_install, prune_stale_staging}`.
 
 `pub mod updater;` in `src/services/mod.rs` stays — only its active submodules
 are gated internally.

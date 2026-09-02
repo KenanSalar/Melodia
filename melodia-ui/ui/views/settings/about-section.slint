@@ -33,15 +33,23 @@ export component AboutSection inherits Rectangle {
 
     // The brands, the SPDX id and "GitHub" / "Ko-fi" stay untranslated but still
     // belong in the haystack — they're what a user would type.
+    property <string> app-label: "Melodia";
     property <string> version-desc: @tr("Version {}", MelodiaUpdater.current-version);
     property <string> author-label: @tr("Made by {}", "Kenan Salar");
+    property <string> repo-label: "GitHub";
     property <string> support-label: @tr("Support Melodia");
+    property <string> support-desc: @tr("Melodia is free and open source. Support helps keep it going.");
     property <string> license-label: @tr("License");
+    property <string> license-desc: "AGPL-3.0-or-later";
+    property <string> kofi-label: @tr("Support me on Ko-fi");
 
-    property <bool> show-app: row-visible("Melodia", version-desc);
-    property <bool> show-author: row-visible(author-label, "GitHub");
-    property <bool> show-support: row-visible(support-label, "Ko-fi");
-    property <bool> show-license: row-visible(license-label, "AGPL-3.0-or-later");
+    property <bool> show-app: row-visible(app-label, version-desc);
+    property <bool> show-author: row-visible(author-label, repo-label);
+    // The button's own wording is a term too, "Ko-fi" alone being the brand rather than
+    // anything the row says about it.
+    property <bool> show-support: row-visible(support-label, support-desc)
+        || row-visible(kofi-label, "Ko-fi");
+    property <bool> show-license: row-visible(license-label, license-desc);
 
     out property <bool> has-matches: show-app || show-author || show-support || show-license;
 
@@ -53,7 +61,7 @@ export component AboutSection inherits Rectangle {
 
             if root.show-app: SettingRow {
                 icon: "info";
-                label: "Melodia";
+                label: root.app-label;
                 description: root.version-desc;
             }
 
@@ -63,7 +71,7 @@ export component AboutSection inherits Rectangle {
                 icon: "person";
                 label: root.author-label;
                 SectionButton {
-                    label: "GitHub";
+                    label: root.repo-label;
                     icon: "";
                     primary: false;
                     clicked => { Settings.open-repository(); }
@@ -78,9 +86,9 @@ export component AboutSection inherits Rectangle {
             if root.show-support: SettingRow {
                 icon: "favorite";
                 label: root.support-label;
-                description: @tr("Melodia is free and open source. Support helps keep it going.");
+                description: root.support-desc;
                 SectionButton {
-                    label: @tr("Support me on Ko-fi");
+                    label: root.kofi-label;
                     icon: "";
                     leading-image: @image-url("../../assets/icons/kofi-symbol.svg");
                     corner-radius: Theme.radius-md;
@@ -93,7 +101,7 @@ export component AboutSection inherits Rectangle {
             if root.show-license: SettingRow {
                 icon: "balance";
                 label: root.license-label;
-                description: "AGPL-3.0-or-later";
+                description: root.license-desc;
             }
         }
     }

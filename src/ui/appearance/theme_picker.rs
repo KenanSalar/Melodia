@@ -7,10 +7,9 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 use slint::{ComponentHandle, ModelRc, VecModel};
-use tokio::sync::watch;
 
 use crate::library;
-use crate::state::AppState;
+use crate::state::{AppState, Signal};
 use crate::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
 use crate::{AppWindow, Settings};
 
@@ -58,7 +57,7 @@ pub(super) fn wire_theme_changed(
     ui: &AppWindow,
     state: &AppState,
     os_state: Arc<RwLock<SystemColorState>>,
-    kick_tx: watch::Sender<u64>,
+    kick: Signal,
     persisted_accent: PersistedAccent,
 ) {
     let weak = ui.as_weak();
@@ -93,7 +92,7 @@ pub(super) fn wire_theme_changed(
         // Sequenced inside one `spawn_blocking`, so the coordinator reads the new theme
         // on wake rather than the previous one — switching to or from material3 flips
         // whether dynamic colour applies at all.
-        persist_and_kick(&s, theme.id, &variant_id, &accent_id, &kick_tx);
+        persist_and_kick(&s, theme.id, &variant_id, &accent_id, &kick);
     });
 }
 
@@ -135,7 +134,7 @@ pub(super) fn wire_variant_changed(
     ui: &AppWindow,
     state: &AppState,
     os_state: Arc<RwLock<SystemColorState>>,
-    kick_tx: watch::Sender<u64>,
+    kick: Signal,
     persisted_accent: PersistedAccent,
 ) {
     let weak = ui.as_weak();
@@ -201,6 +200,6 @@ pub(super) fn wire_variant_changed(
         // Write and kick are sequenced in one `spawn_blocking`, so the coordinator
         // reads the new variant on wake — a flip can change `is_dark` and oblige a
         // regenerate.
-        persist_and_kick(&s, theme.id, variant_id, &persisted_accent_str, &kick_tx);
+        persist_and_kick(&s, theme.id, variant_id, &persisted_accent_str, &kick);
     });
 }

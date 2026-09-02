@@ -380,11 +380,6 @@ impl QueueState {
         self.version += 1;
     }
 
-    pub fn set_repeat_mode(&mut self, mode: RepeatMode) {
-        self.repeat_mode = mode;
-        self.version += 1;
-    }
-
     pub fn cycle_repeat_mode(&mut self) {
         self.repeat_mode = match self.repeat_mode {
             RepeatMode::Off => RepeatMode::All,

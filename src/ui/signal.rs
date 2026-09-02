@@ -1,8 +1,7 @@
 //! Running a closure on the UI thread every time a [`Signal`] moves.
 //!
-//! Four subscribers wanted the same twelve lines — subscribe, `spawn_local` a loop, `await` the
-//! change, upgrade the weak handle, do the work — and each spelled them out with its own error
-//! label. The loop is the whole of what they shared and none of what they differ on.
+//! The subscribe-and-spawn loop is the whole of what the four subscribers share and none of what
+//! they differ on, so what each does with the tick is all that stays at the call site.
 //!
 //! `changed()` marks the value seen on its own, so there is deliberately no `borrow_and_update`
 //! here: the counter is a tick, not a payload, and nothing downstream reads it.

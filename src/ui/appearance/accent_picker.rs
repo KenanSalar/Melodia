@@ -8,9 +8,8 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 use slint::{Brush, ComponentHandle, SharedString};
-use tokio::sync::watch;
 
-use crate::state::AppState;
+use crate::state::{AppState, Signal};
 use crate::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
 use crate::{AppWindow, Settings};
 
@@ -110,7 +109,7 @@ pub(super) fn wire_accent_changed(
     ui: &AppWindow,
     state: &AppState,
     os_state: Arc<RwLock<SystemColorState>>,
-    _kick_tx: watch::Sender<u64>,
+    _kick: Signal,
     persisted_accent: PersistedAccent,
 ) {
     let weak = ui.as_weak();

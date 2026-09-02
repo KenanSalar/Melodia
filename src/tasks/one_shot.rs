@@ -26,7 +26,8 @@ pub enum OnFailure {
     Retry,
 }
 
-/// What distinguishes one sweep from the other: its marker, and what a failure costs.
+/// What distinguishes one sweep from the other: what it is called, which flag records it, and
+/// what a failure costs.
 #[derive(Clone, Copy)]
 pub struct Sweep {
     /// Names the pass in the two lines below. Prose rather than the flag name, these landing in

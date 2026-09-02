@@ -70,7 +70,6 @@ export component AppearanceSection inherits Rectangle {
 
     // A divider needs a visible row on both sides; filtering down to one row
     // would otherwise leave one dangling above it and another below.
-    property <bool> any-above-variant: show-theme;
     property <bool> any-above-accent: show-theme || show-variant;
     property <bool> any-above-color-style: show-theme || show-variant || show-accent;
     property <bool> any-above-backdrop: any-above-color-style || show-color-style;

@@ -347,21 +347,8 @@ fn set_volume_clamps_and_unmutes() {
 
 // --- mute ---
 
-#[test]
-fn set_muted_saves_pre_mute_volume() {
-    let mut state = PlayerState {
-        volume: 75,
-        ..PlayerState::default()
-    };
-
-    let actions = state.build_set_muted_actions(true);
-
-    assert_eq!(state.pre_mute_volume, 75);
-    assert!(state.is_muted);
-    assert!((state.effective_volume() - 0.0).abs() < f64::EPSILON);
-    assert_eq!(actions, vec![PlayerAction::SetVolume(0.0)]);
-}
-
+/// The unmute reads `pre_mute_volume`, so the mute edge has to save it and the unmute must
+/// not overwrite it — a toggle-off that re-stamped it would pin the volume at zero.
 #[test]
 fn toggle_mute_roundtrip() {
     let mut state = PlayerState {
@@ -371,11 +358,13 @@ fn toggle_mute_roundtrip() {
 
     let actions = state.build_toggle_mute_actions();
     assert!(state.is_muted);
+    assert_eq!(state.pre_mute_volume, 80);
     assert!((state.effective_volume() - 0.0).abs() < f64::EPSILON);
     assert_eq!(actions, vec![PlayerAction::SetVolume(0.0)]);
 
     let actions = state.build_toggle_mute_actions();
     assert!(!state.is_muted);
+    assert_eq!(state.pre_mute_volume, 80);
     let vol = state.effective_volume();
     assert!(vol > 0.0);
     assert_eq!(actions, vec![PlayerAction::SetVolume(vol)]);
@@ -407,30 +396,14 @@ fn set_playback_speed_normal_value() {
     assert_eq!(actions, vec![PlayerAction::SetSpeed(1.5)]);
 }
 
-// --- mute edge cases ---
-
-#[test]
-fn set_muted_false_does_not_overwrite_pre_mute() {
-    let mut state = PlayerState {
-        volume: 80,
-        ..PlayerState::default()
-    };
-
-    state.build_set_muted_actions(true);
-    assert_eq!(state.pre_mute_volume, 80);
-
-    state.build_set_muted_actions(false);
-
-    assert!(!state.is_muted);
-    assert_eq!(state.pre_mute_volume, 80);
-}
-
 // --- next with repeat all ---
 
 #[test]
 fn next_at_end_with_repeat_all_wraps() {
     let mut state = state_with_queue(3);
-    state.queue.set_repeat_mode(RepeatMode::All);
+    // One cycle off the default is repeat-all, which is how the transport reaches it.
+    state.queue.cycle_repeat_mode();
+    assert_eq!(state.queue.repeat_mode, RepeatMode::All);
     let track = make_summary(1, 180_000);
     play_track_inner(&mut state, track, None);
 

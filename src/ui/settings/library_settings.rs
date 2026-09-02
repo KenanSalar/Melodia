@@ -79,7 +79,6 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
                 if rx.changed().await.is_err() {
                     break;
                 }
-                let _ = rx.borrow_and_update();
                 refresh_folders(weak.clone(), s.clone()).await;
             }
             log::debug!("ui::settings::library_settings library-changed subscriber stopped");

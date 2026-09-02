@@ -213,7 +213,6 @@ pub async fn refresh_detail(
 
         // Hand the model swap to `apply_filtered_detail` so the filter and selection re-stamp pass
         // runs in one place.
-        drop(g);
         apply_filtered_detail(&ui, &artists_ui);
     });
     Ok(())

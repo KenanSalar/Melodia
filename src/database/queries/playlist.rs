@@ -250,25 +250,6 @@ pub async fn add_tracks_to_playlist(
     Ok(())
 }
 
-pub async fn remove_track_from_playlist(
-    db: &DbPool,
-    playlist_id: i64,
-    track_id: i64,
-) -> Result<(), AppError> {
-    let mut tx = db.write().begin().await?;
-
-    sqlx::query("DELETE FROM playlist_items WHERE playlist_id = ? AND track_id = ?")
-        .bind(playlist_id)
-        .bind(track_id)
-        .execute(&mut *tx)
-        .await?;
-
-    renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
-    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id).await?;
-    tx.commit().await?;
-    Ok(())
-}
-
 pub async fn remove_tracks_from_playlist_batch(
     db: &DbPool,
     playlist_id: i64,

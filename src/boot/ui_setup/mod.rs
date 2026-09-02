@@ -1,8 +1,9 @@
-//! UI installation phase: chrome, per-view installers, settings hydration, initial fetches,
-//! and the backend-to-UI subscribers.
+//! UI installation phase, four topics one file deep each: [`chrome`] is the window's own shell,
+//! [`views`] the per-view installers and the boot ordering they depend on, [`hydrate`] the
+//! `settings.json`-to-Slint applies plus the initial fetches, and [`subscribers`] the
+//! backend-to-UI bridges.
 //!
-//! Split four ways by topic — the file held all four under one doc line and had grown past
-//! seven hundred. Everything is re-exported, so `boot::ui_setup::*` is unchanged for callers.
+//! Everything is re-exported, so `boot::ui_setup::*` is one namespace for callers.
 
 pub mod chrome;
 pub mod hydrate;

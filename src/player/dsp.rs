@@ -76,6 +76,10 @@ pub(crate) fn frames_to_duration(frames: u64, rate: SampleRate) -> Duration {
 ///
 /// Saturating, because the only bound on a length read back out of a container is what fits a
 /// `u64`, and a corrupt one states whatever it likes.
+///
+/// Here rather than beside its one caller because it is the third term of the same vocabulary as
+/// [`frames_in`] and [`frames_to_duration`] — frames, the time they play for, and the samples
+/// they occupy — and splitting the trio costs more than the single consumer saves.
 pub(crate) fn interleaved(frames: u64, channels: ChannelCount) -> u64 {
     frames.saturating_mul(u64::from(channels.get()))
 }

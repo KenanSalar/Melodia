@@ -1,13 +1,12 @@
 //! Tests for the shared DSP primitives.
 
-use std::num::NonZero;
 use std::time::Duration;
 
 use super::{
     Generation, db_to_linear, frames_in, frames_to_duration, index_to_f32, interleaved,
     linear_to_db,
 };
-use crate::player::tests::helpers::approx_eq as approx;
+use crate::player::tests::helpers::{approx_eq as approx, nz_u16 as channels, nz_u32 as rate};
 
 #[test]
 fn zero_decibels_is_unity_gain() {
@@ -71,14 +70,6 @@ fn a_bump_publishes_a_new_value() {
 }
 
 // ------------------------------------------------- frames, durations and channels
-
-fn rate(hz: u32) -> crate::player::audio::SampleRate {
-    NonZero::new(hz).unwrap_or(NonZero::<u32>::MIN)
-}
-
-fn channels(n: u16) -> crate::player::audio::ChannelCount {
-    NonZero::new(n).unwrap_or(NonZero::<u16>::MIN)
-}
 
 /// **Neither direction is an identity, and that is the contract rather than a defect**: both
 /// halves floor, so a value that does not land on a frame boundary loses its remainder and a

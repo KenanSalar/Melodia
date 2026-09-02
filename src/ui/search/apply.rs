@@ -35,7 +35,7 @@ pub fn apply_results_to_slint(
     query: &str,
 ) {
     let sort = search_ui.state().sort.lock().clone();
-    let (prepared, total) = sort_and_prepare(&results.tracks, &sort);
+    let (rows, total) = sort_track_rows(&results.tracks, &sort);
     let top = compute_top_result(results, query);
 
     let album_rows: Vec<UiEntityStripRow> =
@@ -50,7 +50,7 @@ pub fn apply_results_to_slint(
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Search>();
-        write_tracks(&g, prepared, total);
+        write_tracks(&g, rows, total);
         write_strips(&g, album_rows, &artists);
         write_top_result(&g, top);
     });
@@ -62,7 +62,7 @@ pub fn apply_results_to_slint(
 /// Result sets are LIMIT-bounded, so building the *full* set — rather than just the compact
 /// slice, which can't be sized off-thread because `show-all-tracks` is UI-thread state — is
 /// cheap.
-fn sort_and_prepare(
+fn sort_track_rows(
     tracks: &[RsTrackListRow],
     sort: &crate::services::settings::ViewSort,
 ) -> (Vec<UiTrackListRow>, i32) {
@@ -87,21 +87,21 @@ fn sort_and_prepare(
     }
 
     let total = len_as_i32(sorted.len());
-    let prepared = sorted.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
-    (prepared, total)
+    let rows = sorted.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
+    (rows, total)
 }
 
 /// Truncate the Songs rows against the live `show-all-tracks` flag and write
 /// them, with the untruncated total beside them.
-fn write_tracks(g: &Search, prepared: Vec<UiTrackListRow>, total: i32) {
+fn write_tracks(g: &Search, rows: Vec<UiTrackListRow>, total: i32) {
     let take = if g.get_show_all_tracks() {
-        prepared.len()
+        rows.len()
     } else {
-        prepared.len().min(COMPACT_TRACK_LIMIT)
+        rows.len().min(COMPACT_TRACK_LIMIT)
     };
-    let mut rendered: Vec<UiTrackListRow> = prepared.into_iter().take(take).collect();
-    restamp_rows(g, &mut rendered);
-    write_track_model(g, rendered);
+    let mut shown: Vec<UiTrackListRow> = rows.into_iter().take(take).collect();
+    restamp_rows(g, &mut shown);
+    write_track_model(g, shown);
     g.set_tracks_total(total);
 }
 

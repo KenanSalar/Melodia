@@ -69,7 +69,6 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                     if changed.is_err() {
                         break;
                     }
-                    let _ = lib_rx.borrow_and_update();
                     // A real scan/import: resolve only the not-yet-attempted rows,
                     // silently (a toast on every import would be noise).
                     run_sweep(&state, &service, &shutdown, &mut attempted, false).await;

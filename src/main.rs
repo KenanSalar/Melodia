@@ -272,7 +272,7 @@ fn main() -> AppResult<()> {
             state.clone(),
             h.os_state.clone(),
             state.sinks.view_model.subscribe(),
-            h.kick_tx.subscribe(),
+            h.kick.subscribe(),
             h.repaint_tx.clone(),
             views.cover_thumbs.clone(),
         );

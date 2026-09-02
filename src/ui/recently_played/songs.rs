@@ -120,11 +120,11 @@ pub async fn refresh_tracks(
 ///
 /// **An unmounted tab is refused for the same reason, and asked about twice.**
 /// `RecentlyPlayed.tracks` feeds one element, under `if tab-idx == tab-songs`, so on the Most
-/// Played tab every prepared row here reaches nothing. [`build_filtered_tracks`]' check skips the
+/// Played tab every row built here reaches nothing. [`build_filtered_tracks`]' check skips the
 /// cost on the paths that reach here without a tab pick; [`write_filtered_tracks`]' stops a pick
 /// landing mid-post from pinning a row per track behind a tab the user just left.
 pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
-    let Some(prepared) = build_filtered_tracks(rp_ui) else {
+    let Some(rows) = build_filtered_tracks(rp_ui) else {
         return;
     };
 
@@ -132,7 +132,7 @@ pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        write_filtered_tracks(&ui, &rp_ui, prepared);
+        write_filtered_tracks(&ui, &rp_ui, rows);
     });
 }
 
@@ -143,8 +143,8 @@ pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
 /// when called *from* the UI thread, so a redraw can win the race. The tab-leave empties this
 /// model, so what a lost race paints is a `TrackList` of headers over nothing.
 pub fn apply_filtered_tracks_now(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
-    if let Some(prepared) = build_filtered_tracks(rp_ui) {
-        write_filtered_tracks(ui, rp_ui, prepared);
+    if let Some(rows) = build_filtered_tracks(rp_ui) {
+        write_filtered_tracks(ui, rp_ui, rows);
     }
 }
 
@@ -171,7 +171,7 @@ fn build_filtered_tracks(rp_ui: &RecentlyPlayedUi) -> Option<Vec<UiTrackListRow>
 /// Both gates are re-asked here rather than trusted from the build: on the posting path a section
 /// leave or a tab pick can land while the closure is in flight, and either has already emptied
 /// this model on purpose.
-fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: Vec<UiTrackListRow>) {
+fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, mut rows: Vec<UiTrackListRow>) {
     if !rp_ui.section_active() || rp_ui.active_tab() != RecentlyPlayedTab::Songs {
         return;
     }
@@ -181,9 +181,8 @@ fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: Vec
         log::warn!("RecentlyPlayed.tracks: VecModel<TrackListRow> downcast failed");
         return;
     };
-    let mut rendered = prepared;
-    super::selection::restamp_rows(&g, &mut rendered);
-    crate::ui::model_diff::apply_rows_keyed(vec, rendered, |r| r.id);
+    super::selection::restamp_rows(&g, &mut rows);
+    crate::ui::model_diff::apply_rows_keyed(vec, rows, |r| r.id);
 }
 
 /// Flip `is_favorite` on a single row in the Slint `VecModel`. Recency membership is independent

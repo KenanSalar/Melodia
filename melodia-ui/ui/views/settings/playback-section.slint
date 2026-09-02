@@ -51,6 +51,14 @@ export component PlaybackSection inherits Rectangle {
     property <string> resume-desc: @tr("Automatically resume the last track from where you left off when the app starts");
     property <string> crossfade-label: @tr("Crossfade");
     property <string> crossfade-desc: @tr("Overlap the end of one track with the start of the next");
+    property <string> xf-duration-label: @tr("Crossfade duration");
+    property <string> xf-duration-desc: @tr("How long the two tracks overlap");
+    property <string> xf-album-label: @tr("Except on the same album");
+    property <string> xf-album-desc: @tr("Keep tracks from one album gapless, so continuous mixes stay seamless");
+    property <string> xf-manual-label: @tr("Also on manual track change");
+    property <string> xf-manual-desc: @tr("Crossfade when you skip to the next or previous track, not only at the end of one");
+    property <string> xf-pause-label: @tr("Fade out on pause");
+    property <string> xf-pause-desc: @tr("Fade the music out when pausing or stopping, and back in when resuming");
     property <string> visualizer-label: @tr("Visualizer");
     property <string> visualizer-desc: @tr("Show an audio visualizer on the Now Playing screen");
     property <string> viz-style-label: @tr("Visualizer Style");
@@ -60,9 +68,14 @@ export component PlaybackSection inherits Rectangle {
     property <bool> show-gapless: row-visible(gapless-label, gapless-desc);
     property <bool> show-anim: row-visible(anim-label, anim-desc);
     property <bool> show-resume: row-visible(resume-label, resume-desc);
-    // The cluster searches as one unit: any of its labels reveals the toggle
-    // plus whichever sub-rows are mounted.
-    property <bool> show-crossfade: row-visible(crossfade-label, crossfade-desc);
+    // The cluster searches as one unit: any of its labels reveals the toggle plus whichever
+    // sub-rows are mounted, so every sub-row's pair is a term here. Left off, a sub-row is
+    // reachable only by scrolling to it.
+    property <bool> show-crossfade: row-visible(crossfade-label, crossfade-desc)
+        || row-visible(xf-duration-label, xf-duration-desc)
+        || row-visible(xf-album-label, xf-album-desc)
+        || row-visible(xf-manual-label, xf-manual-desc)
+        || row-visible(xf-pause-label, xf-pause-desc);
 
     // One unit again, which is also what keeps the upstream dividers' gates
     // right with no further edits.
@@ -109,8 +122,8 @@ export component PlaybackSection inherits Rectangle {
 
         if root.show-crossfade-details: SettingRowStacked {
             icon: "history";
-            label: @tr("Crossfade duration");
-            description: @tr("How long the two tracks overlap");
+            label: root.xf-duration-label;
+            description: root.xf-duration-desc;
             HorizontalLayout {
                 spacing: Theme.pad-md;
                 alignment: stretch;
@@ -141,8 +154,8 @@ export component PlaybackSection inherits Rectangle {
 
         if root.show-crossfade-details: SettingRow {
             icon: "album";
-            label: @tr("Except on the same album");
-            description: @tr("Keep tracks from one album gapless, so continuous mixes stay seamless");
+            label: root.xf-album-label;
+            description: root.xf-album-desc;
             ToggleSwitch {
                 checked <=> Settings.crossfade-skip-same-album;
                 toggled(v) => { Settings.crossfade-skip-same-album-changed(v); }
@@ -151,8 +164,8 @@ export component PlaybackSection inherits Rectangle {
 
         if root.show-crossfade-details: SettingRow {
             icon: "queue_play_next";
-            label: @tr("Also on manual track change");
-            description: @tr("Crossfade when you skip to the next or previous track, not only at the end of one");
+            label: root.xf-manual-label;
+            description: root.xf-manual-desc;
             ToggleSwitch {
                 checked <=> Settings.crossfade-manual;
                 toggled(v) => { Settings.crossfade-manual-changed(v); }
@@ -161,8 +174,8 @@ export component PlaybackSection inherits Rectangle {
 
         if root.show-crossfade-details: SettingRow {
             icon: "pause";
-            label: @tr("Fade out on pause");
-            description: @tr("Fade the music out when pausing or stopping, and back in when resuming");
+            label: root.xf-pause-label;
+            description: root.xf-pause-desc;
             ToggleSwitch {
                 checked <=> Settings.crossfade-fade-on-pause;
                 toggled(v) => { Settings.crossfade-fade-on-pause-changed(v); }
