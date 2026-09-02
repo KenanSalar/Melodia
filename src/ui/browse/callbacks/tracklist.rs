@@ -27,10 +27,10 @@ pub(super) fn wire(
 
     // Seed the sort header + the `BrowseUi` sort cache from the persisted
     // `view_sort["browse"]` so the first folder navigation sorts with it.
-    if let Some((field, dir)) = persisted_sort(view_state, view_id::BROWSE) {
-        g.set_sort_field(SharedString::from(field.as_str()));
-        g.set_sort_dir(SharedString::from(dir));
-        browse_ui.set_sort(field, dir.to_owned());
+    if let Some(sort) = persisted_sort(view_state, view_id::BROWSE) {
+        g.set_sort_field(SharedString::from(sort.field.as_str()));
+        g.set_sort_dir(SharedString::from(sort.dir.as_str()));
+        browse_ui.set_sort(sort.field.clone(), sort.dir.as_str().to_owned());
     }
 
     // play-row: double-click loads every in-library file in this folder into

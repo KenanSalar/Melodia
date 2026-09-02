@@ -26,7 +26,6 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::services::settings::SortDir;
 use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::artists::ArtistsUi;
@@ -69,17 +68,17 @@ fn hydrate_sort_from_settings(
     fav_ui: &FavoritesUi,
     g: &Favorites<'_>,
 ) {
-    if let Some((field, dir)) = persisted_sort(view_state, view_id::FAVORITES) {
-        g.set_sort_field(SharedString::from(field.as_str()));
-        g.set_sort_dir(SharedString::from(dir));
-        favorites_ui_mod::set_sort(fav_ui, field, SortDir::from_token(dir));
+    if let Some(sort) = persisted_sort(view_state, view_id::FAVORITES) {
+        g.set_sort_field(SharedString::from(sort.field.as_str()));
+        g.set_sort_dir(SharedString::from(sort.dir.as_str()));
+        favorites_ui_mod::set_sort(fav_ui, sort.field.clone(), sort.dir);
     }
 
     // Sorts an empty cache — the fetch hasn't run yet — but going through the
     // one setter is what keeps "shadow and rows move together" unconditional.
-    if let Some((field, dir)) = persisted_sort(view_state, view_id::FAVORITE_ARTISTS) {
-        g.set_artist_sort_field(SharedString::from(field.as_str()));
-        g.set_artist_sort_dir(SharedString::from(dir));
-        favorites_ui_mod::set_artist_sort(fav_ui, field, SortDir::from_token(dir));
+    if let Some(sort) = persisted_sort(view_state, view_id::FAVORITE_ARTISTS) {
+        g.set_artist_sort_field(SharedString::from(sort.field.as_str()));
+        g.set_artist_sort_dir(SharedString::from(sort.dir.as_str()));
+        favorites_ui_mod::set_artist_sort(fav_ui, sort.field.clone(), sort.dir);
     }
 }

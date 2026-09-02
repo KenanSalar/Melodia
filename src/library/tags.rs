@@ -43,7 +43,7 @@ static TAG_WRITE_POOL: LazyLock<Option<rayon::ThreadPool>> = LazyLock::new(|| {
     rayon::ThreadPoolBuilder::new()
         .num_threads(TAG_WRITE_THREADS)
         .build()
-        .inspect_err(|e| log::warn!("tag-write pool build failed ({e}); using the global pool"))
+        .inspect_err(|e| log::warn!("tag-write pool build failed ({e}); writing sequentially"))
         .ok()
 });
 
@@ -248,30 +248,31 @@ fn run_write_pass(
     // `Keep` can arrive beside a field that re-homes the track, so both stay on
     // the full path.
     let skip_artwork = edit.artwork == ArtworkEdit::Replace || edit.is_rating_only();
-    let map_files = || {
-        rows.par_iter()
-            .map(|(id, path)| {
-                let p = Path::new(path);
-                // Mark BEFORE the write, per file, so the TTL clock tracks the
-                // event this write is about to fire — and with the DB `file_path`
-                // (the set keys on exact `PathBuf` equality).
-                self_writes.mark(p);
-                let outcome = tag_writer::apply_to_file(p, edit, picture).and_then(|unsupported| {
-                    extract_metadata(p, artwork_dir, cover_cache, skip_artwork)
-                        .map(|meta| (meta, unsupported.0))
-                });
-                FileWrite {
-                    id: *id,
-                    path: path.clone(),
-                    outcome,
-                }
-            })
-            .collect::<Vec<FileWrite>>()
+    let write_one = |(id, path): &(i64, String)| {
+        let p = Path::new(path);
+        // Mark BEFORE the write, per file, so the TTL clock tracks the
+        // event this write is about to fire — and with the DB `file_path`
+        // (the set keys on exact `PathBuf` equality).
+        self_writes.mark(p);
+        let outcome = tag_writer::apply_to_file(p, edit, picture).and_then(|unsupported| {
+            extract_metadata(p, artwork_dir, cover_cache, skip_artwork)
+                .map(|meta| (meta, unsupported.0))
+        });
+        FileWrite {
+            id: *id,
+            path: path.clone(),
+            outcome,
+        }
     };
 
-    // A build failure is extremely unlikely and falls back to the global pool
-    // rather than aborting the edit.
-    TAG_WRITE_POOL.as_ref().map_or_else(map_files, |pool| pool.install(map_files))
+    // Sequentially, rather than on the global pool, where the build failed. That pool is
+    // `num_cpus` wide, which is the number `TAG_WRITE_THREADS` exists to hold down, and it panics
+    // on first use if it could not build either. Both matter for the same reason: thread
+    // starvation is the only realistic way to arrive here.
+    match TAG_WRITE_POOL.as_ref() {
+        Some(pool) => pool.install(|| rows.par_iter().map(write_one).collect()),
+        None => rows.iter().map(write_one).collect(),
+    }
 }
 
 /// Cache key for `run_commit`'s FK-resolution memo. Holds everything
@@ -398,8 +399,9 @@ async fn run_commit(
     // click and can move nothing, so gating them is most of what that click costs.
     //
     // The residue is that a file whose tags had already drifted from the database
-    // can be re-homed by the re-extract above and strand its old parent. That row
-    // lives until the next scan, which sweeps it on the same pass it always did.
+    // can be re-homed by the re-extract above: its old parent is left stranded, and
+    // the album row it lands in instead gets no cover. The next scan runs both
+    // passes and repairs both, on the pass it always did.
     if edit.moves_between_parents() {
         // Backfill album covers from their tracks (null-only, never an overwrite),
         // so retagging a track into a different album lets that album inherit the

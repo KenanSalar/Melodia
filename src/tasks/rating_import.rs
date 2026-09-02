@@ -104,8 +104,9 @@ async fn import(state: &AppState) -> AppResult<()> {
 }
 
 /// **Blocking** — one tag parse per row, fanned out the way `retroactive_hash` fans out its
-/// hashes. The rating is a text item, so this asks for neither of the two halves lofty would
-/// otherwise compute: a cover decode, and the frame scan a headerless VBR MP3's duration costs.
+/// hashes. The rating is a text item, so this asks for neither half lofty would otherwise do on
+/// the way to it: copying the embedded pictures out, and the frame scan a headerless VBR MP3's
+/// duration costs.
 fn read_each(unrated: &[(i64, String)]) -> Vec<(i64, i32)> {
     use rayon::prelude::*;
 

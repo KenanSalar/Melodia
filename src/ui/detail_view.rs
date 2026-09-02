@@ -135,8 +135,9 @@ pub(crate) use impl_detail_view_helpers;
 
 /// A view's sort as `(field, dir)` display strings from the persisted
 /// `view_sort[view_id]`, falling back to `default_field` ascending on a fresh install.
-/// Every detail `open_*` uses it, so reopening any entity restores the last sort picked
-/// for that view type, as does the Tracks cold fetch.
+/// Every detail `open_*` uses it, so reopening any entity restores the last sort picked for that
+/// view type. It reads the file each call, which is what those want and what a boot-time seed
+/// does not: reach for [`crate::ui::callbacks::persisted_sort`] there instead.
 pub fn resolve_view_sort(
     state: &crate::state::AppState,
     view_id: &str,

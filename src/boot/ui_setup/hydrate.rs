@@ -144,13 +144,21 @@ fn apply_startup_animation_suppression(
 /// Kick off the initial Tracks fetch so the list is populated by the time the
 /// user navigates to it. A fresh install falls back to title ascending, matching
 /// the `Tracks` global default and the header `ui::tracks::install` seeds.
+///
+/// Off the same snapshot that header is seeded from, rather than `resolve_view_sort`'s own
+/// `views.json` read: the two have to agree, and one source is what makes that structural.
 pub fn spawn_initial_tracks_fetch(
     state: &AppState,
     tracks_ui: &Arc<ui::tracks::TracksUi>,
+    view_state: Option<&services::view_state::ViewStateData>,
     weak: slint::Weak<AppWindow>,
 ) {
     let (sort_field, sort_dir) =
-        ui::detail_view::resolve_view_sort(state, ui::track_list_view::view_id::TRACKS, "title");
+        ui::callbacks::persisted_sort(view_state, ui::track_list_view::view_id::TRACKS)
+            .map_or_else(
+                || ("title".to_owned(), "asc".to_owned()),
+                |sort| (sort.field.clone(), sort.dir.as_str().to_owned()),
+            );
     let s = state.clone();
     let tu = tracks_ui.clone();
     state.runtime.spawn(async move {

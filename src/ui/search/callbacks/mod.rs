@@ -30,6 +30,7 @@ use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
+use crate::ui::callbacks::persisted_sort;
 use crate::ui::search::{SearchUi, fetch::push_recent_rows_to_slint};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Search};
@@ -75,7 +76,7 @@ fn hydrate_sort_from_settings(
     search_ui: &SearchUi,
     g: &Search<'_>,
 ) {
-    let Some(sort) = view_state.and_then(|vs| vs.view_sort.get(view_id::SEARCH)) else {
+    let Some(sort) = persisted_sort(view_state, view_id::SEARCH) else {
         return;
     };
     g.set_sort_field(SharedString::from(sort.field.as_str()));

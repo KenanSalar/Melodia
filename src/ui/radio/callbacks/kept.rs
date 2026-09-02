@@ -29,9 +29,9 @@ pub(super) fn wire(
 
     // The persisted sort, ahead of the first apply. A fresh install keeps the Slint-declared
     // default rather than being handed one from Rust.
-    if let Some((field, dir)) = persisted_sort(view_state, view_id::RADIO_FAVORITES) {
-        g.set_sort_field(SharedString::from(field.as_str()));
-        g.set_sort_dir(SharedString::from(dir));
+    if let Some(sort) = persisted_sort(view_state, view_id::RADIO_FAVORITES) {
+        g.set_sort_field(SharedString::from(sort.field.as_str()));
+        g.set_sort_dir(SharedString::from(sort.dir.as_str()));
     }
 
     {

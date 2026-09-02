@@ -27,9 +27,9 @@ pub(super) fn wire(
 
     // Seed the sort header from the persisted `view_sort["tracks"]` so the
     // arrow matches the order `spawn_initial_tracks_fetch` fetches with.
-    if let Some((field, dir)) = persisted_sort(view_state, view_id::TRACKS) {
-        tracks.set_sort_field(SharedString::from(field.as_str()));
-        tracks.set_sort_dir(SharedString::from(dir));
+    if let Some(sort) = persisted_sort(view_state, view_id::TRACKS) {
+        tracks.set_sort_field(SharedString::from(sort.field.as_str()));
+        tracks.set_sort_dir(SharedString::from(sort.dir.as_str()));
     }
 
     // request-sort: clicking a header column. Same field flips dir; new field

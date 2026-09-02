@@ -26,9 +26,9 @@ pub(super) fn wire(
 
     // Seed the grid's sort pill from the persisted `view_sort["albums"]`
     // so the initial grid build (and the pill) use the remembered order.
-    if let Some((field, dir)) = persisted_sort(view_state, view_id::ALBUMS) {
-        albums.set_sort_field(SharedString::from(field.as_str()));
-        albums.set_sort_dir(SharedString::from(dir));
+    if let Some(sort) = persisted_sort(view_state, view_id::ALBUMS) {
+        albums.set_sort_field(SharedString::from(sort.field.as_str()));
+        albums.set_sort_dir(SharedString::from(sort.dir.as_str()));
     }
 
     // request-cover: lazy per-card cover lookup. Only on-screen
