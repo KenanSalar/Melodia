@@ -9,7 +9,7 @@ Status: **not started** · Issue:
 [#83](https://github.com/KenanSalar/Melodia/issues/83) · Created: 2026-09-03 · Validated against
 `93b47dfa`
 
-> The issue body carries the argument for *why* nine crates. This doc carries what a read of the
+> The issue body carries the argument for *why* a workspace. This doc carries what a read of the
 > tree found that the body does not, and it is the source [#84](https://github.com/KenanSalar/Melodia/issues/84)
 > will draw on, so the rationale for each boundary belongs here rather than in the issue thread.
 > Where this doc and the code disagree, the code is right.
@@ -24,83 +24,186 @@ Status: **not started** · Issue:
 
 ## What validation changed
 
-All five cycles in the issue are real code edges. Six of its numbers are not, and three of its
-dependency edges are missing. Both matter: the counts decide which cut is cheapest, and the missing
-edges decide the shape of the graph.
+All five cycles in the issue are real code edges. Nine of its numbers are not, four of its
+dependency edges are missing, and two of its crate boundaries are wrong. The counts decide which
+cut is cheapest; the edges decide the shape of the graph.
 
-| issue says | tree says |
+| issue or earlier draft says | tree says |
 |---|---|
 | `Track::replaygain()` | `TrackSummary::replaygain()`, `entities/track.rs:73-82` |
 | `state/mod.rs:133,137`, 2 sites | `:151,155,277,278,280`, 5 code lines |
 | `ui` reaches `state` at 135 | 138, all production |
 | `ui` reaches `tasks` at 27 | 29, and 25 of them are one function |
-| `player` reaches `services` at ~6 | 12, and `player/hls/` postdates the issue entirely |
-| `ui` reaches `media` at 34, 26 `cover_thumbs` | 28 / 22 non-test; 34 was the all-files count |
+| `player` reaches `services` at ~6 | 13 lines, 12 of them code; `player/hls/` postdates the issue entirely |
+| `ui` reaches `media` at 34, 26 `cover_thumbs` | 28 non-test, 22 of them `cover_thumbs` |
+| ~134 of 225 `.claude/rules` globs break | **83 of 165**, and 145 of 165 once `melodia-ui` moves too |
+| 21 test files anchor on a tree root | **28**: 27 through the seven constants, plus `library/tests/radio_tests.rs:17` direct |
+| 241 relative `include_str!` across 46 files | **243 across 47 files**; the 135 reaching `melodia-ui/ui/` is exact |
+| ten non-binary `CARGO_PKG_VERSION` sites | 10 expansions, **9 non-binary, 7 non-test**, and `ui/callbacks/updater/install.rs:83` is missing from the list |
+| `src/` is 81,131 production lines | **86,820**, of 133,772 total. The table below is remeasured |
 
-Three edges the table omits, each a real call and not a doc link:
+Four edges the issue's table omits, each a real call and not a doc link:
 
 - `media/metadata.rs:248` calls `player::file_decode::probe_duration`, so **store depends on audio**.
   It is the sole edge `media/` has into that directory, which `src/player/CLAUDE.md` already says.
 - `station_logo.rs:140` and `deezer.rs:245` call `artwork::store_image`, so **net depends on artwork**.
 - `scanner.rs:52` and `metadata.rs:178` take `&artwork::CoverCache`, so **store depends on artwork**.
+- `services/artist_images.rs:9-12` names `database::{DbPool, queries}` *and* `media::deezer`, so a
+  "net owns everything that opens a socket" rule would put **store on net's dependency line**. It is
+  an orchestrator rather than a fetcher and belongs in app; see finding 3.
 
 Four files outside `src/ui/` name `crate::AppWindow`, not the two the issue lists: `themes/apply.rs:8`,
 `tasks/updater_daily.rs:47`, `tasks/rss_sampler.rs:47` and `services/dwm_titlebar.rs:24`
-(Windows-gated). App and platform therefore carry `melodia-ui` whatever happens to `src/ui/`.
+(Windows-gated). Only two of those four survive the plan below; see the graph.
 
 And the three-way `media/` split has a hole: `mod.rs` declares 14 modules and the issue's tiers name
 13. `rating_tags.rs` is unassigned and belongs with ingest. Going the other way,
 `services/material_you.rs` is an image file misfiled under services (`slint`, `image_decode::decode_capped`,
-`themes`) and should join the image tier.
+`themes`) and should join the image tier. `services/radio_blocklist/` is unassigned in both documents;
+finding 5 places it.
+
+### Sizes, remeasured
+
+`src/` totals 133,772 lines, 46,952 of them tests, so **86,820 production**. Per directory,
+production only:
+
+```
+ui       38,243      services 12,378      player   11,734
+library   6,086      database  4,649      media     3,953
+tasks     3,590      entities  1,699      themes    1,379
+boot        903      state       511
+```
+
+`player/` is the one that moved. The issue budgeted 7.7k for `melodia-audio` against today's 11,734,
+because #79 and `player/hls/` both landed after it was written. That is a third of the reason the
+audio stack is three crates below rather than one.
 
 ## Findings the issue does not carry
 
 Ranked by how quietly they fail.
 
-1. **`version = "0.0.0"` on internal crates would ship a bug.** Ten non-binary sites read
+1. **`melodia-views` cannot exclude `melodia-store` as the tree stands, and that exclusion is the
+   entire justification for the boundary.** Two production files break it:
+   `src/ui/callbacks/tags.rs:33` imports `crate::media::tag_writer::{self, ArtworkEdit, FieldEdit,
+   TagEdit}`, and `src/ui/radio/logos.rs:26` imports `crate::media::station_logo::StoredLogo`.
+   Three of the four types are boundary DTOs the UI *builds* (`build_edit`, `diff_str`,
+   `diff_parsed`, `diff_bpm` at `tags.rs:466-529`) before handing them to
+   `library::tags::apply_tag_edit`; `StoredLogo` is two fields and appears only as the `Ok` type of
+   an awaited future. The one real call is `tag_writer::read_lyrics(&path)` at `tags.rs:127`.
+   Under the proposed graph the first file puts store on views' dependency line and the second puts
+   net there. Both are the rule the root `CLAUDE.md` already states, so both are cheap, and both
+   have to land in Phase A: until they do, the post-extraction check this whole issue is verified
+   by is false on the day it is written.
+2. **`melodia-testkit` as the issue draws it does not compile.** Cargo permits a dev-dependency
+   cycle for *resolution*, and the resolver reference then says why that is not enough: a test
+   binary may link two distinct copies of the same library. Building `melodia-store`'s unit-test
+   target compiles `melodia-store` a second time under `cfg(test)`, so a `DbPool` handed back by a
+   testkit that depends on the rlib is a different type from the one the test's own crate names.
+   That is the `expected slint::Weak, found slint::Weak` wall the root `CLAUDE.md` already
+   documents, with a different type name. The fix is nearly free: of the ~35 items in
+   `src/test_support.rs` exactly two touch workspace types, `paths_in()` (`:447`, returns
+   `config::Paths`, 2 call sites) and `resolved_home()` (`:600`, calls `services::home_dir_string`,
+   1 call site). **`melodia-testkit` is a leaf with no workspace dependency at all**, those two move
+   to the crates owning their types, and nothing needs the cycle exemption.
+3. **`version = "0.0.0"` on internal crates would ship a bug.** Nine non-binary sites read
    `env!("CARGO_PKG_VERSION")`: the updater's compare (`tasks/updater_daily.rs:137`,
-   `ui/callbacks/updater/check.rs:33`), the Settings version label (`ui/settings/updater_settings.rs:39`),
-   the HTTP user agent (`services/mod.rs:89`), crash reports, and ListenBrainz's submitted client
-   version. Worse, `repository` and `homepage` sit on `[package]` rather than `[workspace.package]`,
-   so `ui/settings/about.rs:18`'s `CARGO_PKG_REPOSITORY` resolves empty and the About page's
-   repository button silently no-ops, which that file already logs and returns for.
-   **Every member takes `version.workspace = true`, and `repository`/`homepage` move into
-   `[workspace.package]`.** `melodia-ui` already sets the precedent.
-2. **About 134 of 225 `.claude/rules` path globs stop matching, and the pin cannot see it.**
-   `src/tests/test_support_tests.rs:89` does `if glob.contains('*') { continue; }`, deliberately,
-   because a glob may legitimately describe an empty tree. So every `src/**/*.rs` entry goes green
-   while matching nothing, and `code-style.md` and `tokio.md` stop loading for all Rust in the tree.
-   This is the largest silent failure in the change, and the fix is part of Phase D rather than an
-   afterthought.
-3. **A member missing `[lints] workspace = true` leaves the gate with no CI signal.** It drops
-   `unwrap_used`, `unsafe_code`, `await_holding_lock` and all of pedantic, and
-   `cargo clippy --all-targets -- -D warnings` reports zero warnings for a crate with no lint table.
-4. **Build scripts multiply.** `cargo:rustc-env` and `OUT_DIR` are per-crate, which the root
-   `CLAUDE.md` already warns about. Whichever crate holds `scrobble`/`discord` needs `load_dotenv()`
-   or the build silently ships keyless and ListenBrainz-only; whichever holds `radio_blocklist` needs
-   the bake its `include!` reads back out of `OUT_DIR`. `build.rs`'s `read_to_string(".env")` is
-   CWD-relative, and cargo sets CWD to the package root.
-5. **Compile-time path breaks. Loud, but numerous.** 241 relative `include_str!` sites across 46
+   `ui/callbacks/updater/check.rs:33`, `ui/callbacks/updater/install.rs:83`), the Settings version
+   label (`ui/settings/updater_settings.rs:39`), the HTTP user agent (`services/mod.rs:89`), crash
+   reports, and ListenBrainz's submitted client version. Separately, `repository` and `homepage` sit
+   on `[package]` rather than `[workspace.package]`. They resolve *today*, because the root package
+   declares them as literals; they go empty in whichever crate `ui/settings/about.rs:18` lands in,
+   because there is nothing in `[workspace.package]` to inherit. `melodia-ui/Cargo.toml` is the
+   precedent: it sets no `repository` at all. **Every member takes `version.workspace = true`, and
+   `repository`/`homepage` move into `[workspace.package]`.**
+4. **The binary's artifact name is load-bearing and the issue renames it.** `Melodia` has no
+   `[[bin]]` table, so the artifact is `target/release/Melodia`, spelled in `Cargo.toml:90`,
+   `release-build.yml:60`, all three of `scripts/build-{appimage,tarball,rpm}.sh`, and on Windows
+   `wix/main.wxs:268` (`Source`, `Name`), `:281` (`RestartResource ProcessName`) and `:319-324`
+   (`HKLM\Software\Classes\Applications\Melodia.exe`). Those registry keys are what an in-place MSI
+   upgrade matches on, so a rename strands the file associations of everyone already installed.
+   **The bin package is `melodia` with `[[bin]] name = "Melodia"`.** One line, `-p melodia` works,
+   `cargo wix --package melodia` works, and every path above is untouched.
+5. **Two build-script constraints decide crate membership, and neither is a preference.**
+   `cargo:rustc-env` reaches only the crate whose build script emitted it, and there are three
+   `option_env!` sites: `services/scrobble/providers/lastfm.rs:24,25` and
+   `services/discord/mod.rs:29`. **Scrobble and Discord therefore land in the same crate**, which
+   owns `load_dotenv()`. Splitting them across net and app ships a build that is silently keyless
+   and ListenBrainz-only. Likewise `OUT_DIR` is per-crate and `build.rs:22` `include!`s
+   `src/services/radio_blocklist/source.rs` by path, so the bake, the `blake3` build-dependency and
+   the two `.env.radio.*.local` files move with `radio_blocklist` (702 production lines) wherever it
+   goes. Its consumers are `radio_browser` (net) and `library/radio/{authoring,radio_files}` (app),
+   and it imports only `entities::radio`, so net is the placement. Re-root the two dotfiles at the
+   repo root so the existing secret workflow keeps its paths. `build.rs`'s `read_to_string(".env")`
+   is CWD-relative and cargo sets CWD to the package root: a missed hop breaks local dev only,
+   because CI passes the keys as environment variables and the environment wins, which is the worst
+   possible place for it to break quietly.
+6. **`tests/` has no home under a virtual manifest.** `tests/{headless,crossfade,stream_rate}.rs`
+   and `tests/{assets,fixtures,common}/` belong to the root package today; a virtual root has no
+   package, so nothing compiles them and no job notices. `ASSETS_DIR` points into that directory
+   from 6 unit-test files and `tests/headless.rs:33` joins `CARGO_MANIFEST_DIR` itself. They move to
+   `crates/melodia/tests/`, which is also where the corpus walks should go; see finding 8.
+7. **About half the `.claude/rules` path globs stop matching, and the pin cannot see it.**
+   83 of 165 entries begin `src/`; another 62 name `melodia-ui/`, so moving that crate under
+   `crates/` takes the total to 145 of 165. `src/tests/test_support_tests.rs:89` does
+   `if glob.contains('*') { continue; }`, deliberately, because a glob may legitimately describe an
+   empty tree, so every `src/**/*.rs` entry goes green while matching nothing and `code-style.md`
+   and `tokio.md` stop loading for all Rust in the tree. **Drop that skip in Phase A, on its own**,
+   not in Phase D beside the 83 rewrites: a glob that has already rotted is otherwise
+   indistinguishable from one the split broke.
+8. **The tree-root anchors narrow, and only some of them fail loudly.** 28 test files anchor on a
+   root, 10 of them on `SRC_DIR`. The `MIN_SOURCES = 200` and `MIN_SLINT_SOURCES = 100` vacuity
+   floors (`test_support.rs:29`, `:20`) mean a narrowed `SRC_DIR` or `UI_DIR` trips an assertion
+   rather than passing vacuously, which is the good half. `UI_SRC_DIR` and `RULES_DIR` carry no
+   floor, and those are the silent half. Two things fix the whole class: one workspace-root anchor
+   (Phase A), and one home for every walk that asks a question of the *tree* rather than of a crate.
+   Left where they are, `library::radio::tests::every_outbound_call_takes_its_client_from_behind_the_switch`
+   and `radio_browser::tests::only_the_radio_facade_reaches_the_directory_client` end up in
+   different crates, each seeing half of the property they jointly hold.
+9. **Compile-time path breaks. Loud, but numerous.** 243 relative `include_str!` sites across 47
    files, 135 of them reaching into `melodia-ui/ui/`, each hop count a function of that file's depth
    from the package root. Then `sqlx::migrate!("./migrations")` at `database/mod.rs:214` and `:313`,
-   `services/updater/minisign.rs:35`'s `assets/updater-pubkey.b64`, `library/tests/radio_tests.rs:17`,
+   `services/updater/minisign.rs:34-35`'s `assets/updater-pubkey.b64`, `library/tests/radio_tests.rs:17`,
    and `ui/settings/tests/locale_tests.rs:22`.
-6. **`[package.metadata.deb]`'s eight asset paths and its `license-file` are package-root-relative**,
-   and `target/` stays at the virtual root. Under a virtual manifest a bare `cargo build` and
-   `cargo deb` both build every member, so `release-build.yml:83` and `:124` need `-p`.
-7. **21 test files anchor on a tree root, 10 of them on `SRC_DIR`.** Walks such as the `rfd` pin and
-   the single-resampler equality would keep passing while checking one crate out of nine. `SRC_DIR`
-   needs one workspace-root definition, not a per-crate one.
-8. **`toast` and `play_count_flusher` are the same primitive written twice**: a
-   `OnceLock<UnboundedSender<E>>` plus a plain enum, producer half dependency-free, consumer half
-   owning the I/O. `services/toast.rs:10` already notices the resemblance in prose.
-9. **`player` names `DbPool` only to serve a test fallback.** The direct UPDATE at
-   `actions.rs:107-127` exists because the flusher is not installed in test contexts, and the comment
-   there says exactly that. Install it and `db: &DbPool` leaves `execute_actions` and
-   `emit_and_execute`, taking `crate::database::{DbPool, queries}` out of the engine with it. That is
-   a deletion rather than the new `PlayerAction` variants the issue proposes.
-10. **Stale doc comment** at `tasks/rss_sampler.rs:18` names an `ui::window_chrome::is_queue_sheet_open`
-    import that no longer exists anywhere in `src/tasks/`.
+10. **`[package.metadata.deb]`'s eight asset paths and its `license-file` are package-root-relative**,
+    and `target/` stays at the virtual root. cargo-deb also special-cases a `target/release/` prefix
+    when `--target` is passed, and that prefix stops matching literally once the manifest sits at
+    `crates/melodia/`, so this one gets a real `cargo deb --target … --no-build` run rather than an
+    assumption. Under a virtual manifest a bare `cargo build` and `cargo deb` both build every
+    member, so `release-build.yml:83` and `:124` need `-p`.
+11. **A member missing `[lints] workspace = true` leaves the gate with no CI signal.** It drops
+    `unwrap_used`, `unsafe_code`, `await_holding_lock` and all of pedantic, and
+    `cargo clippy --all-targets -- -D warnings` reports zero warnings for a crate with no lint table.
+    The sibling trap is `default-members`: narrowing it to the binary would silently drop every other
+    crate's *test* targets from `--all-targets`. Leave every member default and pass `--workspace`.
+12. **Shared third-party dependencies have to move to `[workspace.dependencies]`, and the issue
+    never says so.** `slint` is already there and the comment beside it gives the whole argument: a
+    drift resolves two `slint` crates and the build dies in a wall of `expected slint::Weak, found
+    slint::Weak`. The same holds for every dependency more than one member names, and the pin that
+    matters most is `reqwest`'s `default-features = false`, which `.claude/rules/radio.md` calls
+    load-bearing and which net and audio both need.
+13. **Facade re-exports launder the dependency the split exists to forbid.** The landing tactic
+    below has each crate `pub use` what it took, which is right for the migration and needs a stated
+    stopping rule: **a crate must not `pub use` a type from a crate its own dependents are meant to
+    be unable to reach.** `melodia-app` re-exporting a store type hands views that type back without
+    views ever naming store in its manifest, and the compile error the exercise buys never fires.
+14. **`toast` and `play_count_flusher` are the same primitive written twice**: a
+    `OnceLock<UnboundedSender<E>>` plus a plain enum, producer half dependency-free, consumer half
+    owning the I/O. `services/toast.rs:10` already notices the resemblance in prose. What must not
+    be flattened along with it: `try_send` returns `bool` because callers branch on it, `notify`
+    returns `()`.
+15. **`player` names `DbPool` for a test fallback in one file and for real in another.** The direct
+    UPDATE at `actions.rs:107-127` runs only when `try_send` returns false, and the comment there
+    says exactly that: install the flusher in test contexts and `db: &DbPool` leaves
+    `execute_actions` and `emit_and_execute`. But `handlers.rs:239` holds `pub db: DbPool` as a real
+    field and `:441` runs `queries::track::update_last_position` in production with nothing behind
+    it, so A5's third bullet is not optional. One of those two is a deletion; the other is the
+    snapshot-upward move.
+16. **Stale doc comment** at `tasks/rss_sampler.rs:16-21` names an `ui::window_chrome::is_queue_sheet_open`
+    import that no longer exists anywhere in `src/tasks/`; the real imports are `crate::AppWindow`
+    and `ui::view_tag::format_view` at `:45-49`.
+17. **Nothing in the gate runs `cargo doc`.** The 162 bracketed intra-doc links that will stop
+    resolving degrade silently to plain text rather than failing. Either accept that explicitly or
+    add a `cargo doc` step, but do not leave it unstated.
 
 **Survives untouched**, verified, so no work is planned for it: the four `[workspace.package]`
 version scrapes (they anchor on `^\[`, so the `[package]` table vanishing is fine),
@@ -110,24 +213,92 @@ correctly), every `$REPO_ROOT`-based path in the packaging scripts, and `wix/mai
 
 ## The graph, corrected
 
+Thirteen members plus `melodia-ui`. Four changes from the issue's nine, each resting on a seam the
+code already has rather than on an abstraction invented to satisfy the split.
+
 ```
-melodia-core      error, config, entities, utils, describe, atomic json/text writers
-melodia-artwork   artwork/, cover_thumbs, image_decode, logo_tile, material_you   -> core, slint
-melodia-net       http primitives, 4 fetchers, radio_browser, scrobble providers  -> core, artwork
-melodia-platform  tray, media keys, single_instance, logging, crash_report, themes -> core, melodia-ui
-melodia-audio     player/                                                          -> core, net
-melodia-store     database/, scanner, metadata, watcher, tag_writer, rating_tags   -> core, artwork, audio
-melodia-app       library/, tasks/, state/, settings, scrobble, discord, updater   -> all above, melodia-ui
-melodia-views     src/ui/                                        -> app, audio, platform, artwork, core, melodia-ui
-melodia (bin)     main, boot/, shutdown                                            -> views, app
-melodia-testkit   test_support, dev-dependency of every member
+melodia-core          error, config, entities (+ the boundary DTOs), utils,
+                      describe, atomic json/text writers                   -> nothing
+melodia-testkit       env lock, path anchors, corpus walkers               -> nothing (dev-dep of all)
+melodia-artwork       artwork/, cover_thumbs, image_decode, logo_tile,
+                      material_you                                         -> core, slint
+melodia-net           http primitives, 4 fetchers, radio_browser,
+                      radio_blocklist + its bake, updater's net half       -> core, artwork
+melodia-platform      tray, media keys, single_instance, logging,
+                      crash_report, system_theme, dwm_titlebar, palette
+                      derivation, updater's platform half                  -> core
+melodia-audio         audio.rs vocabulary, decode, file/stream/hls
+                      sources, aac                                         -> core, net
+melodia-playback      output device/mixer/convert, EQ, ReplayGain,
+                      crossfade, dsp, spectrum, visualizer, waveform,
+                      decks, stream_health                                 -> core, audio
+melodia-engine        PlayerState, queue, actions, handlers, types,
+                      now_playing, event_sink, backend                     -> core, audio, playback
+melodia-store         database/, scanner, metadata, watcher, tag_writer,
+                      rating_tags, self_writes                             -> core, artwork, audio
+melodia-integrations  scrobble, discord, and load_dotenv with them         -> core, net, engine
+melodia-app           library/, tasks/, state/, settings, view_state,
+                      artist_images, updater orchestration                 -> all above, melodia-ui
+melodia-views         src/ui/, themes::apply                               -> app, engine, playback,
+                                                                              artwork, platform,
+                                                                              core, melodia-ui
+melodia (bin)         main, boot/, shutdown, tests/                        -> views, app
+                      [[bin]] name = "Melodia"
 ```
 
-Three deltas from the issue: audio sits below store rather than beside it, artwork is depended on by
-net, store and views rather than being a peer of them, and app and platform carry `melodia-ui`.
+The directories nest and the crates do not. A `->` entry is a `path = "../<name>"` line in that
+crate's manifest, so a crate can be named by several others and `melodia-core` is named by eleven.
+That is a graph, and no tree can hold it.
 
-`melodia-testkit` works because Cargo permits cyclic **dev**-dependencies between workspace members,
-so it can depend back on the crates that dev-depend on it for `DbPool::test_pool()`.
+Deltas from the issue: audio sits below store rather than beside it; artwork is depended on by net,
+store and views rather than being their peer; the single `melodia-audio` becomes three crates;
+scrobble and Discord become their own crate because `load_dotenv` forces it; `themes` splits so
+platform no longer carries `melodia-ui`; and `melodia-testkit` is a leaf rather than a cycle.
+
+### Why the audio stack is three crates and not one
+
+The issue defers this, on "librespot splits fetch/decode from mixer/sink and that is probably where
+this ends up, but not on day one. Let the code prove it." Measured against `93b47dfa`, the code has
+proved it:
+
+| tier | production | third party |
+|---|---:|---|
+| `melodia-audio` (`audio.rs`, `decode`, `file_decode`, `stream_decode`, `stream_source`, `prebuffer`, `hls/`, `aac_*`) | 3,510 | symphonia, reqwest, stream-download, icy-metadata. No cpal |
+| `melodia-playback` (`output/`, `equalizer`, `replaygain`, `crossfade`, `dsp`, `spectrum`, `visualizer`, `waveform`, `decks`, `stream_health`) | 5,445 with `backend/`, 4,522 without | cpal, biquad, realfft. No reqwest |
+| `melodia-engine` (`state`, `queue`, `actions`, `handlers`, `types`, `now_playing`, `event_sink`) | 2,779, or 3,702 with `backend/` | neither, once Phase A lands |
+
+Exactly three files name the network (`stream_source.rs`, `hls/reader.rs`, `hls/playlist.rs`) and
+exactly two import cpal (`output/device.rs`, `stream_health.rs`). The dependency sets of the top two
+tiers do not intersect.
+
+The interface is already written and already argued: `player/audio.rs` is 92 lines with no `crate::`
+import at all, and its `//!` says an `AudioSource` is something `output` can pull rather than
+something a dependency happens to accept. `output/mod.rs:1` says "everything below the DSP chain".
+
+**The cut costs one file.** `backend/mod.rs:29,31,33` names `file_decode::FileDecoder`,
+`prebuffer::StreamShared` and `stream_source::PreparedStream`, which is the correct direction. The
+single wrong-direction edge in the whole directory is `file_decode.rs:28`, `use super::dsp::{frames_in,
+frames_to_duration, interleaved}`. Those three are pure numeric helpers and belong in `audio.rs`
+beside `Sample` and `Shape`, which is where the rest of the shared vocabulary already lives. Move
+them and the seam is clean.
+
+What it buys, and this is the one place in the whole issue where the roadmap argument is load
+bearing rather than decorative: a podcast episode or a Subsonic track is a new `AudioSource` and
+nothing else. Under one `melodia-audio` it can reach `PlayerState`, the mixer and the EQ; under this
+split it cannot, and rustc says so at the import. It also makes
+`[profile.dev.package.melodia-playback] opt-level = 2` target the DSP chain without also
+un-debugging the state machine.
+
+`backend/` is the one judgement call. It holds `PlaybackEngine`, which `PlaybackContext` names, so
+engine reads better than playback. If Phase C runs long, the engine cut is the separable one; the
+audio/playback cut is not.
+
+### Why `melodia-integrations` exists
+
+Not a preference. `cargo:rustc-env` reaches one crate, and the `option_env!` sites are split across
+`scrobble/providers/lastfm.rs` and `discord/mod.rs`, so the two modules share a crate or the build
+ships keyless. 3,321 production lines together, which is a reasonable crate on its own terms, and it
+keeps `melodia-app` from absorbing every integration the roadmap adds.
 
 ### Why `melodia-artwork` depends on `slint`, and `cover_thumbs` moves wholesale
 
@@ -166,6 +337,50 @@ Related placement call, stated rather than left to accident: `logo_tile.rs`'s on
 is `station_logo.rs`, which lands in `melodia-net`. It stays in artwork, since net already depends on
 artwork and the alternative puts pixel composition in the crate that owns sockets.
 
+### Why `themes/` splits
+
+The issue puts `themes` in app and an earlier draft of this doc put it in platform; both make a crate
+that has no business drawing anything carry `melodia-ui`. The seam is inside the directory. Palette
+computation (the registry, the `kdeglobals` and Material You derivations, `on_accent_hex`) names no
+Slint type. `apply.rs` is 260 lines and is the only half that does, importing `crate::AppWindow` at
+`:8` and writing 19 brushes at `:133`. Palette to platform, `apply` to views, and `melodia-platform`
+depends on core alone. That leaves `tasks/updater_daily.rs` and `tasks/rss_sampler.rs` as the only
+non-views `AppWindow` namers, and A2 plus the `updater_daily` split below handle both.
+
+### What is deliberately not split
+
+- **`src/ui/`.** The issue's argument holds. The twenty slices are a dense mesh, the shared component
+  library imports 14 of them, and cutting it needs a view registry, which fails the stopping rule.
+- **`library/` as its own crate.** 42 of its 43 non-test files take `&AppState`, so it cannot be a
+  leaf. Of 6,086 production lines only 804 are thin `queries::*` wrappers; 1,465 are settings
+  persistence that touches no database, 1,521 are radio (which does HTTP), and `playback.rs` and
+  `queue.rs` import `player::state` and drive the machine directly. It is a command layer wearing a
+  query layer's name, and that renaming is worth an ADR under #84 whatever happens here.
+- **Vertical feature crates** (`melodia-podcast`, `melodia-radio`). They are the shape that would
+  make a source kind a one-crate change, and they need three inversions the tree does not have:
+  `queries::artwork::LEDGER` becoming a registry features contribute to rather than a `const` naming
+  their tables, `PlaybackSource` becoming open rather than a closed enum, and the nav index becoming
+  data rather than a `NAV_RADIO = 10` const. Revisit if #31 lands commercial, since DRM would force
+  an optional feature and there is nothing in the tree to hang one on.
+- **Cargo features.** There are zero today, in either manifest, and zero `#[cfg(feature = …)]` sites.
+  Keep it that way: `resolver.feature-unification = "workspace"` is nightly-only and the toolchain is
+  pinned to stable, so per-crate features reselect and rebuild shared dependencies under any scoped
+  invocation, and a real feature matrix is combinations the single `--workspace` gate cannot cover.
+  Roadmap features stay runtime settings defaulting off, which is what radio already does.
+
+### What the split does and does not buy
+
+Worth being straight about, because the issue's "Why" section leans on the roadmap harder than the
+evidence supports. Radio already reaches eight `src/` directories (`.claude/rules/radio.md` carries
+27 path globs across `database`, `entities`, `library`, `media`, `player`, `services`, `tasks` and
+`ui`, plus the Slint tree and `migrations/`), and after the split it reaches nearly every crate.
+Podcasts will do the same. **A layer split does not make a new source kind cheaper. It makes a new
+source kind's misplacement impossible.** Only the second is what the issue actually argues for, and
+it stands on its own: tests should verify behaviour and the compiler should enforce topology.
+
+The audio three-way cut is the exception. That one genuinely does make a new source cheaper, which
+is the reason it is promoted out of "out of scope".
+
 ## Phase A: cut the cycles, still one crate
 
 Independent of each other, so they land in any order, whenever a gap opens. Each is its own commit,
@@ -178,7 +393,7 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
       `tasks/rss_sampler.rs:59` takes `impl Fn(&AppWindow) -> String`; the binary passes
       `ui::view_tag::format_view` at the `boot` call site. That is the only `crate::ui::` reference in
       all of `src/tasks/`, so it deletes a stated exception rather than relocating it. Delete the
-      stale doc comment at `:18` in the same commit.
+      stale doc comment at `:16-21` in the same commit.
 - [ ] **A3. `heap_trim::trim()` moves beside the other platform FFI.** It is a bare
       `libc::malloc_trim` with no task machinery in it, and it is **25 of the 29** `ui` to `tasks`
       edges. `spawn` and `STARTUP_DELAY` stay in `tasks/`, where the one-shot schedule belongs. Not in
@@ -187,38 +402,67 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
       (`database/queries/scan/lookups.rs:70`), `ScannedFile` and `ExtractedMetadata`, applying the
       rule the root `CLAUDE.md` already states. Fixes 7 sites in `database/queries/` plus
       `media/scanner.rs:9` and `:101`.
+- [ ] **A4b. The four view-facing DTOs move to `entities/` for the same reason.** `TagEdit`,
+      `FieldEdit<T>` and `ArtworkEdit` out of `media/tag_writer.rs`, `StoredLogo` out of
+      `media/station_logo.rs`, plus a `library::tags::read_lyrics` wrapper beside `get_tag_edit_rows`
+      so `ui/callbacks/tags.rs:127` stops calling the writer directly. This is finding 1, and without
+      it the flagship exclusion is false before the first manifest is written.
 - [ ] **A5. Persistence and the toast bridge leave `player/`.** Three moves, one commit each:
       - Install `play_count_flusher` in the test contexts that need it, then delete the direct-UPDATE
         fallback at `actions.rs:107-127`. `db: &DbPool` then drops off `execute_actions` and
         `emit_and_execute`.
       - Collapse `toast` and `play_count_flusher` onto one `OnceLock<UnboundedSender<E>>` bridge
-        primitive. Producer half goes to core, consumer halves stay where the I/O is.
+        primitive. Producer half goes to core, consumer halves stay where the I/O is. Keep
+        `try_send`'s `bool`; callers branch on it.
       - The 30 s periodic save (`handlers.rs:443-460`, `PlaybackMonitorContext.db` and `paths`)
         publishes a snapshot the app layer writes, so the monitor stops owning `DbPool` and
-        `write_json_atomic_sync`.
+        `write_json_atomic_sync`. This is the half that removes `handlers.rs:239` and `:441`.
 - [ ] **A6. `describe` and the atomic writers move to core.** `services/mod.rs:351`, plus
       `write_json_atomic_sync`, `write_text_atomic_sync` and `load_json_or_default{,_sync}`. Resolves
-      4 of the 12 `player` to `services` edges by relocation. The 5 HTTP ones resolve in Phase C by
-      the graph, audio depending on net.
+      4 of the 12 `player` to `services` edges by relocation. The rest resolve in Phase C by the
+      graph, audio depending on net.
 - [ ] **A7. `nav_history` and `ui_handles` come off `AppState`.** `state/mod.rs:151,155,277,278,280`
       into a struct the binary owns and passes down. 6 sites in `boot/ui_setup/views.rs`, 18 inside
       `src/ui/` itself. `ui/my_library/tests/my_library_tests.rs:17` does
       `include_str!("../../nav_history.rs")` with source-text assertions at `:1010` and `:1024`, so
       it needs re-pathing. This is the one that actually stops `melodia-views` existing, and the only
       one with structural work in it.
+- [ ] **A8. `dsp.rs`'s numeric helpers move into `audio.rs`.** `frames_in`, `frames_to_duration` and
+      `interleaved`, whose only cross-tier consumer is `file_decode.rs:28`. That is the one
+      wrong-direction edge inside `src/player/`, and removing it is what makes the audio/playback
+      seam a manifest line rather than a refactor.
+- [ ] **A9. Anchor the test corpus on the workspace root.** `.cargo/config.toml` already has an
+      `[env]` table, and `relative = true` resolves against the config file's parent directory on
+      stable:
+
+      ```toml
+      [env]
+      MELODIA_REPO_ROOT = { value = "", relative = true }
+      ```
+
+      All seven constants in `test_support.rs` take it, as do the three non-relative includes
+      (`locale_tests.rs:22`, `radio_tests.rs:17`, `minisign.rs:34-35`). Landing it before anything
+      moves is what stops `SRC_DIR` ever meaning "one crate".
+- [ ] **A10. Make the rules-glob pin honest.** Drop `if glob.contains('*') { continue; }` at
+      `test_support_tests.rs:89` and fix whatever it was hiding. On its own commit, before the split,
+      so a glob that had already rotted cannot be mistaken for one the split broke.
 
 ## Phase B: reshape in place, still one crate
 
-- [ ] **B1. Split monolithic `services/mod.rs`.** It is simultaneously the core-primitives module
-      (`load_json_or_default*`, `write_*_atomic_sync`, `current_exe`, `is_dev_build`, `redact_home`,
-      `describe`) and the HTTP module (`build_http_client`, `http_url`, `is_http_url`, `is_http`,
-      `get_capped`, `get_capped_text`, `read_capped`). **Hard prerequisite for everything else**: all
-      four media fetchers plus `radio_browser`, both scrobble providers and `updater/github` depend on
-      the net half, so nothing can move before this does.
-- [ ] **B2. `services/` regroups into net, platform and integrations.** `updater/`'s 24 files straddle
-      all three and do not move wholesale: net is `check`, `github`, `manifest`, `install/download`;
-      platform is `target`, `linux_pkg`, `system_install`, `install/{staging,verify,swap}`; core is
-      `minisign`, `version`, `probe`; the rest is orchestration.
+- [ ] **B1. Split monolithic `services/mod.rs`** (376 lines). It is simultaneously the
+      core-primitives module (`load_json_or_default*`, `write_*_atomic_sync`, `current_exe`,
+      `is_dev_build`, `redact_home`, `home_dir_string`, `describe`) and the HTTP module
+      (`build_http_client`, `http_url`, `is_http_url`, `is_http`, `get_capped`, `get_capped_text`,
+      `read_capped`), nine and seven exports respectively. **Hard prerequisite for everything else**:
+      all four media fetchers plus `radio_browser`, both scrobble providers, `updater/github` and
+      `player/hls/` depend on the net half, so nothing can move before this does.
+- [ ] **B2. `services/` regroups into net, platform, integrations and app.** `updater/`'s 24 files
+      straddle all of them and do not move wholesale: net is `check`, `github`, `manifest`,
+      `install/download`; platform is `target`, `linux_pkg`, `system_install`,
+      `install/{staging,verify,swap}`; core is `minisign`, `version`, `probe`; the rest is
+      orchestration. `scrobble/` and `discord/` go to integrations together (finding 5).
+      `artist_images.rs` goes to app, not net (finding, `What validation changed`). `diagnostics.rs`
+      names `database` and `state`, so it is app too.
 - [ ] **B3. `media/` regroups three ways.** Image tier, ingest, fetchers. Assign `rating_tags.rs` to
       ingest, and pull `services/material_you.rs` into the image tier.
 - [ ] **B4. `single_instance.rs:31`'s `crate::media::is_audio_extension`** is the one import between
@@ -226,18 +470,27 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
 - [ ] **B5. Move the cross-tier size assertions out of the image tier.**
       `media/artwork/tests/artwork_tests.rs:119-121` reach `ui::grid_prewarm` and `ui::util` to check
       `STORE_MAX_DIM` against the UI's cover tiers. They cannot compile inside a leaf crate, so they
-      become integration tests under `tests/`.
+      become integration tests under `crates/melodia/tests/`.
+- [ ] **B6. `themes/` splits palette from apply**, per the graph section. `apply.rs` is the views
+      half; everything else is the platform half.
+- [ ] **B7. `player/` regroups into `source`, `output` and `engine` modules** ahead of the manifests,
+      so the three-way extraction in Phase C is a move rather than a design decision made under a
+      compile error. `output/` already exists and needs no change.
 
 ## Phase C: extract the crates
 
-Order, each landing green: **core, artwork, net, platform, audio, store, app, views, bin, testkit.**
+Order, each landing green: **core, testkit, artwork, net, platform, audio, playback, engine, store,
+integrations, app, views, bin.**
 
+- [ ] Move every dependency more than one member names into `[workspace.dependencies]` first
+      (finding 12), starting with `reqwest`, `stream-download`, `icy-metadata`, `sqlx`, `symphonia`,
+      `cpal`, `tokio`, `serde`, `image`, `log`, `blake3`. Members take `<dep>.workspace = true`.
 - [ ] Per-member manifest, modelled on `melodia-ui/Cargo.toml`, which already gets this right:
 
       ```toml
       [package]
       name = "melodia-<x>"
-      version.workspace = true       # never "0.0.0"; see finding 1
+      version.workspace = true       # never "0.0.0"; see finding 3
       edition.workspace = true
       rust-version.workspace = true
       license.workspace = true
@@ -253,37 +506,51 @@ Order, each landing green: **core, artwork, net, platform, audio, store, app, vi
 
 - [ ] The per-crate build-script work, because these are compile errors the moment a boundary
       appears: `sqlx::migrate!`'s path, `minisign.rs`'s `include_str!`, `radio_blocklist`'s `OUT_DIR`
-      bake, `load_dotenv()` moving to the crate holding the `option_env!` sites, and the Windows
-      `winresource` embed staying with the binary.
-- [ ] `test_support` becomes `melodia-testkit`, a dev-dependency of every member.
+      bake and its two dotfiles, `load_dotenv()` moving to `melodia-integrations`, and the Windows
+      `winresource` embed staying with the binary with its `assets/melodia.ico` hop rewritten.
+- [ ] `test_support` becomes `melodia-testkit` **with no workspace dependency** (finding 2).
+      `paths_in()` goes to `melodia-core`'s own `#[cfg(test)]` support and `resolved_home()` to the
+      crate owning `home_dir_string`.
 
 **Landing tactic for the 2,721 `crate::` paths.** Each consuming crate re-exports what it took
 (`pub use melodia_core::{error, config, entities, utils};` in its `lib.rs`), so `crate::error::AppError`
-keeps resolving and the diff stays about topology rather than import churn. Enforcement is unaffected:
-a re-export cannot reach a crate absent from the manifest. De-facade in Phase D once the graph is
-proven, one crate at a time.
+keeps resolving and the diff stays about topology rather than import churn. Enforcement is unaffected
+for the crates a member does not name at all: a re-export cannot reach a crate absent from the
+manifest. It *is* affected the other way, so finding 13's rule applies from the first re-export:
+never `pub use` a type out of a crate your dependents are meant to be unable to reach. De-facade in
+Phase D once the graph is proven, one crate at a time.
 
 ## Phase D: make the repo workspace-native
 
-- [ ] Virtual root manifest, `members = ["crates/*"]`, `exclude = ["winit"]`. Profiles and
-      `[patch.crates-io]` stay at the root, as do the four version scrapes.
+- [ ] Virtual root manifest, `members = ["crates/*"]`, `exclude = ["winit"]`. No `default-members`
+      (finding 11). Profiles and `[patch.crates-io]` stay at the root, as do the four version scrapes.
+      `melodia-ui` moves to `crates/melodia-ui/` unchanged; that is what keeps the 135 Slint
+      `include_str!` hops resolving from files at the same depth.
+- [ ] `[[bin]] name = "Melodia"` on the binary crate (finding 4), so the artifact name survives.
 - [ ] `[package.metadata.deb]` moves to the binary crate with all eight asset paths and `license-file`
-      rewritten. Re-key `LICENSE_SHIPPERS`' `("Cargo.toml", ...)` entry in
+      rewritten, then a real `cargo deb --target … --no-build` to confirm the `target/release/` prefix
+      rewrite still fires. Re-key `LICENSE_SHIPPERS`' `("Cargo.toml", ...)` entry in
       `services/tests/mod_tests.rs:398`, which fails loudly and correctly when it moves.
-- [ ] `release-build.yml:83` and `:124` take `-p melodia`, or the root declares `default-members`.
+- [ ] `release-build.yml:83` and `:124` take `-p melodia`; `:143`'s `cargo wix --package` follows.
       A bare `cargo build` at a virtual root builds every member.
-- [ ] The 241 relative `include_str!` hops and the 21 tree-root test anchors. `SRC_DIR` becomes one
-      workspace-root definition so the corpus walks keep their full reach rather than narrowing to
-      one crate each.
-- [ ] All ~134 `.claude/rules` globs, **and the pin that guards them**: drop the
-      `glob.contains('*') { continue; }` skip at `test_support_tests.rs:89` so a rotted wildcard fails
-      loudly. Without that, this class of breakage recurs the next time anything moves.
+- [ ] `tests/` moves to `crates/melodia/tests/`, and every corpus walk moves with it (findings 6 and
+      8): the `rfd` pin, `current_exe`, thread-name length, the single-resampler equality,
+      `CALLBACK_HOMES`, the scrollbar brace-matching, the rules-glob pin,
+      `no_result_carries_its_error_as_a_string`, and both halves of the radio off-switch pin. One
+      home, one reach, walking `$MELODIA_REPO_ROOT/crates`.
+- [ ] The 243 relative `include_str!` hops, as they surface.
+- [ ] All 145 `.claude/rules` globs (83 naming `src/`, 62 naming `melodia-ui/`), against the pin A10
+      already made honest.
 - [ ] `CLAUDE.md`'s module map and its "every path below is `src/`-relative" convention, the README
-      architecture section, `src/player/CLAUDE.md`'s heading, and the 112 bracketed intra-doc links.
+      architecture section, `src/player/CLAUDE.md`'s heading, and the 162 bracketed intra-doc links
+      (`\[\`?crate::`).
 - [ ] Drop the scope-clippy-to-one-crate convention. `feature-unification = "workspace"` is
       nightly-only and the toolchain is pinned to stable, so a scoped invocation reselects features
-      for shared dependencies and rebuilds them. Workspace-wide is the only correct command, which a
-      workspace makes the natural one anyway.
+      for shared dependencies and rebuilds them. `--workspace` on all three gate commands is the only
+      correct form, which a workspace makes the natural one anyway.
+- [ ] Measure the CI test job. It caps `CARGO_BUILD_JOBS: 4` with a comment naming five test binaries
+      and warning that past the ceiling the runner swaps rather than fails; the split takes that to
+      roughly fourteen.
 
 ## Verification
 
@@ -291,39 +558,44 @@ Per commit, unchanged by the split since all three are already workspace-wide:
 
 ```bash
 cargo fmt --all --check
-cargo clippy --all-targets --locked -- -D warnings
-cargo test --locked
+cargo clippy --all-targets --locked --workspace -- -D warnings
+cargo test --locked --workspace
 ```
 
 Phase boundaries:
 
 - After **A**: `grep -rn 'crate::database\|crate::tasks' src/player/` returns nothing, and
   `grep -rn 'crate::services' src/player/` returns only the HTTP primitives. `grep -rn 'crate::ui' src/tasks/`
-  returns nothing.
+  returns nothing. `grep -rn 'crate::media' src/ui/` returns only the image tier.
 - After **C**: delete a `path` dependency from one manifest and confirm rustc names the crate in the
-  error. The `melodia-views` manifest must not list `melodia-store`; that is the flagship rule
-  turning into a compile error, and it is the whole point of the exercise.
+  error. **The `melodia-views` manifest must list neither `melodia-store` nor `melodia-net`**, and the
+  `melodia-audio` manifest must not name `cpal`. Those are the two flagship rules turning into compile
+  errors, and they are the whole point of the exercise.
 - After **D**: `cargo deb -p melodia` plus `scripts/build-{rpm,appimage,tarball}.sh` each produce an
-  artifact; `cargo build --timings` against the prerequisite baseline; `/usr/bin/time -v
-  target/release/Melodia` for peak RSS. No RSS change is expected, `lto = "fat"` with
-  `codegen-units = 1` recovering cross-crate inlining.
+  artifact and the produced binary is still named `Melodia`; `cargo build --timings` against the
+  prerequisite baseline; `/usr/bin/time -v target/release/Melodia` for peak RSS. No RSS change is
+  expected, `lto = "fat"` with `codegen-units = 1` recovering cross-crate inlining.
 
-One thing gets better rather than staying level: `[profile.dev.package.melodia-audio] opt-level = 2`
-becomes possible, so the DSP chain stops being debugged unoptimized.
+One thing gets better rather than staying level: `[profile.dev.package.melodia-playback] opt-level = 2`
+becomes possible, so the DSP chain stops being debugged unoptimized, without also optimizing the state
+machine out from under a breakpoint.
 
 ## Notes
 
-**239 `pub(crate)` sites** widen to `pub` where they cross a boundary, out of 2,056 public items.
-The issue counted 209; the tree has grown since. That is the price the literature names, and it is
-the same thing as the payoff: it forces the interface to be stated.
+**239 `pub(crate)` sites**, 228 of them outside `tests/`, widen to `pub` where they cross a
+boundary, against 2,254 `pub` items (`^\s*pub (fn|struct|enum|const|type|mod|trait|static)`, tests
+excluded). The issue counted 209; the tree has grown since. That is the price the literature names,
+and it is the same thing as the payoff: it forces the interface to be stated.
 
 **Prior art is argued in the issue** and not restated here. The four sibling checkouts kept beside
 this repo (rox, termusic, Symphonia, sonora) are what its crate counts can be checked against.
+Thirteen members is above the issue's nine and still below librespot's eight-plus-protocol at a
+comparable size, because the audio stack is three rather than one and integrations is its own.
 
 **`cargo-crate-split` is on crates.io at 0.2.0.** It computes strongly connected components and emits
 a minimum cut set, suggest-only, never rewriting source, which suits the no-autofix rule. Its blind
 spot is glob re-exports and inference-hidden coupling, so treat its list as a floor cross-checked
-against the five cycles above rather than as the answer.
+against the cycles above rather than as the answer.
 
 **What this trades away, plainly:** a single `src/` tree any grep reaches in one pass, a test corpus
 that has been genuinely good at catching drift, and a packaging path that works today. The bet is
