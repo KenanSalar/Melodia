@@ -556,10 +556,22 @@ pub struct MotionFlags {
 /// Its own struct rather than a fourth bool on [`LayoutFlags`], which is already at clippy's
 /// `struct_excessive_bools` budget. Read once at boot into `Theme.aurora-backdrop` — the toggle is
 /// restart-gated, so the artwork tiers can decide whether to build a blur half at all.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BackdropFlags {
+    /// On, and `theme.slint` declares the same value so a failed settings read lands on the
+    /// shipped look. Flipping it only reaches a `settings.json` predating the key: the struct
+    /// serializes whole, so an install that has saved settings since the toggle shipped carries
+    /// its own answer.
     pub aurora_backdrop: bool,
+}
+
+impl Default for BackdropFlags {
+    fn default() -> Self {
+        Self {
+            aurora_backdrop: true,
+        }
+    }
 }
 
 // OS / desktop-environment probes behind the defaults above. They sit in

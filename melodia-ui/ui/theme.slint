@@ -183,7 +183,7 @@ export global Theme {
     // **`in`, not `in-out`**: the two arms publish different tiers, so a mid-session flip leaves one
     // stack painting the other's colours, and the qualifier is what pins
     // `boot::ui_setup::apply_backdrop_style` as the only writer. The default matches the setting's.
-    in property <bool> aurora-backdrop: false;
+    in property <bool> aurora-backdrop: true;
 
     // Integer arithmetic, so no float rounding; anything ≤ 0 collapses to "0:00", which lets
     // the now-playing bar format a mid-transition position safely.

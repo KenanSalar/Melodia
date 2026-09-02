@@ -231,7 +231,7 @@ silently miss the other.
   free option it reads as**: `Brush::is_transparent()` (`i-slint-core/graphics/brush.rs`) answers
   `false` for every gradient whatever its stop alphas, and femtovg's `draw_rectangle` tessellates
   the path before `brush_to_paint` looks at it, so a stack faded to nothing still filled the whole
-  surface every frame — four of them on the blur arm, which is the shipped default.
+  surface every frame — four of them on the blur arm.
   What the gate does **not** retire is `shown`: the mounted stack still drains to its idle colours
   through it (below), which is why each stack's `shown: false` arm stays a *gradient of the same
   shape* — `Brush::interpolate` blends stop-for-stop and only between matching types, so
