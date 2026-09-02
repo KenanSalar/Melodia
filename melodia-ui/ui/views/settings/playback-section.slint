@@ -21,8 +21,10 @@ export component PlaybackSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> card-title: @tr("Playback");
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, @tr("Playback"),
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
@@ -38,31 +40,34 @@ export component PlaybackSection inherits Rectangle {
             + f * (Settings.crossfade-max-secs - Settings.crossfade-min-secs);
     }
 
+    // Each row's pair, declared once and read by both the visibility term and the row. The
+    // predicate is fed `label + " " + desc`, so a copy at either site can drift out of what
+    // search matches on.
+    property <string> gapless-label: @tr("Gapless Playback");
+    property <string> gapless-desc: @tr("Seamless transitions between tracks without silence gaps");
+    property <string> anim-label: @tr("Play Button Animation");
+    property <string> anim-desc: @tr("Visual effect on the play button while music is playing");
+    property <string> resume-label: @tr("Resume on Startup");
+    property <string> resume-desc: @tr("Automatically resume the last track from where you left off when the app starts");
+    property <string> crossfade-label: @tr("Crossfade");
+    property <string> crossfade-desc: @tr("Overlap the end of one track with the start of the next");
+    property <string> visualizer-label: @tr("Visualizer");
+    property <string> visualizer-desc: @tr("Show an audio visualizer on the Now Playing screen");
+    property <string> viz-style-label: @tr("Visualizer Style");
+    property <string> viz-style-desc: @tr("Choose how the visualizer draws the audio");
+
     // Per row, feeding both the inner `if` and the section's `has-matches`.
-    // Named, so each long label is written once rather than at three sites.
-    property <bool> show-gapless: row-visible(
-        @tr("Gapless Playback"),
-        @tr("Seamless transitions between tracks without silence gaps"));
-    property <bool> show-anim: row-visible(
-        @tr("Play Button Animation"),
-        @tr("Visual effect on the play button while music is playing"));
-    property <bool> show-resume: row-visible(
-        @tr("Resume on Startup"),
-        @tr("Automatically resume the last track from where you left off when the app starts"));
+    property <bool> show-gapless: row-visible(gapless-label, gapless-desc);
+    property <bool> show-anim: row-visible(anim-label, anim-desc);
+    property <bool> show-resume: row-visible(resume-label, resume-desc);
     // The cluster searches as one unit: any of its labels reveals the toggle
     // plus whichever sub-rows are mounted.
-    property <bool> show-crossfade: row-visible(
-        @tr("Crossfade"),
-        @tr("Overlap the end of one track with the start of the next"));
+    property <bool> show-crossfade: row-visible(crossfade-label, crossfade-desc);
 
     // One unit again, which is also what keeps the upstream dividers' gates
     // right with no further edits.
-    property <bool> show-visualizer: row-visible(
-        @tr("Visualizer"),
-        @tr("Show an audio visualizer on the Now Playing screen"))
-        || row-visible(
-        @tr("Visualizer Style"),
-        @tr("Choose how the visualizer draws the audio"));
+    property <bool> show-visualizer: row-visible(visualizer-label, visualizer-desc)
+        || row-visible(viz-style-label, viz-style-desc);
 
     // An `if` rather than `visible`, which would still claim the layout slot.
     property <bool> show-viz-style: root.show-visualizer && Visualizer.enabled;
@@ -78,12 +83,12 @@ export component PlaybackSection inherits Rectangle {
     // See `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
-        title: @tr("Playback");
+        title: root.card-title;
 
         if root.show-gapless: SettingRow {
             icon: "graphic_eq";
-            label: @tr("Gapless Playback");
-            description: @tr("Seamless transitions between tracks without silence gaps");
+            label: root.gapless-label;
+            description: root.gapless-desc;
             ToggleSwitch {
                 checked <=> Settings.gapless-playback;
                 toggled(v) => { Settings.gapless-playback-changed(v); }
@@ -94,8 +99,8 @@ export component PlaybackSection inherits Rectangle {
 
         if root.show-crossfade: SettingRow {
             icon: "swap_horiz";
-            label: @tr("Crossfade");
-            description: @tr("Overlap the end of one track with the start of the next");
+            label: root.crossfade-label;
+            description: root.crossfade-desc;
             ToggleSwitch {
                 checked <=> Settings.crossfade-enabled;
                 toggled(v) => { Settings.crossfade-enabled-changed(v); }
@@ -167,8 +172,8 @@ export component PlaybackSection inherits Rectangle {
 
         if root.show-anim: SettingRowStacked {
             icon: "animation";
-            label: @tr("Play Button Animation");
-            description: @tr("Visual effect on the play button while music is playing");
+            label: root.anim-label;
+            description: root.anim-desc;
             ChipGroup {
                 options: [
                     @tr("None"),
@@ -182,8 +187,8 @@ export component PlaybackSection inherits Rectangle {
 
         if root.show-resume: SettingRow {
             icon: "play_circle";
-            label: @tr("Resume on Startup");
-            description: @tr("Automatically resume the last track from where you left off when the app starts");
+            label: root.resume-label;
+            description: root.resume-desc;
             ToggleSwitch {
                 checked <=> Settings.resume-on-startup;
                 toggled(v) => { Settings.resume-on-startup-changed(v); }
@@ -197,8 +202,8 @@ export component PlaybackSection inherits Rectangle {
         // callback fires, so the callbacks only persist.
         if root.show-visualizer: SettingRow {
             icon: "bar_chart";
-            label: @tr("Visualizer");
-            description: @tr("Show an audio visualizer on the Now Playing screen");
+            label: root.visualizer-label;
+            description: root.visualizer-desc;
             ToggleSwitch {
                 checked <=> Visualizer.enabled;
                 toggled(v) => { Visualizer.set-enabled(v); }
@@ -208,8 +213,8 @@ export component PlaybackSection inherits Rectangle {
 
         if root.show-viz-style: SettingRowStacked {
             icon: "show_chart";
-            label: @tr("Visualizer Style");
-            description: @tr("Choose how the visualizer draws the audio");
+            label: root.viz-style-label;
+            description: root.viz-style-desc;
             // The same list the Now-Playing flyout renders, so the two pickers
             // can't drift.
             ChipGroup {

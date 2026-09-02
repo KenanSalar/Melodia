@@ -250,8 +250,9 @@ pub(super) fn wire(
         let au = artists_ui.clone();
         let weak = weak.clone();
         detail.on_filter_changed(move |text| {
+            let Some(ui) = weak.upgrade() else { return };
             artists_ui_mod::set_filter(&au, text.as_str());
-            artists_ui_mod::apply_filtered_detail(&weak, &au);
+            artists_ui_mod::apply_filtered_detail(&ui, &au);
         });
     }
 

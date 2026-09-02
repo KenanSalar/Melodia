@@ -14,7 +14,7 @@
 //!
 //! Cache discipline is `src/ui/favorites`': per-strip `CoverThumbs` LRUs
 //! released on section leave. There is deliberately **no**
-//! `library_changed_tx` subscriber — Search is query-driven, and a scan
+//! `library_changed` subscriber — Search is query-driven, and a scan
 //! completing mid-query must not swap results out from under the user.
 
 mod apply;

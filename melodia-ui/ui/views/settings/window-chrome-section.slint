@@ -25,31 +25,44 @@ export component WindowChromeSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> card-title: @tr("Window");
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, @tr("Window"),
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
-    property <bool> show-native-titlebar: row-visible(@tr("Native Title Bar"),
-        @tr("Use the operating system's native title bar instead of the custom one. Restart required to apply."));
+    // Each row's pair, declared once and read by both the visibility term and the row. Three of
+    // the descriptions swap with live state, so whichever form is on screen is the one in the
+    // haystack — which only holds while there is one copy of it.
+    property <string> os-managed-desc: @tr("Managed by the operating system");
+    property <string> native-titlebar-label: @tr("Native Title Bar");
+    property <string> native-titlebar-desc: @tr("Use the operating system's native title bar instead of the custom one. Restart required to apply.");
+    property <string> match-unfocused-label: @tr("Match Unfocused Window Background");
+    property <string> match-unfocused-desc: !Theme.use-native-titlebar
+        ? @tr("Only available with the native title bar.")
+        : @tr("Tint the sidebar and now-playing bar toward the content background when the window loses focus.");
+    property <string> corner-radius-label: @tr("Window Corner Radius");
+    property <string> tb-style-label: @tr("Decoration Button Style");
+    property <string> tb-side-label: @tr("Decoration Button Side");
+    property <string> tray-icon-label: @tr("System Tray Icon");
+    property <string> tray-icon-desc: @tr("Show a Melodia icon in the system tray with playback controls.");
+    property <string> close-to-tray-label: @tr("Close to Tray");
+    property <string> close-to-tray-desc: Settings.tray-active
+        ? @tr("Keep Melodia running in the system tray when you close the window, instead of quitting.")
+        : @tr("Available only while the system tray icon is active.");
+    // The three OS-managed rows share one description, blank unless the native bar is on.
+    property <string> os-managed-when-native: root.native-titlebar ? os-managed-desc : "";
+
+    property <bool> show-native-titlebar: row-visible(native-titlebar-label, native-titlebar-desc);
     property <bool> show-match-unfocused: Settings.match-unfocused-supported
-        && row-visible(@tr("Match Unfocused Window Background"),
-            !Theme.use-native-titlebar
-                ? @tr("Only available with the native title bar.")
-                : @tr("Tint the sidebar and now-playing bar toward the content background when the window loses focus."));
-    property <bool> show-corner-radius: row-visible(@tr("Window Corner Radius"),
-        root.native-titlebar ? @tr("Managed by the operating system") : "");
-    property <bool> show-titlebar-button-style: row-visible(@tr("Decoration Button Style"),
-        root.native-titlebar ? @tr("Managed by the operating system") : "");
-    property <bool> show-titlebar-button-side: row-visible(@tr("Decoration Button Side"),
-        root.native-titlebar ? @tr("Managed by the operating system") : "");
-    property <bool> show-tray-icon: row-visible(@tr("System Tray Icon"),
-        @tr("Show a Melodia icon in the system tray with playback controls."));
-    property <bool> show-close-to-tray: row-visible(@tr("Close to Tray"),
-        Settings.tray-active
-            ? @tr("Keep Melodia running in the system tray when you close the window, instead of quitting.")
-            : @tr("Available only while the system tray icon is active."));
+        && row-visible(match-unfocused-label, match-unfocused-desc);
+    property <bool> show-corner-radius: row-visible(corner-radius-label, os-managed-when-native);
+    property <bool> show-titlebar-button-style: row-visible(tb-style-label, os-managed-when-native);
+    property <bool> show-titlebar-button-side: row-visible(tb-side-label, os-managed-when-native);
+    property <bool> show-tray-icon: row-visible(tray-icon-label, tray-icon-desc);
+    property <bool> show-close-to-tray: row-visible(close-to-tray-label, close-to-tray-desc);
 
     out property <bool> has-matches:
         show-native-titlebar || show-match-unfocused || show-corner-radius
@@ -86,7 +99,7 @@ export component WindowChromeSection inherits Rectangle {
 
     VerticalLayout {
     if has-matches: SectionCard {
-        title: @tr("Window");
+        title: root.card-title;
 
         // Slint reads `Window.no-frame` once at first show, so a runtime flip
         // would leave the OS frame stale — hence the restart dialog, with
@@ -95,8 +108,8 @@ export component WindowChromeSection inherits Rectangle {
         // boots, so cancelling needs no explicit revert.
         if root.show-native-titlebar: SettingRow {
             icon: "title";
-            label: @tr("Native Title Bar");
-            description: @tr("Use the operating system's native title bar instead of the custom one. Restart required to apply.");
+            label: root.native-titlebar-label;
+            description: root.native-titlebar-desc;
             ToggleSwitch {
                 checked: root.native-titlebar;
                 manual: true;
@@ -124,10 +137,8 @@ export component WindowChromeSection inherits Rectangle {
         // `sidebar.slint` / `now-playing-bar.slint` on all three conditions.
         if root.show-match-unfocused: SettingRow {
             icon: "tonality";
-            label: @tr("Match Unfocused Window Background");
-            description: !Theme.use-native-titlebar
-                ? @tr("Only available with the native title bar.")
-                : @tr("Tint the sidebar and now-playing bar toward the content background when the window loses focus.");
+            label: root.match-unfocused-label;
+            description: root.match-unfocused-desc;
             disabled: !Theme.use-native-titlebar;
             ToggleSwitch {
                 checked <=> Settings.match-unfocused-bg;
@@ -141,10 +152,8 @@ export component WindowChromeSection inherits Rectangle {
         // chips sit below the description.
         if root.show-corner-radius: SettingRowStacked {
             icon: "rounded_corner";
-            label: @tr("Window Corner Radius");
-            description: root.native-titlebar
-                ? @tr("Managed by the operating system")
-                : "";
+            label: root.corner-radius-label;
+            description: root.os-managed-when-native;
             disabled: root.native-titlebar;
 
             if !root.native-titlebar: ChipGroup {
@@ -168,10 +177,8 @@ export component WindowChromeSection inherits Rectangle {
         // native titlebar, which owns its own buttons.
         if root.show-titlebar-button-style: SettingRowStacked {
             icon: "category";
-            label: @tr("Decoration Button Style");
-            description: root.native-titlebar
-                ? @tr("Managed by the operating system")
-                : "";
+            label: root.tb-style-label;
+            description: root.os-managed-when-native;
             disabled: root.native-titlebar;
 
             if !root.native-titlebar: ChipGroup {
@@ -190,10 +197,8 @@ export component WindowChromeSection inherits Rectangle {
         // corner in all four combinations.
         if root.show-titlebar-button-side: SettingRowStacked {
             icon: "swap_horiz";
-            label: @tr("Decoration Button Side");
-            description: root.native-titlebar
-                ? @tr("Managed by the operating system")
-                : "";
+            label: root.tb-side-label;
+            description: root.os-managed-when-native;
             disabled: root.native-titlebar;
 
             if !root.native-titlebar: ChipGroup {
@@ -213,8 +218,8 @@ export component WindowChromeSection inherits Rectangle {
         // same restart-dialog shape as the Native Title Bar row above.
         if root.show-tray-icon: SettingRow {
             icon: "dock_to_right";
-            label: @tr("System Tray Icon");
-            description: @tr("Show a Melodia icon in the system tray with playback controls.");
+            label: root.tray-icon-label;
+            description: root.tray-icon-desc;
             ToggleSwitch {
                 checked: Settings.tray-enabled;
                 manual: true;
@@ -238,10 +243,8 @@ export component WindowChromeSection inherits Rectangle {
         // nothing. Wired in `src/ui/appearance/window_settings.rs`.
         if root.show-close-to-tray: SettingRow {
             icon: "move_to_inbox";
-            label: @tr("Close to Tray");
-            description: Settings.tray-active
-                ? @tr("Keep Melodia running in the system tray when you close the window, instead of quitting.")
-                : @tr("Available only while the system tray icon is active.");
+            label: root.close-to-tray-label;
+            description: root.close-to-tray-desc;
             disabled: !Settings.tray-active;
             ToggleSwitch {
                 checked <=> Settings.close-to-tray;

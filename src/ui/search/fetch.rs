@@ -80,10 +80,9 @@ pub async fn kick_search(
 /// whether it actually yielded, which is what obliges the caller to re-check
 /// its fetch token.
 ///
-/// Track rows finish on the UI thread (`finish_track_list_row`) and the Album
-/// / Artist strip cards resolve via lazy `request-*-cover` lookups that decode
-/// on miss *on the UI thread* — without this, a cold cache pays one
-/// synchronous decode per card at paint time.
+/// Track rows resolve their thumbnail per mounted row through `RowCovers.request`, and the
+/// Album / Artist strip cards via lazy `request-*-cover` lookups that decode on miss *on the
+/// UI thread* — without this, a cold cache pays one synchronous decode per card at paint time.
 ///
 /// Three prewarms rather than one because the three lists land in three
 /// different tiers, so each is capped against its own capacity. Result sets

@@ -33,7 +33,7 @@ use crate::ui::albums::AlbumsUi;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
-use crate::ui::section_state::SectionState;
+use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
 use crate::ui::util::clamp_i64_to_i32;
 use crate::ui::view_ctx::ViewCtx;
 use crate::{
@@ -139,16 +139,6 @@ impl ArtistsUi {
         }
     }
 
-    /// Mirror the Artists-section-visible flag (`section-active-changed`).
-    pub fn set_section_active(&self, active: bool) {
-        self.section.set_active(active);
-    }
-
-    /// Whether the Artists section is currently on screen.
-    pub fn section_active(&self) -> bool {
-        self.section.active()
-    }
-
     /// Drop *everything* the Artists section is keeping resident — both cover LRUs, the canonical
     /// grid data, the memoized filter/sort indices, the cached detail track rows and the
     /// applied-selection shadow — then hand the freed pages back to the OS. Called off the UI
@@ -180,17 +170,6 @@ impl ArtistsUi {
         crate::tasks::heap_trim::trim();
     }
 
-    /// Mark the cached grid + detail data as "must be re-fetched on the next section-enter".
-    /// Synchronous on the UI thread; see [`crate::ui::albums::AlbumsUi::mark_dirty`].
-    pub fn mark_dirty(&self) {
-        self.section.mark_dirty();
-    }
-
-    /// Atomically read-and-clear the dirty flag. See [`crate::ui::albums::AlbumsUi::take_dirty`].
-    pub fn take_dirty(&self) -> bool {
-        self.section.take_dirty()
-    }
-
     /// Drop just the grid-tier cover cache. Called off the UI thread when the user opens an
     /// artist: the grid view is unmounted by the `ArtistDetail.artist-id` flip.
     pub fn release_grid_covers(&self) {
@@ -216,34 +195,6 @@ impl ArtistsUi {
     /// Artist id currently open in the detail view (`-1` = grid).
     pub fn detail_artist_id(&self) -> i64 {
         *self.detail.artist_id.lock()
-    }
-
-    /// Track ids of the **displayed** detail list, in display order — the filter-applied subset
-    /// when a search is active. Play / shuffle / add-to-queue act on exactly these rows.
-    pub fn detail_track_ids(&self) -> Vec<i64> {
-        self.detail.tracks.lock().iter().map(|r| r.id).collect()
-    }
-
-    /// Surgically flip `is_favorite` on the cached detail row. Both the displayed `tracks` cache
-    /// and the canonical `all_tracks` set are touched so a later rebuild keeps the star.
-    pub fn flip_detail_favorite(&self, id: i64, fav: bool) {
-        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.is_favorite = fav;
-        }
-        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.is_favorite = fav;
-        }
-    }
-
-    /// Star-rating analogue of [`Self::flip_detail_favorite`] — set `rating` on both the displayed
-    /// `tracks` cache and the canonical `all_tracks` set.
-    pub fn flip_detail_rating(&self, id: i64, rating: i32) {
-        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
-        }
-        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
-        }
     }
 
     /// Lazy cover lookup for an Artists **grid card** — backs `Artists.request-cover`, resolving
@@ -290,6 +241,9 @@ pub fn to_slint_artist_row(a: &ArtistStats) -> UiArtistRow {
             .unwrap_or(i32::MAX),
     }
 }
+
+impl_section_state_helpers!(ArtistsUi);
+impl_detail_row_cache!(ArtistsUi);
 
 // `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {

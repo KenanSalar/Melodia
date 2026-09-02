@@ -21,7 +21,6 @@ use crate::ui::model_patch;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
-use crate::ui::tracks::PreparedTrackRow;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{AlbumDetail, AppWindow, NavEnterFrom, TrackListRow as UiTrackListRow};
 
@@ -109,8 +108,8 @@ where
     // The `Send` half of every row, built on the worker so only the `!Send`
     // cover lookup is left for the UI thread — otherwise the click→detail
     // transition hitches on a long album.
-    let prepared: Vec<PreparedTrackRow> =
-        tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
+    let ui_tracks: Vec<UiTrackListRow> =
+        tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
 
     // Folded here rather than in the closure below: this is the worker that
     // already holds the rows.
@@ -122,8 +121,6 @@ where
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<AlbumDetail>();
-        let ui_tracks: Vec<UiTrackListRow> =
-            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
         let header = to_slint_album_row(&detail);
         g.set_album(header);
         replace_tracks_model(&g, ui_tracks);

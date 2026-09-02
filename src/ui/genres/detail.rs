@@ -25,7 +25,6 @@ use crate::ui::model_patch;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
-use crate::ui::tracks::PreparedTrackRow;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, GenreDetail, NavEnterFrom, TrackListRow as UiTrackListRow};
 
@@ -118,8 +117,8 @@ where
 
     // Build the `Send` half of every row here on the worker — only the `!Send` cover decode is
     // left for the UI thread, so the click→detail transition doesn't hitch on a large genre.
-    let prepared: Vec<PreparedTrackRow> =
-        tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
+    let ui_tracks: Vec<UiTrackListRow> =
+        tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
 
     // How far the genre spreads — folded on the worker that fetched the rows,
     // since a broad genre's track list is the longest in the app.
@@ -131,9 +130,6 @@ where
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<GenreDetail>();
-        // UI-thread step: just the cover lookups + the model swap.
-        let ui_tracks: Vec<UiTrackListRow> =
-            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
         let header = to_slint_genre_row(&detail);
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &genres_ui);

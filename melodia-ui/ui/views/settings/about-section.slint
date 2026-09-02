@@ -23,22 +23,25 @@ export component AboutSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> card-title: @tr("About");
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, @tr("About"),
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
     // The brands, the SPDX id and "GitHub" / "Ko-fi" stay untranslated but still
     // belong in the haystack — they're what a user would type.
-    property <bool> show-app:
-        row-visible("Melodia", @tr("Version {}", MelodiaUpdater.current-version));
-    property <bool> show-author:
-        row-visible(@tr("Made by {}", "Kenan Salar"), "GitHub");
-    property <bool> show-support:
-        row-visible(@tr("Support Melodia"), "Ko-fi");
-    property <bool> show-license:
-        row-visible(@tr("License"), "AGPL-3.0-or-later");
+    property <string> version-desc: @tr("Version {}", MelodiaUpdater.current-version);
+    property <string> author-label: @tr("Made by {}", "Kenan Salar");
+    property <string> support-label: @tr("Support Melodia");
+    property <string> license-label: @tr("License");
+
+    property <bool> show-app: row-visible("Melodia", version-desc);
+    property <bool> show-author: row-visible(author-label, "GitHub");
+    property <bool> show-support: row-visible(support-label, "Ko-fi");
+    property <bool> show-license: row-visible(license-label, "AGPL-3.0-or-later");
 
     out property <bool> has-matches: show-app || show-author || show-support || show-license;
 
@@ -46,19 +49,19 @@ export component AboutSection inherits Rectangle {
     // see `language-section.slint`.
     VerticalLayout {
         if has-matches: SectionCard {
-            title: @tr("About");
+            title: root.card-title;
 
             if root.show-app: SettingRow {
                 icon: "info";
                 label: "Melodia";
-                description: @tr("Version {}", MelodiaUpdater.current-version);
+                description: root.version-desc;
             }
 
             // No leading icon, matching the Updates section's action buttons.
             if root.show-app && root.show-author: SectionDivider {}
             if root.show-author: SettingRow {
                 icon: "person";
-                label: @tr("Made by {}", "Kenan Salar");
+                label: root.author-label;
                 SectionButton {
                     label: "GitHub";
                     icon: "";
@@ -74,7 +77,7 @@ export component AboutSection inherits Rectangle {
             if (root.show-app || root.show-author) && root.show-support: SectionDivider {}
             if root.show-support: SettingRow {
                 icon: "favorite";
-                label: @tr("Support Melodia");
+                label: root.support-label;
                 description: @tr("Melodia is free and open source. Support helps keep it going.");
                 SectionButton {
                     label: @tr("Support me on Ko-fi");
@@ -89,7 +92,7 @@ export component AboutSection inherits Rectangle {
             if (root.show-app || root.show-author || root.show-support) && root.show-license: SectionDivider {}
             if root.show-license: SettingRow {
                 icon: "balance";
-                label: @tr("License");
+                label: root.license-label;
                 description: "AGPL-3.0-or-later";
             }
         }

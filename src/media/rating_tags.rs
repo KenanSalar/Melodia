@@ -111,3 +111,7 @@ pub fn write_stars(tag: &mut Tag, stars: i32) -> bool {
 pub fn clear(tag: &mut Tag) {
     tag.remove_key(ItemKey::Popularimeter);
 }
+
+#[cfg(test)]
+#[path = "tests/rating_tags_tests.rs"]
+mod tests;

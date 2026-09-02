@@ -24,7 +24,8 @@ use crate::error::AppError;
 
 use super::aac_trim::{self, Trim};
 use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
-use super::decode;
+use super::decode::{self, Rounding};
+use super::dsp::{frames_in, frames_to_duration, interleaved};
 
 /// How far short of a stated length a seek is allowed to land.
 ///
@@ -191,18 +192,21 @@ impl FileDecoder {
         let Some(time_base) = self.time_base else {
             return 0;
         };
-        let ahead = required.get().saturating_sub(actual.get());
-        let Ok(ahead) = u128::try_from(ahead) else {
+        let shape = self.cursor.shape();
+        // A demuxer that landed *past* what was asked for has nothing to trim, and `Timestamp` is
+        // signed, so the negative case falls out here rather than being handled below.
+        let Ok(ahead) = u64::try_from(required.get().saturating_sub(actual.get())) else {
             return 0;
         };
-
-        let rate = u128::from(self.cursor.shape().rate.get());
-        let ticks = ahead * u128::from(time_base.numer.get()) * rate;
-        let frames = ticks.div_ceil(u128::from(time_base.denom.get()));
+        // Rounded up: a trim short by a frame replays the tail of the packet the seek landed in.
+        let Some(frames) = decode::ticks_to_frames(ahead, time_base, shape.rate, Rounding::Up)
+        else {
+            return 0;
+        };
         let Ok(frames) = usize::try_from(frames) else {
             return 0;
         };
-        frames.saturating_mul(usize::from(self.cursor.shape().channels.get()))
+        frames.saturating_mul(usize::from(shape.channels.get()))
     }
 
     /// Discard `count` interleaved samples, decoding as far as it takes.
@@ -227,29 +231,6 @@ impl FileDecoder {
         let played = frames_in(pos, shape.rate);
         Some(interleaved(playable.saturating_sub(played), shape.channels))
     }
-}
-
-const NANOS_PER_SEC: u64 = 1_000_000_000;
-
-/// `frames` as interleaved samples. Saturating, because the only bound on a length read back out of
-/// a container is what fits a `u64`, and a corrupt one states whatever it likes.
-fn interleaved(frames: u64, channels: ChannelCount) -> u64 {
-    frames.saturating_mul(u64::from(channels.get()))
-}
-
-/// How long `frames` play for. Seconds and nanoseconds separately, so a rate that does not divide
-/// a second evenly cannot cost the answer a frame the way a float round trip would.
-fn frames_to_duration(frames: u64, rate: SampleRate) -> Duration {
-    let rate = u64::from(rate.get());
-    let nanos = (frames % rate) * NANOS_PER_SEC / rate;
-    Duration::new(frames / rate, u32::try_from(nanos).unwrap_or(0))
-}
-
-/// The frames in `span`, its inverse.
-fn frames_in(span: Duration, rate: SampleRate) -> u64 {
-    let rate = u64::from(rate.get());
-    let subsec = u64::from(span.subsec_nanos()) * rate / NANOS_PER_SEC;
-    span.as_secs().saturating_mul(rate).saturating_add(subsec)
 }
 
 /// How long the file at `path` plays for, or `None` when it names no duration or no decoder is

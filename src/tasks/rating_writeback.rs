@@ -116,7 +116,7 @@ async fn run(mut rx: UnboundedReceiver<(i64, i32)>, shutdown: CancellationToken,
 async fn flush_at_exit(state: &AppState, pending: &mut HashMap<i64, i32>) {
     // The switch is read here as well as in `flush`, so a switched-off install doesn't announce
     // dropping writes it was never going to make.
-    let over_budget = if state.write_ratings_to_tags() {
+    let over_budget = if state.write_ratings_to_tags.get() {
         pending.len().saturating_sub(SHUTDOWN_FLUSH_MAX)
     } else {
         0
@@ -133,7 +133,7 @@ async fn flush(state: &AppState, pending: &mut HashMap<i64, i32>) {
     if pending.is_empty() {
         return;
     }
-    if !state.write_ratings_to_tags() {
+    if !state.write_ratings_to_tags.get() {
         pending.clear();
         return;
     }

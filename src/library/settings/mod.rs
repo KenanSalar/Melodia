@@ -99,10 +99,6 @@ pub fn get_view_state(state: &AppState) -> Result<ViewStateData, AppError> {
     services::view_state::read_view_state(&state.paths)
 }
 
-pub fn update_settings(state: &AppState, settings: &SettingsData) -> Result<(), AppError> {
-    services::settings::write_settings(&state.paths, settings)
-}
-
 /// Returns "dark" or "light" based on the OS color scheme preference.
 #[cfg_attr(
     not(target_os = "linux"),

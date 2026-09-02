@@ -4,7 +4,7 @@
 //!
 //! Inert until the user enables "Add `MusicBrainz` IDs" **and** `ListenBrainz` is
 //! connected (the lookup endpoint needs the token). Triggers: a boot/enable
-//! sweep, a `library_changed_tx` subscription (new imports get resolved), and a
+//! sweep, a `library_changed` subscription (new imports get resolved), and a
 //! manual kick from the Settings button. No `ui::*` imports.
 //!
 //! A persisted `attempted` set (`scrobble_mbid_attempted.json`) keeps unmatched
@@ -12,7 +12,7 @@
 //! on the next launch: they stay NULL in the DB and are skipped until the manual
 //! kick, which clears both the set and the file. Being id-keyed, it also skips a
 //! track retagged *after* its miss, so a library that grows better tags needs
-//! that button. The writer deliberately doesn't bump `library_changed_tx`, so
+//! that button. The writer deliberately doesn't bump `library_changed`, so
 //! this task never wakes itself.
 
 use std::collections::HashSet;
@@ -49,7 +49,7 @@ struct SweepOutcome {
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let state = state.clone();
     let service = state.scrobble.clone();
-    let mut lib_rx = state.library_changed_tx.subscribe();
+    let mut lib_rx = state.library_changed.subscribe();
 
     spawner.spawn_cancellable(move |shutdown| async move {
         // Persisted across restarts so an unmatched track isn't re-looked-up on

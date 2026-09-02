@@ -67,7 +67,7 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
     }
 
     // Remove folder: matches Tauri — immediate, no confirmation. The
-    // `library_changed_tx` bump inside `remove_folder` drives both the
+    // `library_changed` bump inside `remove_folder` drives both the
     // folder-list subscriber and the Tracks view's request_refresh, so
     // the row vanishes and the cascade-deleted tracks disappear without
     // any explicit re-fetch here.
@@ -81,7 +81,7 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
     }
 
     // Rescan: kick off a scan; the scan-progress channel drives the bar,
-    // and the `library_changed_tx` bump at the end of `scan_folder_internal`
+    // and the `library_changed` bump at the end of `scan_folder_internal`
     // triggers a refresh of the folder list so `last_scanned` updates.
     {
         let s = state.clone();

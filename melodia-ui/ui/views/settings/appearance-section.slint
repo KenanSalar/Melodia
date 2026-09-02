@@ -38,26 +38,32 @@ export component AppearanceSection inherits Rectangle {
     // one bool with no `Settings` mirror beside it.
     out property <bool> aurora-backdrop: Theme.aurora-backdrop;
 
+    property <string> card-title: @tr("Appearance");
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, @tr("Appearance"),
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
     // Color Style's description swaps with `material-you-active`, so whichever
     // form is on screen is the one in the haystack.
-    property <bool> show-theme: row-visible(@tr("Theme"), "");
-    property <bool> show-variant: row-visible(@tr("Theme Variant"), "");
-    property <bool> show-accent: show-accent-row()
-        && row-visible(@tr("Accent Color"), "");
-    property <bool> show-color-style: Settings.theme-idx == 4
-        && row-visible(@tr("Color Style"),
-            Settings.material-you-active
-                ? @tr("Active — palette derived from the current track's artwork.")
-                : @tr("Generate theme colors from album artwork."));
+    property <string> theme-label: @tr("Theme");
+    property <string> variant-label: @tr("Theme Variant");
+    property <string> accent-label: @tr("Accent Color");
+    property <string> color-style-label: @tr("Color Style");
+    property <string> color-style-desc: Settings.material-you-active
+        ? @tr("Active — palette derived from the current track's artwork.")
+        : @tr("Generate theme colors from album artwork.");
+    property <string> backdrop-label: @tr("Aurora Backdrop");
+    property <string> backdrop-desc: @tr("Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply.");
 
-    property <bool> show-backdrop: row-visible(@tr("Aurora Backdrop"),
-        @tr("Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."));
+    property <bool> show-theme: row-visible(theme-label, "");
+    property <bool> show-variant: row-visible(variant-label, "");
+    property <bool> show-accent: show-accent-row() && row-visible(accent-label, "");
+    property <bool> show-color-style: Settings.theme-idx == 4
+        && row-visible(color-style-label, color-style-desc);
+    property <bool> show-backdrop: row-visible(backdrop-label, backdrop-desc);
 
     out property <bool> has-matches:
         show-theme || show-variant || show-accent || show-color-style || show-backdrop;
@@ -73,14 +79,14 @@ export component AppearanceSection inherits Rectangle {
     // see `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
-        title: @tr("Appearance");
+        title: root.card-title;
 
         // `<=>` is mandatory: `ChipGroup` writes its own `selected-index` on
         // click, which orphans a one-way binding, and Rust's later
         // `set_theme_idx` would then never reach the chips.
         if root.show-theme: SettingRowStacked {
             icon: "brush";
-            label: @tr("Theme");
+            label: root.theme-label;
             description: "";
             ChipGroup {
                 options: Settings.theme-names;
@@ -99,7 +105,7 @@ export component AppearanceSection inherits Rectangle {
         // variant names are proper nouns and stay verbatim.
         if root.show-variant: SettingRowStacked {
             icon: "palette";
-            label: @tr("Theme Variant");
+            label: root.variant-label;
             description: "";
             ChipGroup {
                 options: Settings.theme-idx == 0
@@ -114,7 +120,7 @@ export component AppearanceSection inherits Rectangle {
         if root.any-above-accent && root.show-accent: SectionDivider {}
         if root.show-accent: SettingRowStacked {
             icon: "colorize";
-            label: @tr("Accent Color");
+            label: root.accent-label;
             description: "";
             ColorDotGrid {
                 colors: Settings.accent-colors;
@@ -134,10 +140,8 @@ export component AppearanceSection inherits Rectangle {
         if root.any-above-color-style && root.show-color-style: SectionDivider {}
         if root.show-color-style: SettingRowStacked {
             icon: "auto_awesome";
-            label: @tr("Color Style");
-            description: Settings.material-you-active
-                ? @tr("Active — palette derived from the current track's artwork.")
-                : @tr("Generate theme colors from album artwork.");
+            label: root.color-style-label;
+            description: root.color-style-desc;
             ChipGroup {
                 options: [
                     @tr("None"),
@@ -161,8 +165,8 @@ export component AppearanceSection inherits Rectangle {
         if root.any-above-backdrop && root.show-backdrop: SectionDivider {}
         if root.show-backdrop: SettingRow {
             icon: "tonality";
-            label: @tr("Aurora Backdrop");
-            description: @tr("Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply.");
+            label: root.backdrop-label;
+            description: root.backdrop-desc;
             ToggleSwitch {
                 checked: root.aurora-backdrop;
                 manual: true;

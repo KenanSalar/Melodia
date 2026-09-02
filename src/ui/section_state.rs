@@ -75,3 +75,76 @@ impl Default for SectionState {
         Self::new()
     }
 }
+
+/// Generate a view handle's delegating accessors over its `section: SectionState` field.
+///
+/// The four bodies are one line each and the argument for every one of them is on
+/// [`SectionState`] itself, so eight views were carrying eight restatements of it — three of
+/// which had already degraded to `/// See [the albums one]`.
+macro_rules! impl_section_state_helpers {
+    ($Ui:ty) => {
+        impl $Ui {
+            /// Mirror the section-visible flag, off this view's `section-active-changed`.
+            pub fn set_section_active(&self, active: bool) {
+                self.section.set_active(active);
+            }
+
+            /// Whether this section is currently on screen.
+            pub fn section_active(&self) -> bool {
+                self.section.active()
+            }
+
+            /// Mark the cached data stale. See [`SectionState::mark_dirty`] for why this is
+            /// written before the release task rather than by it.
+            pub fn mark_dirty(&self) {
+                self.section.mark_dirty();
+            }
+
+            /// Read-and-clear, deciding whether a section enter re-fetches.
+            /// See [`SectionState::take_dirty`].
+            pub fn take_dirty(&self) -> bool {
+                self.section.take_dirty()
+            }
+        }
+    };
+}
+
+/// Generate the three cached-detail accessors the four detail views share.
+///
+/// Both flips touch the displayed `tracks` cache *and* the canonical `all_tracks` set, or the
+/// next `apply_filtered_detail` rebuild drops what was just set.
+macro_rules! impl_detail_row_cache {
+    ($Ui:ty) => {
+        impl $Ui {
+            /// Track ids of the **displayed** detail list, in display order — the filtered
+            /// subset while a search is active. `play-row` / shuffle / add-to-queue pass these
+            /// on, so those act on the visible rows rather than the whole entity.
+            pub fn detail_track_ids(&self) -> Vec<i64> {
+                self.detail.tracks.lock().iter().map(|r| r.id).collect()
+            }
+
+            /// Flip `is_favorite` on the cached detail row, so a single-row toggle needs no
+            /// re-fetch.
+            pub fn flip_detail_favorite(&self, id: i64, fav: bool) {
+                if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
+                    r.is_favorite = fav;
+                }
+                if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
+                    r.is_favorite = fav;
+                }
+            }
+
+            /// [`Self::flip_detail_favorite`]'s star-rating twin.
+            pub fn flip_detail_rating(&self, id: i64, rating: i32) {
+                if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
+                    r.rating = rating;
+                }
+                if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
+                    r.rating = rating;
+                }
+            }
+        }
+    };
+}
+
+pub(crate) use {impl_detail_row_cache, impl_section_state_helpers};

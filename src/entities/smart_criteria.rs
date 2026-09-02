@@ -64,7 +64,7 @@ impl SmartCriteria {
 
     /// Whether resolving this criteria's membership or order can be moved by a
     /// play-count flush (a `play_count` / `skip_count` / `last_played` change —
-    /// the columns `stats_changed_tx` signals). Lets the Playlists grid skip
+    /// the columns `stats_changed` signals). Lets the Playlists grid skip
     /// re-counting smart playlists a stats bump can't affect. `skip_count` is
     /// included because a single flush can carry play *and* skip changes at the
     /// same bump. Conservative: a `true` here only ever costs a redundant

@@ -182,7 +182,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 } else {
                     // Name / description are user-owned too — update them along
                     // with the criteria. `update_smart_criteria` bumps
-                    // `library_changed_tx`, so the grid + open detail refresh.
+                    // `library_changed`, so the grid + open detail refresh.
                     if let Err(e) =
                         library::playlists::update_playlist(&s, target_id, name, description, None)
                             .await

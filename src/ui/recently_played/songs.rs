@@ -15,7 +15,6 @@ use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::row_match::{self, Needle};
-use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
@@ -54,10 +53,10 @@ pub async fn refresh_tracks(
         return Ok(());
     }
 
-    // Prewarm the row covers off-thread before the first model apply — the `!Send` cover lookup in
-    // `finish_track_list_row` runs on the UI thread, so a cold cache would pay one synchronous
-    // decode per unique cover at paint time. The rows are already in recency order, so the prefix
-    // surviving the cap is the right one.
+    // Prewarm the row covers off-thread before the first model apply — a mounted row resolves its
+    // thumbnail through `RowCovers.request` on the UI thread, so a cold cache would pay one
+    // synchronous decode per unique cover at paint time. The rows are already in recency order,
+    // so the prefix surviving the cap is the right one.
     let cover_paths: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         rows.iter().map(|r| r.artwork_path.as_deref()),
         rp_ui.cover_thumbs.capacity(),
@@ -152,9 +151,8 @@ pub fn apply_filtered_tracks_now(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
 /// Walk the cached `tracks_all` through the active filter, or `None` when Songs isn't the mounted
 /// tab and the walk would feed nothing.
 ///
-/// Filters and prepares the `Send` row halves on the calling thread, borrowing the cache in place
-/// — the `!Send` cover lookup is what `finish_track_list_row` adds on the UI thread.
-fn build_filtered_tracks(rp_ui: &RecentlyPlayedUi) -> Option<Vec<PreparedTrackRow>> {
+/// Filters and builds the rows on the calling thread, borrowing the cache in place.
+fn build_filtered_tracks(rp_ui: &RecentlyPlayedUi) -> Option<Vec<UiTrackListRow>> {
     if rp_ui.active_tab() != RecentlyPlayedTab::Songs {
         return None;
     }
@@ -163,21 +161,17 @@ fn build_filtered_tracks(rp_ui: &RecentlyPlayedUi) -> Option<Vec<PreparedTrackRo
     Some(
         all.iter()
             .filter(|r| row_match::track_matches(r, &needle))
-            .map(crate::ui::tracks::prepare_track_list_row)
+            .map(crate::ui::tracks::to_slint_track_list_row)
             .collect(),
     )
 }
 
-/// Finish the rows and push them into `RecentlyPlayed.tracks`. UI thread only.
+/// Push the rows into `RecentlyPlayed.tracks`. UI thread only.
 ///
 /// Both gates are re-asked here rather than trusted from the build: on the posting path a section
 /// leave or a tab pick can land while the closure is in flight, and either has already emptied
 /// this model on purpose.
-fn write_filtered_tracks(
-    ui: &AppWindow,
-    rp_ui: &RecentlyPlayedUi,
-    prepared: Vec<PreparedTrackRow>,
-) {
+fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: Vec<UiTrackListRow>) {
     if !rp_ui.section_active() || rp_ui.active_tab() != RecentlyPlayedTab::Songs {
         return;
     }
@@ -187,8 +181,7 @@ fn write_filtered_tracks(
         log::warn!("RecentlyPlayed.tracks: VecModel<TrackListRow> downcast failed");
         return;
     };
-    let mut rendered: Vec<UiTrackListRow> =
-        prepared.into_iter().map(finish_track_list_row).collect();
+    let mut rendered = prepared;
     super::selection::restamp_rows(&g, &mut rendered);
     crate::ui::model_diff::apply_rows_keyed(vec, rendered, |r| r.id);
 }

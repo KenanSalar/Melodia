@@ -26,7 +26,7 @@ pub struct AudioStreamHealth {
     other: AtomicU64,
     device_lost: AtomicBool,
     /// Kept because the counter alone says nothing actionable.
-    first_backend_error: parking_lot::Mutex<Option<String>>,
+    first_other_error: parking_lot::Mutex<Option<String>>,
 }
 
 /// Everything [`AudioStreamHealth::drain`] found.
@@ -34,16 +34,21 @@ pub struct AudioStreamHealth {
 pub struct StreamHealthReport {
     /// Buffer under/overruns. cpal recovers from these itself.
     pub underruns: u64,
-    /// Backend errors that are neither an xrun nor a lost device.
+    /// Stream errors that are neither an xrun nor a lost device. `ErrorKind::BackendError` is one
+    /// of the several kinds that land here, which is why neither this nor the field below is named
+    /// after it.
     pub other: u64,
     /// The description of the first `other`, when one was captured.
-    pub first_backend_error: Option<String>,
+    pub first_other_error: Option<String>,
     /// The device went away, or its configuration stopped being valid.
     pub device_lost: bool,
 }
 
 impl AudioStreamHealth {
     /// Record one stream error. No blocking lock, no I/O.
+    ///
+    /// The catch-all arm does format, once per window: both gates below have to pass, so a storm
+    /// pays for one short string and then nothing.
     pub fn record(&self, err: &Error) {
         match err.kind() {
             ErrorKind::Xrun => {
@@ -64,7 +69,7 @@ impl AudioStreamHealth {
                 // here is what this module exists to avoid, and only-if-empty so
                 // a spin frees a short string rather than trading one for another.
                 // The `to_string` is inside both gates for the same reason.
-                if let Some(mut slot) = self.first_backend_error.try_lock()
+                if let Some(mut slot) = self.first_other_error.try_lock()
                     && slot.is_none()
                 {
                     *slot = Some(err.to_string());
@@ -84,7 +89,7 @@ impl AudioStreamHealth {
         Some(StreamHealthReport {
             underruns,
             other,
-            first_backend_error: self.first_backend_error.lock().take(),
+            first_other_error: self.first_other_error.lock().take(),
             device_lost,
         })
     }

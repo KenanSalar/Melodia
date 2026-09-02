@@ -5,10 +5,9 @@
 //! per-view Slint global and the `*Ui` holding the caches differ. Captured once here over
 //! the [`RowSelectionView`] trait and a [`FilterRefs`] borrow.
 //!
-//! Album / Genre / Playlist run the whole pass on the UI thread through
-//! [`apply_filtered_detail`]. Artist does its own worker-thread row prep, also rebuilding
-//! an Albums strip, so it reuses only [`restamp_selection`] and the predicate from
-//! [`crate::ui::row_match`].
+//! All four run the whole pass on the UI thread through [`apply_filtered_detail`]. Artist
+//! calls it and then narrows its own Albums strip, that carousel being the one thing the
+//! four do not share.
 
 use std::collections::HashSet;
 

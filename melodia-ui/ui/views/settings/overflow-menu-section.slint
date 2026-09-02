@@ -71,25 +71,29 @@ export component OverflowMenuSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> card-title: @tr("Player Bar");
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, @tr("Player Bar"),
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
-    property <bool> show-overflow: row-visible(@tr("Overflow Menu Buttons"),
-        @tr("Move selected buttons into a compact overflow menu in the player bar"));
+    property <string> overflow-label: @tr("Overflow Menu Buttons");
+    property <string> overflow-desc: @tr("Move selected buttons into a compact overflow menu in the player bar");
+
+    property <bool> show-overflow: row-visible(overflow-label, overflow-desc);
 
     out property <bool> has-matches: show-overflow;
 
     VerticalLayout {
     if has-matches: SectionCard {
-        title: @tr("Player Bar");
+        title: root.card-title;
 
         if root.show-overflow: SettingRowStacked {
             icon: "more_vert";
-            label: @tr("Overflow Menu Buttons");
-            description: @tr("Move selected buttons into a compact overflow menu in the player bar");
+            label: root.overflow-label;
+            description: root.overflow-desc;
 
             // A `GridLayout` rather than rows of `HorizontalLayout`s: equal
             // stretch only divides the *surplus* on top of each cell's

@@ -1,14 +1,9 @@
 use crate::error::AppError;
 use crate::services::{
     self,
-    always_on_top::AlwaysOnTopCapability,
     settings::{TitlebarButtonSide, TitlebarButtonStyle},
 };
 use crate::state::AppState;
-
-pub fn get_always_on_top_capability(state: &AppState) -> Result<AlwaysOnTopCapability, AppError> {
-    Ok(state.always_on_top.clone())
-}
 
 /// Apply the user's pinned choice and persist it. On Linux this drops
 /// into the `KWin` / GNOME D-Bus backends via

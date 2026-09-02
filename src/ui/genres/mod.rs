@@ -25,7 +25,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::entities::genre::GenreStats;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::row_match::Needle;
-use crate::ui::section_state::SectionState;
+use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
 use crate::ui::util::clamp_i64_to_i32;
 use crate::ui::view_ctx::ViewCtx;
 use crate::{
@@ -112,14 +112,6 @@ impl GenresUi {
         }
     }
 
-    pub fn set_section_active(&self, active: bool) {
-        self.section.set_active(active);
-    }
-
-    pub fn section_active(&self) -> bool {
-        self.section.active()
-    }
-
     /// Hand retained glibc arena slack back, with no LRU to drop first. The
     /// close-detail trim, where wiping the grid would be wrong — the user is now
     /// looking at it. A section leave takes [`Self::release_section_state`].
@@ -155,47 +147,9 @@ impl GenresUi {
         crate::tasks::heap_trim::trim();
     }
 
-    /// See [`crate::ui::albums::AlbumsUi::mark_dirty`].
-    pub fn mark_dirty(&self) {
-        self.section.mark_dirty();
-    }
-
-    /// See [`crate::ui::albums::AlbumsUi::take_dirty`].
-    pub fn take_dirty(&self) -> bool {
-        self.section.take_dirty()
-    }
-
     /// Genre id currently open in the detail view (`-1` = grid).
     pub fn detail_genre_id(&self) -> i64 {
         *self.detail.genre_id.lock()
-    }
-
-    /// Track ids of the **displayed** detail list, so play / shuffle /
-    /// add-to-queue operate on the visible rows rather than the whole genre.
-    pub fn detail_track_ids(&self) -> Vec<i64> {
-        self.detail.tracks.lock().iter().map(|r| r.id).collect()
-    }
-
-    /// Flip `is_favorite` on the cached detail row, so a single-row toggle needs
-    /// no re-fetch. Touches the canonical set too, or a later
-    /// `apply_filtered_detail` rebuild drops the star.
-    pub fn flip_detail_favorite(&self, id: i64, fav: bool) {
-        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.is_favorite = fav;
-        }
-        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.is_favorite = fav;
-        }
-    }
-
-    /// [`Self::flip_detail_favorite`]'s star-rating twin.
-    pub fn flip_detail_rating(&self, id: i64, rating: i32) {
-        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
-        }
-        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
-        }
     }
 }
 
@@ -232,6 +186,9 @@ pub fn to_slint_genre_row(g: &GenreStats) -> UiGenreRow {
         tile_color_2: accent.tile_color_2,
     }
 }
+
+impl_section_state_helpers!(GenresUi);
+impl_detail_row_cache!(GenresUi);
 
 // `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {

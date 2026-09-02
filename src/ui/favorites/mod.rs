@@ -34,7 +34,7 @@ use crate::ui::artists::ArtistsUi;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
-use crate::ui::section_state::SectionState;
+use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
 
 use state::{FavoritesUiState, GRID_THUMB_CAP};
@@ -145,14 +145,6 @@ impl FavoritesUi {
         }
     }
 
-    pub fn set_section_active(&self, active: bool) {
-        self.section.set_active(active);
-    }
-
-    pub fn section_active(&self) -> bool {
-        self.section.active()
-    }
-
     /// Mirror the mounted sub-view. Written on the UI thread, from the tab bar's pick and from the
     /// section-lifecycle seed.
     pub fn set_active_tab(&self, tab: FavoritesTab) {
@@ -161,15 +153,6 @@ impl FavoritesUi {
 
     pub fn active_tab(&self) -> FavoritesTab {
         FavoritesTab::from_code(self.active_tab.load(Ordering::Relaxed))
-    }
-
-    pub fn mark_dirty(&self) {
-        self.section.mark_dirty();
-    }
-
-    /// Atomically read-and-clear, deciding whether a section enter re-fetches.
-    pub fn take_dirty(&self) -> bool {
-        self.section.take_dirty()
     }
 
     /// Remember that a refresh tick reached the page with Songs not mounted.
@@ -284,11 +267,6 @@ impl FavoritesUi {
             .collect()
     }
 
-    /// Whether an artist appears in the cached Favorite Artists grid.
-    pub fn fav_artist_known(&self, id: i64) -> bool {
-        self.inner.fav_artists.lock().iter().any(|a| a.id == id)
-    }
-
     /// Flip `is_favorite` on a cached Songs-tab row so a single-row toggle lands without a
     /// re-fetch. `false` removes the row outright, for parity with a fetch that only ever returns
     /// `is_favorite = TRUE`.
@@ -308,6 +286,8 @@ impl FavoritesUi {
 }
 
 // `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
+impl_section_state_helpers!(FavoritesUi);
+
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<FavoritesUi>();

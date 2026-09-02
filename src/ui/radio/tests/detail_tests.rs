@@ -83,7 +83,7 @@ fn the_seat_and_the_refresh_both_take_the_completed_ref() {
 fn an_empty_uuid_is_what_closes_both_directory_gates() {
     let src = detail();
     assert!(
-        src.contains("let votable = state.radio_enabled() && !station.uuid.is_empty();"),
+        src.contains("let votable = state.radio_enabled.get() && !station.uuid.is_empty();"),
         "the vote pill must gate on the uuid being present, not on the station having a row"
     );
 

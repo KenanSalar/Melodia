@@ -74,7 +74,7 @@ fn a_kind_without_a_message_still_names_itself() {
     health.record(&ErrorKind::PermissionDenied.into());
 
     let report = health.drain().unwrap_or_default();
-    let described = report.first_backend_error.unwrap_or_default();
+    let described = report.first_other_error.unwrap_or_default();
     assert!(!described.is_empty(), "an errorless description tells a reporter nothing");
 }
 
@@ -88,12 +88,12 @@ fn the_first_backend_description_is_the_one_kept() {
 
     let report = health.drain().unwrap_or_default();
     assert_eq!(report.other, 2);
-    assert_eq!(report.first_backend_error.as_deref(), Some("first"));
+    assert_eq!(report.first_other_error.as_deref(), Some("first"));
 
     // And the slot is empty again, so the next window reports its own.
     health.record(&backend("third"));
     let next = health.drain().unwrap_or_default();
-    assert_eq!(next.first_backend_error.as_deref(), Some("third"));
+    assert_eq!(next.first_other_error.as_deref(), Some("third"));
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn a_window_with_no_backend_error_carries_no_description() {
 
     let report = health.drain().unwrap_or_default();
     assert_eq!(report.underruns, 1);
-    assert!(report.first_backend_error.is_none());
+    assert!(report.first_other_error.is_none());
 }
 
 /// `output::device::open` clones the callback once per configuration its ladder

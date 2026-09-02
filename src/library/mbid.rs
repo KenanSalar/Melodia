@@ -9,7 +9,7 @@
 //! `file_hash` / `file_size` / `date_modified` so `scanner::track_is_current`
 //! stays honest), then `update_track_metadata` inside one write transaction.
 //!
-//! It deliberately does **not** bump `library_changed_tx`: the Recording ID is
+//! It deliberately does **not** bump `library_changed`: the Recording ID is
 //! never displayed, so no view is stale, and staying silent keeps the backfill
 //! task — which subscribes to that channel — from waking itself in a loop.
 

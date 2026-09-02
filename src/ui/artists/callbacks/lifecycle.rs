@@ -136,7 +136,7 @@ pub(super) fn wire(
         let s = state.clone();
         let au = artists_ui.clone();
         let weak = weak.clone();
-        let mut rx = state.library_changed_tx.subscribe();
+        let mut rx = state.library_changed.subscribe();
         let _ = slint::spawn_local(Compat::new(async move {
             rx.mark_unchanged();
             while rx.changed().await.is_ok() {

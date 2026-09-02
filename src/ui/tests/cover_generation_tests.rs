@@ -26,7 +26,7 @@ const EXEMPT: &str = "ui/tests/grid_prewarm_tests.rs";
 /// placeholder until something unrelated dirties the binding. There is nothing to see in review
 /// and nothing to catch at runtime.
 const NOTIFIER_HOMES: [&str; 8] = [
-    "boot/ui_setup.rs",
+    "boot/ui_setup/views.rs",
     "ui/albums/callbacks/grid.rs",
     "ui/artists/callbacks/grid.rs",
     "ui/browse/mod.rs",

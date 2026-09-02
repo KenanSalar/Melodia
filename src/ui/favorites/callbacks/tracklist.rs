@@ -66,7 +66,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     }
     // toggle-row-favorite: optimistic local removal (favourite ⇒ not-
     // favourite drops the row from the filtered view). `set_favorite`
-    // bumps `library_changed_tx`, which the lifecycle subscriber picks
+    // bumps `library_changed`, which the lifecycle subscriber picks
     // up and re-fetches the list — covers the un-toggle-then-toggle race
     // where the user undoes the change quickly. Multi-select arrives
     // as `[int]`; single-row mode sends a 1-element array.

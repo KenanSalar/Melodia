@@ -132,17 +132,20 @@ pub(super) fn resolve(
 
 /// Converts a count stated against the container's timescale into decoded frames.
 ///
-/// The two agree for almost every AAC file, and the one case where they don't is the one this
-/// cannot skip: [`super::aac_config`] rewrites an HE-AAC config to its LC core, so the decoder runs
-/// at half the rate the container declares, while the edit list is written against the declared one.
+/// `rate` is the **decoder's**, and the two agree for almost every AAC file. The one case where
+/// they don't is the one this cannot skip: [`super::aac_config`] rewrites an HE-AAC config to its
+/// LC core, so the decoder runs at half the rate the container declares, while the edit list is
+/// written against the declared one.
 ///
 /// `iTunSMPB` counts PCM samples rather than ticks, and takes this same conversion because the
 /// encoder writing the tag writes the media timescale as the sample rate. Reading it off
 /// `AudioCodecParameters::sample_rate` instead would not be safer: that field is the `stsd` entry's
 /// 16.16 rate, which for HE-AAC names the core layer about as often as the doubled one.
+///
+/// Rounded **down**, both ends: a head that overshoots cuts the first frame of real audio off, and
+/// a length that overshoots leaves the padding it exists to remove.
 fn to_frames(ticks: u64, time_base: TimeBase, rate: SampleRate) -> Option<u64> {
-    let scaled = u128::from(ticks) * u128::from(time_base.numer.get()) * u128::from(rate.get());
-    u64::try_from(scaled / u128::from(time_base.denom.get())).ok()
+    super::decode::ticks_to_frames(ticks, time_base, rate, super::decode::Rounding::Down)
 }
 
 /// The priming and the original sample count, as `iTunSMPB` spells them.

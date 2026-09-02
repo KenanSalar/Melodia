@@ -22,46 +22,31 @@ use lofty::file::TaggedFileExt;
 use crate::database::queries;
 use crate::error::{AppError, AppResult};
 use crate::media::{metadata, rating_tags};
-use crate::services;
 use crate::state::AppState;
-use crate::tasks::TaskSpawner;
+use crate::tasks::{TaskSpawner, one_shot};
 
 /// Run the import unless this install has already had one.
 ///
-/// The marker goes down only on a clean pass, which is where this parts company with
-/// [`super::artwork_renormalize`]'s otherwise identical shape. Two of the three ways this can
-/// fail write no rows at all, and the marker is the only gate there is, so recording one would
-/// put every rating in this library's files out of reach for the life of the install. A
-/// renormalize that half-ran is repaired by the next scan; this is not repaired by anything.
+/// [`OnFailure::Retry`], which is where this parts company with [`super::artwork_renormalize`]'s
+/// otherwise identical shape. Two of the three ways this can fail write no rows at all, and the
+/// marker is the only gate there is, so recording one would put every rating in this library's
+/// files out of reach for the life of the install. A renormalize that half-ran is repaired by the
+/// next scan; this is not repaired by anything.
 ///
 /// A half-imported library needs no marker either: the pass only ever reads unrated rows, so the
 /// retry picks up exactly where it stopped.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
-    let state = state.clone();
-    spawner.spawn(async move {
-        match services::settings::read_settings(&state.paths) {
-            Ok(settings) if settings.library.ratings_imported_from_tags => return,
-            Ok(_) => {}
-            Err(e) => {
-                log::warn!("Rating import skipped: {}", services::describe(&e));
-                return;
-            }
-        }
-
-        if let Err(e) = import(&state).await {
-            log::warn!("Rating import failed: {}", services::describe(&e));
-            return;
-        }
-
-        // Through `mutate_settings` rather than a write-back of the snapshot above: the pass
-        // between the two is minutes long on a real library, and a full-file write of a read
-        // that old reverts every setting changed while it ran.
-        state.persist_blocking("ratings_imported_from_tags", |state| {
-            services::settings::mutate_settings(&state.paths, |settings| {
-                settings.library.ratings_imported_from_tags = true;
-            })
-        });
-    });
+    one_shot::spawn(
+        spawner,
+        state,
+        one_shot::Sweep {
+            label: "ratings_imported_from_tags",
+            done: |flags| flags.ratings_imported_from_tags,
+            mark: |flags| flags.ratings_imported_from_tags = true,
+            on_failure: one_shot::OnFailure::Retry,
+        },
+        |state| async move { import(&state).await },
+    );
 }
 
 async fn import(state: &AppState) -> AppResult<()> {
@@ -90,7 +75,7 @@ async fn import(state: &AppState) -> AppResult<()> {
     // Nothing else will say so. This lands minutes into a session on a real library, by which
     // time every mounted list is painting the zero these rows carried at fetch time, and the two
     // views that retain their rows keep it until something unrelated refetches.
-    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed.bump();
 
     log::info!("Imported {} rating(s) from file tags", found.len());
     Ok(())

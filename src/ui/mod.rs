@@ -44,6 +44,7 @@ pub mod section_state;
 pub mod settings;
 pub mod settings_bind;
 pub mod shell;
+pub mod signal;
 pub mod sleep_timer;
 pub mod support;
 pub mod tab_bar;

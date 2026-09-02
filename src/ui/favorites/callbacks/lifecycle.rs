@@ -94,7 +94,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         });
     }
 
-    // --- library_changed_tx + stats_changed_tx subscriber ---
+    // --- library_changed + stats_changed subscriber ---
     // `library_changed` is bumped after every favorite toggle and every scan / file-event commit;
     // `stats_changed` after every play-count flush. Favorites is the only surface ranking by
     // `play_count`, so it alone listens to both. Visible, it refetches in place; hidden, it marks
@@ -103,8 +103,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         let s = state.clone();
         let fu = fav_ui.clone();
         let weak = weak.clone();
-        let mut library_rx = state.library_changed_tx.subscribe();
-        let mut stats_rx = state.stats_changed_tx.subscribe();
+        let mut library_rx = state.library_changed.subscribe();
+        let mut stats_rx = state.stats_changed.subscribe();
         let _ = slint::spawn_local(Compat::new(async move {
             library_rx.mark_unchanged();
             stats_rx.mark_unchanged();

@@ -23,7 +23,6 @@ use crate::ui::model_patch;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_rows_by;
-use crate::ui::tracks::PreparedTrackRow;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{AppWindow, NavEnterFrom, PlaylistDetail, TrackListRow as UiTrackListRow};
 
@@ -130,8 +129,8 @@ where
     )
     .await;
 
-    let prepared: Vec<PreparedTrackRow> =
-        tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
+    let ui_tracks: Vec<UiTrackListRow> =
+        tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
 
     // Seed both caches before the UI hop so resort / drag-reorder / play-row callbacks firing on
     // the next tick already see consistent state.
@@ -154,8 +153,6 @@ where
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<PlaylistDetail>();
-        let ui_tracks: Vec<UiTrackListRow> =
-            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
         let header = to_slint_playlist_row(&detail);
         g.set_playlist(header);
         replace_tracks_model(&g, ui_tracks);

@@ -21,7 +21,7 @@ pub async fn search(
     search: &radio::StationSearch,
 ) -> Result<radio::StationPage, AppError> {
     let mut page = radio_browser::search(directory_client(state)?, search).await?;
-    hide_segmented(&mut page, state.radio_hide_segmented());
+    hide_segmented(&mut page, state.radio_hide_segmented.get());
     Ok(page)
 }
 
@@ -69,7 +69,7 @@ pub async fn facets(
     kind: radio::FacetKind,
 ) -> Result<Arc<[radio::Facet]>, AppError> {
     let facets = radio_browser::facets(directory_client(state)?, kind).await?;
-    Ok(hide_segmented_codecs(facets, kind, state.radio_hide_segmented()))
+    Ok(hide_segmented_codecs(facets, kind, state.radio_hide_segmented.get()))
 }
 
 /// Drop the codecs that only ever name a segmented stream, if the user has those hidden.

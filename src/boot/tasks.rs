@@ -37,7 +37,7 @@ pub fn spawn_background_tasks(
     tasks::audio_health::spawn(spawner, state);
     // Batches `play_count` / `skip_count` UPDATEs so a fast skip burst is one
     // write. Before any playback can fire an `UpdatePlayCount`.
-    tasks::play_count_flusher::spawn(spawner, state.db.clone(), state.stats_changed_tx.clone());
+    tasks::play_count_flusher::spawn(spawner, state.db.clone(), state.stats_changed.clone());
     // Watches the view-model/position seam, enqueues qualifying plays and
     // drains the durable queue. Inert until a provider is connected.
     tasks::scrobble::spawn(spawner, state);

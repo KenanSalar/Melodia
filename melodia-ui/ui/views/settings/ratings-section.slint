@@ -12,27 +12,33 @@ export component RatingsSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> card-title: @tr("Ratings");
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, @tr("Ratings"),
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
-    out property <bool> has-matches:
-        row-visible(@tr("Save ratings to files"),
-            @tr("Write star ratings into each file's tags, so they survive a rescan and other players can read them."));
+    // Each row's strings live here rather than at the two sites that need them: the search
+    // predicate is fed `label + " " + desc`, so a reworded copy silently stops the row matching.
+    property <string> write-tags-label: @tr("Save ratings to files");
+    property <string> write-tags-desc: @tr("Write star ratings into each file's tags, so they survive a rescan and other players can read them.");
+
+    property <bool> show-write-tags: row-visible(write-tags-label, write-tags-desc);
+
+    out property <bool> has-matches: show-write-tags;
 
     // Wrapper so the root's preferred-height tracks the card's natural height —
     // see `language-section.slint`.
     VerticalLayout {
         if has-matches: SectionCard {
-            title: @tr("Ratings");
+            title: root.card-title;
 
-            if root.row-visible(@tr("Save ratings to files"),
-                    @tr("Write star ratings into each file's tags, so they survive a rescan and other players can read them.")): SettingRow {
+            if root.show-write-tags: SettingRow {
                 icon: "star";
-                label: @tr("Save ratings to files");
-                description: @tr("Write star ratings into each file's tags, so they survive a rescan and other players can read them.");
+                label: root.write-tags-label;
+                description: root.write-tags-desc;
                 ToggleSwitch {
                     checked <=> Settings.write-ratings-to-tags;
                     toggled(v) => { Settings.write-ratings-to-tags-changed(v); }

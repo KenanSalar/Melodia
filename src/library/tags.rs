@@ -59,7 +59,7 @@ pub async fn get_tag_edit_rows(state: &AppState, ids: &[i64]) -> Result<Vec<TagE
 }
 
 /// Apply `edit` to `ids`, then refresh the player's cached summaries and bump
-/// `library_changed_tx` so the visibility-gated list views re-fetch.
+/// `library_changed` so the visibility-gated list views re-fetch.
 ///
 /// `artwork_source` is `Some(path)` iff `edit.artwork == ArtworkEdit::Replace`
 /// (the picked image file): the writer's `Replace` is a unit variant, so the
@@ -102,7 +102,7 @@ pub async fn apply_tag_edit(
             crate::player::state::sync_track_summaries(&state.player_state, &state.sinks, &map);
         }
 
-        state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+        state.library_changed.bump();
     }
 
     Ok(report)

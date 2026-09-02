@@ -16,27 +16,14 @@
 use slint::Weak;
 
 use crate::AppWindow;
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
 use crate::state::AppState;
+use crate::ui::signal::on_signal;
 
 /// Run `refresh` on the UI thread after every language switch.
-///
-/// The closure takes no `Send` bound on purpose: `spawn_local` runs it on the UI thread, so a
-/// subscriber may capture the `Rc` handles the shell owns.
 pub fn on_locale_changed<F>(state: &AppState, weak: Weak<AppWindow>, refresh: F) -> AppResult<()>
 where
     F: Fn(&AppWindow) + 'static,
 {
-    let mut rx = state.locale_changed_tx.subscribe();
-    slint::spawn_local(async_compat::Compat::new(async move {
-        loop {
-            if rx.changed().await.is_err() {
-                break;
-            }
-            let Some(ui) = weak.upgrade() else { break };
-            refresh(&ui);
-        }
-    }))
-    .map(|_| ())
-    .map_err(|e| AppError::Window(format!("locale-changed subscriber: {e}")))
+    on_signal(&state.locale_changed, weak, "locale-changed", refresh)
 }

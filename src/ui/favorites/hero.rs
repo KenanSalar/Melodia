@@ -1,6 +1,6 @@
 //! Hero stats + the banner artwork refresh.
 //!
-//! On every `library_changed_tx` tick the Favorites view is visible for, this re-fetches
+//! On every `library_changed` tick the Favorites view is visible for, this re-fetches
 //! `library::favorites::get_favorite_stats` and composes the top-4 most-played covers into
 //! one collage through [`crate::ui::mosaic_hero`]. Past that the banner is an ordinary
 //! single-artwork hero: `apply_detail_artwork` writes the cover slot directly and the blur

@@ -17,15 +17,14 @@ use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
-use crate::ui::detail_filter::restamp_selection;
+use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_selection::prune_selection_to;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::row_match::{self, track_matches};
+use crate::ui::row_match;
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
-use crate::ui::tracks::PreparedTrackRow;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, NavEnterFrom, TrackListRow as UiTrackListRow,
@@ -117,8 +116,8 @@ where
         decode_detail_pair(state, artists_ui.detail_artwork.clone(), detail.image_path.clone())
             .await;
 
-    let prepared: Vec<PreparedTrackRow> =
-        tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
+    let ui_tracks: Vec<UiTrackListRow> =
+        tracks.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
 
     // The album list is the artist's own discography, so its year span is what
     // "active 1957–1963" means here; folded on the worker that fetched it.
@@ -130,9 +129,6 @@ where
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<ArtistDetail>();
-
-        let ui_tracks: Vec<UiTrackListRow> =
-            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
 
         let header = to_slint_artist_row(&detail);
         g.set_artist(header);
@@ -192,8 +188,6 @@ pub async fn refresh_detail(
 
     let years = crate::ui::hero_folds::year_span(&albums);
 
-    let weak_for_filter = weak.clone();
-    let artists_ui_clone = artists_ui.clone();
     let artists_ui = artists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<ArtistDetail>();
@@ -220,7 +214,7 @@ pub async fn refresh_detail(
         // Hand the model swap to `apply_filtered_detail` so the filter and selection re-stamp pass
         // runs in one place.
         drop(g);
-        apply_filtered_detail(&weak_for_filter, &artists_ui_clone);
+        apply_filtered_detail(&ui, &artists_ui);
     });
     Ok(())
 }
@@ -263,49 +257,33 @@ pub fn set_filter(artists_ui: &ArtistsUi, needle: &str) {
     *artists_ui.detail.filter.lock() = row_match::fold_needle(needle);
 }
 
-/// Re-walk the canonical `all_tracks` and `albums` Vecs through the current filter and push the
-/// resulting Slint models. The track match is the shared [`track_matches`] walk; the album match
-/// is on album name only.
+/// Re-walk the cached tracks and albums through the current filter and push both models.
+/// Runs on the UI thread; [`crate::ui::detail_filter`] is the shared body for the track half.
 ///
-/// The filtered track result is stored back into the displayed `tracks` cache so it stays in
-/// lockstep with the model — the generic selection/sort logic maps id ↔ row-index through that
-/// cache. Selection is re-stamped onto the filtered rows so it survives a filter change.
-pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>) {
+/// The albums strip is this view's alone — the other three details have no carousel — and matches
+/// on album name only.
+pub fn apply_filtered_detail(ui: &AppWindow, artists_ui: &ArtistsUi) {
+    let g = ui.global::<ArtistDetail>();
+    crate::ui::detail_filter::apply_filtered_detail(
+        &g,
+        &FilterRefs {
+            all_tracks: &artists_ui.detail.all_tracks,
+            tracks: &artists_ui.detail.tracks,
+            applied: &artists_ui.detail.applied_selection,
+            filter: &artists_ui.detail.filter,
+        },
+    );
+
     let needle = artists_ui.detail.filter.lock().clone();
-
-    let displayed_tracks: Vec<RsTrackListRow> = {
-        let all = artists_ui.detail.all_tracks.lock();
-        all.iter().filter(|r| track_matches(r, &needle)).cloned().collect()
-    };
-
-    let filtered_albums: Vec<AlbumStats> = {
-        let cache = artists_ui.detail.albums.lock();
-        cache.iter().filter(|a| needle.contains(&a.name)).cloned().collect()
-    };
-
-    let prepared: Vec<PreparedTrackRow> =
-        displayed_tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
-    let album_rows: Vec<UiAlbumRow> =
-        filtered_albums.iter().map(crate::ui::albums::to_slint_album_row).collect();
-
-    let weak = weak.clone();
-    let artists_ui = artists_ui.clone();
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        let g = ui.global::<ArtistDetail>();
-
-        let mut ui_tracks: Vec<UiTrackListRow> =
-            prepared.into_iter().map(crate::ui::tracks::finish_track_list_row).collect();
-        restamp_selection(&g, &mut ui_tracks);
-        // Keep the displayed `tracks` cache in lockstep with the model.
-        *artists_ui.detail.tracks.lock() = displayed_tracks;
-        replace_tracks_model(&g, ui_tracks);
-        write_albums_model(&g, album_rows);
-        // The displayed model changed shape — a stale shift-range anchor would now index the
-        // wrong row, so drop it. `restamp_selection` already stamped the rows, so the `applied`
-        // shadow just mirrors `selected-ids` for the next click diff.
-        g.set_selection_anchor(-1);
-        *artists_ui.detail.applied_selection.lock() = g.get_selected_ids().iter().collect();
-    });
+    let album_rows: Vec<UiAlbumRow> = artists_ui
+        .detail
+        .albums
+        .lock()
+        .iter()
+        .filter(|a| needle.contains(&a.name))
+        .map(crate::ui::albums::to_slint_album_row)
+        .collect();
+    write_albums_model(&g, album_rows);
 }
 
 /// Flip `is_favorite` on a single detail row in the Slint `VecModel`.
@@ -360,11 +338,13 @@ pub(super) fn reset_detail_selection(g: &ArtistDetail, artists_ui: &ArtistsUi) {
     artists_ui.detail.applied_selection.lock().clear();
 }
 
-/// Swap the `ArtistDetail.albums` `VecModel` contents in place.
+/// Swap the `ArtistDetail.albums` `VecModel` contents in place, through the keyed diff so a
+/// filter keystroke that leaves the strip alone patches rather than rebuilding every delegate.
+/// `replace_tracks_model`'s shape, one model over.
 fn write_albums_model(g: &ArtistDetail, rows: Vec<UiAlbumRow>) {
     let model = g.get_albums();
     if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiAlbumRow>>() {
-        vm.set_vec(rows);
+        crate::ui::model_diff::apply_rows_keyed(vm, rows, |r| r.id);
     } else {
         g.set_albums(ModelRc::from(Rc::new(VecModel::from(rows))));
     }

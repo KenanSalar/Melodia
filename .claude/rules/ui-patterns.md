@@ -501,7 +501,7 @@ silently miss the other.
 
 - **No row struct carries a decoded cover; every one asks for it.** `TrackListRow` has no `image`
   field — `TrackListRowItem` resolves per *instantiated* row through
-  `RowCovers.request(path, generation)`, wired once in `boot/ui_setup.rs`. New TrackList consumers
+  `RowCovers.request(path, generation)`, wired once in `boot/ui_setup/views.rs`. New TrackList consumers
   need zero cover plumbing. `CoverThumbs::prewarm` dedupes and caps at LRU capacity — pass paths in
   **display order** so the kept prefix paints first.
 

@@ -74,14 +74,6 @@ pub async fn count_tracks_in_playlists_for_selection(
     queries::playlist::count_tracks_in_playlists_for_selection(&state.db, &track_ids).await
 }
 
-pub async fn remove_from_playlist(
-    state: &AppState,
-    playlist_id: i64,
-    track_id: i64,
-) -> Result<(), AppError> {
-    queries::playlist::remove_track_from_playlist(&state.db, playlist_id, track_id).await
-}
-
 pub async fn remove_tracks_from_playlist_batch(
     state: &AppState,
     playlist_id: i64,
@@ -115,31 +107,6 @@ pub async fn get_playlist_artwork_paths(
 ) -> Result<Vec<String>, AppError> {
     queries::playlist::get_playlist_artwork_paths(&state.db, playlist_id, MOSAIC_CANDIDATE_LIMIT)
         .await
-}
-
-pub fn cache_external_images(
-    state: &AppState,
-    file_paths: &[String],
-) -> Result<Vec<String>, AppError> {
-    const ALLOWED_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "bmp"];
-
-    let artwork_dir = state.paths.artwork_dir.clone();
-
-    let mut cached_paths = Vec::with_capacity(file_paths.len());
-    for file_path in file_paths {
-        let source = std::path::Path::new(file_path);
-        let has_image_ext = source
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .is_some_and(|ext| ALLOWED_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()));
-        if !has_image_ext {
-            continue;
-        }
-        if let Some(cached) = crate::media::artwork::cache_image_file(source, &artwork_dir) {
-            cached_paths.push(cached);
-        }
-    }
-    Ok(cached_paths)
 }
 
 pub async fn set_playlist_thumbnail(

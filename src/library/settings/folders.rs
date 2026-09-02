@@ -85,7 +85,7 @@ pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder
     // visible immediately, and any child folders that were auto-aggregated
     // away cascade-deleted their tracks. The subsequent scan will fire its
     // own bump on completion.
-    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed.bump();
 
     Ok(folder)
 }
@@ -94,7 +94,7 @@ pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
     queries::folder::delete_folder(&state.db, id).await?;
     // Cascade-delete removes every track in this folder; subscribers (Tracks
     // view + folder list) need to re-fetch or the UI keeps the stale rows.
-    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed.bump();
     Ok(())
 }
 
@@ -148,7 +148,7 @@ impl Drop for ReconcileGuard {
 /// Sequential per folder: `SQLite` has a single writer, and
 /// `scan_progress_tx` is a `watch` channel that parallel scans would
 /// clobber. Each `scan_folder_internal` already bumps
-/// `library_changed_tx`, so Browse/Tracks views auto-refresh per folder
+/// `library_changed`, so Browse/Tracks views auto-refresh per folder
 /// as scans complete.
 ///
 /// Tracked on `TaskSpawner` so shutdown waits for the in-flight folder's
@@ -351,7 +351,7 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
     // is self-consistent: stats triggers are dropped and recreated INSIDE
     // its transaction, so a crash never leaves them missing — the stats
     // merely lag until the final recalc below, which is invisible to the
-    // UI because `library_changed_tx` is bumped only after the final
+    // UI because `library_changed` is bumped only after the final
     // commit. A crash between chunks leaves committed tracks behind; the
     // next scan's size+mtime gate makes the re-run a cheap no-op over them.
     let mut inserted_count: u32 = 0;
@@ -453,7 +453,7 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
     // reference set this reads.
     tasks::artwork_sweep::spawn(&spawner, state);
 
-    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed.bump();
 
     Ok(inserted_count)
 }

@@ -27,7 +27,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::ui::section_state::SectionState;
+use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::track_list_cache::TrackListCache;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::ui::view_ctx::ViewCtx;
@@ -87,29 +87,6 @@ impl TracksUi {
         }
     }
 
-    /// Mirror the Tracks-section-visible flag (`section-active-changed`).
-    pub fn set_section_active(&self, active: bool) {
-        self.section.set_active(active);
-    }
-
-    /// Whether the Tracks section is currently on screen.
-    pub fn section_active(&self) -> bool {
-        self.section.active()
-    }
-
-    /// Mark the cached row data stale — a `library_changed` bump arrived
-    /// while the section was hidden. See [`Self::take_dirty`].
-    pub fn mark_dirty(&self) {
-        self.section.mark_dirty();
-    }
-
-    /// Atomically read-and-clear the dirty flag. `true` on section-enter
-    /// means a library mutation happened while hidden and the row set must
-    /// be re-fetched.
-    pub fn take_dirty(&self) -> bool {
-        self.section.take_dirty()
-    }
-
     /// IDs of the rows that pass `filter`, in the current sort order.
     /// `play-row` hands these to `player_play_tracks`, so the queue becomes
     /// exactly the view the user was looking at.
@@ -134,6 +111,8 @@ impl TracksUi {
     }
 }
 
+impl_section_state_helpers!(TracksUi);
+
 /// Build an empty `VecModel<TrackListRow>`, hand it to the Slint `Tracks`
 /// global as a `ModelRc`. Subsequent updates locate it by downcasting
 /// `Tracks.rows` back to `VecModel<TrackListRow>`.
@@ -150,35 +129,14 @@ fn install_selection_model(ui: &AppWindow) {
     ui.global::<Tracks>().set_selected_ids(ModelRc::from(model));
 }
 
-/// A `UiTrackListRow` minus its `cover_img` — every field that can be built
-/// **off** the UI thread. `slint::Image` is `!Send`, so the cover decode
-/// must stay on the UI thread, but the `SharedString`s and the formatted
-/// duration are all `Send` and are far cheaper to produce on a tokio
-/// worker. See [`prepare_track_list_row`] / [`finish_track_list_row`].
-pub struct PreparedTrackRow {
-    id: i32,
-    title: SharedString,
-    artist: SharedString,
-    album: SharedString,
-    genre: SharedString,
-    year: i32,
-    track_number: i32,
-    duration_ms: i32,
-    is_favorite: bool,
-    rating: i32,
-    artwork_path: SharedString,
-    display_duration: SharedString,
-    enabled: bool,
-    album_id: i32,
-    artist_id: i32,
-    genre_id: i32,
-}
-
-/// Build the `Send` half of a track-list row — every field but the cover
-/// decode. Safe (and intended) to run on a tokio worker so the UI thread
-/// only pays for the `!Send` cover lookup in [`finish_track_list_row`].
-pub fn prepare_track_list_row(r: &RsTrackListRow) -> PreparedTrackRow {
-    PreparedTrackRow {
+/// Build a track-list row for the Slint model.
+///
+/// Every field is `Send`, covers included — a row carries only its artwork *path* and
+/// `RowCovers.request` resolves the thumbnail per instantiated row on the Slint side — so this
+/// runs wherever the rows are, worker or event loop. It replaced a `prepare`/`finish` pair that
+/// split it across a thread hop the finished row makes just as well.
+pub fn to_slint_track_list_row(r: &RsTrackListRow) -> UiTrackListRow {
+    UiTrackListRow {
         id: clamp_i64_to_i32(r.id),
         title: SharedString::from(r.title.as_str()),
         artist: SharedString::from(r.artist.as_deref().unwrap_or("")),
@@ -191,6 +149,7 @@ pub fn prepare_track_list_row(r: &RsTrackListRow) -> PreparedTrackRow {
         rating: r.rating,
         artwork_path: SharedString::from(r.artwork_path.as_deref().unwrap_or("")),
         display_duration: SharedString::from(format_duration_ms(r.duration_ms.max(0))),
+        selected: false,
         // Always interactive for real DB-backed rows. Only the Browse view
         // overrides this `false` — for disk-only files not yet in the library.
         enabled: true,
@@ -198,37 +157,6 @@ pub fn prepare_track_list_row(r: &RsTrackListRow) -> PreparedTrackRow {
         artist_id: r.artist_id.map_or(0, clamp_i64_to_i32),
         genre_id: r.genre_id.map_or(0, clamp_i64_to_i32),
     }
-}
-
-/// Finish a [`PreparedTrackRow`] into a `UiTrackListRow`. Since covers
-/// went lazy (`RowCovers.request` resolves the thumbnail per instantiated
-/// row on the Slint side), this is a plain field move — the prepare/finish
-/// split survives only because the established view pipelines hop threads
-/// between the two stages.
-pub fn finish_track_list_row(p: PreparedTrackRow) -> UiTrackListRow {
-    UiTrackListRow {
-        id: p.id,
-        title: p.title,
-        artist: p.artist,
-        album: p.album,
-        genre: p.genre,
-        year: p.year,
-        track_number: p.track_number,
-        duration_ms: p.duration_ms,
-        is_favorite: p.is_favorite,
-        rating: p.rating,
-        artwork_path: p.artwork_path,
-        display_duration: p.display_duration,
-        selected: false,
-        enabled: p.enabled,
-        album_id: p.album_id,
-        artist_id: p.artist_id,
-        genre_id: p.genre_id,
-    }
-}
-
-pub fn to_slint_track_list_row(r: &RsTrackListRow) -> UiTrackListRow {
-    finish_track_list_row(prepare_track_list_row(r))
 }
 
 /// `mm:ss` for tracks under one hour, `h:mm:ss` otherwise. Matches the Slint

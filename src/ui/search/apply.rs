@@ -18,7 +18,6 @@ use crate::library::search::SearchResults;
 use crate::services::settings::SortDir;
 use crate::ui::genres::genre_accent;
 use crate::ui::track_sort::sort_track_rows_by;
-use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{
     AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
@@ -57,17 +56,16 @@ pub fn apply_results_to_slint(
     });
 }
 
-/// Sort a result set's tracks into display order and prepare the `Send` half
-/// of each row. Runs on the worker, so the event-loop closure only pays for
-/// the `!Send` cover lookups.
+/// Sort a result set's tracks into display order and build their rows. Runs on the worker, so
+/// the event-loop closure only pays for the model write.
 ///
-/// Result sets are LIMIT-bounded, so preparing the *full* set — rather than
-/// just the compact slice, which can't be sized off-thread because
-/// `show-all-tracks` is UI-thread state — is cheap.
+/// Result sets are LIMIT-bounded, so building the *full* set — rather than just the compact
+/// slice, which can't be sized off-thread because `show-all-tracks` is UI-thread state — is
+/// cheap.
 fn sort_and_prepare(
     tracks: &[RsTrackListRow],
     sort: &crate::services::settings::ViewSort,
-) -> (Vec<PreparedTrackRow>, i32) {
+) -> (Vec<UiTrackListRow>, i32) {
     // The FTS5 `ORDER BY rank` lands these rank-ordered, but the user may
     // have picked a different sort after the fact.
     let mut sorted: Vec<RsTrackListRow> = tracks.to_vec();
@@ -89,20 +87,19 @@ fn sort_and_prepare(
     }
 
     let total = len_as_i32(sorted.len());
-    let prepared = sorted.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
+    let prepared = sorted.iter().map(crate::ui::tracks::to_slint_track_list_row).collect();
     (prepared, total)
 }
 
-/// Finish the Songs rows against the live `show-all-tracks` flag and write
+/// Truncate the Songs rows against the live `show-all-tracks` flag and write
 /// them, with the untruncated total beside them.
-fn write_tracks(g: &Search, prepared: Vec<PreparedTrackRow>, total: i32) {
+fn write_tracks(g: &Search, prepared: Vec<UiTrackListRow>, total: i32) {
     let take = if g.get_show_all_tracks() {
         prepared.len()
     } else {
         prepared.len().min(COMPACT_TRACK_LIMIT)
     };
-    let mut rendered: Vec<UiTrackListRow> =
-        prepared.into_iter().take(take).map(finish_track_list_row).collect();
+    let mut rendered: Vec<UiTrackListRow> = prepared.into_iter().take(take).collect();
     restamp_rows(g, &mut rendered);
     write_track_model(g, rendered);
     g.set_tracks_total(total);

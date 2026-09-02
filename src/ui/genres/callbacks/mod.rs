@@ -18,7 +18,7 @@ use crate::state::AppState;
 use crate::ui::genres::GenresUi;
 
 /// Wire every `Genres.*` / `GenreDetail.*` callback to its `library::*` counterpart
-/// and the `genres_ui` shared state, plus a `library_changed_tx` subscriber that
+/// and the `genres_ui` shared state, plus a `library_changed` subscriber that
 /// re-fetches the grid and refreshes an open detail on watcher / scan / folder events.
 ///
 /// Called by [`super::install`], which is what guarantees the models are in place first — a

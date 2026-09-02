@@ -18,7 +18,7 @@
 //! is gone with the version that needed it.
 //!
 //! `tasks/` imports no `ui::*`, so the toast goes out over
-//! `state.audio_device_lost_tx` — the `rescan_notice_tx` shape.
+//! `state.audio_device_lost` — the `rescan_notice` shape.
 
 use std::time::Duration;
 
@@ -29,7 +29,7 @@ use crate::tasks::TaskSpawner;
 /// "your audio device went away" isn't stale by the time it arrives.
 const DRAIN_INTERVAL: Duration = Duration::from_secs(5);
 
-/// Whether the backend-error line has already been warned about.
+/// Whether the unclassified-error line has already been warned about.
 ///
 /// An unclassified error `continue`s inside cpal's worker loop, so one that
 /// repeats would restate itself at `warn` once per window for the rest of the
@@ -52,7 +52,7 @@ impl WarnedOnce {
 
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let health = state.audio_health.clone();
-    let device_lost_tx = state.audio_device_lost_tx.clone();
+    let device_lost = state.audio_device_lost.clone();
 
     spawner.spawn_cancellable(move |shutdown| async move {
         let mut ticker = tokio::time::interval(DRAIN_INTERVAL);
@@ -61,12 +61,11 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
             tokio::select! {
                 () = shutdown.cancelled() => break,
                 _ = ticker.tick() => {
-                    let report = health.drain();
-                    // Every window reaches the latch, empty ones included — a
-                    // quiet window is what re-arms it, and an empty one is the
-                    // clearest case of that.
-                    let warn = warned.should_warn(report.as_ref().map_or(0, |r| r.other));
-                    let Some(report) = report else { continue };
+                    // Defaulted rather than `let else`-skipped, so an empty window reaches the
+                    // latch — a quiet window is the only thing that re-arms it. Every arm below
+                    // is zero-gated, so the empty case costs nothing whatever the order.
+                    let report = health.drain().unwrap_or_default();
+                    let warn = warned.should_warn(report.other);
 
                     if report.underruns > 0 {
                         log::debug!(
@@ -79,14 +78,14 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                         let level = if warn { log::Level::Warn } else { log::Level::Debug };
                         log::log!(
                             level,
-                            "audio: {} backend stream error(s); first: {}",
+                            "audio: {} unclassified stream error(s); first: {}",
                             report.other,
-                            report.first_backend_error.as_deref().unwrap_or("unknown")
+                            report.first_other_error.as_deref().unwrap_or("unknown")
                         );
                     }
                     if report.device_lost {
                         log::warn!("audio: output device lost; playback will produce no sound");
-                        device_lost_tx.send_modify(|n| *n = n.wrapping_add(1));
+                        device_lost.bump();
                     }
                 }
             }

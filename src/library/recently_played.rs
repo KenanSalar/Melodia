@@ -2,7 +2,7 @@
 //! `queries::track` recency/most-played queries. Mirrors `library::favorites`.
 //!
 //! Read-only over data written elsewhere: `tasks::play_count_flusher` stamps
-//! `last_played` and bumps `stats_changed_tx`, so the lifecycle re-fetches on that
+//! `last_played` and bumps `stats_changed`, so the lifecycle re-fetches on that
 //! signal exactly like Favorites.
 
 use crate::database::queries;

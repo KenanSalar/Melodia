@@ -20,20 +20,24 @@ export component DiagnosticsSection inherits Rectangle {
 
     in property <string> tab-name;
 
+    property <string> card-title: @tr("Diagnostics");
+
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, @tr("Diagnostics"),
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
-    property <bool> show-logs:
-        row-visible(@tr("Logs"), @tr("Where Melodia writes its log files and crash reports."));
-    property <bool> show-report:
-        row-visible(@tr("Diagnostics report"),
-                    @tr("One text file with your system details, settings and recent logs, for attaching to a bug report."));
-    property <bool> show-verbose:
-        row-visible(@tr("Verbose logging"),
-                    @tr("Record extra detail. Turn this on, reproduce the problem, then save a report."));
+    property <string> logs-label: @tr("Logs");
+    property <string> logs-desc: @tr("Where Melodia writes its log files and crash reports.");
+    property <string> report-label: @tr("Diagnostics report");
+    property <string> report-desc: @tr("One text file with your system details, settings and recent logs, for attaching to a bug report.");
+    property <string> verbose-label: @tr("Verbose logging");
+    property <string> verbose-desc: @tr("Record extra detail. Turn this on, reproduce the problem, then save a report.");
+
+    property <bool> show-logs: row-visible(logs-label, logs-desc);
+    property <bool> show-report: row-visible(report-label, report-desc);
+    property <bool> show-verbose: row-visible(verbose-label, verbose-desc);
 
     out property <bool> has-matches: show-logs || show-report || show-verbose;
 
@@ -41,12 +45,12 @@ export component DiagnosticsSection inherits Rectangle {
     // see `language-section.slint`.
     VerticalLayout {
         if has-matches: SectionCard {
-            title: @tr("Diagnostics");
+            title: root.card-title;
 
             if root.show-logs: SettingRow {
                 icon: "description";
-                label: @tr("Logs");
-                description: @tr("Where Melodia writes its log files and crash reports.");
+                label: root.logs-label;
+                description: root.logs-desc;
                 SectionButton {
                     label: @tr("Open Folder");
                     icon: "";
@@ -61,8 +65,8 @@ export component DiagnosticsSection inherits Rectangle {
             if root.show-logs && root.show-report: SectionDivider {}
             if root.show-report: SettingRow {
                 icon: "bug_report";
-                label: @tr("Diagnostics report");
-                description: @tr("One text file with your system details, settings and recent logs, for attaching to a bug report.");
+                label: root.report-label;
+                description: root.report-desc;
                 SectionButton {
                     label: @tr("Save…");
                     icon: "";
@@ -74,8 +78,8 @@ export component DiagnosticsSection inherits Rectangle {
             if (root.show-logs || root.show-report) && root.show-verbose: SectionDivider {}
             if root.show-verbose: SettingRow {
                 icon: "tune";
-                label: @tr("Verbose logging");
-                description: @tr("Record extra detail. Turn this on, reproduce the problem, then save a report.");
+                label: root.verbose-label;
+                description: root.verbose-desc;
                 ToggleSwitch {
                     checked <=> Settings.verbose-logging;
                     toggled(v) => { Settings.verbose-logging-changed(v); }

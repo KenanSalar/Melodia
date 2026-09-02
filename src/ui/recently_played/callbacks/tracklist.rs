@@ -74,7 +74,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     }
     // toggle-row-favorite: flip in place (recency membership is independent of
     // the favorite flag, so the row stays). `set_favorite` bumps
-    // `library_changed_tx`; the lifecycle subscriber re-fetches. Multi-select
+    // `library_changed`; the lifecycle subscriber re-fetches. Multi-select
     // arrives as `[int]`; single-row mode sends a 1-element array.
     {
         let ru = rp_ui.clone();

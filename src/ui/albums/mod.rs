@@ -29,7 +29,7 @@ use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
-use crate::ui::section_state::SectionState;
+use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
 use crate::ui::util::clamp_i64_to_i32;
 use crate::ui::view_ctx::ViewCtx;
 use crate::{
@@ -123,14 +123,6 @@ impl AlbumsUi {
         }
     }
 
-    pub fn set_section_active(&self, active: bool) {
-        self.section.set_active(active);
-    }
-
-    pub fn section_active(&self) -> bool {
-        self.section.active()
-    }
-
     /// Drop *everything* the section keeps resident — both cover tiers, the
     /// canonical grid data, the memoized indices, the cached detail rows and the
     /// selection shadow — then hand the freed pages back. Runs off the UI thread
@@ -163,20 +155,6 @@ impl AlbumsUi {
             self.detail.applied_selection.lock().clear();
         }
         crate::tasks::heap_trim::trim();
-    }
-
-    /// Mark the grid and detail data stale. Written synchronously on the UI
-    /// thread at section leave, *before* the release task is spawned, so a
-    /// subsequent enter observes it whatever the release is doing.
-    pub fn mark_dirty(&self) {
-        self.section.mark_dirty();
-    }
-
-    /// Atomically read-and-clear, deciding whether a section enter takes a full
-    /// [`fetch_grid`] or the cheap [`Self::prewarm_visible_covers`] — the latter
-    /// being the initial enter after the boot pre-fetch.
-    pub fn take_dirty(&self) -> bool {
-        self.section.take_dirty()
     }
 
     /// Drop just the grid tier, on opening an album: the grid unmounts the
@@ -213,34 +191,6 @@ impl AlbumsUi {
         *self.detail.album_id.lock()
     }
 
-    /// Track ids of the **displayed** detail list, so play / shuffle /
-    /// add-to-queue operate on the visible rows rather than the whole album.
-    pub fn detail_track_ids(&self) -> Vec<i64> {
-        self.detail.tracks.lock().iter().map(|r| r.id).collect()
-    }
-
-    /// Flip `is_favorite` on the cached detail row, so a single-row toggle needs
-    /// no re-fetch. Touches the canonical set too, or a later
-    /// `apply_filtered_detail` rebuild drops the star.
-    pub fn flip_detail_favorite(&self, id: i64, fav: bool) {
-        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.is_favorite = fav;
-        }
-        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.is_favorite = fav;
-        }
-    }
-
-    /// [`Self::flip_detail_favorite`]'s star-rating twin.
-    pub fn flip_detail_rating(&self, id: i64, rating: i32) {
-        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
-        }
-        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
-        }
-    }
-
     /// Backs `Albums.request-cover`, so a card's cover is resolved only once it
     /// is on screen.
     pub fn grid_cover(&self, artwork_path: &str) -> slint::Image {
@@ -261,6 +211,9 @@ impl AlbumsUi {
         self.grid_covers.clone()
     }
 }
+
+impl_section_state_helpers!(AlbumsUi);
+impl_detail_row_cache!(AlbumsUi);
 
 /// Hand the two globals their empty `VecModel`s. Later updates find them by
 /// downcasting back.

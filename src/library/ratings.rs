@@ -19,7 +19,7 @@ fn clamp_rating(rating: i32) -> i32 {
 
 /// Set the star rating (0–5) on one or more tracks by ID. Mirrors
 /// [`crate::library::favorites::set_favorite`]: persist to DB, then bump
-/// `library_changed_tx` so the visibility-gated list views re-fetch. Rating is
+/// `library_changed` so the visibility-gated list views re-fetch. Rating is
 /// orthogonal to list membership (unlike un-favoriting), so callers pair this
 /// with an optimistic per-row `VecModel` patch for instant feedback.
 pub async fn set_rating(state: &AppState, ids: Vec<i64>, rating: i32) -> Result<(), AppError> {
@@ -32,7 +32,7 @@ pub async fn set_rating(state: &AppState, ids: Vec<i64>, rating: i32) -> Result<
     // waiting for the next track load (parity with `set_current_rating`).
     sync_current_track_rating(state, &ids, rating);
     rating_writeback::enqueue(&ids, rating);
-    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed.bump();
     Ok(())
 }
 
@@ -74,7 +74,7 @@ pub async fn set_current_rating(
         Vec::<PlayerAction>::new()
     });
 
-    state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+    state.library_changed.bump();
 
     Ok(Some((id, rating)))
 }
@@ -85,7 +85,7 @@ pub async fn set_current_rating(
 /// rating doesn't need. The `SelfWrites` mark, the re-extract and the `update_track_metadata`
 /// that keeps `file_hash` / `file_size` / `date_modified` honest all come with it; what is
 /// deliberately left behind is [`crate::library::tags::apply_tag_edit`]'s wrapper, whose
-/// `library_changed_tx` bump would make every open list re-fetch for a value they are already
+/// `library_changed` bump would make every open list re-fetch for a value they are already
 /// showing, and whose player resync answers to fields a rating write cannot change.
 ///
 /// Failures are the caller's to log: a file can be read-only, or a container can have no tag to

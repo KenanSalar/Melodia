@@ -103,7 +103,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         });
     }
 
-    // --- library_changed_tx + stats_changed_tx subscriber ---------
+    // --- library_changed + stats_changed subscriber ---------
     // `library_changed` is bumped by scans / imports / favorite toggles;
     // `stats_changed` after every play-count flush (which writes both this
     // view's ordering keys — `last_played` for Songs, `play_count` for Most
@@ -114,8 +114,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         let s = state.clone();
         let ru = rp_ui.clone();
         let weak = weak.clone();
-        let mut library_rx = state.library_changed_tx.subscribe();
-        let mut stats_rx = state.stats_changed_tx.subscribe();
+        let mut library_rx = state.library_changed.subscribe();
+        let mut stats_rx = state.stats_changed.subscribe();
         let _ = slint::spawn_local(Compat::new(async move {
             library_rx.mark_unchanged();
             stats_rx.mark_unchanged();

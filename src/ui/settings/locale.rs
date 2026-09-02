@@ -106,7 +106,7 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
         // no gate edge to hand them back — so drop them rather than re-rendering: no band
         // is mounted here, and every section-enter re-fetches and republishes.
         crate::ui::hero_chips::clear(&ui);
-        s.locale_changed_tx.send_modify(|v| *v = v.wrapping_add(1));
+        s.locale_changed.bump();
 
         // Keep `language-idx` in sync defensively — the dropdown's two-way
         // bind already writes it, but a future code path could call the

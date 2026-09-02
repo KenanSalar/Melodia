@@ -11,20 +11,17 @@
 use slint::ComponentHandle;
 
 use crate::library;
-use crate::services::settings;
 use crate::state::AppState;
 use crate::{AppWindow, Settings};
 
 pub fn install(ui: &AppWindow, state: &AppState) {
-    // A missing or unreadable file leaves the Slint default in place, matching the
-    // first-launch path.
-    if let Ok(s) = settings::read_settings(&state.paths) {
-        ui.global::<Settings>().set_write_ratings_to_tags(s.library.write_ratings_to_tags);
-    }
+    // Seeded off the shadow rather than off `settings.json`, as `radio_settings` does: `AppState`
+    // already read the file at boot, and a second read here would answer the same question twice.
+    ui.global::<Settings>().set_write_ratings_to_tags(state.write_ratings_to_tags.get());
 
     let state = state.clone();
     ui.global::<Settings>().on_write_ratings_to_tags_changed(move |on| {
-        state.set_write_ratings_to_tags(on);
+        state.write_ratings_to_tags.set(on);
         state.persist_blocking("set_write_ratings_to_tags", move |st| {
             library::settings::set_write_ratings_to_tags(st, on)
         });

@@ -22,7 +22,7 @@ use crate::state::AppState;
 use crate::ui::browse::BrowseUi;
 
 /// Wire every `Browse.*` callback to its `library::*` counterpart and the `browse_ui`
-/// shared state, plus a `library_changed_tx` subscriber that re-fetches the current path
+/// shared state, plus a `library_changed` subscriber that re-fetches the current path
 /// on watcher events.
 ///
 /// Called by [`super::install`], which is what guarantees the models are in place first — a
