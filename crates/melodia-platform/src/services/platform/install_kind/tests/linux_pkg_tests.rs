@@ -7,7 +7,7 @@
 use crate::services::platform::install_kind::linux_pkg::{
     LinuxPackageFormat, detect, resolve_install_program,
 };
-use crate::test_support::{with_appimage_env, with_env_var};
+use melodia_testkit::{with_appimage_env, with_env_var};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 

@@ -6,7 +6,7 @@
 //! `card-height - …` and landed `card-height - tile-size` below where they read, over the text
 //! block, with a source that reads exactly like the one that was right.
 
-use crate::test_support::strip_line_comments;
+use melodia_testkit::strip_line_comments;
 
 const ENTITY_CARD: &str =
     include_str!("../../../../melodia-ui/ui/components/grid/entity-card.slint");

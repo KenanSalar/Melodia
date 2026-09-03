@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::{block_body, strip_line_comments};
+use melodia_testkit::{block_body, strip_line_comments};
 
 // Every mouse wheel on every platform, and a touchpad on X11 and Win32.
 #[test]

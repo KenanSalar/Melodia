@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::player::playback::tests::helpers::assert_approx as approx;
-use crate::test_support::UNBOUNDED;
+use melodia_testkit::UNBOUNDED;
 
 const RATE: u32 = 44_100;
 /// A window generous enough for any rate these tests use, matching the ring the

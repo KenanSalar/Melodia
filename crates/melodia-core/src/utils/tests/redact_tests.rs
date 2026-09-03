@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use super::redact_home;
 use super::redact_prefix;
 #[cfg(unix)]
-use crate::test_support::with_env_var;
+use melodia_testkit::with_env_var;
 
 /// A Windows home directory, spelled the way `Path::display` spells it. Nothing on a Linux runner
 /// can exercise `dirs::home_dir`'s Windows arm, so the *shape* is pinned here instead.

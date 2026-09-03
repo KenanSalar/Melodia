@@ -12,8 +12,8 @@ use symphonia::core::units::TimeBase;
 
 use super::{edit_lists, exact_media_ticks, parse_smpb};
 use crate::player::source::audio::SampleRate;
-use crate::test_support::ASSETS_DIR;
 use melodia_core::error::AppError;
+use melodia_testkit::ASSETS_DIR;
 
 /// What iTunes writes: priming 0x840 (2112, Apple's default), remainder 0x1DC, and a count of
 /// 0xAC44E4 samples. Twelve fields, of which three carry anything.

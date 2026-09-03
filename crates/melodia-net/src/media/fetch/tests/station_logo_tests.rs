@@ -136,7 +136,7 @@ fn the_slint_tile_that_skips_native_size_still_agrees_with_the_floor() {
     // Stripped, or the comment making the argument satisfies the search for the binding it
     // argues against.
     assert!(
-        !crate::test_support::strip_line_comments(TILE).contains("native-size"),
+        !melodia_testkit::strip_line_comments(TILE).contains("native-size"),
         "the argument stands or the binding does — if the tile now sets `native-size`, this pin \
          and the comment above it are both stale"
     );

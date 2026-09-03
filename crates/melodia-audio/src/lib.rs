@@ -13,6 +13,3 @@
 pub mod player {
     pub mod source;
 }
-
-#[cfg(test)]
-pub(crate) use melodia_testkit as test_support;

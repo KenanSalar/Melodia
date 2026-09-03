@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use crate::services::platform::install_kind::install_target;
 use crate::services::platform::install_kind::linux_pkg::LinuxPackageFormat;
 use crate::services::platform::install_kind::target::{current_target_key, format_key};
-use crate::test_support::with_appimage_env;
+use melodia_testkit::with_appimage_env;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 

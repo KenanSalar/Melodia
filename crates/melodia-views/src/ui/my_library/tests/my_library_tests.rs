@@ -44,7 +44,7 @@ const DETAIL_BODIES: [(&str, &str); 4] = [
 
 // A `.slint` source with its comments dropped, so prose naming a component can't satisfy
 // — or trip — a pin about mounting one.
-use crate::test_support::strip_line_comments as code;
+use melodia_testkit::strip_line_comments as code;
 
 /// The `tab-*` constant names the `MyLibrary` global declares, `tab-count` excluded.
 fn declared_tabs() -> Vec<String> {
@@ -58,7 +58,7 @@ fn declared_tabs() -> Vec<String> {
 }
 
 fn declared_tab_count() -> usize {
-    let parsed = crate::test_support::declared_tab_count(GLOBAL);
+    let parsed = melodia_testkit::declared_tab_count(GLOBAL);
     // The whole line rather than the digits the parser failed on — if it failed, the
     // digits are whatever the split happened to leave, which explains nothing.
     let declared =
@@ -868,7 +868,7 @@ const SORT_ROWS: [(&str, [&str; 3]); 3] = [
 #[test]
 fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     for (global, fields) in SORT_ROWS {
-        let arrays = crate::test_support::sort_mount_arrays(PILLS, &format!("{global}.sort-field"));
+        let arrays = melodia_testkit::sort_mount_arrays(PILLS, &format!("{global}.sort-field"));
         assert!(
             arrays.is_some(),
             "`tab-pills.slint` must mount a `SortPillRow` bound to {global}.sort-field",

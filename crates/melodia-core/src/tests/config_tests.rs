@@ -5,7 +5,7 @@
 //! it a tempdir. What is left is the choice above it, and it decides which database opens.
 
 use super::*;
-use crate::test_support::with_env_var;
+use melodia_testkit::with_env_var;
 
 /// The override and the path it is spelled as. Joined rather than written out, so the separator
 /// is the platform's; a working directory that can't be rendered back is worth reporting rather

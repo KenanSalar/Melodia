@@ -5,7 +5,7 @@ use std::cell::Cell;
 use super::*;
 use crate::player::playback::dsp::{VISUALIZER_DECAY, db_to_linear};
 use crate::player::playback::tests::helpers::{assert_approx as approx, fill_sine};
-use crate::test_support::UNBOUNDED;
+use melodia_testkit::UNBOUNDED;
 
 // --- helpers -----------------------------------------------------------------
 

@@ -207,7 +207,7 @@ fn extract_metadata_file_size_recorded() -> Result<(), AppError> {
 // ── the containers the extension list gained ──
 
 fn assets_dir() -> std::path::PathBuf {
-    std::path::PathBuf::from(crate::test_support::ASSETS_DIR)
+    std::path::PathBuf::from(melodia_testkit::ASSETS_DIR)
 }
 
 /// Copy a checked-in fixture into `tmp` under `name`, so a rename is free and the

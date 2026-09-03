@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use super::{FavoritesTab, FavoritesUi};
-use crate::test_support::write_test_png;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::artist::FavoriteArtist;
+use melodia_testkit::write_test_png;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -77,12 +77,12 @@ const TABS: usize = 3;
 
 /// The `N` in `Favorites`'s `tab-count: N;`.
 fn declared_tab_count() -> Option<usize> {
-    crate::test_support::declared_tab_count(GLOBAL)
+    melodia_testkit::declared_tab_count(GLOBAL)
 }
 
 /// The body of an inline `name: [ … ];` array literal in `favorites-view.slint`.
 fn array_body(marker: &str) -> Option<&'static str> {
-    crate::test_support::array_body(VIEW, marker)
+    melodia_testkit::array_body(VIEW, marker)
 }
 
 /// `Favorites.tab-count` is the sole definition of how many sub-views exist —
@@ -210,7 +210,7 @@ fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     // the default is a defined order, not a no-op.
     const FIELDS: [&str; 2] = ["name", "favorite_count"];
 
-    let arrays = crate::test_support::sort_mount_arrays(VIEW, "Favorites.artist-sort-field");
+    let arrays = melodia_testkit::sort_mount_arrays(VIEW, "Favorites.artist-sort-field");
     assert!(
         arrays.is_some(),
         "favorites-view.slint must mount a `SortPillRow` bound to \

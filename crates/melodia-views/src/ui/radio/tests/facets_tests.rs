@@ -15,7 +15,7 @@ const FACET_CHIP: &str = include_str!("../../../../../melodia-ui/ui/views/radio/
 /// The picker's tree, comment-stripped and flattened — its prose argues the same bindings these
 /// pins read, and would answer for them.
 fn picker() -> String {
-    crate::test_support::normalize_ws(&crate::test_support::strip_line_comments(FACET_CHIP))
+    melodia_testkit::normalize_ws(&melodia_testkit::strip_line_comments(FACET_CHIP))
 }
 
 /// The query one pick leaves behind, starting from no filters at all.
@@ -184,7 +184,7 @@ fn a_facet_row_with_no_count_paints_no_slot() {
 #[test]
 fn the_picker_spells_its_width_once() {
     let src = picker();
-    let declared = crate::test_support::binding_value(&src, "property <length> popup-w:").trim();
+    let declared = melodia_testkit::binding_value(&src, "property <length> popup-w:").trim();
     assert!(
         declared.ends_with("px"),
         "the picker no longer declares `popup-w` as the one seat of its popup's width"

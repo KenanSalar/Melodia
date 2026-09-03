@@ -8,8 +8,8 @@
 
 // Comments stripped: every anchor is a gradient literal or a geometry binding, and the prose above
 // them names the same tokens.
-use crate::test_support::{normalize_ws as normalized, strip_line_comments as code};
 use crate::ui::aurora::WASH_COUNT;
+use melodia_testkit::{normalize_ws as normalized, strip_line_comments as code};
 
 const AURORA: &str = include_str!("../../../../melodia-ui/ui/components/aurora-backdrop.slint");
 

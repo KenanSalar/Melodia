@@ -12,8 +12,3 @@
 //! registry nothing else in the tree wants.
 
 pub mod ui;
-
-// The corpus walkers and env-lock fixtures. Aliased so `crate::test_support::…` keeps resolving
-// in the test modules that spell it.
-#[cfg(test)]
-pub(crate) use melodia_testkit as test_support;

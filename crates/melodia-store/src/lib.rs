@@ -10,6 +10,3 @@ pub mod database;
 pub mod media {
     pub mod ingest;
 }
-
-#[cfg(test)]
-pub(crate) use melodia_testkit as test_support;

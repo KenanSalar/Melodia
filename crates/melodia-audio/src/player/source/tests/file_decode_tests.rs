@@ -11,8 +11,8 @@ use std::time::Duration;
 use super::{FileDecoder, probe_duration};
 use crate::player::source::aac_trim;
 use crate::player::source::audio::AudioSource;
-use crate::test_support::ASSETS_DIR;
 use melodia_core::error::AppError;
+use melodia_testkit::ASSETS_DIR;
 
 fn asset(name: &str) -> PathBuf {
     Path::new(ASSETS_DIR).join(name)

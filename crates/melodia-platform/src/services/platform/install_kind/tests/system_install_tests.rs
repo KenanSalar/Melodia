@@ -1,5 +1,5 @@
 use crate::services::platform::install_kind::system_install::is_system_install;
-use crate::test_support::with_appimage_env;
+use melodia_testkit::with_appimage_env;
 
 // `is_system_install()` queries `install_target().parent()`. Since
 // `install_target()` resolves to either `$APPIMAGE` (when set) or

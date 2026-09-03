@@ -6,9 +6,9 @@ use super::{
     FolderCounts, LibraryFacts, Paths, assemble, crash_block, head_of, library_block, log_section,
     settings_block, suggested_file_name, tail_of,
 };
-use crate::test_support::reading_env;
 use melodia_core::error::AppError;
 use melodia_core::utils::redact::home_dir_string;
+use melodia_testkit::reading_env;
 
 /// A [`Paths`] rooted in a throwaway directory, with the subdirectories [`Paths::resolve`]
 /// creates already in place. Creation is best-effort — a failure surfaces as a missing-file

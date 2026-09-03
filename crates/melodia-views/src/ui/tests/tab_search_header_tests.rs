@@ -9,7 +9,7 @@
 //! Here rather than under a host for the `tab_bar_tests.rs` reason: no Rust module owns
 //! the file.
 
-use crate::test_support::{binding_value as binding, strip_line_comments};
+use melodia_testkit::{binding_value as binding, strip_line_comments};
 
 const HEADER: &str =
     include_str!("../../../../melodia-ui/ui/components/hero/tab-search-header.slint");

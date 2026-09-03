@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tempfile::TempDir;
 
 use super::write_tag_edit;
-use crate::test_support::ASSETS_DIR;
 use melodia_artwork::media::image::artwork;
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::error::AppError;
@@ -16,6 +15,7 @@ use melodia_core::utils::self_writes::SelfWrites;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_testkit::ASSETS_DIR;
 
 fn assets_dir() -> PathBuf {
     PathBuf::from(ASSETS_DIR)

@@ -16,7 +16,7 @@
 //! `detail-restoring` predicate its own sheet declares, where Radio's three tab bodies read
 //! `Radio.restoring` directly, so each sheet is walked on its own terms.
 
-use crate::test_support::{strip_line_comments, tab_body_branches};
+use melodia_testkit::{strip_line_comments, tab_body_branches};
 
 const SHEET: &str = include_str!("../../../../melodia-ui/ui/views/my-library-view.slint");
 const RADIO_SHEET: &str = include_str!("../../../../melodia-ui/ui/views/radio-view.slint");

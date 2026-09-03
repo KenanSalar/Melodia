@@ -13,6 +13,3 @@ pub mod library;
 pub mod services;
 pub mod state;
 pub mod tasks;
-
-#[cfg(test)]
-pub(crate) use melodia_testkit as test_support;

@@ -9,7 +9,7 @@
 //! global, and because what went wrong was never a value a test could have been handed: the
 //! function asked the caller for a field the caller was under no obligation to fill.
 
-use crate::test_support::{block_body, strip_line_comments};
+use melodia_testkit::{block_body, strip_line_comments};
 
 const DETAIL: &str = include_str!("../detail.rs");
 

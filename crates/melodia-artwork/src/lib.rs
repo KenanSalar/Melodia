@@ -10,6 +10,3 @@
 pub mod media {
     pub mod image;
 }
-
-#[cfg(test)]
-pub(crate) use melodia_testkit as test_support;

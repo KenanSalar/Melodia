@@ -250,7 +250,7 @@ fn the_strip_draws_exactly_max_stars_glyphs() {
 
     let needle = format!("for i in {MAX_STARS}:");
     assert!(
-        crate::test_support::strip_line_comments(STRIP).contains(&needle),
+        melodia_testkit::strip_line_comments(STRIP).contains(&needle),
         "`star-rating.slint` no longer draws {MAX_STARS} glyphs — `{needle}` is gone, so the \
          markup and `MAX_STARS` have parted company"
     );

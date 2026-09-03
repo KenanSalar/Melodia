@@ -7,7 +7,7 @@
 
 use super::detail::is_manual_order;
 use super::*;
-use crate::test_support::{normalize_ws, strip_line_comments};
+use melodia_testkit::{normalize_ws, strip_line_comments};
 
 const DRAGGABLE_LIST: &str =
     include_str!("../../../../../melodia-ui/ui/components/track-list/draggable-track-list.slint");

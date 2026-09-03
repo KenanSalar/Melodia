@@ -1,8 +1,8 @@
-use crate::test_support::{reading_env, with_env_set};
 use melodia_core::error::AppError;
+use melodia_testkit::{reading_env, with_env_set};
 // The corner-radius probe is the only caller and only Linux has a desktop to ask.
 #[cfg(target_os = "linux")]
-use crate::test_support::with_env_var;
+use melodia_testkit::with_env_var;
 
 use super::*;
 

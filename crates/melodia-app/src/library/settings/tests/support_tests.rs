@@ -53,7 +53,7 @@ fn a_launch_past_the_threshold_still_asks_while_unseen() {
 /// comment saying what it used to do satisfies every needle below verbatim.
 #[test]
 fn a_spent_prompt_is_read_before_the_settings_file_is_rewritten() {
-    let src = crate::test_support::strip_line_comments(include_str!("../support.rs"));
+    let src = melodia_testkit::strip_line_comments(include_str!("../support.rs"));
     let tail = src.split_once("pub fn record_launch").map(|(_, tail)| tail).unwrap_or_default();
     let body = tail.split_once("\npub fn").map_or(tail, |(body, _)| body);
     assert!(!body.is_empty(), "`record_launch` is gone from support.rs");

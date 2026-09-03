@@ -5,7 +5,7 @@
 //! places itself by hand. Each half is invisible on its own — the button looks
 //! and behaves identically either way — and each is one plausible tidy-up away.
 
-use crate::test_support::strip_line_comments;
+use melodia_testkit::strip_line_comments;
 
 const BUTTON: &str = include_str!("../../../../melodia-ui/ui/components/icon-button.slint");
 

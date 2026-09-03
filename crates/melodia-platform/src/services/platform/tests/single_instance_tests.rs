@@ -9,7 +9,7 @@ use super::{
     Claim, LENGTH_PREFIX_LEN, MAX_PAYLOAD_LEN, allow_missing_timeout, claim, decode_paths,
     encode_frame, name_is_taken_on, serve, socket_name,
 };
-use crate::test_support::reading_env;
+use melodia_testkit::reading_env;
 
 /// Split a frame the way `read_payload` does.
 fn split_frame(frame: &[u8]) -> (u32, &[u8]) {

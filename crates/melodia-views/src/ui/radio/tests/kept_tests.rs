@@ -128,7 +128,7 @@ fn every_sort_the_picker_offers_reaches_an_arm_of_its_own() {
     const TAB_PILLS: &str =
         include_str!("../../../../../melodia-ui/ui/views/radio/tab-pills.slint");
 
-    let arrays = crate::test_support::sort_mount_arrays(TAB_PILLS, "Radio.sort-field");
+    let arrays = melodia_testkit::sort_mount_arrays(TAB_PILLS, "Radio.sort-field");
     assert!(
         arrays.is_some(),
         "`views/radio/tab-pills.slint` must mount a sort control bound to Radio.sort-field"

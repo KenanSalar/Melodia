@@ -46,7 +46,7 @@ fn guard_still_held(src: &str, guard: usize, needle: usize) -> bool {
 /// task the edge to its own store, so `Relaxed` would be sound too.
 #[test]
 fn the_write_runs_under_the_lock_that_ordered_it() {
-    let src = crate::test_support::strip_line_comments(PRIMITIVE);
+    let src = melodia_testkit::strip_line_comments(PRIMITIVE);
     let body = src
         .split_once("fn write_if_current")
         .and_then(|(_, rest)| rest.split_once("\n    }\n"))

@@ -6,7 +6,7 @@
 //! half only this file can answer — that the band still mounts that row, hands it hero
 //! tiers, and forwards what its two pages read back.
 
-use crate::test_support::binding_value;
+use melodia_testkit::binding_value;
 
 const HERO: &str = include_str!("../../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint");
 

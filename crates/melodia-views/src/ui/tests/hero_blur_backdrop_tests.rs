@@ -12,7 +12,7 @@
 // Comments dropped, so prose about a fix can neither satisfy a pin nor bound a region
 // early — every anchor here is a gradient literal, and the block above the floor's own
 // binding argues about gradients and stop counts.
-use crate::test_support::strip_line_comments as code;
+use melodia_testkit::strip_line_comments as code;
 
 const HERO_BLUR: &str =
     include_str!("../../../../melodia-ui/ui/components/hero-blur-backdrop.slint");

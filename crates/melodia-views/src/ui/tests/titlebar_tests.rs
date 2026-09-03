@@ -5,7 +5,7 @@
 //! removal is invisible on the default theme: a reviewer running Mocha sees the
 //! same mark either way, and only a light palette shows the ~1.2:1 wash-out.
 
-use crate::test_support::strip_line_comments;
+use melodia_testkit::strip_line_comments;
 
 const TITLEBAR: &str = include_str!("../../../../melodia-ui/ui/components/custom-titlebar.slint");
 const THEME: &str = include_str!("../../../../melodia-ui/ui/theme.slint");

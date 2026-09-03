@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use super::{RING_CAP, VisualizerShared, VisualizerTap};
 use crate::player::playback::tests::helpers::{TestSource, bits};
-use crate::test_support::UNBOUNDED;
 use melodia_audio::player::source::audio::AudioSource;
+use melodia_testkit::UNBOUNDED;
 
 // --- helpers ---------------------------------------------------------------
 

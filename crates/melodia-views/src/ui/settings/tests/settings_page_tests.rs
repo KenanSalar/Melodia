@@ -57,12 +57,12 @@ const PAGES: [(&str, &str); 5] = [
 
 /// The `N` in `SettingsPage`'s `tab-count: N;`.
 fn declared_tab_count() -> Option<usize> {
-    crate::test_support::declared_tab_count(GLOBAL)
+    melodia_testkit::declared_tab_count(GLOBAL)
 }
 
 /// The body of an inline `name: [ … ];` array literal in `settings-view.slint`.
 fn array_body(marker: &str) -> Option<&'static str> {
-    crate::test_support::array_body(VIEW, marker)
+    melodia_testkit::array_body(VIEW, marker)
 }
 
 /// `SettingsPage.tab-count` is the sole definition of how many tabs exist —

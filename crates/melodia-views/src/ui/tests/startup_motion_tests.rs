@@ -7,7 +7,7 @@
 //! together because they are one symptom — a window that spends its first moments dark —
 //! and restoring either half puts that symptom back on its own.
 
-use crate::test_support::strip_line_comments;
+use melodia_testkit::strip_line_comments;
 
 const VIEW_TRANSITION: &str =
     include_str!("../../../../melodia-ui/ui/components/view-transition.slint");

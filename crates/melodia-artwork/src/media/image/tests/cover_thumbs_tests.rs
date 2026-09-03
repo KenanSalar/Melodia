@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::write_test_png;
+use melodia_testkit::write_test_png;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 

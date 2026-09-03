@@ -16,9 +16,9 @@ use tempfile::TempDir;
 
 use super::*;
 use crate::media::ingest::metadata::{TagScope, extract_metadata, read_tags};
-use crate::test_support::{ASSETS_DIR, UNBOUNDED};
 use melodia_artwork::media::image::artwork;
 use melodia_core::error::AppError;
+use melodia_testkit::{ASSETS_DIR, UNBOUNDED};
 
 // ---------------------------------------------------------------- helpers
 

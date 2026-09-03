@@ -1325,7 +1325,7 @@ naming either once the shims are gone. That is one fewer test binary, 41 rather 
       `.claude/rules/audio-stack.md` loses its `crates/melodia/src/player/mod.rs` glob, which A10's
       pin demands in the same commit, and nothing is lost with the file: its `//!` argues the three
       tiers, which is the argument that rule already carries.
-- [ ] **E13. The testkit alias.** `crate::test_support` becomes `melodia_testkit` across nine
+- [x] **E13. The testkit alias.** `crate::test_support` becomes `melodia_testkit` across nine
       crates, roughly 63 sites. It is `#[cfg(test)] pub(crate) use melodia_testkit as test_support`
       and launders nothing, but it is the last place one crate wears two names, and the 42
       integration tests already spell the second.

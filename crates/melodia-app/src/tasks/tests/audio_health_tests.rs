@@ -37,7 +37,7 @@ fn a_quiet_window_re_arms_the_latch() {
 /// is `AudioStreamHealth::drain`'s return type and needs no walk.
 #[test]
 fn a_repeating_fault_stops_warning_after_the_first_window() {
-    let src = crate::test_support::strip_line_comments(include_str!("../audio_health.rs"));
+    let src = melodia_testkit::strip_line_comments(include_str!("../audio_health.rs"));
 
     // Anchored on the arm and its message rather than on a whitespace-exact
     // macro call, which any reformat would retire.

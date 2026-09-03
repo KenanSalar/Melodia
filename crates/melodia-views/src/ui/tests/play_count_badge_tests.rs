@@ -8,7 +8,7 @@
 //! card owes is the count rather than the markup — and a dropped `play-count:` line is silent,
 //! which is what the second assertion below is for.
 
-use crate::test_support::strip_line_comments;
+use melodia_testkit::strip_line_comments;
 
 const BADGE: &str =
     include_str!("../../../../melodia-ui/ui/components/grid/play-count-badge.slint");

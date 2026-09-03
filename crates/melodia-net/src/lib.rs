@@ -14,6 +14,3 @@ pub mod services {
 pub mod media {
     pub mod fetch;
 }
-
-#[cfg(test)]
-pub(crate) use melodia_testkit as test_support;

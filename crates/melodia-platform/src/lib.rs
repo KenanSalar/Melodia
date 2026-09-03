@@ -10,6 +10,3 @@
 pub mod services {
     pub mod platform;
 }
-
-#[cfg(test)]
-pub(crate) use melodia_testkit as test_support;

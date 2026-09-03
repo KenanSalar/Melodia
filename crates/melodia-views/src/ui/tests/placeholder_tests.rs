@@ -27,7 +27,7 @@
 // Every file here documents its own invariants at length, which is exactly the text a
 // `contains` would match — so each pin reads the source stripped of comments, with
 // indentation collapsed.
-use crate::test_support::{binding_value, normalize_ws as normalized, strip_line_comments as code};
+use melodia_testkit::{binding_value, normalize_ws as normalized, strip_line_comments as code};
 
 const SEARCH_BAR: &str = include_str!("../../../../melodia-ui/ui/components/search-bar.slint");
 /// The chrome every `PopupWindow` body wraps, and so the corner an `inset` bar sits inside.

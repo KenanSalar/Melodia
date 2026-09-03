@@ -22,7 +22,7 @@ const TABS: usize = 3;
 /// matching body branch leaves the page blank on that tab.
 #[test]
 fn tab_count_matches_the_tabs_slint_declares() {
-    let declared = crate::test_support::declared_tab_count(GLOBAL);
+    let declared = melodia_testkit::declared_tab_count(GLOBAL);
     assert_eq!(
         declared,
         Some(TABS),
@@ -42,7 +42,7 @@ fn tab_count_matches_the_tabs_slint_declares() {
     // Anchored on the branch's own shape rather than on the comparison alone, which is
     // `tab_body_branches`' argument. It also pins that every body is wrapped — one mounted bare
     // would appear without the sideways enter the others play.
-    let branches = crate::test_support::tab_body_branches(VIEW, "Radio").len();
+    let branches = melodia_testkit::tab_body_branches(VIEW, "Radio").len();
     assert_eq!(
         branches, TABS,
         "radio-view.slint must mount one `ViewTransition` body branch per tab — a tab with no \
@@ -50,7 +50,7 @@ fn tab_count_matches_the_tabs_slint_declares() {
     );
 
     for marker in ["tab-labels: [", "tab-icons: ["] {
-        let body = crate::test_support::array_body(VIEW, marker);
+        let body = melodia_testkit::array_body(VIEW, marker);
         assert!(
             body.is_some(),
             "the band's `{marker}…];` must stay an inline array literal — `@tr` folds msgids at \
@@ -173,17 +173,17 @@ fn the_kept_cache_splits_on_the_recent_tab_alone() {
 #[test]
 fn the_station_form_resets_every_property_it_declares() {
     const FORMS: &str = include_str!("../../../../../melodia-ui/ui/globals/dialog-forms.slint");
-    let src = crate::test_support::strip_line_comments(FORMS);
+    let src = melodia_testkit::strip_line_comments(FORMS);
 
     let global = src
         .find("export global RadioForm")
         .and_then(|at| src[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| crate::test_support::block_body(&src, open))
+        .and_then(|open| melodia_testkit::block_body(&src, open))
         .unwrap_or_default();
     let reset = global
         .find("public function reset()")
         .and_then(|at| global[at..].find('{').map(|rel| at + rel))
-        .and_then(|open| crate::test_support::block_body(global, open))
+        .and_then(|open| melodia_testkit::block_body(global, open))
         .unwrap_or_default();
     assert!(!reset.is_empty(), "RadioForm must keep a reset() for both openers to share");
 

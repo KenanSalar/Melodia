@@ -2,7 +2,7 @@
 //! crate, so `crates/melodia/tests/` holds it.
 
 use super::*;
-use crate::test_support::{write_test_jpeg, write_test_jpeg_sized, write_test_png};
+use melodia_testkit::{write_test_jpeg, write_test_jpeg_sized, write_test_png};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
