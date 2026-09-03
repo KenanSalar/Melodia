@@ -5,7 +5,7 @@ order the cuts come out in. Harvest into `docs/adr/` when
 [#84](https://github.com/KenanSalar/Melodia/issues/84) ships, not before: the boundary rationale
 below is exactly what #84 exists to stop evaporating.
 
-Status: **Phases A and B complete**, Phase C in progress · Issue:
+Status: **Phases A and B complete**, Phase C through C12 · Issue:
 [#83](https://github.com/KenanSalar/Melodia/issues/83) · Created: 2026-09-03 · Validated against
 `93b47dfa`, Phase A landed on `a1c087e4`, Phase B over five commits from `e506b490`
 
@@ -1025,20 +1025,62 @@ Two further decisions the phase needs and the doc did not carry:
       > `melodia-playback` no reqwest, both now enforced by cargo rather than asserted by a grep.
       > 2,237 tests across thirteen binaries.
 
-- [ ] **C9. `melodia-engine`** — `player/engine/`.
-- [ ] **C10. `melodia-store`** — `database/` + `media/ingest/`. Carries `sqlx::migrate!` at
+- [x] **C9. `melodia-engine`** — `player/engine/`. Core, audio and playback, and nothing else; the
+      cut cost no widening at all, B8 having already resolved every wrong-direction edge.
+
+      **`src/player/CLAUDE.md` had to move, and it had already stopped working.** A nested
+      `CLAUDE.md` loads for its own directory subtree, so once C7 and C8 took `source/` and
+      `playback/` to `crates/`, the contract doc for two of its three tiers was reaching nothing —
+      the rule-glob failure in `CLAUDE.md` form, and invisible because A10's pin only reads
+      `.claude/rules/`. It is now `.claude/rules/audio-stack.md`, globbed over all three tiers plus
+      the `src/player/mod.rs` facade, which is the shape the root `CLAUDE.md` already prescribes for
+      a subject spanning trees no one directory reaches. Six live references followed it.
+- [x] **C10. `melodia-store`** — `database/` + `media/ingest/`. Carries `sqlx::migrate!` at
       `database/mod.rs:214` and `:313`; note the second is inside `test_pool()`, which is
       `#[doc(hidden)]` rather than `cfg(test)` and so compiles into release. `migrations/` stays at
       the repo root, being shipped and checksummed, so the macro argument becomes the hop to it.
-- [ ] **C11. `melodia-integrations`** — `services/integrations/`. Takes `load_dotenv()` into its own
+
+      **Decision 3's list of two fixtures is three.** `database/queries/tests/helpers.rs` was
+      `#[cfg(test)]` with four consumers in what became `melodia-app` —
+      `library/tests/{tags,mbid}_tests.rs`, `library/playlist_files/tests/` and
+      `tasks/tests/reconcile_tests.rs`, all seeding through `insert_test_track` — so it became
+      `queries::fixtures`, `#[doc(hidden)] pub`, on `DbPool::test_pool`'s precedent and for its
+      reason. Eighteen imports re-point. Six `pub(crate)` items widened, every one named by rustc.
+- [x] **C11. `melodia-integrations`** — `services/integrations/`. Takes `load_dotenv()` into its own
       `build.rs`, reading `.env` from the repo root. Finding 5's hard constraint, and the one whose
       failure is invisible: CI passes the keys as environment variables and the environment wins, so
       only a local build would ever notice a missed hop.
-- [ ] **C12. `melodia-app`.** `library/`, `tasks/`, `state/`, and the flat remainder of `services/`.
+
+      **Verified by evidence rather than by reading**, which is what the invisibility demands:
+      `melodia-integrations`' build-script `output` carries both key names and the root package's
+      carries neither, and the key value appears in the compiled `libmelodia_integrations` rlib.
+      The move itself was the cheapest of the four — **every app-ward edge in the directory was
+      prose**, five intra-doc links and not one call, so the crate needed no narrowing to fit under
+      core, net and engine.
+- [x] **C12. `melodia-app`.** `library/`, `tasks/`, `state/`, and the flat remainder of `services/`.
       Two literals break and neither is a `crate::` path: `library/tests/radio_tests.rs:17`
       hard-codes `src/library/radio` in a `concat!`, and `services/tests/view_state_tests.rs:123`
       `include_str!`s a bin file, joining the cross-tier pins B7 moved to `tests/`.
-> **Commit 3 lands here.**
+
+      **Finding 13 is enforced by visibility rather than by omission, and it is checkable.** App
+      names every crate below it and views will name app, so the four paths views may not reach —
+      `database`, `media::{ingest,fetch}`, `services::net`, plus `player::source` — are
+      `pub(crate) use` in its facade. Deleting nothing and merely *trying* the import from the root
+      package fails with `module database is private`, naming the facade line. The root package
+      keeps its own path dependency on store and net for `src/lib.rs`'s three shim modules, which is
+      what `boot/` and `tests/` reach through.
+
+      **The root manifest carried fourteen dependencies no file in it named any more**, left behind
+      by commits 1 and 2 — `symphonia`, `realfft`, `flexi_logger`, `interprocess`, `zbus`, `ksni`,
+      `libc`, `tray-icon` and the rest — plus a `[build-dependencies] blake3` dead since C5. Nothing
+      in the gate can see that (`unused_crate_dependencies` is allow-by-default and outside the
+      `unused` group), so the binary was still compiling and linking the whole lower half of the
+      graph. Pruned here, `sqlx` demoted to a dev-dependency, and the eleven `melodia-*` path lines
+      are what remain of the topology at the top.
+
+      > **Commit 3 lands here.** Twelve crates out; `melodia-store` names no socket and
+      > `melodia-integrations` no schema, both now cargo's answer rather than a grep's. The same
+      > 2,237 tests across seventeen binaries.
 
 - [ ] **C13. `melodia-views`, with the `melodia-ui` relocation.** Its own commit, for the reason
       given above. `src/ui/` and `melodia-ui/` move in
@@ -1087,8 +1129,9 @@ to reach. De-facade in Phase D once the graph is proven, one crate at a time.
 - [ ] Whatever `.claude/rules` globs Phase C did not already have to fix as it moved their paths —
       the `tests/` and `build.rs` ones, and any `src/` entry still naming the bin.
 - [ ] `CLAUDE.md`'s module map and its "every path below is `src/`-relative" convention, the README
-      architecture section, `src/player/CLAUDE.md`'s heading, and the 162 bracketed intra-doc links
-      (`\[\`?crate::`).
+      architecture section, and the 162 bracketed intra-doc links (`\[\`?crate::`). The nested
+      `src/player/CLAUDE.md` is already gone — C9 turned it into `.claude/rules/audio-stack.md`,
+      the directory having stopped being able to reach two of its three tiers.
 - [ ] Drop the scope-clippy-to-one-crate convention. `feature-unification = "workspace"` is
       nightly-only and the toolchain is pinned to stable, so a scoped invocation reselects features
       for shared dependencies and rebuilds them. `--workspace` on all three gate commands is the only

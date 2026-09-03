@@ -4,7 +4,7 @@ paths:
   - src/ui/shell/tray_bridge.rs
   - src/ui/shell/event_sink.rs
   - crates/melodia-platform/src/services/platform/tray/**/*.rs
-  - src/services/integrations/media_controls/**/*.rs
+  - crates/melodia-integrations/src/services/integrations/media_controls/**/*.rs
   - crates/melodia-platform/src/services/platform/always_on_top/**/*.rs
   - crates/melodia-platform/src/services/platform/dwm_titlebar.rs
   - src/ui/appearance/theme_apply.rs

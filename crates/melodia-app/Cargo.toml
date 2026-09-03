@@ -1,0 +1,68 @@
+[package]
+name = "melodia-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The command layer: the library API, the background tasks, the app state and its settings"
+publish = false
+
+[lib]
+doctest = false
+
+# Names every crate below it, which is what makes it the app layer rather than another tier: the
+# question it answers is what to do, and every answer needs a database, a socket, a decoder or the
+# OS. What it must not name is `melodia-views`, and the facade in `lib.rs` is `pub(crate)` for the
+# four paths views is meant to be unable to reach through it.
+[dependencies]
+melodia-core = { path = "../melodia-core" }
+melodia-artwork = { path = "../melodia-artwork" }
+melodia-net = { path = "../melodia-net" }
+melodia-platform = { path = "../melodia-platform" }
+# `library::radio::authoring` and `library::playback` both read a station's stream facts.
+melodia-audio = { path = "../melodia-audio" }
+melodia-playback = { path = "../melodia-playback" }
+melodia-engine = { path = "../melodia-engine" }
+melodia-store = { path = "../melodia-store" }
+melodia-integrations = { path = "../melodia-integrations" }
+# `tasks::updater_daily` drives the in-app updater banner, which is a Slint global.
+melodia-ui = { path = "../../melodia-ui" }
+
+slint.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+async-compat.workspace = true
+parking_lot.workspace = true
+sqlx.workspace = true
+lofty.workspace = true
+rand.workspace = true
+rayon.workspace = true
+blake3.workspace = true
+natord.workspace = true
+unicode-normalization.workspace = true
+image.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+reqwest.workspace = true
+# `AppState` carries the media-key event channel, whose item type is souvlaki's.
+souvlaki.workspace = true
+log.workspace = true
+thiserror.workspace = true
+open.workspace = true
+minisign-verify.workspace = true
+semver.workspace = true
+futures-util.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys.workspace = true
+
+[dev-dependencies]
+melodia-testkit = { path = "../melodia-testkit" }
+tokio = { workspace = true, features = ["test-util"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

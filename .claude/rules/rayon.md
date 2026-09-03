@@ -1,10 +1,10 @@
 ---
 paths:
-  - src/media/**/*.rs
+  - crates/melodia-store/src/media/ingest/**/*.rs
   - crates/melodia-artwork/src/media/image/**/*.rs
-  - src/tasks/**/*.rs
-  - src/library/**/*.rs
-  - src/database/queries/**/*.rs
+  - crates/melodia-app/src/tasks/**/*.rs
+  - crates/melodia-app/src/library/**/*.rs
+  - crates/melodia-store/src/database/queries/**/*.rs
 ---
 
 # Rayon Best Practices

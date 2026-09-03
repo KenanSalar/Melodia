@@ -1,11 +1,11 @@
 ---
 paths:
-  - src/media/**/*.rs
+  - crates/melodia-store/src/media/ingest/**/*.rs
   - crates/melodia-artwork/src/media/image/**/*.rs
-  - src/tasks/**/*.rs
-  - src/library/playlist_files.rs
-  - src/library/playlist_files/**/*.rs
-  - src/database/queries/**/*.rs
+  - crates/melodia-app/src/tasks/**/*.rs
+  - crates/melodia-app/src/library/playlist_files.rs
+  - crates/melodia-app/src/library/playlist_files/**/*.rs
+  - crates/melodia-store/src/database/queries/**/*.rs
   - crates/melodia-platform/src/services/platform/desktop_integration.rs
 ---
 

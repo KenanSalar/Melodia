@@ -1,11 +1,11 @@
 ---
 paths:
-  - src/library/**/*.rs
-  - src/database/**/*.rs
+  - crates/melodia-app/src/library/**/*.rs
+  - crates/melodia-store/src/database/**/*.rs
   - crates/melodia-core/src/entities/**/*.rs
-  - src/media/**/*.rs
+  - crates/melodia-store/src/media/ingest/**/*.rs
   - crates/melodia-artwork/src/media/image/**/*.rs
-  - src/tasks/**/*.rs
+  - crates/melodia-app/src/tasks/**/*.rs
   - crates/melodia-core/src/utils/audio_ext.rs
   - crates/melodia-core/src/utils/self_writes.rs
   - src/ui/playlists/callbacks/**/*.rs
@@ -128,7 +128,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 - **`tracks_fts` indexes eight columns, and adding a ninth is a migration, not an edit.** fts5 has
   no `ALTER`, so a change means dropping the table plus all three triggers and rebuilding.
   Migration `20260802000001` carries the column list, the tokenizer and the bm25 weights with the
-  argument for each; `src/database/queries/search.rs` carries the query shape and the folding
+  argument for each; `crates/melodia-store/src/database/queries/search.rs` carries the query shape and the folding
   asymmetry. Two things neither of them can tell you: **a ninth column is two edits**, since the
   per-view filter boxes never touch this index and walk in-memory caches through
   `ui::row_match::search_fields`, which mirrors the column list by hand
@@ -154,7 +154,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 ## Write-through to files
 
 - **Tag editing = "Edit Track Information", write-through the scan pipeline**
-  (`src/library/tags.rs::apply_tag_edit`, `src/media/ingest/tag_writer.rs`). Right-click rows → **Edit
+  (`crates/melodia-app/src/library/tags.rs::apply_tag_edit`, `crates/melodia-store/src/media/ingest/tag_writer.rs`). Right-click rows → **Edit
   Tags…** (`Dialog.kind == "edit-tags"`); **batch is the point** — **touched-tracking is a
   Rust-side diff against a populate-time snapshot** (Keep/Clear/Set), so only changed fields write.
   **Lyrics live in the file, not the DB** (single-track tab only). The writer always targets the
@@ -168,7 +168,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   watcher via `SelfWrites` (TTL 30 s, `mark` per-file *before* its write). Post-commit refresh is
   the `library_changed` bump, **not** an optimistic patch — a retag can change list membership.
 
-- **Playlist import/export = Extended M3U8** (`src/library/playlist_files.rs` + the pure `m3u`
+- **Playlist import/export = Extended M3U8** (`crates/melodia-app/src/library/playlist_files.rs` + the pure `m3u`
   submodule; hand-rolled writer/parser, no crate). One `.m3u8` per playlist; writer emits
   `#EXTM3U`/`#PLAYLIST:`/`#EXTINF:` + a custom `#MELODIA-HASH:<blake3>` line + an absolute native
   path, parser tolerantly ignores unknown `#` comments and a leading BOM. Import is
@@ -183,8 +183,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 ## Smart playlists
 
 - **Smart / dynamic playlists = virtual, criteria-derived membership**
-  (`crates/melodia-core/src/entities/smart_criteria.rs`, `src/database/queries/smart_playlist.rs`,
-  `src/library/smart_playlists.rs`). `playlists.is_smart` + `smart_criteria TEXT` store a JSON
+  (`crates/melodia-core/src/entities/smart_criteria.rs`, `crates/melodia-store/src/database/queries/smart_playlist.rs`,
+  `crates/melodia-app/src/library/smart_playlists.rs`). `playlists.is_smart` + `smart_criteria TEXT` store a JSON
   `SmartCriteria` rule set instead of `playlist_items` — **resolved at read time**, never
   materialized (updates live). `#[serde(default)]` + a `version` field keep it forward-compatible.
   The evaluator builds WHERE via `sqlx::QueryBuilder` — **only** enum-derived

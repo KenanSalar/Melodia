@@ -1,9 +1,9 @@
 ---
 paths:
-  - src/services/updater/**/*.rs
+  - crates/melodia-app/src/services/updater/**/*.rs
   - crates/melodia-platform/src/services/platform/install_kind/**/*.rs
   - crates/melodia-platform/src/services/platform/desktop_integration.rs
-  - src/tasks/updater_daily.rs
+  - crates/melodia-app/src/tasks/updater_daily.rs
   - src/ui/settings/updater_settings.rs
   - wix/main.wxs
   - scripts/build-latest-json.py
@@ -116,7 +116,7 @@ from `main.rs` without ever opening this file.
   `latest.json` in `artifacts/` alongside them is what broke v0.9.0's refresh on the first publish
   after that guard landed.
 
-- **Manifest schema gate + critical-release flag** (`src/services/updater/manifest.rs`).
+- **Manifest schema gate + critical-release flag** (`crates/melodia-app/src/services/updater/manifest.rs`).
   `manifest_schema_version: u32` (default 1) — `check.rs` returns `CheckOutcome::UnsupportedSchema`
   when `> SUPPORTED_MANIFEST_SCHEMA`, treated like `NoAssetForTarget`; bumping it means bumping
   `build-latest-json.py`'s `--manifest-schema-version` and the CI invocation. `critical: bool`

@@ -1,0 +1,43 @@
+[package]
+name = "melodia-integrations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Scrobbling, Discord presence and the OS media controls for Melodia"
+publish = false
+
+[lib]
+doctest = false
+
+# The three surfaces outside the app that get told what is playing, and take transport commands
+# back. They share a crate because `cargo:rustc-env` reaches only the crate whose build script
+# emitted it and the `option_env!` key reads are split across scrobble and Discord: separating
+# them ships a build that is silently keyless and ListenBrainz-only.
+[dependencies]
+melodia-core = { path = "../melodia-core" }
+melodia-net = { path = "../melodia-net" }
+# What is playing, as the state machine publishes it, plus the transport commands that come back.
+melodia-engine = { path = "../melodia-engine" }
+
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+parking_lot.workspace = true
+# Discord's asset ids are cached per cover, bounded because a long session sees many.
+lru.workspace = true
+# Last.fm mandates MD5 for `api_sig`; nothing security-sensitive.
+md5.workspace = true
+souvlaki.workspace = true
+thiserror.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+# The scrobble queue's suites persist into a throwaway data root.
+tempfile.workspace = true
+
+[lints]
+workspace = true

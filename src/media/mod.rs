@@ -15,11 +15,10 @@
 
 pub use melodia_artwork::media::image;
 pub use melodia_net::media::fetch;
+pub use melodia_store::media::ingest;
 
-pub mod ingest;
-
-// A walking pin rather than a module's own tests: what it asks is where in `src/` a lofty parse
-// may start, which no one file in here is positioned to answer.
+// A walking pin rather than a module's own tests: what it asks is where in the workspace a lofty
+// parse may start, which no one file in any of the three tiers is positioned to answer.
 #[cfg(test)]
 #[path = "tests/lofty_open_tests.rs"]
 mod lofty_open_tests;

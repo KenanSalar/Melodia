@@ -2,7 +2,7 @@
 paths:
   - crates/melodia-platform/src/services/platform/logging.rs
   - crates/melodia-platform/src/services/platform/crash_report.rs
-  - src/services/diagnostics.rs
+  - crates/melodia-app/src/services/diagnostics.rs
   - crates/melodia-core/src/utils/redact.rs
   - src/ui/settings/diagnostics.rs
   - src/main.rs

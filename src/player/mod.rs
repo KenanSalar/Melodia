@@ -1,5 +1,6 @@
-//! Playback, in the three tiers the audio stack cuts into. Contracts live in `CLAUDE.md` beside
-//! this file; what belongs here is only which tier a module is in and why the order is that way.
+//! Playback, in the three tiers the audio stack cuts into, one crate each. Contracts live in
+//! `.claude/rules/audio-stack.md`; what belongs here is only which tier a module is in and why
+//! the order is that way.
 //!
 //! - [`source`]: the vocabulary the whole chain is written against ([`source::audio`]), one
 //!   Symphonia behind [`source::decode`], and the four things that can feed it — a file, a live
@@ -16,6 +17,5 @@
 //! it could reach the mixer and the state machine, and here it cannot.
 
 pub use melodia_audio::player::source;
+pub use melodia_engine::player::engine;
 pub use melodia_playback::player::playback;
-
-pub mod engine;

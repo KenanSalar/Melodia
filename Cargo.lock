@@ -7,64 +7,35 @@ name = "Melodia"
 version = "0.12.0"
 dependencies = [
  "async-compat",
- "biquad",
- "blake3",
  "chrono",
- "color-thief",
- "cpal",
- "dirs",
- "dunce",
- "fast_image_resize",
- "flexi_logger",
  "futures-util",
- "icy-metadata",
  "image",
- "interprocess",
- "jpeg-decoder",
- "ksni",
- "libc",
- "lofty",
  "log",
  "lru",
  "material-colors",
- "md5",
+ "melodia-app",
  "melodia-artwork",
  "melodia-audio",
  "melodia-core",
+ "melodia-engine",
+ "melodia-integrations",
  "melodia-net",
  "melodia-platform",
  "melodia-playback",
+ "melodia-store",
  "melodia-testkit",
  "melodia-ui",
- "minisign-verify",
- "natord",
- "notify",
- "notify-debouncer-full",
  "open",
  "parking_lot",
  "rand 0.10.2",
- "rayon",
- "realfft",
- "reqwest",
  "rfd",
- "semver",
- "serde",
- "serde_json",
  "slint",
- "souvlaki",
  "sqlx",
- "stream-download",
- "symphonia",
  "tempfile",
- "thiserror 2.0.19",
  "tokio",
  "tokio-util",
- "tray-icon",
  "unicode-normalization",
- "walkdir",
- "windows-sys 0.61.2",
  "winresource",
- "zbus",
 ]
 
 [[package]]
@@ -3680,6 +3651,50 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0695a693e38d35838dd34bc3ab19911395f6837ccf55c7271189cfb12cb8b57f"
 
 [[package]]
+name = "melodia-app"
+version = "0.12.0"
+dependencies = [
+ "async-compat",
+ "blake3",
+ "chrono",
+ "dirs",
+ "futures-util",
+ "image",
+ "lofty",
+ "log",
+ "melodia-artwork",
+ "melodia-audio",
+ "melodia-core",
+ "melodia-engine",
+ "melodia-integrations",
+ "melodia-net",
+ "melodia-platform",
+ "melodia-playback",
+ "melodia-store",
+ "melodia-testkit",
+ "melodia-ui",
+ "minisign-verify",
+ "natord",
+ "open",
+ "parking_lot",
+ "rand 0.10.2",
+ "rayon",
+ "reqwest",
+ "semver",
+ "serde",
+ "serde_json",
+ "slint",
+ "souvlaki",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "tokio-util",
+ "unicode-normalization",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "melodia-artwork"
 version = "0.12.0"
 dependencies = [
@@ -3735,6 +3750,44 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
+]
+
+[[package]]
+name = "melodia-engine"
+version = "0.12.0"
+dependencies = [
+ "log",
+ "melodia-audio",
+ "melodia-core",
+ "melodia-playback",
+ "parking_lot",
+ "rand 0.10.2",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "melodia-integrations"
+version = "0.12.0"
+dependencies = [
+ "log",
+ "lru",
+ "md5",
+ "melodia-core",
+ "melodia-engine",
+ "melodia-net",
+ "parking_lot",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "souvlaki",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -3794,6 +3847,30 @@ dependencies = [
  "parking_lot",
  "realfft",
  "tokio",
+]
+
+[[package]]
+name = "melodia-store"
+version = "0.12.0"
+dependencies = [
+ "blake3",
+ "chrono",
+ "dunce",
+ "image",
+ "lofty",
+ "log",
+ "melodia-artwork",
+ "melodia-audio",
+ "melodia-core",
+ "melodia-testkit",
+ "notify",
+ "notify-debouncer-full",
+ "rayon",
+ "serde",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "walkdir",
 ]
 
 [[package]]

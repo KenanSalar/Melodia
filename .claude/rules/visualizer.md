@@ -18,7 +18,7 @@ paths:
 Wiring, the per-frame tick, and the gates that decide when any of it runs — the half no `//!` doc
 can hold, the subject spanning `src/ui/visualizer/`, the `.slint` under `melodia-ui/ui/` and the
 tap in `src/player/`. The DSP is `src/player/{visualizer,spectrum,waveform}.rs` under
-`src/player/CLAUDE.md`; `mod.rs` argues arming and off-screen windows and `pulse.rs` the frame
+`.claude/rules/audio-stack.md`; `mod.rs` argues arming and off-screen windows and `pulse.rs` the frame
 counter, both worth reading before changing a gate.
 
 ## Arming the producer

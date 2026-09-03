@@ -1,17 +1,17 @@
 ---
 paths:
   - src/ui/radio/**/*.rs
-  - src/library/radio/**/*.rs
-  - src/library/radio_files.rs
+  - crates/melodia-app/src/library/radio/**/*.rs
+  - crates/melodia-app/src/library/radio_files.rs
   - crates/melodia-net/src/services/net/radio_browser/**/*.rs
   - crates/melodia-audio/src/player/source/stream_source.rs
   - crates/melodia-audio/src/player/source/prebuffer.rs
   - crates/melodia-audio/src/player/source/stream_decode.rs
   - crates/melodia-net/src/media/fetch/station_logo.rs
   - crates/melodia-core/src/entities/radio.rs
-  - src/database/queries/radio.rs
-  - src/tasks/radio_logo_cache.rs
-  - src/library/settings/radio.rs
+  - crates/melodia-store/src/database/queries/radio.rs
+  - crates/melodia-app/src/tasks/radio_logo_cache.rs
+  - crates/melodia-app/src/library/settings/radio.rs
   - src/ui/settings/radio_settings.rs
   - melodia-ui/ui/globals/radio.slint
   - melodia-ui/ui/components/station-facts.slint
@@ -38,7 +38,7 @@ reach out of `src/player/`, and a handful of numbers spelled in both trees.
 The page's own shape belongs to `.claude/rules/ui-patterns.md` — the Browse box and its scope
 pills, `StationCard` as an `EntityCard` host, and why three tabs share one `SectionActiveGate`.
 The sweep is `library-data.md`'s. The stream's own design, the ring included, is
-`src/player/CLAUDE.md`'s. None of those is restated here, and a paragraph here that starts to
+`.claude/rules/audio-stack.md`'s. None of those is restated here, and a paragraph here that starts to
 is the copy to delete.
 
 ## The off switch
@@ -96,7 +96,7 @@ is the copy to delete.
 
 ## The stream
 
-- **D8, the reconnect's home and what the ring is still for are `src/player/CLAUDE.md`'s**,
+- **D8, the reconnect's home and what the ring is still for are `.claude/rules/audio-stack.md`'s**,
   over `prebuffer.rs`'s and `stream_decode.rs`'s `//!`. That file loads on the whole directory,
   including `handlers.rs` — the monitor the reconnect argument is *about*, and the one file in it
   no glob here reaches.

@@ -1,0 +1,44 @@
+[package]
+name = "melodia-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The SQLite library, the scanner and everything that reads or writes a track's tags"
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+melodia-core = { path = "../melodia-core" }
+# The scanner and the metadata reader both cache covers through the store.
+melodia-artwork = { path = "../melodia-artwork" }
+# `ingest::metadata`'s duration probe, for the containers lofty can't measure. The one edge
+# this crate has into the audio stack, and it points at its bottom tier.
+melodia-audio = { path = "../melodia-audio" }
+
+sqlx.workspace = true
+tokio.workspace = true
+lofty.workspace = true
+walkdir.workspace = true
+notify.workspace = true
+notify-debouncer-full.workspace = true
+rayon.workspace = true
+blake3.workspace = true
+image.workspace = true
+chrono.workspace = true
+serde.workspace = true
+log.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+dunce.workspace = true
+
+[dev-dependencies]
+melodia-testkit = { path = "../melodia-testkit" }
+# The scan and watcher suites build a library under a throwaway root.
+tempfile.workspace = true
+
+[lints]
+workspace = true

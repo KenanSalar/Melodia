@@ -1,0 +1,35 @@
+[package]
+name = "melodia-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The playback state machine, its queue and the action list that runs its decisions"
+publish = false
+
+[lib]
+doctest = false
+
+# Neither cpal nor the network: the two tiers below it own a device and a socket respectively,
+# and this one owns the decisions. What it takes from them is a `Deck` to drive.
+[dependencies]
+melodia-core = { path = "../melodia-core" }
+melodia-audio = { path = "../melodia-audio" }
+melodia-playback = { path = "../melodia-playback" }
+
+tokio.workspace = true
+tokio-util.workspace = true
+parking_lot.workspace = true
+# Shuffle picks its order here rather than in the queue's persisted form.
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+# The persistence suites write a queue into a throwaway directory.
+tempfile.workspace = true
+
+[lints]
+workspace = true

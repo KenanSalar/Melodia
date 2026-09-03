@@ -124,3 +124,36 @@ async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result
     );
     Ok(())
 }
+
+/// **The persisted nav index is clamped in one crate and guarded in another**, and both ends have
+/// to take the bound from `MAX_NAV_INDEX` rather than restate it.
+///
+/// A source read because the write needs an `AppState` and the read an `AppWindow`, and because
+/// what failed before was not the arithmetic but the *literal*: two sites agreeing on `9` for
+/// reasons neither could see. Here rather than beside either half because the write is
+/// `melodia-app`'s and the read is the binary's, so no crate can `include_str!` both.
+#[test]
+fn both_ends_of_the_nav_bound_take_it_from_one_const() {
+    const WRITE: &str = include_str!(concat!(
+        env!("MELODIA_REPO_ROOT"),
+        "crates/melodia-app/src/library/settings/view.rs"
+    ));
+    const READ: &str =
+        include_str!(concat!(env!("MELODIA_REPO_ROOT"), "src/boot/ui_setup/views.rs"));
+
+    let clamp = melodia_testkit::strip_line_comments(WRITE)
+        .split_once("pub fn set_last_nav_index")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    assert!(!clamp.is_empty(), "`set_last_nav_index` moved, so this pin reads nothing");
+    assert!(
+        clamp.contains("view_state::MAX_NAV_INDEX"),
+        "the write clamp must bound against `MAX_NAV_INDEX`, never a literal"
+    );
+
+    let read = melodia_testkit::strip_line_comments(READ);
+    assert!(
+        read.contains("(0..=services::view_state::MAX_NAV_INDEX).contains("),
+        "`install_views` must guard the persisted index against the same const the write clamps to"
+    );
+}

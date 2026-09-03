@@ -8,13 +8,12 @@ pub use melodia_ui::*;
 // dependent reaches past a manifest it was meant to be stopped by.
 pub use melodia_core::{config, entities, error, themes, utils};
 
-pub mod database;
-pub mod library;
+pub use melodia_app::{library, state, tasks};
+pub use melodia_store::database;
+
 pub mod media;
 pub mod player;
 pub mod services;
-pub mod state;
-pub mod tasks;
 // The corpus walkers and env-lock fixtures, in their own crate so every member can dev-depend
 // on them. Aliased rather than re-imported per file: `crate::test_support::…` is what the ~60
 // test modules spelling it already say.

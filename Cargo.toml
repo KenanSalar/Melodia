@@ -303,82 +303,45 @@ assets = [
 # The Slint compiler's output, re-exported by `src/lib.rs` so the generated types
 # stay reachable as `crate::AppWindow`, `crate::TrackRow`, ….
 melodia-ui = { path = "melodia-ui" }
+# All eleven, because `src/lib.rs` and the three shim modules beside it are what
+# keeps `crate::database`, `crate::media::fetch` and their siblings resolving for
+# `src/ui/`, `src/boot/` and `tests/`. Phase C13 narrows this as views leaves.
 melodia-core = { path = "crates/melodia-core" }
 melodia-artwork = { path = "crates/melodia-artwork" }
 melodia-net = { path = "crates/melodia-net" }
 melodia-platform = { path = "crates/melodia-platform" }
 melodia-audio = { path = "crates/melodia-audio" }
 melodia-playback = { path = "crates/melodia-playback" }
+melodia-engine = { path = "crates/melodia-engine" }
+melodia-store = { path = "crates/melodia-store" }
+melodia-integrations = { path = "crates/melodia-integrations" }
+melodia-app = { path = "crates/melodia-app" }
 
+# What is left once the extraction crates own their own third-party lines: the
+# renderer, the runtime the UI thread bridges onto, and what `src/ui/` itself
+# draws with. Nothing here is named by a crate above — a dependency this package
+# no longer spells is one it no longer compiles.
 slint.workspace = true
 
 tokio.workspace = true
 tokio-util.workspace = true
 async-compat.workspace = true
 parking_lot.workspace = true
-sqlx.workspace = true
 
-cpal.workspace = true
-symphonia.workspace = true
-biquad.workspace = true
-realfft.workspace = true
-lofty.workspace = true
-
-walkdir.workspace = true
+# Shuffle-all picks its starting row here.
 rand.workspace = true
-notify.workspace = true
-notify-debouncer-full.workspace = true
-rayon.workspace = true
-blake3.workspace = true
-natord.workspace = true
+# Accent folding for the per-view filter boxes, matching what `tracks_fts` does.
 unicode-normalization.workspace = true
 image.workspace = true
-fast_image_resize.workspace = true
-jpeg-decoder.workspace = true
 lru.workspace = true
 material-colors.workspace = true
-color-thief.workspace = true
-
-serde.workspace = true
-serde_json.workspace = true
 chrono.workspace = true
-dirs.workspace = true
-
-reqwest.workspace = true
-stream-download.workspace = true
-icy-metadata.workspace = true
-md5.workspace = true
 
 log.workspace = true
-flexi_logger.workspace = true
-thiserror.workspace = true
-tempfile.workspace = true
 
-souvlaki.workspace = true
 rfd.workspace = true
 open.workspace = true
-interprocess.workspace = true
-
-minisign-verify.workspace = true
-semver.workspace = true
 futures-util.workspace = true
-
-[target.'cfg(target_os = "linux")'.dependencies]
-zbus.workspace = true
-ksni.workspace = true
-libc.workspace = true
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows-sys.workspace = true
-dunce.workspace = true
-
-[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
-tray-icon.workspace = true
-
-# The build script hashes with the same primitive the crate looks up with, compiling
-# one shared file twice; pinned to the runtime version, two of them being two hashes.
-[build-dependencies]
-blake3.workspace = true
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 winresource.workspace = true
@@ -386,6 +349,10 @@ winresource.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 melodia-testkit = { path = "crates/melodia-testkit" }
+tempfile.workspace = true
+# `tests/cross_tier.rs` reads `pragma_table_info` off a `test_pool`, which is the
+# only place this package touches the database directly.
+sqlx.workspace = true
 
 # Workspace-level and inherited by every package, so no member can sit outside the
 # gate; `melodia-ui`'s generated module carries a blanket `#[allow]`.

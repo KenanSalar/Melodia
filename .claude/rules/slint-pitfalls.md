@@ -393,7 +393,7 @@ this file is what builds, looks right, and is wrong.
   so pausing holds the timer and it never expires on a paused player. Never persisted; bounds
   `[30 s, 2 h]`; `Player.set-sleep-timer(minutes)` takes 0 off / `>0` duration / `-1`
   End-of-track, the last arming `PlayerState::pause_after_current_track` (monitor half in
-  `src/player/CLAUDE.md`).
+  `.claude/rules/audio-stack.md`).
 
 - **Flash-free image cross-fade = two slots, never cleared.** Two stacked `Image`s + `use-a` bool;
   Rust writes the new image into the *inactive* slot then flips the bool so both `opacity`

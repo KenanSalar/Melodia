@@ -1,24 +1,16 @@
-//! OS and I/O adapters, in the four groups that become four crates.
-//!
-//! - [`net`]: the shared HTTP primitives, and the radio directory client over them.
-//! - [`platform`]: everything that answers to the OS rather than to a feature.
-//! - [`integrations`]: the three surfaces outside the app that get told what is playing.
-//! - The rest, flat here: settings, the two JSON state files, the artist-image orchestration, the
-//!   diagnostics bundle and the updater. Each of them names `database` or `state` or both, so
-//!   they are app-level rather than adapters, and they are what is left once the three groups go.
+//! The four groups as the binary reaches them, re-exported so `crate::services::…` resolves
+//! whichever crate now owns a module.
 
+pub use melodia_app::services::{
+    artist_images, diagnostics, search_history, settings, updater, view_state,
+};
+pub use melodia_integrations::services::integrations;
 pub use melodia_net::services::net;
 pub use melodia_platform::services::platform;
 
-pub mod integrations;
-
-pub mod artist_images;
-pub mod diagnostics;
-pub mod search_history;
-pub mod settings;
-pub mod updater;
-pub mod view_state;
-
+// A walking pin rather than a module's own tests: it asks what every package format ships, what
+// the gate's workflow waits on and how long a thread name may be, and answers nothing about
+// `services` at all. It stays with the binary, which is where Phase D collects the corpus walks.
 #[cfg(test)]
 #[path = "tests/mod_tests.rs"]
 mod tests;

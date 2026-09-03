@@ -5,8 +5,9 @@
 //! reads correctly and refuses a file the scan read by its header: `tag_writer` did exactly
 //! that, and the rows it could not save were the ones the library had listed in full.
 //!
-//! `src/` is the whole reach it needs — `melodia-ui` depends on `slint` alone, so the other
-//! package has no lofty to open a file with.
+//! It walks every crate rather than the one that owns the tags, which is the point: the question
+//! is where in the workspace a lofty parse may start, and `melodia-store` is precisely the crate
+//! that cannot answer it about anything outside itself.
 
 use crate::test_support::rust_sources;
 

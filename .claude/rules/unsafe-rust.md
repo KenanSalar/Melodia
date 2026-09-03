@@ -49,8 +49,8 @@ because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of t
 | `src/main.rs` | `env::set_var` for `PIPEWIRE_ALSA` |
 | `crates/melodia-platform/…/allocator.rs` | `libc::mallopt` ×3 (the glibc arena / mmap / trim knobs), `libc::malloc_trim` |
 | `crates/melodia-platform/…/dwm_titlebar.rs` | `DwmSetWindowAttribute` ×3 |
-| `src/services/settings/data.rs` | `GetUserDefaultLocaleName` |
-| `src/services/updater/install/swap.rs` | `MoveFileExW` |
+| `crates/melodia-app/…/settings/data.rs` | `GetUserDefaultLocaleName` |
+| `crates/melodia-app/…/updater/install/swap.rs` | `MoveFileExW` |
 
 A new site outside that shape is a different *kind* of thing rather than one more of the
 same, and owes a justification somewhere a reviewer will read — not only in the
