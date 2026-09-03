@@ -10,11 +10,11 @@ use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use std::path::PathBuf;
 
-use crate::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult};
 
 #[cfg(target_os = "linux")]
-use crate::services::platform::install_kind::linux_pkg;
-use crate::services::platform::install_kind::linux_pkg::LinuxPackageFormat;
+use melodia_platform::services::platform::install_kind::linux_pkg;
+use melodia_platform::services::platform::install_kind::linux_pkg::LinuxPackageFormat;
 
 /// Hand the staged package to the resolved package manager under `pkexec`, so
 /// it validates the file, installs it and updates its own DB.

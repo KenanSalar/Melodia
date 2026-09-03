@@ -6,13 +6,13 @@
 
 use std::sync::Arc;
 
-use crate::database::queries;
-use crate::entities::radio;
-use crate::error::AppError;
 use crate::library::playback;
-use crate::player::engine::types::RadioNowPlaying;
-use crate::services::net::radio_browser;
 use crate::state::AppState;
+use melodia_core::entities::radio;
+use melodia_core::error::AppError;
+use melodia_engine::player::engine::types::RadioNowPlaying;
+use melodia_net::services::net::radio_browser;
+use melodia_store::database::queries;
 
 use super::{
     directory_client, ensure_enabled, get_station, save_station, set_artwork, set_favorite,
@@ -59,7 +59,7 @@ pub async fn station_to_restore(state: &AppState, id: i64) -> Option<Arc<RadioNo
     match get_station(state, id).await {
         Ok(station) => Some(Arc::new(RadioNowPlaying::from(&station))),
         Err(e) => {
-            log::debug!("radio: not restoring station {id}: {}", crate::error::describe(&e));
+            log::debug!("radio: not restoring station {id}: {}", melodia_core::error::describe(&e));
             None
         }
     }
@@ -132,7 +132,7 @@ fn spawn_click(state: &AppState, station_uuid: Option<&str>) {
             return;
         };
         if let Err(e) = radio_browser::count_click(client, &uuid).await {
-            log::debug!("radio: click report failed: {}", crate::error::describe(&e));
+            log::debug!("radio: click report failed: {}", melodia_core::error::describe(&e));
         }
     });
 }

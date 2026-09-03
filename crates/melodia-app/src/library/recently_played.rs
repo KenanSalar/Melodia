@@ -5,10 +5,10 @@
 //! `last_played` and bumps `stats_changed`, so the lifecycle re-fetches on that
 //! signal exactly like Favorites.
 
-use crate::database::queries;
-use crate::entities::track;
-use crate::error::AppError;
 use crate::state::AppState;
+use melodia_core::entities::track;
+use melodia_core::error::AppError;
+use melodia_store::database::queries;
 
 /// Number of most-recently-played tracks the view holds. Membership is fixed to
 /// this set — the view filters/re-sorts it in memory rather than re-querying.

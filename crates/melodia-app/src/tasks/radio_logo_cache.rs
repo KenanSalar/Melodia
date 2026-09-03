@@ -10,10 +10,10 @@
 //! library scan, which a user who browses radio and never touches their music folders may not run
 //! for weeks.
 
-use crate::error::{AppError, describe};
 use crate::library;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_core::error::{AppError, describe};
 
 /// Prune the answer table and sweep the store behind it, in the background.
 ///

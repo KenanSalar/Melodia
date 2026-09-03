@@ -5,14 +5,14 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use crate::config::Paths;
-use crate::database::DbPool;
-use crate::database::queries;
-use crate::entities::scan::ExtractedMetadata;
-use crate::error::AppResult;
-use crate::media::image::artwork::CoverCache;
-use crate::media::ingest::metadata::{extract_date_modified, extract_or_filename_row};
-use crate::media::ingest::watcher::FileEvent;
+use melodia_artwork::media::image::artwork::CoverCache;
+use melodia_core::config::Paths;
+use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::error::AppResult;
+use melodia_store::database::DbPool;
+use melodia_store::database::queries;
+use melodia_store::media::ingest::metadata::{extract_date_modified, extract_or_filename_row};
+use melodia_store::media::ingest::watcher::FileEvent;
 
 /// Batch size threshold above which stats triggers are disabled for bulk processing.
 const BULK_THRESHOLD: usize = 20;
@@ -67,7 +67,11 @@ async fn extract_metadata_batch(
                     // Only an unreadable file gets this far; unparseable tags come back
                     // as a filename-derived row rather than a `None`.
                     Err(e) => {
-                        log::warn!("Skipping {}: {}", path.display(), crate::error::describe(&e));
+                        log::warn!(
+                            "Skipping {}: {}",
+                            path.display(),
+                            melodia_core::error::describe(&e)
+                        );
                         None
                     }
                 }
@@ -114,15 +118,18 @@ pub(super) async fn process_batch(
         // Batch all hash lookups into chunked IN-clause queries.
         // For each hash, we want the lowest-id matching row, so we fetch
         // (file_hash, id, file_path) for the whole set and pick the min id per hash in Rust.
-        let rows: Vec<(String, i64, String)> =
-            crate::database::chunked_in_query(db.read(), &hashes_to_check, |placeholders| {
+        let rows: Vec<(String, i64, String)> = melodia_store::database::chunked_in_query(
+            db.read(),
+            &hashes_to_check,
+            |placeholders| {
                 format!(
                     "SELECT file_hash, id, file_path FROM tracks \
                      WHERE file_hash IN ({placeholders})"
                 )
-            })
-            .await
-            .unwrap_or_default();
+            },
+        )
+        .await
+        .unwrap_or_default();
 
         let mut by_hash: HashMap<String, (i64, String)> = HashMap::new();
         for (hash, id, path) in rows {
@@ -293,7 +300,7 @@ async fn handle_created(
     };
 
     let file_name = file_name_owned(path);
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
     let _new_id = queries::scan::insert_track(tx, &path_str, &file_name, meta, &ids, &now).await?;
     log::info!("Added new track: {path_str}");
 

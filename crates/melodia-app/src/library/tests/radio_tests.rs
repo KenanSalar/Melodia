@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
-use crate::entities::radio::{DirectoryStation, Facet, FacetKind, RadioStation, StationPage};
-use crate::error::AppError;
+use melodia_core::entities::radio::{
+    DirectoryStation, Facet, FacetKind, RadioStation, StationPage,
+};
+use melodia_core::error::AppError;
 
 use super::authoring::{ensure_editable, resolve_station_name, website_url};
 use super::directory::{hide_segmented, hide_segmented_codecs, names_segmented};

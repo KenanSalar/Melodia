@@ -5,9 +5,9 @@
 
 use chrono::{DateTime, Utc};
 
-use crate::error::AppError;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 /// Persist the user toggle for "Automatically check for updates". The
 /// runtime effect (whether `tasks::updater_daily::spawn` registers a

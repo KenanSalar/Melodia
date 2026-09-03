@@ -18,11 +18,11 @@ use sqlx::AssertSqlSafe;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_util::sync::CancellationToken;
 
-use crate::database::DbPool;
 use crate::state::Signal;
 use crate::tasks::TaskSpawner;
-use crate::utils::now_rfc3339;
-use crate::utils::play_counts::{self, PlayCountEvent};
+use melodia_core::utils::now_rfc3339;
+use melodia_core::utils::play_counts::{self, PlayCountEvent};
+use melodia_store::database::DbPool;
 
 /// How often to flush pending events. Short enough that play counts feel
 /// up-to-date in the UI on the next track change, long enough to batch a
@@ -130,10 +130,10 @@ async fn flush_play_counts(
     db: &DbPool,
     counts: &HashMap<i64, u32>,
     now: &str,
-) -> Result<(), crate::error::AppError> {
+) -> Result<(), melodia_core::error::AppError> {
     // Stay below SQLite's 999 bind cap: 2 binds per row (id for CASE, id for
     // IN) + 1 for `now`.
-    const MAX_ROWS: usize = (crate::database::SQLITE_BIND_LIMIT - 1) / 2;
+    const MAX_ROWS: usize = (melodia_store::database::SQLITE_BIND_LIMIT - 1) / 2;
     let entries: Vec<(i64, u32)> = counts.iter().map(|(&k, &v)| (k, v)).collect();
     for chunk in entries.chunks(MAX_ROWS) {
         let mut sql = String::from("UPDATE tracks SET play_count = play_count + CASE id");
@@ -165,8 +165,8 @@ async fn flush_play_counts(
 async fn flush_skip_counts(
     db: &DbPool,
     counts: &HashMap<i64, u32>,
-) -> Result<(), crate::error::AppError> {
-    const MAX_ROWS: usize = crate::database::SQLITE_BIND_LIMIT / 2;
+) -> Result<(), melodia_core::error::AppError> {
+    const MAX_ROWS: usize = melodia_store::database::SQLITE_BIND_LIMIT / 2;
     let entries: Vec<(i64, u32)> = counts.iter().map(|(&k, &v)| (k, v)).collect();
     for chunk in entries.chunks(MAX_ROWS) {
         let mut sql = String::from("UPDATE tracks SET skip_count = skip_count + CASE id");

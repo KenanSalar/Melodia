@@ -9,7 +9,7 @@ use super::*;
 /// library-folder check (which needs an `AppState`). The classification itself
 /// is the shipped code, not a copy of it.
 fn scan_directory(path: &std::path::Path) -> Result<DirScanResult, AppError> {
-    let canonical = crate::utils::canonicalize_path(path)
+    let canonical = melodia_core::utils::canonicalize_path(path)
         .map_err(|_| AppError::Validation(format!("Path does not exist: {}", path.display())))?;
 
     if !canonical.is_dir() {

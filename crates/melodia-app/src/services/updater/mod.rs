@@ -13,7 +13,7 @@
 
 use std::path::PathBuf;
 
-use crate::error::AppResult;
+use melodia_core::error::AppResult;
 
 pub mod asset_cache;
 pub mod check;
@@ -29,7 +29,7 @@ pub use event::{FailureKind, UpdaterEvent};
 pub use install::{download_and_install, prune_stale_staging};
 // Re-exported from `platform::install_kind`, whose two other consumers are why it left this
 // directory. Kept here so the UI keeps asking the updater whether an install is a system one.
-pub use crate::services::platform::install_kind::{install_target, is_system_install};
+pub use melodia_platform::services::platform::install_kind::{install_target, is_system_install};
 
 /// Whether this build has an in-app updater at all.
 ///
@@ -38,7 +38,7 @@ pub use crate::services::platform::install_kind::{install_target, is_system_inst
 /// trades the install button for a package-manager hint, this takes the whole section.
 #[must_use]
 pub fn is_available() -> bool {
-    !crate::utils::exe::is_dev_build()
+    !melodia_core::utils::exe::is_dev_build()
 }
 
 /// `<install_target>.old` — the rollback copy [`install::swap_in_place`] retains on

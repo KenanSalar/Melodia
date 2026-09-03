@@ -1,5 +1,5 @@
 use super::{parse, serialize};
-use crate::entities::track::PlaylistExportRow;
+use melodia_core::entities::track::PlaylistExportRow;
 
 fn row(
     path: &str,

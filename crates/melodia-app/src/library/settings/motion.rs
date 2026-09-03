@@ -1,8 +1,8 @@
 //! The Motion card's one persisted setting.
 
-use crate::error::AppError;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 /// Persist the Skip Startup Animation switch.
 ///

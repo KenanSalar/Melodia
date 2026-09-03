@@ -4,8 +4,8 @@ use std::path::Path;
 
 use tempfile::TempDir;
 
-use crate::entities::folder::Folder;
-use crate::error::AppError;
+use melodia_core::entities::folder::Folder;
+use melodia_core::error::AppError;
 
 use super::validate_folder_path;
 
@@ -52,7 +52,7 @@ fn validate_duplicate_folder_returns_error() -> Result<(), AppError> {
     let dir = tmp.path().join("music");
     std::fs::create_dir(&dir)?;
 
-    let canonical = crate::utils::canonicalize_path(&dir)?;
+    let canonical = melodia_core::utils::canonicalize_path(&dir)?;
     let canonical_str =
         canonical.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
     let existing = make_folder(1, canonical_str);
@@ -70,7 +70,7 @@ fn validate_child_of_existing_returns_error() -> Result<(), AppError> {
     let child = parent.join("rock");
     std::fs::create_dir_all(&child)?;
 
-    let canonical_parent = crate::utils::canonicalize_path(&parent)?;
+    let canonical_parent = melodia_core::utils::canonicalize_path(&parent)?;
     let canonical_str =
         canonical_parent.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
     let existing = make_folder(1, canonical_str);
@@ -90,8 +90,8 @@ fn validate_parent_of_existing_returns_children_to_remove() -> Result<(), AppErr
     std::fs::create_dir_all(&child1)?;
     std::fs::create_dir_all(&child2)?;
 
-    let c1 = crate::utils::canonicalize_path(&child1)?;
-    let c2 = crate::utils::canonicalize_path(&child2)?;
+    let c1 = melodia_core::utils::canonicalize_path(&child1)?;
+    let c2 = melodia_core::utils::canonicalize_path(&child2)?;
     let existing = vec![
         make_folder(10, c1.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?),
         make_folder(20, c2.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?),
@@ -112,7 +112,7 @@ fn validate_unrelated_path_returns_empty() -> Result<(), AppError> {
     std::fs::create_dir(&dir_a)?;
     std::fs::create_dir(&dir_b)?;
 
-    let canonical_a = crate::utils::canonicalize_path(&dir_a)?;
+    let canonical_a = melodia_core::utils::canonicalize_path(&dir_a)?;
     let existing = make_folder(
         1,
         canonical_a.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
@@ -146,7 +146,7 @@ fn validate_canonicalizes_symlinks() -> Result<(), AppError> {
     let link_path = tmp.path().join("link_music");
     symlink(&real_dir, &link_path)?;
 
-    let canonical = crate::utils::canonicalize_path(&real_dir)?;
+    let canonical = melodia_core::utils::canonicalize_path(&real_dir)?;
     let canonical_str =
         canonical.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
     let existing = make_folder(1, canonical_str);

@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::media::ingest::watcher::FileEvent;
+use melodia_store::media::ingest::watcher::FileEvent;
 
 /// Deduplicate events within a batch using priority rules:
 /// - Created + Removed for same path → cancel both

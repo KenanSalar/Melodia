@@ -17,11 +17,11 @@ use std::time::{Duration, Instant};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
-use crate::player::engine::state::PlayerViewModelLight;
-use crate::services::integrations::discord::DiscordPresenceService;
-use crate::services::integrations::discord::model::{PresenceState, Update};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_engine::player::engine::state::PlayerViewModelLight;
+use melodia_integrations::services::integrations::discord::DiscordPresenceService;
+use melodia_integrations::services::integrations::discord::model::{PresenceState, Update};
 
 /// Self-throttle between presence writes. The Rich Presence SDK docs cite one
 /// update per 15 s, but that's the conservative legacy figure: over raw IPC the

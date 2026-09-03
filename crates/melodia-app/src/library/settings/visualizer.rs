@@ -4,9 +4,9 @@
 //! that by the time these run. Arming the sample tap follows from the
 //! strip being on screen — see `ui::visualizer`.
 
-use crate::error::AppError;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 /// Persist the visualizer on/off toggle. Unlike the other audio features this
 /// one defaults to *on* (`VisualizerFlags::default()`) — see its doc for why —

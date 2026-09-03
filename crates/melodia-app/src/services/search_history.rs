@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
-use crate::config::Paths;
-use crate::error::AppResult;
+use melodia_core::config::Paths;
+use melodia_core::error::AppResult;
 
 const MAX_ENTRIES: usize = 10;
 
@@ -31,7 +31,7 @@ impl SearchHistoryState {
     pub async fn init(paths: &Paths) -> Self {
         let path = paths.search_history_path.clone();
         let history: SearchHistory =
-            crate::utils::atomic_file::load_json_or_default(&path).await.unwrap_or_default();
+            melodia_core::utils::atomic_file::load_json_or_default(&path).await.unwrap_or_default();
         Self {
             inner: Mutex::new(history),
             path,
@@ -77,10 +77,10 @@ impl SearchHistoryState {
     async fn flush(&self, snapshot: SearchHistory) -> AppResult<()> {
         let path = self.path.clone();
         tokio::task::spawn_blocking(move || {
-            crate::utils::atomic_file::write_json_sync(&path, &snapshot)
+            melodia_core::utils::atomic_file::write_json_sync(&path, &snapshot)
         })
         .await
-        .map_err(crate::error::AppError::io_source)?
+        .map_err(melodia_core::error::AppError::io_source)?
     }
 }
 

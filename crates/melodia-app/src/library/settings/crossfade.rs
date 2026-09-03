@@ -5,10 +5,10 @@
 //! `settings.json` commit only persists the choice. Mirrors the shape of
 //! [`super::replaygain`].
 
-use crate::error::AppError;
-use crate::player::playback::crossfade::clamp_crossfade_ms;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppError;
+use melodia_playback::player::playback::crossfade::clamp_crossfade_ms;
 
 /// Persist the crossfade on/off toggle. Defaults to `false` on first launch
 /// (`CrossfadeFlags::default()`), so new installs keep plain gapless playback.

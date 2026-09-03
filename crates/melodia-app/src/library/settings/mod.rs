@@ -84,9 +84,9 @@ pub use view::{
 };
 pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 
-use crate::error::AppError;
 use crate::services::{self, settings::SettingsData, view_state::ViewStateData};
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 pub fn get_settings(state: &AppState) -> Result<SettingsData, AppError> {
     services::settings::read_settings(&state.paths)
@@ -110,7 +110,7 @@ pub fn get_view_state(state: &AppState) -> Result<ViewStateData, AppError> {
 pub async fn get_system_theme() -> String {
     #[cfg(target_os = "linux")]
     {
-        crate::services::platform::system_theme::get_system_theme().await
+        melodia_platform::services::platform::system_theme::get_system_theme().await
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -125,8 +125,8 @@ pub async fn get_system_theme() -> String {
 // `services::settings::*` directly.
 
 #[cfg(target_os = "linux")]
-pub fn get_kde_colors() -> Option<crate::themes::kde::KdeColorPalette> {
-    crate::services::platform::system_theme::get_kde_colors()
+pub fn get_kde_colors() -> Option<melodia_core::themes::kde::KdeColorPalette> {
+    melodia_platform::services::platform::system_theme::get_kde_colors()
 }
 
 #[cfg(not(target_os = "linux"))]

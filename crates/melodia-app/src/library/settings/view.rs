@@ -1,9 +1,9 @@
 //! View-section setters: locale, overflow-menu buttons, the snap-to-preset corner radius helper,
 //! and per-view column visibility.
 
-use crate::error::AppError;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 /// Persist the active locale. Validates against [`services::settings::SUPPORTED_LOCALES`] before
 /// the disk write, so a malformed UI write can't pin `settings.json` to a code with no bundled

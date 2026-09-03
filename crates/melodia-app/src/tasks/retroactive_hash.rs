@@ -5,11 +5,11 @@
 
 use std::path::Path;
 
-use crate::database::DbPool;
-use crate::database::queries;
-use crate::error::AppResult;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_core::error::AppResult;
+use melodia_store::database::DbPool;
+use melodia_store::database::queries;
 
 /// Spawn the retroactive-hash task on the shared task lifecycle so the
 /// main shutdown sequence waits for the pending batch update to commit
@@ -50,7 +50,7 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
                     return None;
                 };
 
-                let hash = match crate::media::ingest::metadata::compute_file_hash(path) {
+                let hash = match melodia_store::media::ingest::metadata::compute_file_hash(path) {
                     Ok(h) => h,
                     Err(e) => {
                         log::warn!("Failed to hash {path_str}: {e}");
@@ -58,14 +58,15 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
                     }
                 };
 
-                let mtime = crate::media::ingest::metadata::date_modified_from_metadata(&meta);
+                let mtime =
+                    melodia_store::media::ingest::metadata::date_modified_from_metadata(&meta);
 
                 Some((*id, hash, mtime))
             })
             .collect::<Vec<_>>()
     })
     .await
-    .map_err(|e| crate::error::AppError::scanner("Hashing task panicked", e))?;
+    .map_err(|e| melodia_core::error::AppError::scanner("Hashing task panicked", e))?;
 
     if updates.is_empty() {
         return Ok(());

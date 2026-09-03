@@ -2,8 +2,8 @@
 //!
 //! The store is content-addressed and shared, so nothing on the delete paths can safely unlink a
 //! cover: eleven of twelve tracks may still point at it. Deletion happens here instead, against
-//! the reference set as a whole — see [`crate::media::image::artwork::sweep`] for why that shape rather
-//! than a refcount.
+//! the reference set as a whole — see [`melodia_artwork::media::image::artwork::sweep`] for why
+//! that shape rather than a refcount.
 //!
 //! Runs per scan rather than once at upgrade, because the store also *churns*: `compose_artwork`
 //! hashes its output, so every change to a playlist's top four writes a new composite and orphans
@@ -12,13 +12,13 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::config::Paths;
-use crate::database::DbPool;
-use crate::database::queries;
-use crate::error::{AppError, AppResult, describe};
-use crate::media::image::artwork::sweep::{self, GRACE, SweepReport};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_artwork::media::image::artwork::sweep::{self, GRACE, SweepReport};
+use melodia_core::config::Paths;
+use melodia_core::error::{AppError, AppResult, describe};
+use melodia_store::database::DbPool;
+use melodia_store::database::queries;
 
 /// Sweep both artwork stores in the background.
 ///

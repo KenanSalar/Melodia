@@ -16,9 +16,9 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::database::{DbPool, queries};
-use crate::error::AppError;
 use crate::state::AppState;
+use melodia_core::error::AppError;
+use melodia_store::database::{DbPool, queries};
 
 mod m3u;
 
@@ -85,7 +85,7 @@ pub async fn export_playlists_to_folder(
         let mut ok: u32 = 0;
         let mut errs: Vec<(String, String)> = Vec::new();
         for (path, text) in to_write {
-            match crate::utils::atomic_file::write_text_sync(&path, &text) {
+            match melodia_core::utils::atomic_file::write_text_sync(&path, &text) {
                 Ok(()) => ok += 1,
                 Err(e) => {
                     let label =

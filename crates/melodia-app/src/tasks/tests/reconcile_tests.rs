@@ -11,9 +11,9 @@ use std::collections::HashMap;
 use tempfile::TempDir;
 
 use super::*;
-use crate::database::DbPool;
-use crate::database::queries::fixtures::{insert_test_track, make_test_metadata};
-use crate::error::AppError;
+use melodia_core::error::AppError;
+use melodia_store::database::DbPool;
+use melodia_store::database::queries::fixtures::{insert_test_track, make_test_metadata};
 
 /// An mtime no file on disk can have, so a value that reaches the row proves it
 /// came from the `ExtractedMetadata` and not from a fresh `stat`.
@@ -89,7 +89,7 @@ async fn renamed_without_metadata_falls_back_to_a_stat() -> Result<(), AppError>
 
     let to = tmp.path().join("to.mp3");
     std::fs::write(&to, b"audio")?;
-    let on_disk = crate::media::ingest::metadata::extract_date_modified(&to);
+    let on_disk = melodia_store::media::ingest::metadata::extract_date_modified(&to);
     assert!(on_disk.is_some(), "the temp file must have a readable mtime");
 
     let mut tx = db.write().begin().await?;

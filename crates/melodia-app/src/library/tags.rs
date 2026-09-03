@@ -20,17 +20,17 @@ use std::sync::{Arc, LazyLock};
 
 use rayon::prelude::*;
 
-use crate::database::{DbPool, queries};
-use crate::entities::scan::ExtractedMetadata;
-use crate::entities::tags::{ArtworkEdit, TagEdit};
-use crate::entities::track::{TagEditRow, TrackSummary};
-use crate::error::AppError;
-use crate::error::describe;
-use crate::media::image::artwork::{self, CoverCache};
-use crate::media::ingest::metadata::extract_metadata;
-use crate::media::ingest::tag_writer;
 use crate::state::AppState;
-use crate::utils::self_writes::SelfWrites;
+use melodia_artwork::media::image::artwork::{self, CoverCache};
+use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::entities::tags::{ArtworkEdit, TagEdit};
+use melodia_core::entities::track::{TagEditRow, TrackSummary};
+use melodia_core::error::AppError;
+use melodia_core::error::describe;
+use melodia_core::utils::self_writes::SelfWrites;
+use melodia_store::database::{DbPool, queries};
+use melodia_store::media::ingest::metadata::extract_metadata;
+use melodia_store::media::ingest::tag_writer;
 
 /// Width cap for the tag-write fan-out. The MP4 save clones the embedded cover,
 /// so an unbounded `par_iter` would hold `num_cpus × (image + its clone)`
@@ -118,12 +118,12 @@ pub async fn apply_tag_edit(
         // otherwise, but the fetch + `HashMap` build run before its own check,
         // so gate them on the same cheap membership probe.
         let touched: HashSet<i64> = updated_ids.iter().copied().collect();
-        if crate::player::engine::state::any_tracked(&state.player_state, |id| {
+        if melodia_engine::player::engine::state::any_tracked(&state.player_state, |id| {
             touched.contains(&id)
         }) {
             let fresh = queries::track::get_track_summaries_by_ids(&state.db, &updated_ids).await?;
             let map: HashMap<i64, TrackSummary> = fresh.into_iter().map(|t| (t.id, t)).collect();
-            crate::player::engine::state::sync_track_summaries(
+            melodia_engine::player::engine::state::sync_track_summaries(
                 &state.player_state,
                 &state.sinks,
                 &map,

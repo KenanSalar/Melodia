@@ -3,10 +3,10 @@
 //! takes `&AppState` and returns `Result<_, AppError>`; the UI bridge
 //! (`melodia-views`' `ui/genres/`) does the in-memory sorting / filtering / chunking.
 
-use crate::database::queries;
-use crate::entities::{genre, track};
-use crate::error::AppError;
 use crate::state::AppState;
+use melodia_core::entities::{genre, track};
+use melodia_core::error::AppError;
+use melodia_store::database::queries;
 
 /// Every genre with at least one track, name-sorted (the `genre_stats`
 /// view's default order). The Genres grid re-sorts in memory for the

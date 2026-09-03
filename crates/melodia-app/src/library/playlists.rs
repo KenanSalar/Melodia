@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use serde::Serialize;
 
 use super::import::import_files_with_summaries;
-use crate::database::queries;
-use crate::entities::{playlist, track};
-use crate::error::AppError;
 use crate::state::AppState;
+use melodia_core::entities::{playlist, track};
+use melodia_core::error::AppError;
+use melodia_store::database::queries;
 
 pub async fn create_playlist(
     state: &AppState,
@@ -121,8 +121,9 @@ pub async fn set_playlist_thumbnail(
     let artwork_dir = state.paths.artwork_dir.clone();
 
     let source_paths: Vec<PathBuf> = image_paths.iter().map(PathBuf::from).collect();
-    let composite_path = crate::media::image::artwork::compose_artwork(&source_paths, &artwork_dir)
-        .ok_or_else(|| AppError::io_other("Failed to compose artwork"))?;
+    let composite_path =
+        melodia_artwork::media::image::artwork::compose_artwork(&source_paths, &artwork_dir)
+            .ok_or_else(|| AppError::io_other("Failed to compose artwork"))?;
 
     queries::playlist::set_playlist_custom_thumbnail(&state.db, playlist_id, &composite_path).await
 }

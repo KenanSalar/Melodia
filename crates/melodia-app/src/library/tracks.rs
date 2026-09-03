@@ -1,7 +1,7 @@
-use crate::database::queries;
-use crate::entities::track;
-use crate::error::AppError;
 use crate::state::AppState;
+use melodia_core::entities::track;
+use melodia_core::error::AppError;
+use melodia_store::database::queries;
 
 pub async fn get_tracks(state: &AppState) -> Result<Vec<track::TrackListRow>, AppError> {
     queries::track::get_all_tracks_for_list(&state.db).await

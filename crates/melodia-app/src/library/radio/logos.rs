@@ -10,10 +10,10 @@
 //! definition. What they share is that a miss costs a request and a hit costs nothing, so they are
 //! about not asking a dead host on a schedule rather than about bandwidth.
 
-use crate::database::queries;
-use crate::entities::radio::{self, StoredLogo};
-use crate::error::AppError;
 use crate::state::AppState;
+use melodia_core::entities::radio::{self, StoredLogo};
+use melodia_core::error::AppError;
+use melodia_store::database::queries;
 
 use super::directory_client;
 
@@ -26,8 +26,12 @@ pub async fn fetch_logo(
     favicon_url: &str,
 ) -> Result<Option<StoredLogo>, AppError> {
     let client = directory_client(state)?;
-    crate::media::fetch::station_logo::fetch(client, favicon_url, &state.paths.radio_logos_dir)
-        .await
+    melodia_net::media::fetch::station_logo::fetch(
+        client,
+        favicon_url,
+        &state.paths.radio_logos_dir,
+    )
+    .await
 }
 
 /// How long a logo URL that answered with nothing is left alone, per failed attempt. A day, so a
@@ -118,7 +122,7 @@ pub async fn record_logo_outcome(state: &AppState, favicon_url: &str, logo: Opti
         None => note_logo_miss(state, favicon_url).await,
     };
     if let Err(e) = recorded {
-        log::debug!("radio: logo outcome not recorded: {}", crate::error::describe(&e));
+        log::debug!("radio: logo outcome not recorded: {}", melodia_core::error::describe(&e));
     }
 }
 
@@ -135,7 +139,7 @@ async fn note_logo_miss(state: &AppState, favicon_url: &str) -> Result<(), AppEr
         favicon_url,
         attempts,
         &retry_after.to_rfc3339(),
-        &crate::utils::now_rfc3339(),
+        &melodia_core::utils::now_rfc3339(),
     )
     .await
 }
@@ -155,7 +159,7 @@ async fn note_logo_hit(
         favicon_url,
         &logo.path,
         i64::try_from(logo.bytes).unwrap_or(i64::MAX),
-        &crate::utils::now_rfc3339(),
+        &melodia_core::utils::now_rfc3339(),
     )
     .await
 }
@@ -199,7 +203,7 @@ pub(super) async fn ask_logo_url(state: &AppState, seed: &AnswerSeed, url: &str)
     let logo = match fetch_logo(state, url).await {
         Ok(logo) => logo,
         Err(e) => {
-            log::debug!("radio: station logo fetch failed: {}", crate::error::describe(&e));
+            log::debug!("radio: station logo fetch failed: {}", melodia_core::error::describe(&e));
             return None;
         }
     };
@@ -257,13 +261,13 @@ impl AnswerSeed {
 /// a path naming nothing paints an empty tile where the monogram was the honest answer.
 async fn stored_answer(state: &AppState, seed: &AnswerSeed, url: &str) -> LogoAnswer {
     if let Some(answer) = seed.0.get(url) {
-        return classify_logo_answer(answer, &crate::utils::now_rfc3339());
+        return classify_logo_answer(answer, &melodia_core::utils::now_rfc3339());
     }
     let asked = [url.to_owned()];
     let Ok(answers) = logo_answers(state, &asked).await else {
         return LogoAnswer::Unknown;
     };
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
     answers.first().map_or(LogoAnswer::Unknown, |answer| classify_logo_answer(answer, &now))
 }
 
@@ -304,7 +308,7 @@ impl SiteOrigin {
 /// The site to ask about a station, from whatever the row carries. `None` where neither the
 /// homepage nor the stream URL names a host.
 pub fn site_origin(homepage: &str, stream_url: &str) -> Option<SiteOrigin> {
-    crate::media::fetch::logo_discovery::origin_for(homepage, stream_url).map(SiteOrigin)
+    melodia_net::media::fetch::logo_discovery::origin_for(homepage, stream_url).map(SiteOrigin)
 }
 
 /// Give a kept station with no usable logo another chance at one, and point its row at what lands.
@@ -388,7 +392,7 @@ pub(super) async fn adopted(state: &AppState, id: i64, path: String) -> Option<S
     match set_artwork(state, id, Some(&path)).await {
         Ok(()) => Some(path),
         Err(e) => {
-            log::debug!("radio: station logo not stored: {}", crate::error::describe(&e));
+            log::debug!("radio: station logo not stored: {}", melodia_core::error::describe(&e));
             None
         }
     }
@@ -397,17 +401,17 @@ pub(super) async fn adopted(state: &AppState, id: i64, path: String) -> Option<S
 /// Record that a site advertised nothing usable.
 async fn note_site_miss(state: &AppState, origin: &str) {
     if let Err(e) = note_logo_miss(state, origin).await {
-        log::debug!("radio: site outcome not recorded: {}", crate::error::describe(&e));
+        log::debug!("radio: site outcome not recorded: {}", melodia_core::error::describe(&e));
     }
 }
 
 /// What a station's own site says its logo is, past the switch that turns Radio off.
 async fn discover_logo_url(state: &AppState, origin: &reqwest::Url) -> Option<String> {
     let client = directory_client(state).ok()?;
-    match crate::media::fetch::logo_discovery::icon_url(client, origin).await {
+    match melodia_net::media::fetch::logo_discovery::icon_url(client, origin).await {
         Ok(url) => url,
         Err(e) => {
-            log::debug!("radio: station site not read: {}", crate::error::describe(&e));
+            log::debug!("radio: station site not read: {}", melodia_core::error::describe(&e));
             None
         }
     }

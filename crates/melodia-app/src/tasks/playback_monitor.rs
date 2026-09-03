@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::database::{DbPool, queries};
-use crate::player::engine::handlers::{
-    PlaybackMonitorContext, PlaybackSnapshot, SnapshotSink, spawn_playback_monitor,
-};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_engine::player::engine::handlers::{
+    PlaybackMonitorContext, PlaybackSnapshot, SnapshotSink, spawn_playback_monitor,
+};
+use melodia_store::database::{DbPool, queries};
 
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let db = state.db.clone();
@@ -51,7 +51,7 @@ async fn persist(db: &DbPool, queue_path: &Path, snapshot: PlaybackSnapshot) {
     let path: PathBuf = queue_path.to_path_buf();
     let playback = snapshot.playback;
     let join = tokio::task::spawn_blocking(move || {
-        crate::utils::atomic_file::write_json_sync(&path, &playback)
+        melodia_core::utils::atomic_file::write_json_sync(&path, &playback)
     })
     .await;
     match join {

@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use crate::database::queries;
-use crate::error::AppResult;
 use crate::library;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppResult;
+use melodia_store::database::queries;
 
 /// Translate of `startup::run_async_init` from the Tauri version.
 ///
@@ -23,12 +23,13 @@ pub async fn run(state: &AppState) -> AppResult<()> {
     if !settings.library.music_folder_auto_added {
         if let Some(music_dir) = dirs::audio_dir()
             && music_dir.exists()
-            && let Ok(canonical) = crate::utils::canonicalize_path(&music_dir)
+            && let Ok(canonical) = melodia_core::utils::canonicalize_path(&music_dir)
         {
             let path = canonical.to_string_lossy().into_owned();
             let existing = queries::folder::get_all_folders(&state.db).await.unwrap_or_default();
             let dup = existing.iter().any(|f| {
-                crate::utils::canonicalize_path(Path::new(&f.path)).is_ok_and(|p| p == canonical)
+                melodia_core::utils::canonicalize_path(Path::new(&f.path))
+                    .is_ok_and(|p| p == canonical)
             });
             if !dup {
                 match queries::folder::insert_folder(&state.db, &path, true).await {

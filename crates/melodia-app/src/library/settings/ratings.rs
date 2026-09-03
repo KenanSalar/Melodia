@@ -2,9 +2,9 @@
 //! [`AppState`] is refreshed by the UI callback before the write, the same synchronous-shadow
 //! ordering [`super::radio`] uses.
 
-use crate::error::AppError;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 /// Persist whether a star set in Melodia is also written into the file's own tag.
 pub fn set_write_ratings_to_tags(state: &AppState, write: bool) -> Result<(), AppError> {

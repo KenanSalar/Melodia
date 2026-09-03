@@ -1,11 +1,11 @@
-use crate::database::queries;
-use crate::error::AppError;
 use crate::state::AppState;
+use melodia_core::error::AppError;
+use melodia_store::database::queries;
 
 // The UI names this to hold what `search_all` hands back; without the re-export
-// its only spelling is `crate::database::queries::…`, which puts a persistence
+// its only spelling is `melodia_store::database::queries::…`, which puts a persistence
 // path in four `ui::search` files for a type that is pure data.
-pub use crate::entities::search::SearchResults;
+pub use melodia_core::entities::search::SearchResults;
 
 pub async fn search_all(state: &AppState, query: String) -> Result<SearchResults, AppError> {
     if query.trim().is_empty() {

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::media::ingest::watcher::FileEvent;
-use crate::utils::self_writes::SelfWrites;
+use melodia_core::utils::self_writes::SelfWrites;
+use melodia_store::media::ingest::watcher::FileEvent;
 
 use super::{deduplicate_events, suppress_self_writes};
 

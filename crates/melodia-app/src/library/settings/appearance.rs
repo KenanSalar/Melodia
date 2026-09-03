@@ -9,12 +9,12 @@
 //! a rewrite of `settings.json` on every launch. Nothing else is writing at
 //! that point in the boot, so there is no window to serialise against.
 
-use crate::error::AppError;
 use crate::services::{
     self,
     settings::{SettingsData, ThemePreference},
 };
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 /// Backfill `theme_preferences[theme_id]` from the top-level theme fields when
 /// the active theme has no entry yet, persisting only when one was missing.
@@ -33,11 +33,12 @@ pub fn seed_theme_preference(state: &AppState, mut settings: SettingsData) -> Re
     if settings.theme_preferences.contains_key(&settings.theme_id) {
         return Ok(());
     }
-    let last_static_accent = if settings.accent_color == crate::themes::MATERIAL_YOU_ACCENT_ID {
-        None
-    } else {
-        Some(settings.accent_color.clone())
-    };
+    let last_static_accent =
+        if settings.accent_color == melodia_core::themes::MATERIAL_YOU_ACCENT_ID {
+            None
+        } else {
+            Some(settings.accent_color.clone())
+        };
     settings.theme_preferences.insert(
         settings.theme_id.clone(),
         ThemePreference {
@@ -69,7 +70,7 @@ pub fn set_appearance(
     services::settings::mutate_settings(&state.paths, move |settings| {
         let preserved_static =
             settings.theme_preferences.get(&theme_id).and_then(|p| p.last_static_accent.clone());
-        let last_static_accent = if accent_color == crate::themes::MATERIAL_YOU_ACCENT_ID {
+        let last_static_accent = if accent_color == melodia_core::themes::MATERIAL_YOU_ACCENT_ID {
             preserved_static
         } else {
             Some(accent_color.clone())

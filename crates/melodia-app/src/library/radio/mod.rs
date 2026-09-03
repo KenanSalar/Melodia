@@ -40,11 +40,11 @@ pub use playback::{
 // above — see the argument at each of their definitions.
 pub(super) use authoring::{resolve_station_name, validated_overrides};
 
-use crate::database::queries;
-use crate::entities::radio;
-use crate::error::AppError;
-use crate::services::net::radio_browser;
 use crate::state::AppState;
+use melodia_core::entities::radio;
+use melodia_core::error::AppError;
+use melodia_net::services::net::radio_browser;
+use melodia_store::database::queries;
 
 /// Stations per directory page.
 ///

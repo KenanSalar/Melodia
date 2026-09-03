@@ -1,9 +1,9 @@
 //! Scrobbling background tasks: a **detector** that turns the player's
 //! view-model + position watch channels into scrobble / now-playing decisions
-//! (via the pure [`crate::services::integrations::scrobble::detector::DetectorState`]), and a
-//! **submitter** that drains
-//! the durable queue to the providers with per-provider batching, retry, and
-//! backoff.
+//! (via the pure
+//! [`melodia_integrations::services::integrations::scrobble::detector::DetectorState`]),
+//! and a **submitter** that drains the durable queue to the providers with
+//! per-provider batching, retry, and backoff.
 //!
 //! Both run off the same seam OS media controls use, so nothing here touches the
 //! player state machine. No `ui::*` imports — a backend failure would surface via
@@ -15,14 +15,14 @@ use std::time::Duration;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
-use crate::database::DbPool;
-use crate::database::queries;
-use crate::entities::track::ScrobbleRow;
-use crate::player::engine::state::{PlayerViewModelLight, PositionTick};
-use crate::services::integrations::scrobble::detector::{DetectorState, Effect};
-use crate::services::integrations::scrobble::{ScrobbleService, ScrobbleTrack};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_core::entities::track::ScrobbleRow;
+use melodia_engine::player::engine::state::{PlayerViewModelLight, PositionTick};
+use melodia_integrations::services::integrations::scrobble::detector::{DetectorState, Effect};
+use melodia_integrations::services::integrations::scrobble::{ScrobbleService, ScrobbleTrack};
+use melodia_store::database::DbPool;
+use melodia_store::database::queries;
 
 /// Base retry delay after a deferred submit; doubles up to [`MAX_BACKOFF`] on
 /// repeated failure and resets to this on a clean round.

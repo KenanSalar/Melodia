@@ -5,9 +5,9 @@
 //! which row was passed over. So every shape a real file arrives in is spelled out rather than
 //! trusted, and so is what each one does to the table.
 
-use crate::database::{DbPool, queries};
-use crate::entities::radio::{self, RadioStation};
-use crate::error::AppError;
+use melodia_core::entities::radio::{self, RadioStation};
+use melodia_core::error::AppError;
+use melodia_store::database::{DbPool, queries};
 
 use super::{
     ImportStationsResult, StationEntry, indexed_key, parse, read_station_list, serialize,

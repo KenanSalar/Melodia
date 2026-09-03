@@ -5,9 +5,9 @@
 //! Discord has no *credentials* — the application id is a compile-time
 //! constant — so nothing lives outside `settings.json`.
 
-use crate::error::AppError;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 /// Persist the Discord Rich Presence master toggle. Off by default (opt-in).
 pub fn set_discord_rpc_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {

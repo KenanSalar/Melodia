@@ -5,12 +5,12 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 
-use crate::config::Paths;
-use crate::database::DbPool;
-use crate::database::queries;
-use crate::error::AppResult;
-use crate::error::describe;
-use crate::media::fetch::deezer::{self, DeezerAnswer};
+use melodia_core::config::Paths;
+use melodia_core::error::AppResult;
+use melodia_core::error::describe;
+use melodia_net::media::fetch::deezer::{self, DeezerAnswer};
+use melodia_store::database::DbPool;
+use melodia_store::database::queries;
 
 /// Session-scoped negative memo: artist ids whose Deezer search returned a
 /// definitive "no match" this session. `spawn_fetch` runs after every scan

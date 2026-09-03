@@ -16,10 +16,10 @@
 
 use std::path::Path;
 
-use crate::database::{DbPool, queries};
-use crate::entities::radio;
-use crate::error::AppError;
 use crate::state::AppState;
+use melodia_core::entities::radio;
+use melodia_core::error::AppError;
+use melodia_store::database::{DbPool, queries};
 
 const HEADER: &str = "#EXTM3U";
 const EXTINF_TAG: &str = "#EXTINF:";
@@ -133,9 +133,11 @@ async fn write_station_list(db: &DbPool, dest: &Path) -> Result<u32, AppError> {
     let path = dest.to_path_buf();
 
     let written = u32::try_from(stations.len()).unwrap_or(u32::MAX);
-    tokio::task::spawn_blocking(move || crate::utils::atomic_file::write_text_sync(&path, &text))
-        .await
-        .map_err(AppError::io_source)??;
+    tokio::task::spawn_blocking(move || {
+        melodia_core::utils::atomic_file::write_text_sync(&path, &text)
+    })
+    .await
+    .map_err(AppError::io_source)??;
     Ok(written)
 }
 
@@ -203,7 +205,7 @@ async fn import_one(
     // without this a blocked station is one export away from a row. Counted as
     // skipped rather than reported: the caller has no vocabulary for the difference
     // and giving it one would describe the blocklist to whoever read the toast.
-    if crate::services::net::radio_blocklist::blocks(&station) {
+    if melodia_net::services::net::radio_blocklist::blocks(&station) {
         return Ok(false);
     }
     let existing = queries::radio::kept_station_matching(
@@ -247,12 +249,12 @@ async fn apply_overrides(
     let stored = match super::radio::validated_overrides(overrides) {
         Ok(stored) => stored,
         Err(e) => {
-            log::debug!("radio: imported details refused: {}", crate::error::describe(&e));
+            log::debug!("radio: imported details refused: {}", melodia_core::error::describe(&e));
             return;
         }
     };
     if let Err(e) = queries::radio::set_local_fields_on(&mut **tx, id, &stored).await {
-        log::debug!("radio: imported details not stored: {}", crate::error::describe(&e));
+        log::debug!("radio: imported details not stored: {}", melodia_core::error::describe(&e));
     }
 }
 
@@ -383,7 +385,7 @@ fn parse(body: &str) -> Vec<StationEntry> {
         if let Some((key, value)) = line.split_once('=') {
             let value = value.trim();
             if let Some(index) = indexed_key(key.trim(), "File") {
-                if crate::services::net::is_http_url(value) {
+                if melodia_net::services::net::is_http_url(value) {
                     pls_slots.push((index, entries.len()));
                     entries.push(pending.claim(value.to_owned()));
                 }
@@ -403,7 +405,7 @@ fn parse(body: &str) -> Vec<StationEntry> {
             // through to the URL reading rather than being swallowed here.
         }
 
-        if crate::services::net::is_http_url(line) {
+        if melodia_net::services::net::is_http_url(line) {
             entries.push(pending.claim(line.to_owned()));
         }
     }

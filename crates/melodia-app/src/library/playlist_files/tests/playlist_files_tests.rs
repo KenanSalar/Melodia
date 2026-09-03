@@ -2,10 +2,10 @@ use std::collections::HashSet;
 
 #[allow(clippy::wildcard_imports)]
 use super::*;
-use crate::database::DbPool;
-use crate::database::queries;
-use crate::database::queries::fixtures::insert_test_track;
-use crate::error::AppError;
+use melodia_core::error::AppError;
+use melodia_store::database::DbPool;
+use melodia_store::database::queries;
+use melodia_store::database::queries::fixtures::insert_test_track;
 
 fn entry(path: &str, hash: Option<&str>) -> m3u::ParsedEntry {
     m3u::ParsedEntry {

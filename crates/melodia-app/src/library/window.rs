@@ -1,19 +1,19 @@
-use crate::error::AppError;
 use crate::services::{
     self,
     settings::{TitlebarButtonSide, TitlebarButtonStyle},
 };
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 /// Apply the user's pinned choice and persist it. On Linux this drops
 /// into the `KWin` / GNOME D-Bus backends via
-/// `services::platform::always_on_top::apply`; on macOS / Windows the UI callback
+/// `melodia_platform::services::platform::always_on_top::apply`; on macOS / Windows the UI callback
 /// already pushed `WindowLevel::AlwaysOnTop` to winit synchronously, so
 /// here we just persist. Returns `AppError::Window` when the desktop
 /// has no supported method — callers use that to revert the optimistic
 /// toggle they performed on the UI thread.
 pub async fn set_always_on_top(state: &AppState, pinned: bool) -> Result<(), AppError> {
-    services::platform::always_on_top::apply(
+    melodia_platform::services::platform::always_on_top::apply(
         state.always_on_top.method,
         &state.paths.data_dir,
         pinned,

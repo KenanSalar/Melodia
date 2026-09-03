@@ -4,10 +4,10 @@
 //! sound changes immediately and the `settings.json` commit only persists the
 //! choice. Mirrors the shape of [`super::playback`].
 
-use crate::error::AppError;
-use crate::player::playback::equalizer;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppError;
+use melodia_playback::player::playback::equalizer;
 
 /// Persist the EQ on/off toggle. Defaults to `false` on first launch
 /// (`EqualizerFlags::default()`), so new installs land with the EQ inert.

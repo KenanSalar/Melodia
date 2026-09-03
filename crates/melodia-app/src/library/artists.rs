@@ -4,10 +4,10 @@
 //! bridge (`melodia-views`' `ui/artists/`) does the in-memory sorting / filtering /
 //! chunking.
 
-use crate::database::queries;
-use crate::entities::{album, artist, track};
-use crate::error::AppError;
 use crate::state::AppState;
+use melodia_core::entities::{album, artist, track};
+use melodia_core::error::AppError;
+use melodia_store::database::queries;
 
 /// Every artist with at least one track, name-sorted (the `artist_stats`
 /// view's default order). The Artist grid re-sorts in memory for the

@@ -13,7 +13,7 @@ mod staging;
 mod swap;
 mod verify;
 
-use crate::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult};
 
 use super::install_target;
 use super::manifest::PlatformAsset;

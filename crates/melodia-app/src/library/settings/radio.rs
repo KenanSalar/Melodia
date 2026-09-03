@@ -2,9 +2,9 @@
 //! shadows on [`AppState`] are refreshed separately by the UI callbacks once the
 //! write commits, the same kick-after-persist ordering [`super::discord`] uses.
 
-use crate::error::AppError;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 /// Persist the Radio master toggle. Off by default (opt-in).
 pub fn set_radio_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {

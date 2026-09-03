@@ -4,9 +4,9 @@
 //! kick-after-persist ordering the appearance/EQ setters use. Shaped like
 //! [`super::replaygain`].
 
-use crate::error::AppError;
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 /// Persist the Last.fm scrobbling toggle. Defaults to `false` on first launch.
 pub fn set_scrobble_lastfm_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {

@@ -7,10 +7,10 @@
 
 use std::sync::Arc;
 
-use crate::entities::radio;
-use crate::error::AppError;
-use crate::services::net::radio_browser;
 use crate::state::AppState;
+use melodia_core::entities::radio;
+use melodia_core::error::AppError;
+use melodia_net::services::net::radio_browser;
 
 use super::directory_client;
 

@@ -3,10 +3,10 @@
 //! takes `&AppState` and returns `Result<_, AppError>`; the UI bridge
 //! (`melodia-views`' `ui/albums/`) does the in-memory sorting / filtering / chunking.
 
-use crate::database::queries;
-use crate::entities::{album, track};
-use crate::error::AppError;
 use crate::state::AppState;
+use melodia_core::entities::{album, track};
+use melodia_core::error::AppError;
+use melodia_store::database::queries;
 
 /// Every album, name-sorted (the `album_stats` view's default order). The
 /// Albums grid re-sorts in memory for the Year / Artist sort options, so

@@ -10,9 +10,9 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::Paths;
-use crate::error::{AppError, AppResult};
 use crate::services::settings::{ColumnWidths, ViewSort};
+use melodia_core::config::Paths;
+use melodia_core::error::{AppError, AppResult};
 
 /// Per-view UI state persisted between launches. Every field is
 /// `#[serde(default)]` through the struct attribute, so a missing key — or a
@@ -91,11 +91,11 @@ fn default_last_nav_index() -> i32 {
 pub const MAX_NAV_INDEX: i32 = 10;
 
 pub fn read_view_state(paths: &Paths) -> AppResult<ViewStateData> {
-    crate::utils::atomic_file::load_json_or_default_sync(&paths.view_state_path)
+    melodia_core::utils::atomic_file::load_json_or_default_sync(&paths.view_state_path)
 }
 
 pub fn write_view_state(paths: &Paths, view_state: &ViewStateData) -> AppResult<()> {
-    crate::utils::atomic_file::write_json_sync(&paths.view_state_path, view_state)
+    melodia_core::utils::atomic_file::write_json_sync(&paths.view_state_path, view_state)
         .map_err(|e| AppError::Settings(format!("Failed to write view state: {e}")))
 }
 

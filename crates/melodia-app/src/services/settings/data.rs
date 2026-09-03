@@ -14,11 +14,11 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::entities::integrations::{DiscordFlags, ScrobbleFlags};
-use crate::player::engine::types::RepeatMode;
-use crate::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
-use crate::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
-use crate::player::playback::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
+use melodia_core::entities::integrations::{DiscordFlags, ScrobbleFlags};
+use melodia_engine::player::engine::types::RepeatMode;
+use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
+use melodia_playback::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
+use melodia_playback::player::playback::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
 
 pub const MAX_CORNER_RADIUS: u32 = 15;
 
@@ -686,7 +686,7 @@ impl Default for SettingsData {
 /// The locale list, which is `entities::locale`'s: three tiers read it and none of them owns
 /// it. Re-exported rather than moved out of reach, `services::settings::SUPPORTED_LOCALES`
 /// being what the persisted-code validator and the Settings page already spell.
-pub use crate::entities::locale::SUPPORTED_LOCALES;
+pub use melodia_core::entities::locale::SUPPORTED_LOCALES;
 
 fn default_locale() -> String {
     detect_os_locale().unwrap_or_else(|| "en".to_owned())

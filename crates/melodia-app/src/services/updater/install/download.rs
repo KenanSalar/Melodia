@@ -7,7 +7,7 @@ use std::path::Path;
 
 use futures_util::StreamExt;
 
-use crate::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult};
 
 use super::staging::{
     StagedMeta, discard_staging_if_sidecar_mismatches, sidecar_meta_path, write_staged_meta,

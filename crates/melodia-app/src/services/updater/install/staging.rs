@@ -15,10 +15,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{AppError, AppResult};
-use crate::services::platform::install_kind::linux_pkg::LinuxPackageFormat;
-use crate::services::platform::install_kind::probe::dir_is_writable;
-use crate::services::platform::install_kind::target::current_target_key;
+use melodia_core::error::{AppError, AppResult};
+use melodia_platform::services::platform::install_kind::linux_pkg::LinuxPackageFormat;
+use melodia_platform::services::platform::install_kind::probe::dir_is_writable;
+use melodia_platform::services::platform::install_kind::target::current_target_key;
 
 /// Install strategy resolved from the current `latest.json` target key, driving
 /// both where the artifact lands and how it is installed. One enum for both, so

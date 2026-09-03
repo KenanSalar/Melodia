@@ -3,12 +3,12 @@
 //! [`queries::playlist`]. Membership is resolved live from the stored criteria;
 //! nothing is ever materialized into `playlist_items`.
 
-use crate::database::queries;
-use crate::entities::playlist::Playlist;
-use crate::entities::smart_criteria::SmartCriteria;
-use crate::entities::track::TrackListRow;
-use crate::error::AppError;
 use crate::state::AppState;
+use melodia_core::entities::playlist::Playlist;
+use melodia_core::entities::smart_criteria::SmartCriteria;
+use melodia_core::entities::track::TrackListRow;
+use melodia_core::error::AppError;
+use melodia_store::database::queries;
 
 /// Resolve a smart playlist's current membership from its criteria (ordered and
 /// capped per the criteria's optional limit).

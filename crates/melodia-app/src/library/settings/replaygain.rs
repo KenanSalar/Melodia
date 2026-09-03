@@ -4,10 +4,10 @@
 //! writes, so the sound changes immediately and the `settings.json` commit only
 //! persists the choice. Mirrors the shape of [`super::equalizer`].
 
-use crate::error::AppError;
-use crate::player::playback::replaygain::{self, RgMode};
 use crate::services;
 use crate::state::AppState;
+use melodia_core::error::AppError;
+use melodia_playback::player::playback::replaygain::{self, RgMode};
 
 /// Persist the `ReplayGain` on/off toggle. Defaults to `false` on first launch
 /// (`ReplayGainFlags::default()`), so new installs land with `ReplayGain` inert.

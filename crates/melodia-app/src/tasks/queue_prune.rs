@@ -14,17 +14,17 @@ use std::sync::Arc;
 
 use sqlx::FromRow;
 
-use crate::database::DbPool;
-use crate::error::AppResult;
-use crate::player::engine::actions::emit_and_execute;
-use crate::player::engine::backend::PlaybackEngine;
-use crate::player::engine::event_sink::PlayerSinks;
-use crate::player::engine::state::{
-    PlayerAction, PlayerStateHandle, lock_state, play_track_inner, stop_end_of_queue,
-};
-use crate::player::engine::types::PlaybackSource;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_core::error::AppResult;
+use melodia_engine::player::engine::actions::emit_and_execute;
+use melodia_engine::player::engine::backend::PlaybackEngine;
+use melodia_engine::player::engine::event_sink::PlayerSinks;
+use melodia_engine::player::engine::state::{
+    PlayerAction, PlayerStateHandle, lock_state, play_track_inner, stop_end_of_queue,
+};
+use melodia_engine::player::engine::types::PlaybackSource;
+use melodia_store::database::DbPool;
 
 /// `chunked_in_query` row shape for `SELECT id FROM tracks WHERE id IN (…)`.
 #[derive(FromRow)]
@@ -85,7 +85,7 @@ async fn reconcile_once(
     // Step 2: ask the DB which of those ids still exist. The chunked helper
     // stays within SQLite's 999-bind cap for very long queues.
     let surviving_rows: Vec<IdRow> =
-        crate::database::chunked_in_query(db.read(), &queued_ids, |placeholders| {
+        melodia_store::database::chunked_in_query(db.read(), &queued_ids, |placeholders| {
             format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
         })
         .await?;

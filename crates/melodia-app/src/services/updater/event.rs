@@ -52,12 +52,12 @@ pub enum FailureKind {
 }
 
 impl FailureKind {
-    /// Map an [`AppError`](crate::error::AppError) onto the bucket the UI displays.
+    /// Map an [`AppError`](melodia_core::error::AppError) onto the bucket the UI displays.
     /// A signature failure is recognised by the "signature" substring
     /// [`crate::services::updater::install`] puts on its `Validation` error; every
     /// other `Validation` reads as a parse failure.
-    pub fn classify(err: &crate::error::AppError) -> Self {
-        use crate::error::AppError;
+    pub fn classify(err: &melodia_core::error::AppError) -> Self {
+        use melodia_core::error::AppError;
         match err {
             AppError::Network { .. } => Self::Network,
             AppError::Io(_) => Self::Io,

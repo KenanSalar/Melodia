@@ -44,7 +44,7 @@ use crate::services::updater::{
 };
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
-use crate::{AppWindow, MelodiaUpdater};
+use melodia_ui::{AppWindow, MelodiaUpdater};
 
 const STARTUP_DELAY: Duration = Duration::from_secs(30);
 const NORMAL_CADENCE: Duration = Duration::from_hours(6);

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use crate::error::AppError;
 use crate::services::settings::SortDir;
+use melodia_core::error::AppError;
 
 use super::*;
 

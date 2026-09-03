@@ -11,7 +11,7 @@
 //! That hash is what lets a restored playlist re-match a track even after its
 //! file was moved.
 
-use crate::entities::track::PlaylistExportRow;
+use melodia_core::entities::track::PlaylistExportRow;
 
 const HEADER: &str = "#EXTM3U";
 const PLAYLIST_TAG: &str = "#PLAYLIST:";

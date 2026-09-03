@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use crate::entities::track::TrackSummary;
-use crate::error::AppError;
-use crate::player::engine::state::PlayerState;
+use melodia_core::entities::track::TrackSummary;
+use melodia_core::error::AppError;
+use melodia_engine::player::engine::state::PlayerState;
 
 use super::*;
 

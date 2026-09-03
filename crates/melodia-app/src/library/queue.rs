@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
-use crate::config::Paths;
-use crate::database::queries;
-use crate::entities::track::TrackSummary;
-use crate::error::{AppError, AppResult};
-use crate::player::engine::actions::emit_and_execute;
-use crate::player::engine::state::{
-    play_track_inner, restore_queue, restore_station, with_state_emit,
-};
-use crate::player::engine::types::{PersistedPlayback, RepeatMode};
 use crate::services::settings::{mutate_settings, mutate_settings_with};
 use crate::state::AppState;
+use melodia_core::config::Paths;
+use melodia_core::entities::track::TrackSummary;
+use melodia_core::error::{AppError, AppResult};
+use melodia_engine::player::engine::actions::emit_and_execute;
+use melodia_engine::player::engine::state::{
+    play_track_inner, restore_queue, restore_station, with_state_emit,
+};
+use melodia_engine::player::engine::types::{PersistedPlayback, RepeatMode};
+use melodia_store::database::queries;
 
 use super::import::{ImportFilesResult, import_files_with_summaries};
 use super::playback::player_play_tracks;
@@ -322,7 +322,7 @@ pub async fn restore_persisted_playback(state: &AppState) -> AppResult<()> {
 /// Shuffle the queue's `play_order` in place using a thread-local RNG,
 /// pinning the currently-playing track to position 0 so playback stays
 /// continuous. Allocation-free — no intermediate index Vec.
-fn shuffle_inline(state: &mut crate::player::engine::state::PlayerState) {
+fn shuffle_inline(state: &mut melodia_engine::player::engine::state::PlayerState) {
     let mut rng = rand::rng();
     state.queue.shuffle_play_order_in_place(&mut rng, /* anchor_to_current */ true);
 }

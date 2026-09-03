@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::database::queries;
-use crate::entities::browse::{BrowseFile, BrowseFolder, BrowseResult};
-use crate::entities::folder::Folder;
-use crate::entities::track::TrackListRow;
-use crate::error::AppError;
 use crate::state::AppState;
-use crate::utils::audio_ext::is_audio_extension;
+use melodia_core::entities::browse::{BrowseFile, BrowseFolder, BrowseResult};
+use melodia_core::entities::folder::Folder;
+use melodia_core::entities::track::TrackListRow;
+use melodia_core::error::AppError;
+use melodia_core::utils::audio_ext::is_audio_extension;
+use melodia_store::database::queries;
 
 /// Result of the blocking filesystem scan, returned from `spawn_blocking`.
 struct DirScanResult {
@@ -74,11 +74,11 @@ pub async fn browse_directory(
     let enabled_canonical: Vec<PathBuf> = library_folders
         .iter()
         .filter(|f| f.is_enabled)
-        .filter_map(|f| crate::utils::canonicalize_path(&f.path).ok())
+        .filter_map(|f| melodia_core::utils::canonicalize_path(&f.path).ok())
         .collect();
 
     let scan = tokio::task::spawn_blocking(move || -> Result<DirScanResult, AppError> {
-        let canonical = crate::utils::canonicalize_path(&path)
+        let canonical = melodia_core::utils::canonicalize_path(&path)
             .map_err(|_| AppError::Validation(format!("Path does not exist: {path}")))?;
 
         if !canonical.is_dir() {

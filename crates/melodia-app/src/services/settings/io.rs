@@ -1,21 +1,21 @@
 //! Load / save / atomic-mutate for `settings.json`. The data model these
 //! functions read and write lives in the sibling [`super::data`] module.
 
-use crate::config::Paths;
-use crate::error::{AppError, AppResult};
+use melodia_core::config::Paths;
+use melodia_core::error::{AppError, AppResult};
 
 use super::{MAX_CORNER_RADIUS, SettingsData};
 
 pub fn read_settings(paths: &Paths) -> AppResult<SettingsData> {
     let mut settings: SettingsData =
-        crate::utils::atomic_file::load_json_or_default_sync(&paths.settings_path)?;
-    settings.volume = settings.volume.min(crate::player::engine::state::MAX_VOLUME);
+        melodia_core::utils::atomic_file::load_json_or_default_sync(&paths.settings_path)?;
+    settings.volume = settings.volume.min(melodia_engine::player::engine::state::MAX_VOLUME);
     settings.corner_radius = settings.corner_radius.min(MAX_CORNER_RADIUS);
     Ok(settings)
 }
 
 pub fn write_settings(paths: &Paths, settings: &SettingsData) -> AppResult<()> {
-    crate::utils::atomic_file::write_json_sync(&paths.settings_path, settings)
+    melodia_core::utils::atomic_file::write_json_sync(&paths.settings_path, settings)
         .map_err(|e| AppError::Settings(format!("Failed to write settings: {e}")))
 }
 

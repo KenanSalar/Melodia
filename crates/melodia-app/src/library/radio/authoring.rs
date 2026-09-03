@@ -6,12 +6,12 @@
 //! [`set_station_overrides`], because an import of fifty stations must not fire fifty logo
 //! downloads. Both halves argue it at their own definitions.
 
-use crate::database::queries;
-use crate::entities::radio;
-use crate::error::AppError;
-use crate::player::source::stream_source::{self, StationFacts};
-use crate::services::net::radio_blocklist;
 use crate::state::AppState;
+use melodia_audio::player::source::stream_source::{self, StationFacts};
+use melodia_core::entities::radio;
+use melodia_core::error::AppError;
+use melodia_net::services::net::radio_blocklist;
+use melodia_store::database::queries;
 
 use super::logos::{AnswerSeed, adopted, ask_logo_url};
 use super::{directory_client, get_station, save_station, set_favorite};
@@ -172,7 +172,7 @@ fn trimmed(value: Option<&str>) -> Option<String> {
 /// `None` is the empty field, which clears the column. Anything else has to parse as an HTTP(S)
 /// URL with a host: the value ends up behind a button that opens the user's browser, so a typo is
 /// caught while they are looking at the field rather than handed to `open::that_detached`. Through
-/// [`crate::services::net::http_url`], which the logo fetch and the playlist reader share.
+/// [`melodia_net::services::net::http_url`], which the logo fetch and the playlist reader share.
 ///
 /// Normalized through `Url` rather than stored as typed, so `nidaa.fm` and a trailing-slash-less
 /// spelling of the same site do not read as two different links.
@@ -181,9 +181,9 @@ pub(super) fn website_url(website: &str) -> Result<Option<String>, AppError> {
     if website.is_empty() {
         return Ok(None);
     }
-    crate::services::net::http_url(website).map(|url| Some(url.to_string())).ok_or_else(|| {
-        AppError::Validation("A station website must be an http:// or https:// address".into())
-    })
+    melodia_net::services::net::http_url(website).map(|url| Some(url.to_string())).ok_or_else(
+        || AppError::Validation("A station website must be an http:// or https:// address".into()),
+    )
 }
 
 /// Refuse to edit a station the directory owns.

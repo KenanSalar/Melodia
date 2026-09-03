@@ -27,14 +27,14 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use crate::library;
-use crate::media::image::cover_thumbs::CoverThumbs;
-use crate::media::image::material_you::{
-    SchemeStyle, SeedCache, extract_source_argb_from_rgb8, generate_palette,
-};
-use crate::player::engine::state::PlayerViewModelLight;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
-use crate::themes::{Palette, SystemColorState};
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_artwork::media::image::material_you::{
+    SchemeStyle, SeedCache, extract_source_argb_from_rgb8, generate_palette,
+};
+use melodia_core::themes::{Palette, SystemColorState};
+use melodia_engine::player::engine::state::PlayerViewModelLight;
 
 /// Spawn the coordinator on the shared task lifecycle so the main shutdown
 /// sequence waits for any in-flight palette generation to settle before the

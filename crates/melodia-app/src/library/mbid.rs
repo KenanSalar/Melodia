@@ -19,16 +19,16 @@ use std::sync::Arc;
 
 use rayon::prelude::*;
 
-use crate::database::{DbPool, queries};
-use crate::entities::scan::ExtractedMetadata;
-use crate::entities::tags::{FieldEdit, TagEdit};
-use crate::error::AppError;
-use crate::error::describe;
-use crate::media::image::artwork::CoverCache;
-use crate::media::ingest::metadata::extract_metadata;
-use crate::media::ingest::tag_writer;
 use crate::state::AppState;
-use crate::utils::self_writes::SelfWrites;
+use melodia_artwork::media::image::artwork::CoverCache;
+use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::entities::tags::{FieldEdit, TagEdit};
+use melodia_core::error::AppError;
+use melodia_core::error::describe;
+use melodia_core::utils::self_writes::SelfWrites;
+use melodia_store::database::{DbPool, queries};
+use melodia_store::media::ingest::metadata::extract_metadata;
+use melodia_store::media::ingest::tag_writer;
 
 /// Same bound as the tag editor's fan-out ([`crate::library::tags`]): the write
 /// is I/O-bound and the MP4 save clones the embedded cover, so extra width buys

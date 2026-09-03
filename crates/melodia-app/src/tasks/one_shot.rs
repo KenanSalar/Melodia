@@ -9,11 +9,11 @@
 //!
 //! What the two genuinely differ on is [`OnFailure`], and that is the only knob here.
 
-use crate::error::{AppResult, describe};
 use crate::services;
 use crate::services::settings::LibraryFlags;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_core::error::{AppResult, describe};
 
 /// Whether a pass that failed part way still records its marker.
 #[derive(Clone, Copy)]

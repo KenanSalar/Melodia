@@ -10,13 +10,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use rayon::prelude::*;
 
-use crate::database::queries;
-use crate::entities::folder;
-use crate::error::AppError;
-use crate::media::ingest::scanner::{collect_media_files, scan_files_parallel, track_is_current};
 use crate::services;
 use crate::state::{AppState, ScanProgressTick};
 use crate::tasks::{self, TaskSpawner};
+use melodia_core::entities::folder;
+use melodia_core::error::AppError;
+use melodia_store::database::queries;
+use melodia_store::media::ingest::scanner::{
+    collect_media_files, scan_files_parallel, track_is_current,
+};
 
 /// Validates a new folder path against existing folders.
 /// Returns IDs of existing child folders that should be removed (covered by the new parent).
@@ -34,7 +36,7 @@ fn validate_folder_path(
         )));
     }
 
-    let canonical_new = crate::utils::canonicalize_path(new_path).map_err(|e| {
+    let canonical_new = melodia_core::utils::canonicalize_path(new_path).map_err(|e| {
         AppError::Validation(format!("Cannot resolve path {}: {}", new_path.display(), e))
     })?;
 
@@ -42,7 +44,7 @@ fn validate_folder_path(
 
     for folder in existing_folders {
         let existing_path = Path::new(&folder.path);
-        let Ok(canonical_existing) = crate::utils::canonicalize_path(existing_path) else {
+        let Ok(canonical_existing) = melodia_core::utils::canonicalize_path(existing_path) else {
             continue;
         };
 
@@ -75,7 +77,7 @@ pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder
 
     queries::folder::delete_folders_by_ids(&state.db, &children_to_remove).await?;
 
-    let canonical = crate::utils::canonicalize_path(new_path)
+    let canonical = melodia_core::utils::canonicalize_path(new_path)
         .map_err(|e| AppError::Validation(format!("Cannot resolve path: {e}")))?;
     let canonical_str = canonical.to_string_lossy().into_owned();
 
@@ -342,7 +344,7 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
         .map_err(|e| AppError::scanner("Scan task failed", e))?
     };
 
-    let scan_timestamp = crate::utils::now_rfc3339();
+    let scan_timestamp = melodia_core::utils::now_rfc3339();
 
     // --- Stage 1: ingest, chunked into separate write transactions on the
     // bulk path. The single writer connection frees between chunks, so
@@ -439,7 +441,7 @@ pub async fn scan_folder_internal(state: &AppState, folder_id: i64) -> Result<u3
         log::info!("Updated metadata for {updated_count} changed files");
     }
 
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
     queries::folder::update_folder_last_scanned(&state.db, folder_id, &now).await?;
 
     services::artist_images::spawn_fetch(

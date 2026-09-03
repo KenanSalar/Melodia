@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use crate::database::queries;
-use crate::entities::track::TrackSummary;
-use crate::error::AppError;
-use crate::player::engine::state::{lock_state, play_track_inner, with_state_emit};
-use crate::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
-use crate::player::source::stream_source;
 use crate::state::PlaybackContext;
+use melodia_audio::player::source::stream_source;
+use melodia_core::entities::track::TrackSummary;
+use melodia_core::error::AppError;
+use melodia_engine::player::engine::state::{lock_state, play_track_inner, with_state_emit};
+use melodia_engine::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
+use melodia_store::database::queries;
 
 /// Which slot of `summaries` playback should start on.
 ///
@@ -90,7 +90,7 @@ pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {
     if resume_station(ctx) {
         return Ok(());
     }
-    ctx.emit_and_execute(crate::player::engine::state::PlayerState::build_play_actions);
+    ctx.emit_and_execute(melodia_engine::player::engine::state::PlayerState::build_play_actions);
     Ok(())
 }
 
@@ -135,7 +135,7 @@ fn resume_station(ctx: &PlaybackContext) -> bool {
     let ctx = ctx.clone();
     tokio::spawn(async move {
         if let Err(e) = open_and_start_station(&ctx, &station, generation).await {
-            log::warn!("Could not resume {}: {}", station.name, crate::error::describe(&e));
+            log::warn!("Could not resume {}: {}", station.name, melodia_core::error::describe(&e));
         }
     });
     true
@@ -172,7 +172,7 @@ async fn open_and_start_station(
     station: &Arc<RadioNowPlaying>,
     generation: u64,
 ) -> Result<(), AppError> {
-    let client = ctx.http.get_or_init(crate::services::net::build_http_client).clone();
+    let client = ctx.http.get_or_init(melodia_net::services::net::build_http_client).clone();
     let opened = stream_source::open(&client, &station.stream_url).await;
 
     match opened {
@@ -187,8 +187,8 @@ async fn open_and_start_station(
         }
         Err(e) => {
             ctx.emit_and_execute(|s| s.build_station_failed_actions(generation));
-            crate::utils::toast::notify(
-                crate::utils::toast::ToastKind::PlaybackFailed,
+            melodia_core::utils::toast::notify(
+                melodia_core::utils::toast::ToastKind::PlaybackFailed,
                 station.name.clone(),
             );
             Err(e)
@@ -210,7 +210,7 @@ async fn open_and_start_station(
 /// deck (fading there would make the incoming track audible on arrival).
 fn transport_fade_ms(ctx: &PlaybackContext) -> u64 {
     if ctx.engine.crossfade_settings().fade_on_pause {
-        crate::player::playback::crossfade::PAUSE_FADE_MS
+        melodia_playback::player::playback::crossfade::PAUSE_FADE_MS
     } else {
         0
     }
@@ -270,12 +270,14 @@ pub fn player_seek(ctx: &PlaybackContext, position_ms: u64) -> Result<(), AppErr
 }
 
 pub fn player_next(ctx: &PlaybackContext) -> Result<(), AppError> {
-    ctx.emit_and_execute(crate::player::engine::state::PlayerState::build_next_actions);
+    ctx.emit_and_execute(melodia_engine::player::engine::state::PlayerState::build_next_actions);
     Ok(())
 }
 
 pub fn player_previous(ctx: &PlaybackContext) -> Result<(), AppError> {
-    ctx.emit_and_execute(crate::player::engine::state::PlayerState::build_previous_actions);
+    ctx.emit_and_execute(
+        melodia_engine::player::engine::state::PlayerState::build_previous_actions,
+    );
     Ok(())
 }
 
@@ -297,7 +299,9 @@ pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppErr
 }
 
 pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
-    ctx.emit_and_execute(crate::player::engine::state::PlayerState::build_toggle_mute_actions);
+    ctx.emit_and_execute(
+        melodia_engine::player::engine::state::PlayerState::build_toggle_mute_actions,
+    );
     commit_player_settings(ctx).await
 }
 
@@ -402,7 +406,7 @@ pub fn player_set_replaygain_enabled(ctx: &PlaybackContext, enabled: bool) {
 /// Set the `ReplayGain` mode (Track / Album) on the live player.
 pub fn player_set_replaygain_mode(
     ctx: &PlaybackContext,
-    mode: crate::player::playback::replaygain::RgMode,
+    mode: melodia_playback::player::playback::replaygain::RgMode,
 ) {
     ctx.engine.set_replaygain_mode(mode);
 }

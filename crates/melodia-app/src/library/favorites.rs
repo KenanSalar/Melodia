@@ -8,15 +8,15 @@
 
 use std::sync::Arc;
 
-use crate::database::queries;
-use crate::entities::{artist, track};
-use crate::error::AppError;
-use crate::player::engine::state::{
+use crate::state::AppState;
+use melodia_core::entities::{artist, track};
+use melodia_core::error::AppError;
+use melodia_core::utils::toast::{self, ToastKind};
+use melodia_engine::player::engine::state::{
     PlayerAction, lock_state, sync_current_track_if_in, with_state_emit,
 };
-use crate::services::integrations::scrobble::LoveTarget;
-use crate::state::AppState;
-use crate::utils::toast::{self, ToastKind};
+use melodia_integrations::services::integrations::scrobble::LoveTarget;
+use melodia_store::database::queries;
 
 pub async fn set_favorite(state: &AppState, ids: Vec<i64>, favorite: bool) -> Result<(), AppError> {
     queries::track::set_favorite(&state.db, &ids, favorite).await?;

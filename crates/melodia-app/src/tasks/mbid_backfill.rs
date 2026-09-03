@@ -21,16 +21,16 @@ use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
 
-use crate::database::queries;
-use crate::error::AppResult;
 use crate::library::mbid;
-use crate::services::integrations::scrobble::ScrobbleService;
-use crate::services::integrations::scrobble::providers::listenbrainz::{
-    self, ListenBrainzError, LookupQuery, MAX_LOOKUPS_PER_POST,
-};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
-use crate::utils::toast::{self, ToastKind};
+use melodia_core::error::AppResult;
+use melodia_core::utils::toast::{self, ToastKind};
+use melodia_integrations::services::integrations::scrobble::ScrobbleService;
+use melodia_integrations::services::integrations::scrobble::providers::listenbrainz::{
+    self, ListenBrainzError, LookupQuery, MAX_LOOKUPS_PER_POST,
+};
+use melodia_store::database::queries;
 
 /// Gentle pause between successful batches — `ListenBrainz` is load-sensitive, so
 /// pace lookups rather than sprint into a 429.
@@ -253,7 +253,7 @@ async fn backfill(
 /// unreadable file (a fresh sweep is the safe fallback). Stored as a plain id
 /// array for stable file contents.
 fn load_attempted(path: &Path) -> HashSet<i64> {
-    crate::utils::atomic_file::load_json_or_default_sync::<Vec<i64>>(path)
+    melodia_core::utils::atomic_file::load_json_or_default_sync::<Vec<i64>>(path)
         .unwrap_or_default()
         .into_iter()
         .collect()
@@ -265,7 +265,7 @@ async fn persist_attempted(path: &Path, attempted: &HashSet<i64>) {
     let path = path.to_path_buf();
     let ids: Vec<i64> = attempted.iter().copied().collect();
     match tokio::task::spawn_blocking(move || {
-        crate::utils::atomic_file::write_json_sync(&path, &ids)
+        melodia_core::utils::atomic_file::write_json_sync(&path, &ids)
     })
     .await
     {

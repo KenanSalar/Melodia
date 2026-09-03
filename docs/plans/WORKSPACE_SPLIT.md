@@ -1311,7 +1311,7 @@ naming either once the shims are gone. That is one fewer test binary, 41 rather 
 - [x] **E6. `melodia-engine`**, 22.
 - [x] **E7. `melodia-store`**, 48. `crate::database` stays, being store's own.
 - [x] **E8. `melodia-integrations`**, 26.
-- [ ] **E9. `melodia-app`**, roughly 157, plus the four `pub(crate) use` enforcement lines and
+- [x] **E9. `melodia-app`**, roughly 157, plus the four `pub(crate) use` enforcement lines and
       `services/mod.rs`'s three. With call sites naming `melodia_store::database` directly the
       manifest is the enforcement, and views not listing `melodia-store` is a harder error than a
       private module: the import does not resolve at all rather than resolving to something

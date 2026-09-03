@@ -19,11 +19,11 @@ use std::path::Path;
 
 use lofty::file::TaggedFileExt;
 
-use crate::database::queries;
-use crate::error::{AppError, AppResult};
-use crate::media::ingest::{metadata, rating_tags};
 use crate::state::AppState;
 use crate::tasks::{TaskSpawner, one_shot};
+use melodia_core::error::{AppError, AppResult};
+use melodia_store::database::queries;
+use melodia_store::media::ingest::{metadata, rating_tags};
 
 /// Tracks whose paths are held in memory at once, and whose tags are parsed in one fan-out.
 ///

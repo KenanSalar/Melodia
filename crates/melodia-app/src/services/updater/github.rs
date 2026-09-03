@@ -19,7 +19,7 @@
 use reqwest::StatusCode;
 use reqwest::header::{ETAG, HeaderValue, IF_NONE_MATCH};
 
-use crate::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult};
 
 use super::manifest::LatestManifest;
 use super::minisign;
@@ -84,7 +84,8 @@ pub async fn fetch_latest_manifest(
     }
 
     let etag = resp.headers().get(ETAG).and_then(|v| v.to_str().ok()).map(str::to_owned);
-    let body = crate::services::net::read_capped(resp, "latest.json", MANIFEST_MAX_BYTES).await?;
+    let body =
+        melodia_net::services::net::read_capped(resp, "latest.json", MANIFEST_MAX_BYTES).await?;
 
     // Fetch the sibling .minisig. A missing or non-200 response is
     // treated as a verification failure — we'd rather refuse to install
@@ -104,9 +105,12 @@ pub async fn fetch_latest_manifest(
             sig_resp.status()
         )));
     }
-    let sig_bytes =
-        crate::services::net::read_capped(sig_resp, "latest.json.minisig", SIGNATURE_MAX_BYTES)
-            .await?;
+    let sig_bytes = melodia_net::services::net::read_capped(
+        sig_resp,
+        "latest.json.minisig",
+        SIGNATURE_MAX_BYTES,
+    )
+    .await?;
     let sig_text = String::from_utf8_lossy(&sig_bytes);
 
     let pubkey = minisign::embedded_pubkey()

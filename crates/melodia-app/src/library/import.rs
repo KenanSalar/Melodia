@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-use crate::database::queries;
-use crate::entities::track::TrackSummary;
-use crate::error::AppError;
-use crate::media::ingest::scanner::scan_files_parallel;
 use crate::state::AppState;
-use crate::utils::audio_ext::is_audio_extension;
+use melodia_core::entities::track::TrackSummary;
+use melodia_core::error::AppError;
+use melodia_core::utils::audio_ext::is_audio_extension;
+use melodia_store::database::queries;
+use melodia_store::media::ingest::scanner::scan_files_parallel;
 
 /// Result of importing files into the library (shared by playlist and queue import).
 ///
@@ -42,7 +42,7 @@ pub async fn import_files_to_library(
             failed_paths.push(file_path.clone());
             continue;
         }
-        if let Ok(canonical) = crate::utils::canonicalize_path(&path) {
+        if let Ok(canonical) = melodia_core::utils::canonicalize_path(&path) {
             valid_paths.push(canonical.to_string_lossy().into_owned());
         } else {
             failed_paths.push(file_path.clone());
@@ -80,7 +80,7 @@ pub async fn import_files_to_library(
             let mut tx = state.db.write().begin().await?;
             queries::stats::disable_stats_triggers(&mut tx).await?;
 
-            let scan_timestamp = crate::utils::now_rfc3339();
+            let scan_timestamp = melodia_core::utils::now_rfc3339();
 
             let result = queries::ingest::ingest_scanned_files(
                 &mut tx,

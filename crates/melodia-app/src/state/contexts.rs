@@ -18,11 +18,11 @@
 
 use std::sync::{Arc, OnceLock};
 
-use crate::config::Paths;
-use crate::database::DbPool;
-use crate::player::engine::backend::PlaybackEngine;
-use crate::player::engine::event_sink::PlayerSinks;
-use crate::player::engine::state::{PlayerAction, PlayerState, PlayerStateHandle};
+use melodia_core::config::Paths;
+use melodia_engine::player::engine::backend::PlaybackEngine;
+use melodia_engine::player::engine::event_sink::PlayerSinks;
+use melodia_engine::player::engine::state::{PlayerAction, PlayerState, PlayerStateHandle};
+use melodia_store::database::DbPool;
 
 use super::AppState;
 
@@ -44,14 +44,14 @@ pub struct PlaybackContext {
 
 impl PlaybackContext {
     /// Serialized mutate → emit → execute against this context's handles. Thin
-    /// forwarder over [`crate::player::engine::actions::emit_and_execute`] so the
+    /// forwarder over [`melodia_engine::player::engine::actions::emit_and_execute`] so the
     /// `library::playback::*` / `library::queue::*` call sites stay one-liners
     /// while still routing through the shared execution lock.
     pub fn emit_and_execute<F>(&self, f: F)
     where
         F: FnOnce(&mut PlayerState) -> Vec<PlayerAction>,
     {
-        crate::player::engine::actions::emit_and_execute(
+        melodia_engine::player::engine::actions::emit_and_execute(
             &*self.engine,
             &self.player_state,
             &self.sinks,

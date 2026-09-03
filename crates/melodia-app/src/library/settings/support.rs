@@ -3,10 +3,10 @@
 //! The decision is split from the disk write so the sequence can be tested without a
 //! settings file — the [`crate::tasks::audio_health`] shape.
 
-use crate::error::AppError;
 use crate::services;
 use crate::services::settings::SupportFlags;
 use crate::state::AppState;
+use melodia_core::error::AppError;
 
 /// Which launch asks. Not the first: someone still deciding whether to keep the app
 /// has nothing to decide about supporting it yet.

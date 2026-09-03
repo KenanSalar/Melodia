@@ -11,26 +11,26 @@ pub mod signal;
 pub use contexts::PlaybackContext;
 pub use signal::{SharedFlag, Signal};
 
-use crate::config::Paths;
-use crate::database::{self, DbPool};
-use crate::error::{AppError, AppResult};
-use crate::media::image::artwork::CoverCache;
-use crate::media::ingest::watcher::{FileEvent, FolderWatcher};
-use crate::player::engine::backend::PlaybackEngine;
-use crate::player::engine::event_sink::{MediaControlsSync, PlayerSinks};
-use crate::player::engine::state::{
-    PlayerStateHandle, PlayerViewModelLight, PositionTick, QueueViewModel, lock_state,
-};
-use crate::player::playback::decks::DECK_COUNT;
-use crate::player::playback::output::AudioOutput;
-use crate::player::playback::stream_health::{self, AudioStreamHealth};
-use crate::services::integrations::discord::DiscordPresenceService;
-use crate::services::integrations::media_controls::{self, MediaControlsHandle};
-use crate::services::integrations::scrobble::ScrobbleService;
-use crate::services::platform::always_on_top::{self, AlwaysOnTopCapability};
 use crate::services::search_history::SearchHistoryState;
 use crate::services::settings;
-use crate::utils::self_writes::SelfWrites;
+use melodia_artwork::media::image::artwork::CoverCache;
+use melodia_core::config::Paths;
+use melodia_core::error::{AppError, AppResult};
+use melodia_core::utils::self_writes::SelfWrites;
+use melodia_engine::player::engine::backend::PlaybackEngine;
+use melodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerSinks};
+use melodia_engine::player::engine::state::{
+    PlayerStateHandle, PlayerViewModelLight, PositionTick, QueueViewModel, lock_state,
+};
+use melodia_integrations::services::integrations::discord::DiscordPresenceService;
+use melodia_integrations::services::integrations::media_controls::{self, MediaControlsHandle};
+use melodia_integrations::services::integrations::scrobble::ScrobbleService;
+use melodia_platform::services::platform::always_on_top::{self, AlwaysOnTopCapability};
+use melodia_playback::player::playback::decks::DECK_COUNT;
+use melodia_playback::player::playback::output::AudioOutput;
+use melodia_playback::player::playback::stream_health::{self, AudioStreamHealth};
+use melodia_store::database::{self, DbPool};
+use melodia_store::media::ingest::watcher::{FileEvent, FolderWatcher};
 
 /// One scan-progress sample published while a folder scan is running. `None`
 /// on the channel means "no scan in progress" — the UI uses that to clear the
@@ -174,13 +174,13 @@ impl AppState {
         let player_state = Arc::new(PlayerStateHandle::default());
         {
             let mut s = lock_state(&player_state);
-            s.volume = settings.volume.min(crate::player::engine::state::MAX_VOLUME);
+            s.volume = settings.volume.min(melodia_engine::player::engine::state::MAX_VOLUME);
             s.is_muted = settings.playback.is_muted;
             s.pre_mute_volume = s.volume;
             s.gapless_enabled = settings.playback.gapless_playback;
             s.playback_speed = settings.playback.playback_speed.clamp(
-                crate::player::engine::state::MIN_SPEED,
-                crate::player::engine::state::MAX_SPEED,
+                melodia_engine::player::engine::state::MIN_SPEED,
+                melodia_engine::player::engine::state::MAX_SPEED,
             );
             let vol = s.effective_volume();
             let speed = s.playback_speed;
@@ -191,7 +191,7 @@ impl AppState {
 
         hydrate_audio_dsp(&engine, &settings);
 
-        let cover_cache: CoverCache = crate::media::image::artwork::new_cover_cache();
+        let cover_cache: CoverCache = melodia_artwork::media::image::artwork::new_cover_cache();
 
         let (vm_tx, _) = watch::channel::<Option<PlayerViewModelLight>>(None);
         let (q_tx, _) = watch::channel::<Option<QueueViewModel>>(None);
@@ -298,14 +298,14 @@ impl AppState {
 
     /// The shared `reqwest::Client`, built on first call and reused for the
     /// process lifetime. Construction is deferred out of `init` (see
-    /// [`crate::services::net::build_http_client`]) so the rustls TLS stack and
+    /// [`melodia_net::services::net::build_http_client`]) so the rustls TLS stack and
     /// connection pool never load at boot/idle — only the updater, the post-scan
     /// Deezer artist-image fetch, and scrobbling pull them in. reqwest's
     /// connection pool lives on the client, so callers reuse this accessor (and
     /// `ScrobbleService`, which shares the same `OnceLock`) rather than
     /// constructing a new client per request.
     pub fn http_client(&self) -> &reqwest::Client {
-        self.http_client.get_or_init(crate::services::net::build_http_client)
+        self.http_client.get_or_init(melodia_net::services::net::build_http_client)
     }
 
     /// The still-unbuilt cell behind [`Self::http_client`], for the one consumer that has to carry
@@ -334,9 +334,11 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     // source at play time. Ships off by default; the mode string falls back to
     // Album on an unknown value.
     engine.set_replaygain_preamp(settings.replaygain.rg_preamp);
-    engine.set_replaygain_mode(crate::player::playback::replaygain::RgMode::from_settings_str(
-        &settings.replaygain.rg_mode,
-    ));
+    engine.set_replaygain_mode(
+        melodia_playback::player::playback::replaygain::RgMode::from_settings_str(
+            &settings.replaygain.rg_mode,
+        ),
+    );
     engine.set_replaygain_prevent_clipping(settings.replaygain.rg_prevent_clipping);
     engine.set_replaygain_enabled(settings.replaygain.rg_enabled);
 

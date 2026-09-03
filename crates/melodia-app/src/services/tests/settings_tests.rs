@@ -1,5 +1,5 @@
-use crate::error::AppError;
 use crate::test_support::{reading_env, with_env_set};
+use melodia_core::error::AppError;
 // The corner-radius probe is the only caller and only Linux has a desktop to ask.
 #[cfg(target_os = "linux")]
 use crate::test_support::with_env_var;
@@ -54,8 +54,8 @@ fn test_volume_clamped_to_max() -> Result<(), AppError> {
     let json = r#"{"volume": 999}"#;
     let mut settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
     // Simulate the clamping that read_settings performs
-    settings.volume = settings.volume.min(crate::player::engine::state::MAX_VOLUME);
-    assert_eq!(settings.volume, crate::player::engine::state::MAX_VOLUME);
+    settings.volume = settings.volume.min(melodia_engine::player::engine::state::MAX_VOLUME);
+    assert_eq!(settings.volume, melodia_engine::player::engine::state::MAX_VOLUME);
     Ok(())
 }
 

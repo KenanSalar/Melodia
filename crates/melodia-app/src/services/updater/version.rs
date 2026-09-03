@@ -5,7 +5,7 @@
 
 use semver::Version;
 
-use crate::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult};
 
 /// Returns `Ok(true)` only when `candidate` parses as a strictly higher
 /// semver than `current`. Equal and older candidates return `Ok(false)`

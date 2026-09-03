@@ -20,14 +20,14 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Local};
 
-use crate::config::Paths;
-use crate::database::queries;
-use crate::error::{AppError, AppResult};
-use crate::services::platform::crash_report::FILE_TS_FORMAT;
-use crate::services::platform::{crash_report, logging};
 use crate::services::settings::read_settings;
 use crate::state::AppState;
-use crate::utils::redact::redact_home;
+use melodia_core::config::Paths;
+use melodia_core::error::{AppError, AppResult};
+use melodia_core::utils::redact::redact_home;
+use melodia_platform::services::platform::crash_report::FILE_TS_FORMAT;
+use melodia_platform::services::platform::{crash_report, logging};
+use melodia_store::database::queries;
 
 /// How many recent crash reports the bundle embeds. A panic that reproduces is
 /// worth two samples; past that the older ones describe a version the reporter

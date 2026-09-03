@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use crate::database::queries;
-use crate::entities::tags::{FieldEdit, TagEdit};
-use crate::error::AppError;
-use crate::media::ingest::rating_tags;
-use crate::player::engine::state::{
-    PlayerAction, lock_state, sync_current_track_if_in, with_state_emit,
-};
 use crate::state::AppState;
 use crate::tasks::rating_writeback;
+use melodia_core::entities::tags::{FieldEdit, TagEdit};
+use melodia_core::error::AppError;
+use melodia_engine::player::engine::state::{
+    PlayerAction, lock_state, sync_current_track_if_in, with_state_emit,
+};
+use melodia_store::database::queries;
+use melodia_store::media::ingest::rating_tags;
 
 /// Star ratings live in the range 0–5 (0 = unrated). Both public setters clamp
 /// through here so a hand-edited or out-of-range value can never reach the DB.

@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use super::{needs_station_reopen, resolve_start_slot};
-use crate::entities::track::TrackSummary;
-use crate::player::engine::state::{
+use melodia_core::entities::track::TrackSummary;
+use melodia_engine::player::engine::state::{
     MAX_VOLUME, PlayerAction, PlayerState, RESTART_THRESHOLD_MS, play_track_inner,
     resume_from_stopped,
 };
-use crate::player::engine::types::{PlaybackStatus, RadioNowPlaying, RepeatMode};
-use crate::player::playback::replaygain::TrackReplayGain;
+use melodia_engine::player::engine::types::{PlaybackStatus, RadioNowPlaying, RepeatMode};
+use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
 fn make_summary(id: i64, duration_ms: i64) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {
@@ -490,7 +490,7 @@ fn toggle_from_stopped_without_track_is_noop() {
 // --- radio transport routing -----------------------------------------------
 
 fn station() -> std::sync::Arc<RadioNowPlaying> {
-    crate::player::engine::fixtures::test_station("Example FM")
+    melodia_engine::player::engine::fixtures::test_station("Example FM")
 }
 
 fn tuned_in() -> PlayerState {

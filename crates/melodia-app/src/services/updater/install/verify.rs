@@ -6,8 +6,8 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-use crate::error::{AppError, AppResult};
 use crate::services::updater::minisign;
+use melodia_core::error::{AppError, AppResult};
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use super::swap::old_path;

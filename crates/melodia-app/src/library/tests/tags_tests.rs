@@ -8,14 +8,14 @@ use std::sync::Arc;
 use tempfile::TempDir;
 
 use super::write_tag_edit;
-use crate::database::DbPool;
-use crate::database::queries;
-use crate::database::queries::fixtures::insert_test_track;
-use crate::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
-use crate::error::AppError;
-use crate::media::image::artwork;
 use crate::test_support::ASSETS_DIR;
-use crate::utils::self_writes::SelfWrites;
+use melodia_artwork::media::image::artwork;
+use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
+use melodia_core::error::AppError;
+use melodia_core::utils::self_writes::SelfWrites;
+use melodia_store::database::DbPool;
+use melodia_store::database::queries;
+use melodia_store::database::queries::fixtures::insert_test_track;
 
 fn assets_dir() -> PathBuf {
     PathBuf::from(ASSETS_DIR)
