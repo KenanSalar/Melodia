@@ -127,7 +127,6 @@ where
     *genres_ui.detail.genre_id.lock() = genre_id;
 
     let genres_ui = genres_ui.clone();
-    let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<GenreDetail>();
         let header = to_slint_genre_row(&detail);
@@ -158,7 +157,7 @@ where
         // Fresh open: no filter, so the displayed cache equals the canonical full set.
         genres_ui.detail.all_tracks.lock().clone_from(&tracks);
         *genres_ui.detail.tracks.lock() = tracks;
-        crate::ui::nav_history::record_current(&state_for_history, &ui);
+        crate::ui::nav_history::record_current(&ui);
         // Reseat the page's shared filter box, which the clear above doesn't reach — same
         // reasoning, and same closure position, as `albums::detail::open_album_with`.
         ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();

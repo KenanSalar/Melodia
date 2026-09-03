@@ -49,7 +49,7 @@ pub fn install_radio(ui: &AppWindow, state: &AppState) {
         g.on_radio_hide_segmented_changed(move |hide| {
             s.radio_hide_segmented.set(hide);
             if let Some(app) = weak.upgrade() {
-                crate::ui::radio::forget_facets(&app, &s);
+                crate::ui::radio::forget_facets(&app);
             }
             s.persist_blocking("set_radio_hide_segmented", move |st| {
                 library::settings::set_radio_hide_segmented(st, hide)

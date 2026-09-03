@@ -7,7 +7,7 @@
 //!
 //! Both run off the same seam OS media controls use, so nothing here touches the
 //! player state machine. No `ui::*` imports — a backend failure would surface via
-//! `services::toast` if it ever needed to (routine submit failures stay silent).
+//! `utils::toast` if it ever needed to (routine submit failures stay silent).
 
 use std::sync::Arc;
 use std::time::Duration;

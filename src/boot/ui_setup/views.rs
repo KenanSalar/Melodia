@@ -114,11 +114,11 @@ pub fn install_views(
 
     // Publish into the nav-history registry so Mouse-4/5 replay can dispatch
     // `open_*` futures without threading handles through `winit_filter`.
-    *state.ui_handles.albums.lock() = Some(albums_ui.clone());
-    *state.ui_handles.artists.lock() = Some(artists_ui.clone());
-    *state.ui_handles.genres.lock() = Some(genres_ui.clone());
-    *state.ui_handles.playlists.lock() = Some(playlists_ui.clone());
-    *state.ui_handles.radio.lock() = Some(radio_ui.clone());
+    *ui::nav_history::nav().handles().albums.lock() = Some(albums_ui.clone());
+    *ui::nav_history::nav().handles().artists.lock() = Some(artists_ui.clone());
+    *ui::nav_history::nav().handles().genres.lock() = Some(genres_ui.clone());
+    *ui::nav_history::nav().handles().playlists.lock() = Some(playlists_ui.clone());
+    *ui::nav_history::nav().handles().radio.lock() = Some(radio_ui.clone());
 
     // The five persisted-detail reopens stay adjacent here rather than folding
     // into each slice's `install`, because the history seed below depends on
@@ -136,7 +136,7 @@ pub fn install_views(
     // Reads the detail global while it is still `-1`; the async
     // `seed_detail_from_settings` future appends its own entry on top once it
     // lands.
-    ui::nav_history::record_current(state, app);
+    ui::nav_history::record_current(app);
 
     // The Now-Playing heart and star rating fan into every per-row cache.
     ui::callbacks::wire_now_playing_favorite(

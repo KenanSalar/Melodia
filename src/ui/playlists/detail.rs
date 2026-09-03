@@ -150,7 +150,6 @@ where
     let fold = crate::ui::hero_folds::fold_tracks(&tracks);
 
     let playlists_ui = playlists_ui.clone();
-    let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<PlaylistDetail>();
         let header = to_slint_playlist_row(&detail);
@@ -181,7 +180,7 @@ where
         crate::ui::hero_chips::publish_playlist(&ui, &detail, fold, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
         // Record a browser-style history entry — see `albums::detail::open_album_with`.
-        crate::ui::nav_history::record_current(&state_for_history, &ui);
+        crate::ui::nav_history::record_current(&ui);
         // Reseat the page's shared filter box, which the clear above doesn't reach — same
         // reasoning, and same closure position, as `albums::detail::open_album_with`.
         ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();

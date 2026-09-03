@@ -15,6 +15,7 @@
 use std::path::Path;
 use std::time::Duration;
 
+use crate::entities::radio::StoredLogo;
 use crate::error::AppError;
 use crate::media::logo_tile::Tile;
 use crate::media::{artwork, image_decode, logo_tile};
@@ -42,17 +43,6 @@ const MIN_LOGO_DIM: u32 = 32;
 /// for the same reason. Set well under that: a favicon this slow is a miss, and a page's worth of
 /// them queue behind each other.
 pub(super) const LOGO_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-
-/// One logo that landed: where it is, and what it cost the store.
-///
-/// The size is read back off the file rather than taken from the bytes handed to `store_image` —
-/// that re-encodes anything over its own bounds, so the two differ exactly where the number
-/// matters most.
-#[derive(Debug, Clone)]
-pub struct StoredLogo {
-    pub path: String,
-    pub bytes: u64,
-}
 
 /// Fetch and store one station logo, returning where it landed.
 ///

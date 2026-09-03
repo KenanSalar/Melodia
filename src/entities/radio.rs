@@ -443,3 +443,14 @@ pub struct StationSearch {
     /// default is the entire directory.
     pub limit: u32,
 }
+
+/// One station logo that landed: where it is, and what it cost the store.
+///
+/// The size is read back off the file rather than taken from the bytes handed to `store_image` —
+/// that re-encodes anything over its own bounds, so the two differ exactly where the number
+/// matters most.
+#[derive(Debug, Clone)]
+pub struct StoredLogo {
+    pub path: String,
+    pub bytes: u64,
+}

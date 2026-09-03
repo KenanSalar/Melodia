@@ -187,8 +187,8 @@ async fn open_and_start_station(
         }
         Err(e) => {
             ctx.emit_and_execute(|s| s.build_station_failed_actions(generation));
-            crate::services::toast::notify(
-                crate::services::toast::ToastKind::PlaybackFailed,
+            crate::utils::toast::notify(
+                crate::utils::toast::ToastKind::PlaybackFailed,
                 station.name.clone(),
             );
             Err(e)

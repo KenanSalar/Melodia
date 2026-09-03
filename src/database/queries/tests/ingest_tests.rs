@@ -4,8 +4,8 @@ use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::ingest::{FolderResolution, ingest_scanned_files};
 use crate::database::queries::tests::helpers::{insert_test_track, make_test_metadata};
+use crate::entities::scan::ScannedFile;
 use crate::error::AppError;
-use crate::media::scanner::ScannedFile;
 
 fn make_scanned_file(path: &str, title: &str) -> ScannedFile {
     let mut meta = make_test_metadata(title);

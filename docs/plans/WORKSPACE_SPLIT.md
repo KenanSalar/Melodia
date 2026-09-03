@@ -424,25 +424,45 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
       block was; a call allocates nothing, so the ahead-of-the-first-malloc invariant holds.
       `CLAUDE.md`'s "literal first statement in `main()`" was already wrong — `--version`,
       `--logs` and the updater reap all precede it — and now says what the code says.
-- [ ] **A4. The three scan DTOs move to `entities/`.** `ExistingTrackSummary`
-      (`database/queries/scan/lookups.rs:70`), `ScannedFile` and `ExtractedMetadata`, applying the
-      rule the root `CLAUDE.md` already states. Fixes 7 sites in `database/queries/` plus
-      `media/scanner.rs:9` and `:101`.
-- [ ] **A4b. The four view-facing DTOs move to `entities/` for the same reason.** `TagEdit`,
-      `FieldEdit<T>` and `ArtworkEdit` out of `media/tag_writer.rs`, `StoredLogo` out of
-      `media/station_logo.rs`, plus a `library::tags::read_lyrics` wrapper beside `get_tag_edit_rows`
-      so `ui/callbacks/tags.rs:127` stops calling the writer directly. This is finding 1, and without
-      it the flagship exclusion is false before the first manifest is written.
-- [ ] **A5. Persistence and the toast bridge leave `player/`.** Three moves, one commit each:
-      - Install `play_count_flusher` in the test contexts that need it, then delete the two
-        direct-UPDATE fallbacks at `actions.rs:107-127`, one per counter. `db: &DbPool` then drops
-        off `execute_actions` and `emit_and_execute`.
-      - Collapse `toast` and `play_count_flusher` onto one `OnceLock<UnboundedSender<E>>` bridge
-        primitive. Producer half goes to core, consumer halves stay where the I/O is. Keep
-        `try_send`'s `bool`; callers branch on it.
-      - The 30 s periodic save (`handlers.rs:443-460`, `PlaybackMonitorContext.db` and `paths`)
-        publishes a snapshot the app layer writes, so the monitor stops owning `DbPool` and
-        `write_json_atomic_sync`. This is the half that removes `handlers.rs:239` and `:441`.
+- [x] **A4. The three scan DTOs move to `entities/`.** `ExistingTrackSummary`
+      (`database/queries/scan/lookups.rs:70`), `ScannedFile` and `ExtractedMetadata`, into one new
+      `entities/scan.rs` — they are the scan pipeline's vocabulary and `ScannedFile` holds an
+      `ExtractedMetadata`, so splitting them across two modules buys nothing. All three are
+      `#[derive]`-only plain data with no impls and no lofty or sqlx type in any field; the reverse
+      edge in `media/tests/scanner_tests.rs` goes with them, which the item's site list missed.
+- [x] **A4b. The four view-facing DTOs move to `entities/` for the same reason.** `TagEdit`,
+      `FieldEdit<T>` and `ArtworkEdit` into `entities/tags.rs` with `TagEdit`'s four predicates;
+      `StoredLogo` into the existing `entities/radio.rs`, being a station's. Plus a
+      `library::tags::read_lyrics` wrapper beside `get_tag_edit_rows`, kept sync — the caller owns
+      the `spawn_blocking`, having a runtime handle where the wrapper does not.
+
+      **The flagship exclusion now holds**: `grep -rn 'crate::media' src/ui/` returns only
+      `cover_thumbs`, `artwork` and `image_decode`. `UnsupportedFields` is a fifth companion type
+      the item does not assign; it is named nowhere outside `media/`, so it stays for B3.
+- [x] **A5. Persistence and the toast bridge leave `player/`.** Three moves:
+      - ~~Install `play_count_flusher` in the test contexts that need it, then~~ delete the two
+        direct-UPDATE fallbacks. **There was no such test context** — nothing anywhere runs
+        `execute_actions` on `UpdatePlayCount`/`UpdateSkipCount`, and the DB behaviour is tested
+        directly against `queries::track`. So it is a straight deletion, and `actions_tests.rs`'s
+        fixture loses the `DbPool` that existed only to satisfy the parameter, which makes its
+        builder sync. `db: &DbPool` drops off `execute_actions` and `emit_and_execute`.
+      - Collapse `toast` and `play_count_flusher` onto `utils::event_bridge::EventBridge<E>`.
+        The two installers stay different and that is the substance: the flusher's `spawn` claims
+        the bridge *and* spawns its consumer, where `toast::init` hands its receiver to a UI-thread
+        task. `try_send` keeps its `bool`, `notify` its `()`.
+
+        **Extracting the primitive is only half of "producer half goes to core", and the After-A
+        check is what says so.** Left where they were, `player/actions.rs` still named
+        `crate::tasks::play_count_flusher` and `crate::services::toast` — the two edges the check
+        forbids. So both producers move: `services/toast.rs` is producer end to end (its consumer
+        is `boot::ui_setup`'s) and becomes `utils/toast.rs` whole, while `play_count_flusher`
+        splits, the enum and the send going to `utils/play_counts.rs` and the batching staying in
+        `tasks/`. The rules-glob pin A10 had just made honest caught the stale
+        `src/services/toast.rs` entry in `ui-patterns.md` on the first run after the move.
+      - The 30 s periodic save publishes a `PlaybackSnapshot` through a `SnapshotSink`, which
+        `tasks::playback_monitor` supplies — awaited inline, so an in-flight save still completes
+        before shutdown wins the next select. Takes `src/player/` to **zero** `DbPool` references
+        and removes the whole `player` to `config::Paths` edge, which the item does not claim.
 - [x] **A6. `describe` and the atomic writers move to core.** `describe` lands in `src/error.rs`,
       beside the type it reads, widening from `pub(crate)` to `pub`; its test moves out of
       `services/tests/mod_tests.rs` with it. The four file primitives land in a new
@@ -459,12 +479,26 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
       primitives. Four `services/mod.rs` items are equally core-shaped and deliberately stay put
       (`current_exe`, `is_dev_build`, `redact_home`, `home_dir_string`) — B1 owns the full split and
       moving them here would half-do it.
-- [ ] **A7. `nav_history` and `ui_handles` come off `AppState`.** `state/mod.rs:151,155,277,278,280`
-      into a struct the binary owns and passes down. 6 sites in `boot/ui_setup/views.rs`, 18 inside
-      `src/ui/` itself. `ui/my_library/tests/my_library_tests.rs:17` does
-      `include_str!("../../nav_history.rs")` with source-text assertions at `:1010` and `:1024`, so
-      it needs re-pathing. This is the one that actually stops `melodia-views` existing, and the only
-      one with structural work in it.
+- [x] **A7. `nav_history` and `ui_handles` come off `AppState`.** Both into one `Navigation` in
+      `ui/nav_history.rs`, holding the stack and a `SectionHandles` — renamed from `UiHandles`,
+      which collided with `boot::ui_setup::views`' unrelated struct of that name. `src/state/`
+      now names nothing under `ui::`, which is what stops `melodia-views` existing.
+
+      **Reached through a `LazyLock` static, not a value the binary threads down.** Threading was
+      the plan and it does not survive contact: `Navigation` is read from twelve `'static`
+      callbacks and five `open_*_with` futures, and carrying it there means a parameter on roughly
+      fifty functions — `open_album`, `open_album_with`, `seed_detail_from_settings`, two `wire`
+      hops and every grid, lifecycle and cross-tab caller, five times over — to arrive at a value
+      there is exactly one of per process. A static instead *removes* a parameter from fourteen
+      functions rather than adding one to fifty, and it is the bargain `utils::toast`'s bridge
+      and `window_chrome`'s geometry statics already take. It holds no `AppState`, so nothing in
+      it can grow a second way back to the app layer, which is the property the split needs.
+
+      Two source-text pins moved with it, both in `my_library_tests.rs`. The `record_current`
+      spelling lost its state argument. And the `land_pending` pin told its two roles apart by
+      which handle each read — the bail taking the caller's `state`, the failure arm its clone —
+      a distinction that is gone now neither reads one; it reads the role off what *follows* the
+      call instead, only the bail returning. Both mutation-tested.
 - [x] **A8. `dsp.rs`'s numeric helpers move into `audio.rs`.** `frames_in`, `frames_to_duration` and
       `interleaved`, whose only cross-tier consumer is `file_decode.rs:28`. That is the one
       wrong-direction edge inside `src/player/`, and removing it is what makes the audio/playback

@@ -28,9 +28,9 @@ use crate::services::scrobble::{
     ListenBrainzCredentials, LoveTarget, ScrobbleService, ScrobbleStatus,
 };
 use crate::services::settings::ScrobbleFlags;
-use crate::services::toast::{self, ToastKind};
 use crate::state::AppState;
 use crate::ui::launcher;
+use crate::utils::toast::{self, ToastKind};
 use crate::{AppWindow, Dialog, ScrobbleUi, Settings};
 
 /// Paint the per-service connection/enabled props from a status snapshot. The

@@ -10,7 +10,7 @@ use melodia::{
     player::event_sink::EventSink,
     services,
     state::{AppState, StartupChannels},
-    tasks, ui,
+    tasks, ui, utils,
 };
 
 /// Spawn every always-running background task and the souvlaki event
@@ -140,7 +140,7 @@ pub fn serve_file_opens(
         state.runtime.clone().spawn(async move {
             if let Err(e) = library::queue::open_files(&state, paths).await {
                 log::warn!("Failed to open forwarded files: {e}");
-                services::toast::notify(services::toast::ToastKind::OperationFailed, e.to_string());
+                utils::toast::notify(utils::toast::ToastKind::OperationFailed, e.to_string());
             }
         });
     });

@@ -146,13 +146,6 @@ pub struct AppState {
     pub task_tracker: TaskTracker,
     /// Broadcast cancel signal — long-running loops listen via `cancelled().await`.
     pub shutdown_token: CancellationToken,
-    /// Browser-style back/forward navigation history. In-memory only —
-    /// reset on each launch. See `src/ui/nav_history.rs`.
-    pub nav_history: Arc<parking_lot::Mutex<crate::ui::nav_history::NavHistory>>,
-    /// Per-section `*Ui` handle registry the nav-history replay reads
-    /// when it needs to invoke an `open_*` future. Populated by each
-    /// `wire_*` once its `Arc<*Ui>` exists. See `src/ui/nav_history.rs`.
-    pub ui_handles: Arc<crate::ui::nav_history::UiHandles>,
 }
 
 /// Receivers handed back from `AppState::init` for `boot::tasks` to consume.
@@ -274,10 +267,6 @@ impl AppState {
             http_client,
             task_tracker: TaskTracker::new(),
             shutdown_token: CancellationToken::new(),
-            nav_history: Arc::new(parking_lot::Mutex::new(
-                crate::ui::nav_history::NavHistory::new(),
-            )),
-            ui_handles: Arc::new(crate::ui::nav_history::UiHandles::default()),
         };
 
         let channels = StartupChannels {

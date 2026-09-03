@@ -73,7 +73,7 @@ pub fn install_audio_device_lost_subscriber(
     })
 }
 
-/// Drain the process-wide `services::toast` channel on the UI thread.
+/// Drain the process-wide `utils::toast` channel on the UI thread.
 ///
 /// [`install_rescan_notice_subscriber`]'s shape over an `mpsc` rather than a
 /// `watch` — errors must not coalesce — resolving the localized title by kind at
@@ -84,7 +84,7 @@ pub fn install_toast_bridge(
     notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
 ) -> Result<(), melodia::error::AppError> {
     use melodia::Settings;
-    use melodia::services::toast::{self, ToastKind, ToastRequest};
+    use melodia::utils::toast::{self, ToastKind, ToastRequest};
     use ui::shell::notifications::{NotificationParams, RowText};
 
     // First installer owns delivery; a second call (shouldn't happen) is a no-op.

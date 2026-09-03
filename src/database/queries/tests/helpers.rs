@@ -1,7 +1,7 @@
 use crate::database::DbPool;
 use crate::database::queries;
+use crate::entities::scan::ExtractedMetadata;
 use crate::error::AppError;
-use crate::media::metadata::ExtractedMetadata;
 
 /// Create a default `ExtractedMetadata` with sensible test values.
 /// Override fields as needed after calling this.

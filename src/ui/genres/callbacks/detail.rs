@@ -79,7 +79,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
 
             // Record the post-close state — see the matching call in
             // `albums/detail.rs::on_close_detail` for the rationale.
-            crate::ui::nav_history::record_current(&s, &ui);
+            crate::ui::nav_history::record_current(&ui);
         });
     }
 

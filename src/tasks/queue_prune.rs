@@ -107,7 +107,7 @@ async fn reconcile_once(
     // `with_state_emit` publishes the new queue VM on `sinks.queue` and the
     // light VM on `sinks.view_model`, so the queue sheet's subscriber
     // rebuilds rows automatically.
-    emit_and_execute(&**engine, db, player_state, sinks, |s| {
+    emit_and_execute(&**engine, player_state, sinks, |s| {
         let outcome = s.queue.prune_missing(&to_remove);
         // A station leaves the queue seated underneath rather than playing from it, so a row
         // going missing out of it is not a playback event at all: reacting would stop the

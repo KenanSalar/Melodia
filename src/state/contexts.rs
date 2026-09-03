@@ -51,13 +51,7 @@ impl PlaybackContext {
     where
         F: FnOnce(&mut PlayerState) -> Vec<PlayerAction>,
     {
-        crate::player::actions::emit_and_execute(
-            &*self.engine,
-            &self.db,
-            &self.player_state,
-            &self.sinks,
-            f,
-        );
+        crate::player::actions::emit_and_execute(&*self.engine, &self.player_state, &self.sinks, f);
     }
 }
 

@@ -7,13 +7,13 @@
 //!
 //! It holds no `ui::*` types, which is what preserves the layering rule that `tasks`
 //! never imports `ui` — the producer side is UI-free and localization happens entirely
-//! on the consumer. Like [`crate::tasks::play_count_flusher`]'s global sender it
-//! no-ops when uninstalled, so producers never thread a handle through their call
-//! chains.
+//! on the consumer. The sender itself is [`crate::utils::event_bridge`], shared with
+//! [`crate::tasks::play_count_flusher`]; what stays here is the consumer, which in this
+//! case is somebody else's.
 
-use std::sync::OnceLock;
+use tokio::sync::mpsc::UnboundedReceiver;
 
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use crate::utils::event_bridge::EventBridge;
 
 /// Which localized template the UI consumer titles a toast with. A plain enum with no
 /// `ui` dependency, so `player` / `library` / `tasks` classify a failure without
@@ -52,32 +52,27 @@ pub struct ToastRequest {
     pub detail: String,
 }
 
-/// Process-wide sender, set once by [`init`]. Read by [`fn@notify`] so producers
-/// don't have to carry a channel handle. Unset in tests → [`fn@notify`] no-ops.
-/// (Disambiguated: the `notify` crate is a dependency of this build.)
-static SENDER: OnceLock<UnboundedSender<ToastRequest>> = OnceLock::new();
+/// Process-wide sender, claimed by [`init`]. Read by [`fn@notify`] so producers don't have to
+/// carry a channel handle. (Disambiguated: the `notify` crate is a dependency of this build.)
+static BRIDGE: EventBridge<ToastRequest> = EventBridge::new();
 
 /// Register the process-wide sender and hand back the receiver for the UI-thread
 /// consumer to drain. `None` if the bridge was already initialized — the first
 /// receiver owns delivery, so the caller treats that as a no-op.
 pub fn init() -> Option<UnboundedReceiver<ToastRequest>> {
-    let (tx, rx) = mpsc::unbounded_channel();
-    match SENDER.set(tx) {
-        Ok(()) => Some(rx),
-        Err(_) => None,
-    }
+    BRIDGE.install()
 }
 
 /// Queue a toast from any thread. No-op when the bridge isn't installed or after the
-/// consumer has shut down — a send to a closed channel is dropped, which is the right
-/// behaviour during shutdown.
+/// consumer has shut down.
+///
+/// Returns nothing, unlike its sibling in `tasks::play_count_flusher`: a failure worth toasting
+/// has no second way to reach the user, so there is nothing for a caller to branch on.
 pub fn notify(kind: ToastKind, detail: impl Into<String>) {
-    if let Some(tx) = SENDER.get() {
-        let _ = tx.send(ToastRequest {
-            kind,
-            detail: detail.into(),
-        });
-    }
+    BRIDGE.send(ToastRequest {
+        kind,
+        detail: detail.into(),
+    });
 }
 
 #[cfg(test)]

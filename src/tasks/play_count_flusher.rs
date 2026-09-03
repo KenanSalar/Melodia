@@ -12,44 +12,17 @@
 //! just stack into the same `play_count + N` increment.
 
 use std::collections::HashMap;
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use sqlx::AssertSqlSafe;
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_util::sync::CancellationToken;
 
 use crate::database::DbPool;
 use crate::state::Signal;
 use crate::tasks::TaskSpawner;
 use crate::utils::now_rfc3339;
-
-/// Event emitted by `PlayerAction::UpdatePlayCount` / `UpdateSkipCount`.
-#[derive(Debug, Clone, Copy)]
-pub enum PlayCountEvent {
-    Play(i64),
-    Skip(i64),
-}
-
-/// Process-wide sender. Set once at startup by `spawn`; read by
-/// `execute_actions` so we don't have to thread an extra parameter through 30
-/// callsites. When unset (tests), callers fall back to a per-event spawn.
-static SENDER: OnceLock<UnboundedSender<PlayCountEvent>> = OnceLock::new();
-
-/// Send an event to the flusher. Returns `false` if the flusher hasn't been
-/// installed (test contexts) — callers should then fall back to their direct
-/// per-event UPDATE.
-pub fn try_send(event: PlayCountEvent) -> bool {
-    if let Some(tx) = SENDER.get() {
-        // `send` only fails if the receiver is dropped, which only happens at
-        // shutdown after we've cancelled our own watcher — losing the event is
-        // fine in that window.
-        let _ = tx.send(event);
-        true
-    } else {
-        false
-    }
-}
+use crate::utils::play_counts::{self, PlayCountEvent};
 
 /// How often to flush pending events. Short enough that play counts feel
 /// up-to-date in the UI on the next track change, long enough to batch a
@@ -68,11 +41,9 @@ const FLUSH_INTERVAL: Duration = Duration::from_secs(2);
 /// view refresher + `queue_prune` to run after every played song.
 /// Skip-count flushes do not bump — no UI surface depends on skip counts.
 pub fn spawn(spawner: &TaskSpawner, db: DbPool, stats_changed: Signal) {
-    let (tx, rx) = mpsc::unbounded_channel::<PlayCountEvent>();
-    if SENDER.set(tx).is_err() {
-        // Already spawned. Drop the new receiver to release resources.
+    let Some(rx) = play_counts::install() else {
         return;
-    }
+    };
     spawner.spawn_cancellable(move |shutdown| run(rx, shutdown, db, stats_changed));
 }
 

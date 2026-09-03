@@ -23,6 +23,7 @@ use std::rc::Rc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedString};
 
+use crate::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use crate::entities::track::TagEditRow;
 use crate::error::AppError;
 use crate::library;
@@ -30,7 +31,6 @@ use crate::library::tags::TagEditReport;
 use crate::media::image_decode::{
     FilterType, MAX_SOURCE_DIM, decode_capped, fit_within, resize_rgb8,
 };
-use crate::media::tag_writer::{self, ArtworkEdit, FieldEdit, TagEdit};
 use crate::state::AppState;
 use crate::ui::file_dialog;
 use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, RowText};
@@ -124,7 +124,7 @@ fn wire_request_edit(
             // single selection (the Lyrics tab isn't mounted otherwise).
             let lyrics = if single {
                 let path = PathBuf::from(&rows[0].file_path);
-                match s.runtime.spawn_blocking(move || tag_writer::read_lyrics(&path)).await {
+                match s.runtime.spawn_blocking(move || library::tags::read_lyrics(&path)).await {
                     Ok(Ok(Some(l))) => l,
                     _ => String::new(),
                 }

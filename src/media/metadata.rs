@@ -7,44 +7,8 @@ use lofty::prelude::*;
 use lofty::properties::FileProperties;
 
 use super::{artwork, rating_tags};
+use crate::entities::scan::ExtractedMetadata;
 use crate::error::AppError;
-
-#[derive(Debug, Clone)]
-pub struct ExtractedMetadata {
-    pub title: String,
-    pub artist: Option<String>,
-    pub album_artist: Option<String>,
-    pub album: Option<String>,
-    pub genre: Option<String>,
-    pub track_number: Option<i32>,
-    pub disc_number: Option<i32>,
-    pub year: Option<i32>,
-    pub composer: Option<String>,
-    pub comment: Option<String>,
-    pub bpm: Option<f64>,
-    pub musicbrainz_track_id: Option<String>,
-    pub musicbrainz_release_id: Option<String>,
-    pub label: Option<String>,
-    pub original_year: Option<i32>,
-    pub replaygain_track_gain: Option<f64>,
-    pub replaygain_track_peak: Option<f64>,
-    pub replaygain_album_gain: Option<f64>,
-    pub replaygain_album_peak: Option<f64>,
-    /// Stars the file's own tag carries, `None` when it carries none. Seeds a new row and,
-    /// through `update_track_metadata`, overwrites an existing one — but only when it is
-    /// `Some`, a rating with no carrier having nowhere else to live.
-    pub rating: Option<i32>,
-    pub duration_ms: i64,
-    pub codec: Option<String>,
-    pub bitrate: Option<i32>,
-    pub channels: Option<i32>,
-    pub sample_rate: Option<i32>,
-    pub bit_depth: Option<i32>,
-    pub file_size: i64,
-    pub file_hash: String,
-    pub date_modified: Option<String>,
-    pub artwork_path: Option<String>,
-}
 
 /// Compute a full BLAKE3 hash of a file (64-char hex string).
 /// Uses `update_reader` for optimized streaming I/O with SIMD-friendly buffering.

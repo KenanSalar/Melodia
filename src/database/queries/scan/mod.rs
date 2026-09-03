@@ -14,8 +14,8 @@ mod sort_key;
 mod upserts;
 
 pub use lookups::{
-    ExistingTrackSummary, find_folder_for_path, get_all_track_paths_for_folder,
-    get_existing_track_summaries_for_folder, get_track_id_by_path, track_exists_by_path,
+    find_folder_for_path, get_all_track_paths_for_folder, get_existing_track_summaries_for_folder,
+    get_track_id_by_path, track_exists_by_path,
 };
 pub use mutations::{
     INSERT_CHUNK_ROWS, NewTrackRow, delete_track_by_path, delete_tracks_by_paths_batch,
@@ -44,7 +44,7 @@ pub(crate) async fn resolve_track_context(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &std::path::Path,
     path_str: &str,
-    meta: &crate::media::metadata::ExtractedMetadata,
+    meta: &crate::entities::scan::ExtractedMetadata,
     context: &str,
 ) -> Result<Option<ResolvedIds>, crate::error::AppError> {
     let Some(folder_id) = find_folder_for_path(tx, path_str).await? else {

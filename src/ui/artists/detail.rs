@@ -126,7 +126,6 @@ where
     *artists_ui.detail.artist_id.lock() = artist_id;
 
     let artists_ui = artists_ui.clone();
-    let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<ArtistDetail>();
 
@@ -164,7 +163,7 @@ where
         crate::ui::hero_chips::publish_artist(&ui, &detail, years, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
         // Record a browser-style history entry — see `albums::detail::open_album_with`.
-        crate::ui::nav_history::record_current(&state_for_history, &ui);
+        crate::ui::nav_history::record_current(&ui);
         // Reseat the page's shared filter box, which the clear above doesn't reach — same
         // reasoning, and same closure position, as `albums::detail::open_album_with`.
         ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();

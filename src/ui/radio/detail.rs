@@ -296,7 +296,7 @@ where
         // Mouse-4/5 replay and the boot restore never touch that callback. It is also the only
         // point at which the tab the station landed on is known.
         persist_seat(&landed_state, &ui, &radio_ui);
-        crate::ui::nav_history::record_current(&landed_state, &ui);
+        crate::ui::nav_history::record_current(&ui);
         // Last: the box has just gone away, so whatever the user typed on the tab underneath is
         // no longer in front of them, and a re-open with the same station fires no mirror.
         g.invoke_detail_scope_changed();

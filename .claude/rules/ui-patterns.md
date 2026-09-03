@@ -3,7 +3,7 @@ paths:
   - melodia-ui/ui/**/*.slint
   - src/ui/**/*.rs
   - src/boot/**/*.rs
-  - src/services/toast.rs
+  - src/utils/toast.rs
   - melodia-ui/build.rs
 ---
 
@@ -446,7 +446,7 @@ silently miss the other.
   `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as
   the iter var), and translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
 
-- **Backend-thread toasts via `services::toast`.** `NotificationsUi` is `Rc`, so failures on tokio
+- **Backend-thread toasts via `utils::toast`.** `NotificationsUi` is `Rc`, so failures on tokio
   workers surface through a neutral `OnceLock<UnboundedSender<…>>` — no-op when uninstalled,
   holding no `ui::*` types, which preserves the `tasks`-no-`ui` rule. `install_toast_bridge` drains
   the `mpsc` (**not** a `watch` — errors must not coalesce), resolving the localized **title** by

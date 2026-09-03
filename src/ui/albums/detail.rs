@@ -118,7 +118,6 @@ where
     *albums_ui.detail.album_id.lock() = album_id;
 
     let albums_ui = albums_ui.clone();
-    let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<AlbumDetail>();
         let header = to_slint_album_row(&detail);
@@ -155,7 +154,7 @@ where
         apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
         // After the hook, so a cross-tab drill records the post-flip section.
         // No-op while a Mouse-4/5 replay is in flight.
-        crate::ui::nav_history::record_current(&state_for_history, &ui);
+        crate::ui::nav_history::record_current(&ui);
         // The filter clear above is only half a clear: the page's one box is
         // `MyLibrary.filter`, and the sheet's `album-id` mirror can't announce a
         // re-open writing the *same* id — which a section re-enter over an open

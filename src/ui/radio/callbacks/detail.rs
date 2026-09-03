@@ -9,9 +9,9 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::library;
-use crate::services::toast::{self, ToastKind};
 use crate::state::AppState;
 use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
+use crate::utils::toast::{self, ToastKind};
 use crate::{AppWindow, NavEnterFrom, Radio};
 
 use super::super::{RadioUi, detail};
@@ -64,7 +64,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
                 s.runtime.spawn_blocking(move || ru_swap.release_detail_artwork());
             }
 
-            crate::ui::nav_history::record_current(&s, &ui);
+            crate::ui::nav_history::record_current(&ui);
         });
     }
 

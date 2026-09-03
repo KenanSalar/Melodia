@@ -1007,7 +1007,7 @@ fn only_a_tab_pick_records_a_history_entry() {
          — this pin bounds the handler between the two",
     );
     assert!(
-        pick.contains("nav_history::record_current(&s, &ui)"),
+        pick.contains("nav_history::record_current(&ui)"),
         "`on_tab_changed` must record the tab it lands on, or Mouse-4 skips every grid \
          reached by a pick",
     );
@@ -1086,18 +1086,31 @@ fn a_history_walk_lands_the_tab_beside_the_detail_id() {
 
     // A path that skips the hook and can still open something has to land the navigation
     // itself, or the press does nothing at all — a Mouse-4 into a deleted playlist being
-    // the reachable case. Both spellings are pinned by role: the bail runs before the
-    // spawn and reads the caller's `state`, the failure arm after it and reads the clone.
-    for (spelling, role) in [
-        ("land_pending(pending, state, &fallback);", "the missing-handle bails"),
-        ("land_pending(pending, &s, &fallback);", "the failed opens"),
-    ] {
-        assert_eq!(
-            NAV_HISTORY.matches(spelling).count(),
-            WALKABLE_DETAILS,
-            "{role} in `spawn_open_detail` must each land the pending navigation",
-        );
-    }
+    // the reachable case. There are two per detail: the missing-handle bail before the
+    // spawn and the failed open after it.
+    //
+    // The two used to be told apart by which handle each read, one taking the caller's
+    // `state` and the other its clone; neither reads one now. What still separates them is
+    // that only the bail returns, so the role split is read off what follows the call
+    // rather than off the call itself — trimmed, the four match arms sitting a level deeper
+    // than Radio's.
+    let lands_pending = "land_pending(pending, &fallback);";
+    assert_eq!(
+        NAV_HISTORY.matches(lands_pending).count(),
+        WALKABLE_DETAILS * 2,
+        "every path in `spawn_open_detail` that can still open something must land the \
+         pending navigation",
+    );
+    let bails = NAV_HISTORY
+        .split(lands_pending)
+        .skip(1)
+        .filter(|rest| rest.trim_start().starts_with("return;"))
+        .count();
+    assert_eq!(
+        bails, WALKABLE_DETAILS,
+        "the missing-handle bails in `spawn_open_detail` must each land the pending \
+         navigation before returning",
+    );
 }
 
 /// **The section flip is decided against the live index, not against where the walk

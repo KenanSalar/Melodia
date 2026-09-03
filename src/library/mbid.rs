@@ -20,12 +20,14 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use crate::database::{DbPool, queries};
+use crate::entities::scan::ExtractedMetadata;
+use crate::entities::tags::{FieldEdit, TagEdit};
 use crate::error::AppError;
 use crate::error::describe;
 use crate::media::artwork::CoverCache;
-use crate::media::metadata::{ExtractedMetadata, extract_metadata};
+use crate::media::metadata::extract_metadata;
 use crate::media::self_writes::SelfWrites;
-use crate::media::tag_writer::{self, FieldEdit, TagEdit};
+use crate::media::tag_writer;
 use crate::state::AppState;
 
 /// Same bound as the tag editor's fan-out ([`crate::library::tags`]): the write

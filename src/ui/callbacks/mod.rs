@@ -272,7 +272,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
         let persist = Arc::new(IndexPersist::new(nav.get_selected_index()));
         nav.on_persist_selected_index(move |idx| {
             if let Some(ui) = ui_weak.upgrade() {
-                crate::ui::nav_history::record_current(&s, &ui);
+                crate::ui::nav_history::record_current(&ui);
             }
             persist.publish(idx);
             // Spelled out rather than through `spawn_blocking_logged!`, which takes a

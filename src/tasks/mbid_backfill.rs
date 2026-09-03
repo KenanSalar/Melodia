@@ -28,9 +28,9 @@ use crate::services::scrobble::ScrobbleService;
 use crate::services::scrobble::providers::listenbrainz::{
     self, ListenBrainzError, LookupQuery, MAX_LOOKUPS_PER_POST,
 };
-use crate::services::toast::{self, ToastKind};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use crate::utils::toast::{self, ToastKind};
 
 /// Gentle pause between successful batches — `ListenBrainz` is load-sensitive, so
 /// pace lookups rather than sprint into a 429.

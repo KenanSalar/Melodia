@@ -39,8 +39,8 @@ use slint::winit_030::winit::window::WindowLevel;
 
 use crate::error::AppError;
 use crate::services::always_on_top::AlwaysOnTopMethod;
-use crate::services::toast::{self, ToastKind};
 use crate::state::AppState;
+use crate::utils::toast::{self, ToastKind};
 use crate::{AppWindow, Theme};
 
 /// Armed once the new setting is persisted, read at the very end of `main()` — after the

@@ -49,8 +49,8 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
                         // screen by the time the scan starts.
                         if let Err(e) = library::settings::scan_folder(&s, folder.id).await {
                             log::warn!("scan after add_folder: {e}");
-                            crate::services::toast::notify(
-                                crate::services::toast::ToastKind::OperationFailed,
+                            crate::utils::toast::notify(
+                                crate::utils::toast::ToastKind::OperationFailed,
                                 e.to_string(),
                             );
                         }

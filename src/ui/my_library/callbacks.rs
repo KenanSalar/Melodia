@@ -123,7 +123,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
                 g.set_filter(SharedString::from(""));
                 g.set_blur_search_tick(g.get_blur_search_tick() + 1);
                 my_library_mod::filter::clear_mounted(&ui);
-                crate::ui::nav_history::record_current(&s, &ui);
+                crate::ui::nav_history::record_current(&ui);
             }
             persist_tab(&s, &persist, tab);
         });

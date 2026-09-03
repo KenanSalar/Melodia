@@ -11,9 +11,8 @@
 //! about not asking a dead host on a schedule rather than about bandwidth.
 
 use crate::database::queries;
-use crate::entities::radio;
+use crate::entities::radio::{self, StoredLogo};
 use crate::error::AppError;
-use crate::media::station_logo::StoredLogo;
 use crate::state::AppState;
 
 use super::directory_client;

@@ -1,4 +1,7 @@
 pub mod atomic_file;
+pub mod event_bridge;
+pub mod play_counts;
+pub mod toast;
 
 use std::io;
 use std::path::{Path, PathBuf};

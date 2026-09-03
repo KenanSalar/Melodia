@@ -1,13 +1,11 @@
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-
-use crate::config::Paths;
-use crate::database::DbPool;
-use crate::database::queries;
 
 use super::actions::emit_and_execute;
 use super::backend::{PlaybackCheck, PlaybackEngine};
@@ -18,7 +16,7 @@ use super::replaygain::TrackReplayGain;
 use super::state::{
     PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state, with_state_emit,
 };
-use super::types::{PlaybackSource, PlaybackStatus};
+use super::types::{PersistedPlayback, PlaybackSource, PlaybackStatus};
 
 /// How often the monitor wakes: tight enough that gapless preload triggers and
 /// end-of-stream detection stay responsive, loose enough not to spin.
@@ -183,7 +181,7 @@ pub fn evaluate_playing_tick(
 fn notify_station_ended(player_state: &PlayerStateHandle) {
     let station = lock_state(player_state).station().map(|s| s.name.clone());
     if let Some(name) = station {
-        crate::services::toast::notify(crate::services::toast::ToastKind::PlaybackFailed, name);
+        crate::utils::toast::notify(crate::utils::toast::ToastKind::PlaybackFailed, name);
     }
 }
 
@@ -227,6 +225,21 @@ fn reconcile_live_stream(
     });
 }
 
+/// What the monitor knows at a save point, for whoever owns the writing.
+pub struct PlaybackSnapshot {
+    /// The playing track and how far into it, `None` when nothing is.
+    pub track: Option<(i64, u64)>,
+    pub playback: PersistedPlayback,
+}
+
+/// How the monitor hands a snapshot over.
+///
+/// A sink rather than a `DbPool` and a `Paths`: what the engine knows is where playback got to,
+/// and *where that is written down* is a question one layer up. Awaited inline at the call site,
+/// so an in-flight save still completes before shutdown wins the next select.
+pub type SnapshotSink =
+    Arc<dyn Fn(PlaybackSnapshot) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+
 /// All long-lived handles the playback monitor needs to operate. Bundled
 /// so `spawn_playback_monitor` doesn't accumulate a long argument list as
 /// the monitor's responsibilities grow.
@@ -236,8 +249,7 @@ pub struct PlaybackMonitorContext {
     pub engine: Arc<PlaybackEngine>,
     pub sinks: Arc<PlayerSinks>,
     pub position_tx: watch::Sender<Option<PositionTick>>,
-    pub db: DbPool,
-    pub paths: Paths,
+    pub save: SnapshotSink,
 }
 
 /// Spawns a single background task that handles position polling,
@@ -249,8 +261,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
         engine,
         sinks,
         position_tx,
-        db,
-        paths,
+        save,
     } = ctx;
     tracker.spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(POLL_INTERVAL_MS));
@@ -310,7 +321,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             // Single lock acquisition to avoid TOCTOU between gapless and EOS checks
             match engine.check_playback_state() {
                 PlaybackCheck::GaplessTransition => {
-                    emit_and_execute(&*engine, &db, &player_state, &sinks, |state| {
+                    emit_and_execute(&*engine, &player_state, &sinks, |state| {
                         let mut actions = Vec::with_capacity(2);
 
                         // Update play count for the track that just finished
@@ -348,7 +359,6 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     // `PlayerState::build_end_of_stream_actions`.
                     emit_and_execute(
                         &*engine,
-                        &db,
                         &player_state,
                         &sinks,
                         PlayerState::build_end_of_stream_actions,
@@ -405,7 +415,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         // current track and the position under the exec lock, so
                         // anything that landed since the decision above can't be
                         // clobbered.
-                        emit_and_execute(&*engine, &db, &player_state, &sinks, |state| {
+                        emit_and_execute(&*engine, &player_state, &sinks, |state| {
                             state.build_crossfade_actions(decision)
                         });
                     } else if let Some((path, rg)) = late_preload {
@@ -425,38 +435,19 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 }
             }
 
-            // Periodic save (every 60 playing ticks ~= 30s). Snapshots the
-            // current track id + position and what `queue.json` holds, then
-            // awaits the DB and FS writes inline — the monitor task itself is tracked by
-            // `tracker`, so an in-flight save completes before shutdown wins
-            // on the next select.
+            // Periodic save (every 60 playing ticks ~= 30s). Snapshots under the state lock and
+            // awaits the sink inline — the monitor task itself is tracked by `tracker`, so an
+            // in-flight save completes before shutdown wins on the next select.
             save_tick_counter = (save_tick_counter + 1) % 60;
             if save_tick_counter == 0 {
-                let (track_data, persistable) = {
+                let snapshot = {
                     let state = lock_state(&player_state);
-                    let td = state.current_track().map(|t| (t.id, state.position_ms));
-                    (td, state.to_persisted())
+                    PlaybackSnapshot {
+                        track: state.current_track().map(|t| (t.id, state.position_ms)),
+                        playback: state.to_persisted(),
+                    }
                 };
-                if let Some((track_id, position_ms)) = track_data
-                    && let Err(e) = queries::track::update_last_position(
-                        &db,
-                        track_id,
-                        i64::try_from(position_ms).unwrap_or(i64::MAX),
-                    )
-                    .await
-                {
-                    log::warn!("periodic save: update_last_position {track_id}: {e}");
-                }
-                let queue_path = paths.queue_path.clone();
-                let join = tokio::task::spawn_blocking(move || {
-                    crate::utils::atomic_file::write_json_sync(&queue_path, &persistable)
-                })
-                .await;
-                match join {
-                    Ok(Ok(())) => {}
-                    Ok(Err(e)) => log::warn!("periodic save: write queue.json: {e}"),
-                    Err(e) => log::warn!("periodic save: spawn_blocking: {e}"),
-                }
+                save(snapshot).await;
             }
         }
     });

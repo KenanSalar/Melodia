@@ -1,9 +1,8 @@
 use std::collections::VecDeque;
 use std::path::Path;
 
-use crate::database::DbPool;
-use crate::database::queries;
 use crate::error::AppError;
+use crate::utils::play_counts::{PlayCountEvent, try_send};
 
 use super::backend::PlayerBackend;
 use super::event_sink::PlayerSinks;
@@ -25,7 +24,6 @@ use super::state::{
 pub fn execute_actions<B: PlayerBackend>(
     actions: Vec<PlayerAction>,
     engine: &B,
-    db: &DbPool,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
 ) {
@@ -103,29 +101,14 @@ pub fn execute_actions<B: PlayerBackend>(
                     enqueue_station_failure(&mut pending, player_state, sinks, generation);
                 }
             }
+            // Both no-op until `boot::tasks` installs the flusher, which it does before playback
+            // can start. Nothing here writes the row itself: a `DbPool` on this side is what pins
+            // the engine to sqlx.
             PlayerAction::UpdatePlayCount(track_id) => {
-                use crate::tasks::play_count_flusher::{PlayCountEvent, try_send};
-                if !try_send(PlayCountEvent::Play(track_id)) {
-                    // Flusher not installed (test contexts): fall back to a
-                    // direct UPDATE so test invariants still hold.
-                    let db = db.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = queries::track::update_play_count(&db, track_id).await {
-                            log::warn!("Failed to update play count for {track_id}: {e}");
-                        }
-                    });
-                }
+                try_send(PlayCountEvent::Play(track_id));
             }
             PlayerAction::UpdateSkipCount(track_id) => {
-                use crate::tasks::play_count_flusher::{PlayCountEvent, try_send};
-                if !try_send(PlayCountEvent::Skip(track_id)) {
-                    let db = db.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = queries::track::update_skip_count(&db, track_id).await {
-                            log::warn!("Failed to update skip count for {track_id}: {e}");
-                        }
-                    });
-                }
+                try_send(PlayCountEvent::Skip(track_id));
             }
         }
     }
@@ -149,7 +132,6 @@ pub fn execute_actions<B: PlayerBackend>(
 /// re-entrancy.
 pub fn emit_and_execute<B, F>(
     engine: &B,
-    db: &DbPool,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
     f: F,
@@ -159,7 +141,7 @@ pub fn emit_and_execute<B, F>(
 {
     let _exec = player_state.lock_exec();
     let actions = with_state_emit(player_state, sinks, f);
-    execute_actions(actions, engine, db, player_state, sinks);
+    execute_actions(actions, engine, player_state, sinks);
 }
 
 /// How a track is being started — the only thing that differs between the
@@ -227,8 +209,8 @@ fn start_or_skip<B: PlayerBackend>(
     }
     if let Err(e) = start() {
         log::error!("Failed to {} {file_path}: {e}", mode.verb());
-        crate::services::toast::notify(
-            crate::services::toast::ToastKind::PlaybackFailed,
+        crate::utils::toast::notify(
+            crate::utils::toast::ToastKind::PlaybackFailed,
             toast_track_name(file_path),
         );
         if mode.stops_on_failure() {

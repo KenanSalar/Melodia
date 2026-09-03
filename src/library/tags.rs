@@ -21,13 +21,15 @@ use std::sync::{Arc, LazyLock};
 use rayon::prelude::*;
 
 use crate::database::{DbPool, queries};
+use crate::entities::scan::ExtractedMetadata;
+use crate::entities::tags::{ArtworkEdit, TagEdit};
 use crate::entities::track::{TagEditRow, TrackSummary};
 use crate::error::AppError;
 use crate::error::describe;
 use crate::media::artwork::{self, CoverCache};
-use crate::media::metadata::{ExtractedMetadata, extract_metadata};
+use crate::media::metadata::extract_metadata;
 use crate::media::self_writes::SelfWrites;
-use crate::media::tag_writer::{self, ArtworkEdit, TagEdit};
+use crate::media::tag_writer;
 use crate::state::AppState;
 
 /// Width cap for the tag-write fan-out. The MP4 save clones the embedded cover,
@@ -67,6 +69,15 @@ pub struct TagEditReport {
 /// and [`apply_tag_edit`] below is the write half of the same feature.
 pub async fn get_tag_edit_rows(state: &AppState, ids: &[i64]) -> Result<Vec<TagEditRow>, AppError> {
     queries::track::get_tag_edit_rows_by_ids(&state.db, ids).await
+}
+
+/// The dialog's Lyrics tab, which reads off the file rather than the database.
+///
+/// Here for [`get_tag_edit_rows`]' reason: it is the read half of the same dialog, and the one
+/// piece of it the UI would otherwise have to reach into `media::tag_writer` for. Blocking —
+/// the caller owns the `spawn_blocking`, having a runtime handle in hand where this does not.
+pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
+    tag_writer::read_lyrics(path)
 }
 
 /// Apply `edit` to `ids`, then refresh the player's cached summaries and bump

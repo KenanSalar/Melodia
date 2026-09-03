@@ -166,20 +166,17 @@ fn make_test_sinks() -> PlayerSinks {
 /// at `track_path` so the `Path::exists()` pre-flight check in
 /// `execute_actions` lets `PlayMedia` reach the (mock) backend.
 struct ActionsFixture {
-    db: crate::database::DbPool,
     player_state: PlayerStateHandle,
     sinks: PlayerSinks,
     track_path: String,
     _tmp: tempfile::TempDir,
 }
 
-async fn fixture() -> Result<ActionsFixture, AppError> {
+fn fixture() -> Result<ActionsFixture, AppError> {
     let tmp = tempfile::tempdir()?;
     let track_path = tmp.path().join("track.mp3");
     std::fs::write(&track_path, b"")?;
-    let db = crate::database::DbPool::test_pool().await?;
     Ok(ActionsFixture {
-        db,
         player_state: PlayerStateHandle::default(),
         sinks: make_test_sinks(),
         track_path: track_path.to_string_lossy().into_owned(),
@@ -189,7 +186,7 @@ async fn fixture() -> Result<ActionsFixture, AppError> {
 
 #[tokio::test]
 async fn execute_play_media_calls_backend() -> Result<(), AppError> {
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
     let actions = vec![PlayerAction::PlayMedia {
@@ -200,7 +197,7 @@ async fn execute_play_media_calls_backend() -> Result<(), AppError> {
         replaygain: TrackReplayGain::default(),
     }];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert_eq!(inner.play_media_calls.len(), 1);
@@ -218,7 +215,7 @@ async fn execute_play_media_decode_failure_triggers_auto_skip() -> Result<(), Ap
     // an empty queue, auto-skip lands on `stop_end_of_queue`, so stop is
     // called twice — once for the failure handling, once for the empty-queue
     // skip.
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::with_play_failure();
 
     let actions = vec![PlayerAction::PlayMedia {
@@ -229,7 +226,7 @@ async fn execute_play_media_decode_failure_triggers_auto_skip() -> Result<(), Ap
         replaygain: TrackReplayGain::default(),
     }];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert!(inner.play_media_calls.is_empty());
@@ -242,7 +239,7 @@ async fn execute_play_media_vanished_file_pre_flights() -> Result<(), AppError> 
     // Pre-flight catches the missing file before any decode attempt: the
     // mock's `play_media` is never invoked, and auto-skip stops the empty
     // queue.
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
     let actions = vec![PlayerAction::PlayMedia {
@@ -253,7 +250,7 @@ async fn execute_play_media_vanished_file_pre_flights() -> Result<(), AppError> 
         replaygain: TrackReplayGain::default(),
     }];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert!(inner.play_media_calls.is_empty());
@@ -263,7 +260,7 @@ async fn execute_play_media_vanished_file_pre_flights() -> Result<(), AppError> 
 
 #[tokio::test]
 async fn execute_resume_pause_stop() -> Result<(), AppError> {
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
     let actions = vec![
@@ -272,7 +269,7 @@ async fn execute_resume_pause_stop() -> Result<(), AppError> {
         PlayerAction::Stop { fade_ms: 0 },
     ];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert_eq!(inner.resume_count, 1);
@@ -285,7 +282,7 @@ async fn execute_resume_pause_stop() -> Result<(), AppError> {
 async fn execute_stop_forwards_the_fade_length() -> Result<(), AppError> {
     // A user stop with fade-on-pause carries the ramp length; the end-of-queue
     // stop passes 0 so it lands immediately.
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
     let actions = vec![
@@ -293,7 +290,7 @@ async fn execute_stop_forwards_the_fade_length() -> Result<(), AppError> {
         PlayerAction::Stop { fade_ms: 0 },
     ];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     assert_eq!(mock.inner().stop_fade_calls, vec![250, 0]);
     Ok(())
@@ -304,7 +301,7 @@ async fn execute_pause_forwards_the_fade_length() -> Result<(), AppError> {
     // A user pause with fade-on-pause carries the ramp length; the `Pause` that
     // next/previous append to restore a paused deck passes 0, so the incoming
     // track can never be heard fading out on arrival.
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
     let actions = vec![
@@ -312,7 +309,7 @@ async fn execute_pause_forwards_the_fade_length() -> Result<(), AppError> {
         PlayerAction::Pause { fade_ms: 0 },
     ];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     assert_eq!(mock.inner().pause_fade_calls, vec![250, 0]);
     Ok(())
@@ -320,7 +317,7 @@ async fn execute_pause_forwards_the_fade_length() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn execute_begin_crossfade_calls_backend() -> Result<(), AppError> {
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
     let actions = vec![PlayerAction::BeginCrossfade {
@@ -331,7 +328,7 @@ async fn execute_begin_crossfade_calls_backend() -> Result<(), AppError> {
         speed: 1.0,
     }];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert_eq!(inner.begin_crossfade_calls.len(), 1);
@@ -348,7 +345,7 @@ async fn execute_begin_crossfade_vanished_file_skips_without_stopping() -> Resul
     // arm must NOT stop the player the way `PlayMedia` does — the auto-skip's
     // `play_media` clears both decks anyway. With an empty queue the skip lands
     // on `stop_end_of_queue`, which is the single stop we expect.
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
     let actions = vec![PlayerAction::BeginCrossfade {
@@ -359,7 +356,7 @@ async fn execute_begin_crossfade_vanished_file_skips_without_stopping() -> Resul
         speed: 1.0,
     }];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert!(inner.begin_crossfade_calls.is_empty());
@@ -369,7 +366,7 @@ async fn execute_begin_crossfade_vanished_file_skips_without_stopping() -> Resul
 
 #[tokio::test]
 async fn execute_begin_crossfade_decode_failure_triggers_auto_skip() -> Result<(), AppError> {
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::with_crossfade_failure();
 
     let actions = vec![PlayerAction::BeginCrossfade {
@@ -380,7 +377,7 @@ async fn execute_begin_crossfade_decode_failure_triggers_auto_skip() -> Result<(
         speed: 1.0,
     }];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert!(inner.begin_crossfade_calls.is_empty());
@@ -390,7 +387,7 @@ async fn execute_begin_crossfade_decode_failure_triggers_auto_skip() -> Result<(
 
 #[tokio::test]
 async fn execute_seek_calls_backend() -> Result<(), AppError> {
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
     let actions = vec![PlayerAction::Seek {
@@ -399,7 +396,7 @@ async fn execute_seek_calls_backend() -> Result<(), AppError> {
         replaygain: TrackReplayGain::default(),
     }];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert_eq!(inner.seek_calls, vec![("/music/a.flac".to_owned(), 30_000)]);
@@ -408,12 +405,12 @@ async fn execute_seek_calls_backend() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn execute_set_volume_and_speed() -> Result<(), AppError> {
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
     let actions = vec![PlayerAction::SetVolume(0.75), PlayerAction::SetSpeed(1.5)];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert_eq!(inner.volume_calls, vec![0.75]);
@@ -423,7 +420,7 @@ async fn execute_set_volume_and_speed() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn execute_preload_gapless_with_and_without_path() -> Result<(), AppError> {
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
     let actions = vec![
@@ -431,7 +428,7 @@ async fn execute_preload_gapless_with_and_without_path() -> Result<(), AppError>
         PlayerAction::PreloadGapless(None),
     ];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert_eq!(inner.preload_calls.len(), 2);
@@ -442,7 +439,7 @@ async fn execute_preload_gapless_with_and_without_path() -> Result<(), AppError>
 
 #[tokio::test]
 async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
     let actions = vec![
@@ -457,7 +454,7 @@ async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
         PlayerAction::SetVolume(0.5),
     ];
 
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert_eq!(inner.play_media_calls.len(), 1);
@@ -468,10 +465,10 @@ async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
 
 #[tokio::test]
 async fn execute_empty_actions_is_noop() -> Result<(), AppError> {
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
 
-    crate::player::actions::execute_actions(vec![], &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(vec![], &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert!(inner.play_media_calls.is_empty());
@@ -495,7 +492,7 @@ fn tune_in(player_state: &PlayerStateHandle) -> u64 {
 /// `Path::exists` and nothing to auto-skip onto — a station is one source, not a queue position.
 #[tokio::test]
 async fn execute_play_stream_reaches_the_backend_without_a_path() -> Result<(), AppError> {
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::new();
     let generation = tune_in(&fx.player_state);
 
@@ -503,7 +500,7 @@ async fn execute_play_stream_reaches_the_backend_without_a_path() -> Result<(), 
         generation,
         volume: 0.8,
     }];
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
     assert_eq!(inner.play_stream_calls.len(), 1);
@@ -515,7 +512,7 @@ async fn execute_play_stream_reaches_the_backend_without_a_path() -> Result<(), 
 
 #[tokio::test]
 async fn execute_play_stream_failure_clears_the_station() -> Result<(), AppError> {
-    let fx = fixture().await?;
+    let fx = fixture()?;
     let mock = MockBackend::with_stream_failure();
     let generation = tune_in(&fx.player_state);
 
@@ -523,7 +520,7 @@ async fn execute_play_stream_failure_clears_the_station() -> Result<(), AppError
         generation,
         volume: 1.0,
     }];
-    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+    crate::player::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let state = crate::player::state::lock_state(&fx.player_state);
     assert!(state.station().is_none(), "a station that could not start must not sit on Loading");

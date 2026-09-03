@@ -95,7 +95,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             // flight — the replay invokes this very callback to drive
             // back/forward, and the suppress gate stops it from
             // re-recording the entry we already walked to.
-            crate::ui::nav_history::record_current(&s, &ui);
+            crate::ui::nav_history::record_current(&ui);
         });
     }
 

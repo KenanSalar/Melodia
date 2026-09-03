@@ -20,10 +20,10 @@ use lru::LruCache;
 use parking_lot::Mutex;
 use tokio::task::JoinSet;
 
+use crate::entities::radio::StoredLogo;
 use crate::error::AppError;
 use crate::library;
 use crate::library::radio::{LogoAnswer, SiteOrigin};
-use crate::media::station_logo::StoredLogo;
 use crate::state::AppState;
 
 /// How many logo answers to remember.

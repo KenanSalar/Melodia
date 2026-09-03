@@ -19,7 +19,6 @@ pub mod settings;
 pub mod single_instance;
 #[cfg(target_os = "linux")]
 pub mod system_theme;
-pub mod toast;
 pub mod tray;
 pub mod updater;
 pub mod view_state;

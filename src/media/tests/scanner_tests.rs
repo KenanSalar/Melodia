@@ -6,7 +6,7 @@ use std::sync::atomic::AtomicU32;
 use tempfile::TempDir;
 
 use super::*;
-use crate::database::queries::scan::ExistingTrackSummary;
+use crate::entities::scan::ExistingTrackSummary;
 use crate::error::AppError;
 use crate::media::AUDIO_EXTENSIONS;
 use crate::media::artwork::CoverCache;

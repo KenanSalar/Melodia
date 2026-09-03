@@ -6,8 +6,8 @@ use serde::Serialize;
 use walkdir::WalkDir;
 
 use super::is_audio_extension;
-use crate::database::queries::scan::ExistingTrackSummary;
-use crate::media::metadata::{ExtractedMetadata, extract_or_filename_row};
+use crate::entities::scan::{ExistingTrackSummary, ScannedFile};
+use crate::media::metadata::extract_or_filename_row;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ScanProgress {
@@ -15,12 +15,6 @@ pub struct ScanProgress {
     pub scanned: u32,
     pub total: u32,
     pub current_file: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct ScannedFile {
-    pub path: PathBuf,
-    pub metadata: ExtractedMetadata,
 }
 
 pub fn collect_media_files(dir: &Path) -> Vec<PathBuf> {

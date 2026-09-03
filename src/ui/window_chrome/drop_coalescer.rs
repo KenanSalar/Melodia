@@ -115,8 +115,8 @@ pub(super) fn schedule_drop_flush(state: &AppState, path: PathBuf) {
                 }
                 Err(e) => {
                     log::warn!("queue_import_files (drop): {e}");
-                    crate::services::toast::notify(
-                        crate::services::toast::ToastKind::OperationFailed,
+                    crate::utils::toast::notify(
+                        crate::utils::toast::ToastKind::OperationFailed,
                         e.to_string(),
                     );
                 }

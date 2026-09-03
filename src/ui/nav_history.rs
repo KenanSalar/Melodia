@@ -19,7 +19,7 @@
 //! on the way in.
 
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use parking_lot::Mutex;
 use slint::{ComponentHandle, Weak};
@@ -187,19 +187,19 @@ fn current_detail_id_for(ui: &AppWindow, section: i32, tab: i32) -> Option<i64> 
 
 /// Record an arbitrary snapshot, for the detail open/close hooks where the new state is
 /// known at the call site.
-pub fn record(state: &AppState, entry: NavEntry) {
-    state.nav_history.lock().record(entry);
+pub fn record(entry: NavEntry) {
+    nav().history().record(entry);
 }
 
 /// Record the current visible state by reading globals, for the hooks that fire once the
 /// *new* state is already there.
-pub fn record_current(state: &AppState, ui: &AppWindow) {
+pub fn record_current(ui: &AppWindow) {
     let section = ui.global::<Nav>().get_selected_index();
     let tab = tab_of_section(ui, section);
     let detail_id = current_detail_id_for(ui, section, tab);
     // Only what the history took: the eleven hooks fire two or three deep for one click,
     // and logging each reads as a stutter rather than a navigation.
-    if state.nav_history.lock().record(NavEntry {
+    if nav().history().record(NavEntry {
         section,
         tab,
         detail_id,
@@ -216,7 +216,7 @@ pub fn record_current(state: &AppState, ui: &AppWindow) {
 /// regions must not nest; see the module docs.
 pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
     let target = {
-        let mut hist = state.nav_history.lock();
+        let mut hist = nav().history();
         if going_back {
             hist.back()
         } else {
@@ -246,7 +246,7 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
         target.detail_id
     );
 
-    state.nav_history.lock().set_suppress(true);
+    nav().history().set_suppress(true);
 
     if target.section == current_section && target.tab == current_tab {
         apply_same_view(
@@ -284,7 +284,7 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
         }
     }
 
-    state.nav_history.lock().set_suppress(false);
+    nav().history().set_suppress(false);
 }
 
 fn apply_same_view(
@@ -348,19 +348,18 @@ impl PendingNav {
     /// section flip inside reaches the sidebar hook's `record_current`, which would push
     /// the entry the walk just walked *to*. `record`'s dedup swallows it today;
     /// re-arming is two lines and stops the fix resting on that.
-    fn apply_deferred(self, state: &AppState, ui: &AppWindow) {
-        state.nav_history.lock().set_suppress(true);
+    fn apply_deferred(self, ui: &AppWindow) {
+        nav().history().set_suppress(true);
         self.apply(ui);
-        state.nav_history.lock().set_suppress(false);
+        nav().history().set_suppress(false);
     }
 
     /// Land it on an event-loop hop of its own, for the paths where the open never ran
     /// or failed. Without it a press against a deleted playlist — or one arriving before
     /// the view handles are wired — does nothing at all, the whole navigation having
     /// been handed to a hook that never fires.
-    fn land(self, state: &AppState, weak: &Weak<AppWindow>) {
-        let state = state.clone();
-        let _ = weak.upgrade_in_event_loop(move |ui| self.apply_deferred(&state, &ui));
+    fn land(self, weak: &Weak<AppWindow>) {
+        let _ = weak.upgrade_in_event_loop(move |ui| self.apply_deferred(&ui));
     }
 }
 
@@ -418,8 +417,8 @@ fn spawn_open_detail(
         detail_id: Some(id),
     };
     if section == NAV_RADIO {
-        let Some(ru) = state.ui_handles.radio.lock().clone() else {
-            land_pending(pending, state, &fallback);
+        let Some(ru) = nav().handles().radio.lock().clone() else {
+            land_pending(pending, &fallback);
             return;
         };
         // Only a kept station is ever recorded, so the id is the whole handle: `StationRef::is_kept`
@@ -429,15 +428,15 @@ fn spawn_open_detail(
             uuid: String::new(),
         };
         state.runtime.clone().spawn(async move {
-            if s.nav_history.lock().current() != Some(expected) {
+            if nav().history().current() != Some(expected) {
                 return;
             }
-            let hook = pending_hook(pending, &s);
+            let hook = pending_hook(pending);
             if let Err(e) =
                 crate::ui::radio::open_station_with(&s, &ru, weak, station, direction, hook).await
             {
                 log::warn!("nav_history::replay open_station({id}): {e}");
-                land_pending(pending, &s, &fallback);
+                land_pending(pending, &fallback);
             }
         });
         return;
@@ -445,75 +444,75 @@ fn spawn_open_detail(
     match tab_from_index(&ui.global::<MyLibrary>(), tab) {
         MyLibraryTab::Songs => {}
         MyLibraryTab::Albums => {
-            let Some(au) = state.ui_handles.albums.lock().clone() else {
-                land_pending(pending, state, &fallback);
+            let Some(au) = nav().handles().albums.lock().clone() else {
+                land_pending(pending, &fallback);
                 return;
             };
             state.runtime.clone().spawn(async move {
-                if s.nav_history.lock().current() != Some(expected) {
+                if nav().history().current() != Some(expected) {
                     return;
                 }
-                let hook = pending_hook(pending, &s);
+                let hook = pending_hook(pending);
                 if let Err(e) =
                     crate::ui::albums::open_album_with(&s, &au, weak, id, direction, hook).await
                 {
                     log::warn!("nav_history::replay open_album({id}): {e}");
-                    land_pending(pending, &s, &fallback);
+                    land_pending(pending, &fallback);
                 }
             });
         }
         MyLibraryTab::Artists => {
-            let Some(au) = state.ui_handles.artists.lock().clone() else {
-                land_pending(pending, state, &fallback);
+            let Some(au) = nav().handles().artists.lock().clone() else {
+                land_pending(pending, &fallback);
                 return;
             };
             state.runtime.clone().spawn(async move {
-                if s.nav_history.lock().current() != Some(expected) {
+                if nav().history().current() != Some(expected) {
                     return;
                 }
-                let hook = pending_hook(pending, &s);
+                let hook = pending_hook(pending);
                 if let Err(e) =
                     crate::ui::artists::open_artist_with(&s, &au, weak, id, direction, hook).await
                 {
                     log::warn!("nav_history::replay open_artist({id}): {e}");
-                    land_pending(pending, &s, &fallback);
+                    land_pending(pending, &fallback);
                 }
             });
         }
         MyLibraryTab::Genres => {
-            let Some(gu) = state.ui_handles.genres.lock().clone() else {
-                land_pending(pending, state, &fallback);
+            let Some(gu) = nav().handles().genres.lock().clone() else {
+                land_pending(pending, &fallback);
                 return;
             };
             state.runtime.clone().spawn(async move {
-                if s.nav_history.lock().current() != Some(expected) {
+                if nav().history().current() != Some(expected) {
                     return;
                 }
-                let hook = pending_hook(pending, &s);
+                let hook = pending_hook(pending);
                 if let Err(e) =
                     crate::ui::genres::open_genre_with(&s, &gu, weak, id, direction, hook).await
                 {
                     log::warn!("nav_history::replay open_genre({id}): {e}");
-                    land_pending(pending, &s, &fallback);
+                    land_pending(pending, &fallback);
                 }
             });
         }
         MyLibraryTab::Playlists => {
-            let Some(pu) = state.ui_handles.playlists.lock().clone() else {
-                land_pending(pending, state, &fallback);
+            let Some(pu) = nav().handles().playlists.lock().clone() else {
+                land_pending(pending, &fallback);
                 return;
             };
             state.runtime.clone().spawn(async move {
-                if s.nav_history.lock().current() != Some(expected) {
+                if nav().history().current() != Some(expected) {
                     return;
                 }
-                let hook = pending_hook(pending, &s);
+                let hook = pending_hook(pending);
                 if let Err(e) =
                     crate::ui::playlists::open_playlist_with(&s, &pu, weak, id, direction, hook)
                         .await
                 {
                     log::warn!("nav_history::replay open_playlist({id}): {e}");
-                    land_pending(pending, &s, &fallback);
+                    land_pending(pending, &fallback);
                 }
             });
         }
@@ -522,22 +521,18 @@ fn spawn_open_detail(
 
 /// The `on_applied` hook the four `open_*_with` calls share — a no-op when the
 /// replay has no navigation to defer.
-fn pending_hook(
-    pending: Option<PendingNav>,
-    state: &AppState,
-) -> impl FnOnce(&AppWindow) + Send + 'static {
-    let state = state.clone();
+fn pending_hook(pending: Option<PendingNav>) -> impl FnOnce(&AppWindow) + Send + 'static {
     move |ui: &AppWindow| {
         if let Some(pending) = pending {
-            pending.apply_deferred(&state, ui);
+            pending.apply_deferred(ui);
         }
     }
 }
 
 /// [`PendingNav::land`] over the same `Option`, so the bails read as one line.
-fn land_pending(pending: Option<PendingNav>, state: &AppState, weak: &Weak<AppWindow>) {
+fn land_pending(pending: Option<PendingNav>, weak: &Weak<AppWindow>) {
     if let Some(pending) = pending {
-        pending.land(state, weak);
+        pending.land(weak);
     }
 }
 
@@ -554,13 +549,51 @@ pub fn overlay_open(ui: &AppWindow) -> bool {
 /// `Arc<*Ui>` exists and read by the replay's `open_*` dispatch.
 /// `Mutex<Option<…>>` so it can be populated lazily during boot rather than threading
 /// the handles through every callback.
+///
+/// Named for the *sections* it registers rather than for the handles, `boot::ui_setup::views`
+/// having its own unrelated `UiHandles` that this used to collide with.
 #[derive(Default)]
-pub struct UiHandles {
+pub struct SectionHandles {
     pub albums: Mutex<Option<Arc<crate::ui::albums::AlbumsUi>>>,
     pub artists: Mutex<Option<Arc<crate::ui::artists::ArtistsUi>>>,
     pub genres: Mutex<Option<Arc<crate::ui::genres::GenresUi>>>,
     pub playlists: Mutex<Option<Arc<crate::ui::playlists::PlaylistsUi>>>,
     pub radio: Mutex<Option<Arc<crate::ui::radio::RadioUi>>>,
+}
+
+/// Everything browser-style navigation needs, owned by the view layer.
+///
+/// Both halves sat on `AppState` and were the only reason it named anything under `ui::`. That
+/// edge is the one no dependency direction survives, `src/ui/` reaching `state` from 138 places.
+#[derive(Default)]
+pub struct Navigation {
+    history: Mutex<NavHistory>,
+    handles: SectionHandles,
+}
+
+impl Navigation {
+    /// The back/forward stack. In-memory only — reset on each launch.
+    pub fn history(&self) -> parking_lot::MutexGuard<'_, NavHistory> {
+        self.history.lock()
+    }
+
+    pub fn handles(&self) -> &SectionHandles {
+        &self.handles
+    }
+}
+
+/// The one navigation state this process has.
+///
+/// A static rather than a value threaded from `boot`, because reaching it from the twelve
+/// `'static` callbacks that record and the five `open_*_with` futures that land would mean a
+/// parameter on about fifty functions to arrive at a value there is exactly one of — the same
+/// bargain `utils::toast`'s bridge and `window_chrome`'s geometry statics already take. It
+/// carries no `AppState`, so nothing here can grow a second way to reach the app layer.
+static NAVIGATION: LazyLock<Navigation> = LazyLock::new(Navigation::default);
+
+/// The process's navigation state. Fresh on first use, so there is no install to order.
+pub fn nav() -> &'static Navigation {
+    &NAVIGATION
 }
 
 #[cfg(test)]

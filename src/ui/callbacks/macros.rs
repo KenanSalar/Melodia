@@ -22,8 +22,8 @@ macro_rules! spawn_logged_toast {
         $state.runtime.clone().spawn(async move {
             if let Err(e) = $fut.await {
                 log::warn!("{}: {e}", $label);
-                $crate::services::toast::notify(
-                    $crate::services::toast::ToastKind::OperationFailed,
+                $crate::utils::toast::notify(
+                    $crate::utils::toast::ToastKind::OperationFailed,
                     e.to_string(),
                 );
             }

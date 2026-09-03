@@ -85,7 +85,7 @@ pub fn disable(ui: &AppWindow, state: &AppState) {
     if let Err(e) = crate::library::playback::player_stop_station(&state.playback_ctx()) {
         log::warn!("radio: stop station on disable: {e}");
     }
-    state.nav_history.lock().forget_section(NAV_RADIO);
+    crate::ui::nav_history::nav().history().forget_section(NAV_RADIO);
 
     // Through the callback rather than by clearing the flag, so the persisted id and the hero's
     // images go the one way they ever go. It is the whole page that is being taken away; leaving
@@ -97,7 +97,7 @@ pub fn disable(ui: &AppWindow, state: &AppState) {
     // The pages waiting on the other two tabs never reached `detail-open`, so nothing above can
     // see them. Nothing is owed but forgetting them: the page they belong to is gone, and the
     // one name `views.json` carries is the mounted tab's, which the close above already cleared.
-    if let Some(radio_ui) = state.ui_handles.radio.lock().clone() {
+    if let Some(radio_ui) = crate::ui::nav_history::nav().handles().radio.lock().clone() {
         state.runtime.spawn_blocking(move || {
             detail::forget_all_seats(&radio_ui);
             radio_ui.release_detail_artwork();
@@ -129,8 +129,8 @@ pub fn disable(ui: &AppWindow, state: &AppState) {
 /// Nothing else re-asks inside one session: the section's prime skips a list already held, and the
 /// picker skips the fetch for a chip whose list is still in hand. Parking `facet-shown` is what
 /// takes away that second shortcut.
-pub fn forget_facets(ui: &AppWindow, state: &AppState) {
-    if let Some(radio_ui) = state.ui_handles.radio.lock().clone() {
+pub fn forget_facets(ui: &AppWindow) {
+    if let Some(radio_ui) = crate::ui::nav_history::nav().handles().radio.lock().clone() {
         *radio_ui.facet_index.lock() = facets::FacetIndex::default();
         radio_ui.facet_list.lock().take();
     }

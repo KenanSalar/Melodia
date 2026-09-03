@@ -11,10 +11,10 @@ use super::write_tag_edit;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::tests::helpers::insert_test_track;
+use crate::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use crate::error::AppError;
 use crate::media::artwork;
 use crate::media::self_writes::SelfWrites;
-use crate::media::tag_writer::{ArtworkEdit, FieldEdit, TagEdit};
 use crate::test_support::ASSETS_DIR;
 
 fn assets_dir() -> PathBuf {

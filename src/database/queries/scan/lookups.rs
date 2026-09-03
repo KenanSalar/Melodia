@@ -4,6 +4,7 @@
 //! resolves hashes in batch via `batch_lookup_by_hash` / the reconcile
 //! pre-pass — there is no per-file hash lookup anymore.
 
+use crate::entities::scan::ExistingTrackSummary;
 use crate::error::AppError;
 
 /// Check if a track with the given file path already exists.
@@ -61,15 +62,6 @@ pub async fn get_all_track_paths_for_folder(
         .fetch_all(&mut **tx)
         .await?;
     Ok(paths)
-}
-
-/// Existing-track summary (size + mtime) feeding the incremental-scan
-/// filter, which decides whether an on-disk file is unchanged and can be
-/// skipped entirely. See `scanner::track_is_current`.
-#[derive(Debug, Clone)]
-pub struct ExistingTrackSummary {
-    pub file_size: Option<i64>,
-    pub date_modified: Option<String>,
 }
 
 /// Read just the columns the incremental-scan filter needs (size, mtime),
