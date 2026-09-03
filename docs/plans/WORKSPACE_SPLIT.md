@@ -1453,9 +1453,13 @@ Phase boundaries:
   and `melodia-audio` / `melodia-playback` demoted to dev-dependencies, nothing outside `tests/`
   reaching below `melodia-engine` any more.
 
-  Not yet held by a test. The natural pin is a corpus walk in `crates/melodia/tests/` over
-  `rust_sources()` for a `pub use melodia_`, which is the shape `error_as_string` and
-  `net_primitives` already have and the one thing that would stop a facade growing back.
+  **Held by `tests/workspace_shape.rs`**, a corpus walk over `rust_sources()` for a
+  `pub use melodia_` and its `pub(crate)` half, in the shape `error_as_string` and
+  `net_primitives` already have. Two more assertions ride the same file, for the two properties
+  the split rests on that no compile can answer either: every member carries
+  `[lints] workspace = true`, which is the only thing enforcing `unwrap_used` and `dead_code`,
+  and every member sits directly under `crates/`, which is the only place `rust_source_roots()`
+  looks. All three were checked by mutation before landing.
 
 One thing gets better rather than staying level: `[profile.dev.package.melodia-playback] opt-level = 2`
 becomes possible, so the DSP chain stops being debugged unoptimized, without also optimizing the state
@@ -1473,7 +1477,7 @@ payoff: it forces the interface to be stated.
 
 **Prior art is argued in the issue** and not restated here. The four sibling checkouts kept beside
 this repo (rox, termusic, Symphonia, sonora) are what its crate counts can be checked against.
-Thirteen members is above the issue's nine and still below librespot's eight-plus-protocol at a
+Fourteen members is above the issue's nine and still below librespot's eight-plus-protocol at a
 comparable size, because the audio stack is three rather than one and integrations is its own.
 
 **`cargo-crate-split` is on crates.io at 0.2.0.** It computes strongly connected components and emits

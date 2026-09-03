@@ -10,7 +10,7 @@ Status: **proposed** · Created: 2026-08-14
 > `crates/rox-playback/src/output/`).
 >
 > **Re-read against #90 before acting on any of it.** rodio is gone and
-> `src/player/output/` exists, so findings 1 through 3 and Phase 1 are largely spent —
+> `crates/melodia-playback/src/player/playback/output/` exists, so findings 1 through 3 and Phase 1 are largely spent —
 > each is marked where it changed. Everything about exclusive mode is untouched.
 >
 > **cpal has since moved to 0.18.2**, which changes three premises below: a built stream now
@@ -46,7 +46,7 @@ That holds only when **all** of these are true, and the UI states which one is n
 | Volume == 100% | see below |
 
 The visualizer tap is the one thing that **stays on**: it is read-only and taps
-before the deck's conversion, pause and volume (`src/player/CLAUDE.md`), so it observes
+before the deck's conversion, pause and volume (`.claude/rules/audio-stack.md`), so it observes
 without touching. That's a Melodia advantage worth keeping — most players kill their
 visualizer in exclusive mode.
 
@@ -211,7 +211,7 @@ CPU does.
 
 ## Structure
 
-**The directory exists.** #90 built `src/player/output/` for the shared backend, so this is no
+**The directory exists.** #90 built `crates/melodia-playback/src/player/playback/output/` for the shared backend, so this is no
 longer a greenfield layout — it is four files to extend rather than one `shared.rs` to write:
 
 ```
@@ -262,7 +262,7 @@ doesn't exist.
 
 ### Phase 1 — The output seam · **mostly done by #90**
 
-`src/player/output/` exists, `AudioOutput` is owned on `AppState`, `device::open` carries
+`crates/melodia-playback/src/player/playback/output/` exists, `AudioOutput` is owned on `AppState`, `device::open` carries
 the fallback ladder and the `stream_health` callback, and `mixer::fill` is the single
 point samples reach a device buffer — the ownership rule this doc wrote for `pump()`,
 adopted there. What is left of this phase is the exclusive-mode vocabulary, which had
@@ -282,7 +282,8 @@ clean, playback behaves identically. No user-visible change.
 
 1. Add `sample_rate`, `channels`, `bit_depth` to `TrackSummary` (`Option<i32>`,
    `#[serde(default)]` — the queue round-trip persists it).
-2. Carry them through the projection queries in `src/database/queries/track.rs` and
+2. Carry them through the projection queries in
+   `crates/melodia-store/src/database/queries/track.rs` and
    whatever else builds a `TrackSummary`. Follow the ReplayGain columns exactly.
 3. Surface the negotiated-vs-source pair in the UI as read-only text (Now Playing
    detail, or Settings → Playback). It reads "FLAC 44.1 kHz / 24-bit → device 48 kHz"
@@ -321,7 +322,7 @@ end of the phase).
 
 ### Phase 4 — The bit-perfect contract · settings + the truth panel
 
-1. `BitPerfectFlags` in `src/services/settings/data.rs` — `#[serde(default)]`,
+1. `BitPerfectFlags` in `crates/melodia-app/src/services/settings/data.rs` — `#[serde(default)]`,
    `#[serde(flatten)]`'d like `PlaybackFlags`. Fields: `enabled`, `mode`
    (`shared` / `exclusive`), `device_id`, `period_ms`, `resync_delay_ms`.
    Ships **off**, per the new-visible-behaviour default.
@@ -417,7 +418,8 @@ path; toggling off restores system audio.
    `#[allow(unsafe_code, reason = "…")]` under the rule's "unless every item in it is
    FFI" clause. Don't leave the rule silently out of date.
 5. `README.md` feature list, `CLAUDE.md` conventions, and a new
-   `.claude/rules/bit-perfect.md` scoped to `src/player/output/**` holding the
+   `.claude/rules/bit-perfect.md` scoped to
+   `crates/melodia-playback/src/player/playback/output/**` holding the
    contract and the per-platform quirks — it cuts across enough that a nested
    `CLAUDE.md` would miss the settings and UI halves.
 

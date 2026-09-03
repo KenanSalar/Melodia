@@ -15,8 +15,9 @@ fn inside_block(src: &str, open: usize, needle: usize) -> bool {
     melodia_testkit::depth_between(src, open, needle).is_some_and(|depth| depth >= 1)
 }
 
-/// The wiring under [`UI_SRC_DIR`], less the pins over it — this file names both needles it
-/// searches for, so a walk that read itself would answer about its own prose.
+/// The wiring under [`UI_SRC_DIR`], less the pins over it: `callbacks/tests/index_persist_tests.rs`
+/// and `radio/tests/radio_tests.rs` both name the needles below, so a walk that kept them would
+/// answer about the prose describing the rule rather than about the wiring obeying it.
 fn wiring_sources() -> Vec<(String, String)> {
     stripped_sources(UI_SRC_DIR, "rs", MIN_UI_SOURCES)
         .into_iter()

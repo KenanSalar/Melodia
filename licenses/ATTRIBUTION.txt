@@ -17,7 +17,8 @@ not installed.
 
 Debian packages carry a fuller machine-readable version of this at
 /usr/share/doc/melodia/copyright; the two are kept in step by
-services::tests::the_debian_copyright_quotes_the_licences_it_ships.
+the_debian_copyright_quotes_the_licences_it_ships, in
+crates/melodia/tests/packaging.rs.
 
 
 Vazirmatn

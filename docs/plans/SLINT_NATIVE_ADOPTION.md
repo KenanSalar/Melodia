@@ -87,15 +87,16 @@ foundation only — watch, not yet usable.
   of #4009 — so the fork's `WindowId` fix and URI percent-decoding aren't "did they take our
   commits" questions, they're entirely different code. Re-test percent-decoded paths (spaces,
   non-ASCII) empirically on the new API before deleting the fork.
-- **Also update `CLAUDE.md` on retirement** — three sites still cite the superseded lineage:
-  `CLAUDE.md:130` (fork provenance, PR #4009), `:192` ("winit#1881 open since 2021"), `:254`
-  ("Retires … when upstream lands native Wayland DnD (winit#1881)"). winit#1881 is still open
-  but #4571 supersedes it in practice.
+- **Also update `CLAUDE.md` on retirement** — the fork's provenance, its retirement condition and
+  the `unstable-winit-030` → `-031` rename now sit in one Known Gaps bullet (search `Vendored winit
+  fork`), which is what has to go with the directory. winit#1881 is still open but #4571 supersedes
+  it in practice.
 
 ## 🟡 `SystemTrayIcon` element → retire the dual tray stack
 
-- **Today:** `src/services/tray/` cfg-split (Linux `ksni` with the zbus-feature footgun; Win/mac
-  `tray-icon` with deferred init + pre-exit drop), `crates/melodia-views/src/ui/tray_bridge.rs`, embedded `tray.png`,
+- **Today:** `crates/melodia-platform/src/services/platform/tray/` cfg-split (Linux `ksni` with the
+  zbus-feature footgun; Win/mac `tray-icon` with deferred init + pre-exit drop),
+  `crates/melodia-views/src/ui/shell/tray_bridge.rs`, embedded `tray.png`,
   restart-gated enable toggle, close-to-tray geometry-restore timer dance.
 - **Upstream in 1.17:** declarative `SystemTrayIcon` element. Brand new — already accumulating
   feature requests upstream (icon-by-name, macOS template images), so let it bake a release or

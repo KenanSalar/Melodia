@@ -307,7 +307,8 @@ cargo test --workspace                         # run tests
 > never uploads your files anywhere). Nothing leaves the machine while the feature
 > is off, or while Discord isn't running. Building a **fork** needs its own Discord
 > **application ID**. It's public (it ships in every presence payload, so no CI
-> secret, unlike the Last.fm keys), and hardcoded in `services/discord/mod.rs`
+> secret, unlike the Last.fm keys), and hardcoded in
+> `crates/melodia-integrations/src/services/integrations/discord/mod.rs`
 > with a `MELODIA_DISCORD_APP_ID` compile-time override.
 
 > **Tip: cleaning up a loosely-tagged library.**

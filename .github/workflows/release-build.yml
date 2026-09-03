@@ -107,7 +107,7 @@ jobs:
 
       # Compiled from source rather than taiki-e/install-action, whose manifest
       # stopped covering cargo-deb for aarch64_linux. The pin is not just
-      # reproducibility: `license-file = "packaging/debian-copyright"` leans on
+      # reproducibility: `license-file = "../../packaging/debian-copyright"` leans on
       # undocumented cargo-deb behaviour, `has_copyright_metadata` (config.rs, not
       # the README) wanting a DEP-5 key in the first ten lines before it copies
       # the file verbatim. A bump that narrows it silently ships a copyright

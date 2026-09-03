@@ -27,8 +27,9 @@ fn nothing_writes_into_the_store_without_staging_and_renaming() {
 
     let mut touching = 0;
     for (path, code) in rust_sources() {
-        // Test sources stage nothing and write wherever their tempdir is.
-        if path.contains("/tests/")
+        // Test sources stage nothing and write wherever their tempdir is. By segment rather than
+        // by substring: a crate's top-level `src/tests/` comes back with no leading slash.
+        if path.split('/').any(|segment| segment == "tests")
             || !(code.contains("artwork_dir") || code.contains("artists_dir"))
         {
             continue;

@@ -10,7 +10,14 @@ not before.
 > **#90 removed rodio from the tree**, and several Decisions below were argued against its mixer.
 > Where that happened the *conclusion* stands and only the mechanism moved — the notes are marked
 > inline. Ahead of #84 harvesting these: read a rodio sentence here as history, and take the
-> current shape from `src/player/CLAUDE.md` and `src/player/output/`.
+> current shape from `.claude/rules/audio-stack.md` and
+> `crates/melodia-playback/src/player/playback/output/`.
+
+> **Every other repo path below names the pre-workspace tree**, which
+> [#83](https://github.com/KenanSalar/Melodia/issues/83) has since moved `src/` out of into
+> `crates/<member>/src/`; the nested `src/player/CLAUDE.md` folded into the rule named above.
+> Left as written rather than rewritten, on the same argument that keeps this file at all: what
+> #84 harvests is the reasoning, and the tree it was reasoned against is the one the prose names.
 
 Upstream facts verified **2026-08-20** against crate sources, the live API and this tree.
 Anything marked ⚠️ **re-verify** is expected to drift; check it on the day rather than

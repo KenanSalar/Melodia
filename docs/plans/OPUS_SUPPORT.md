@@ -23,6 +23,11 @@ All upstream facts below were verified **2026-07-23**. Anything marked
 ⚠️ **re-verify** is expected to drift — check it again on the day rather than trusting
 this doc.
 
+Every bare `src/…` below names the pre-workspace tree, which
+[#83](https://github.com/KenanSalar/Melodia/issues/83) moved into `crates/<member>/src/`. Left as
+written, the sections holding them being the dead ones; the live summary above spells its own
+module paths and those are current.
+
 ---
 
 ## Why this shape

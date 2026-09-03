@@ -76,7 +76,7 @@ self-update = ["dep:minisign-verify"]
 ## Dependency change
 
 `minisign-verify` is used **only** by the `minisign` submodule of the updater
-(confirmed: every referencing file is under `src/services/updater/`). Make it
+(confirmed: every referencing file is under `crates/melodia-app/src/services/updater/`). Make it
 optional so it disappears from feature-off builds — fewer crates for distro
 auditors:
 
@@ -85,19 +85,20 @@ auditors:
 minisign-verify = { version = "0.2.5", optional = true }
 ```
 
-`reqwest` stays unconditional — it is **shared** with `src/media/deezer.rs` and
-`src/services/artist_images.rs`, so it can't be made update-only. (All the
+`reqwest` stays unconditional — it is **shared** with
+`crates/melodia-net/src/media/fetch/deezer.rs` and
+`crates/melodia-app/src/services/artist_images.rs`, so it can't be made update-only. (All the
 *update-side* reqwest usage lives in the gated submodules, so the feature-off
 build still won't perform any update network I/O.)
 
 ## Module split — the crux
 
-Split `src/services/updater/` into "detection/metadata" (always compiled, cheap,
+Split `crates/melodia-app/src/services/updater/` into "detection/metadata" (always compiled, cheap,
 no heavy deps, referenced by non-updater code) vs "active behavior" (network +
 crypto + binary swap, gated). This is what lets `minisign-verify` become
 optional.
 
-**Verified dependency boundary** (`src/services/updater/`):
+**Verified dependency boundary** (`crates/melodia-app/src/services/updater/`):
 - `system_install.rs` imports `super::install_target`, `super::linux_pkg`,
   `super::probe::dir_is_writable`, `super::target::current_target_key` — all
   ungated. It references `super::install::download_and_install` **only in a doc
@@ -108,7 +109,7 @@ optional.
   siblings.
 - `event.rs` / `state.rs` import **nothing** — pure data enums.
 
-`src/services/updater/mod.rs` submodule decls:
+`crates/melodia-app/src/services/updater/mod.rs` submodule decls:
 
 | Submodule | Gate | Why |
 |---|---|---|
@@ -118,9 +119,9 @@ optional.
 
 *(A `test_support` submodule used to sit in this table. It held the env-var mutex the
 ungated detection tests take, and the row said to keep it `#[cfg(test)]`-only rather than
-feature-gate it. It has since moved to `src/test_support.rs` at the crate root — the lock
-had to cover `settings_tests` too — so the question no longer arises here: a crate-root
-`#[cfg(test)]` module is outside the `self-update` gate by construction. Nothing to do,
+feature-gate it. It has since moved to the `melodia-testkit` crate — the lock had to cover
+`settings_tests` too, and then every member's suite — so the question no longer arises here: a
+dev-dependency is outside the `self-update` gate by construction. Nothing to do,
 but don't re-add the submodule when working through this plan.)*
 
 `mod.rs` free functions **[fix]** (the first draft conflated these two):
@@ -135,28 +136,28 @@ but don't re-add the submodule when working through this plan.)*
 - **Gated** (`#[cfg(feature = "self-update")]`): `check::{CheckOutcome, check_for_update}`,
   `event::{FailureKind, UpdaterEvent}`, `install::{download_and_install, prune_stale_staging}`.
 
-`pub mod updater;` in `src/services/mod.rs` stays — only its active submodules
+`pub mod updater;` in `crates/melodia-app/src/services/mod.rs` stays — only its active submodules
 are gated internally.
 
 ## Rust touch points
 
-`src/main.rs`
+`crates/melodia/src/main.rs`
 - **Keep ungated:** the `--version` literal-first branch (forward-compat
   contract; it only prints, never calls into the gated install path).
-- **[fix] Gate the `.old` reaper** at `src/main.rs:79-84` — it calls
+- **[fix] Gate the `.old` reaper** at `crates/melodia/src/main.rs:79-84` — it calls
   `install_target_old()`, now gated. Change `#[cfg(target_os = "linux")]` to
   `#[cfg(all(target_os = "linux", feature = "self-update"))]`. (A feature-off
   build never produces a `.old`, so reaping it is moot anyway.)
 - **Gate** (`#[cfg(feature = "self-update")]`) the updater block at
-  ~`src/main.rs:394-437`:
+  ~`crates/melodia/src/main.rs:394-437`:
   - `updater_event_tx/rx` channel
   - `ui::updater_settings::install_event_subscriber(...)`
   - `ui::callbacks::wire_updater(...)`
   - the `updater_daily::spawn(...)` gate (incl. the `else` log branch)
   - the `prune_stale_staging()` boot task at ~`:434-437`
 
-`src/tasks/mod.rs`
-- Gate `pub mod updater_daily;` (`src/tasks/mod.rs:22`).
+`crates/melodia-app/src/tasks/mod.rs`
+- Gate `pub mod updater_daily;` (`crates/melodia-app/src/tasks/mod.rs:22`).
 
 `crates/melodia-views/src/ui/callbacks/mod.rs`
 - Gate `mod updater;` (line 25) and `pub use updater::wire as wire_updater;`
@@ -213,8 +214,11 @@ still seeded by the ungated `install()`).
 intra-doc-link warnings. These do **not** fail the clippy/build gate below
 (rustdoc lints fire only under `cargo doc`), but per house style fix them by
 converting the `[path]` links to plain backticked text:
-- `src/services/updater/system_install.rs:~13` → `super::install::download_and_install`
-- `src/services/updater/linux_pkg.rs:~14` → `super::install::download_and_install`
+- `crates/melodia-platform/src/services/platform/install_kind/system_install.rs:~13` and
+  `.../linux_pkg.rs:~14` → `super::install::download_and_install`. **Both moved out of the
+  updater and into `melodia-platform`**, which is a different question from a longer path: the
+  link's target is in another crate now, so `super::` no longer names it and the gate that would
+  hide it is not this crate's.
 - `crates/melodia-views/src/ui/settings/updater_settings.rs:~3, ~12` → `UpdaterEvent`
 
 (`event.rs:75`'s link to `install` is fine — `event` is gated, so it only

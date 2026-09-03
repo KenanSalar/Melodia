@@ -15,42 +15,28 @@
 //! it needs an `AppState`, a socket and a station that is reliably down, where the ordering is
 //! the whole invariant and is legible from the text.
 
-use melodia_testkit::rust_sources;
+use melodia_testkit::{rust_sources, stripped_sources};
+
+/// The facade's own tree, from the repo root.
+const FACADE_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "crates/melodia-app/src/library/radio");
+
+/// Vacuity floor for [`facade_source`], loose enough that folding two submodules together does
+/// not trip it and tight enough that a walk reading nothing cannot pass the pins standing on it.
+const MIN_FACADE_FILES: usize = 4;
 
 /// Every file the facade is made of, concatenated, with line comments stripped.
 ///
 /// **Read off the directory rather than named**, which is what makes the walks below cover a
 /// submodule nobody has written yet. The facade was one file when they were written and a split
 /// that re-anchored them onto `mod.rs` alone would have left four fifths of it unmeasured — a
-/// refactor that looks like an improvement and quietly disables a check.
+/// refactor that looks like an improvement and quietly disables a check. Through the shared
+/// walker, which recurses: a `read_dir` answers that claim with the top of the directory alone.
 fn facade_source() -> String {
-    let dir = concat!(env!("MELODIA_REPO_ROOT"), "crates/melodia-app/src/library/radio");
-    let mut entries: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
-        .collect();
-    assert!(
-        !entries.is_empty(),
-        "`library/radio/` holds no Rust files, so this walk reads nothing"
-    );
-    // Sorted so a failure names the same offset run to run.
-    entries.sort();
-
     let mut source = String::new();
-    let mut read = 0usize;
-    for path in &entries {
-        if let Ok(text) = std::fs::read_to_string(path) {
-            source.push_str(&melodia_testkit::strip_line_comments(&text));
-            source.push('\n');
-            read += 1;
-        }
+    for (_, text) in stripped_sources(FACADE_DIR, "rs", MIN_FACADE_FILES) {
+        source.push_str(&text);
+        source.push('\n');
     }
-    // Counted rather than skipped: a file that fails to read leaves the walks below measuring less
-    // than they claim to, which is the exact failure this helper exists to prevent.
-    assert_eq!(read, entries.len(), "every file under `library/radio/` has to be readable");
     source
 }
 

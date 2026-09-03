@@ -117,7 +117,7 @@ counter, both worth reading before changing a gate.
 
 - **The trace is the visualizer's most expensive frame, and the `x` half of it is cached.**
   Rebuilding the path string outweighs a whole spectrum frame, two FFTs included, and it is the
-  number *formatting* that costs, not the arithmetic. `player/waveform.rs` holds the whole
+  number *formatting* that costs, not the arithmetic. `player/playback/waveform.rs` holds the whole
   argument: `XPrefixes` for the cache, `push_fixed` for the writer both halves of a vertex share,
   and why a `write!("{x:.4}")` beside it would disagree in the last place.
 

@@ -264,7 +264,8 @@ walks the directory instead.
 
 - **`LICENSE` is an input to those tests** — hence its absence from the skip denylist above:
   compiling nothing is not the same as being unexercised. The other four needles live in
-  `scripts/`, `Cargo.toml` and `wix/`, which the denylist never reaches.
+  `scripts/`, `crates/melodia/Cargo.toml` and `crates/melodia/wix/`, which the denylist never
+  reaches.
 
 - **A face added under `crates/melodia-ui/ui/assets/fonts/` owes an entry in
   `licenses/ATTRIBUTION.txt`** — `every_bundled_font_is_named_in_the_attribution` walks the
@@ -273,7 +274,7 @@ walks the directory instead.
 
 ## The workspace split, as the release workflow sees it
 
-**Before adding a third member, grep the `release*.yml` and the packaging scripts for `melodia`.**
+**Before adding a member, grep the `release*.yml` and the packaging scripts for `melodia`.**
 The split to `melodia` + `melodia-ui` broke that workflow twice, both times on something
 identifying a thing by *name* that was unambiguous with one member, and both deep in a matrix slot:
 
