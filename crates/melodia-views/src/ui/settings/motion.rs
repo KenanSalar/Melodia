@@ -2,9 +2,9 @@
 
 use slint::ComponentHandle;
 
-use crate::{AppWindow, Settings};
 use melodia_app::state::AppState;
 use melodia_app::{library, services};
+use melodia_ui::{AppWindow, Settings};
 
 /// Seed and wire the Skip Startup Animation switch.
 ///

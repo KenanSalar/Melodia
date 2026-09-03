@@ -7,10 +7,10 @@ use slint::Weak;
 
 use super::apply::apply_filtered_grids;
 use super::sort::sort_cached_artists;
-use crate::AppWindow;
 use crate::ui::favorites::FavoritesUi;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::AppWindow;
 
 /// Fetch Most Played + Favorite Artists in parallel and apply each independently. Returns `()`
 /// because the caller has no use for a propagated error — every failure is logged here with

@@ -13,10 +13,10 @@ use super::state::SongsTotals;
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::row_match::{self, Needle};
 use crate::ui::util::len_as_i32;
-use crate::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
+use melodia_ui::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
 /// Read-and-return the active filter needle, folded by [`set_filter`] and ready to hand to a
 /// `row_match` predicate.

@@ -40,8 +40,8 @@ use std::sync::Arc;
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::ui::view_ctx::ViewCtx;
-use crate::{AppWindow, Nav, Radio, RadioFacetRow, RadioStationGridRow, RadioSuggestionRow};
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Nav, Radio, RadioFacetRow, RadioStationGridRow, RadioSuggestionRow};
 
 use tabs::section_is_up;
 

@@ -13,9 +13,9 @@ use crate::ui::shell::notifications::{
     NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
 };
 use crate::ui::util::count_as_i32;
-use crate::{AppWindow, Playlists, Settings};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Playlists, Settings};
 
 pub(super) fn wire(
     ui: &AppWindow,

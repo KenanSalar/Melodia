@@ -41,10 +41,10 @@ use slint::ComponentHandle;
 use tokio::sync::watch;
 
 use crate::ui::shell::notifications::NotificationsUi;
-use crate::{AppWindow, MelodiaUpdater};
 use melodia_app::library;
 use melodia_app::services::updater::UpdaterEvent;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, MelodiaUpdater};
 
 use check::spawn_manual_check;
 use install::spawn_install;

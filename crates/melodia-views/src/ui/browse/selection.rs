@@ -7,7 +7,7 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use super::BrowseUi;
 use crate::ui::util::clamp_i64_to_i32;
-use crate::{AppWindow, Browse, TrackListRow as UiTrackListRow};
+use melodia_ui::{AppWindow, Browse, TrackListRow as UiTrackListRow};
 
 /// Compute the new selection state for a row click and apply it. Mirrors
 /// `tracks::handle_select_row`, with one Browse-specific guard: disk-only

@@ -11,9 +11,9 @@ use slint::Image;
 
 use super::state::{GRID_PREWARM_AHEAD, GRID_THUMB_CAP};
 use super::{FavoritesTab, FavoritesUi};
-use crate::AppWindow;
 use crate::ui::grid_prewarm::grid_cover;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_ui::AppWindow;
 
 impl FavoritesUi {
     /// First-screenful cover paths for a grid tab, in display order.

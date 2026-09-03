@@ -14,7 +14,7 @@ use crate::ui::recently_played::{
 use crate::ui::row_match::most_played_matches;
 use crate::ui::tab_bar::{grid_signature, should_announce_warm};
 use crate::ui::util::len_as_i32;
-use crate::{AppWindow, EntityStripRow as UiEntityStripRow, RecentlyPlayed};
+use melodia_ui::{AppWindow, EntityStripRow as UiEntityStripRow, RecentlyPlayed};
 
 /// The Most Played tab's filtered rows, prepared away from the UI thread by
 /// [`build_filtered_grid`] and consumed by [`write_filtered_grid`].

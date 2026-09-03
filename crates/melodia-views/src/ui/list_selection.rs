@@ -19,7 +19,7 @@ use std::hash::BuildHasher;
 use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
-use crate::{
+use melodia_ui::{
     AlbumDetail, ArtistDetail, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed,
     TrackListRow as UiTrackListRow,
 };

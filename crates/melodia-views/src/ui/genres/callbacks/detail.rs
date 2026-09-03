@@ -13,9 +13,9 @@ use crate::ui::callbacks::{next_sort, persist_view_sort};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
-use crate::{AppWindow, GenreDetail};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, GenreDetail};
 
 /// Wire the `GenreDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {

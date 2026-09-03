@@ -4,7 +4,7 @@
 
 use slint::{ComponentHandle, SharedString, Weak};
 
-use crate::{AppWindow, MelodiaUpdater};
+use melodia_ui::{AppWindow, MelodiaUpdater};
 
 pub(super) fn set_is_checking(weak: &Weak<AppWindow>, on: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {

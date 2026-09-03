@@ -19,10 +19,10 @@ mod smart;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::AppWindow;
 use crate::ui::playlists::PlaylistsUi;
 use crate::ui::shell::notifications::NotificationsUi;
 use melodia_app::state::AppState;
+use melodia_ui::AppWindow;
 
 /// Wire every `Playlists.*` / `PlaylistDetail.*` callback to its
 /// `library::*` counterpart and the `playlists_ui` shared state, plus a

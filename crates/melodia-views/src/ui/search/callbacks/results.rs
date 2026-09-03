@@ -17,10 +17,10 @@ use crate::ui::callbacks::{
 };
 use crate::ui::search::{self as search_ui_mod, SearchUi, fetch};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
-use crate::{AppWindow, Search};
 use melodia_app::library;
 use melodia_app::services::settings::ViewSort;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Search};
 
 /// Wire the cross-tab open / Top Result / row-action / sort / selection
 /// callbacks.

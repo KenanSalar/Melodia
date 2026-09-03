@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 
-use crate::AppWindow;
 use melodia_app::state::{AppState, Signal};
 use melodia_core::themes::SystemColorState;
+use melodia_ui::AppWindow;
 
 #[cfg(target_os = "linux")]
 use slint::ComponentHandle;

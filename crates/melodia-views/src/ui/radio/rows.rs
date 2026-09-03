@@ -9,8 +9,8 @@
 
 use slint::{Model, SharedString, VecModel};
 
-use crate::{RadioFacetRow, RadioStationGridRow, RadioStationRow};
 use melodia_core::entities::radio::{DirectoryStation, Facet, RadioStation, UNKNOWN_CODEC};
+use melodia_ui::{RadioFacetRow, RadioStationGridRow, RadioStationRow};
 
 use super::{facets, identity};
 

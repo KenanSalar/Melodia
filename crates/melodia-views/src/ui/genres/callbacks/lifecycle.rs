@@ -17,10 +17,10 @@ use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::{
+use melodia_app::state::AppState;
+use melodia_ui::{
     AppWindow, GenreDetail, GenreGridRow as UiGenreGridRow, Genres, TrackListRow as UiTrackListRow,
 };
-use melodia_app::state::AppState;
 
 /// Wire the Genres section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
@@ -91,7 +91,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                                 &gu,
                                 weak.clone(),
                                 open_id,
-                                crate::NavEnterFrom::Right,
+                                melodia_ui::NavEnterFrom::Right,
                             )
                             .await
                         {

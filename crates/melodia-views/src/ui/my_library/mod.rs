@@ -17,8 +17,8 @@ mod callbacks;
 pub(super) mod filter;
 mod tabs;
 
-use crate::AppWindow;
 use melodia_app::state::AppState;
+use melodia_ui::AppWindow;
 
 pub use tabs::{
     MountedSurface, MyLibraryTab, NO_TAB, close_open_detail, detail_id_for, go_to_tab,

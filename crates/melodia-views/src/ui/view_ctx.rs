@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use crate::AppWindow;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_ui::AppWindow;
 
 /// The window, the app state, the shared row-tier cover cache and `views.json` as read
 /// once at boot.

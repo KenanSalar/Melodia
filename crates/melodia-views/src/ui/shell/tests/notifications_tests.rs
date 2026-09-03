@@ -5,7 +5,7 @@ use std::rc::Rc;
 use slint::{Model, SharedString, VecModel};
 
 use super::*;
-use crate::NotificationRow;
+use melodia_ui::NotificationRow;
 
 /// Build a `NotificationsUi` outside of an `AppWindow`. The Slint global
 /// wiring in `install()` is purely about pushing the same `VecModel` into

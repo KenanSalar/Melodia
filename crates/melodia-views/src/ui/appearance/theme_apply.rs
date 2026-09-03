@@ -8,11 +8,11 @@
 
 use slint::{Brush, Color, ComponentHandle};
 
-use crate::{AppWindow, Theme as ThemeGlobal};
 use melodia_core::themes::palette::{
     MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef, on_accent_hex,
 };
 use melodia_core::themes::system_color_state::SystemColorState;
+use melodia_ui::{AppWindow, Theme as ThemeGlobal};
 
 /// Brushes for the colour-dot picker — one per accent in `theme`, each
 /// rendered in `variant_id`'s shade.

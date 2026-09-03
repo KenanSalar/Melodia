@@ -12,8 +12,8 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::AppWindow;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_ui::AppWindow;
 
 /// Call `bump` on the UI thread whenever `tier` finishes a batch it was handed by a miss.
 ///

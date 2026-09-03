@@ -19,7 +19,6 @@ use std::sync::{Arc, Mutex};
 use slint::ComponentHandle;
 
 use crate::ui::shell::event_sink::SlintEventSink;
-use crate::{AppWindow, Settings, Visualizer};
 use melodia_app::state::AppState;
 use melodia_app::tasks::TaskSpawner;
 use melodia_engine::player::engine::event_sink::{EventSink, PlayerEvent};
@@ -27,6 +26,7 @@ use melodia_engine::player::engine::state::PlayerViewModelLight;
 use melodia_platform::services::platform::tray::{
     self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TraySnapshot,
 };
+use melodia_ui::{AppWindow, Settings, Visualizer};
 
 /// Mirrors `settings.tray.close_to_tray`, so `window_chrome`'s close handlers
 /// read the preference without touching disk.

@@ -11,10 +11,10 @@ use slint::ComponentHandle;
 
 use crate::ui::launcher;
 use crate::ui::radio::{RadioUi, browse, kept};
-use crate::{AppWindow, Radio, RadioStationRow};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::DirectoryStation;
+use melodia_ui::{AppWindow, Radio, RadioStationRow};
 
 /// Whether a row names a station that already has a database row.
 fn is_kept(row: &RadioStationRow) -> bool {

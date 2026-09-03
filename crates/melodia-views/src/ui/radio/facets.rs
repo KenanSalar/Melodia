@@ -19,10 +19,10 @@ use slint::ComponentHandle;
 
 use crate::ui::grid_rows::write_grid;
 use crate::ui::row_match;
-use crate::{AppWindow, Radio};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::{Facet, FacetKind, StationSearch, UNKNOWN_CODEC};
+use melodia_ui::{AppWindow, Radio};
 
 use super::{RadioUi, browse, rows};
 

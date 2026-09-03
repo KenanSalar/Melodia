@@ -15,11 +15,11 @@ use crate::ui::recently_played::{
     self as recently_played_ui_mod, RecentlyPlayedTab, RecentlyPlayedUi,
 };
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::{
+use melodia_app::state::AppState;
+use melodia_ui::{
     AppWindow, EntityGridRow as UiEntityGridRow, Nav, RecentlyPlayed,
     TrackListRow as UiTrackListRow,
 };
-use melodia_app::state::AppState;
 
 /// Wire the Recently-Played section-lifecycle callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {

@@ -3,7 +3,7 @@
 
 use slint::{Model, ModelRc, VecModel};
 
-use crate::{
+use melodia_ui::{
     BreadcrumbRow as UiBreadcrumbRow, Browse, BrowseFolderRow as UiBrowseFolderRow,
     TrackListRow as UiTrackListRow,
 };

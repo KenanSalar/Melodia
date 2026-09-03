@@ -42,7 +42,7 @@ const ARTWORK_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(12) {
 /// This tier's spec, or `None` under the aurora setting. The three detail views each build
 /// their own tier, so the pairing of [`BLUR`] with the live setting lives here rather than
 /// three times at their `install`s.
-pub fn blur_spec(ui: &crate::AppWindow) -> Option<BlurSpec> {
+pub fn blur_spec(ui: &melodia_ui::AppWindow) -> Option<BlurSpec> {
     crate::ui::backdrop::blur_spec(ui, BLUR)
 }
 

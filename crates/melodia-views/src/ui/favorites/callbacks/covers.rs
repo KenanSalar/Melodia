@@ -11,7 +11,7 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::ui::favorites::FavoritesUi;
-use crate::{AppWindow, Favorites};
+use melodia_ui::{AppWindow, Favorites};
 
 /// Wire the two `request-*-cover` callbacks.
 pub(super) fn wire(ui: &AppWindow, fav_ui: &Arc<FavoritesUi>) {

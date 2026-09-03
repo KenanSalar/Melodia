@@ -21,9 +21,9 @@ use slint::ComponentHandle;
 
 use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
 use crate::ui::radio::{RadioUi, browse, covers, detail, facets, kept};
-use crate::{AppWindow, Radio};
 use melodia_app::state::AppState;
 use melodia_app::tasks::TaskSpawner;
+use melodia_ui::{AppWindow, Radio};
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     let g = ui.global::<Radio>();

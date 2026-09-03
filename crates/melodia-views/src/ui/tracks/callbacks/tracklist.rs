@@ -10,10 +10,10 @@ use crate::ui::callbacks::{
 };
 use crate::ui::track_list_view::view_id;
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
-use crate::{AppWindow, Tracks};
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Tracks};
 
 /// Wire the list's own callbacks, and seed the sort header they persist through.
 pub(super) fn wire(

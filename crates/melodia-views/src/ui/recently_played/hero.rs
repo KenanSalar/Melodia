@@ -12,9 +12,9 @@ use slint::{ComponentHandle, Weak};
 
 use super::RecentlyPlayedUi;
 use crate::ui::detail_view::impl_detail_view_helpers;
-use crate::{AppWindow, RecentlyPlayed};
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_ui::{AppWindow, RecentlyPlayed};
 
 // Only the artwork half — this page's track model is its own tabbed cache's.
 impl_detail_view_helpers!(

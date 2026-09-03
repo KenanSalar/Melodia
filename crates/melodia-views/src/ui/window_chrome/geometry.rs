@@ -28,8 +28,8 @@ use slint::winit_030::winit::dpi::{
 use slint::winit_030::winit::window::Window as WinitWindow;
 use slint::{ComponentHandle, LogicalPosition, LogicalSize};
 
-use crate::AppWindow;
 use melodia_app::services::settings::SettingsData;
+use melodia_ui::AppWindow;
 
 /// Lower bound for a restored window size, mirroring `app-window.slint`'s own — a guard
 /// against a corrupt `settings.json` producing a 0×0 window.
@@ -88,7 +88,7 @@ pub fn restore(app: &AppWindow, geom: PersistedGeometry) {
     // From persisted state, not the winit window, which doesn't exist yet.
     // `app-window.slint` keys its transparent-rounded versus opaque-square background on
     // this, so a window restored maximized paints square from the first frame.
-    app.global::<crate::WindowChrome>().set_is_maximized(geom.maximized);
+    app.global::<melodia_ui::WindowChrome>().set_is_maximized(geom.maximized);
 }
 
 /// Live-mirror payload: the geometry plus whether winit ever reported a real position.

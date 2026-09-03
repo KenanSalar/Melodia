@@ -8,7 +8,7 @@
 use slint::ComponentHandle;
 
 use super::RecentlyPlayedUi;
-use crate::{AppWindow, RecentlyPlayed};
+use melodia_ui::{AppWindow, RecentlyPlayed};
 
 /// Which Recently-Played sub-view is mounted.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

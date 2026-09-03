@@ -18,11 +18,11 @@
 use slint::ComponentHandle;
 
 use crate::ui::settings_bind::toggle_binding;
-use crate::{AppWindow, Settings};
 use melodia_app::library;
 use melodia_app::services::settings;
 use melodia_app::state::AppState;
 use melodia_playback::player::playback::crossfade;
+use melodia_ui::{AppWindow, Settings};
 
 /// The on-disk token as a Slint chip index, in lock-step with the inline literal in
 /// `views/settings/playback-section.slint` — both sides have to agree on the order or

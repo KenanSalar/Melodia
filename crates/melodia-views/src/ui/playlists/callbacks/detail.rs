@@ -10,9 +10,9 @@ use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
-use crate::{AppWindow, Dialog, PlaylistDetail};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Dialog, PlaylistDetail};
 
 /// Wire the `PlaylistDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {

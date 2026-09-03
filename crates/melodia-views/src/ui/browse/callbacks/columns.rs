@@ -4,9 +4,9 @@ use slint::ComponentHandle;
 
 use crate::ui::callbacks::macros::spawn_blocking_logged;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
-use crate::{AppWindow, Browse};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Browse};
 
 /// toggle-column: the popup already flipped the matching `show-*` flag for instant visual
 /// feedback. Persist the new visible-column list to `views.json`'s

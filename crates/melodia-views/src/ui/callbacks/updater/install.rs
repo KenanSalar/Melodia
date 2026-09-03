@@ -5,11 +5,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use slint::{ComponentHandle, Weak};
 use tokio::sync::watch;
 
-use crate::{AppWindow, MelodiaUpdater};
 use melodia_app::services::updater::{
     self, CheckOutcome, FailureKind, UpdaterEvent, asset_cache, check_for_update,
 };
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, MelodiaUpdater};
 
 use super::paint::{paint_error, paint_restart_needed, set_is_installing};
 use super::read_etag;

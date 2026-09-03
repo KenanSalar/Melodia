@@ -12,11 +12,11 @@ use slint::{ComponentHandle, Model, VecModel, Weak};
 use super::{FavoritesTab, FavoritesUi};
 use crate::ui::row_match::{self, Needle};
 use crate::ui::track_sort;
-use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 use melodia_app::library;
 use melodia_app::services::settings::{SortDir, ViewSort};
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
+use melodia_ui::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 
 /// The active sort. Slint mirrors it in `Favorites.sort-*`, but this cache is the source of truth
 /// — those properties are written from Rust, never back.

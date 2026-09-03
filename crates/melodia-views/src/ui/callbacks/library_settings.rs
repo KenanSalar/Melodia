@@ -6,10 +6,10 @@ use slint::ComponentHandle;
 use super::macros::{spawn_logged, spawn_logged_toast};
 use crate::ui::file_dialog;
 use crate::ui::settings::library_settings as lib_settings_ui;
-use crate::{AppWindow, LibrarySettings};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
+use melodia_ui::{AppWindow, LibrarySettings};
 
 /// Wire the `LibrarySettings.*` callbacks. Pairs with
 /// `ui::settings::library_settings::install`, which handles the push side (folder list

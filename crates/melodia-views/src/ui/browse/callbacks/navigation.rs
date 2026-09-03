@@ -11,9 +11,9 @@ use slint::{ComponentHandle, Weak};
 
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
 use crate::ui::callbacks::macros::spawn_blocking_logged;
-use crate::{AppWindow, Browse};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Browse};
 
 /// Fetch `path` and apply it to the view, logging a failure under `label`.
 ///

@@ -12,9 +12,9 @@ use super::{add_pick_disabled, refresh_add_selection_meta, set_all_picks, toggle
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
 use crate::ui::util::len_as_i32;
-use crate::{AppWindow, Dialog, PlaylistPickRow as UiPlaylistPickRow, Playlists, Settings};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Dialog, PlaylistPickRow as UiPlaylistPickRow, Playlists, Settings};
 
 pub(super) fn wire(
     ui: &AppWindow,

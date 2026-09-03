@@ -22,12 +22,12 @@ use std::sync::Arc;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::sync::watch;
 
-use crate::{AppWindow, Settings};
 use melodia_app::library;
 use melodia_app::state::{AppState, Signal};
 use melodia_core::themes::{self, SystemColorState, ThemeDef};
 #[cfg(target_os = "linux")]
 use melodia_platform::services::platform;
+use melodia_ui::{AppWindow, Settings};
 
 pub use install::install;
 pub use repaint::{apply_and_seed, repaint_from_settings};

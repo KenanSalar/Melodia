@@ -14,7 +14,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use crate::{AppWindow, NotificationRow, Notifications};
+use melodia_ui::{AppWindow, NotificationRow, Notifications};
 
 /// Maximum visible notifications. Pushing past it drops the oldest first, so the stack
 /// never grows off-screen.

@@ -7,7 +7,9 @@
 
 use slint::ComponentHandle;
 
-use crate::{AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, Nav, PlaylistDetail};
+use melodia_ui::{
+    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, Nav, PlaylistDetail,
+};
 
 /// The tab index a section without tabs answers with. Here rather than beside either
 /// reader: `nav_history` and `callbacks::cross_tab_nav` are compared against each other

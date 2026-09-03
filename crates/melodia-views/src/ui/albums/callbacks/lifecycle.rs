@@ -12,10 +12,10 @@ use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::{
+use melodia_app::state::AppState;
+use melodia_ui::{
     AlbumDetail, AlbumGridRow as UiAlbumGridRow, Albums, AppWindow, TrackListRow as UiTrackListRow,
 };
-use melodia_app::state::AppState;
 
 /// Wire the Albums section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
@@ -117,7 +117,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                                 &au,
                                 weak.clone(),
                                 open_id,
-                                crate::NavEnterFrom::Right,
+                                melodia_ui::NavEnterFrom::Right,
                             )
                             .await
                         {

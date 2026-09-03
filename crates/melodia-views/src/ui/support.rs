@@ -14,9 +14,9 @@ use slint::ComponentHandle;
 
 use crate::ui::launcher;
 use crate::ui::shell::notifications::{NotificationsUi, RowText};
-use crate::{AppWindow, Settings};
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
+use melodia_ui::{AppWindow, Settings};
 
 /// A literal rather than a manifest field — Cargo has no `funding` key to read it out
 /// of, unlike `about.rs`'s `CARGO_PKG_REPOSITORY`.

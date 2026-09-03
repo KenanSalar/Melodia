@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use slint::{Model, ModelRc, VecModel};
 
-use crate::{EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow};
+use melodia_ui::{EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow};
 
 /// Chunk `items` into rows of `columns`, mapping each item through `card` and wrapping each
 /// row's cards through `row`. `columns` is floored at one — a grid mid-layout can report

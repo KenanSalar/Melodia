@@ -8,9 +8,9 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::{AppWindow, Playlists};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Playlists};
 
 /// Wire the `Playlists` grid callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
@@ -65,7 +65,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     &pu_fetch,
                     weak_fetch,
                     id,
-                    crate::NavEnterFrom::Right
+                    melodia_ui::NavEnterFrom::Right
                 )
             );
 

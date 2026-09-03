@@ -12,9 +12,9 @@
 
 use slint::ComponentHandle;
 
-use crate::{AppWindow, Settings};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Settings};
 
 pub fn install_radio(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Settings>();

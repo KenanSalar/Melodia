@@ -20,15 +20,15 @@ use crate::ui::row_match;
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
-use crate::{
-    AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, NavEnterFrom, TrackListRow as UiTrackListRow,
-};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_core::error::AppResult;
+use melodia_ui::{
+    AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, NavEnterFrom, TrackListRow as UiTrackListRow,
+};
 
 // `apply_detail_artwork` (cover + hero-blur write) and `replace_tracks_model` (in-place `tracks`
 // `VecModel` swap) — see `src/ui/detail_view.rs`.
@@ -166,7 +166,7 @@ where
         crate::ui::nav_history::record_current(&ui);
         // Reseat the page's shared filter box, which the clear above doesn't reach — same
         // reasoning, and same closure position, as `albums::detail::open_album_with`.
-        ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
+        ui.global::<melodia_ui::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }

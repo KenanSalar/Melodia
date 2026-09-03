@@ -6,7 +6,7 @@ use slint::ComponentHandle;
 
 use super::RecentlyPlayedUi;
 use crate::ui::list_selection;
-use crate::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
+use melodia_ui::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
 /// Compute the new selection set for a row click and apply it. Click semantics match
 /// `favorites::handle_select_row`. Runs on the UI thread.

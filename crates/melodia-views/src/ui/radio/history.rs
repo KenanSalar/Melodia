@@ -19,8 +19,8 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::AppWindow;
 use melodia_engine::player::engine::event_sink::PlayerSinks;
+use melodia_ui::AppWindow;
 
 use super::{RadioUi, detail};
 
@@ -120,7 +120,7 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
         let history = radio_ui.history.lock();
         history.titles().iter().map(|title| slint::SharedString::from(title.as_str())).collect()
     };
-    ui.global::<crate::Radio>()
+    ui.global::<melodia_ui::Radio>()
         .set_history_rows(slint::ModelRc::new(slint::VecModel::from(titles)));
     detail::sync_history_seat(ui, radio_ui);
 }

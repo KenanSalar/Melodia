@@ -22,7 +22,7 @@ use slint::{ComponentHandle, SharedString};
 
 use super::{MountedSurface, MyLibraryTab, mounted_surface};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::{
+use melodia_ui::{
     AlbumDetail, Albums, AppWindow, ArtistDetail, Artists, GenreDetail, Genres, MyLibrary,
     PlaylistDetail, Playlists, Tracks,
 };

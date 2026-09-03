@@ -10,8 +10,8 @@ use slint::ComponentHandle;
 
 use crate::ui::callbacks::spawn_play_then_shuffle;
 use crate::ui::favorites::FavoritesUi;
-use crate::{AppWindow, Favorites};
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Favorites};
 
 /// Wire the two hero shuffle callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {

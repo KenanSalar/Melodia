@@ -15,13 +15,13 @@ use std::collections::HashSet;
 
 use slint::ComponentHandle;
 
-use crate::AppWindow;
-use crate::{
+use melodia_app::services::settings::ColumnWidths;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_ui::AppWindow;
+use melodia_ui::{
     AlbumDetail, ArtistDetail, Browse, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed,
     Search, Tracks,
 };
-use melodia_app::services::settings::ColumnWidths;
-use melodia_app::services::view_state::ViewStateData;
 
 /// The Slint-side surface of a per-view track-list global, so the hydrate and snapshot
 /// helpers drive any number of views down one path. Each generated global gets its own

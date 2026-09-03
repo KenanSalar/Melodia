@@ -28,12 +28,12 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::ui::settings_bind::read_or_default;
 use crate::ui::shell::tray_bridge;
-use crate::{AppWindow, Visualizer};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_playback::player::playback::spectrum::{FFT_SIZE, NUM_BANDS, SpectrumAnalyzer};
 use melodia_playback::player::playback::visualizer::RING_CAP;
 use melodia_playback::player::playback::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
+use melodia_ui::{AppWindow, Visualizer};
 
 const STYLE_BARS: &str = "bars";
 const STYLE_WAVEFORM: &str = "waveform";

@@ -9,7 +9,7 @@
 
 use slint::{Model, ModelRc, VecModel};
 
-use crate::TrackListRow as UiTrackListRow;
+use melodia_ui::TrackListRow as UiTrackListRow;
 
 /// Find the row with `id` and apply `patch` to a clone of it, writing back via
 /// `set_row_data`. No-ops when the model isn't a `VecModel` or the id isn't

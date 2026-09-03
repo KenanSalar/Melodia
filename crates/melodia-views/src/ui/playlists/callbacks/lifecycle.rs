@@ -12,11 +12,11 @@ use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::{
+use melodia_app::state::AppState;
+use melodia_ui::{
     AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, Playlists,
     TrackListRow as UiTrackListRow,
 };
-use melodia_app::state::AppState;
 
 /// Wire the Playlists section-lifecycle callbacks. See
 /// [`super::wire`].
@@ -77,7 +77,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                                 &pu,
                                 weak.clone(),
                                 open_id,
-                                crate::NavEnterFrom::Right,
+                                melodia_ui::NavEnterFrom::Right,
                             )
                             .await
                         {

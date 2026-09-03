@@ -26,7 +26,6 @@ use slint::{ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedS
 use crate::ui::file_dialog;
 use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, RowText};
 use crate::ui::util::{COVER_SIZE, buffer_from_rgb};
-use crate::{AppWindow, Dialog, Settings, TagEditor};
 use melodia_app::library;
 use melodia_app::library::tags::TagEditReport;
 use melodia_app::state::AppState;
@@ -36,6 +35,7 @@ use melodia_artwork::media::image::image_decode::{
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::entities::track::TagEditRow;
 use melodia_core::error::AppError;
+use melodia_ui::{AppWindow, Dialog, Settings, TagEditor};
 
 /// Canonical field order, shared by the three positional lists that must stay
 /// aligned: the `commit` getter array, `populate`'s `field!` calls, and

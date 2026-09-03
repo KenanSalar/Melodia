@@ -12,9 +12,9 @@ use super::{NowPlayingState, UP_NEXT_N, current_track_id};
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::ui::queue_sheet::to_slint_queue_row;
 use crate::ui::util::len_as_i32;
-use crate::{AppWindow, Nav, NowPlaying, QueueRow};
 use melodia_app::state::AppState;
 use melodia_engine::player::engine::state::QueueViewModel;
+use melodia_ui::{AppWindow, Nav, NowPlaying, QueueRow};
 
 /// Subscribe to `sinks.queue`. Closed, the subscriber only stashes the latest snapshot
 /// into `NowPlayingState::latest_qvm`; open, it rebuilds the Up Next list when the

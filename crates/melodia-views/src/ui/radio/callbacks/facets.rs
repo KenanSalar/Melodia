@@ -8,8 +8,8 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::ui::radio::{RadioUi, facets, suggest};
-use crate::{AppWindow, Radio};
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Radio};
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     let g = ui.global::<Radio>();

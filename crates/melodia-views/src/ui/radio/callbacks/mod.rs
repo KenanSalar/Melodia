@@ -22,10 +22,10 @@ use slint::ComponentHandle;
 
 use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::view_tag;
-use crate::{AppWindow, Radio};
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Radio};
 
 use super::{RadioTab, RadioUi, filter, tab_from_index};
 

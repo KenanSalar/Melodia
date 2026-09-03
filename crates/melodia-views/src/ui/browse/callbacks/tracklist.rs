@@ -10,10 +10,10 @@ use crate::ui::callbacks::{
     collect_nonzero_track_ids, next_sort, persist_view_sort, persisted_sort, play_row_start,
 };
 use crate::ui::track_list_view::view_id;
-use crate::{AppWindow, Browse};
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Browse};
 
 /// Wire the list's own callbacks, and seed the sort the first navigation applies.
 pub(super) fn wire(

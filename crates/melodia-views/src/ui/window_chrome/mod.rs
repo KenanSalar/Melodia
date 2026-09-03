@@ -37,11 +37,11 @@ use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowLevel;
 
-use crate::{AppWindow, Theme};
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
+use melodia_ui::{AppWindow, Theme};
 
 /// Armed once the new setting is persisted, read at the very end of `main()` — after the
 /// event loop has exited and every background task wound down. Spawning *before* shutdown
@@ -174,7 +174,7 @@ pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
 /// waits, so `KWin` / GNOME have registered the window — `MakeAbove` against a
 /// not-yet-shown one quietly fails on bare `window-calls`.
 fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool) {
-    let chrome = app.global::<crate::WindowChrome>();
+    let chrome = app.global::<melodia_ui::WindowChrome>();
     chrome.set_always_on_top_supported(state.always_on_top.supported);
     chrome.set_always_on_top_active(persisted_pinned);
 

@@ -15,10 +15,10 @@
 
 use slint::Weak;
 
-use crate::AppWindow;
 use crate::ui::signal::on_signal;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
+use melodia_ui::AppWindow;
 
 /// Run `refresh` on the UI thread after every language switch.
 pub fn on_locale_changed<F>(state: &AppState, weak: Weak<AppWindow>, refresh: F) -> AppResult<()>

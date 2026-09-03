@@ -24,11 +24,11 @@ use crate::ui::shell::notifications::{
     NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
 };
 use crate::ui::{file_dialog, launcher};
-use crate::{AppWindow, Settings};
 use melodia_app::state::AppState;
 use melodia_app::{library, services};
 use melodia_core::error::{AppError, AppResult};
 use melodia_platform::services::platform;
+use melodia_ui::{AppWindow, Settings};
 
 /// Routing key shared with the `Notifications.action` dispatcher.
 const CRASH_TOAST_KIND: &str = "crash-report";

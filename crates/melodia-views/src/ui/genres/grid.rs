@@ -14,10 +14,10 @@ use super::{GenresUi, to_slint_genre_row};
 use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
-use crate::{AppWindow, GenreGridRow as UiGenreGridRow, Genres};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
+use melodia_ui::{AppWindow, GenreGridRow as UiGenreGridRow, Genres};
 
 /// Fetch the genre list from the DB into `genres_ui.grid.data`, then
 /// rebuild the grid model on the UI thread. Async — runs on the tokio

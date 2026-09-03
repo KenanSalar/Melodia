@@ -7,7 +7,7 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::ui::recently_played::RecentlyPlayedUi;
-use crate::{AppWindow, RecentlyPlayed};
+use melodia_ui::{AppWindow, RecentlyPlayed};
 
 /// Wire the `request-most-played-cover` callback.
 pub(super) fn wire(ui: &AppWindow, rp_ui: &Arc<RecentlyPlayedUi>) {

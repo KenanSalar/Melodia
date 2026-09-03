@@ -11,12 +11,12 @@ use slint::{ComponentHandle, SharedString, Weak};
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::radio::{RadioTab, RadioUi, kept};
 use crate::ui::track_list_view::view_id;
-use crate::{AppWindow, Dialog, Radio, RadioForm};
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio;
 use melodia_core::error::AppError;
+use melodia_ui::{AppWindow, Dialog, Radio, RadioForm};
 
 pub(super) fn wire(
     ui: &AppWindow,

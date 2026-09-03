@@ -22,11 +22,11 @@ use std::sync::Arc;
 use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
 
-use crate::{AppWindow, Nav, Player};
 use melodia_app::library;
 use melodia_app::services::settings::{SortDir, ViewSort};
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Nav, Player};
 
 use index_persist::IndexPersist;
 use macros::{spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
@@ -68,7 +68,7 @@ pub(super) fn play_row_start(ids: &[i64], track_id: i64, idx: i32) -> Option<usi
 /// set is a sorted, truncated projection of `last_results` assembled at render time, so
 /// the model is the only place its display order exists. LIMIT-bounded, so the UI-thread
 /// walk is cheap.
-pub(super) fn model_track_ids(rows: &ModelRc<crate::TrackListRow>) -> Vec<i64> {
+pub(super) fn model_track_ids(rows: &ModelRc<melodia_ui::TrackListRow>) -> Vec<i64> {
     rows.iter().map(|r| i64::from(r.id)).collect()
 }
 

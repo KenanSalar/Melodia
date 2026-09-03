@@ -30,12 +30,12 @@ use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::my_library::{NAV_MY_LIBRARY, NO_TAB, go_to_tab, tab_of_section};
 use crate::ui::nav_transition;
 use crate::ui::track_list_view::view_id;
-use crate::{
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_ui::{
     AlbumDetail, AppWindow, ArtistDetail, Browse, Favorites, GenreDetail, MyLibrary, Nav,
     NavEnterFrom, PlaylistDetail, RecentlyPlayed, Search, Tracks,
 };
-use melodia_app::library;
-use melodia_app::state::AppState;
 
 /// Where the user is standing when a "Go to …" fires: the nav index, plus the My Library
 /// tab when that index *is* My Library. Both halves are read synchronously, before any

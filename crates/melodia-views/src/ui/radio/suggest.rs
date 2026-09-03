@@ -22,9 +22,9 @@ use slint::{ComponentHandle, Model, SharedString};
 
 use crate::ui::grid_rows::write_grid;
 use crate::ui::row_match::{self, Needle};
-use crate::{AppWindow, Radio, RadioSuggestionRow};
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::{Facet, StationSearch};
+use melodia_ui::{AppWindow, Radio, RadioSuggestionRow};
 
 use super::facets::{self, ChipFilter, FacetIndex};
 use super::{RadioTab, RadioUi, browse, mounted_tab};

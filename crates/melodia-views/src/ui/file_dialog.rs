@@ -9,7 +9,7 @@
 
 use slint::ComponentHandle;
 
-use crate::AppWindow;
+use melodia_ui::AppWindow;
 
 /// A native dialog parented to the main window, titled `title`. Chain the rest at the call
 /// site.

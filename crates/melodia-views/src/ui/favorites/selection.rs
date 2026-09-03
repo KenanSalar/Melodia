@@ -10,7 +10,7 @@ use slint::ComponentHandle;
 
 use super::FavoritesUi;
 use crate::ui::list_selection;
-use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
+use melodia_ui::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 
 /// Compute the new selection set for a row click and apply it. Click semantics match
 /// `tracks::handle_select_row` exactly. Runs on the UI thread (called from `on_select_row`).

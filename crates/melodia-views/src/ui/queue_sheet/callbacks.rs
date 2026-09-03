@@ -10,11 +10,11 @@ use slint::{ComponentHandle, Model, VecModel};
 
 use super::rows::rebuild_rows;
 use super::{ShadowEntry, push_selected_count};
-use crate::{AppWindow, Queue, QueueRow};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_engine::player::engine::state::{PlayerAction, lock_state, with_state_emit};
+use melodia_ui::{AppWindow, Queue, QueueRow};
 
 /// Covers decoded ahead of first paint when the sheet opens.
 ///

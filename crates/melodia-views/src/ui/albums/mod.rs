@@ -30,12 +30,12 @@ use crate::ui::row_match::Needle;
 use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
 use crate::ui::util::clamp_i64_to_i32;
 use crate::ui::view_ctx::ViewCtx;
-use crate::{
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::album::AlbumStats;
+use melodia_ui::{
     AlbumDetail, AlbumGridRow as UiAlbumGridRow, AlbumRow as UiAlbumRow, Albums, AppWindow,
     TrackListRow as UiTrackListRow,
 };
-use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
-use melodia_core::entities::album::AlbumStats;
 
 use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
 use state::{AlbumDetailState, AlbumGridState, DEFAULT_GRID_COVER_CAP, GridData};

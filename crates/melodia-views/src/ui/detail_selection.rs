@@ -20,10 +20,10 @@ use std::collections::{HashMap, HashSet};
 use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
-use crate::TrackListRow as UiTrackListRow;
 pub use crate::ui::list_selection::RowSelectionView;
 use crate::ui::util::clamp_i64_to_i32;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_ui::TrackListRow as UiTrackListRow;
 
 /// Borrows of the Rust-side caches a detail view keeps alongside its Slint
 /// model: the track rows in display order, and the selection set currently
@@ -179,7 +179,7 @@ macro_rules! impl_detail_selection {
 
         /// Compute the new selection state for a detail-row click and apply it.
         pub fn handle_select_row(
-            ui: &$crate::AppWindow,
+            ui: &melodia_ui::AppWindow,
             view: &$Ui,
             idx: i32,
             id: i32,
@@ -192,7 +192,7 @@ macro_rules! impl_detail_selection {
         }
 
         /// Reset selection (called from the action-pill "Clear" button).
-        pub fn clear_selection(ui: &$crate::AppWindow, view: &$Ui) {
+        pub fn clear_selection(ui: &melodia_ui::AppWindow, view: &$Ui) {
             use slint::ComponentHandle as _;
             let g = ui.global::<$Global>();
             $crate::ui::detail_selection::clear_selection(&g, &refs(view));

@@ -31,7 +31,7 @@ macro_rules! impl_detail_view_helpers {
         /// after a nav away would paint this page's solve under whichever hero mounted next.
         fn publish_hero_artwork(
             view: &std::sync::Arc<$Ui>,
-            weak: &slint::Weak<$crate::AppWindow>,
+            weak: &slint::Weak<melodia_ui::AppWindow>,
             pair: $crate::ui::detail_artwork::DetailPair,
             animate: bool,
             paths: Vec<String>,
@@ -56,7 +56,7 @@ macro_rules! impl_detail_view_helpers {
         /// signature early-return, and `mounted_content` is a constant `0` on the Songs tab.
         pub fn republish_chips(
             view: &std::sync::Arc<$Ui>,
-            weak: &slint::Weak<$crate::AppWindow>,
+            weak: &slint::Weak<melodia_ui::AppWindow>,
         ) {
             let view = view.clone();
             let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -80,7 +80,7 @@ macro_rules! impl_detail_view_helpers {
         /// section's synchronous shadow, never a literal: the boot path fetches every
         /// persisted detail id whichever section is restored.
         fn apply_detail_artwork(
-            ui: &$crate::AppWindow,
+            ui: &melodia_ui::AppWindow,
             g: &$Global,
             pair: $crate::ui::detail_artwork::DetailPair,
             animate: bool,
@@ -117,11 +117,11 @@ macro_rules! impl_detail_view_helpers {
         ///
         /// `rows` must already carry the selection it should end up with; the diff compares
         /// whole rows, so a caller that stamps selection afterwards would have it skipped.
-        fn replace_tracks_model(g: &$Global, rows: Vec<$crate::TrackListRow>) {
+        fn replace_tracks_model(g: &$Global, rows: Vec<melodia_ui::TrackListRow>) {
             use slint::Model as _;
             let model = g.get_tracks();
             if let Some(vm) =
-                model.as_any().downcast_ref::<slint::VecModel<$crate::TrackListRow>>()
+                model.as_any().downcast_ref::<slint::VecModel<melodia_ui::TrackListRow>>()
             {
                 $crate::ui::model_diff::apply_rows_keyed(vm, rows, |r| r.id);
             } else {

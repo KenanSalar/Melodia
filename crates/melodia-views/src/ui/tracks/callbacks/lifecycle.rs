@@ -6,8 +6,8 @@ use slint::ComponentHandle;
 
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tracks::TracksUi;
-use crate::{AppWindow, Tracks};
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Tracks};
 
 /// Mirror visibility into the synchronous shadow, and on re-enter run the deferred
 /// refresh.

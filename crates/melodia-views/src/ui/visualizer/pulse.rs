@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use slint::{ComponentHandle, RenderingState};
 
-use crate::AppWindow;
+use melodia_ui::AppWindow;
 
 /// Frames drawn since startup. Monotonic, and never read for its absolute value —
 /// the tick only asks whether it moved since last time.

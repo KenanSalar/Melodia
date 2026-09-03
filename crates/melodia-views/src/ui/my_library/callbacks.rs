@@ -19,9 +19,9 @@ use slint::{ComponentHandle, SharedString};
 use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::callbacks::macros::release_hero_slots;
 use crate::ui::my_library as my_library_mod;
-use crate::{AlbumDetail, AppWindow, ArtistDetail, MyLibrary, PlaylistDetail};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AlbumDetail, AppWindow, ArtistDetail, MyLibrary, PlaylistDetail};
 
 /// Write the active tab to `views.json` on the blocking pool. The Slint property is
 /// already correct by the time any caller gets here, so this is pure catch-up.

@@ -10,11 +10,11 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use slint::ComponentHandle;
 
-use crate::{AppWindow, Settings};
 use melodia_app::library;
 use melodia_app::state::{AppState, Signal};
 use melodia_artwork::media::image::material_you::SchemeStyle;
 use melodia_core::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState};
+use melodia_ui::{AppWindow, Settings};
 
 use super::{PersistedAccent, registry_get, usize_from};
 

@@ -14,8 +14,8 @@ use std::num::NonZeroUsize;
 use slint::ComponentHandle;
 
 use crate::ui::grid_prewarm;
-use crate::{AppWindow, Radio};
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_ui::{AppWindow, Radio};
 
 use super::RadioUi;
 

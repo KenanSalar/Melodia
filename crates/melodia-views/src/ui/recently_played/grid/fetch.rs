@@ -6,10 +6,10 @@ use std::sync::Arc;
 use slint::Weak;
 
 use super::apply::apply_filtered_grid;
-use crate::AppWindow;
 use crate::ui::recently_played::RecentlyPlayedUi;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::AppWindow;
 
 /// Fetch the library's played tracks and apply them (filtered). Returns `()` —
 /// the caller (`kick_full_refresh`) has no use for a propagated error; failures

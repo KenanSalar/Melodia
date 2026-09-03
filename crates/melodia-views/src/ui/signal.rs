@@ -8,9 +8,9 @@
 
 use slint::Weak;
 
-use crate::AppWindow;
 use melodia_app::state::Signal;
 use melodia_core::error::{AppError, AppResult};
+use melodia_ui::AppWindow;
 
 /// Run `on_tick` on the UI thread after every bump of `signal`, until the window goes away.
 ///

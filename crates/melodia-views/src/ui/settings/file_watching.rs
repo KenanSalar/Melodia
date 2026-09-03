@@ -22,7 +22,7 @@ use melodia_app::services::settings;
 use melodia_app::state::AppState;
 
 use crate::ui::shell::notifications::{NotificationsUi, RowText};
-use crate::{AppWindow, Settings};
+use melodia_ui::{AppWindow, Settings};
 
 pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
     // A missing or unreadable file leaves the Slint default in place, matching the

@@ -15,13 +15,13 @@ use super::{SearchUi, restamp_rows, to_slint_album_strip_row, to_slint_artist_st
 use crate::ui::genres::genre_accent;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
-use crate::{
-    AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
-};
 use melodia_app::library::search::SearchResults;
 use melodia_app::services::settings::SortDir;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_ui::{
+    AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
+};
 
 /// Push the freshly-fetched `results` into all four Slint models,
 /// compute + apply the Top Result, set `tracks-total`, and honour the

@@ -18,10 +18,10 @@ use slint::{ComponentHandle, Weak};
 
 use crate::ui::grid_rows::{chunk_built_rows, write_grid};
 use crate::ui::util::len_as_i32;
-use crate::{AppWindow, Radio, RadioStationGridRow};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::{DirectoryStation, StationPage, StationSearch};
+use melodia_ui::{AppWindow, Radio, RadioStationGridRow};
 
 use super::{RadioUi, covers, logos, rows};
 

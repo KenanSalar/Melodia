@@ -9,10 +9,10 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
-use crate::{AppWindow, NavEnterFrom, Radio};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::utils::toast::{self, ToastKind};
+use melodia_ui::{AppWindow, NavEnterFrom, Radio};
 
 use super::super::{RadioUi, detail};
 

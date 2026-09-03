@@ -15,9 +15,9 @@ use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::{UNFETCHED_COUNT, should_announce_warm};
 use crate::ui::track_list_view::view_id;
-use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 
 /// Wire the card-action and sub-view-routing callbacks.
 pub(super) fn wire(

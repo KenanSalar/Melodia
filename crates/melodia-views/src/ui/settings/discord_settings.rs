@@ -13,12 +13,12 @@
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::{AppWindow, Settings};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::integrations::DiscordFlags;
 use melodia_core::error::AppError;
 use melodia_integrations::services::integrations::discord::DiscordStatus;
+use melodia_ui::{AppWindow, Settings};
 
 /// Paint the connection/enabled props from a status snapshot. The single writer
 /// of these props — called once for the seed and then on every `subscribe_status`

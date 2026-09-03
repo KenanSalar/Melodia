@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use super::SearchUi;
-use crate::{AppWindow, Search, TrackListRow as UiTrackListRow};
+use melodia_ui::{AppWindow, Search, TrackListRow as UiTrackListRow};
 
 /// Compute the new selection set for a row click and apply it. Click
 /// semantics match `favorites::selection::handle_select_row` exactly:

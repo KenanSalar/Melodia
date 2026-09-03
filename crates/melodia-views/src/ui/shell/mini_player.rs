@@ -16,9 +16,9 @@ use slint::ComponentHandle;
 
 use crate::ui::now_playing::NowPlayingState;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
-use crate::{AppWindow, MiniPlayer};
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
+use melodia_ui::{AppWindow, MiniPlayer};
 
 /// Hydrate `np_state.mini_square` from the live global, because `square-changed` only
 /// fires on actual flips — a window already square before entering mini would leave the

@@ -16,9 +16,9 @@ use crate::ui::shell::notifications::{
     NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
 };
 use crate::ui::util::count_as_i32;
-use crate::{AppWindow, Radio, Settings};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Radio, Settings};
 
 /// The extensions a station list arrives in. `.pls` is the one most stations are handed out as,
 /// which is why the importer reads it at all.

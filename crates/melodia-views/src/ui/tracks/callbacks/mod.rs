@@ -12,10 +12,10 @@ mod tracklist;
 
 use std::sync::Arc;
 
-use crate::AppWindow;
 use crate::ui::tracks::TracksUi;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_ui::AppWindow;
 
 /// Wire every `Tracks.*` callback to its `library::*` counterpart and the `tracks_ui`
 /// shared state.

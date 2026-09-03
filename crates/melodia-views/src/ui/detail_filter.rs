@@ -14,10 +14,10 @@ use std::collections::HashSet;
 use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
-use crate::TrackListRow as UiTrackListRow;
 use crate::ui::detail_selection::RowSelectionView;
 use crate::ui::row_match::{Needle, track_matches};
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_ui::TrackListRow as UiTrackListRow;
 
 /// Re-apply selection from the view's `selected-ids` onto freshly-built rows before they
 /// are swapped in — `to_slint_track_list_row` defaults `selected` to `false`, so a

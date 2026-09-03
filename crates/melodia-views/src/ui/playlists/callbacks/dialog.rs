@@ -25,11 +25,11 @@ use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
 use crate::ui::callbacks::macros::release_detail_hero_images;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::{
-    AppWindow, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow, Playlists, TagEditor,
-};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{
+    AppWindow, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow, Playlists, TagEditor,
+};
 
 /// Wire the playlist dialog + CRUD callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {

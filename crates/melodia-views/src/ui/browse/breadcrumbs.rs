@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 
 use slint::SharedString;
 
-use crate::BreadcrumbRow as UiBreadcrumbRow;
 use crate::ui::track_sort::sort_track_rows_by;
 use melodia_core::entities::browse::BrowseFile;
 use melodia_core::entities::folder::Folder;
+use melodia_ui::BreadcrumbRow as UiBreadcrumbRow;
 
 /// Build a breadcrumb trail that starts at the **library folder root**
 /// and walks down to `path`. The leading filesystem prefix is hidden so

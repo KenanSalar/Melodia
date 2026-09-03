@@ -12,9 +12,9 @@ use slint::Image;
 
 use super::state::{GRID_PREWARM_AHEAD, GRID_THUMB_CAP};
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
-use crate::AppWindow;
 use crate::ui::grid_prewarm::grid_cover;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_ui::AppWindow;
 
 impl RecentlyPlayedUi {
     /// First-screenful cover paths for the Most Played tab, in display order.

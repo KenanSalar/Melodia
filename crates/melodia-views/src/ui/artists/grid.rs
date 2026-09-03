@@ -11,10 +11,10 @@ use super::{ArtistsUi, to_slint_artist_row};
 use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
-use crate::{AppWindow, ArtistGridRow as UiArtistGridRow, Artists};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
+use melodia_ui::{AppWindow, ArtistGridRow as UiArtistGridRow, Artists};
 
 /// Fetch the artist list from the DB into `artists_ui.grid.data`, prewarm
 /// cover thumbnails, then rebuild the grid model on the UI thread.

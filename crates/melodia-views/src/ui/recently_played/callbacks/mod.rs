@@ -15,9 +15,9 @@ mod tracklist;
 
 use std::sync::Arc;
 
-use crate::AppWindow;
 use crate::ui::recently_played::RecentlyPlayedUi;
 use melodia_app::state::AppState;
+use melodia_ui::AppWindow;
 
 /// The settings view-id under which this view's column state persists. Unlike
 /// its sortable siblings there is no `view_sort` entry — the Songs list is

@@ -11,13 +11,13 @@ use super::{PlaylistsUi, to_slint_playlist_row};
 use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
-use crate::{
-    AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
-};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::smart_criteria::SmartCriteria;
 use melodia_core::error::AppResult;
+use melodia_ui::{
+    AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
+};
 
 /// How much smart-playlist counting a grid refresh pays for.
 #[derive(Clone, Copy)]

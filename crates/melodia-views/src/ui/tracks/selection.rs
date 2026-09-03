@@ -9,7 +9,7 @@ use slint::{ComponentHandle, Model, ModelRc};
 use super::TracksUi;
 use crate::ui::list_selection;
 use crate::ui::util::clamp_i64_to_i32;
-use crate::{AppWindow, Tracks};
+use melodia_ui::{AppWindow, Tracks};
 
 /// Compute the new selection state for a row click and apply it: write back
 /// `selected-ids` + `selection-anchor` on the global, then walk the visible

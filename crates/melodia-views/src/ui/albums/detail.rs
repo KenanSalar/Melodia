@@ -17,12 +17,12 @@ use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
-use crate::{AlbumDetail, AppWindow, NavEnterFrom, TrackListRow as UiTrackListRow};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_core::error::AppResult;
+use melodia_ui::{AlbumDetail, AppWindow, NavEnterFrom, TrackListRow as UiTrackListRow};
 
 // `apply_detail_artwork` (cover + hero-blur write) and
 // `replace_tracks_model` (in-place `tracks` `VecModel` swap) — see
@@ -161,7 +161,7 @@ where
         // detail is, leaving the box holding a needle this call just cleared.
         // Last in the closure because `sync_box` reads the mounted tab, which
         // `on_applied` may have just moved.
-        ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
+        ui.global::<melodia_ui::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }

@@ -29,9 +29,9 @@ use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::track_list_cache::TrackListCache;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::ui::view_ctx::ViewCtx;
-use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_ui::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
 // `boot::ui_setup` kicks the first fetch after the window is shown, which is
 // why `fetch_and_apply` can't fold into `install` with the rest.

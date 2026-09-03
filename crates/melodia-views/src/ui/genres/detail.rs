@@ -21,12 +21,12 @@ use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
-use crate::{AppWindow, GenreDetail, NavEnterFrom, TrackListRow as UiTrackListRow};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::genre::GenreStats;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_core::error::AppResult;
+use melodia_ui::{AppWindow, GenreDetail, NavEnterFrom, TrackListRow as UiTrackListRow};
 
 /// Publish the genre's hero band from both of its hash-derived pairs — [`genre_accent`] picks them
 /// off a name hash, and which one reaches the surface is the backdrop's to decide.
@@ -160,7 +160,7 @@ where
         crate::ui::nav_history::record_current(&ui);
         // Reseat the page's shared filter box, which the clear above doesn't reach — same
         // reasoning, and same closure position, as `albums::detail::open_album_with`.
-        ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
+        ui.global::<melodia_ui::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }

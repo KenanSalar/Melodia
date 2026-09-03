@@ -8,7 +8,7 @@
 use slint::ComponentHandle;
 
 use super::FavoritesUi;
-use crate::{AppWindow, Favorites};
+use melodia_ui::{AppWindow, Favorites};
 
 /// Which Favorites sub-view is mounted.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

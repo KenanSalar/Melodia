@@ -13,9 +13,9 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Image};
 
-use crate::AppWindow;
 use melodia_artwork::media::image::artwork::STORE_MAX_DIM;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_ui::AppWindow;
 
 /// Deduplicated, non-empty artwork paths from an iterator of optional path strings,
 /// first-seen order preserved, stopping at `cap`.

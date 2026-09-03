@@ -30,7 +30,7 @@ const BLUR: BlurSpec = BlurSpec {
 
 /// This tier's spec, or `None` under the aurora setting. Here rather than at the one call site
 /// so [`BLUR`] stays private — the two numbers are what makes this the Now Playing tier.
-pub fn blur_spec(ui: &crate::AppWindow) -> Option<BlurSpec> {
+pub fn blur_spec(ui: &melodia_ui::AppWindow) -> Option<BlurSpec> {
     crate::ui::backdrop::blur_spec(ui, BLUR)
 }
 

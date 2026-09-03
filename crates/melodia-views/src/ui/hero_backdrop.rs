@@ -21,7 +21,7 @@ use slint::ComponentHandle;
 use crate::ui::appearance::theme_apply::color;
 use crate::ui::aurora::{self, Tint, WASH_COUNT};
 use crate::ui::backdrop::{self, BackdropColors, BackdropSample};
-use crate::{AppWindow, HeroBackdrop};
+use melodia_ui::{AppWindow, HeroBackdrop};
 
 thread_local! {
     /// What the set now in `HeroBackdrop` was derived from, so a palette change can re-solve it.

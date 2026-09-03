@@ -29,8 +29,8 @@ use crate::ui::my_library::{
 };
 use crate::ui::radio::NAV_RADIO;
 use crate::ui::view_tag;
-use crate::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Queue, Radio};
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Queue, Radio};
 
 const HISTORY_CAP: usize = 24;
 

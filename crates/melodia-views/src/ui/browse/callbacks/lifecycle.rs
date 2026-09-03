@@ -7,8 +7,8 @@ use slint::ComponentHandle;
 
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi, NAV_BROWSE};
 use crate::ui::callbacks::macros::spawn_logged;
-use crate::{AppWindow, Browse, Nav};
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Browse, Nav};
 
 /// Seed the section shadow, wire the gate, and subscribe to `library_changed`.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {

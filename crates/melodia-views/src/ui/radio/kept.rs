@@ -20,11 +20,11 @@ use slint::{ComponentHandle, Weak};
 use crate::ui::grid_rows::{chunk_built_rows, write_grid};
 use crate::ui::row_match::{self, Needle};
 use crate::ui::util::len_as_i32;
-use crate::{AppWindow, Radio, RadioStationGridRow};
 use melodia_app::library;
 use melodia_app::services::settings::SortDir;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::RadioStation;
+use melodia_ui::{AppWindow, Radio, RadioStationGridRow};
 
 use super::{RadioTab, RadioUi, covers, mounted_tab, rows};
 

@@ -23,10 +23,10 @@ use crate::ui::aurora;
 use crate::ui::backdrop::{self, BackdropSample};
 use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
-use crate::{AppWindow, Player, TrackMetaRow};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackSummary;
+use melodia_ui::{AppWindow, Player, TrackMetaRow};
 
 thread_local! {
     /// The measurement behind whatever is in the `Player.np-*` tier now, so a palette change can

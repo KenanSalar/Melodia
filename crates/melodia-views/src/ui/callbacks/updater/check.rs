@@ -4,12 +4,12 @@ use chrono::Utc;
 use slint::Weak;
 use tokio::sync::watch;
 
-use crate::AppWindow;
 use melodia_app::library;
 use melodia_app::services::updater::{
     CheckOutcome, FailureKind, UpdaterEvent, asset_cache, check_for_update, version::is_upgrade,
 };
 use melodia_app::state::AppState;
+use melodia_ui::AppWindow;
 
 use super::paint::{paint_available, paint_error, paint_up_to_date, set_is_checking};
 use super::{current_skipped_release, read_etag};

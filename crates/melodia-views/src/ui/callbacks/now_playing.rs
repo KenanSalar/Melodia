@@ -10,9 +10,9 @@ use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
-use crate::{AppWindow, Player};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Player};
 
 /// The five view-side surfaces holding a per-row `is_favorite` / `rating`,
 /// bundled so the two Now-Playing fan-outs clone one handle instead of six.

@@ -6,11 +6,11 @@
 
 use slint::ComponentHandle;
 
-use crate::{AppWindow, Settings, Theme};
 use melodia_app::library;
 use melodia_app::services;
 use melodia_app::services::settings::{TitlebarButtonSide, TitlebarButtonStyle};
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Settings, Theme};
 
 /// Wire the KDE-only "Match Unfocused Window Background" toggle. The two-way binding
 /// has already flipped the property, and the sidebar and bar bindings read it directly,

@@ -11,10 +11,10 @@ use super::{AlbumsUi, to_slint_album_row};
 use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
-use crate::{AlbumGridRow as UiAlbumGridRow, Albums, AppWindow};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
+use melodia_ui::{AlbumGridRow as UiAlbumGridRow, Albums, AppWindow};
 
 /// Fetch the album list from the DB into `albums_ui.grid.data`, prewarm
 /// cover thumbnails, then rebuild the grid model on the UI thread. Async —

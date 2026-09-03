@@ -31,8 +31,8 @@ use slint::winit_030::winit::event::{
 };
 use slint::winit_030::winit::window::Window as WinitWindow;
 
-use crate::{AppWindow, CompositeScroll, PlaylistDetail, PopupHighlight, Queue, Theme};
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, CompositeScroll, PlaylistDetail, PopupHighlight, Queue, Theme};
 
 use super::{drop_coalescer, geometry};
 
@@ -200,7 +200,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     })
                     .unwrap_or(false);
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    let chrome = ui.global::<crate::WindowChrome>();
+                    let chrome = ui.global::<melodia_ui::WindowChrome>();
                     chrome.set_is_maximized(maximized);
                     // The cover tiers size themselves against the window, so this is the edge
                     // that re-derives them — see the handler in `boot::ui_setup`.

@@ -11,10 +11,10 @@ use slint::{ComponentHandle, Model, VecModel, Weak};
 
 use super::ShadowEntry;
 use crate::ui::tracks::format_duration_ms;
-use crate::{AppWindow, Queue, QueueRow};
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackSummary;
 use melodia_engine::player::engine::state::QueueViewModel;
+use melodia_ui::{AppWindow, Queue, QueueRow};
 
 /// Subscribe to `state.sinks.queue` and rebuild the row model on
 /// every mutation. Preserves the per-row `selected` bit by track id

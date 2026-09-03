@@ -40,14 +40,14 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
-use crate::{
-    AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
-    BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
-};
 use melodia_app::services::view_state;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::browse::{BrowseFile, BrowseFolder};
+use melodia_ui::{
+    AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
+    BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
+};
 
 // `boot::ui_setup` retunes the cover cap once the window is live.
 pub use cards::tune_cache_for_display;
@@ -339,7 +339,7 @@ fn seed_from_settings(
     });
 }
 
-use crate::BreadcrumbRow as UiBreadcrumbRow;
+use melodia_ui::BreadcrumbRow as UiBreadcrumbRow;
 
 /// A `BrowseFile` as the shared `TrackListRow`. An in-library file reuses the
 /// Tracks converter; a disk-only one becomes the sparse, dimmed,

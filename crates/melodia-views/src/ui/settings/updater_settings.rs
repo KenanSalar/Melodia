@@ -23,10 +23,10 @@ use slint::{ComponentHandle, SharedString, Weak};
 use tokio::sync::watch;
 
 use crate::ui::shell::notifications::{NotificationsUi, RowText};
-use crate::{AppWindow, MelodiaUpdater, Settings};
 use melodia_app::services::settings;
 use melodia_app::services::updater::{UpdaterEvent, is_available, is_system_install};
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, MelodiaUpdater, Settings};
 
 // (FailureKind classification is performed at the send site in
 // `ui::callbacks::updater`; here we just hand the discriminator string

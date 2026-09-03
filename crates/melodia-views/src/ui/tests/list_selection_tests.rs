@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use super::{compute_click_selection, restamp_selected};
-use crate::TrackListRow as UiTrackListRow;
+use melodia_ui::TrackListRow as UiTrackListRow;
 
 /// Displayed order used by every shift-range case below.
 const VISIBLE: [i32; 6] = [10, 20, 30, 40, 50, 60];

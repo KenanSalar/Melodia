@@ -27,11 +27,11 @@ use crate::ui::detail_view::impl_detail_view_helpers;
 use crate::ui::hero_chips::{self, StationFacts};
 use crate::ui::track_list_view::view_id;
 use crate::ui::util::clamp_i64_to_i32;
-use crate::{AppWindow, NavEnterFrom, Radio, RadioStationRow};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::{DirectoryStation, RadioStation};
 use melodia_core::error::{AppError, AppResult};
+use melodia_ui::{AppWindow, NavEnterFrom, Radio, RadioStationRow};
 
 use super::tabs::{RadioTab, mounted_tab, section_is_up};
 use super::{RadioUi, browse, kept, rows};

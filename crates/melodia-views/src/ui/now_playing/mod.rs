@@ -25,12 +25,12 @@ use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
 use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
-use crate::{AppWindow, Nav, NowPlaying, Player, QueueRow};
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackSummary;
 use melodia_engine::player::engine::now_playing::SourceId;
 use melodia_engine::player::engine::state::{PlayerViewModelLight, QueueViewModel, lock_state};
+use melodia_ui::{AppWindow, Nav, NowPlaying, Player, QueueRow};
 
 use async_compat::Compat;
 

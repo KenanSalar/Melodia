@@ -11,10 +11,6 @@
 //! dense mesh, the component library imports fourteen of them, and cutting it needs a view
 //! registry nothing else in the tree wants.
 
-// The Slint compiler's output. Flat, so every call site keeps naming the generated types as
-// `crate::AppWindow`, `crate::TrackRow`, … — roughly seventy of them arrive this way.
-pub use melodia_ui::*;
-
 pub mod ui;
 
 // The corpus walkers and env-lock fixtures. Aliased so `crate::test_support::…` keeps resolving

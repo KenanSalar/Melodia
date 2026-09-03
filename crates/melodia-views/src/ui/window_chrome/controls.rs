@@ -11,13 +11,13 @@ use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowLevel;
 
-use crate::AppWindow;
 use melodia_app::state::AppState;
 use melodia_core::error::AppError;
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
+use melodia_ui::AppWindow;
 
 pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool>) {
-    let chrome = app.global::<crate::WindowChrome>();
+    let chrome = app.global::<melodia_ui::WindowChrome>();
 
     {
         let weak = app.as_weak();
@@ -86,7 +86,7 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
         let state = state.clone();
         chrome.on_toggle_always_on_top(move || {
             let Some(ui) = weak.upgrade() else { return };
-            let chrome = ui.global::<crate::WindowChrome>();
+            let chrome = ui.global::<melodia_ui::WindowChrome>();
             let new = !chrome.get_always_on_top_active();
             let is_native = matches!(state.always_on_top.method, AlwaysOnTopMethod::Native);
 
@@ -113,7 +113,7 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
                 {
                     log::warn!("set_always_on_top: {e}");
                     let _ = weak.upgrade_in_event_loop(move |ui| {
-                        ui.global::<crate::WindowChrome>().set_always_on_top_active(!new);
+                        ui.global::<melodia_ui::WindowChrome>().set_always_on_top_active(!new);
                         // Applied through winit above, so roll the OS-level state back
                         // too and keep it in step with the reverted property.
                         if is_native {
@@ -176,7 +176,7 @@ fn restart_toggle(
     let state = state.clone();
     move || {
         let Some(ui) = weak.upgrade() else { return };
-        let on = ui.global::<crate::Dialog>().get_target_id() == 1;
+        let on = ui.global::<melodia_ui::Dialog>().get_target_id() == 1;
 
         if let Err(e) = persist(&state, on) {
             log::warn!("persist {setting} failed: {e}");

@@ -1317,7 +1317,7 @@ naming either once the shims are gone. That is one fewer test binary, 41 rather 
       private module: the import does not resolve at all rather than resolving to something
       private. The After-C check is restated in that form.
 - [x] **E10. `melodia-views`**, roughly 321 layering lines.
-- [ ] **E11. `melodia-views`, the generated types.** Roughly 224 lines across 174 files, 157 of
+- [x] **E11. `melodia-views`, the generated types.** Roughly 224 lines across 174 files, 157 of
       them grouped imports translating one for one to `use melodia_ui::{AppWindow, Settings};`.
       Its own commit because it answers a different question from E10 and reviews separately.
 - [ ] **E12. `melodia` (bin).** The lib target and the three shim directories go; `use melodia::{…}`

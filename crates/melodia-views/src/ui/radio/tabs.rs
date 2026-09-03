@@ -4,7 +4,7 @@
 
 use slint::ComponentHandle;
 
-use crate::{AppWindow, Nav, Radio};
+use melodia_ui::{AppWindow, Nav, Radio};
 
 /// Which Radio sub-view is mounted.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

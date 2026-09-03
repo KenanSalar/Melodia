@@ -38,14 +38,14 @@ use crate::ui::radio::NAV_RADIO;
 use crate::ui::recently_played::{NAV_RECENTLY_PLAYED, RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::tracks::format_duration_ms;
 use crate::ui::util::len_as_i32;
-use crate::{
-    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, HeroChips, MyLibrary, Nav, PlaylistDetail,
-    Radio,
-};
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::genre::GenreStats;
 use melodia_core::entities::playlist::PlaylistStats;
+use melodia_ui::{
+    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, HeroChips, MyLibrary, Nav, PlaylistDetail,
+    Radio,
+};
 
 /// How many rows a hero band gives its chips before dropping the rest.
 ///

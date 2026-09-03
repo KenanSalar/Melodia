@@ -8,7 +8,7 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::ui::search::SearchUi;
-use crate::{AppWindow, Search};
+use melodia_ui::{AppWindow, Search};
 
 /// Wire the three `request-*-cover` callbacks.
 pub(super) fn wire(ui: &AppWindow, search_ui: &Arc<SearchUi>) {

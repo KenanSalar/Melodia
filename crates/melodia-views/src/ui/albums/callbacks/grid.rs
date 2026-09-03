@@ -9,10 +9,10 @@ use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::track_list_view::view_id;
-use crate::{AlbumDetail, Albums, AppWindow};
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_ui::{AlbumDetail, Albums, AppWindow};
 
 /// Wire the `Albums` grid callbacks. See [`super::wire`].
 pub(super) fn wire(
@@ -123,7 +123,7 @@ pub(super) fn wire(
                     &au_fetch,
                     weak_fetch,
                     id,
-                    crate::NavEnterFrom::Right
+                    melodia_ui::NavEnterFrom::Right
                 )
             );
 

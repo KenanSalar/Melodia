@@ -31,8 +31,8 @@ use slint::{Model, ModelRc, VecModel};
 use crate::ui::playlists::PlaylistsUi;
 use crate::ui::shell::notifications::NotificationsUi;
 use crate::ui::util::len_as_i32;
-use crate::{AppWindow, Dialog};
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Dialog};
 
 /// Wire the `Playlists.*` import/export callbacks. Call once after both the
 /// `playlists_ui` handle and the notifications stack exist.

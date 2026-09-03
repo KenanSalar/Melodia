@@ -26,12 +26,12 @@ use crate::ui::row_match::Needle;
 use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
 use crate::ui::util::clamp_i64_to_i32;
 use crate::ui::view_ctx::ViewCtx;
-use crate::{
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::genre::GenreStats;
+use melodia_ui::{
     AppWindow, GenreDetail, GenreGridRow as UiGenreGridRow, GenreRow as UiGenreRow, Genres,
     TrackListRow as UiTrackListRow,
 };
-use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
-use melodia_core::entities::genre::GenreStats;
 
 use state::{GenreDetailState, GenreGridState, GridData};
 

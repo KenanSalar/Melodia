@@ -11,7 +11,7 @@
 
 use slint::ComponentHandle;
 
-use crate::{AppWindow, Nav, NavEnterFrom};
+use melodia_ui::{AppWindow, Nav, NavEnterFrom};
 
 /// `left` — a detail close that also restores the section the drill started in.
 pub fn mark_drill_back(ui: &AppWindow) {

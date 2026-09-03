@@ -23,7 +23,7 @@ use crate::ui::my_library::{MyLibraryTab, NAV_MY_LIBRARY, tab_from_index};
 use crate::ui::radio::{NAV_RADIO, tab_from_index as radio_tab};
 use crate::ui::recently_played::tab_from_index as recently_played_tab;
 use crate::ui::settings::settings_page::tab_from_index as settings_tab;
-use crate::{
+use melodia_ui::{
     AlbumDetail, AppWindow, ArtistDetail, Favorites, GenreDetail, MyLibrary, Nav, PlaylistDetail,
     Radio, RecentlyPlayed, SettingsPage,
 };

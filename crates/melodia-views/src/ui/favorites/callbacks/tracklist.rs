@@ -10,9 +10,9 @@ use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row
 use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort, play_row_start};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
-use crate::{AppWindow, Favorites};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Favorites};
 
 /// Wire the Songs tab's row / filter / sort / selection callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {

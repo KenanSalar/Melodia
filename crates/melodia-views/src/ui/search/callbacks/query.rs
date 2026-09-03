@@ -8,8 +8,8 @@ use slint::ComponentHandle;
 
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::search::{self as search_ui_mod, SearchUi, apply, fetch};
-use crate::{AppWindow, Search};
 use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, Search};
 
 /// Wire the query / debounce / show-all callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {

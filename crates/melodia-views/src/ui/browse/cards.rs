@@ -22,10 +22,10 @@ use super::BrowseUi;
 use crate::ui::grid_prewarm;
 use crate::ui::grid_rows::{chunk_built_rows, write_grid};
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
-use crate::{
+use melodia_core::entities::browse::{BrowseFile, BrowseFolder};
+use melodia_ui::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow, BrowseCardRow as UiBrowseCardRow,
 };
-use melodia_core::entities::browse::{BrowseFile, BrowseFolder};
 
 /// Fallback LRU capacity for the card cover cache, used at construction and
 /// whenever the display can't be queried. [`tune_cache_for_display`] replaces it

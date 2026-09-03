@@ -14,10 +14,10 @@
 use slint::ComponentHandle;
 
 use crate::ui::settings_bind::{read_or_default, toggle_binding};
-use crate::{AppWindow, ReplayGain};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_playback::player::playback::replaygain::{self, RgMode};
+use melodia_ui::{AppWindow, ReplayGain};
 
 pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
     // A missing / unreadable file falls back to the inert defaults (off, Album,

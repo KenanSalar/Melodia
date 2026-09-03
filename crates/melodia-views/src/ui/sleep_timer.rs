@@ -29,11 +29,11 @@ use std::time::Duration;
 use slint::ComponentHandle;
 use tokio_util::sync::CancellationToken;
 
-use crate::{AppWindow, Player};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_app::tasks::TaskSpawner;
 use melodia_engine::player::engine::types::PlaybackStatus;
+use melodia_ui::{AppWindow, Player};
 
 /// Bounds on a custom duration, mirroring the stepper's own in
 /// `sleep-timer-flyout.slint` — the ceiling keeps the display and the

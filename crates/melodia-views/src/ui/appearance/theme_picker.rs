@@ -8,10 +8,10 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use slint::{ComponentHandle, ModelRc, VecModel};
 
-use crate::{AppWindow, Settings};
 use melodia_app::library;
 use melodia_app::state::{AppState, Signal};
 use melodia_core::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
+use melodia_ui::{AppWindow, Settings};
 
 use super::accent_picker::{
     accent_id_from_grid_idx, accent_swatches_with_my, effective_accent_id, material_you_active,
