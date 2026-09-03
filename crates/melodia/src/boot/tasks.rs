@@ -5,13 +5,14 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use melodia::{
-    AppWindow, library,
-    player::engine::event_sink::EventSink,
-    services,
-    state::{AppState, StartupChannels},
-    tasks, ui, utils,
-};
+use melodia_app::state::{AppState, StartupChannels};
+use melodia_app::{library, services, tasks};
+use melodia_core::utils;
+use melodia_engine::player::engine::event_sink::EventSink;
+use melodia_integrations::services::integrations;
+use melodia_platform::services::platform;
+use melodia_ui::AppWindow;
+use melodia_views::ui;
 
 /// Spawn every always-running background task and the souvlaki event
 /// receiver. Consumes `channels`.
@@ -56,7 +57,7 @@ pub fn spawn_background_tasks(
         let sink: Arc<dyn EventSink> = Arc::new(ui::shell::event_sink::SlintEventSink {
             state: state.clone(),
         });
-        services::integrations::media_controls::spawn_event_receiver(
+        integrations::media_controls::spawn_event_receiver(
             &state.task_tracker,
             state.shutdown_token.clone(),
             rx,
@@ -90,7 +91,7 @@ pub fn maybe_resume_on_startup(
     // Bind the bool out so the guard drops *before* `player_play()`, which
     // re-enters the same lock through `with_state_emit`.
     let has_source = {
-        let s = melodia::player::engine::state::lock_state(&state.player_state);
+        let s = melodia_engine::player::engine::state::lock_state(&state.player_state);
         s.source.is_some()
     };
     if has_source && let Err(e) = library::playback::player_play(&state.playback_ctx()) {
@@ -123,12 +124,12 @@ pub fn open_startup_files(
 pub fn serve_file_opens(
     state: &AppState,
     app: &AppWindow,
-    listener: services::platform::single_instance::Listener,
+    listener: platform::single_instance::Listener,
 ) {
     let state = state.clone();
     let weak = app.as_weak();
 
-    services::platform::single_instance::serve(listener, move |paths| {
+    platform::single_instance::serve(listener, move |paths| {
         // Raise either way — an empty forward is someone launching Melodia
         // again to get at the window.
         let _ = weak.upgrade_in_event_loop(|ui| ui::shell::tray_bridge::raise_window(&ui));

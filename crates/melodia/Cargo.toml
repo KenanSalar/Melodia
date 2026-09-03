@@ -19,10 +19,6 @@ publish = false
 
 # `winit` carries its own `[workspace]`; excluding it survives an upstream re-sync
 
-[lib]
-# Nothing consumes this as a library and every doc example is an `ignore` fence.
-doctest = false
-
 # The artifact name is load-bearing and is not the package name: `target/release/Melodia`
 # is spelled in the three packaging scripts, `release-build.yml`'s BINARY, and
 # `wix/main.wxs`'s `Melodia.exe` File, RestartResource and
@@ -88,21 +84,16 @@ assets = [
 ]
 
 [dependencies]
-# The Slint compiler's output, re-exported by `src/lib.rs` so the generated types
-# stay reachable as `crate::AppWindow`, `crate::TrackRow`, ….
+# The generated Slint types `main.rs` and `boot/` name directly.
 melodia-ui = { path = "../melodia-ui" }
-# The whole UI layer, re-exported as `ui` so `main.rs`, `boot/` and `tests/` keep
-# spelling `ui::`.
+# The UI layer, whose `ui` module is what `boot/` wires.
 melodia-views = { path = "../melodia-views" }
-# Ten of the twelve, because `src/lib.rs` and the three shim modules beside it are
-# what keeps `crate::database`, `crate::media::image` and their siblings resolving
-# for `src/boot/` and `tests/`. `melodia-net` is not among them: nothing left in
-# this package opens a socket or spells one.
+# The eight the binary itself spells. `melodia-net` is absent because nothing here
+# opens a socket, and `melodia-audio` and `melodia-playback` are dev-dependencies
+# below: only `tests/` reaches under the DSP chain.
 melodia-core = { path = "../melodia-core" }
 melodia-artwork = { path = "../melodia-artwork" }
 melodia-platform = { path = "../melodia-platform" }
-melodia-audio = { path = "../melodia-audio" }
-melodia-playback = { path = "../melodia-playback" }
 melodia-engine = { path = "../melodia-engine" }
 melodia-store = { path = "../melodia-store" }
 melodia-integrations = { path = "../melodia-integrations" }
@@ -123,6 +114,10 @@ winresource.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 melodia-testkit = { path = "../melodia-testkit" }
+# `crossfade`, `stream_rate` and `common/` drive the two lower audio tiers directly,
+# which is the only thing in this package that reaches below `melodia-engine`.
+melodia-audio = { path = "../melodia-audio" }
+melodia-playback = { path = "../melodia-playback" }
 tempfile.workspace = true
 # The rules pin asks whether each `.claude/rules` `paths:` entry still matches anything, and half
 # of them are globs. Hand-rolling `**` inside the one test that exists to catch silent drift is

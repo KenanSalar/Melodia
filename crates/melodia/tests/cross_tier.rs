@@ -9,7 +9,7 @@
 //! `docs/plans/WORKSPACE_SPLIT.md` finding 8 gives every corpus walk one home; these are the
 //! walks' compile-time cousins and land in the same place for the same reason.
 
-use melodia::error::AppError;
+use melodia_core::error::AppError;
 
 /// The invariant `STORE_MAX_DIM` was picked from: the store must hold at least what the largest
 /// tier decodes, or every tier upscales from a source the store already threw away.
@@ -18,10 +18,10 @@ use melodia::error::AppError;
 /// functions.
 #[test]
 fn every_cover_tier_decodes_within_the_store_cap() {
-    use melodia::media::image::artwork::STORE_MAX_DIM;
-    use melodia::media::image::cover_thumbs::row_cover_size;
-    use melodia::ui::grid_prewarm::{GRID_COVER_FALLBACK, cover_size};
-    use melodia::ui::util::COVER_SIZE;
+    use melodia_artwork::media::image::artwork::STORE_MAX_DIM;
+    use melodia_artwork::media::image::cover_thumbs::row_cover_size;
+    use melodia_views::ui::grid_prewarm::{GRID_COVER_FALLBACK, cover_size};
+    use melodia_views::ui::util::COVER_SIZE;
 
     for (tier, size) in [
         ("GRID_COVER_FALLBACK", GRID_COVER_FALLBACK),
@@ -60,8 +60,8 @@ fn every_cover_tier_decodes_within_the_store_cap() {
 #[test]
 fn the_nav_bound_reaches_the_highest_section_that_routes() {
     assert_eq!(
-        melodia::services::view_state::MAX_NAV_INDEX,
-        melodia::ui::radio::NAV_RADIO,
+        melodia_app::services::view_state::MAX_NAV_INDEX,
+        melodia_views::ui::radio::NAV_RADIO,
         "Radio is the highest index `nav.slint` routes, so the bound is its index — a section \
          added above it moves both"
     );
@@ -75,7 +75,7 @@ fn the_nav_bound_reaches_the_highest_section_that_routes() {
 /// what makes it a pin on both sides at once.
 #[tokio::test]
 async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result<(), AppError> {
-    use melodia::database::DbPool;
+    use melodia_store::database::DbPool;
 
     // `composer` has no slot on `TrackListRow`, and `file_name` is left out deliberately — the
     // tiebreaker weight that keeps a filename echo below the tags it repeats has no equivalent in
@@ -95,7 +95,7 @@ async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result
     // claims to mirror and a failure names the column that drifted. The literal is exhaustive on
     // purpose: a new `TrackListRow` field fails this file to compile, which is the prompt to
     // decide whether it belongs in the index and in the fold.
-    let row = melodia::entities::track::TrackListRow {
+    let row = melodia_core::entities::track::TrackListRow {
         id: 1,
         file_path: "/m/1.flac".to_owned(),
         file_name: "file_name".to_owned(),
@@ -118,7 +118,7 @@ async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result
         sort_key: None,
     };
     assert_eq!(
-        melodia::ui::row_match::search_fields(&row).as_slice(),
+        melodia_views::ui::row_match::search_fields(&row).as_slice(),
         expected,
         "the fts5 column list and what the filter boxes search have drifted"
     );

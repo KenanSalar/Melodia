@@ -7,8 +7,8 @@
 
 use std::num::NonZero;
 
-use melodia::player::playback::output::mixer::MixerPull;
-use melodia::player::source::audio::{Sample, Shape};
+use melodia_audio::player::source::audio::{Sample, Shape};
+use melodia_playback::player::playback::output::mixer::MixerPull;
 
 /// A [`Shape`] from the plain integers a test spells.
 ///

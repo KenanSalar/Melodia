@@ -1,8 +1,12 @@
 //! Shutdown sequence: state flush, task cancellation + bounded wait,
 //! runtime drop in background, optional respawn.
 
-use melodia::services::platform::single_instance::RESPAWN_ENV;
-use melodia::{AppWindow, Nav, services, state::AppState, ui, utils};
+use melodia_app::services;
+use melodia_app::state::AppState;
+use melodia_core::utils;
+use melodia_platform::services::platform::single_instance::RESPAWN_ENV;
+use melodia_ui::{AppWindow, Nav};
+use melodia_views::ui;
 use slint::ComponentHandle;
 
 /// Persist playback position and queue before shutdown. Synchronous writes only:
@@ -10,8 +14,8 @@ use slint::ComponentHandle;
 /// mid-write. The function-local `AtomicBool` makes it safe to call from both
 /// shutdown paths (window close and run-loop exit).
 pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::runtime::Runtime) {
-    use melodia::database::queries;
-    use melodia::player::engine::state::lock_state;
+    use melodia_engine::player::engine::state::lock_state;
+    use melodia_store::database::queries;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     static SAVED: AtomicBool = AtomicBool::new(false);

@@ -11,9 +11,9 @@
 //! output samples per half period, which is the ratio of the two rates and nothing else. The span
 //! that used to be the mechanism is gone; the property it protected is what this still asserts.
 
-use melodia::player::playback::decks::DECK_COUNT;
-use melodia::player::playback::output::mixer;
-use melodia::player::source::prebuffer::{PrebufferSource, StreamShared};
+use melodia_audio::player::source::prebuffer::{PrebufferSource, StreamShared};
+use melodia_playback::player::playback::decks::DECK_COUNT;
+use melodia_playback::player::playback::output::mixer;
 
 mod common;
 use common::{pull, shape};

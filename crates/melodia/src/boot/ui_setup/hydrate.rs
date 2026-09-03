@@ -2,7 +2,11 @@
 
 use std::sync::Arc;
 
-use melodia::{AppWindow, ArtistDetail, Nav, Player, media, services, state::AppState, ui};
+use melodia_app::services;
+use melodia_app::state::AppState;
+use melodia_artwork::media::image;
+use melodia_ui::{AppWindow, ArtistDetail, Nav, Player};
+use melodia_views::ui;
 use slint::ComponentHandle;
 
 /// Push the current `PlayerState` into `Player.vm` / `Player.queue` so the
@@ -10,9 +14,9 @@ use slint::ComponentHandle;
 pub fn seed_initial_view_model(
     app: &AppWindow,
     state: &AppState,
-    cover_thumbs: &Arc<media::image::cover_thumbs::CoverThumbs>,
+    cover_thumbs: &Arc<image::cover_thumbs::CoverThumbs>,
 ) {
-    use melodia::player::engine::state::lock_state;
+    use melodia_engine::player::engine::state::lock_state;
 
     let s = lock_state(&state.player_state);
     let light = s.to_view_model_light();

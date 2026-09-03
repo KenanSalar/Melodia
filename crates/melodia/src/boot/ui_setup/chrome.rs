@@ -1,7 +1,10 @@
 //! Window chrome and the two appearance answers that have to land before the first frame:
 //! the bundled-translation locale, and the backdrop style the artwork tiers are built against.
 
-use melodia::{AppWindow, HeroBackdrop, Player, Theme, services, state::AppState, ui};
+use melodia_app::services;
+use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, HeroBackdrop, Player, Theme};
+use melodia_views::ui;
 use slint::ComponentHandle;
 
 /// Hydrate Slint's bundled-translation runtime from the persisted

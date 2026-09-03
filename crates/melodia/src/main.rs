@@ -10,14 +10,14 @@ mod shutdown;
 
 use std::sync::Arc;
 
-use melodia::{
-    AppWindow,
-    config::Paths,
-    error::{AppError, AppResult},
-    library, services,
-    state::AppState,
-    tasks, ui, utils,
-};
+use melodia_app::state::AppState;
+use melodia_app::{library, services, tasks};
+use melodia_core::config::Paths;
+use melodia_core::error::{AppError, AppResult};
+use melodia_core::utils;
+use melodia_platform::services::platform;
+use melodia_ui::AppWindow;
+use melodia_views::ui;
 use slint::ComponentHandle;
 use tokio::sync::watch;
 
@@ -59,13 +59,13 @@ fn main() -> AppResult<()> {
     // msiexec never leaves an `.old` at the install target.
     #[cfg(target_os = "linux")]
     {
-        if let Ok(stale) = melodia::services::updater::install_target_old() {
+        if let Ok(stale) = services::updater::install_target_old() {
             let _ = std::fs::remove_file(stale);
         }
     }
     // Ahead of the logger and the runtime builder, both of which allocate; the
     // module argues the numbers.
-    melodia::services::platform::allocator::pin_arenas_and_thresholds();
+    platform::allocator::pin_arenas_and_thresholds();
 
     // Give PipeWire's ALSA-compat layer a clean stream name: CPAL opens the
     // default ALSA PCM, which PipeWire turns into a node auto-named
@@ -92,27 +92,27 @@ fn main() -> AppResult<()> {
     // what we were asked to open to the one that already is. Ahead of the logger
     // so a forwarding launch never opens the shared file, and ahead of
     // everything expensive so it costs a socket write and a return.
-    let startup_files = services::platform::single_instance::audio_files_from_argv();
+    let startup_files = platform::single_instance::audio_files_from_argv();
     let mut unenforced_reason = None;
-    let file_open_listener =
-        match services::platform::single_instance::claim(&paths.data_dir, &startup_files) {
-            services::platform::single_instance::Claim::Secondary => return Ok(()),
-            services::platform::single_instance::Claim::Primary(listener) => Some(listener),
-            services::platform::single_instance::Claim::Unenforced(e) => {
-                unenforced_reason = Some(e);
-                None
-            }
-        };
+    let file_open_listener = match platform::single_instance::claim(&paths.data_dir, &startup_files)
+    {
+        platform::single_instance::Claim::Secondary => return Ok(()),
+        platform::single_instance::Claim::Primary(listener) => Some(listener),
+        platform::single_instance::Claim::Unenforced(e) => {
+            unenforced_reason = Some(e);
+            None
+        }
+    };
 
     // Infallible: a log file that can't be opened degrades to stderr rather
-    // than stopping the boot. See `services::platform::logging::install`.
+    // than stopping the boot. See `platform::logging::install`.
     // An unparseable settings file is no reason to start louder; it surfaces later through
     // `AppState::init`'s own read.
     let verbose_logging = services::settings::read_settings(&paths)
         .is_ok_and(|settings| settings.diagnostics.verbose_logging);
-    services::platform::logging::install(&paths, verbose_logging);
+    platform::logging::install(&paths, verbose_logging);
     // Before the runtime and before Slint, so boot panics are covered too.
-    services::platform::crash_report::install_hook(&paths.logs_dir);
+    platform::crash_report::install_hook(&paths.logs_dir);
     log::info!("Melodia starting");
     // Which root this boot landed on is the one startup fact nothing downstream can infer: a dev
     // build and `MELODIA_DATA_DIR` both move it. The diagnostics bundle carries it as a field of
@@ -387,7 +387,7 @@ fn main() -> AppResult<()> {
     // stat plus a 3 KB hash and no write. Gating rationale in the module.
     #[cfg(target_os = "linux")]
     runtime.spawn_blocking(|| {
-        if let Err(e) = services::platform::desktop_integration::refresh_user_install() {
+        if let Err(e) = platform::desktop_integration::refresh_user_install() {
             log::warn!("desktop_integration: refresh failed: {e}");
         }
     });
@@ -421,7 +421,7 @@ fn main() -> AppResult<()> {
                     if mc.attach_smtc(hwnd) {
                         // `sync()` no-op'd while the controls were inert, so the
                         // OS panel is still empty.
-                        melodia::player::engine::state::with_state_emit(
+                        melodia_engine::player::engine::state::with_state_emit(
                             &player_state,
                             &sinks,
                             |_| {},
@@ -491,7 +491,7 @@ fn main() -> AppResult<()> {
 
     // Before `respawn_if_requested`, which `exec`s and never returns on Unix,
     // and before the `process::exit(0)` below — neither runs a destructor.
-    services::platform::logging::flush();
+    platform::logging::flush();
 
     shutdown::respawn_if_requested();
 

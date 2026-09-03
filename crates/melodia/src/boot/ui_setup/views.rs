@@ -2,7 +2,11 @@
 
 use std::sync::Arc;
 
-use melodia::{AppWindow, Nav, media, services, state::AppState, ui};
+use melodia_app::services;
+use melodia_app::state::AppState;
+use melodia_artwork::media::image;
+use melodia_ui::{AppWindow, Nav};
+use melodia_views::ui;
 use slint::ComponentHandle;
 
 /// The per-view handles `install_views` hands back for the wiring `main()` still
@@ -15,7 +19,7 @@ use slint::ComponentHandle;
 /// life of the app, and there is no `Weak<…Ui>` anywhere in the tree — so a
 /// field here would be a keepalive guarding nothing.
 pub struct UiHandles {
-    pub cover_thumbs: Arc<media::image::cover_thumbs::CoverThumbs>,
+    pub cover_thumbs: Arc<image::cover_thumbs::CoverThumbs>,
     pub tracks_ui: Arc<ui::tracks::TracksUi>,
     pub albums_ui: Arc<ui::albums::AlbumsUi>,
     pub artists_ui: Arc<ui::artists::ArtistsUi>,
@@ -28,18 +32,15 @@ pub struct UiHandles {
 /// through the one shared row-tier LRU. Rows carry only the artwork path, so
 /// only instantiated rows pay a lookup and nothing pins evicted buffers. Part of
 /// no slice's `install`, serving every view.
-fn install_row_covers(
-    app: &AppWindow,
-    cover_thumbs: &Arc<media::image::cover_thumbs::CoverThumbs>,
-) {
+fn install_row_covers(app: &AppWindow, cover_thumbs: &Arc<image::cover_thumbs::CoverThumbs>) {
     let ct = cover_thumbs.clone();
     // `generation` is read for its effect on the binding, never its value — see `RowCovers`.
-    app.global::<melodia::RowCovers>().on_request(move |path, _generation| {
+    app.global::<melodia_ui::RowCovers>().on_request(move |path, _generation| {
         ct.get_or_schedule_opt(ui::grid_prewarm::nonempty_artwork_path(path.as_str()))
     });
 
     ui::cover_generation::notify_on_decode(cover_thumbs, app, |app| {
-        let covers = app.global::<melodia::RowCovers>();
+        let covers = app.global::<melodia_ui::RowCovers>();
         covers.set_generation(covers.get_generation().wrapping_add(1));
     });
 }
@@ -84,7 +85,7 @@ pub fn install_views(
     ui::my_library::install(app, state);
 
     // Ahead of the first `install`, every slice cloning the cache into its handle.
-    let cover_thumbs = Arc::new(media::image::cover_thumbs::CoverThumbs::new());
+    let cover_thumbs = Arc::new(image::cover_thumbs::CoverThumbs::new());
     install_row_covers(app, &cover_thumbs);
 
     let cx = ui::view_ctx::ViewCtx {
@@ -185,7 +186,7 @@ pub fn install_views(
         ui::radio::tune_cache_for_display(&app, &tune_radio);
         // The row tier belongs to no view, so it has no
         // `tune_cache_for_display` — but it owes the same post-show read.
-        tune_rows.set_thumb_size(media::image::cover_thumbs::row_cover_size(f64::from(
+        tune_rows.set_thumb_size(image::cover_thumbs::row_cover_size(f64::from(
             app.window().scale_factor(),
         )));
     };
@@ -194,7 +195,7 @@ pub fn install_views(
     // placeholders, the lookup behind them scheduling against a tier that cannot hold them.
     // Setting the cap exactly rather than growing it: a smaller window really does draw fewer
     // cards, and a drag that oscillates re-warms through the model rebuild it triggers anyway.
-    app.global::<melodia::WindowChrome>().on_display_changed(retune.clone());
+    app.global::<melodia_ui::WindowChrome>().on_display_changed(retune.clone());
     if let Err(e) = slint::invoke_from_event_loop(retune) {
         log::warn!("Failed to schedule cover-cache display tuning: {e}");
     }
@@ -218,9 +219,10 @@ pub fn install_views(
 pub fn install_library_settings_and_friends(
     app: &AppWindow,
     state: &AppState,
-) -> Result<std::rc::Rc<ui::shell::notifications::NotificationsUi>, melodia::error::AppError> {
-    ui::settings::library_settings::install(app, state)
-        .map_err(|e| melodia::error::AppError::Window(format!("library_settings install: {e}")))?;
+) -> Result<std::rc::Rc<ui::shell::notifications::NotificationsUi>, melodia_core::error::AppError> {
+    ui::settings::library_settings::install(app, state).map_err(|e| {
+        melodia_core::error::AppError::Window(format!("library_settings install: {e}"))
+    })?;
     ui::callbacks::wire_library_settings(app, state);
     ui::settings::playback_settings::install_playback_settings(app, state);
     ui::equalizer::install_equalizer(app, state);

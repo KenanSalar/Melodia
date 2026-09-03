@@ -16,10 +16,10 @@
 
 use std::path::PathBuf;
 
-use melodia::config::Paths;
-use melodia::error::AppError;
-use melodia::library;
-use melodia::state::AppState;
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::config::Paths;
+use melodia_core::error::AppError;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn headless_scan_persists_track() -> Result<(), AppError> {

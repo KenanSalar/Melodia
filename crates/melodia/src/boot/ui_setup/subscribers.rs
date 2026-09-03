@@ -5,7 +5,9 @@
 
 use std::sync::Arc;
 
-use melodia::{AppWindow, state::AppState, ui};
+use melodia_app::state::AppState;
+use melodia_ui::AppWindow;
+use melodia_views::ui;
 use slint::ComponentHandle;
 
 /// Keep the Tracks view in sync with scans and watcher batches. The initial `0`
@@ -20,11 +22,11 @@ pub fn install_library_changed_refresher(
     state: &AppState,
     tracks_ui: &Arc<ui::tracks::TracksUi>,
     weak: slint::Weak<AppWindow>,
-) -> Result<(), melodia::error::AppError> {
+) -> Result<(), melodia_core::error::AppError> {
     let tu = tracks_ui.clone();
     ui::signal::on_signal(&state.library_changed, weak, "library-changed", move |ui| {
         if tu.section_active() {
-            ui.global::<melodia::Tracks>().invoke_request_refresh();
+            ui.global::<melodia_ui::Tracks>().invoke_request_refresh();
         } else {
             tu.mark_dirty();
         }
@@ -40,8 +42,8 @@ pub fn install_rescan_notice_subscriber(
     state: &AppState,
     weak: slint::Weak<AppWindow>,
     notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
-) -> Result<(), melodia::error::AppError> {
-    use melodia::Settings;
+) -> Result<(), melodia_core::error::AppError> {
+    use melodia_ui::Settings;
     use ui::shell::notifications::RowText;
 
     ui::signal::on_signal(&state.rescan_notice, weak, "rescan-notice", move |ui| {
@@ -61,8 +63,8 @@ pub fn install_audio_device_lost_subscriber(
     state: &AppState,
     weak: slint::Weak<AppWindow>,
     notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
-) -> Result<(), melodia::error::AppError> {
-    use melodia::Settings;
+) -> Result<(), melodia_core::error::AppError> {
+    use melodia_ui::Settings;
     use ui::shell::notifications::RowText;
 
     ui::signal::on_signal(&state.audio_device_lost, weak, "audio-device-lost", move |ui| {
@@ -82,9 +84,9 @@ pub fn install_audio_device_lost_subscriber(
 pub fn install_toast_bridge(
     weak: slint::Weak<AppWindow>,
     notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
-) -> Result<(), melodia::error::AppError> {
-    use melodia::Settings;
-    use melodia::utils::toast::{self, ToastKind, ToastRequest};
+) -> Result<(), melodia_core::error::AppError> {
+    use melodia_core::utils::toast::{self, ToastKind, ToastRequest};
+    use melodia_ui::Settings;
     use ui::shell::notifications::{NotificationParams, RowText};
 
     // First installer owns delivery; a second call (shouldn't happen) is a no-op.
@@ -166,5 +168,5 @@ pub fn install_toast_bridge(
         }
     }))
     .map(|_| ())
-    .map_err(|e| melodia::error::AppError::Window(format!("toast bridge: {e}")))
+    .map_err(|e| melodia_core::error::AppError::Window(format!("toast bridge: {e}")))
 }
