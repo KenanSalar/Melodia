@@ -605,8 +605,9 @@ struct FeedContext {
 
 fn spawn_feed(ctx: FeedContext) {
     let shared = ctx.shared.clone();
-    // Spelled inline rather than lifted to a const: `services::tests`' thread-name walk matches a
-    // literal after `.name(`, so a named constant here would be silently unmeasured.
+    // Spelled inline rather than lifted to a const: the thread-name walk in
+    // `crates/melodia/tests/packaging.rs` matches a literal after `.name(`, so a named constant
+    // here would be silently unmeasured.
     if let Err(e) =
         std::thread::Builder::new().name("radio-buffer".to_owned()).spawn(move || feed_loop(ctx))
     {

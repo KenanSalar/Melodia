@@ -199,8 +199,10 @@ jobs:
     steps:
       # Derived from `needs:` above rather than restating it, so adding a job is
       # one edit. `toJSON` can't see a job that never reached `needs:`; that half
-      # is pinned by `crates/melodia/tests/packaging.rs`. Through `env:` rather than `${{ }}` in
-      # the script, interpolating into bash being the shape that goes wrong.
+      # is pinned by `crates/melodia/tests/packaging.rs`'s
+      # `the_aggregate_waits_on_every_job_in_the_gate_workflow`. Through `env:`
+      # rather than `${{ }}` in the script, interpolating into bash being the
+      # shape that goes wrong.
       - name: Check job results
         env:
           NEEDS: ${{ toJSON(needs) }}

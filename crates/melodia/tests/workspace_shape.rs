@@ -126,6 +126,9 @@ fn re_export_heads(code: &str) -> impl Iterator<Item = &str> {
             None => rest,
         };
         let path = rest.trim_start().strip_prefix("use ")?.trim_start();
+        // A leading `::` is the same re-export with a rooted path, and it would otherwise split to
+        // an empty head and read as a line with no path on it at all.
+        let path = path.strip_prefix("::").unwrap_or(path);
         let head = path.split(|c: char| !c.is_alphanumeric() && c != '_').next()?;
         (!head.is_empty()).then_some(head)
     })
@@ -206,9 +209,9 @@ fn every_member_lives_where_the_corpus_walks_can_see_it() {
     );
 
     // The glob is only half the property. `rust_source_roots` keys on `crates/*/src`, so a member
-    // pointing `[lib] path` at a directory of another name satisfies the pattern above and still
-    // contributes nothing — and `MIN_SOURCES` cannot see it, the tree being large enough that
-    // losing a whole crate clears the floor.
+    // whose sources sit anywhere else, such as a `[lib] path` into a directory of another name,
+    // satisfies the pattern above and still contributes nothing. `MIN_SOURCES` cannot see it
+    // either, the tree being large enough that losing a whole crate clears the floor.
     let sourceless: Vec<String> = member_manifests()
         .into_iter()
         .map(|(name, _)| name)

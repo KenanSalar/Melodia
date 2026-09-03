@@ -17,8 +17,9 @@
 //!
 //! **`ensure_enabled` and `directory_client` may not move.** The switch is enforced at the seam
 //! rather than per call site, so a submodule reaching `state.http_client()` directly is traffic a
-//! user who turned Radio off still pays. `library::radio::tests` walks *every* file under this
-//! directory counting the reaches, which is what makes a fifth submodule covered by default.
+//! user who turned Radio off still pays. `crates/melodia/tests/radio_facade.rs` walks *every* file
+//! under this directory counting the reaches, which is what makes a fifth submodule covered by
+//! default.
 
 mod authoring;
 mod directory;

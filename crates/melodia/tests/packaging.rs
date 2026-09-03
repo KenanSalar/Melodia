@@ -331,7 +331,7 @@ fn the_two_workflows_disagree_about_debug_info_on_purpose() {
 
 /// `src` with every `<!-- … -->` block removed.
 ///
-/// `test_support::strip_line_comments`' argument, in the one markup language that doesn't use
+/// `melodia_testkit::strip_line_comments`' argument, in the one markup language that doesn't use
 /// `//`. Kept local rather than shared because it has one caller and `main.wxs` is the only XML in
 /// the tree a pin reads.
 ///

@@ -85,9 +85,9 @@ fn every_outbound_call_takes_its_client_from_behind_the_switch() {
 
 /// Where this module may be named, relative to its crate root: its own declaration.
 ///
-/// An allowlist rather than the per-file *counts* `services::tests::mod_tests` pins `current_exe`
-/// with. There a second call in an exempt file is itself the regression; here the facade is meant
-/// to grow one per surface it gains.
+/// An allowlist rather than the per-file *counts* `tests/binary_path.rs` pins `current_exe` with.
+/// There a second call in an exempt file is itself the regression; here the facade is meant to grow
+/// one per surface it gains.
 const CALLER_DECL: &str = "services/net/mod.rs";
 
 /// The facade, as a prefix rather than a file list.

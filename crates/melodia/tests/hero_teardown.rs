@@ -14,7 +14,7 @@ use melodia_testkit::{callback_sources, rust_sources};
 /// place with no way to tell which case it is in.
 ///
 /// **It walks the wiring tree rather than listing the sites**, for the reason
-/// the `rfd` pin beside it does. The corpus is `test_support::callback_sources`, whose
+/// the `rfd` pin beside it does. The corpus is `melodia_testkit::callback_sources`, whose
 /// `CALLBACK_HOMES` equality stops a renamed subtree shrinking this walk in silence.
 #[test]
 fn no_leave_clears_the_chips_behind_the_macro() {

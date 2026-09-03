@@ -529,8 +529,9 @@ the five boundary types in `src/entities/radio.rs`, and the two facade functions
 
 What later phases reach for:
 
-- **`DEFAULT_PAGE_LIMIT`, `TAG_FACET_LIMIT` and `FACET_LIMIT`** in `query.rs`, each argued
-  at its definition. Paging is `StationSearch::offset` plus `limit`.
+- **`TAG_FACET_LIMIT` and `FACET_LIMIT`** in `query.rs`, and **`DEFAULT_PAGE_LIMIT`** beside
+  `StationSearch` in `entities::radio`, each argued at its definition. Paging is
+  `StationSearch::offset` plus `limit`.
 - **`DirectoryStation::to_new_station()`**, Phase 7's bridge from a browsed station to a
   kept one. It passes the uuid across as a plain `Some`, which is only sound because
   `search` drops anything failing `DirectoryStation::is_usable` first: an empty uuid is a
