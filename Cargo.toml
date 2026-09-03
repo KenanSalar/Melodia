@@ -34,7 +34,11 @@ homepage = "https://github.com/KenanSalar/Melodia"
 # reason is the one `slint` taught: a drifted version resolves two copies of a crate
 # and the build dies in a wall of `expected slint::Weak, found slint::Weak`. Members
 # take `<dep>.workspace = true` and decide nothing.
+#
+# Grouped by what the dependency is for, and a feature list is wrapped once the line
+# outgrows the 100 columns `rustfmt.toml` holds the Rust tree to.
 [workspace.dependencies]
+# UI
 # `raw-window-handle-06` parents the rfd pickers; `unstable-winit-030` exposes
 # `WinitWindowAccessor` for `drag_window()` and `WindowEvent::Resized` (slint-ui#2521,
 # #6273, #4817); `renderer-femtovg` because the software renderer can't clip to
@@ -51,15 +55,32 @@ slint = { version = "1.16.1", default-features = false, features = [
 # Must match the `slint` version above; the pair is declared adjacently for that.
 slint-build = "1.16.1"
 
-# Async runtime / utilities
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
+# Async runtime / synchronisation
+tokio = { version = "1.53.1", features = [
+    "rt-multi-thread",
+    "macros",
+    "sync",
+    "time",
+    "fs",
+    "process",
+] }
 tokio-util = { version = "0.7.19", features = ["rt"] }
 async-compat = "0.2.5"
 parking_lot = "0.12.5"
+# `StreamExt` over a response body, so neither the updater's download nor a capped read
+# collects the whole asset; `future::join_all` where a view fans out over its rows.
+futures-util = { version = "0.3.33", default-features = false, features = ["std"] }
 
+# Database
 # `macros` stays despite every query going through runtime `query_as`, because
 # `sqlx::migrate!` is re-exported only under `all(macros, migrate)`.
-sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "derive", "macros"] }
+sqlx = { version = "0.9.0", default-features = false, features = [
+    "runtime-tokio",
+    "sqlite",
+    "migrate",
+    "derive",
+    "macros",
+] }
 
 # Audio
 # The device stream `player::playback::output` opens, and the `ErrorKind`s
@@ -107,11 +128,10 @@ biquad = "0.6.0"
 # transform, and its reusable scratch is what lets the per-frame analysis allocate
 # nothing.
 realfft = "3.5.0"
-lofty = "0.24.0"
 
-# Library indexing / file IO
+# Library scan and indexing
+lofty = "0.24.0"
 walkdir = "2.5"
-rand = "0.10.2"
 notify = "8.2.0"
 notify-debouncer-full = "0.7"
 rayon = "1.12"
@@ -120,6 +140,8 @@ natord = "1.0.9"
 # Accent folding, so filter boxes narrow on the same spellings `tracks_fts`'s
 # `remove_diacritics 2` tokenizer does.
 unicode-normalization = "0.1.25"
+
+# Images and colour
 # The superset of what a lofty picture's MIME type can name and what the cover
 # pickers accept, which `media::image::artwork`'s `STORED_EXTENSIONS` is written
 # against.
@@ -141,16 +163,33 @@ fast_image_resize = { version = "6.1.0", features = ["image"] }
 # IDCTs by coefficient content, not by request). Every tier draws a cover far smaller
 # than the store holds; `image_decode::decode_capped_to` falls back to `image`.
 jpeg-decoder = "0.3.2"
-lru = "0.18.2"
-
 # Material 3 dynamic colour. Its `image`/`serde`/`libm` features stay off; we feed
 # it quantized pixel data ourselves.
 material-colors = "0.4.2"
-
 # The backdrop's quantizer, beside rather than instead of the one above: median-cut
 # over a fixed histogram answers "what is this cover mostly made of" in a fraction of
 # a millisecond, where Celebi's k-means costs tens on photographic art.
 color-thief = "0.2.2"
+
+# HTTP (Deezer artist images, scrobbling, the radio directory and its streams)
+reqwest = { version = "0.13.4", default-features = false, features = [
+    "form",
+    "json",
+    "query",
+    "rustls",
+    "stream",
+] }
+# `Read` plus `Seek` over an HTTP response, backed by a ring an endless stream can't
+# outgrow: `Decoder` wants a seekable reader, a live mount is neither finite nor
+# rewindable. `default-features = false` is load-bearing: the default set pulls
+# `reqwest/default-tls`, a second TLS stack (OpenSSL) landing in cargo-deb's `$auto`
+# deps, and turning it off also drops `system-proxy`, so this path ignores `HTTP_PROXY`.
+stream-download = { version = "0.24.3", default-features = false, features = ["reqwest-rustls"] }
+# Icecast in-band metadata: the request header, the `icy-*` response headers, and the
+# reader that strips the interleaved blocks so the decoder sees audio only.
+icy-metadata = "0.6.0"
+# Last.fm mandates MD5 for `api_sig`; nothing security-sensitive.
+md5 = "0.8.1"
 
 # Serde / config
 serde = { version = "1.0.229", features = ["derive"] }
@@ -158,89 +197,80 @@ serde_json = "1.0.151"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 dirs = "6.0.0"
 
-# HTTP (Deezer artist images, scrobbling, the radio directory and its streams)
-reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "query", "rustls", "stream"] }
-
-# `Read` plus `Seek` over an HTTP response, backed by a ring an endless stream can't
-# outgrow: `Decoder` wants a seekable reader, a live mount is neither finite nor
-# rewindable. `default-features = false` is load-bearing: the default set pulls
-# `reqwest/default-tls`, a second TLS stack (OpenSSL) landing in cargo-deb's `$auto`
-# deps, and turning it off also drops `system-proxy`, so this path ignores `HTTP_PROXY`.
-stream-download = { version = "0.24.3", default-features = false, features = ["reqwest-rustls"] }
-
-# Icecast in-band metadata: the request header, the `icy-*` response headers, and the
-# reader that strips the interleaved blocks so the decoder sees audio only.
-icy-metadata = "0.6.0"
-
-# Last.fm mandates MD5 for `api_sig`; nothing security-sensitive.
-md5 = "0.8.1"
-
+# Logging / errors
+log = "0.4.33"
 # Replaced `env_logger` when logs had to reach a file: the only candidate with size
 # and age rotation in one criterion and no background thread. `colors` pulls
 # `nu-ansi-term`, the only crate the swap adds against thirteen it retires.
-log = "0.4.33"
 flexi_logger = { version = "0.31.9", default-features = false, features = ["colors"] }
-
-# Errors
 thiserror = "2.0.19"
 
-# Atomic file writes (settings/queue/search-history persistence)
-tempfile = "3.27.0"
+# Updater
+# `minisign-verify` is zero-dep and verify-only. `semver` powers `is_upgrade()`, so a
+# rolled-back `latest.json` reports `UpToDate` where string equality would downgrade.
+minisign-verify = "0.2.5"
+semver = "1.0.28"
 
 # OS integrations
 souvlaki = "0.8.3"
 rfd = "0.17.2"
 # Hands a path to the OS default handler, for "Open Containing Folder".
 open = "5.4.0"
-
 # The single-instance socket: one abstraction over a Linux abstract unix socket and
 # a Windows named pipe, whose *server* half would otherwise be `CreateNamedPipeW`, an
 # FFI site no Linux runner compiles. `tokio` would pull `tokio/net`, left off above.
 interprocess = "2.4.3"
 
-# `minisign-verify` is zero-dep and verify-only. `semver` powers `is_upgrade()`, so a
-# rolled-back `latest.json` reports `UpToDate` where string equality would downgrade.
-# `futures-util` lets the download `.next().await` rather than buffer the asset.
-minisign-verify = "0.2.5"
-semver = "1.0.28"
-futures-util = { version = "0.3.33", default-features = false, features = ["std"] }
+# Utilities
+rand = "0.10.2"
+lru = "0.18.2"
+# Atomic file writes (settings/queue/search-history persistence)
+tempfile = "3.27.0"
+# Test-only: the rules pin expands each `.claude/rules` `paths:` glob.
+glob = "0.3.4"
 
+# Platform-specific, each declared under a `[target.'cfg(…)']` table in the member that
+# takes it: a call site gated wider than its dependency fails to resolve on the platforms
+# the gap leaves uncovered.
+
+# Linux
 # Do NOT enable the `tokio` feature: cargo unifies it onto Slint's accesskit_unix →
 # atspi → zbus chain, whose a11y thread has no tokio context and panics at startup.
 # Always-on-top uses `zbus::blocking::*` inside `spawn_blocking`.
 zbus = "5.18.0"
-
 # Linux tray (StatusNotifierItem, no GTK); Windows/macOS take `tray-icon` below.
 # Defaults off: ksni's default `tokio` feature turns on `zbus/tokio` and walks into
 # the footgun above. `async-io` is mandatory (`compat` won't compile without an
 # executor feature) and matches accesskit's.
 ksni = { version = "0.3.6", default-features = false, features = ["blocking", "async-io"] }
-
 # Two glibc-only knobs, cfg-gated at their call sites since musl has neither:
 # `mallopt` caps the per-thread arenas and pins the mmap/trim thresholds, which
 # otherwise ratchet up until nothing returns to the kernel, and `malloc_trim` hands
 # retained pages back.
 libc = "0.2.189"
 
+# Windows
 # `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, for when
 # `Melodia.exe.old` is still loaded, and `GetUserDefaultLocaleName`. Declarations
 # from here rather than a hand-rolled `extern` block only review can keep true.
-windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem", "Win32_Graphics_Dwm", "Win32_Foundation", "Win32_Globalization"] }
-
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Storage_FileSystem",
+    "Win32_Graphics_Dwm",
+    "Win32_Foundation",
+    "Win32_Globalization",
+] }
 # `canonicalize` returns the extended-length form (`\\?\C:\...`), which lands in
 # `folders.path` and then fails to match the plain paths `read_dir` yields, greying
 # Browse rows out as disk-only. Reached through `utils::canonicalize_path`.
 dunce = "1.0.5"
-
-# Defaults off to drop `gtk` and `libxdo`, the Linux paths `ksni` covers. The icon is
-# created on the main thread, its menu events pumped from Slint's winit loop.
-tray-icon = { version = "0.24.2", default-features = false }
-
 # Embeds the `ICON` resource so the taskbar and Explorer entries aren't the generic
 # placeholder. `wix/main.wxs` reads the same `assets/melodia.ico`.
 winresource = "0.1.31"
 
-glob = "0.3.4"
+# Windows and macOS
+# Defaults off to drop `gtk` and `libxdo`, the Linux paths `ksni` covers. The icon is
+# created on the main thread, its menu events pumped from Slint's winit loop.
+tray-icon = { version = "0.24.2", default-features = false }
 
 [workspace.lints.rust]
 unused = { level = "warn", priority = -1 }
@@ -285,6 +315,14 @@ unnecessary_min_or_max      = "warn"
 useless_vec                 = "warn"
 io_other_error              = "warn"
 
+# winit 0.30.13 has no `wl_data_device` handling, so `WindowEvent::DroppedFile` fires
+# everywhere but Wayland (rust-windowing/winit#1881). `winit/` is that tag plus 3
+# commits reaching `ui::window_chrome::winit_filter`, cfg-gated to Linux and in-tree
+# so a fresh clone and every CI runner build identically. Delete both once upstream
+# lands native Wayland DnD.
+[patch.crates-io]
+winit = { path = "winit" }
+
 [profile.release]
 lto = "fat"
 codegen-units = 1
@@ -297,11 +335,3 @@ strip = "debuginfo"
 # which is also the build-memory peak the CI `CARGO_BUILD_JOBS` cap holds down.
 [profile.dev.package."*"]
 opt-level = 3
-
-# winit 0.30.13 has no `wl_data_device` handling, so `WindowEvent::DroppedFile` fires
-# everywhere but Wayland (rust-windowing/winit#1881). `winit/` is that tag plus 3
-# commits reaching `ui::window_chrome::winit_filter`, cfg-gated to Linux and in-tree
-# so a fresh clone and every CI runner build identically. Delete both once upstream
-# lands native Wayland DnD.
-[patch.crates-io]
-winit = { path = "winit" }
