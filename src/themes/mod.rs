@@ -1,24 +1,25 @@
 //! Pluggable theme registry. Each theme is a static `ThemeDef` owning its
 //! variants (palette + semantic colours) and accent definitions (one hex per
-//! variant). `apply()` writes the resolved brushes into the Slint `Theme`
-//! global; `accent_brushes()` builds the `[brush]` swatch list shown in the
-//! settings picker.
+//! variant).
 //!
 //! Palette data is ported verbatim from the legacy Tauri app
 //! (`Melodia-tauri/src/themes/<name>.ts`). No heap allocation, no
 //! `lazy_static` — themes are zero-cost static data referenced by
 //! `&'static ThemeDef`.
 //!
+//! **Nothing under this directory names a Slint type.** The half that does is
+//! `ui::appearance::theme_apply`, which resolves a triple against this registry
+//! and writes the brushes into the `Theme` global; keeping it there is what
+//! stops every crate wanting a palette from carrying `melodia-ui`.
+//!
 //! Module layout:
-//! - [`palette`]: pure data structures (`Palette`, `Variant`, `AccentDef`,
-//!   `ThemeDef`) and the synthetic `SYSTEM_VARIANT_ID` /
-//!   `MATERIAL_YOU_ACCENT_ID` constants.
-//! - [`system_color_state`]: bundled OS appearance signals (`SystemColorState`)
-//!   consumed by `apply()`.
-//! - [`mod@apply`]: the Slint-facing pipeline that writes palette brushes into
-//!   the `Theme` global plus the colour-dot picker helper.
+//! - [`palette`]: the data structures (`Palette`, `Variant`, `AccentDef`,
+//!   `ThemeDef`), the synthetic `SYSTEM_VARIANT_ID` / `MATERIAL_YOU_ACCENT_ID`
+//!   constants, and the luminance split `on_accent_hex` reads off a colour.
+//! - [`system_color_state`]: bundled OS appearance signals (`SystemColorState`).
 //! - Per-theme modules ([`catppuccin`], [`gnome`], [`kde`], [`macos`],
-//!   [`material3`], [`windows`]): the static palette data.
+//!   [`material3`], [`windows`]): the static palette data. [`kde`] carries a
+//!   second, dynamic derivation off the live `kdeglobals`.
 
 pub mod catppuccin;
 pub mod gnome;
@@ -27,16 +28,11 @@ pub mod macos;
 pub mod material3;
 pub mod windows;
 
-pub mod apply;
 pub mod palette;
 pub mod system_color_state;
 
-pub use apply::{accent_brushes, apply};
-pub(crate) use apply::{
-    brush, brush_to_rgb, brush_with_alpha, color, color_to_rgb, color_with_alpha,
-};
 pub use palette::{
-    AccentDef, MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef, Variant,
+    AccentDef, MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef, Variant, on_accent_hex,
 };
 pub use system_color_state::SystemColorState;
 

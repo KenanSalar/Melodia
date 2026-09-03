@@ -9,6 +9,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use slint::{Brush, ComponentHandle, SharedString};
 
+use super::theme_apply::{accent_brushes, brush};
 use crate::state::{AppState, Signal};
 use crate::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
 use crate::{AppWindow, Settings};
@@ -28,7 +29,7 @@ pub(super) fn material_you_active(theme_id: &str, system: &SystemColorState) -> 
 /// labels. When Material You is active for the current `theme` +
 /// `system`, a 9th brush rendered in the dynamic primary is prepended
 /// with label `"Material You"`; otherwise it's the existing 8-dot list
-/// from `themes::accent_brushes` paired with each `AccentDef.name`.
+/// from `theme_apply::accent_brushes` paired with each `AccentDef.name`.
 /// Returns the swatches, the labels, and a bool indicating whether the
 /// Material You dot was prepended.
 pub(super) fn accent_swatches_with_my(
@@ -37,24 +38,14 @@ pub(super) fn accent_swatches_with_my(
     system: &SystemColorState,
 ) -> (Vec<Brush>, Vec<SharedString>, bool) {
     let my_active = material_you_active(theme.id, system);
-    let mut brushes = themes::accent_brushes(theme, variant_id);
+    let mut brushes = accent_brushes(theme, variant_id);
     let mut labels: Vec<SharedString> =
         theme.accents.iter().map(|a| SharedString::from(a.name)).collect();
     if my_active && let Some((_, dyn_accent)) = &system.material_you {
-        brushes.insert(0, brush_from_rgb(*dyn_accent));
+        brushes.insert(0, brush(*dyn_accent));
         labels.insert(0, SharedString::from("Material You"));
     }
     (brushes, labels, my_active)
-}
-
-/// Pack a `0x00RRGGBB` u32 into an opaque solid `Brush`. Mirrors the
-/// private `themes::brush()` helper — duplicated rather than re-exported
-/// to keep the themes module's surface minimal.
-fn brush_from_rgb(rgb: u32) -> Brush {
-    let r = u8::try_from((rgb >> 16) & 0xff).unwrap_or(0);
-    let g = u8::try_from((rgb >> 8) & 0xff).unwrap_or(0);
-    let b = u8::try_from(rgb & 0xff).unwrap_or(0);
-    Brush::SolidColor(slint::Color::from_rgb_u8(r, g, b))
 }
 
 /// Map a persisted `accent_id` to its index in the visible swatch grid.

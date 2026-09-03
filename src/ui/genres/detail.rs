@@ -16,7 +16,7 @@ use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
-use crate::themes::color_to_rgb;
+use crate::ui::appearance::theme_apply::color_to_rgb;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_selection::prune_selection_to;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};

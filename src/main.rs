@@ -412,7 +412,7 @@ fn main() -> AppResult<()> {
         let sinks = state.sinks.clone();
         if let Err(e) = slint::invoke_from_event_loop(move || {
             let Some(app) = weak.upgrade() else { return };
-            match win32_hwnd(&app) {
+            match ui::window_chrome::win32_hwnd(&app) {
                 Some(hwnd) => {
                     if mc.attach_smtc(hwnd) {
                         // `sync()` no-op'd while the controls were inert, so the
@@ -429,7 +429,7 @@ fn main() -> AppResult<()> {
         }
     }
 
-    // Boot's `themes::apply` ran inside `appearance::install`, where the DWM
+    // Boot's `theme_apply::apply` ran inside `appearance::install`, where the DWM
     // hook no-op'd with no HWND yet. By the time this one-shot fires the window
     // is up and `Theme.mantle` carries the resolved palette; every later change
     // drives DWM from `write_palette`.
@@ -443,7 +443,7 @@ fn main() -> AppResult<()> {
         if let Err(e) = slint::invoke_from_event_loop(move || {
             let Some(app) = weak.upgrade() else { return };
             install_window_icon(&app);
-            melodia::services::dwm_titlebar::reapply_from_theme(&app);
+            ui::appearance::theme_apply::reapply_from_theme(&app);
         }) {
             log::warn!("Failed to schedule Windows titlebar polish: {e}");
         }
@@ -492,21 +492,6 @@ fn main() -> AppResult<()> {
     // tokio worker parked on a blocking call. State is flushed and the rest is
     // OS-managed.
     std::process::exit(0);
-}
-
-/// The shown window's native `HWND`, for souvlaki's SMTC backend. `None` before
-/// the winit window exists, which leaves `attach_smtc` inert.
-#[cfg(target_os = "windows")]
-fn win32_hwnd(app: &AppWindow) -> Option<*mut std::ffi::c_void> {
-    use slint::winit_030::WinitWindowAccessor;
-    use slint::winit_030::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-    app.window()
-        .with_winit_window(|w| match w.window_handle().ok()?.as_raw() {
-            RawWindowHandle::Win32(h) => Some(h.hwnd.get() as *mut std::ffi::c_void),
-            _ => None,
-        })
-        .flatten()
 }
 
 /// Push the embedded EXE icon onto the winit window. Windows auto-binds it to

@@ -2,7 +2,7 @@
 //!
 //! Reads the persisted `theme_id` / `theme_variant` / `accent_color` from
 //! `services::settings`, populates the Slint `Settings` global, and applies
-//! the resolved palette via `themes::apply()`. Three callbacks
+//! the resolved palette via `theme_apply::apply()`. Three callbacks
 //! (`theme-changed` / `variant-changed` / `accent-changed`) update the
 //! global, repaint the Theme tokens, and persist the new selection on the
 //! tokio runtime so the JSON write doesn't block the UI thread.
@@ -12,6 +12,7 @@ mod install;
 mod material_you_sync;
 mod repaint;
 mod system_watcher;
+pub mod theme_apply;
 mod theme_picker;
 mod window_settings;
 
@@ -91,7 +92,7 @@ pub(super) fn read_last_static_accent(state: &AppState, theme_id: &str) -> Optio
 
 /// Write the palette, then re-solve the two artwork-derived tiers against it.
 ///
-/// **The only place `themes::apply` may be called from.** Both tiers are snapshots taken when a
+/// **The only place `theme_apply::apply` may be called from.** Both tiers are snapshots taken when a
 /// hero or a track landed, so a palette change reaches neither on its own — visibly, since the
 /// aurora's whole tier set is the theme's own and Now Playing republishes only on the next track.
 pub(super) fn apply_palette(
@@ -101,7 +102,7 @@ pub(super) fn apply_palette(
     accent_id: &str,
     system: &SystemColorState,
 ) {
-    themes::apply(ui, theme_id, variant_id, accent_id, system);
+    theme_apply::apply(ui, theme_id, variant_id, accent_id, system);
     crate::ui::hero_backdrop::republish_for_palette(ui);
     crate::ui::now_playing::republish_for_palette(ui);
 }

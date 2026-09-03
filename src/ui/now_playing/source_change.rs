@@ -21,7 +21,7 @@ use super::{NowPlayingSource, NowPlayingState, SourceKey};
 use crate::entities::track::TrackSummary;
 use crate::library;
 use crate::state::AppState;
-use crate::themes::color;
+use crate::ui::appearance::theme_apply::color;
 use crate::ui::aurora;
 use crate::ui::backdrop::{self, BackdropSample};
 use crate::ui::chips;

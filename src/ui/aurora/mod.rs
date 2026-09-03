@@ -15,7 +15,7 @@
 use slint::Color;
 
 use crate::services::material_you::{clamp_to_tone_band, rotate_hue, scale_tone};
-use crate::themes::color_with_alpha;
+use crate::ui::appearance::theme_apply::color_with_alpha;
 use crate::ui::backdrop::{SEED_COUNT, ThemeTokens};
 
 mod dither;

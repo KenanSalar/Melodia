@@ -1,11 +1,11 @@
 //! The third copy of the luminance split, checked against the one that owns it.
 //!
-//! `is_dark_from_rgb` restates `themes::apply::on_accent_hex`'s weights and threshold rather than
+//! `is_dark_from_rgb` restates `themes::on_accent_hex`'s weights and threshold rather than
 //! calling it, because `apply` is what calls *into* this module. Nothing else links the two, and
 //! `test-windows` is the only place this runs.
 
 use super::is_dark_from_rgb;
-use crate::themes::apply::on_accent_hex;
+use crate::themes::on_accent_hex;
 
 /// Asks the twin in its own terms. `on_accent_hex` answers with an ink rather than a bool, so the
 /// ink a known-dark surface gets is what "dark" means here — no fourth copy of the weights.

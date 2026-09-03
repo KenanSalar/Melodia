@@ -127,6 +127,31 @@ pub fn request_respawn_and_quit() {
     }
 }
 
+/// The shown window's native Win32 `HWND`.
+///
+/// `None` until the window has first been shown, and `None` if the active winit backend isn't
+/// Win32 — impossible on a Windows build, but the API surface stays honest.
+///
+/// The two consumers are one layer apart and neither may hold this hop: souvlaki's SMTC attach in
+/// `main`, and `dwm_titlebar` through `ui::appearance::theme_apply`, which the split keeps off
+/// every Slint name. It sat in both for a while, byte-identical, which is what a private copy of
+/// an accessor hop turns into.
+///
+/// Fetched per call rather than cached: Slint's `with_winit_window` accessor only borrows for the
+/// closure's duration.
+#[cfg(target_os = "windows")]
+pub fn win32_hwnd(app: &AppWindow) -> Option<*mut std::ffi::c_void> {
+    use slint::winit_030::WinitWindowAccessor;
+    use slint::winit_030::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    app.window()
+        .with_winit_window(|w| match w.window_handle().ok()?.as_raw() {
+            RawWindowHandle::Win32(h) => Some(h.hwnd.get() as *mut std::ffi::c_void),
+            _ => None,
+        })
+        .flatten()
+}
+
 /// Hydrate `Theme.use-native-titlebar` from the persisted setting and wire the
 /// `WindowChrome` callbacks. Must run between `AppWindow::new()` and `app.run()`.
 pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {

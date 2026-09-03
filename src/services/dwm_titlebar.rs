@@ -6,8 +6,12 @@
 //! - Paint the caption in the app's mantle via `DWMWA_CAPTION_COLOR`, suppressing Windows'
 //!   system-wide "Show accent color on title bars" override.
 //!
-//! Applied after window-show in [`crate::main`] and again at the end of every
-//! [`crate::themes::apply`], so theme / variant / accent changes update the caption live.
+//! **It takes an `HWND`, not a window.** Both callers already sit above this module and can do
+//! the `WinitWindowAccessor` hop themselves, and keeping it on their side is what leaves this file
+//! naming no Slint type at all; `ui::window_chrome::win32_hwnd` is the one place that hop is
+//! written. Applied after window-show from `main`, and again at the end of every
+//! `ui::appearance::theme_apply::write_palette`, so theme / variant / accent changes update the
+//! caption live.
 //!
 //! **Fails open**: every `DwmSetWindowAttribute` error is logged and dropped. Pre-Win11 22000
 //! builds reject `DWMWA_CAPTION_COLOR` with `E_INVALIDARG` while the immersive-dark flag still
@@ -15,48 +19,30 @@
 
 use std::ffi::c_void;
 
-use slint::ComponentHandle;
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::Graphics::Dwm::{
     DWMWA_CAPTION_COLOR, DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
 };
-
-use crate::AppWindow;
 
 /// Pre-20H1 builds (Windows 10 1903–1909) expose the immersive-dark attribute at index 19 instead
 /// of 20. Try 20 first and fall back — one of the two succeeds on every build that knows the
 /// attribute at all.
 const DWMWA_USE_IMMERSIVE_DARK_MODE_PRE_20H1: u32 = 19;
 
-/// Push DWM titlebar attributes for the given Slint window.
+/// Push DWM titlebar attributes onto a shown window's `HWND`.
 ///
-/// - `caption_rgb`: `0x00_RR_GG_BB` (Slint / CSS byte order), converted to the BGR `COLORREF`
-///   Windows expects. Pass `Theme.mantle` so the caption matches the chrome below it exactly; the
-///   dark/light flag is derived from that same value's relative luminance, so one value drives
-///   both.
+/// `caption_rgb` is `0x00_RR_GG_BB` (Slint / CSS byte order), converted to the BGR `COLORREF`
+/// Windows expects. Pass `Theme.mantle` so the caption matches the chrome below it exactly; the
+/// dark/light flag is derived from that same value's relative luminance, so one value drives both.
 ///
-/// No-op when the underlying winit window isn't `Win32`, which includes the pre-show boot path.
-/// The HWND is fetched per call rather than cached because Slint's `with_winit_window` accessor
-/// only borrows for the closure's duration.
-pub fn apply(app: &AppWindow, caption_rgb: u32) {
-    let Some(hwnd) = win32_hwnd(app) else { return };
+/// The caller owns getting the handle, and owns the pre-show case where there isn't one yet.
+pub fn apply(hwnd: *mut c_void, caption_rgb: u32) {
     set_immersive_dark(hwnd, is_dark_from_rgb(caption_rgb));
     set_caption_color(hwnd, caption_rgb);
 }
 
-/// Read `Theme.mantle` back from the Slint global and apply. Called once at startup after the
-/// window is shown, the boot-time `themes::apply` having no-op'd with no HWND yet. Every later
-/// `themes::apply` drives the DWM call directly from `write_palette`.
-pub fn reapply_from_theme(app: &AppWindow) {
-    use crate::Theme;
-    let color = app.global::<Theme>().get_mantle().color();
-    let rgb =
-        (u32::from(color.red()) << 16) | (u32::from(color.green()) << 8) | u32::from(color.blue());
-    apply(app, rgb);
-}
-
 /// Relative-luminance dark/light check on a packed `0x00RRGGBB` colour. Same coefficients and
-/// threshold as `themes::apply::on_accent_hex` — **a deliberate third copy**, so this module owes
+/// threshold as `themes::on_accent_hex` — **a deliberate third copy**, so this module owes
 /// nothing to the palette code that calls *into* it.
 ///
 /// `<=`, not `<`: both siblings split on `lum > 0.5` for *light*, so anything but the exact
@@ -70,21 +56,6 @@ fn is_dark_from_rgb(rgb: u32) -> bool {
     lum <= 0.5
 }
 
-/// Extract the native Win32 `HWND` from a shown Slint window. `None` until the window has first
-/// been shown, and `None` if the active winit backend isn't Win32 — impossible on Windows builds,
-/// but the API surface stays honest.
-fn win32_hwnd(app: &AppWindow) -> Option<*mut c_void> {
-    use slint::winit_030::WinitWindowAccessor;
-    use slint::winit_030::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-    app.window()
-        .with_winit_window(|w| match w.window_handle().ok()?.as_raw() {
-            RawWindowHandle::Win32(h) => Some(h.hwnd.get() as *mut c_void),
-            _ => None,
-        })
-        .flatten()
-}
-
 #[allow(
     unsafe_code,
     reason = "FFI to DwmSetWindowAttribute. Both pointer parameters target stack-local primitives whose sizes match the `cbAttribute` argument; the API takes a `const void*` and never retains the pointer past the call."
@@ -96,9 +67,10 @@ fn set_immersive_dark(hwnd: *mut c_void, is_dark: bool) {
     let pv: *const c_void = std::ptr::from_ref::<i32>(&value).cast::<c_void>();
     let size: u32 = 4;
 
-    // SAFETY: `pv` points at a stack-local `i32` and `size` matches its actual size. The HWND came
-    // from `win32_hwnd()` off the live winit window, so it is valid for this call's lifetime, and
-    // the API does not retain the pointer.
+    // SAFETY: `pv` points at a stack-local `i32` and `size` matches its actual size. `hwnd` is the
+    // caller's to keep live for the call — every path in reaches it through
+    // `ui::window_chrome::win32_hwnd`, which reads it off the live winit window. The API does not
+    // retain the pointer.
     let hr = unsafe {
         DwmSetWindowAttribute(hwnd as HWND, DWMWA_USE_IMMERSIVE_DARK_MODE as u32, pv, size)
     };
@@ -129,7 +101,8 @@ fn set_caption_color(hwnd: *mut c_void, rgb: u32) {
     // COLORREF is a `u32`; the literal dodges the `cast_possible_truncation` lint.
     let size: u32 = 4;
 
-    // SAFETY: `pv` targets a stack-local `u32` and `size` matches.
+    // SAFETY: `pv` targets a stack-local `u32`, `size` matches, and `hwnd` is live for the
+    // call by the same contract as `set_immersive_dark`'s.
     let hr = unsafe { DwmSetWindowAttribute(hwnd as HWND, DWMWA_CAPTION_COLOR as u32, pv, size) };
     if hr < 0 {
         // Pre-Win11 22000 builds reject this attribute. The immersive-dark call already handled

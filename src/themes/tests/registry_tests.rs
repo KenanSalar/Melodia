@@ -3,7 +3,7 @@
 #![allow(clippy::unreadable_literal)]
 
 use super::*;
-use crate::themes::apply::{LUMA_B, LUMA_G, LUMA_R, LUMA_THRESHOLD, on_accent_hex};
+use crate::themes::palette::{LUMA_B, LUMA_G, LUMA_R, LUMA_THRESHOLD, on_accent_hex};
 
 #[test]
 fn registry_lists_six_themes_in_display_order() {
@@ -109,19 +109,6 @@ fn variant_and_accent_index_lookups_round_trip() {
     assert_eq!(accent_index(theme, "mauve"), 3);
     assert_eq!(accent_index(theme, "rosewater"), 0);
     assert_eq!(accent_index(theme, "not-an-accent"), 0);
-}
-
-#[test]
-fn accent_brushes_returns_one_per_accent() {
-    let theme = get("catppuccin");
-    let brushes = accent_brushes(theme, "mocha");
-    assert_eq!(brushes.len(), 14);
-
-    let gnome = get("gnome-adwaita");
-    assert_eq!(accent_brushes(gnome, "dark").len(), 9);
-
-    let macos = get("macos");
-    assert_eq!(accent_brushes(macos, "light").len(), 8);
 }
 
 #[test]

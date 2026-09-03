@@ -487,7 +487,7 @@ fn no_leave_clears_the_chips_behind_the_macro() {
     );
 }
 
-/// `themes::apply` is reached only through `ui::appearance::apply_palette`. Both artwork-derived
+/// `theme_apply::apply` is reached only through `ui::appearance::apply_palette`. Both artwork-derived
 /// tiers are snapshots of the palette live when a hero or a track landed, so a pick reaches neither
 /// on its own — and Now Playing never recovers, its three publish paths all deduping on
 /// `applied_track_id`. The wrapper is what pairs the write with the two re-solves.
@@ -503,14 +503,14 @@ fn the_palette_is_never_written_without_re_solving_the_backdrops() {
         "rs",
         crate::test_support::MIN_SOURCES,
     ) {
-        if rel != SELF && code.contains("themes::apply(") {
+        if rel != SELF && code.contains("theme_apply::apply(") {
             callers.push(rel);
         }
     }
     assert_eq!(
         callers,
         ["ui/appearance/mod.rs"],
-        "`themes::apply` must be called only from `apply_palette`, which re-solves \
+        "`theme_apply::apply` must be called only from `apply_palette`, which re-solves \
          `HeroBackdrop` and `Player.np-*` against the palette it just wrote"
     );
 

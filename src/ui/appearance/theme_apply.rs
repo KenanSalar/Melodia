@@ -1,15 +1,18 @@
 //! Apply pipeline: resolve `(theme_id, variant_id, accent_id)` against the
 //! registry and the OS / Material You signals, then write every theme-
-//! dependent brush into the Slint `Theme` global. All Slint coupling for
-//! the themes module lives here.
+//! dependent brush into the Slint `Theme` global.
+//!
+//! It lives here rather than under `themes/` because it is the only half of that directory that
+//! names a Slint type, and carrying it there would put `melodia-ui` under every crate wanting a
+//! palette. What it reads is `crate::themes`: tables, the registry, and the two derivations.
 
 use slint::{Brush, Color, ComponentHandle};
 
-use crate::AppWindow;
-use crate::Theme as ThemeGlobal;
-
-use super::palette::{MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef};
-use super::system_color_state::SystemColorState;
+use crate::themes::palette::{
+    MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef, on_accent_hex,
+};
+use crate::themes::system_color_state::SystemColorState;
+use crate::{AppWindow, Theme as ThemeGlobal};
 
 /// Brushes for the colour-dot picker — one per accent in `theme`, each
 /// rendered in `variant_id`'s shade.
@@ -31,7 +34,7 @@ pub fn apply(
     accent_id: &str,
     system: &SystemColorState,
 ) {
-    let theme = super::get(theme_id);
+    let theme = crate::themes::get(theme_id);
 
     // A dynamic palette wins over the static M3 variants whatever the variant
     // id, which is why this sits above the System branch. The accent picker
@@ -65,14 +68,15 @@ pub fn apply(
         if theme_id == "kde-breeze"
             && let Some(kde) = &system.kde_palette
         {
-            let palette = palette_from_kde(kde);
-            let accent_hex = parse_hex_color(&kde.accent).unwrap_or(0x003d_aee9);
+            let palette = crate::themes::kde::palette_from_kde(kde);
+            let accent_hex =
+                crate::themes::kde::parse_hex_color(&kde.accent).unwrap_or(0x003d_aee9);
             // The *only* path pulling a real OS inactive-titlebar colour, so
             // our painted surfaces match the frame exactly on focus loss.
             let mantle_unfocused_hex = kde
                 .colors
                 .get("mantle_unfocused")
-                .and_then(|s| parse_hex_color(s))
+                .and_then(|s| crate::themes::kde::parse_hex_color(s))
                 .unwrap_or(palette.base);
             write_palette(ui, &palette, accent_hex, mantle_unfocused_hex);
             return;
@@ -87,47 +91,6 @@ pub fn apply(
     let accent_hex = theme.resolved_accent_hex(accent_id, variant.id);
     // A static variant has no OS source for an inactive titlebar either.
     write_palette(ui, &variant.palette, accent_hex, variant.palette.base);
-}
-
-/// A `"#RRGGBB"` hex string as the packed `0x00RRGGBB` the palette tables use.
-/// `None` on malformed input, which callers answer with a default.
-#[cfg(target_os = "linux")]
-fn parse_hex_color(s: &str) -> Option<u32> {
-    let stripped = s.strip_prefix('#').unwrap_or(s);
-    u32::from_str_radix(stripped, 16).ok()
-}
-
-/// A `Palette` from a parsed `kdeglobals` scheme: the structure slots straight
-/// off the colours map, the three semantic ones from Plasma's own status
-/// foregrounds.
-///
-/// The Breeze hexes below are a second line rather than the policy —
-/// `kde_palette_from_sections` already substitutes the same defaults for a
-/// scheme that omits a status foreground, and always hands back something
-/// parseable. They fire only if that stops being true.
-#[cfg(target_os = "linux")]
-fn palette_from_kde(kde: &crate::services::system_theme::KdeColorPalette) -> Palette {
-    let g =
-        |key: &str| -> u32 { kde.colors.get(key).and_then(|s| parse_hex_color(s)).unwrap_or(0) };
-    let overlay1 = g("overlay1");
-    Palette {
-        base: g("base"),
-        mantle: g("mantle"),
-        crust: g("crust"),
-        surface0: g("surface0"),
-        surface1: g("surface1"),
-        surface2: g("surface2"),
-        overlay0: g("overlay0"),
-        overlay1,
-        overlay2: g("overlay2"),
-        text: g("text"),
-        subtext0: g("subtext0"),
-        subtext1: g("subtext1"),
-        border: g("border"),
-        red: parse_hex_color(&kde.red).unwrap_or(0x00da_4453),
-        green: parse_hex_color(&kde.green).unwrap_or(0x0027_ae60),
-        yellow: parse_hex_color(&kde.yellow).unwrap_or(0x00f6_7400),
-    }
 }
 
 fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_hex: u32) {
@@ -165,21 +128,39 @@ fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_
     // so we don't write them here.
 
     // Paint the OS-drawn caption in the same mantle so it blends into the chrome
-    // below. A no-op until the window is shown, which `main.rs`'s post-show
-    // one-shot covers. See [`crate::services::dwm_titlebar`].
+    // below. Nothing to paint until the window is shown, which `main.rs`'s
+    // post-show one-shot covers. See [`crate::services::dwm_titlebar`].
     #[cfg(target_os = "windows")]
-    crate::services::dwm_titlebar::apply(ui, p.mantle);
+    if let Some(hwnd) = crate::ui::window_chrome::win32_hwnd(ui) {
+        crate::services::dwm_titlebar::apply(hwnd, p.mantle);
+    }
+}
+
+/// Read `Theme.mantle` back off the Slint global and repaint the OS caption from it.
+///
+/// Called once at startup after the window is shown, the boot-time [`apply`] having had no `HWND`
+/// to paint; every later palette write drives the DWM call from `write_palette` directly. It reads
+/// the global rather than taking a `Palette` because by then the resolved one is only on the Slint
+/// side — which is also why it is here and not in `dwm_titlebar`, whose half of this names no
+/// Slint type.
+#[cfg(target_os = "windows")]
+pub fn reapply_from_theme(app: &AppWindow) {
+    let Some(hwnd) = crate::ui::window_chrome::win32_hwnd(app) else {
+        return;
+    };
+    let mantle = color_to_rgb(app.global::<ThemeGlobal>().get_mantle().color());
+    crate::services::dwm_titlebar::apply(hwnd, mantle);
 }
 
 /// A `0x00RRGGBB` value as an opaque solid `Brush`. `pub(crate)` because Now
 /// Playing packs its per-artwork accent into a brush property too.
-pub(crate) fn brush(rgb: u32) -> Brush {
+pub fn brush(rgb: u32) -> Brush {
     Brush::SolidColor(color(rgb))
 }
 
 /// The same as a bare `Color`, which the Now Playing gradient floor needs —
 /// Slint's `.mix()` and gradient stops take `color`, not `brush`.
-pub(crate) fn color(rgb: u32) -> Color {
+pub fn color(rgb: u32) -> Color {
     let r = ((rgb >> 16) & 0xff) as u8;
     let g = ((rgb >> 8) & 0xff) as u8;
     let b = (rgb & 0xff) as u8;
@@ -189,72 +170,31 @@ pub(crate) fn color(rgb: u32) -> Color {
 /// The same plus an alpha, for the two solved scrims. Their opacity is solved
 /// per artwork, so baking it in keeps the Slint side one `background:` binding
 /// rather than a colour plus a float the view has to recombine.
-pub(crate) fn brush_with_alpha(rgb: u32, alpha: u8) -> Brush {
+pub fn brush_with_alpha(rgb: u32, alpha: u8) -> Brush {
     Brush::SolidColor(color_with_alpha(rgb, f32::from(alpha) / 255.0))
 }
 
 /// [`color`] carrying a weight in its alpha, for a gradient stop that has to stay a `color`. The
 /// aurora's tints arrive this way: `transparentize` on the Slint side multiplies rather than sets,
 /// so the falloff shape and the per-artwork weight compose without either restating the other.
-pub(crate) fn color_with_alpha(rgb: u32, alpha: f32) -> Color {
+pub fn color_with_alpha(rgb: u32, alpha: f32) -> Color {
     color(rgb).with_alpha(alpha)
 }
 
 /// A solid `Brush` back to `0x00RRGGBB`, dropping alpha — how a solved surface
 /// reads the theme accent's *hue* out of the global as an artwork-less fallback.
 /// A gradient answers with its first stop, the right approximation here.
-pub(crate) fn brush_to_rgb(brush: &Brush) -> u32 {
+pub fn brush_to_rgb(brush: &Brush) -> u32 {
     color_to_rgb(brush.color())
 }
 
 /// Inverse of [`color`]. The Genre hero reads the hash-derived gradient stops
 /// off `GenreRow` — they arrive as `Color`, never as a `Brush` — and has to
 /// measure their lightness before it can solve a scrim against them.
-pub(crate) fn color_to_rgb(c: Color) -> u32 {
+pub fn color_to_rgb(c: Color) -> u32 {
     (u32::from(c.red()) << 16) | (u32::from(c.green()) << 8) | u32::from(c.blue())
 }
 
-/// sRGB luma weights, applied to the gamma-encoded channels rather than to
-/// linearized ones — cheap, and the threshold below is tuned for it. Not the
-/// relative luminance `ui::backdrop` solves scrims against; that one linearizes
-/// first. Named because `theme.slint`'s `ink-on` spells the same four numbers
-/// out and `themes::tests::theme_slint_is_light_matches_on_accent_hex` builds
-/// its expected Slint expression from these, so a drift on either side fails.
-///
-/// A third copy lives in `services::dwm_titlebar::is_dark_from_rgb`, duplicated
-/// on purpose to keep that windows-only module off the palette code that calls
-/// into it. It is pinned against `on_accent_hex` rather than against these, by
-/// `services::dwm_titlebar::tests` — which runs only under the
-/// `test-windows` job, the reason that copy went unchecked for so long.
-pub(super) const LUMA_R: f64 = 0.2126;
-pub(super) const LUMA_G: f64 = 0.7152;
-pub(super) const LUMA_B: f64 = 0.0722;
-/// Above this, `fill` is light enough to take dark ink.
-pub(super) const LUMA_THRESHOLD: f64 = 0.5;
-
-/// Pick a contrast colour for text/icons rendered on top of `accent_hex`:
-/// dark `#1e1e2e` for light accents, white for dark accents. Fast enough that
-/// we don't bother caching per accent. f64 keeps clippy happy on the
-/// u8 → float lift (channel values are 0..=255, well inside f64's range).
-///
-/// `theme.slint`'s `Theme.ink-on(brush)` is the Slint-side twin, for the
-/// surfaces whose fill isn't the accent (`danger`, the traffic-light hues).
-/// Same weights, same threshold, same pair — keep them in step.
-///
-/// `pub(crate)` rather than `pub(super)` so `dwm_titlebar`'s test can ask the
-/// twin directly instead of re-spelling the formula a fourth time.
-pub(crate) fn on_accent_hex(accent_hex: u32) -> u32 {
-    let r = f64::from((accent_hex >> 16) & 0xff) / 255.0;
-    let g = f64::from((accent_hex >> 8) & 0xff) / 255.0;
-    let b = f64::from(accent_hex & 0xff) / 255.0;
-    let lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-    if lum > LUMA_THRESHOLD {
-        0x001e_1e2e
-    } else {
-        0x00ff_ffff
-    }
-}
-
-#[cfg(all(test, target_os = "linux"))]
-#[path = "tests/apply_tests.rs"]
+#[cfg(test)]
+#[path = "tests/theme_apply_tests.rs"]
 mod tests;

@@ -1,6 +1,6 @@
-//! Pure data structures for the theme registry. No Slint imports, no OS
-//! signals — those live in `apply.rs` and `system_color_state.rs`
-//! respectively.
+//! Pure data structures for the theme registry, and the luminance split read off them. No Slint
+//! imports and no OS signals: the brush writes live in `ui::appearance::theme_apply`, the OS
+//! signals in `system_color_state.rs`.
 
 /// The theme-dependent brush slots that come from a palette table. Stored as
 /// packed `0x00RRGGBB` so the data tables stay readable next to the
@@ -134,5 +134,44 @@ impl ThemeDef {
             self.system_dark_variant
         };
         self.resolved_variant(id)
+    }
+}
+
+/// sRGB luma weights, applied to the gamma-encoded channels rather than to
+/// linearized ones — cheap, and the threshold below is tuned for it. Not the
+/// relative luminance `ui::backdrop` solves scrims against; that one linearizes
+/// first. Named because `theme.slint`'s `ink-on` spells the same four numbers
+/// out and `themes::tests::theme_slint_is_light_matches_on_accent_hex` builds
+/// its expected Slint expression from these, so a drift on either side fails.
+///
+/// A third copy lives in `services::dwm_titlebar::is_dark_from_rgb`, duplicated
+/// on purpose to keep that windows-only module off the palette code that calls
+/// into it. It is pinned against `on_accent_hex` rather than against these, by
+/// `services::dwm_titlebar::tests` — which runs only under the
+/// `test-windows` job, the reason that copy went unchecked for so long.
+pub const LUMA_R: f64 = 0.2126;
+pub const LUMA_G: f64 = 0.7152;
+pub const LUMA_B: f64 = 0.0722;
+/// Above this, `fill` is light enough to take dark ink.
+pub const LUMA_THRESHOLD: f64 = 0.5;
+
+/// Pick a contrast colour for text/icons rendered on top of `accent_hex`:
+/// dark `#1e1e2e` for light accents, white for dark accents. Fast enough that
+/// we don't bother caching per accent. f64 keeps clippy happy on the
+/// u8 → float lift (channel values are 0..=255, well inside f64's range).
+///
+/// `theme.slint`'s `Theme.ink-on(brush)` is the Slint-side twin, for the
+/// surfaces whose fill isn't the accent (`danger`, the traffic-light hues).
+/// Same weights, same threshold, same pair — keep them in step.
+///
+pub fn on_accent_hex(accent_hex: u32) -> u32 {
+    let r = f64::from((accent_hex >> 16) & 0xff) / 255.0;
+    let g = f64::from((accent_hex >> 8) & 0xff) / 255.0;
+    let b = f64::from(accent_hex & 0xff) / 255.0;
+    let lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
+    if lum > LUMA_THRESHOLD {
+        0x001e_1e2e
+    } else {
+        0x00ff_ffff
     }
 }

@@ -7,6 +7,7 @@ paths:
   - src/services/media_controls/**/*.rs
   - src/services/always_on_top/**/*.rs
   - src/services/dwm_titlebar.rs
+  - src/ui/appearance/theme_apply.rs
   - src/main.rs
   - src/shutdown.rs
   - src/boot/**/*.rs

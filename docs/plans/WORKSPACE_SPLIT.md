@@ -691,7 +691,7 @@ turn it red; the fix is the glob edit in the same commit, never a skip. That is 
       **`library-data.md` is the second rule whose globs had to follow its prose**, for
       B1's reason: it argues both the extension predicate and `SelfWrites`, and named only
       `src/media/**`. The pin cannot see that either, both files having existed all along.
-- [ ] **B3. `themes/` splits three ways, not two.** The first pass had `apply.rs` as the views half
+- [x] **B3. `themes/` splits three ways, not two.** The first pass had `apply.rs` as the views half
       whole, and it is not: it also names `crate::Theme` at `:9`, and it carries about 55 lines of
       pure palette computation the graph section already calls palette. `parse_hex_color` (`:94`),
       `palette_from_kde` (`:108`), `LUMA_R/G/B/THRESHOLD` (`:229`) and `on_accent_hex` (`:246`)
@@ -703,7 +703,20 @@ turn it red; the fix is the glob edit in the same commit, never a skip. That is 
       stops re-exporting the Slint half upward, and the seven `crate::themes::{brush,color,…}`
       importers under `src/ui/` re-point. `ui/tests/hero_backdrop_tests.rs:490-513`, the walk
       enforcing that `themes::apply(` has exactly one caller, re-anchors with them.
-- [ ] **B4. `dwm_titlebar` splits, and the duplicate `win32_hwnd` collapses with it.** Six
+
+      **Two things the item did not budget for, both deletions.** The kde half went to
+      `themes/kde.rs` rather than to `palette.rs`: that module already owns Breeze's static
+      tables, and the `kdeglobals` re-source is the dynamic derivation for the same theme, so
+      `tests/apply_tests.rs` became `tests/kde_tests.rs` and stopped being a file named after a
+      module it no longer describes. And `accent_picker.rs` carried a hand-rolled `brush_from_rgb`
+      whose doc said it was duplicated "to keep the themes module's surface minimal" — an argument
+      that dies the moment `brush` lands in its own directory, so the copy goes.
+      `registry_tests.rs`'s `accent_brushes` test moved with the function it tests.
+
+      Left for B7: `registry_tests.rs` `include_str!`s `melodia-ui/ui/theme.slint` to pin
+      `is-light` and `ink-on` against `on_accent_hex`. That is a palette-tier test reading the UI
+      tree, the same class as the four B7 already carries.
+- [x] **B4. `dwm_titlebar` splits, and the duplicate `win32_hwnd` collapses with it.** Six
       functions, not four: `set_immersive_dark` (`:92`) and `set_caption_color` (`:124`) are the
       actual FFI bodies and take only `*mut c_void` plus a scalar, so they follow `apply` down
       unchanged. The platform half is those two, `is_dark_from_rgb`, and an
@@ -715,6 +728,13 @@ turn it red; the fix is the glob edit in the same commit, never a skip. That is 
       all. The file is **not** `cfg`-gated at the module level (`services/mod.rs:10` declares it
       unconditionally), so check the manifest rather than assuming a `cfg` will catch a mistake.
       Its caller is `main.rs:446`, not `:466`.
+
+      **Everything this item touches is `cfg(target_os = "windows")` and no Windows target is
+      installed**, so the local gate compiles none of it and `clippy-windows` / `test-windows` are
+      what actually check it. Two things that made that survivable: the two SAFETY comments named
+      `win32_hwnd()` as the source of a live handle, which is now a *caller* precondition and says
+      so, and `reapply_from_theme`'s inline shift-and-or turned out to be `color_to_rgb`, which it
+      now sits beside.
 - [ ] **B5. `media/` regroups three ways**, into `media/{image,ingest,fetch}/`:
       `image/` is `artwork/`, `cover_thumbs`, `image_decode`, `logo_tile` and
       `services/material_you.rs` pulled in (~2,190 lines, and the only tier with no outbound

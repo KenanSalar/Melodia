@@ -1,5 +1,9 @@
 //! KDE Breeze theme: 2 variants (Dark / Light), 8 accents.
 //! Ported verbatim from `Melodia-tauri/src/themes/kde-breeze.ts`.
+//!
+//! The static tables are half of it. The other half is [`palette_from_kde`], which re-sources
+//! every slot from the live `kdeglobals` so the player matches Plasma's active scheme rather than
+//! this file's snapshot of it. Both answer for the same theme, so they live together.
 
 #![allow(clippy::unreadable_literal)]
 
@@ -114,3 +118,48 @@ pub static KDE: ThemeDef = ThemeDef {
     system_dark_variant: "dark",
     system_light_variant: "light",
 };
+
+/// A `"#RRGGBB"` hex string as the packed `0x00RRGGBB` the palette tables use.
+/// `None` on malformed input, which callers answer with a default.
+#[cfg(target_os = "linux")]
+pub fn parse_hex_color(s: &str) -> Option<u32> {
+    let stripped = s.strip_prefix('#').unwrap_or(s);
+    u32::from_str_radix(stripped, 16).ok()
+}
+
+/// A `Palette` from a parsed `kdeglobals` scheme: the structure slots straight
+/// off the colours map, the three semantic ones from Plasma's own status
+/// foregrounds.
+///
+/// The Breeze hexes below are a second line rather than the policy —
+/// `kde_palette_from_sections` already substitutes the same defaults for a
+/// scheme that omits a status foreground, and always hands back something
+/// parseable. They fire only if that stops being true.
+#[cfg(target_os = "linux")]
+pub fn palette_from_kde(kde: &crate::services::system_theme::KdeColorPalette) -> Palette {
+    let g =
+        |key: &str| -> u32 { kde.colors.get(key).and_then(|s| parse_hex_color(s)).unwrap_or(0) };
+    let overlay1 = g("overlay1");
+    Palette {
+        base: g("base"),
+        mantle: g("mantle"),
+        crust: g("crust"),
+        surface0: g("surface0"),
+        surface1: g("surface1"),
+        surface2: g("surface2"),
+        overlay0: g("overlay0"),
+        overlay1,
+        overlay2: g("overlay2"),
+        text: g("text"),
+        subtext0: g("subtext0"),
+        subtext1: g("subtext1"),
+        border: g("border"),
+        red: parse_hex_color(&kde.red).unwrap_or(0x00da_4453),
+        green: parse_hex_color(&kde.green).unwrap_or(0x0027_ae60),
+        yellow: parse_hex_color(&kde.yellow).unwrap_or(0x00f6_7400),
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "tests/kde_tests.rs"]
+mod tests;
