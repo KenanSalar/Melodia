@@ -369,7 +369,7 @@ fn a_station_takes_the_best_name_on_offer() {
 /// [`super::directory_client`], which is [`super::ensure_enabled`] plus the handle — so the check
 /// is unskippable rather than remembered per call site.
 ///
-/// `services::radio_browser::tests::only_the_radio_facade_reaches_the_directory_client` holds the
+/// `services::net::radio_browser::tests::only_the_radio_facade_reaches_the_directory_client` holds the
 /// other direction, that nothing *outside* this module reaches the directory at all. Neither test
 /// covers the other's half: that one would pass with every call here on a raw client, and this one
 /// would pass with a second module fetching on its own.

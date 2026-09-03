@@ -5,7 +5,7 @@ paths:
   - src/library/playlist_files.rs
   - src/library/playlist_files/**/*.rs
   - src/database/queries/**/*.rs
-  - src/services/desktop_integration.rs
+  - src/services/platform/desktop_integration.rs
 ---
 
 # BLAKE3 Best Practices

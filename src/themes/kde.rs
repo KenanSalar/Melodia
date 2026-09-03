@@ -136,7 +136,7 @@ pub fn parse_hex_color(s: &str) -> Option<u32> {
 /// scheme that omits a status foreground, and always hands back something
 /// parseable. They fire only if that stops being true.
 #[cfg(target_os = "linux")]
-pub fn palette_from_kde(kde: &crate::services::system_theme::KdeColorPalette) -> Palette {
+pub fn palette_from_kde(kde: &crate::services::platform::system_theme::KdeColorPalette) -> Palette {
     let g =
         |key: &str| -> u32 { kde.colors.get(key).and_then(|s| parse_hex_color(s)).unwrap_or(0) };
     let overlay1 = g("overlay1");

@@ -15,7 +15,7 @@ use slint::ComponentHandle;
 
 use crate::error::AppError;
 use crate::library;
-use crate::services::discord::DiscordStatus;
+use crate::services::integrations::discord::DiscordStatus;
 use crate::services::settings::DiscordFlags;
 use crate::state::AppState;
 use crate::{AppWindow, Settings};

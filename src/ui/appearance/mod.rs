@@ -63,8 +63,8 @@ pub(super) fn read_initial_system_state() -> SystemColorState {
     #[cfg(target_os = "linux")]
     {
         SystemColorState {
-            theme: services::system_theme::get_system_theme_blocking(),
-            kde_palette: services::system_theme::get_kde_colors(),
+            theme: services::platform::system_theme::get_system_theme_blocking(),
+            kde_palette: services::platform::system_theme::get_kde_colors(),
             material_you: None,
         }
     }

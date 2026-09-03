@@ -20,18 +20,16 @@ pub mod check;
 pub mod event;
 pub mod github;
 pub mod install;
-pub mod linux_pkg;
 pub mod manifest;
 pub mod minisign;
-mod probe;
-pub mod system_install;
-pub mod target;
 pub mod version;
 
 pub use check::{CheckOutcome, check_for_update};
 pub use event::{FailureKind, UpdaterEvent};
 pub use install::{download_and_install, prune_stale_staging};
-pub use system_install::is_system_install;
+// Re-exported from `platform::install_kind`, whose two other consumers are why it left this
+// directory. Kept here so the UI keeps asking the updater whether an install is a system one.
+pub use crate::services::platform::install_kind::{install_target, is_system_install};
 
 /// Whether this build has an in-app updater at all.
 ///
@@ -56,26 +54,6 @@ pub fn is_available() -> bool {
 pub fn install_target_old() -> AppResult<PathBuf> {
     let target = install_target()?;
     Ok(install::old_path(&target))
-}
-
-/// The file the swap actually replaces. On an `AppImage` run the executable path is
-/// the read-only squashfs mount and the replaceable file is at `$APPIMAGE`; every
-/// path-touching module here routes through this, the **only** function in the
-/// updater that asks for the running binary's path.
-///
-/// The other arm goes through [`crate::utils::exe::current_exe`] rather than
-/// `std::env::current_exe()`, which on Linux hands back a `<path> (deleted)` string
-/// once the binary has been replaced on disk — an RPM/DEB upgrade mid-session is
-/// exactly that, and this answer is what `desktop_integration` bakes into the user's
-/// `Exec=` line and what `linux_pkg::detect` looks up in the package database.
-pub fn install_target() -> AppResult<PathBuf> {
-    if cfg!(target_os = "linux")
-        && let Ok(p) = std::env::var("APPIMAGE")
-        && !p.is_empty()
-    {
-        return Ok(PathBuf::from(p));
-    }
-    Ok(crate::utils::exe::current_exe()?)
 }
 
 #[cfg(test)]

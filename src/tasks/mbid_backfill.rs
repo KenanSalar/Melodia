@@ -24,8 +24,8 @@ use tokio_util::sync::CancellationToken;
 use crate::database::queries;
 use crate::error::AppResult;
 use crate::library::mbid;
-use crate::services::scrobble::ScrobbleService;
-use crate::services::scrobble::providers::listenbrainz::{
+use crate::services::integrations::scrobble::ScrobbleService;
+use crate::services::integrations::scrobble::providers::listenbrainz::{
     self, ListenBrainzError, LookupQuery, MAX_LOOKUPS_PER_POST,
 };
 use crate::state::AppState;

@@ -1,6 +1,6 @@
 //! Scrobbling background tasks: a **detector** that turns the player's
 //! view-model + position watch channels into scrobble / now-playing decisions
-//! (via the pure [`crate::services::scrobble::detector::DetectorState`]), and a
+//! (via the pure [`crate::services::integrations::scrobble::detector::DetectorState`]), and a
 //! **submitter** that drains
 //! the durable queue to the providers with per-provider batching, retry, and
 //! backoff.
@@ -19,8 +19,8 @@ use crate::database::DbPool;
 use crate::database::queries;
 use crate::entities::track::ScrobbleRow;
 use crate::player::state::{PlayerViewModelLight, PositionTick};
-use crate::services::scrobble::detector::{DetectorState, Effect};
-use crate::services::scrobble::{ScrobbleService, ScrobbleTrack};
+use crate::services::integrations::scrobble::detector::{DetectorState, Effect};
+use crate::services::integrations::scrobble::{ScrobbleService, ScrobbleTrack};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 

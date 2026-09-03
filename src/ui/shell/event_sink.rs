@@ -2,7 +2,7 @@
 //! `library::*` calls on the tokio runtime. It does **not** import Slint —
 //! the name reflects "where it ships to" (the UI binary), not what it
 //! depends on. Keeping souvlaki decoupled from Slint matters for the
-//! `EventSink` trait contract in `services::media_controls`.
+//! `EventSink` trait contract in `services::integrations::media_controls`.
 
 use crate::library;
 use crate::player::event_sink::{EventSink, PlayerEvent};

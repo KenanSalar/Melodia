@@ -1,4 +1,4 @@
-//! Glue between the system tray ([`crate::services::tray`]) and the rest of the app.
+//! Glue between the system tray ([`crate::services::platform::tray`]) and the rest of the app.
 //!
 //! Three pieces:
 //!
@@ -19,7 +19,7 @@ use slint::ComponentHandle;
 
 use crate::player::event_sink::{EventSink, PlayerEvent};
 use crate::player::state::PlayerViewModelLight;
-use crate::services::tray::{self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TraySnapshot};
+use crate::services::platform::tray::{self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TraySnapshot};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use crate::ui::shell::event_sink::SlintEventSink;

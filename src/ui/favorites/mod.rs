@@ -238,7 +238,7 @@ impl FavoritesUi {
         // whatever the flags held on the way out.
         self.mark_songs_dirty();
         self.mark_grids_dirty();
-        crate::services::allocator::trim();
+        crate::services::platform::allocator::trim();
     }
 
     pub(crate) fn state(&self) -> &FavoritesUiState {

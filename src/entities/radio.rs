@@ -302,7 +302,7 @@ pub const UNKNOWN_CODEC: &str = "UNKNOWN";
 /// whether its own last check reached it, none of which the table has a column
 /// for; the table's id, stored logo, sort key and play stats mean nothing until
 /// the user keeps the station. Keeping the wire shape out of `src/ui/` is the
-/// other half of it: a callback names this and never `services::radio_browser`.
+/// other half of it: a callback names this and never `services::net::radio_browser`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DirectoryStation {
     pub station_uuid: String,
@@ -417,7 +417,7 @@ pub enum SearchOrder {
 }
 
 /// A directory query, filled in by the caller and turned into request parameters
-/// by `services::radio_browser`.
+/// by `services::net::radio_browser`.
 ///
 /// `Default` is the first screen with nothing typed: most-clicked first, one
 /// page, no filters.

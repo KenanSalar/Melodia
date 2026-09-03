@@ -23,9 +23,9 @@ use chrono::{DateTime, Local};
 use crate::config::Paths;
 use crate::database::queries;
 use crate::error::{AppError, AppResult};
-use crate::services::crash_report::FILE_TS_FORMAT;
+use crate::services::platform::crash_report::FILE_TS_FORMAT;
+use crate::services::platform::{crash_report, logging};
 use crate::services::settings::read_settings;
-use crate::services::{crash_report, logging};
 use crate::state::AppState;
 use crate::utils::redact::redact_home;
 

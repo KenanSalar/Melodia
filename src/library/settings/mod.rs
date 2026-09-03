@@ -110,7 +110,7 @@ pub fn get_view_state(state: &AppState) -> Result<ViewStateData, AppError> {
 pub async fn get_system_theme() -> String {
     #[cfg(target_os = "linux")]
     {
-        crate::services::system_theme::get_system_theme().await
+        crate::services::platform::system_theme::get_system_theme().await
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -125,8 +125,8 @@ pub async fn get_system_theme() -> String {
 // `services::settings::*` directly.
 
 #[cfg(target_os = "linux")]
-pub fn get_kde_colors() -> Option<crate::services::system_theme::KdeColorPalette> {
-    crate::services::system_theme::get_kde_colors()
+pub fn get_kde_colors() -> Option<crate::services::platform::system_theme::KdeColorPalette> {
+    crate::services::platform::system_theme::get_kde_colors()
 }
 
 #[cfg(not(target_os = "linux"))]

@@ -7,7 +7,7 @@
 //! - [`install`] runs once at boot. Seeds `Updater.current-version` from
 //!   `CARGO_PKG_VERSION`, `Updater.auto-check-enabled` from disk,
 //!   `Updater.system-managed` from the writability probe in
-//!   `services::updater::system_install`, and `Updater.updates-supported`
+//!   `services::platform::install_kind::system_install`, and `Updater.updates-supported`
 //!   from `services::updater::is_available` — false on a source build,
 //!   which takes the whole section rather than trading its buttons.
 //! - [`install_event_subscriber`] hooks `event_rx` onto a UI-thread

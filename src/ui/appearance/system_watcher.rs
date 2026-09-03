@@ -39,7 +39,7 @@ pub(super) fn spawn_os_state_watcher(
     kick: Signal,
 ) {
     let (tx, mut rx) = watch::channel(initial);
-    services::system_theme::spawn_color_watcher(tx);
+    services::platform::system_theme::spawn_color_watcher(tx);
 
     let weak = ui.as_weak();
     let s = state.clone();

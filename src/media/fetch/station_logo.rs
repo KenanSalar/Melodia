@@ -39,7 +39,7 @@ const MIN_LOGO_DIM: u32 = 32;
 /// Deadline on one logo request, start to finish.
 ///
 /// The shared client bounds a *read* and a connect, not a request, so a host that trickles bytes
-/// never trips either and holds its slot for minutes. `services::radio_browser` wraps its own calls
+/// never trips either and holds its slot for minutes. `services::net::radio_browser` wraps its own calls
 /// for the same reason. Set well under that: a favicon this slow is a miss, and a page's worth of
 /// them queue behind each other.
 pub(super) const LOGO_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);

@@ -56,7 +56,7 @@ pub fn spawn_background_tasks(
         let sink: Arc<dyn EventSink> = Arc::new(ui::shell::event_sink::SlintEventSink {
             state: state.clone(),
         });
-        services::media_controls::spawn_event_receiver(
+        services::integrations::media_controls::spawn_event_receiver(
             &state.task_tracker,
             state.shutdown_token.clone(),
             rx,
@@ -123,12 +123,12 @@ pub fn open_startup_files(
 pub fn serve_file_opens(
     state: &AppState,
     app: &AppWindow,
-    listener: services::single_instance::Listener,
+    listener: services::platform::single_instance::Listener,
 ) {
     let state = state.clone();
     let weak = app.as_weak();
 
-    services::single_instance::serve(listener, move |paths| {
+    services::platform::single_instance::serve(listener, move |paths| {
         // Raise either way — an empty forward is someone launching Melodia
         // again to get at the window.
         let _ = weak.upgrade_in_event_loop(|ui| ui::shell::tray_bridge::raise_window(&ui));

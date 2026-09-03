@@ -30,8 +30,8 @@ pub struct Paths {
     /// `database::backup`. Its own directory so the retention sweep runs
     /// somewhere the live database and its `-wal`/`-shm` sidecars aren't.
     pub backups_dir: PathBuf,
-    /// The rolling log files `services::logging` writes and the crash reports
-    /// `services::crash_report` drops beside them. One directory rather than
+    /// The rolling log files `services::platform::logging` writes and the crash reports
+    /// `services::platform::crash_report` drops beside them. One directory rather than
     /// two, so "Open log folder" shows a reporter everything at once — the two
     /// naming schemes don't overlap and each sweep is gated on its own.
     pub logs_dir: PathBuf,

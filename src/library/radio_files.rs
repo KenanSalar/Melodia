@@ -203,7 +203,7 @@ async fn import_one(
     // without this a blocked station is one export away from a row. Counted as
     // skipped rather than reported: the caller has no vocabulary for the difference
     // and giving it one would describe the blocklist to whoever read the toast.
-    if crate::services::radio_blocklist::blocks(&station) {
+    if crate::services::net::radio_blocklist::blocks(&station) {
         return Ok(false);
     }
     let existing = queries::radio::kept_station_matching(

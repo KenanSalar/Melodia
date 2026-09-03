@@ -18,8 +18,8 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use crate::player::state::PlayerViewModelLight;
-use crate::services::discord::DiscordPresenceService;
-use crate::services::discord::model::{PresenceState, Update};
+use crate::services::integrations::discord::DiscordPresenceService;
+use crate::services::integrations::discord::model::{PresenceState, Update};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 

@@ -3,7 +3,7 @@ paths:
   - src/ui/radio/**/*.rs
   - src/library/radio/**/*.rs
   - src/library/radio_files.rs
-  - src/services/radio_browser/**/*.rs
+  - src/services/net/radio_browser/**/*.rs
   - src/player/stream_source.rs
   - src/player/prebuffer.rs
   - src/player/stream_decode.rs

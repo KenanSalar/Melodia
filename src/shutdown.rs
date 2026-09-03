@@ -1,7 +1,7 @@
 //! Shutdown sequence: state flush, task cancellation + bounded wait,
 //! runtime drop in background, optional respawn.
 
-use melodia::services::single_instance::RESPAWN_ENV;
+use melodia::services::platform::single_instance::RESPAWN_ENV;
 use melodia::{AppWindow, Nav, services, state::AppState, ui, utils};
 use slint::ComponentHandle;
 

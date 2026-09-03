@@ -129,10 +129,10 @@ fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_
 
     // Paint the OS-drawn caption in the same mantle so it blends into the chrome
     // below. Nothing to paint until the window is shown, which `main.rs`'s
-    // post-show one-shot covers. See [`crate::services::dwm_titlebar`].
+    // post-show one-shot covers. See [`crate::services::platform::dwm_titlebar`].
     #[cfg(target_os = "windows")]
     if let Some(hwnd) = crate::ui::window_chrome::win32_hwnd(ui) {
-        crate::services::dwm_titlebar::apply(hwnd, p.mantle);
+        crate::services::platform::dwm_titlebar::apply(hwnd, p.mantle);
     }
 }
 
@@ -149,7 +149,7 @@ pub fn reapply_from_theme(app: &AppWindow) {
         return;
     };
     let mantle = color_to_rgb(app.global::<ThemeGlobal>().get_mantle().color());
-    crate::services::dwm_titlebar::apply(hwnd, mantle);
+    crate::services::platform::dwm_titlebar::apply(hwnd, mantle);
 }
 
 /// A `0x00RRGGBB` value as an opaque solid `Brush`. `pub(crate)` because Now

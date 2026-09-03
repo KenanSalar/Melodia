@@ -760,7 +760,7 @@ turn it red; the fix is the glob edit in the same commit, never a skip. That is 
       (platform is core-only), and the two answers are to accept the edge or to notice that
       `Palette` is sixteen `u32`s with no behaviour and belongs further down. **Phase C decides
       it**; the module doc carries the question so it cannot be decided by accident.
-- [ ] **B6. `services/` regroups into net, platform, integrations and app.** The largest item, and
+- [x] **B6. `services/` regroups into net, platform, integrations and app.** The largest item, and
       three of its four groups changed under findings 18 and 19.
       - **`net/`**: B1's primitives, `radio_browser/`, `radio_blocklist/` with its bake left wired
         as it is until Phase C.
@@ -778,7 +778,25 @@ turn it red; the fix is the glob edit in the same commit, never a skip. That is 
       Five rules name a moved file literally and are edited in this commit: `blake3.md` and
       `updater.md` (`desktop_integration`), `desktop-shell.md` (`tray`, `media_controls`,
       `always_on_top`, `dwm_titlebar`), `diagnostics.md` (`logging`, `crash_report`, and
-      `services/mod.rs` from B1), `radio.md` (`radio_browser`).
+      `services/mod.rs` from B1), `radio.md` (`radio_browser`). Nine globs in all, plus the radio
+      facade pin, whose two path constants both moved.
+
+      **Two platform-to-app edges, not one, and the item budgeted for neither.**
+      `always_on_top`'s `&AppState` was the known one and narrowed as planned; its
+      `AlwaysOnTopMethod` gained `Copy` on the way, every variant being a unit one.
+      `logging::install` was the other: it opened `settings.json` itself to read one bool before
+      the logger existed, which is a platform adapter reading the app's file. It takes `verbose`
+      as a parameter now and `main` does the read one line earlier, so the ordering the doc
+      comment argues for is unchanged. **`src/services/platform/` reaches `config`, `error`,
+      `themes` and `utils` and nothing else.**
+
+      **What is left is one class, not two edges, and Phase C should decide it once.**
+      `integrations` names `settings::{ScrobbleFlags, DiscordFlags}` at six sites, and B5 left
+      `image` naming `themes::Palette`. All three are plain serde or plain-data structs sitting one
+      layer above everything that reads them, which is the shape `entities/` already exists for.
+      Either the flag structs and `Palette` go there, or three crates grow a dependency each on the
+      crate that merely happens to declare them. Deciding it per-edge is how it gets decided three
+      different ways.
 - [ ] **B7. The cross-tier assertions leave the tiers that cannot hold them.** Four tests, not one,
       reach upward across a boundary they will not be able to cross, so all four become integration
       tests under `tests/` where Phase D is taking the corpus walks anyway.

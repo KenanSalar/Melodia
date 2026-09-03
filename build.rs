@@ -19,7 +19,7 @@ fn main() {
 /// time cannot come to disagree. A drift there has no symptom — every lookup would
 /// simply stop matching.
 mod blocklist {
-    include!("src/services/radio_blocklist/source.rs");
+    include!("src/services/net/radio_blocklist/source.rs");
 }
 
 /// Leave the pre-hashed form beside the list, for `gh secret set` to read.
@@ -88,7 +88,7 @@ fn write_blocklist() {
     println!("cargo:rerun-if-env-changed={BLOCKLIST_ENV}");
     println!("cargo:rerun-if-changed={BLOCKLIST_FILE}");
     // Without this the hashes would survive a change to how they are computed.
-    println!("cargo:rerun-if-changed=src/services/radio_blocklist/source.rs");
+    println!("cargo:rerun-if-changed=src/services/net/radio_blocklist/source.rs");
 
     let from_environment =
         std::env::var(BLOCKLIST_ENV).ok().filter(|contents| !contents.trim().is_empty());

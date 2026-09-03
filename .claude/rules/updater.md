@@ -1,7 +1,8 @@
 ---
 paths:
   - src/services/updater/**/*.rs
-  - src/services/desktop_integration.rs
+  - src/services/platform/install_kind/**/*.rs
+  - src/services/platform/desktop_integration.rs
   - src/tasks/updater_daily.rs
   - src/ui/settings/updater_settings.rs
   - wix/main.wxs
@@ -84,7 +85,7 @@ from `main.rs` without ever opening this file.
   **`ui::window_chrome::set_respawn_exe`** still has to capture the target *before* the swap and
   stays load-bearing. Don't read the central fix as retiring it.
 
-- **`services::desktop_integration` self-deploys `.desktop` + icon on boot for tarball installs.**
+- **`services::platform::desktop_integration` self-deploys `.desktop` + icon on boot for tarball installs.**
   Compiled-in payloads `assets/desktop/Melodia.desktop.tmpl` (`@EXEC@`) +
   `logo-with-background.svg`; BLAKE3-gated idempotent writes to
   `~/.local/share/applications/…desktop` + `~/.local/share/icons/…/melodia.svg`. Skipped on

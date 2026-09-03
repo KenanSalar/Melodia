@@ -4,6 +4,13 @@
 //! corpus for them rather than listing call sites: a URL arriving from outside the app is
 //! **parsed** rather than prefix-tested, and a body is **streamed under a cap** rather than
 //! collected and measured afterwards.
+//!
+//! The two radio modules sit here because the directory client is the tree's only other outbound
+//! HTTP consumer that is not a fetcher, and its blocklist leads it: `radio_blocklist` names
+//! `entities::radio` and nothing else.
+
+pub mod radio_blocklist;
+pub mod radio_browser;
 
 use crate::error::AppError;
 

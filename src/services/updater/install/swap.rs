@@ -13,8 +13,8 @@ use std::path::PathBuf;
 use crate::error::{AppError, AppResult};
 
 #[cfg(target_os = "linux")]
-use crate::services::updater::linux_pkg;
-use crate::services::updater::linux_pkg::LinuxPackageFormat;
+use crate::services::platform::install_kind::linux_pkg;
+use crate::services::platform::install_kind::linux_pkg::LinuxPackageFormat;
 
 /// Hand the staged package to the resolved package manager under `pkexec`, so
 /// it validates the file, installs it and updates its own DB.

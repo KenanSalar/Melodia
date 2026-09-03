@@ -38,7 +38,7 @@ use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowLevel;
 
 use crate::error::AppError;
-use crate::services::always_on_top::AlwaysOnTopMethod;
+use crate::services::platform::always_on_top::AlwaysOnTopMethod;
 use crate::state::AppState;
 use crate::utils::toast::{self, ToastKind};
 use crate::{AppWindow, Theme};
@@ -197,7 +197,13 @@ fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool)
                 // KWin enumerates `workspace.stackingOrder` by PID, so the window has to
                 // be mapped by the compositor first.
                 tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                if let Err(e) = crate::services::always_on_top::apply(&state, true).await {
+                if let Err(e) = crate::services::platform::always_on_top::apply(
+                    state.always_on_top.method,
+                    &state.paths.data_dir,
+                    true,
+                )
+                .await
+                {
                     log::warn!("startup always_on_top re-apply: {e}");
                 }
             });

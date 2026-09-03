@@ -13,7 +13,7 @@ use slint::winit_030::winit::window::WindowLevel;
 
 use crate::AppWindow;
 use crate::error::AppError;
-use crate::services::always_on_top::AlwaysOnTopMethod;
+use crate::services::platform::always_on_top::AlwaysOnTopMethod;
 use crate::state::AppState;
 
 pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool>) {

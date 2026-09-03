@@ -9,8 +9,8 @@ use crate::error::{AppError, AppResult};
 
 use super::github::{FetchOutcome, fetch_latest_manifest};
 use super::manifest::{self, LatestManifest, PlatformAsset};
-use super::target::current_target_key;
 use super::version::is_upgrade;
+use crate::services::platform::install_kind::target::current_target_key;
 
 #[derive(Debug, Clone)]
 pub enum CheckOutcome {

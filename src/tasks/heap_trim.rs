@@ -13,14 +13,14 @@
 //! piling up under a high repaint rate (`wl_closure_init` via
 //! `wl_display_read_events`). Reach for the producer, not the allocator.
 //!
-//! [`services::allocator::trim`](crate::services::allocator::trim) is still worth calling
+//! [`services::platform::allocator::trim`](crate::services::platform::allocator::trim) is still worth calling
 //! ad-hoc after a bulk free, such as clearing an artwork cache on view exit, where the memory
 //! really is free. The call itself lives beside the other glibc knob; what lives here is only
 //! the schedule.
 
 use std::time::Duration;
 
-use crate::services::allocator::trim;
+use crate::services::platform::allocator::trim;
 use crate::tasks::TaskSpawner;
 
 /// How long to let the startup churn settle before the one-shot trim.

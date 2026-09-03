@@ -128,7 +128,7 @@ fn wire_verbose_logging(ui: &AppWindow, state: &AppState) {
     ui.global::<Settings>().on_verbose_logging_changed(move |on| {
         // Live first: a failed disk write must not undo what the user can
         // already see working.
-        services::logging::set_verbose(on);
+        services::platform::logging::set_verbose(on);
         state.persist_blocking("persist verbose_logging", move |s| {
             library::settings::set_verbose_logging(s, on)
         });
@@ -142,7 +142,7 @@ fn wire_verbose_logging(ui: &AppWindow, state: &AppState) {
 /// one `read_dir` over a directory holding at most a handful of entries, and a
 /// marker write only when there is actually something to report.
 fn notify_previous_crash(ui: &AppWindow, state: &AppState, notifications: &NotificationsUi) {
-    let Some(report) = services::crash_report::take_unseen(&state.paths.logs_dir) else {
+    let Some(report) = services::platform::crash_report::take_unseen(&state.paths.logs_dir) else {
         return;
     };
     log::info!("previous run left a crash report: {}", report.display());

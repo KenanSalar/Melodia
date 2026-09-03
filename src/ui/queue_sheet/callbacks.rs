@@ -348,7 +348,7 @@ pub(super) fn wire_callbacks(
                         // cache-only first frame.
                         queue.set_covers_generation(0);
                         queue_covers.clear();
-                        runtime.spawn_blocking(crate::services::allocator::trim);
+                        runtime.spawn_blocking(crate::services::platform::allocator::trim);
                     });
                 });
             }

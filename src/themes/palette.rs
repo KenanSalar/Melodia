@@ -144,10 +144,10 @@ impl ThemeDef {
 /// out and `themes::tests::theme_slint_is_light_matches_on_accent_hex` builds
 /// its expected Slint expression from these, so a drift on either side fails.
 ///
-/// A third copy lives in `services::dwm_titlebar::is_dark_from_rgb`, duplicated
+/// A third copy lives in `services::platform::dwm_titlebar::is_dark_from_rgb`, duplicated
 /// on purpose to keep that windows-only module off the palette code that calls
 /// into it. It is pinned against `on_accent_hex` rather than against these, by
-/// `services::dwm_titlebar::tests` — which runs only under the
+/// `services::platform::dwm_titlebar::tests` — which runs only under the
 /// `test-windows` job, the reason that copy went unchecked for so long.
 pub const LUMA_R: f64 = 0.2126;
 pub const LUMA_G: f64 = 0.7152;

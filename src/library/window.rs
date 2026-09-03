@@ -7,13 +7,18 @@ use crate::state::AppState;
 
 /// Apply the user's pinned choice and persist it. On Linux this drops
 /// into the `KWin` / GNOME D-Bus backends via
-/// `services::always_on_top::apply`; on macOS / Windows the UI callback
+/// `services::platform::always_on_top::apply`; on macOS / Windows the UI callback
 /// already pushed `WindowLevel::AlwaysOnTop` to winit synchronously, so
 /// here we just persist. Returns `AppError::Window` when the desktop
 /// has no supported method — callers use that to revert the optimistic
 /// toggle they performed on the UI thread.
 pub async fn set_always_on_top(state: &AppState, pinned: bool) -> Result<(), AppError> {
-    services::always_on_top::apply(state, pinned).await?;
+    services::platform::always_on_top::apply(
+        state.always_on_top.method,
+        &state.paths.data_dir,
+        pinned,
+    )
+    .await?;
     let paths = state.paths.clone();
     tokio::task::spawn_blocking(move || {
         services::settings::mutate_settings(&paths, |s| {

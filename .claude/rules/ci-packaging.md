@@ -98,7 +98,7 @@ coverage on this path.
   `MoveFileExW` all rest on today. A release build never passes `--cfg test` either, so a
   `cfg(windows)` test has never been type-checked, let alone run: `updater::install`'s four and
   the `all(test, target_os = "windows")` re-export written to feed them were authored blind. That
-  is the bigger half of what this job unlocks. `services::dwm_titlebar::is_dark_from_rgb`, the
+  is the bigger half of what this job unlocks. `services::platform::dwm_titlebar::is_dark_from_rgb`, the
   third copy of the luminance threshold, split on `lum < 0.5` where its two siblings split on
   `lum > 0.5` for *light*, so the caption disagreed with the chrome under it on every colour
   landing exactly on the threshold; the pin that holds it now is a `cfg(windows)` test, which is to

@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use crate::entities::radio;
 use crate::error::AppError;
-use crate::services::radio_browser;
+use crate::services::net::radio_browser;
 use crate::state::AppState;
 
 use super::directory_client;

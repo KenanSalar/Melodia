@@ -43,7 +43,7 @@ pub(super) use authoring::{resolve_station_name, validated_overrides};
 use crate::database::queries;
 use crate::entities::radio;
 use crate::error::AppError;
-use crate::services::radio_browser;
+use crate::services::net::radio_browser;
 use crate::state::AppState;
 
 /// Stations per directory page.

@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use super::*;
-use crate::services::system_theme::KdeColorPalette;
+use crate::services::platform::system_theme::KdeColorPalette;
 
 /// Breeze's own status foregrounds, i.e. what the mapper must land on when a
 /// scheme's colour is unusable. Same values as the static `themes::kde`

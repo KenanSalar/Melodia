@@ -11,7 +11,7 @@ use crate::entities::radio;
 use crate::error::AppError;
 use crate::library::playback;
 use crate::player::types::RadioNowPlaying;
-use crate::services::radio_browser;
+use crate::services::net::radio_browser;
 use crate::state::AppState;
 
 use super::{

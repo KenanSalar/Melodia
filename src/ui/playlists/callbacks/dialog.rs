@@ -87,7 +87,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             // release it here — this is the one `on_closed`, extended not
             // duplicated.
             ui.global::<TagEditor>().set_cover(Image::default());
-            s.runtime.spawn_blocking(crate::services::allocator::trim);
+            s.runtime.spawn_blocking(crate::services::platform::allocator::trim);
         });
     }
 

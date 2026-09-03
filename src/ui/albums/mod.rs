@@ -154,7 +154,7 @@ impl AlbumsUi {
             self.detail.all_tracks.lock().clear();
             self.detail.applied_selection.lock().clear();
         }
-        crate::services::allocator::trim();
+        crate::services::platform::allocator::trim();
     }
 
     /// Drop just the grid tier, on opening an album: the grid unmounts the
@@ -163,7 +163,7 @@ impl AlbumsUi {
     /// grid re-warms through [`Self::prewarm_visible_covers`].
     pub fn release_grid_covers(&self) {
         self.grid_covers.clear();
-        crate::services::allocator::trim();
+        crate::services::platform::allocator::trim();
     }
 
     /// The mirror image, on closing one: the detail's slots aren't queried again
@@ -171,7 +171,7 @@ impl AlbumsUi {
     /// stays warm.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
-        crate::services::allocator::trim();
+        crate::services::platform::allocator::trim();
     }
 
     /// Re-decode the first screenful of grid covers, so a section enter over

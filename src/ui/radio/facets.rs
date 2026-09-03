@@ -4,7 +4,7 @@
 //! used to wait for a chip to be opened, on the argument that four lists nobody may ever filter by
 //! are four requests. [`super::suggest`] is what overtook that: a list arriving on the chip's own
 //! open arrives after the needle it was wanted for. They are still four requests a session that
-//! never leaves Favorites will not read — `services::radio_browser` holds each in a `OnceCell`, so
+//! never leaves Favorites will not read — `services::net::radio_browser` holds each in a `OnceCell`, so
 //! that is one round of them per run, and every chip now opens on its list rather than a spinner.
 //!
 //! One model serves every chip, because only one picker can be up at a time. `Radio.facet-shown`

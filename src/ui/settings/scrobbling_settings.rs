@@ -23,8 +23,8 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::error::AppError;
 use crate::library;
-use crate::services::scrobble::providers::{lastfm, listenbrainz};
-use crate::services::scrobble::{
+use crate::services::integrations::scrobble::providers::{lastfm, listenbrainz};
+use crate::services::integrations::scrobble::{
     ListenBrainzCredentials, LoveTarget, ScrobbleService, ScrobbleStatus,
 };
 use crate::services::settings::ScrobbleFlags;

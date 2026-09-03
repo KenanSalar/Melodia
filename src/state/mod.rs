@@ -24,14 +24,12 @@ use crate::player::state::{
     PlayerStateHandle, PlayerViewModelLight, PositionTick, QueueViewModel, lock_state,
 };
 use crate::player::stream_health::{self, AudioStreamHealth};
-use crate::services::{
-    always_on_top::{self, AlwaysOnTopCapability},
-    discord::DiscordPresenceService,
-    media_controls::{self, MediaControlsHandle},
-    scrobble::ScrobbleService,
-    search_history::SearchHistoryState,
-    settings,
-};
+use crate::services::integrations::discord::DiscordPresenceService;
+use crate::services::integrations::media_controls::{self, MediaControlsHandle};
+use crate::services::integrations::scrobble::ScrobbleService;
+use crate::services::platform::always_on_top::{self, AlwaysOnTopCapability};
+use crate::services::search_history::SearchHistoryState;
+use crate::services::settings;
 use crate::utils::self_writes::SelfWrites;
 
 /// One scan-progress sample published while a folder scan is running. `None`

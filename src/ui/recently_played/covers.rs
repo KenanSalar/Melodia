@@ -100,7 +100,7 @@ impl RecentlyPlayedUi {
             self.most_played_thumbs.clear();
         }
         let warm = self.prewarm_tab_covers(entering);
-        crate::services::allocator::trim();
+        crate::services::platform::allocator::trim();
         warm
     }
 

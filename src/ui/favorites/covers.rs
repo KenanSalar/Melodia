@@ -94,7 +94,7 @@ impl FavoritesUi {
             self.artist_thumbs.clear();
         }
         let warm = self.prewarm_tab_covers(entering);
-        crate::services::allocator::trim();
+        crate::services::platform::allocator::trim();
         warm
     }
 
@@ -103,7 +103,7 @@ impl FavoritesUi {
     /// [`crate::ui::albums::AlbumsUi::release_grid_covers`].
     pub fn release_artist_covers(&self) {
         self.artist_thumbs.clear();
-        crate::services::allocator::trim();
+        crate::services::platform::allocator::trim();
     }
 
     /// Lazy cover lookup for the Most Played grid cards, via

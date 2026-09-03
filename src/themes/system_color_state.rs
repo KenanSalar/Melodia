@@ -20,7 +20,7 @@ use super::palette::Palette;
 pub struct SystemColorState {
     pub theme: String,
     #[cfg(target_os = "linux")]
-    pub kde_palette: Option<crate::services::system_theme::KdeColorPalette>,
+    pub kde_palette: Option<crate::services::platform::system_theme::KdeColorPalette>,
     /// `(palette, accent_hex)` produced by the Material You coordinator.
     /// `Palette` is `Copy` (32 bytes), so this slot is essentially free
     /// to clone alongside the rest of the state.
