@@ -38,6 +38,10 @@ log.workspace = true
 [dev-dependencies]
 # The scrobble queue's suites persist into a throwaway data root.
 tempfile.workspace = true
+# `discord::artwork`'s lookup test drives a paused clock, and `test-util` is what supplies one.
+# Reaching it through another member's dev-dependency is what `--workspace` feature unification
+# does and what `cargo test -p melodia-integrations` does not, so the crate asks for its own.
+tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true
