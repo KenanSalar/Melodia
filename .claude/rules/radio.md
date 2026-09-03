@@ -46,8 +46,8 @@ is the copy to delete.
 - **The switch itself is argued on `library::radio`'s own items** — why it sits at the facade,
   what the getters are exempt from, and why the logo download is not. What spans is the pair of
   walks holding it, one per direction and neither covering the other's half:
-  `melodia-tidy`'s `radio_facade::every_outbound_call_takes_its_client_from_behind_the_switch` counts the
-  reaches inside the facade, `melodia-tidy`'s `radio_facade::only_the_radio_facade_reaches_the_directory_client`
+  `tests/radio_facade.rs`'s `every_outbound_call_takes_its_client_from_behind_the_switch` counts the
+  reaches inside the facade, `tests/radio_facade.rs`'s `only_the_radio_facade_reaches_the_directory_client`
   counts them outside it. So **`http_client()` may be named exactly once across all of
   `library/radio/`** and `radio_browser` may be named nowhere else in the tree. Both walks read the
   facade off its **directory** rather than off a file list, so a sixth submodule is covered the day
@@ -101,7 +101,7 @@ is the copy to delete.
   including `handlers.rs` — the monitor the reconnect argument is *about*, and the one file in it
   no glob here reaches.
 - **The feed thread's name is spelled inline and may not become a const.**
-  `melodia-tidy`'s `packaging::no_thread_name_outgrows_what_the_kernel_keeps` matches a literal after
+  `tests/packaging.rs`'s `no_thread_name_outgrows_what_the_kernel_keeps` matches a literal after
   `.name(`, so lifting `"radio-buffer"` out would leave it silently unmeasured — the one refactor
   here that looks like an improvement and disables a check.
 - **Nothing may call `StreamDownload::new_http`** — it constructs its own unconfigured client behind

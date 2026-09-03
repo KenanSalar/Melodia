@@ -374,7 +374,6 @@ no mixer; the tag writer has no state machine.
 crates/
 ├── melodia-core         errors, paths, domain types, the theme registry
 ├── melodia-testkit      shared fixtures and corpus walkers (dev-only, names nothing)
-├── melodia-tidy         repo-wide checks over the tree as text, outside every crate they check
 ├── melodia-artwork      decode, resize, the artwork store, the thumbnail cache
 ├── melodia-net          the HTTP primitives, the artwork/logo fetchers, the radio directory
 ├── melodia-platform     tray, logging, crash reports, single instance, system theme

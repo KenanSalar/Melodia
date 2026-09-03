@@ -71,7 +71,7 @@ pub mod window_chrome;
 // thing here a dark-palette reviewer cannot see going wrong.
 //
 // What used to sit among them and no longer does is the set that walked the *tree* rather
-// than reading a component: those are `melodia-tidy`'s, on the rule that a check
+// than reading a component: those are `crates/melodia/tests/`, on the rule that a check
 // enumerating a corpus does not belong in a crate the corpus contains.
 #[cfg(test)]
 #[path = "tests/aurora_backdrop_tests.rs"]

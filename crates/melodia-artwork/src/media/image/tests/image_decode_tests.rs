@@ -1,5 +1,5 @@
 //! The shared resize primitive. That it stays the *only* one is a question about every
-//! crate, so `melodia-tidy` holds it.
+//! crate, so `crates/melodia/tests/` holds it.
 
 use super::*;
 use crate::test_support::{write_test_jpeg, write_test_jpeg_sized, write_test_png};

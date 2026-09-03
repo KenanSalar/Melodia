@@ -124,6 +124,10 @@ winresource.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 melodia-testkit = { path = "../melodia-testkit" }
 tempfile.workspace = true
+# The rules pin asks whether each `.claude/rules` `paths:` entry still matches anything, and half
+# of them are globs. Hand-rolling `**` inside the one test that exists to catch silent drift is
+# the wrong place to be clever.
+glob.workspace = true
 # `tests/cross_tier.rs` reads `pragma_table_info` off a `test_pool`, which is the
 # only place this package touches the database directly.
 sqlx.workspace = true

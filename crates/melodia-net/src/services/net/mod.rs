@@ -1,7 +1,7 @@
 //! The primitives every outbound fetch in the tree shares.
 //!
-//! Two rules live here and both are violable from any file, so `melodia-tidy` walks the
-//! corpus for them rather than listing call sites: a URL arriving from outside the app is
+//! Two rules live here and both are violable from any file, so the corpus pins walk the
+//! tree for them rather than listing call sites: a URL arriving from outside the app is
 //! **parsed** rather than prefix-tested, and a body is **streamed under a cap** rather than
 //! collected and measured afterwards.
 //!

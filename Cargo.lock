@@ -3619,6 +3619,7 @@ name = "melodia"
 version = "0.12.0"
 dependencies = [
  "async-compat",
+ "glob",
  "log",
  "melodia-app",
  "melodia-artwork",
@@ -3868,15 +3869,6 @@ version = "0.12.0"
 dependencies = [
  "image",
  "tempfile",
-]
-
-[[package]]
-name = "melodia-tidy"
-version = "0.12.0"
-dependencies = [
- "glob",
- "melodia-core",
- "melodia-testkit",
 ]
 
 [[package]]

@@ -1197,15 +1197,22 @@ Five commits. Everything below is done.
       `wix/main.wxs` relative to the manifest `--package` selects, and the flag's resolution base is
       undocumented and exercised by nothing short of a tagged Windows release. Its default layout
       costs three `..` in `RepoRoot` and re-points two pins the local suite runs.
-- [x] **D3. `crates/melodia-tidy` — the repo-wide checks get one home.** A leaf naming only
-      `melodia-testkit` and `melodia-core`, so `cargo test -p melodia-tidy` compiles the walkers and
-      stops. rustc keeps the same checks in `src/tools/tidy` and rust-analyzer behind `cargo xtask
-      tidy`; rust-analyzer's contributor guide asks for the narrowest useful test command, which
-      this tree could not offer while a `melodia-net` test compiled `melodia-views`' sources.
+- [x] **D3. The repo-wide checks get one home: `crates/melodia/tests/`.** Finding 6 put `tests/`
+      there and finding 8 asked for one home for the walks; this is both, and the two land in one
+      directory because the binary is the only crate that is above all of them.
+
+      **A dedicated `melodia-tidy` crate was built first and then folded back in**, which is worth
+      recording because the argument for it was thinner than it looked. rustc and rust-analyzer do
+      keep repo-wide checks in a crate of their own, but both are *binaries* — `src/tools/tidy` run
+      by `x.py test tidy`, `xtask/src/tidy.rs` run by `cargo xtask tidy` — so the precedent supports
+      the separate crate and not the shape built, which was integration tests. What the separate
+      crate genuinely bought was that a broken app cannot hide a repo check; what it cost was a
+      fifteenth member and a `lib.rs` holding nothing but a doc comment. Against a gate that is
+      `cargo test --workspace`, where every member is compiled anyway, that trade did not pay.
 
       **The criterion is the corpus, not the subject**: a check that *enumerates* one moves, a pin
-      on one named file stays. Both halves of the radio off-switch pin land together, which is what
-      finding 8 wanted and neither crate could give.
+      on one named file stays beside the module it describes. Both halves of the radio off-switch
+      pin land together, which is what finding 8 wanted and neither crate could give.
 
       **Nine self-exemptions are deleted rather than re-pointed.** A walk inside the corpus it walks
       is its own first hit, so each named itself, and two had bent their shape around it —
@@ -1215,8 +1222,9 @@ Five commits. Everything below is done.
       inside `melodia-views`; `melodia-ui` cannot host them, `[lib] test = false` being A11.
       `depth_between` goes to the testkit, being needed on both sides of the split and the same
       category as `blocks_named` beside it. **`SUPPORTED_LOCALES` goes to `entities::locale`** on
-      Phase C's own rule — three tiers read it, and leaving it in `melodia-app` would have put the
-      command layer on tidy's dependency line for seven string literals.
+      Phase C's own rule, which it meets on its own terms — app validates a persisted code and views
+      indexes its native names, two tiers above the crate that merely declared it, which is the same
+      shape as that phase's `ScrobbleFlags` call.
 
       The criterion is exhaustive rather than aspirational: no crate's `src/` calls a corpus
       enumerator at all. Fifty-four checks in twenty-four files.
@@ -1235,7 +1243,7 @@ default selection.
 
 **The one measurement left open is the CI test job's memory cap.** `CARGO_BUILD_JOBS: 4` is argued
 against the number of test binaries linked, and that number is 43 rather than the five its comment
-claimed or the "roughly fourteen" this plan predicted — the tidy split alone turned 18 into 43, each
+claimed or the "roughly fourteen" this plan predicted — collecting the walks alone turned 18 into 42, each
 walk file being a binary of its own. The count is corrected in the comment; whether 4 is still the
 right cap is a question only a runner can answer, since what it holds down is peak RSS during
 linking and this machine has more memory than one. Cheap to raise if the job's wall clock starts to
@@ -1314,9 +1322,8 @@ Phase boundaries:
   whose bin target is still `Melodia`, which `--version` confirms by printing `Melodia 0.12.0`;
   `cargo deb -p melodia` resolves `target/release/Melodia` to the *workspace* target dir and the
   other eight assets off the new manifest dir. `grep -rn 'rust_sources()\|slint_sources()\|
-  spellings_outside(' crates/*/src` returns nothing outside `melodia-testkit`, and `cargo tree -p
-  melodia-tidy` lists `melodia-core` and `melodia-testkit` and nothing else. The same 2,237 tests
-  pass, across 43 binaries rather than 18.
+  spellings_outside(' crates/*/src` returns nothing outside `melodia-testkit`. The same 2,237 tests
+  pass, across 42 binaries rather than 18.
 
   Left for the release gate, which needs a release build: `scripts/build-{rpm,appimage,tarball}.sh`
   each producing an artifact, `cargo build --timings` against the prerequisite baseline, and
