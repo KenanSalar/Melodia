@@ -7,7 +7,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::AppResult;
+use melodia_core::error::AppResult;
 
 /// Last.fm session credentials. The session key is long-lived (no expiry) and
 /// scoped to scrobbling on the user's own account.
@@ -36,7 +36,7 @@ pub struct ScrobbleCredentials {
 
 /// Read the credential file, defaulting to empty on a missing or unparseable file.
 pub fn load(path: &Path) -> AppResult<ScrobbleCredentials> {
-    crate::utils::atomic_file::load_json_or_default_sync(path)
+    melodia_core::utils::atomic_file::load_json_or_default_sync(path)
 }
 
 /// Atomically write the credential file, then tighten it to owner-only on Unix.
@@ -45,7 +45,7 @@ pub fn load(path: &Path) -> AppResult<ScrobbleCredentials> {
 /// renames on success; the `0o600` chmod afterward is net-new (no existing
 /// secure-write helper) and is a no-op on Windows.
 pub fn save(path: &Path, credentials: &ScrobbleCredentials) -> AppResult<()> {
-    crate::utils::atomic_file::write_json_sync(path, credentials)?;
+    melodia_core::utils::atomic_file::write_json_sync(path, credentials)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

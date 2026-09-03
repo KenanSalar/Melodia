@@ -1,5 +1,5 @@
 use super::{ScrobbleTrack, scrobble_threshold_ms};
-use crate::entities::track::ScrobbleRow;
+use melodia_core::entities::track::ScrobbleRow;
 
 /// A fully-populated row for the `from_row` conversion tests.
 fn row() -> ScrobbleRow {

@@ -17,7 +17,7 @@ use std::time::Duration;
 use lru::LruCache;
 use parking_lot::Mutex;
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 /// Bounded well inside the memory rules — 64 recently-played albums' URLs.
 const ARTWORK_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(64) {
@@ -89,7 +89,7 @@ pub(super) async fn resolve_album_cover(
     }
 
     let deezer = run_lookup(
-        crate::media::fetch::deezer::search_album_cover(client, artist, album),
+        melodia_net::media::fetch::deezer::search_album_cover(client, artist, album),
         "deezer",
     )
     .await;
@@ -100,7 +100,7 @@ pub(super) async fn resolve_album_cover(
     }
 
     let itunes = run_lookup(
-        crate::media::fetch::itunes::search_album_cover(client, artist, album),
+        melodia_net::media::fetch::itunes::search_album_cover(client, artist, album),
         "itunes",
     )
     .await;

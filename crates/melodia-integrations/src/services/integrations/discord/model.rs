@@ -8,9 +8,9 @@
 //! `tasks::discord_presence` drives it; [`super::payload`] serializes
 //! the [`Presence`] it produces and [`super::ipc`] ships the bytes.
 
-use crate::entities::integrations::DiscordFlags;
-use crate::player::engine::now_playing::{SourceId, SourceSummary};
-use crate::player::engine::state::PlayerViewModelLight;
+use melodia_core::entities::integrations::DiscordFlags;
+use melodia_engine::player::engine::now_playing::{SourceId, SourceSummary};
+use melodia_engine::player::engine::state::PlayerViewModelLight;
 
 /// Fallback album line / large-image caption when a track is untagged.
 const APP_NAME: &str = "Melodia";

@@ -27,7 +27,7 @@ impl ScrobbleTrack {
     /// scrobbled — both services require a non-empty artist and track name. Maps
     /// `title` → `track`, `duration_ms` → `duration_secs`, the `i32` track number
     /// to `u32`, and the two `MusicBrainz` ids to the recording/release MBIDs.
-    pub fn from_row(row: &crate::entities::track::ScrobbleRow) -> Option<Self> {
+    pub fn from_row(row: &melodia_core::entities::track::ScrobbleRow) -> Option<Self> {
         let artist = non_empty(row.artist.as_deref())?;
         let track = non_empty(Some(&row.title))?;
         Some(Self {

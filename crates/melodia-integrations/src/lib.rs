@@ -10,18 +10,6 @@
 //! a surface outside the app and take transport commands back is exactly what `discord` does, and
 //! the alternative put the engine, and cpal with it, under every crate wanting a tray icon.
 
-pub use melodia_core::{config, entities, error, themes, utils};
-
 pub mod services {
-    pub use melodia_net::services::net;
-
     pub mod integrations;
-}
-
-pub mod player {
-    pub use melodia_engine::player::engine;
-}
-
-pub mod media {
-    pub use melodia_net::media::fetch;
 }

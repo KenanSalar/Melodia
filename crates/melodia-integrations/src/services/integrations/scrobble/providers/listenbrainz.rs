@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 
 use reqwest::StatusCode;
 
-use crate::error::AppError;
 use crate::services::integrations::scrobble::model::ScrobbleTrack;
+use melodia_core::error::AppError;
 
 /// The `ListenBrainz` API root.
 const LB_API_BASE: &str = "https://api.listenbrainz.org";
@@ -83,7 +83,7 @@ pub async fn validate_token(
     if !status.is_success() {
         return Err(server_error(status, response).await);
     }
-    let bytes = crate::services::net::read_capped(
+    let bytes = melodia_net::services::net::read_capped(
         response,
         "ListenBrainz validate-token",
         ANSWER_MAX_BYTES,
@@ -178,7 +178,7 @@ pub async fn lookup_recording_mbids_bulk(
     if !status.is_success() {
         return Err(error_for(status, response).await);
     }
-    let bytes = crate::services::net::read_capped(
+    let bytes = melodia_net::services::net::read_capped(
         response,
         "ListenBrainz bulk metadata-lookup",
         ANSWER_MAX_BYTES,
@@ -236,11 +236,14 @@ async fn error_for(status: StatusCode, response: reqwest::Response) -> ListenBra
 /// unreadable body, or one past [`ERROR_MAX_BYTES`], degrades to an empty
 /// message.
 async fn server_error(status: StatusCode, response: reqwest::Response) -> ListenBrainzError {
-    let message =
-        crate::services::net::read_capped(response, "ListenBrainz error body", ERROR_MAX_BYTES)
-            .await
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-            .unwrap_or_default();
+    let message = melodia_net::services::net::read_capped(
+        response,
+        "ListenBrainz error body",
+        ERROR_MAX_BYTES,
+    )
+    .await
+    .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+    .unwrap_or_default();
     ListenBrainzError::Server {
         status: status.as_u16(),
         message,

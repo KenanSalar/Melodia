@@ -17,9 +17,9 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::error::AppError;
 use crate::services::integrations::scrobble::credentials::LastfmCredentials;
 use crate::services::integrations::scrobble::model::ScrobbleTrack;
+use melodia_core::error::AppError;
 
 pub const LASTFM_API_KEY: Option<&str> = non_empty_env(option_env!("LASTFM_API_KEY"));
 pub const LASTFM_SHARED_SECRET: Option<&str> = non_empty_env(option_env!("LASTFM_SHARED_SECRET"));
@@ -304,7 +304,8 @@ async fn send<K: Serialize>(
         .await
         .map_err(|e| AppError::network("Last.fm request failed", e))?;
     let bytes =
-        crate::services::net::read_capped(response, "Last.fm response", RESPONSE_MAX_BYTES).await?;
+        melodia_net::services::net::read_capped(response, "Last.fm response", RESPONSE_MAX_BYTES)
+            .await?;
     let body: serde_json::Value = serde_json::from_slice(&bytes)
         .map_err(|e| AppError::network("Failed to parse Last.fm response", e))?;
     if let Some(code) = body.get("error").and_then(serde_json::Value::as_u64) {

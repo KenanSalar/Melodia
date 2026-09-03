@@ -19,8 +19,8 @@ use std::sync::{Arc, OnceLock, mpsc};
 use parking_lot::{Mutex, RwLock};
 use tokio::sync::watch;
 
-use crate::entities::integrations::DiscordFlags;
 use ipc::Command;
+use melodia_core::entities::integrations::DiscordFlags;
 use model::Presence;
 
 /// The Discord application id — **public** (it ships in every presence payload),
@@ -133,7 +133,7 @@ impl DiscordPresenceService {
     /// Resolve an album cover URL for the presence card's `large_image`, cache
     /// first. Driven by the detector task on a track change only.
     pub async fn resolve_artwork(&self, artist: &str, album: &str) -> Option<String> {
-        let client = self.http.get_or_init(crate::services::net::build_http_client).clone();
+        let client = self.http.get_or_init(melodia_net::services::net::build_http_client).clone();
         artwork::resolve_album_cover(&client, &self.artwork_cache, artist, album).await
     }
 

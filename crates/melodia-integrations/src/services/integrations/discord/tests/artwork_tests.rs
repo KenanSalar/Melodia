@@ -1,7 +1,7 @@
 use std::future::ready;
 
 use super::{Lookup, run_lookup};
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 /// The seam the whole cache rule rests on: only a `Lookup::Miss` may be written to
 /// the LRU as "this album has no cover", and only `Ok(None)` produces one.

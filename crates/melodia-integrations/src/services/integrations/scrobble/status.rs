@@ -3,7 +3,7 @@
 //! parts; no locking or I/O (that lives on [`super::ScrobbleService`]).
 
 use super::credentials::ScrobbleCredentials;
-use crate::entities::integrations::ScrobbleFlags;
+use melodia_core::entities::integrations::ScrobbleFlags;
 
 /// Connection + enable state for one provider.
 #[derive(Debug, Clone, Default)]

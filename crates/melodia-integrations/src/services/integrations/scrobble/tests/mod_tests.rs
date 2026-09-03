@@ -4,9 +4,9 @@ use super::{
     LastfmCredentials, ListenBrainzCredentials, LoveItem, LoveTarget, QueuedItem, ScrobbleService,
     ScrobbleTrack,
 };
-use crate::config::Paths;
-use crate::entities::integrations::ScrobbleFlags;
-use crate::entities::track::ScrobbleRow;
+use melodia_core::config::Paths;
+use melodia_core::entities::integrations::ScrobbleFlags;
+use melodia_core::entities::track::ScrobbleRow;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 

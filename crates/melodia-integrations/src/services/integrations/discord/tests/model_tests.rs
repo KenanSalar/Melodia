@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use super::{Presence, PresenceState, Update, clamp_field};
-use crate::entities::integrations::DiscordFlags;
-use crate::entities::track::TrackSummary;
-use crate::player::engine::state::PlayerViewModelLight;
+use melodia_core::entities::integrations::DiscordFlags;
+use melodia_core::entities::track::TrackSummary;
+use melodia_engine::player::engine::state::PlayerViewModelLight;
 
 /// A fixed UNIX-seconds "now" for anchor arithmetic.
 const NOW: i64 = 1_700_000_000;

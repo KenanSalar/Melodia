@@ -14,8 +14,8 @@
 //! "scrobble on completion / skip-past-halfway" model). "Now playing" is sent
 //! once at each play's start.
 
-use crate::player::engine::state::{PlayerViewModelLight, PositionTick};
 use crate::services::integrations::scrobble::model::scrobble_threshold_ms;
+use melodia_engine::player::engine::state::{PlayerViewModelLight, PositionTick};
 
 /// Largest forward position jump (ms) counted as real playback. A tick advancing
 /// more than this is a seek and adds nothing to played time; the ~500 ms poll

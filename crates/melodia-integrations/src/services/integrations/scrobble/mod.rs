@@ -27,11 +27,11 @@ use parking_lot::{Mutex, RwLock};
 use reqwest::Client;
 use tokio::sync::{Notify, watch};
 
-use crate::config::Paths;
-use crate::entities::integrations::ScrobbleFlags;
-use crate::entities::track::ScrobbleRow;
-use crate::error::{AppError, AppResult};
-use crate::services::net::build_http_client;
+use melodia_core::config::Paths;
+use melodia_core::entities::integrations::ScrobbleFlags;
+use melodia_core::entities::track::ScrobbleRow;
+use melodia_core::error::{AppError, AppResult};
+use melodia_net::services::net::build_http_client;
 use providers::lastfm;
 use providers::listenbrainz;
 use status::build_status;
