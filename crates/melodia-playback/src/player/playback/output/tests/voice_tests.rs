@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::{Voice, VoicePull, pair};
 use crate::player::playback::tests::helpers::{TestSource, shape};
-use crate::player::source::audio::Shape;
+use melodia_audio::player::source::audio::Shape;
 
 const RATE: u32 = 44_100;
 

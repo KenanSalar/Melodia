@@ -11,7 +11,7 @@
 //! [`AudioSource::sample_rate`] meaning the source's own rate at every level, so frames pulled are
 //! media frames and the clock needs no conversion.
 
-use crate::player::source::audio::{AudioSource, Sample, Shape};
+use melodia_audio::player::source::audio::{AudioSource, Sample, Shape};
 
 /// What one [`Converter::fill`] did.
 ///

@@ -10,7 +10,7 @@ use super::{
 use crate::player::playback::crossfade::FadeShared;
 use crate::player::playback::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 use crate::player::playback::tests::helpers::{TestSource, approx_eq as approx, bits};
-use crate::player::source::audio::AudioSource;
+use melodia_audio::player::source::audio::AudioSource;
 
 // --- helpers ---------------------------------------------------------------
 

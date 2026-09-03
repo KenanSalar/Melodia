@@ -20,7 +20,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use super::decks::DECK_COUNT;
-use crate::player::source::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
+use melodia_audio::player::source::audio::{
+    AudioSource, ChannelCount, Sample, SampleRate, SeekError,
+};
 
 /// Ring capacity, in mono samples. A power of two so the wrap is a mask, and comfortably wider
 /// than one analysis window so a snapshot always has a full recent one to work from.

@@ -7,7 +7,7 @@ use super::{
     crossfade_ms_to_secs, is_unity_target, manual_fade_ms, ramp_gain, same_album,
     secs_to_crossfade_ms, should_crossfade,
 };
-use crate::entities::track::TrackSummary;
+use melodia_core::entities::track::TrackSummary;
 
 // --- helpers ---------------------------------------------------------------
 

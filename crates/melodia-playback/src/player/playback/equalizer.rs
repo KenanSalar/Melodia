@@ -24,7 +24,9 @@ use biquad::{Biquad, Coefficients, DirectForm1, Hertz, Type};
 use super::crossfade::{self, FadeShared};
 use super::dsp::{AtomicF32, Generation, db_to_linear, linear_to_db};
 use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
-use crate::player::source::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError};
+use melodia_audio::player::source::audio::{
+    AudioSource, ChannelCount, Sample, SampleRate, SeekError,
+};
 
 /// Number of equalizer bands.
 pub const NUM_BANDS: usize = 10;

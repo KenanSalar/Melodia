@@ -12,7 +12,7 @@
 
 use std::sync::Arc;
 
-use crate::player::source::audio::{Sample, Shape};
+use melodia_audio::player::source::audio::{Sample, Shape};
 
 use super::voice::{Voice, VoicePull};
 

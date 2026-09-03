@@ -22,7 +22,7 @@ use parking_lot::Mutex;
 
 use super::super::dsp::AtomicF64;
 use super::convert::{Converter, Filled};
-use crate::player::source::audio::{
+use melodia_audio::player::source::audio::{
     AudioSource, Sample, SampleRate, Shape, frames_in, frames_to_duration,
 };
 

@@ -19,7 +19,7 @@
 use std::num::NonZero;
 use std::time::Duration;
 
-use crate::player::source::audio::{
+use melodia_audio::player::source::audio::{
     AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape,
 };
 

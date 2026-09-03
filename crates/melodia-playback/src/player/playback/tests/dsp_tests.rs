@@ -6,7 +6,7 @@ use super::{Generation, db_to_linear, index_to_f32, linear_to_db};
 use crate::player::playback::tests::helpers::{
     approx_eq as approx, nz_u16 as channels, nz_u32 as rate,
 };
-use crate::player::source::audio::{frames_in, frames_to_duration, interleaved};
+use melodia_audio::player::source::audio::{frames_in, frames_to_duration, interleaved};
 
 #[test]
 fn zero_decibels_is_unity_gain() {

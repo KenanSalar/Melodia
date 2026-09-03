@@ -6,10 +6,10 @@
 use std::sync::Arc;
 
 use super::{Mixer, pair};
-use crate::error::AppError;
 use crate::player::playback::output::voice::Voice;
 use crate::player::playback::tests::helpers::{TestSource, bits, shape};
-use crate::player::source::audio::Shape;
+use melodia_audio::player::source::audio::Shape;
+use melodia_core::error::AppError;
 
 const RATE: u32 = 48_000;
 const VOICES: usize = 2;

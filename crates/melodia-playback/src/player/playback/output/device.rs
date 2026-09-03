@@ -26,9 +26,9 @@ use std::time::Duration;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
-use crate::player::source::audio::{ChannelCount, Sample, SampleRate, Shape};
+use melodia_audio::player::source::audio::{ChannelCount, Sample, SampleRate, Shape};
 
 use super::mixer::MixerPull;
 

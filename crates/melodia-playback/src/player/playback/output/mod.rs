@@ -15,11 +15,11 @@ pub mod device;
 pub mod mixer;
 pub mod voice;
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 use self::device::{DeviceStream, Negotiated};
 use self::mixer::Mixer;
-use crate::player::source::audio::Shape;
+use melodia_audio::player::source::audio::Shape;
 
 /// The open device and the voices feeding it.
 ///

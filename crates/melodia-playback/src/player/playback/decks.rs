@@ -16,12 +16,12 @@ use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 use super::crossfade::FadeShared;
 use super::output::mixer::Mixer;
 use super::output::voice::Voice;
-use crate::player::source::audio::AudioSource;
+use melodia_audio::player::source::audio::AudioSource;
 
 /// How many voices the player alternates between. The visualizer keeps one sample ring per deck,
 /// so the two counts have to agree.

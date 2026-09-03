@@ -5,11 +5,7 @@
 //! the two-crate split exists to keep. `output` has a narrower meaning than this crate — it is
 //! everything *under* the DSP chain — so it stays nested rather than widened.
 
-pub use melodia_core::{config, entities, error, themes, utils};
-
 pub mod player {
-    pub use melodia_audio::player::source;
-
     pub mod playback;
 }
 

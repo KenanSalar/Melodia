@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 
 use super::dsp::{AtomicF32, Generation};
-use crate::entities::track::TrackSummary;
+use melodia_core::entities::track::TrackSummary;
 
 /// Shortest crossfade the user can select.
 ///

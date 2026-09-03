@@ -26,7 +26,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
-use crate::entities::track::TrackSummary;
+use melodia_core::entities::track::TrackSummary;
 
 use super::dsp::{AtomicF32, Generation, db_to_linear};
 
