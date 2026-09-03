@@ -483,7 +483,7 @@ async fn execute_empty_actions_is_noop() -> Result<(), AppError> {
 fn tune_in(player_state: &PlayerStateHandle) -> u64 {
     let mut state = crate::player::engine::state::lock_state(player_state);
     let (generation, _actions) = state.build_station_connecting_actions(
-        crate::player::tests::helpers::test_station("Example FM"),
+        crate::player::engine::fixtures::test_station("Example FM"),
     );
     generation
 }

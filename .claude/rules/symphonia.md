@@ -1,6 +1,6 @@
 ---
 paths:
-  - src/player/**/*.rs
+  - crates/melodia-audio/src/player/source/**/*.rs
   - tests/**/*.rs
 ---
 

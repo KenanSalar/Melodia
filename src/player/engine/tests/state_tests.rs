@@ -1202,7 +1202,7 @@ fn every_player_action_names_what_it_did() {
 // branch for it. What these pin is that the branch is taken *and* that the queue underneath comes
 // through untouched: stopping a station is supposed to hand the library back exactly as it was.
 
-use crate::player::tests::helpers::test_station as station;
+use crate::player::engine::fixtures::test_station as station;
 
 /// A player mid-album, so every "the queue is untouched" assertion has something to be about.
 fn playing_a_queue() -> PlayerState {

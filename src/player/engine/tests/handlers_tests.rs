@@ -271,7 +271,7 @@ fn the_last_track_neither_crossfades_nor_preloads() {
 fn playing_a_station() -> PlayerState {
     let mut state = playing_state();
     let (generation, _actions) = state.build_station_connecting_actions(
-        crate::player::tests::helpers::test_station("Example FM"),
+        crate::player::engine::fixtures::test_station("Example FM"),
     );
     let _started = state.build_station_connected_actions(generation);
     state

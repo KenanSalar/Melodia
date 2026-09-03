@@ -3,11 +3,11 @@ paths:
   - src/ui/radio/**/*.rs
   - src/library/radio/**/*.rs
   - src/library/radio_files.rs
-  - src/services/net/radio_browser/**/*.rs
-  - src/player/source/stream_source.rs
-  - src/player/source/prebuffer.rs
-  - src/player/source/stream_decode.rs
-  - src/media/fetch/station_logo.rs
+  - crates/melodia-net/src/services/net/radio_browser/**/*.rs
+  - crates/melodia-audio/src/player/source/stream_source.rs
+  - crates/melodia-audio/src/player/source/prebuffer.rs
+  - crates/melodia-audio/src/player/source/stream_decode.rs
+  - crates/melodia-net/src/media/fetch/station_logo.rs
   - crates/melodia-core/src/entities/radio.rs
   - src/database/queries/radio.rs
   - src/tasks/radio_logo_cache.rs

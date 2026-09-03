@@ -305,6 +305,10 @@ assets = [
 melodia-ui = { path = "melodia-ui" }
 melodia-core = { path = "crates/melodia-core" }
 melodia-artwork = { path = "crates/melodia-artwork" }
+melodia-net = { path = "crates/melodia-net" }
+melodia-platform = { path = "crates/melodia-platform" }
+melodia-audio = { path = "crates/melodia-audio" }
+melodia-playback = { path = "crates/melodia-playback" }
 
 slint.workspace = true
 

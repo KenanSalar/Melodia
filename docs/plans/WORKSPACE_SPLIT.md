@@ -866,10 +866,16 @@ turn it red; the fix is the glob edit in the same commit, never a skip. That is 
 
 ## Phase C: extract the crates
 
-Thirteen steps in **three commits, 4 / 4 / 5**, the way Phase A's eleven items landed: C1-C4, then
-C5-C8, then C9-C13. Order inside a group is forced by the graph, and the compiler does most of the
-work, nothing building until a step's `pub(crate)` widenings and facade lines are right. The full
-gate runs at each commit boundary.
+Thirteen steps in **four commits, 4 / 4 / 4 / 1**: C1-C4, C5-C8, C9-C12, then C13 alone. Order
+inside a group is forced by the graph, and the compiler does most of the work, nothing building
+until a step's `pub(crate)` widenings and facade lines are right. The full gate runs at each commit
+boundary.
+
+C13 gets a commit to itself because it is not the same kind of change as the twelve before it. Those
+move Rust between compilation units; C13 also relocates `melodia-ui`, rewrites 135 `include_str!`
+hops, and drags four non-Rust concerns with it (the rule globs, the testkit anchors, three
+`scripts/` helpers and a `.gitignore` rule that fails silently). Reviewing that beside an ordinary
+extraction is how one of them gets missed.
 
 **Crates land at `crates/melodia-<name>/`, each keeping the `src/`-relative directory path of the
 files it owns** — `melodia-artwork` is `crates/melodia-artwork/src/media/image/**`, not
@@ -981,18 +987,43 @@ Two further decisions the phase needs and the doc did not carry:
       rayon decode pool and the lofty picture reads. `serde.md` says the same and is the one that
       genuinely does not govern the image tier, so it was left alone.
 
-      > **Commit 1 lands here.** Four crates out, `melodia-testkit` a leaf, and the same 2,237 tests
-      > passing across nine binaries rather than six.
+      > **Commit 1 landed here** (`1060d8f1`). Four crates out, `melodia-testkit` a leaf, and the
+      > same 2,237 tests passing across nine binaries rather than six.
 
-- [ ] **C5. `melodia-net`** — `services/net/` + `media/fetch/`. `services/net/` alone names only
+- [x] **C5. `melodia-net`** — `services/net/` + `media/fetch/`. `services/net/` alone names only
       core; `media/fetch/` is the entire reason the `net -> artwork` edge exists. Takes
       `radio_blocklist`'s bake into its own `build.rs`, the two `.env.radio.*.local` files staying
       at the repo root through `CARGO_MANIFEST_DIR/../..` so the `gh secret` workflow keeps its
-      paths.
-- [ ] **C6. `melodia-platform`** — `services/platform/`. Core alone.
-- [ ] **C7. `melodia-audio`** — `player/source/`. Core plus `services::net`'s four functions.
-- [ ] **C8. `melodia-playback`** — `player/playback/`. Core plus audio.
-> **Commit 2 lands here.**
+      paths. All seven HTTP primitives widen to `pub`, which is the crate's whole interface.
+
+      **The root `build.rs` keeps `load_dotenv` and would have been wrong to lose it.** Only the
+      blocklist bake moved: the `option_env!` sites are still in this package until C11, and
+      `cargo:rustc-env` reaches only the crate whose script emitted it, so pulling the dotenv half
+      out early would have shipped a keyless build with nothing to say so. The bake's own move is
+      checkable and was checked — `melodia-net`'s `OUT_DIR` artifact carries the same term and
+      pattern counts the root one did.
+- [x] **C6. `melodia-platform`** — `services/platform/`. Core alone, and `cargo tree` says so.
+      Nine `include_str!` hops gain two `../` each, four of them production: the `.desktop`
+      template, the two icons and the `MetaInfo` XML.
+- [x] **C7. `melodia-audio`** — `player/source/`. Core plus `melodia-net`'s four functions.
+      A8's three numeric helpers (`frames_in`, `frames_to_duration`, `interleaved`) widen to `pub`,
+      which is that item paying off: they were the one wrong-direction edge inside `player/`, and
+      moving them into `audio.rs` is what left this a manifest line rather than a refactor.
+- [x] **C8. `melodia-playback`** — `player/playback/`. Core plus audio.
+
+      **Decision 3 was right about the problem and too expensive about the fix.** A read of the
+      actual usage narrowed it: `TestSource` and the float helpers are read by *playback alone*,
+      so they stayed `cfg(test)` beside its tests rather than becoming a public fixture on audio;
+      audio's only use of the shared file was `shape`, so it keeps a five-line `cfg(test)` copy of
+      the three `NonZero` constructors. Only the transport trio genuinely crosses — engine's own
+      suites, `library`'s and the now-playing ladder's under `ui/` — and only that became
+      `#[doc(hidden)] pub`, as `player::engine::fixtures`. One production export instead of two,
+      and the one that survived is the one with content: `RadioNowPlaying` has thirteen fields and
+      `PlayerViewModelLight` thirteen more, where a `Shape` constructor is five lines.
+
+      > **Commit 2 lands here.** Eight crates out; `melodia-audio` names no cpal and
+      > `melodia-playback` no reqwest, both now enforced by cargo rather than asserted by a grep.
+      > 2,237 tests across thirteen binaries.
 
 - [ ] **C9. `melodia-engine`** — `player/engine/`.
 - [ ] **C10. `melodia-store`** — `database/` + `media/ingest/`. Carries `sqlx::migrate!` at
@@ -1007,7 +1038,10 @@ Two further decisions the phase needs and the doc did not carry:
       Two literals break and neither is a `crate::` path: `library/tests/radio_tests.rs:17`
       hard-codes `src/library/radio` in a `concat!`, and `services/tests/view_state_tests.rs:123`
       `include_str!`s a bin file, joining the cross-tier pins B7 moved to `tests/`.
-- [ ] **C13. `melodia-views`, with the `melodia-ui` relocation.** `src/ui/` and `melodia-ui/` move in
+> **Commit 3 lands here.**
+
+- [ ] **C13. `melodia-views`, with the `melodia-ui` relocation.** Its own commit, for the reason
+      given above. `src/ui/` and `melodia-ui/` move in
       the same commit, because the 135 `include_str!` hops into `melodia-ui/ui/` are relative paths
       whose depth changes with *either* move; together they are rewritten once rather than twice.
       That pulls the `melodia-ui` half of Phase D forward: its 43 rule globs, the `UI_DIR` /

@@ -14,8 +14,8 @@
 //! `image` below `ingest` and `fetch`, and nothing pointing back up.
 
 pub use melodia_artwork::media::image;
+pub use melodia_net::media::fetch;
 
-pub mod fetch;
 pub mod ingest;
 
 // A walking pin rather than a module's own tests: what it asks is where in `src/` a lofty parse

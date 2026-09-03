@@ -8,8 +8,8 @@
 use std::sync::Arc;
 
 use super::{SourceId, SourceSummary};
+use crate::player::engine::fixtures::{test_station, test_track, test_view_model as deck};
 use crate::player::engine::types::RadioNowPlaying;
-use crate::player::tests::helpers::{test_station, test_track, test_view_model as deck};
 
 /// Mirrors the stream URL [`test_station`] hands back; spelled here because the assertions below
 /// compare a whole `SourceSummary` and the id is one of its fields.

@@ -1,8 +1,8 @@
 ---
 paths:
   - src/services/updater/**/*.rs
-  - src/services/platform/install_kind/**/*.rs
-  - src/services/platform/desktop_integration.rs
+  - crates/melodia-platform/src/services/platform/install_kind/**/*.rs
+  - crates/melodia-platform/src/services/platform/desktop_integration.rs
   - src/tasks/updater_daily.rs
   - src/ui/settings/updater_settings.rs
   - wix/main.wxs

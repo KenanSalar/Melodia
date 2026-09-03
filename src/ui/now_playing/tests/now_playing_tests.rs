@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use super::metadata::{format_channels, format_sample_rate};
 use super::{NowPlayingSource, SourceKey};
+use crate::player::engine::fixtures::{test_station, test_track, test_view_model};
 use crate::player::engine::now_playing::SourceId;
-use crate::player::tests::helpers::{test_station, test_track, test_view_model};
 
 #[test]
 fn sample_rate_drops_trailing_zero() {

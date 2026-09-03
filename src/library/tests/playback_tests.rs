@@ -490,7 +490,7 @@ fn toggle_from_stopped_without_track_is_noop() {
 // --- radio transport routing -----------------------------------------------
 
 fn station() -> std::sync::Arc<RadioNowPlaying> {
-    crate::player::tests::helpers::test_station("Example FM")
+    crate::player::engine::fixtures::test_station("Example FM")
 }
 
 fn tuned_in() -> PlayerState {

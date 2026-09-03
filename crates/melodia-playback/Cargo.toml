@@ -1,0 +1,31 @@
+[package]
+name = "melodia-playback"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The DSP chain, the mixer and the audio device for Melodia"
+publish = false
+
+[lib]
+doctest = false
+
+# No `reqwest`. The network is `melodia-audio`'s end of the chain, and neither manifest naming
+# the other's third-party dependency is what makes that checkable rather than asserted.
+[dependencies]
+melodia-core = { path = "../melodia-core" }
+melodia-audio = { path = "../melodia-audio" }
+
+cpal.workspace = true
+biquad.workspace = true
+realfft.workspace = true
+tokio.workspace = true
+parking_lot.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+melodia-testkit = { path = "../melodia-testkit" }
+
+[lints]
+workspace = true

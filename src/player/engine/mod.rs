@@ -8,6 +8,8 @@
 pub mod actions;
 pub mod backend;
 pub mod event_sink;
+#[doc(hidden)]
+pub mod fixtures;
 pub mod handlers;
 pub mod now_playing;
 pub mod queue;

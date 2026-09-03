@@ -7,9 +7,10 @@
 //!   diagnostics bundle and the updater. Each of them names `database` or `state` or both, so
 //!   they are app-level rather than adapters, and they are what is left once the three groups go.
 
+pub use melodia_net::services::net;
+pub use melodia_platform::services::platform;
+
 pub mod integrations;
-pub mod net;
-pub mod platform;
 
 pub mod artist_images;
 pub mod diagnostics;

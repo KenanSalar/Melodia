@@ -15,11 +15,7 @@
 //! source kind a new [`source::audio::AudioSource`] and nothing else — under one flat directory
 //! it could reach the mixer and the state machine, and here it cannot.
 
-pub mod engine;
-pub mod playback;
-pub mod source;
+pub use melodia_audio::player::source;
+pub use melodia_playback::player::playback;
 
-#[cfg(test)]
-pub(crate) mod tests {
-    pub(crate) mod helpers;
-}
+pub mod engine;

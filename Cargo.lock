@@ -29,7 +29,11 @@ dependencies = [
  "material-colors",
  "md5",
  "melodia-artwork",
+ "melodia-audio",
  "melodia-core",
+ "melodia-net",
+ "melodia-platform",
+ "melodia-playback",
  "melodia-testkit",
  "melodia-ui",
  "minisign-verify",
@@ -3697,6 +3701,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "melodia-audio"
+version = "0.12.0"
+dependencies = [
+ "icy-metadata",
+ "lofty",
+ "log",
+ "melodia-core",
+ "melodia-net",
+ "melodia-testkit",
+ "parking_lot",
+ "reqwest",
+ "stream-download",
+ "symphonia",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+]
+
+[[package]]
 name = "melodia-core"
 version = "0.12.0"
 dependencies = [
@@ -3711,6 +3734,65 @@ dependencies = [
  "sqlx",
  "tempfile",
  "thiserror 2.0.19",
+ "tokio",
+]
+
+[[package]]
+name = "melodia-net"
+version = "0.12.0"
+dependencies = [
+ "blake3",
+ "futures-util",
+ "image",
+ "log",
+ "melodia-artwork",
+ "melodia-core",
+ "melodia-testkit",
+ "rand 0.10.2",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "melodia-platform"
+version = "0.12.0"
+dependencies = [
+ "blake3",
+ "chrono",
+ "dirs",
+ "flexi_logger",
+ "image",
+ "interprocess",
+ "ksni",
+ "libc",
+ "log",
+ "melodia-core",
+ "melodia-testkit",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tray-icon",
+ "windows-sys 0.61.2",
+ "zbus",
+]
+
+[[package]]
+name = "melodia-playback"
+version = "0.12.0"
+dependencies = [
+ "biquad",
+ "cpal",
+ "log",
+ "melodia-audio",
+ "melodia-core",
+ "melodia-testkit",
+ "parking_lot",
+ "realfft",
  "tokio",
 ]
 

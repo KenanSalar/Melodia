@@ -1,0 +1,44 @@
+[package]
+name = "melodia-net"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "HTTP primitives, artwork fetchers and the radio directory client for Melodia"
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+melodia-core = { path = "../melodia-core" }
+# `station_logo` and `deezer` both store what they fetched, so net sits above artwork.
+melodia-artwork = { path = "../melodia-artwork" }
+
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+# The download's `.next().await`, which is what keeps a capped read from buffering the asset.
+futures-util.workspace = true
+# The directory client picks a mirror at random rather than pinning one host.
+rand.workspace = true
+# A logo comes back as bytes and is decoded before it reaches the store.
+image.workspace = true
+log.workspace = true
+
+# The blocklist's fingerprints, hashed at build time and looked up at run time. Pinned to the
+# build-dependency version below: two of them would be two hashes.
+blake3.workspace = true
+
+[build-dependencies]
+blake3.workspace = true
+
+[dev-dependencies]
+melodia-testkit = { path = "../melodia-testkit" }
+# The logo tests write a fetched image into a throwaway store directory.
+tempfile.workspace = true
+
+[lints]
+workspace = true
