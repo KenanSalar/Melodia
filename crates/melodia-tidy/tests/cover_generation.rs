@@ -9,15 +9,16 @@
 
 use std::collections::BTreeSet;
 
-use crate::test_support::rust_sources;
-
-/// This file, which spells the needles below and would otherwise be its own first hit. Skipped
-/// rather than forgiven, and held to still naming one.
-const PIN: &str = "ui/tests/cover_generation_tests.rs";
+use melodia_testkit::rust_sources;
 
 /// `grid_cover`'s own pin, which passes both generations as literals — exercising the cold arm
 /// against the warm one is what it is for, and neither is a call site that has to come back.
 const EXEMPT: &str = "ui/tests/grid_prewarm_tests.rs";
+
+/// A floor under the lookup walk, standing in for the self-check this pin carried while it lived
+/// inside the corpus it walks: it skipped itself and asserted it still spelled the needle. Out
+/// here there is nothing to skip, and a renamed helper would otherwise empty the walk in silence.
+const MIN_LOOKUPS: usize = 8;
 
 /// Every file that installs a decoded-batch notifier, one per tier a scheduling lookup reads.
 ///
@@ -45,14 +46,10 @@ const NOTIFIER_HOMES: [&str; 8] = [
 /// a surface with no generation to come back on and doesn't match this needle.
 #[test]
 fn every_scheduling_cover_lookup_names_a_generation() {
-    let mut pin_seen = false;
+    let mut seen = 0_usize;
     let mut offenders = Vec::new();
 
     for (path, code) in rust_sources() {
-        if path == PIN {
-            pin_seen = code.contains("grid_cover(");
-            continue;
-        }
         if path == EXEMPT {
             continue;
         }
@@ -60,13 +57,17 @@ fn every_scheduling_cover_lookup_names_a_generation() {
             if !line.contains("grid_cover(") || line.contains("fn grid_cover(") {
                 continue;
             }
+            seen += 1;
             if !line.contains("generation") {
                 offenders.push(format!("{path}: {}", line.trim()));
             }
         }
     }
 
-    assert!(pin_seen, "{PIN} no longer names the call it walks for, so it checks nothing");
+    assert!(
+        seen >= MIN_LOOKUPS,
+        "only {seen} scheduling cover lookups found; a renamed helper empties this walk and          every card it guards goes unchecked"
+    );
     assert!(
         offenders.is_empty(),
         "a scheduling cover lookup with no generation on the line leaves the card on its \
@@ -79,14 +80,9 @@ fn every_scheduling_cover_lookup_names_a_generation() {
 /// Every tier a scheduling lookup reads gets told when its batch lands.
 #[test]
 fn every_scheduling_tier_installs_a_notifier() {
-    let mut pin_seen = false;
     let mut found = BTreeSet::new();
 
     for (path, code) in rust_sources() {
-        if path == PIN {
-            pin_seen = code.contains("notify_on_decode(");
-            continue;
-        }
         // The definition's own file, which names it without installing anything.
         if path == "ui/cover_generation.rs" {
             continue;
@@ -96,7 +92,6 @@ fn every_scheduling_tier_installs_a_notifier() {
         }
     }
 
-    assert!(pin_seen, "{PIN} no longer names the call it walks for, so it checks nothing");
     let expected: BTreeSet<String> = NOTIFIER_HOMES.iter().map(|&s| s.to_owned()).collect();
     assert_eq!(
         found, expected,

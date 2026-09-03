@@ -1,14 +1,14 @@
-//! What is left here after B1 walks the *tree* rather than `services`, and none of it names a
-//! `services` item any more: thread-name length, the bundled fonts against their attribution,
-//! the five package formats' licence directories, two CI-workflow pins and two MSI ones, the
-//! Debian copyright, and the bundled licence texts.
+//! What the repo ships and what the gate runs: thread-name length, the bundled fonts against
+//! their attribution, the five package formats' licence directories, two CI-workflow pins and
+//! two MSI ones, the Debian copyright, and the bundled licence texts.
 //!
-//! Finding 8 in `docs/plans/WORKSPACE_SPLIT.md` gives them one home in Phase D; until then this
-//! is where they sit, because moving them twice is worse than the name being wrong once.
+//! None of it asks anything of a crate. Five of these read a file no member owns — a workflow,
+//! a shell script, the MSI source — and the other four walk the whole tree, so every one of
+//! them was homeless before this crate existed and sat wherever it was written.
 
 use std::path::Path;
 
-use crate::test_support::{REPO_ROOT, font_sources, rel_path, rust_sources};
+use melodia_testkit::{REPO_ROOT, font_sources, rel_path, rust_sources};
 
 /// The setters that spell a thread name: `std::thread::Builder`'s, and the fixed-string form
 /// tokio's and rayon's builders share. Anchored on the setter rather than on `Builder::new()`,
@@ -27,12 +27,13 @@ const MIN_THREAD_NAMES: usize = 5;
 
 /// The files that compute a name rather than spelling one, where reading the literal measures
 /// nothing. Paths are relative to the crate root that holds them.
-const RUNTIME_NAMED: [&str; 2] = [
+///
+/// One entry rather than two: this pin used to name itself, having to spell the needle it greps
+/// for, and out here it is no longer in the corpus it walks.
+const RUNTIME_NAMED: [&str; 1] = [
     // `cover-decode-{i}`, whose budget is the prefix plus the widest index the decode pool's
     // clamp can reach; raising that clamp is a thread-name change.
     "media/image/cover_thumbs.rs",
-    // This pin, which has to spell the needle to grep for it.
-    "services/tests/mod_tests.rs",
 ];
 
 /// Linux keeps `TASK_COMM_LEN` bytes of a thread name and std truncates ahead of it rather than
@@ -87,7 +88,7 @@ fn no_thread_name_outgrows_what_the_kernel_keeps() {
 }
 
 /// `licenses/ATTRIBUTION.txt`, which every pin below reads.
-const ATTRIBUTION: &str = include_str!("../../../../../licenses/ATTRIBUTION.txt");
+const ATTRIBUTION: &str = include_str!("../../../licenses/ATTRIBUTION.txt");
 
 /// The floor for the font walk: the five faces that ship today.
 ///
@@ -415,7 +416,7 @@ fn the_msi_offers_every_audio_extension() {
     let wxs = strip_xml_comments(&raw);
 
     let mut unoffered = Vec::new();
-    for ext in crate::utils::audio_ext::AUDIO_EXTENSIONS {
+    for ext in melodia_core::utils::audio_ext::AUDIO_EXTENSIONS {
         for key in MSI_EXTENSION_KEYS {
             if !wxs.contains(&format!("Key=\"{key}\" Name=\".{ext}\"")) {
                 unoffered.push(format!(".{ext} under {key}"));

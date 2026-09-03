@@ -35,7 +35,3 @@ pub fn notify_on_decode(
         let _ = weak.upgrade_in_event_loop(move |app| bump(&app));
     });
 }
-
-#[cfg(test)]
-#[path = "tests/cover_generation_tests.rs"]
-mod tests;

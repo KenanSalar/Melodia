@@ -1,10 +1,9 @@
-use crate::test_support::spellings_outside;
+use melodia_testkit::spellings_outside;
 
 /// A URL scheme tested by prefix, in the substring both spellings share.
 const RAW_SCHEME_TEST: &str = "starts_with(\"http";
 
-/// Nobody, this one included: the needle carries a quote, so the declaration above spells it `\"`
-/// in the source and cannot match itself the way [`RAW_BODY_READ`]'s does.
+/// Nobody. The pin lives outside the tree it walks, so it is not among the candidates either.
 const SCHEME_EXEMPT: [(&str, usize); 0] = [];
 
 /// Four sites tested a scheme by prefix — a station's website field, its logo URL, a `.pls`/`.m3u`
@@ -23,17 +22,17 @@ fn nothing_tests_a_url_scheme_by_prefix() {
     );
 }
 
-/// The streamed body read [`super::read_capped`] owns.
+/// The streamed body read `services::net::read_capped` owns.
 const RAW_BODY_READ: &str = "bytes_stream()";
 
 /// Where it may appear, and how often. Paths are relative to the crate root that holds them.
-const BODY_READ_EXEMPT: [(&str, usize); 3] = [
+/// Two rather than three: this pin used to name itself, spelling the needle it greps for, and
+/// out of the corpus it no longer has to.
+const BODY_READ_EXEMPT: [(&str, usize); 2] = [
     ("services/net/mod.rs", 1),
     // The updater's download, and a genuinely different shape: it streams to a file and reports
     // progress rather than collecting a capped `Vec` in memory.
     ("services/updater/install/download.rs", 1),
-    // This pin.
-    ("services/net/tests/mod_tests.rs", 1),
 ];
 
 /// Five bounded fetches each had their own copy of the stream-under-a-cap loop, and one of them

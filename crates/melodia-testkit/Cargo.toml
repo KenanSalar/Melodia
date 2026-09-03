@@ -17,10 +17,6 @@ doctest = false
 # helpers that did name workspace types were removed rather than carried, and the rule is
 # the whole reason this crate is a leaf.
 [dependencies]
-# The corpus pins ask whether each `.claude/rules` `paths:` entry still matches anything, and
-# half of them are globs. Hand-rolling `**` inside the one test that exists to catch silent
-# drift is the wrong place to be clever; this crate has no dependencies of its own.
-glob.workspace = true
 # `write_test_png` and its two JPEG siblings, for the decode paths that need a real file.
 image.workspace = true
 # The throwaway directory each of those writes into.

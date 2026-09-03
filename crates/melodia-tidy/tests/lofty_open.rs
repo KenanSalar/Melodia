@@ -9,7 +9,7 @@
 //! is where in the workspace a lofty parse may start, and `melodia-store` is precisely the crate
 //! that cannot answer it about anything outside itself.
 
-use crate::test_support::rust_sources;
+use melodia_testkit::rust_sources;
 
 /// What an exempt file has to keep spelling: the type rather than the module path, so it holds
 /// under either import shape.
@@ -25,13 +25,13 @@ const RAW_OPENERS: [&str; 3] = [RAW_PROBE_TYPE, "lofty::probe", "read_from"];
 /// and the tag-writer tests through a `use`.
 const HELPER: &str = "read_tags(";
 
-/// The two files that may name the raw openers, and the name each must **still** spell.
+/// The one file that may name the raw openers, and the name it must **still** spell.
 /// `metadata.rs` owes the probe: the sniff wrapped around it is the whole module, and nothing
-/// else is positioned to notice it go. This pin owes the needle, being the needle.
-const EXEMPT: [(&str, &str); 2] = [
-    ("media/ingest/metadata.rs", RAW_PROBE_TYPE),
-    ("media/tests/lofty_open_tests.rs", RAW_PROBE_TYPE),
-];
+/// else is positioned to notice it go.
+///
+/// It used to owe a second entry for this pin, which spells the needle it greps for. Living
+/// outside the corpus is what retired that.
+const EXEMPT: [(&str, &str); 1] = [("media/ingest/metadata.rs", RAW_PROBE_TYPE)];
 
 /// A floor rather than an equality, so a genuine third caller needs no edit here — but a
 /// caller that stops reading tags, or a walk that silently found nothing, still trips it.

@@ -5,7 +5,6 @@ use reqwest::Url;
 use crate::player::source::stream_source::{
     first_stream_url, is_playlist_content_type, is_playlist_url, reconnect_delay,
 };
-use crate::test_support::rust_sources;
 
 /// `Some(verdict)` when `raw` parsed, `None` when it didn't — so a typo in a test URL fails the
 /// assertion instead of quietly satisfying a negative one.
@@ -150,48 +149,6 @@ fn the_backoff_grows_and_then_gives_up() {
         previous = *delay;
     }
     assert!(grew, "the backoff must actually back off");
-}
-
-/// The one file allowed to name them, because naming them is how it forbids them.
-const EXEMPT: &str = "player/source/tests/stream_source_tests.rs";
-
-/// `StreamDownload`'s convenience constructors build their own unconfigured `reqwest::Client`
-/// behind your back, through the trait's no-argument `Client::create`. That costs three things at
-/// once, none of them visible at the call site: the `Melodia/<version>` User-Agent some Icecast
-/// servers gate on, the `Icy-MetaData` header that makes a station name its tracks, and the shared
-/// connection pool. Every open has to go through `HttpStream::new` with the shared client instead,
-/// and since the temptation is a one-line constructor, this walks the tree rather than naming the
-/// module that currently gets it right.
-#[test]
-fn nothing_reaches_the_convenience_constructors() {
-    let forbidden = [
-        "StreamDownload::new_http",
-        "StreamDownload::new(",
-        "new_http_with_middleware",
-    ];
-
-    let mut offenders = Vec::new();
-    let mut exempt_seen = false;
-    for (path, source) in rust_sources() {
-        if path == EXEMPT {
-            exempt_seen = true;
-            continue;
-        }
-        for needle in forbidden {
-            if source.contains(needle) {
-                offenders.push(format!("{path} names `{needle}`"));
-            }
-        }
-    }
-
-    assert!(
-        exempt_seen,
-        "{EXEMPT} moved, so this pin is checking a corpus it no longer belongs to"
-    );
-    assert!(
-        offenders.is_empty(),
-        "open the stream with HttpStream::new and the shared client instead: {offenders:?}"
-    );
 }
 
 /// Building the decoder probes the container by *reading*, and `StreamDownload`'s reader parks the

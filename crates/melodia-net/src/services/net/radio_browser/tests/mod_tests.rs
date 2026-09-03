@@ -1,8 +1,9 @@
-//! The host and URL contract the fallback and every discovered mirror share,
-//! and the walk holding the module's own reach prohibition.
+//! The host and URL contract the fallback and every discovered mirror share.
+//!
+//! The walk holding this module's reach prohibition is `melodia-tidy`'s: its other half sits
+//! in `melodia-app`, and neither covers the other's direction.
 
 use super::{ApiStation, DEFAULT_PAGE_LIMIT, FALLBACK_HOST, SERVERS_URL, page_from, url_for};
-use crate::test_support::rust_sources;
 
 /// A bare name, so [`url_for`] stays the one place a scheme or a separator is
 /// spelled. A host carrying either would produce `https://https://…` or a
@@ -84,69 +85,4 @@ fn an_unset_limit_is_measured_against_the_default_page_size() {
 
     assert!(page_from(full_page(default), 0).has_more);
     assert!(!page_from(full_page(default - 1), 0).has_more);
-}
-
-/// Where this module may be named, relative to its crate root: its own declaration.
-///
-/// An allowlist rather than the per-file *counts* `services::tests::mod_tests` pins `current_exe`
-/// with. There a second call in an exempt file is itself the regression; here the facade is meant
-/// to grow one per surface it gains.
-const CALLER_DECL: &str = "services/net/mod.rs";
-
-/// The facade, as a prefix rather than a file list.
-///
-/// It is a directory now and three of its files reach the directory client. Listing them would
-/// cost an edit per submodule, and a listed name that moves pre-authorises whatever takes its
-/// path next — [`OWN_TREE`]'s argument, from the other side of the same wall.
-const CALLER_TREE: &str = "library/radio/";
-
-/// This module's own tree. A prefix rather than a file list, so a fourth source
-/// beside the three needs no edit.
-const OWN_TREE: &str = "services/net/radio_browser/";
-
-/// The module doc's "nothing outside `library::radio` should reach here" is what
-/// leaves the setting that turns radio off one place to guard rather than one
-/// per call site. It is violable from any file, so a walk holds it rather than
-/// review.
-///
-/// The needle is the module name itself rather than the `services::net::radio_browser`
-/// path, which a sibling under `services/net/` could dodge with a `super::` import.
-/// Two seams it shares with the tree's other corpus pins: `strip_line_comments`
-/// handles `//` and not `/* */`, and the match is a substring rather than a parse.
-#[test]
-fn only_the_radio_facade_reaches_the_directory_client() {
-    const NEEDLE: &str = "radio_browser";
-
-    let mut reaching = Vec::new();
-    let mut declaration_seen = false;
-    let mut facade_files = 0usize;
-
-    for (path, src) in rust_sources() {
-        if path.starts_with(OWN_TREE) || !src.contains(NEEDLE) {
-            continue;
-        }
-        if path == CALLER_DECL {
-            declaration_seen = true;
-        } else if path.starts_with(CALLER_TREE) {
-            facade_files += 1;
-        } else {
-            reaching.push(path);
-        }
-    }
-
-    assert!(
-        reaching.is_empty(),
-        "{reaching:?} name `{NEEDLE}` directly. Go through `library::radio`, which is where \
-         the setting that turns radio off is enforced"
-    );
-    assert!(
-        declaration_seen,
-        "`{CALLER_DECL}` no longer names `{NEEDLE}`, so a moved declaration has pre-authorised \
-         whatever takes its path next"
-    );
-    assert!(
-        facade_files > 0,
-        "no file under `{CALLER_TREE}` names `{NEEDLE}`, so the facade has stopped being the door \
-         and this walk is passing over an empty set"
-    );
 }

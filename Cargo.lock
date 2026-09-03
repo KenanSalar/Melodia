@@ -3866,9 +3866,17 @@ dependencies = [
 name = "melodia-testkit"
 version = "0.12.0"
 dependencies = [
- "glob",
  "image",
  "tempfile",
+]
+
+[[package]]
+name = "melodia-tidy"
+version = "0.12.0"
+dependencies = [
+ "glob",
+ "melodia-core",
+ "melodia-testkit",
 ]
 
 [[package]]

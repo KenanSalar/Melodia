@@ -1,0 +1,187 @@
+//! The `library::radio` facade's contract, in the parts only its source text carries.
+//!
+//! One setting turns internet radio off, and it is enforced in one place: `library::radio`'s
+//! `directory_client` asks `ensure_enabled` before it hands out an HTTP client. That only works
+//! while two things stay true, and neither is checkable from inside the crate that holds it —
+//! every outbound call in the facade takes its client from behind the guard, and nothing outside
+//! the facade reaches the directory client at all.
+//!
+//! **The two halves are one property and they live together.** Left in their own crates they
+//! ended up in `melodia-app` and `melodia-net`, each seeing half: the first passes with a second
+//! module fetching on its own, the second passes with every call in the facade on a raw client.
+//!
+//! Source walks because the alternative is asserting a network call did *not* happen, and the
+//! tree has no network tests. The play-count ordering below rides along on the same corpus:
+//! it needs an `AppState`, a socket and a station that is reliably down, where the ordering is
+//! the whole invariant and is legible from the text.
+
+use melodia_testkit::rust_sources;
+
+/// Every file the facade is made of, concatenated, with line comments stripped.
+///
+/// **Read off the directory rather than named**, which is what makes the walks below cover a
+/// submodule nobody has written yet. The facade was one file when they were written and a split
+/// that re-anchored them onto `mod.rs` alone would have left four fifths of it unmeasured — a
+/// refactor that looks like an improvement and quietly disables a check.
+fn facade_source() -> String {
+    let dir = concat!(env!("MELODIA_REPO_ROOT"), "crates/melodia-app/src/library/radio");
+    let mut entries: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
+        .collect();
+    assert!(
+        !entries.is_empty(),
+        "`library/radio/` holds no Rust files, so this walk reads nothing"
+    );
+    // Sorted so a failure names the same offset run to run.
+    entries.sort();
+
+    let mut source = String::new();
+    let mut read = 0usize;
+    for path in &entries {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            source.push_str(&melodia_testkit::strip_line_comments(&text));
+            source.push('\n');
+            read += 1;
+        }
+    }
+    // Counted rather than skipped: a file that fails to read leaves the walks below measuring less
+    // than they claim to, which is the exact failure this helper exists to prevent.
+    assert_eq!(read, entries.len(), "every file under `library/radio/` has to be readable");
+    source
+}
+
+/// **"Off" means no traffic, and this file is the only place that can be true.**
+///
+/// D15's switch is enforced at the facade rather than at the sidebar row, because a row that
+/// disappears stops nothing a stale callback or an in-flight fetch has already started. What makes
+/// one guard enough is that every outbound call reaches its client through
+/// [`super::directory_client`], which is [`super::ensure_enabled`] plus the handle — so the check
+/// is unskippable rather than remembered per call site.
+///
+/// [`only_the_radio_facade_reaches_the_directory_client`] holds the
+/// other direction, that nothing *outside* this module reaches the directory at all. Neither test
+/// covers the other's half: that one would pass with every call here on a raw client, and this one
+/// would pass with a second module fetching on its own.
+///
+/// A source walk because the alternative is asserting a network call did *not* happen, and the
+/// tree has no network tests.
+#[test]
+fn every_outbound_call_takes_its_client_from_behind_the_switch() {
+    let src = facade_source();
+
+    // Receiver-agnostic: counting `state.http_client()` would leave a reach spelled off any other
+    // binding uncounted, which is the one thing this test is for.
+    let handles = src.matches(".http_client()").count();
+    assert_eq!(
+        handles, 1,
+        "`http_client()` may be named exactly once in `library::radio`, inside `directory_client` \
+         — every other reach past the guard is traffic a user who switched Radio off still pays"
+    );
+
+    let seam = src
+        .split_once("fn directory_client")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
+    assert!(!seam.is_empty(), "`directory_client` moved or changed shape");
+    assert!(
+        seam.contains("ensure_enabled(state)?"),
+        "the seam is only a seam while it asks `ensure_enabled` first"
+    );
+    assert!(
+        seam.contains("http_client()"),
+        "the one `http_client()` this test counts must be the one inside the seam"
+    );
+}
+
+/// Where this module may be named, relative to its crate root: its own declaration.
+///
+/// An allowlist rather than the per-file *counts* `services::tests::mod_tests` pins `current_exe`
+/// with. There a second call in an exempt file is itself the regression; here the facade is meant
+/// to grow one per surface it gains.
+const CALLER_DECL: &str = "services/net/mod.rs";
+
+/// The facade, as a prefix rather than a file list.
+///
+/// It is a directory now and three of its files reach the directory client. Listing them would
+/// cost an edit per submodule, and a listed name that moves pre-authorises whatever takes its
+/// path next — [`OWN_TREE`]'s argument, from the other side of the same wall.
+const CALLER_TREE: &str = "library/radio/";
+
+/// This module's own tree. A prefix rather than a file list, so a fourth source
+/// beside the three needs no edit.
+const OWN_TREE: &str = "services/net/radio_browser/";
+
+/// The module doc's "nothing outside `library::radio` should reach here" is what
+/// leaves the setting that turns radio off one place to guard rather than one
+/// per call site. It is violable from any file, so a walk holds it rather than
+/// review.
+///
+/// The needle is the module name itself rather than the `services::net::radio_browser`
+/// path, which a sibling under `services/net/` could dodge with a `super::` import.
+/// Two seams it shares with the tree's other corpus pins: `strip_line_comments`
+/// handles `//` and not `/* */`, and the match is a substring rather than a parse.
+#[test]
+fn only_the_radio_facade_reaches_the_directory_client() {
+    const NEEDLE: &str = "radio_browser";
+
+    let mut reaching = Vec::new();
+    let mut declaration_seen = false;
+    let mut facade_files = 0usize;
+
+    for (path, src) in rust_sources() {
+        if path.starts_with(OWN_TREE) || !src.contains(NEEDLE) {
+            continue;
+        }
+        if path == CALLER_DECL {
+            declaration_seen = true;
+        } else if path.starts_with(CALLER_TREE) {
+            facade_files += 1;
+        } else {
+            reaching.push(path);
+        }
+    }
+
+    assert!(
+        reaching.is_empty(),
+        "{reaching:?} name `{NEEDLE}` directly. Go through `library::radio`, which is where \
+         the setting that turns radio off is enforced"
+    );
+    assert!(
+        declaration_seen,
+        "`{CALLER_DECL}` no longer names `{NEEDLE}`, so a moved declaration has pre-authorised \
+         whatever takes its path next"
+    );
+    assert!(
+        facade_files > 0,
+        "no file under `{CALLER_TREE}` names `{NEEDLE}`, so the facade has stopped being the door \
+         and this walk is passing over an empty set"
+    );
+}
+
+/// The count records that the user *chose* a station, so it must not be conditional on the server
+/// being up — and the natural spelling, `player_play_station(..).await?` ahead of `mark_played`,
+/// makes it exactly that. Pinned by reading the source because the alternative needs an
+/// `AppState`, a socket and a station that is reliably down; the ordering is the whole invariant
+/// and it is legible from the text.
+#[test]
+fn a_station_that_cannot_be_reached_is_still_counted_as_played() {
+    let source = facade_source();
+    let body = source
+        .split_once("pub async fn play_station")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
+
+    assert!(!body.is_empty(), "`play_station` moved or changed shape, so this pin reads nothing");
+    assert!(
+        matches!(
+            (body.find("mark_played"), body.find("player_play_station")),
+            (Some(counted), Some(opened)) if counted < opened
+        ),
+        "`play_station` must count the play before it opens the stream, or a station that is down \
+         today never reaches the recents list that would let the user find it again"
+    );
+}

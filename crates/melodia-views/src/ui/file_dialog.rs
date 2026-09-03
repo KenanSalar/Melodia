@@ -26,7 +26,3 @@ pub fn parented(weak: &slint::Weak<AppWindow>, title: &str) -> rfd::AsyncFileDia
         None => dialog,
     }
 }
-
-#[cfg(test)]
-#[path = "tests/file_dialog_tests.rs"]
-mod tests;

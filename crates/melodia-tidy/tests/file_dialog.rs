@@ -9,7 +9,7 @@
 //! as the workspace grows: a member added without `rfd` in its manifest cannot fail this,
 //! and one added with it is exactly what the pin is for.
 
-use crate::test_support::rust_sources;
+use melodia_testkit::rust_sources;
 
 /// The two names nothing outside the helper may spell: the crate the dialogs come from,
 /// and the parenting call the helper exists for.
@@ -24,14 +24,14 @@ const RAW_PARENT: &str = "set_parent";
 /// `use …::parented` reads as one caller fewer here.
 const HELPER: &str = "file_dialog::parented(";
 
-/// The two files that may name the raw calls, and the name each must **still** spell.
+/// The one file that may name the raw calls, and the name it must **still** spell.
 /// The helper owes `set_parent`: that one call is the whole module, it is the half no
 /// review on this machine can see missing, and nothing else is positioned to notice it
-/// go. This pin owes the crate name, being the needle.
-const EXEMPT: [(&str, &str); 2] = [
-    ("ui/file_dialog.rs", RAW_PARENT),
-    ("ui/tests/file_dialog_tests.rs", RAW_CRATE),
-];
+/// go.
+///
+/// It used to owe a second entry for this pin, which spells the crate name it greps for.
+/// Living outside the corpus is what retired that.
+const EXEMPT: [(&str, &str); 1] = [("ui/file_dialog.rs", RAW_PARENT)];
 
 /// A floor rather than an equality, so a genuine sixth dialog needs no edit here — but a
 /// caller that stops opening one, or a walk that silently found nothing, still trips it.
