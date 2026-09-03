@@ -1,9 +1,9 @@
 //! What both mixer-driving integration binaries need.
 //!
-//! `src/player/tests/helpers.rs` already holds these for the unit suites, but a `#[cfg(test)]`
-//! module is not reachable from an integration binary, so this is where the same two answers live
-//! for the other side of the wall. Each binary declares `mod common;`, which compiles it into that
-//! binary rather than into a test target of its own.
+//! `crates/melodia-playback/src/player/playback/tests/helpers.rs` already holds these for the unit
+//! suites, but a `#[cfg(test)]` module is not reachable from an integration binary, so this is
+//! where the same two answers live for the other side of the wall. Each binary declares
+//! `mod common;`, which compiles it into that binary rather than into a test target of its own.
 
 use std::num::NonZero;
 

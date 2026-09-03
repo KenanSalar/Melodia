@@ -6,8 +6,8 @@
 //! [`EqSource`] that copies one downmixed value out of each frame it forwards, leaving the audio
 //! bit-identical either way.
 //!
-//! **`src/player/CLAUDE.md` argues the design** — where the tap sits in the chain, why there is
-//! one ring per deck rather than one shared, and why the analyzer reads
+//! **`.claude/rules/audio-stack.md` argues the design** — where the tap sits in the chain, why
+//! there is one ring per deck rather than one shared, and why the analyzer reads
 //! [`VisualizerShared::analysis_rate`] rather than the media rate. What follows here is what each
 //! piece has to uphold.
 //!
@@ -276,8 +276,7 @@ const _: fn() = || {
 /// that ended. A deck drops a source as soon as it is exhausted or cleared, so the claim is
 /// released within a frame of the audio stopping.
 ///
-/// It is not *strictly* ordered against a control op, and `src/player/CLAUDE.md` documents that
-/// race and why neither deterministic fix was bought.
+/// It is not *strictly* ordered against a control op.
 pub struct DeckRun {
     viz: Arc<VisualizerShared>,
     deck: usize,

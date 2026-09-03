@@ -1,10 +1,10 @@
 //! Audio crossfade: the ramp cell the audio thread reads, the master settings cell the control
 //! layer writes, and the two pure predicates that decide when a transition becomes a crossfade.
 //!
-//! **`src/player/CLAUDE.md` argues the design** — why the ramp lives inside [`EqSource`] rather
-//! than on `Player::set_volume`, and why the curve is complementary linear (the mixer sums with no
-//! clamping, so `g_out + g_in ≡ 1` is what stops it clipping). The constants below carry the
-//! bounds a later edit could reverse.
+//! **`.claude/rules/audio-stack.md` argues the design** — why the ramp lives inside [`EqSource`]
+//! rather than on `Player::set_volume`, and why the curve is complementary linear (the mixer
+//! sums with no clamping, so `g_out + g_in ≡ 1` is what stops it clipping). The constants below
+//! carry the bounds a later edit could reverse.
 //!
 //! [`EqSource`]: super::equalizer::EqSource
 

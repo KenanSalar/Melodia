@@ -345,11 +345,11 @@ pub fn player_set_gapless(ctx: &PlaybackContext, enabled: bool) -> Result<(), Ap
 
 /// Arm / disarm the sleep-timer's "End of current track" mode. When armed, the
 /// playback monitor pauses at the next end-of-stream boundary instead of
-/// advancing the queue (see `src/player/handlers.rs`). Session-only — nothing
-/// is persisted. The `with_state_emit` re-publishes the light `ViewModel` so the
-/// UI's `Player.vm.sleep_at_track_end` (and thus the overflow-menu sleep row)
-/// tracks the flag; the monitor disarms it when it fires, which re-emits and
-/// auto-clears the row.
+/// advancing the queue (see `crates/melodia-engine/src/player/engine/handlers.rs`).
+/// Session-only — nothing is persisted. The `with_state_emit` re-publishes the
+/// light `ViewModel` so the UI's `Player.vm.sleep_at_track_end` (and thus the
+/// overflow-menu sleep row) tracks the flag; the monitor disarms it when it
+/// fires, which re-emits and auto-clears the row.
 ///
 /// **Refused while a station plays.** A live source has no track end, so the monitor would never
 /// fire the flag and the sleep row would sit reading "Track end" over a timer that can only be

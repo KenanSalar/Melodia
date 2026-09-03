@@ -9,8 +9,8 @@
 //! Nothing lands on a deck except through the three primitives taking a *builder* rather than a
 //! ready-made source — [`Decks::cut_to`], [`Decks::crossfade_to`] and [`Deck::stage`]. Each hands
 //! the closure the very deck it is about to append to, so a source's [`FadeShared`] cell and its
-//! visualizer ring slot can only have come from that deck; `src/player/CLAUDE.md` argues why
-//! reading a deck earlier and appending later is a bug.
+//! visualizer ring slot can only have come from that deck; `.claude/rules/audio-stack.md` argues
+//! why reading a deck earlier and appending later is a bug.
 
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};

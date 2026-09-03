@@ -2,8 +2,9 @@
 //!
 //! Without this, every track end / skip fires a separate write-pool round-trip
 //! (see `PlayerAction::UpdatePlayCount` / `UpdateSkipCount` in
-//! `src/player/actions.rs`). A user rapidly skipping through a playlist can
-//! easily fire 10 UPDATEs in a few seconds, each waiting for the WAL writer.
+//! `crates/melodia-engine/src/player/engine/actions.rs`). A user rapidly
+//! skipping through a playlist can easily fire 10 UPDATEs in a few seconds,
+//! each waiting for the WAL writer.
 //!
 //! The flusher absorbs both kinds of events on an `UnboundedSender` and
 //! coalesces them into a single multi-row `CASE WHEN` UPDATE every 2 s (or on

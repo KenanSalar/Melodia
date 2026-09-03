@@ -84,7 +84,8 @@
           prompts again, `MajorUpgrade` below replaces this version, and
           `util:RestartResource` registers the running `Melodia.exe`
           with Windows Installer's Restart Manager so the upgrade
-          doesn't need a reboot. See `src/services/updater/install/`.
+          doesn't need a reboot. See
+          `crates/melodia-app/src/services/updater/install/`.
         -->
         <!--
           SummaryInformation/@Codepage must be a Windows ANSI code page;

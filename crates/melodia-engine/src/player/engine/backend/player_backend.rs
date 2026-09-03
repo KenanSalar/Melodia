@@ -2,7 +2,7 @@
 //!
 //! [`PlayerBackend`] is every transport op the action layer issues and nothing else — no monitor
 //! query, no DSP setter — so `actions::execute_actions` can be driven against `MockBackend`
-//! (`player/tests/actions_tests.rs`) with no audio device. The one impl below is
+//! (`player/engine/tests/actions_tests.rs`) with no audio device. The one impl below is
 //! [`PlaybackEngine`]'s; callers hold an `Arc` and deref at the call site, which every one of them
 //! now does. A blanket `impl<T: Deref>` used to spare three of them the `*` at the cost of forty
 //! lines forwarding twelve signatures a third time.

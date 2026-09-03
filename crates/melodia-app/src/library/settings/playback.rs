@@ -8,10 +8,11 @@ use melodia_core::error::AppError;
 
 /// Persist the user toggle for "Gapless Playback". The runtime effect
 /// (gating `preload_gapless` inside the 500 ms position monitor in
-/// `src/player/handlers.rs`) is applied synchronously by the UI callback
-/// through `library::playback::player_set_gapless` *before* this async
-/// disk write, so the next staging tick picks up the new value even when
-/// the file rewrite hasn't completed.
+/// `crates/melodia-engine/src/player/engine/handlers.rs`) is applied
+/// synchronously by the UI callback through
+/// `library::playback::player_set_gapless` *before* this async disk write,
+/// so the next staging tick picks up the new value even when the file
+/// rewrite hasn't completed.
 pub fn set_gapless_playback(state: &AppState, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
         settings.playback.gapless_playback = on;

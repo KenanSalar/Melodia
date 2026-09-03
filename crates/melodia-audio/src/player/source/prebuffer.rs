@@ -73,7 +73,8 @@ impl StreamShared {
     }
 
     /// Whether the source is currently emitting silence because the ring ran dry. Drives the UI's
-    /// buffering indicator; see `src/player/CLAUDE.md` for why it is not `PlaybackStatus::Loading`.
+    /// buffering indicator; see `.claude/rules/audio-stack.md` for why it is not
+    /// `PlaybackStatus::Loading`.
     pub fn is_buffering(&self) -> bool {
         self.buffering.load(Ordering::Relaxed)
     }
