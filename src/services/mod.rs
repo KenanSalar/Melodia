@@ -9,7 +9,6 @@ pub mod discord;
 #[cfg(target_os = "windows")]
 pub mod dwm_titlebar;
 pub mod logging;
-pub mod material_you;
 pub mod media_controls;
 pub mod net;
 pub mod radio_blocklist;

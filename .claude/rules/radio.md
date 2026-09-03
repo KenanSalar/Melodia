@@ -7,7 +7,7 @@ paths:
   - src/player/stream_source.rs
   - src/player/prebuffer.rs
   - src/player/stream_decode.rs
-  - src/media/station_logo.rs
+  - src/media/fetch/station_logo.rs
   - src/entities/radio.rs
   - src/database/queries/radio.rs
   - src/tasks/radio_logo_cache.rs
@@ -128,11 +128,11 @@ is the copy to delete.
 
 Each of these is written once in Rust and again in `.slint`, so each needs a pin or an argument.
 
-- **`media::station_logo::MIN_LOGO_DIM` is restated in `components/now-playing/source-artwork.slint`**,
+- **`media::fetch::station_logo::MIN_LOGO_DIM` is restated in `components/now-playing/source-artwork.slint`**,
   which argues from it that no source reaching that tile can be small enough for `ArtworkImage`'s
   inset arm to fire — so it binds no `native-size`. Lower the floor and the argument stops being
   true with nothing to say so. Pinned by
-  `media::station_logo::tests::the_slint_tile_that_skips_native_size_still_agrees_with_the_floor`.
+  `media::fetch::station_logo::tests::the_slint_tile_that_skips_native_size_still_agrees_with_the_floor`.
 - **`Radio.tab-count` is the sole definition of how many tabs there are.** `seed_tab` clamps the
   persisted index against the global's own count rather than a Rust const, `RadioTab` carries one
   variant per tab, and `tab_from_index` ends in a default arm so a fourth tab resolves to Browse

@@ -10,7 +10,7 @@ import { ArtworkImage } from "../artwork-image.slint";
 // the station hero paint — a generic glyph across three surfaces is what makes one station look
 // like a different thing on each of them.
 //
-// **No `native-size`.** `media::station_logo::MIN_LOGO_DIM` is 32 px and the largest tile that
+// **No `native-size`.** `media::fetch::station_logo::MIN_LOGO_DIM` is 32 px and the largest tile that
 // mounts this is 46, so a source can never be small enough for `ArtworkImage`'s inset arm to fire.
 // The full view's tile is where that question is real, and it asks it itself.
 export component SourceArtwork inherits ArtworkImage {

@@ -11,7 +11,7 @@ use parking_lot::RwLock;
 use slint::ComponentHandle;
 
 use crate::library;
-use crate::services::material_you::SchemeStyle;
+use crate::media::image::material_you::SchemeStyle;
 use crate::state::{AppState, Signal};
 use crate::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState};
 use crate::{AppWindow, Settings};

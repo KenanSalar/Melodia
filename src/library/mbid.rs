@@ -24,9 +24,9 @@ use crate::entities::scan::ExtractedMetadata;
 use crate::entities::tags::{FieldEdit, TagEdit};
 use crate::error::AppError;
 use crate::error::describe;
-use crate::media::artwork::CoverCache;
-use crate::media::metadata::extract_metadata;
-use crate::media::tag_writer;
+use crate::media::image::artwork::CoverCache;
+use crate::media::ingest::metadata::extract_metadata;
+use crate::media::ingest::tag_writer;
 use crate::state::AppState;
 use crate::utils::self_writes::SelfWrites;
 

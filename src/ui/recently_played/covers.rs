@@ -13,7 +13,7 @@ use slint::Image;
 use super::state::{GRID_PREWARM_AHEAD, GRID_THUMB_CAP};
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::AppWindow;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::grid_prewarm::grid_cover;
 
 impl RecentlyPlayedUi {

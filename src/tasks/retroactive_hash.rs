@@ -50,7 +50,7 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
                     return None;
                 };
 
-                let hash = match crate::media::metadata::compute_file_hash(path) {
+                let hash = match crate::media::ingest::metadata::compute_file_hash(path) {
                     Ok(h) => h,
                     Err(e) => {
                         log::warn!("Failed to hash {path_str}: {e}");
@@ -58,7 +58,7 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
                     }
                 };
 
-                let mtime = crate::media::metadata::date_modified_from_metadata(&meta);
+                let mtime = crate::media::ingest::metadata::date_modified_from_metadata(&meta);
 
                 Some((*id, hash, mtime))
             })

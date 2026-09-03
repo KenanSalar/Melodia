@@ -38,7 +38,7 @@ use lofty::tag::Tag;
 use lru::LruCache;
 use parking_lot::Mutex;
 
-use crate::media::image_decode::{self, FilterType, MAX_SOURCE_DIM, resize_rgb8};
+use crate::media::image::image_decode::{self, FilterType, MAX_SOURCE_DIM, resize_rgb8};
 
 pub mod composite;
 pub mod sweep;
@@ -192,7 +192,7 @@ const HASH_HEX_LEN: usize = 16;
 /// Closed on purpose: [`is_stored_name`] can only be the exact inverse of the writers if the set
 /// is. It is the union of what the cover pickers accept, what a lofty picture's MIME maps to, the
 /// JPEG the composites and artist images are encoded as, and the favicon container
-/// `media::station_logo` admits.
+/// `media::fetch::station_logo` admits.
 ///
 /// **The `image` dependency's feature list has to cover it**, a format named here but absent there
 /// being one the store accepts and no tier can draw. Held by a test rather than by review, the

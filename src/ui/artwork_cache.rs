@@ -8,7 +8,7 @@
 //! each is a newtype over the machinery here.
 //!
 //! Deliberately **separate, small** caches rather than a share of the row-tier
-//! [`crate::media::cover_thumbs::CoverThumbs`]: mixing these much larger buffers into that
+//! [`crate::media::image::cover_thumbs::CoverThumbs`]: mixing these much larger buffers into that
 //! LRU would evict row thumbnails wholesale. Buffers rather than `Image`, `slint::Image`
 //! being neither `Send` nor `Sync` and so unable to cross the `spawn_blocking` boundary
 //! the decode runs on.
@@ -22,7 +22,7 @@ use lru::LruCache;
 use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::media::image_decode::{
+use crate::media::image::image_decode::{
     FilterType, MAX_SOURCE_DIM, decode_capped_to, fit_within, resize_rgb8,
 };
 use crate::ui::backdrop::BackdropSample;

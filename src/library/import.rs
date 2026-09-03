@@ -6,7 +6,7 @@ use serde::Serialize;
 use crate::database::queries;
 use crate::entities::track::TrackSummary;
 use crate::error::AppError;
-use crate::media::scanner::scan_files_parallel;
+use crate::media::ingest::scanner::scan_files_parallel;
 use crate::state::AppState;
 use crate::utils::audio_ext::is_audio_extension;
 

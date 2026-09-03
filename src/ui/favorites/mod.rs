@@ -29,7 +29,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::entities::track::FavoriteStats;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork;

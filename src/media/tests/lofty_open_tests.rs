@@ -1,4 +1,4 @@
-//! Single-opener pin: nothing outside `media::metadata` hands a path to lofty.
+//! Single-opener pin: nothing outside `media::ingest::metadata` hands a path to lofty.
 //!
 //! A walk rather than the two call sites, because what it guards is a third. Lofty's own
 //! openers key on the extension and its map has no entry for `.oga`, so a site spelling one
@@ -28,7 +28,7 @@ const HELPER: &str = "read_tags(";
 /// `metadata.rs` owes the probe: the sniff wrapped around it is the whole module, and nothing
 /// else is positioned to notice it go. This pin owes the needle, being the needle.
 const EXEMPT: [(&str, &str); 2] = [
-    ("media/metadata.rs", RAW_PROBE_TYPE),
+    ("media/ingest/metadata.rs", RAW_PROBE_TYPE),
     ("media/tests/lofty_open_tests.rs", RAW_PROBE_TYPE),
 ];
 
@@ -69,7 +69,7 @@ fn every_lofty_open_goes_through_the_shared_reader() {
 
     assert!(
         inline.is_empty(),
-        "{inline:?} open a file with lofty directly — use `media::metadata::read_tags`, which \
+        "{inline:?} open a file with lofty directly — use `media::ingest::metadata::read_tags`, which \
          falls back to the header for the extensions lofty's own map has no entry for"
     );
     assert!(

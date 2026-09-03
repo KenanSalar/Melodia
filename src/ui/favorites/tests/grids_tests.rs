@@ -3,7 +3,7 @@ use super::sort::{set_artist_sort, sort_artists};
 use super::warm::mounted_content;
 use crate::entities::artist::FavoriteArtist;
 use crate::entities::track::MostPlayedFavorite;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::services::settings::SortDir;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi};
 

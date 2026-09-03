@@ -2,7 +2,7 @@
 //!
 //! The store is content-addressed and shared, so nothing on the delete paths can safely unlink a
 //! cover: eleven of twelve tracks may still point at it. Deletion happens here instead, against
-//! the reference set as a whole — see [`crate::media::artwork::sweep`] for why that shape rather
+//! the reference set as a whole — see [`crate::media::image::artwork::sweep`] for why that shape rather
 //! than a refcount.
 //!
 //! Runs per scan rather than once at upgrade, because the store also *churns*: `compose_artwork`
@@ -16,7 +16,7 @@ use crate::config::Paths;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::error::{AppError, AppResult, describe};
-use crate::media::artwork::sweep::{self, GRACE, SweepReport};
+use crate::media::image::artwork::sweep::{self, GRACE, SweepReport};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 

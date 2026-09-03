@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::DetailArtwork;
 use crate::ui::section_state::SectionState;

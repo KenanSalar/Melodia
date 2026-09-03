@@ -17,8 +17,8 @@ use std::time::Duration;
 
 use crate::entities::radio::StoredLogo;
 use crate::error::AppError;
-use crate::media::logo_tile::Tile;
-use crate::media::{artwork, image_decode, logo_tile};
+use crate::media::image::logo_tile::Tile;
+use crate::media::image::{artwork, image_decode, logo_tile};
 
 /// Ceiling on one logo download, checked against the header and again against the body.
 ///

@@ -12,7 +12,7 @@ use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::tests::helpers::insert_test_track;
 use crate::error::AppError;
-use crate::media::artwork;
+use crate::media::image::artwork;
 use crate::test_support::ASSETS_DIR;
 use crate::utils::self_writes::SelfWrites;
 

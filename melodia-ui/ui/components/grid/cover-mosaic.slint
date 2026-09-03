@@ -39,7 +39,7 @@ component MosaicSlot inherits Rectangle {
 }
 
 // Reusable 1/2/3/4-tile artwork mosaic, and the live preview of what
-// `media::artwork::compose_artwork` will bake — shared layouts, so the picker shows the collage it
+// `media::image::artwork::compose_artwork` will bake — shared layouts, so the picker shows the collage it
 // is about to persist. That function rather than its lenient sibling `compose_cover` is what makes
 // the preview a promise: a source dropping out would bake a collage slot-for-slot different. Pure
 // layout, so no paths draws nothing and the caller's own empty state shows through, and tiles

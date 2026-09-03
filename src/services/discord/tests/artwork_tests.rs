@@ -6,7 +6,7 @@ use crate::error::AppError;
 /// The seam the whole cache rule rests on: only a `Lookup::Miss` may be written to
 /// the LRU as "this album has no cover", and only `Ok(None)` produces one.
 ///
-/// Unpinned until now, which is how `media::itunes` came to fold a non-success HTTP
+/// Unpinned until now, which is how `media::fetch::itunes` came to fold a non-success HTTP
 /// status into `Ok(None)` — every rate-limited iTunes reply was a definitive miss, and
 /// blanked that album's cover for the rest of the session once Deezer had missed too.
 /// A provider that wants to say "I don't know" says it with an `Err`.

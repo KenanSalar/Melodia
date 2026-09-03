@@ -13,7 +13,7 @@ use std::num::NonZeroUsize;
 
 use slint::ComponentHandle;
 
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::grid_prewarm;
 use crate::{AppWindow, Radio};
 

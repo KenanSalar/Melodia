@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::AppWindow;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::services::view_state::ViewStateData;
 use crate::state::AppState;
 

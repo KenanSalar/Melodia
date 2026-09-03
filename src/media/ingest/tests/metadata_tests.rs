@@ -2,7 +2,7 @@ use tempfile::TempDir;
 
 use super::*;
 use crate::error::AppError;
-use crate::media::artwork::CoverCache;
+use crate::media::image::artwork::CoverCache;
 
 /// Creates a minimal valid WAV file (44-byte header + 4 bytes PCM data).
 /// This is the smallest file that Symphonia/Lofty can parse.
@@ -36,7 +36,7 @@ fn create_minimal_wav(path: &std::path::Path) -> Result<(), AppError> {
 }
 
 fn test_cover_cache() -> CoverCache {
-    crate::media::artwork::new_cover_cache()
+    crate::media::image::artwork::new_cover_cache()
 }
 
 #[test]

@@ -26,7 +26,8 @@ pub async fn fetch_logo(
     favicon_url: &str,
 ) -> Result<Option<StoredLogo>, AppError> {
     let client = directory_client(state)?;
-    crate::media::station_logo::fetch(client, favicon_url, &state.paths.radio_logos_dir).await
+    crate::media::fetch::station_logo::fetch(client, favicon_url, &state.paths.radio_logos_dir)
+        .await
 }
 
 /// How long a logo URL that answered with nothing is left alone, per failed attempt. A day, so a
@@ -303,7 +304,7 @@ impl SiteOrigin {
 /// The site to ask about a station, from whatever the row carries. `None` where neither the
 /// homepage nor the stream URL names a host.
 pub fn site_origin(homepage: &str, stream_url: &str) -> Option<SiteOrigin> {
-    crate::media::logo_discovery::origin_for(homepage, stream_url).map(SiteOrigin)
+    crate::media::fetch::logo_discovery::origin_for(homepage, stream_url).map(SiteOrigin)
 }
 
 /// Give a kept station with no usable logo another chance at one, and point its row at what lands.
@@ -403,7 +404,7 @@ async fn note_site_miss(state: &AppState, origin: &str) {
 /// What a station's own site says its logo is, past the switch that turns Radio off.
 async fn discover_logo_url(state: &AppState, origin: &reqwest::Url) -> Option<String> {
     let client = directory_client(state).ok()?;
-    match crate::media::logo_discovery::icon_url(client, origin).await {
+    match crate::media::fetch::logo_discovery::icon_url(client, origin).await {
         Ok(url) => url,
         Err(e) => {
             log::debug!("radio: station site not read: {}", crate::error::describe(&e));

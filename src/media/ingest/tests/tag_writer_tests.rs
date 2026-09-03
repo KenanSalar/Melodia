@@ -16,8 +16,8 @@ use tempfile::TempDir;
 
 use super::*;
 use crate::error::AppError;
-use crate::media::artwork;
-use crate::media::metadata::{TagScope, extract_metadata, read_tags};
+use crate::media::image::artwork;
+use crate::media::ingest::metadata::{TagScope, extract_metadata, read_tags};
 use crate::test_support::{ASSETS_DIR, UNBOUNDED};
 
 // ---------------------------------------------------------------- helpers

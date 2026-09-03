@@ -89,7 +89,7 @@ async fn renamed_without_metadata_falls_back_to_a_stat() -> Result<(), AppError>
 
     let to = tmp.path().join("to.mp3");
     std::fs::write(&to, b"audio")?;
-    let on_disk = crate::media::metadata::extract_date_modified(&to);
+    let on_disk = crate::media::ingest::metadata::extract_date_modified(&to);
     assert!(on_disk.is_some(), "the temp file must have a readable mtime");
 
     let mut tx = db.write().begin().await?;

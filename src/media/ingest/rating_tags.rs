@@ -14,7 +14,7 @@
 //! Deliberately no `FMPS_Rating`, the one carrier with a spec'd scale. It buys precision a
 //! whole-star strip can't show, and lofty has no mapping for it at all: an `ID3v2`
 //! `TXXX:FMPS_Rating` lands in a `pub(crate)` companion tag reachable only through a second
-//! parse, where [`crate::media::metadata::read_tags`] is the tree's only lofty open. The cost is
+//! parse, where [`crate::media::ingest::metadata::read_tags`] is the tree's only lofty open. The cost is
 //! an Amarok or Clementine library importing unrated.
 
 use lofty::prelude::ItemKey;

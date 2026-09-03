@@ -10,7 +10,7 @@ use slint::ComponentHandle;
 pub fn seed_initial_view_model(
     app: &AppWindow,
     state: &AppState,
-    cover_thumbs: &Arc<media::cover_thumbs::CoverThumbs>,
+    cover_thumbs: &Arc<media::image::cover_thumbs::CoverThumbs>,
 ) {
     use melodia::player::state::lock_state;
 

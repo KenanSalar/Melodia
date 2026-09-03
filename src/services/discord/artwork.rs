@@ -2,8 +2,8 @@
 //!
 //! Discord can't read local files, so the cover has to be an external `https://`
 //! URL its CDN fetches server-side. We resolve one via a Deezer album search
-//! (`media::deezer::search_album_cover`), falling back to the iTunes Search API
-//! (`media::itunes::search_album_cover`) when Deezer has no match — their misses
+//! (`media::fetch::deezer::search_album_cover`), falling back to the iTunes Search API
+//! (`media::fetch::itunes::search_album_cover`) when Deezer has no match — their misses
 //! differ, so the second provider fills gaps the first leaves. The result is cached
 //! (bounded LRU, keyed case-insensitively on `(artist, album)`) so a repeat play of
 //! the same album never re-queries. The lookup is driven from the detector task only
@@ -88,16 +88,22 @@ pub(super) async fn resolve_album_cover(
         return hit.clone();
     }
 
-    let deezer =
-        run_lookup(crate::media::deezer::search_album_cover(client, artist, album), "deezer").await;
+    let deezer = run_lookup(
+        crate::media::fetch::deezer::search_album_cover(client, artist, album),
+        "deezer",
+    )
+    .await;
     let deezer_definite_miss = matches!(deezer, Lookup::Miss);
     if let Lookup::Found(url) = deezer {
         cache.lock().put(key, Some(url.clone()));
         return Some(url);
     }
 
-    let itunes =
-        run_lookup(crate::media::itunes::search_album_cover(client, artist, album), "itunes").await;
+    let itunes = run_lookup(
+        crate::media::fetch::itunes::search_album_cover(client, artist, album),
+        "itunes",
+    )
+    .await;
     match itunes {
         Lookup::Found(url) => {
             cache.lock().put(key, Some(url.clone()));

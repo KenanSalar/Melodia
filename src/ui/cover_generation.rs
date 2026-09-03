@@ -13,7 +13,7 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::AppWindow;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 
 /// Call `bump` on the UI thread whenever `tier` finishes a batch it was handed by a miss.
 ///

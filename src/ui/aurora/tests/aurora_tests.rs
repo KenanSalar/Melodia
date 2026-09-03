@@ -3,7 +3,7 @@ use material_colors::hct::Hct;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use super::{WASH_COUNT, WASH_MAX_TONE, WASH_SHADE_FACTOR, tints};
-use crate::services::material_you::{extract_source_argb_from_rgb8, population_seeds};
+use crate::media::image::material_you::{extract_source_argb_from_rgb8, population_seeds};
 use crate::ui::backdrop::{SEED_COUNT, ThemeTokens};
 
 /// The default accent, standing in for "no artwork" wherever a fallback is exercised.

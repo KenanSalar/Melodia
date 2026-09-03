@@ -24,7 +24,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
 use crate::entities::track::TrackSummary;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::player::now_playing::SourceId;
 use crate::player::state::{PlayerViewModelLight, QueueViewModel, lock_state};
 use crate::state::AppState;

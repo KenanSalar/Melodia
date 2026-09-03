@@ -93,7 +93,7 @@ pub fn decode_capped_to(
 /// about cost rather than about content: sniffing means opening every cover to read two bytes
 /// most of them will decline on, where the extension is already in hand. Nothing rests on the
 /// answer — both arms end in a real decode against a guessed format, so a mislabelled file loses
-/// the fast path and stays correct. Every caller passes a store path, and `media::artwork` puts
+/// the fast path and stays correct. Every caller passes a store path, and `media::image::artwork` puts
 /// the format in the name.
 fn decode_jpeg_scaled(path: &Path, max_dim: u32, target: u32) -> Option<DynamicImage> {
     if !is_jpeg_name(path) {
@@ -123,7 +123,7 @@ fn decode_jpeg_scaled(path: &Path, max_dim: u32, target: u32) -> Option<DynamicI
     }
 }
 
-/// Both spellings `media::artwork` writes for a JPEG, case-folded — a user's own picked cover
+/// Both spellings `media::image::artwork` writes for a JPEG, case-folded — a user's own picked cover
 /// keeps whatever case its filesystem gave it.
 fn is_jpeg_name(path: &Path) -> bool {
     path.extension()

@@ -12,7 +12,7 @@ use std::path::PathBuf;
 /// Size and mtime for a track already in the database, feeding the incremental-scan filter that
 /// decides whether an on-disk file is unchanged and can be skipped entirely.
 ///
-/// See `media::scanner::track_is_current`, which compares `date_modified` byte-for-byte.
+/// See `media::ingest::scanner::track_is_current`, which compares `date_modified` byte-for-byte.
 #[derive(Debug, Clone)]
 pub struct ExistingTrackSummary {
     pub file_size: Option<i64>,

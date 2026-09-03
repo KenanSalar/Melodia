@@ -39,7 +39,7 @@ use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::browse::{BrowseFile, BrowseFolder};
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::services::view_state;
 use crate::state::AppState;
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};

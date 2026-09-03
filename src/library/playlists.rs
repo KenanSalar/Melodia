@@ -121,7 +121,7 @@ pub async fn set_playlist_thumbnail(
     let artwork_dir = state.paths.artwork_dir.clone();
 
     let source_paths: Vec<PathBuf> = image_paths.iter().map(PathBuf::from).collect();
-    let composite_path = crate::media::artwork::compose_artwork(&source_paths, &artwork_dir)
+    let composite_path = crate::media::image::artwork::compose_artwork(&source_paths, &artwork_dir)
         .ok_or_else(|| AppError::io_other("Failed to compose artwork"))?;
 
     queries::playlist::set_playlist_custom_thumbnail(&state.db, playlist_id, &composite_path).await

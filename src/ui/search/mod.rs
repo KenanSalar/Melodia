@@ -32,7 +32,7 @@ use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::util::clamp_i64_to_i32;

@@ -240,7 +240,7 @@ impl FileDecoder {
 ///
 /// The scan path's answer of last resort. Lofty reads duration off the same parse that reads the
 /// tags, so a file it can't identify (a Matroska or CAF one, say) reaches the database with no
-/// length at all unless someone asks the decoder instead (`media::metadata`). It costs a probe plus
+/// length at all unless someone asks the decoder instead (`media::ingest::metadata`). It costs a probe plus
 /// one decoded packet, which is why it stays on that failure path rather than running for every
 /// file scanned.
 pub fn probe_duration(path: &Path) -> Option<Duration> {

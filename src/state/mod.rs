@@ -14,10 +14,8 @@ pub use signal::{SharedFlag, Signal};
 use crate::config::Paths;
 use crate::database::{self, DbPool};
 use crate::error::{AppError, AppResult};
-use crate::media::{
-    artwork::CoverCache,
-    watcher::{FileEvent, FolderWatcher},
-};
+use crate::media::image::artwork::CoverCache;
+use crate::media::ingest::watcher::{FileEvent, FolderWatcher};
 use crate::player::backend::PlaybackEngine;
 use crate::player::decks::DECK_COUNT;
 use crate::player::event_sink::{MediaControlsSync, PlayerSinks};
@@ -195,7 +193,7 @@ impl AppState {
 
         hydrate_audio_dsp(&engine, &settings);
 
-        let cover_cache: CoverCache = crate::media::artwork::new_cover_cache();
+        let cover_cache: CoverCache = crate::media::image::artwork::new_cover_cache();
 
         let (vm_tx, _) = watch::channel::<Option<PlayerViewModelLight>>(None);
         let (q_tx, _) = watch::channel::<Option<QueueViewModel>>(None);

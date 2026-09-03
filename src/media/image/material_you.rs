@@ -29,7 +29,7 @@ use material_colors::scheme::variant::{
 use material_colors::score::Score;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::media::image_decode::decode_capped;
+use crate::media::image::image_decode::decode_capped;
 use crate::themes::{Palette, material3};
 
 /// The seven Material 3 scheme variants, plus a `None` that disables Material
@@ -170,7 +170,7 @@ fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
 }
 
 /// [`extract_source_argb`]'s pipeline starting from the RGB8 thumbnail
-/// [`crate::media::cover_thumbs::CoverThumbs`] already keeps for row rendering.
+/// [`crate::media::image::cover_thumbs::CoverThumbs`] already keeps for row rendering.
 /// Small enough that quantizing it directly is qualitatively the same as
 /// quantizing a downsample of the source, and it skips the transient decode peak
 /// the path-based variant produces on large embedded artwork.

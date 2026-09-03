@@ -16,7 +16,7 @@ mod reconcile;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, Instant};
 
-use crate::media::watcher::FileEvent;
+use crate::media::ingest::watcher::FileEvent;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use crate::utils::self_writes::SelfWrites;

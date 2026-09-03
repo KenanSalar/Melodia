@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use parking_lot::Mutex;
 
-use crate::media::artwork::compose_cover;
+use crate::media::image::artwork::compose_cover;
 use crate::state::AppState;
 use crate::ui::artwork_cache::{BlurSpec, pair_from_image};
 use crate::ui::detail_artwork::DetailPair;

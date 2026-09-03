@@ -6,9 +6,10 @@ use lofty::file::{FileType, TaggedFile, TaggedFileExt};
 use lofty::prelude::*;
 use lofty::properties::FileProperties;
 
-use super::{artwork, rating_tags};
+use super::rating_tags;
 use crate::entities::scan::ExtractedMetadata;
 use crate::error::AppError;
+use crate::media::image::artwork;
 
 /// Compute a full BLAKE3 hash of a file (64-char hex string).
 /// Uses `update_reader` for optimized streaming I/O with SIMD-friendly buffering.
@@ -87,7 +88,7 @@ pub(crate) enum TagScope {
 /// extension resolved to nothing, so every file that parses today still parses the same
 /// way, and the extra open stays off the scan's hot path.
 ///
-/// Every lofty open in the tree comes through here, `media::tag_writer` included: a file the
+/// Every lofty open in the tree comes through here, `media::ingest::tag_writer` included: a file the
 /// scan identifies by its header and the tag editor refuses by its extension is a track whose
 /// tags are visible and unsavable.
 pub(crate) fn read_tags(path: &Path, scope: TagScope) -> Result<TaggedFile, AppError> {

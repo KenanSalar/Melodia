@@ -11,7 +11,7 @@ use slint::{ComponentHandle, Model, VecModel};
 use super::rows::rebuild_rows;
 use super::{ShadowEntry, push_selected_count};
 use crate::library;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::player::state::{PlayerAction, lock_state, with_state_emit};
 use crate::state::AppState;
 use crate::{AppWindow, Queue, QueueRow};

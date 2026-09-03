@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::path::Path;
 
 use crate::error::AppError;
-use crate::media::artwork;
+use crate::media::image::artwork;
 
 #[derive(serde::Deserialize)]
 struct DeezerSearchResponse {

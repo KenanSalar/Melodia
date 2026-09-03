@@ -13,7 +13,7 @@ use rayon::prelude::*;
 use crate::database::queries;
 use crate::entities::folder;
 use crate::error::AppError;
-use crate::media::scanner::{collect_media_files, scan_files_parallel, track_is_current};
+use crate::media::ingest::scanner::{collect_media_files, scan_files_parallel, track_is_current};
 use crate::services;
 use crate::state::{AppState, ScanProgressTick};
 use crate::tasks::{self, TaskSpawner};

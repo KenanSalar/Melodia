@@ -116,7 +116,7 @@ fn nothing_writes_into_the_store_without_staging_and_renaming() {
 /// should fail next to the number it invalidates.
 #[test]
 fn every_tier_decodes_within_the_store_cap() {
-    use crate::media::cover_thumbs::row_cover_size;
+    use crate::media::image::cover_thumbs::row_cover_size;
     use crate::ui::grid_prewarm::{GRID_COVER_FALLBACK, cover_size};
     use crate::ui::util::COVER_SIZE;
 

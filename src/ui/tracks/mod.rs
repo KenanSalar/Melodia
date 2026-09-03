@@ -26,7 +26,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::track_list_cache::TrackListCache;
 use crate::ui::util::clamp_i64_to_i32;

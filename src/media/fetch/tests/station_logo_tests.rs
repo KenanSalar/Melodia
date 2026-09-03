@@ -126,10 +126,10 @@ fn a_source_with_no_opaque_pixel_is_refused_rather_than_stored_untreated() -> Te
 #[test]
 fn the_slint_tile_that_skips_native_size_still_agrees_with_the_floor() {
     const TILE: &str =
-        include_str!("../../../melodia-ui/ui/components/now-playing/source-artwork.slint");
+        include_str!("../../../../melodia-ui/ui/components/now-playing/source-artwork.slint");
 
     assert!(
-        TILE.contains(&format!("`media::station_logo::MIN_LOGO_DIM` is {MIN_LOGO_DIM} px")),
+        TILE.contains(&format!("`media::fetch::station_logo::MIN_LOGO_DIM` is {MIN_LOGO_DIM} px")),
         "`source-artwork.slint` restates the floor to argue it needs no `native-size`; it is \
          {MIN_LOGO_DIM} px here and the two have drifted"
     );

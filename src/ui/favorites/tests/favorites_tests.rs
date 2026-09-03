@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{FavoritesTab, FavoritesUi};
 use crate::entities::artist::FavoriteArtist;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::test_support::write_test_png;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;

@@ -14,7 +14,7 @@ use std::sync::atomic::AtomicBool;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, VecModel, Weak};
 
-use crate::media::cover_thumbs::{CoverThumbs, row_cover_size};
+use crate::media::image::cover_thumbs::{CoverThumbs, row_cover_size};
 use crate::state::AppState;
 use crate::{AppWindow, Queue, QueueRow};
 

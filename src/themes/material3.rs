@@ -12,7 +12,7 @@ use super::{AccentDef, Palette, ThemeDef, Variant};
 // slots, which are too washed to signal anything at these tones.
 //
 // `pub(crate)` because the Material You dynamic palette reuses them verbatim
-// (`services::material_you::generate_palette`). A dynamic scheme has no green
+// (`media::image::material_you::generate_palette`). A dynamic scheme has no green
 // or yellow role to map, and deriving one from the album seed puts a moving
 // colour on the three surfaces that need a fixed one — maximize, the
 // success/warning toasts, and the star rating.

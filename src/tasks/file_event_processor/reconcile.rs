@@ -10,9 +10,9 @@ use crate::database::DbPool;
 use crate::database::queries;
 use crate::entities::scan::ExtractedMetadata;
 use crate::error::AppResult;
-use crate::media::artwork::CoverCache;
-use crate::media::metadata::{extract_date_modified, extract_or_filename_row};
-use crate::media::watcher::FileEvent;
+use crate::media::image::artwork::CoverCache;
+use crate::media::ingest::metadata::{extract_date_modified, extract_or_filename_row};
+use crate::media::ingest::watcher::FileEvent;
 
 /// Batch size threshold above which stats triggers are disabled for bulk processing.
 const BULK_THRESHOLD: usize = 20;

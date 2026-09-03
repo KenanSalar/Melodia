@@ -38,9 +38,10 @@ use lofty::prelude::{Accessor, ItemKey};
 use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
-use super::{image_decode, metadata, rating_tags};
+use super::{metadata, rating_tags};
 use crate::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use crate::error::AppError;
+use crate::media::image::image_decode;
 
 /// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and a tag holding a
 /// 12-digit "tempo" is worse than one holding none.

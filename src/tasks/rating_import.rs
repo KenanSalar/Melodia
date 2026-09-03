@@ -21,7 +21,7 @@ use lofty::file::TaggedFileExt;
 
 use crate::database::queries;
 use crate::error::{AppError, AppResult};
-use crate::media::{metadata, rating_tags};
+use crate::media::ingest::{metadata, rating_tags};
 use crate::state::AppState;
 use crate::tasks::{TaskSpawner, one_shot};
 

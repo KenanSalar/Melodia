@@ -1,7 +1,7 @@
 use super::apply::build_filtered_grid;
 use super::warm::mounted_content;
 use crate::entities::track::MostPlayedFavorite;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::recently_played::{RecentlyPlayedTab, RecentlyPlayedUi};
 
 /// An exhaustive struct literal on purpose: a new field on the entity fails this

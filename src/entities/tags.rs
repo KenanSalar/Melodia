@@ -1,7 +1,7 @@
 //! What a tag edit *is*, independent of writing one.
 //!
 //! The Edit-Tags dialog builds these out of its form and hands them to `library::tags`; the writer
-//! in `media::tag_writer` consumes them. Neither end owns the vocabulary, which is why it sits
+//! in `media::ingest::tag_writer` consumes them. Neither end owns the vocabulary, which is why it sits
 //! here — and why the dialog can name it without naming the writer.
 
 /// A per-field tri-state. The dialog reports what the user *did*, not just the value they left
@@ -23,7 +23,7 @@ pub enum ArtworkEdit {
     #[default]
     Keep,
     Remove,
-    /// Embed the picture the caller built with `media::tag_writer::cover_picture_from_path`.
+    /// Embed the picture the caller built with `media::ingest::tag_writer::cover_picture_from_path`.
     Replace,
 }
 

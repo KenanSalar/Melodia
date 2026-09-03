@@ -32,7 +32,7 @@ const MIN_THREAD_NAMES: usize = 5;
 const RUNTIME_NAMED: [&str; 2] = [
     // `cover-decode-{i}`, whose budget is the prefix plus the widest index the decode pool's
     // clamp can reach; raising that clamp is a thread-name change.
-    "media/cover_thumbs.rs",
+    "media/image/cover_thumbs.rs",
     // This pin, which has to spell the needle to grep for it.
     "services/tests/mod_tests.rs",
 ];

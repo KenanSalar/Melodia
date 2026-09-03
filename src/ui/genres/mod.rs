@@ -23,7 +23,7 @@ use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::genre::GenreStats;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
 use crate::ui::util::clamp_i64_to_i32;

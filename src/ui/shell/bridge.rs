@@ -15,7 +15,7 @@ use tokio::runtime::Handle;
 use tokio::sync::watch;
 
 use crate::entities::track::TrackSummary;
-use crate::media::cover_thumbs::CoverThumbs;
+use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::player::event_sink::PlayerSinks;
 use crate::player::state::{PlayerViewModelLight, PositionTick, QueueViewModel};
 use crate::player::types::RadioNowPlaying;

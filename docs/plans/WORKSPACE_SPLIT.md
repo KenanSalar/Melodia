@@ -735,7 +735,7 @@ turn it red; the fix is the glob edit in the same commit, never a skip. That is 
       `win32_hwnd()` as the source of a live handle, which is now a *caller* precondition and says
       so, and `reapply_from_theme`'s inline shift-and-or turned out to be `color_to_rgb`, which it
       now sits beside.
-- [ ] **B5. `media/` regroups three ways**, into `media/{image,ingest,fetch}/`:
+- [x] **B5. `media/` regroups three ways**, into `media/{image,ingest,fetch}/`:
       `image/` is `artwork/`, `cover_thumbs`, `image_decode`, `logo_tile` and
       `services/material_you.rs` pulled in (~2,190 lines, and the only tier with no outbound
       `crate::` edge at all); `ingest/` is `scanner`, `metadata`, `watcher`, `tag_writer` and
@@ -747,6 +747,19 @@ turn it red; the fix is the glob edit in the same commit, never a skip. That is 
       and the alternative puts pixel composition in the crate that owns sockets.
       `media/tests/image_decode_tests.rs:31` pins `EXEMPT = "services/material_you.rs"` as an
       equality, so the `material_you` move breaks it by design.
+
+      **Five corpus pins went red on the move and every one of them was right**: that same
+      equality, `lofty_open_tests`' exemption, the thread-name ledger's `cover_thumbs` path,
+      `radio.md`'s glob, and the `.slint` comment restating `MIN_LOGO_DIM` under its old module
+      path. Four `.slint` files name a Rust module in prose and none of them is walked for, so
+      they were found by grep rather than by the suite.
+
+      **The image tier is not edge-free, and the doc's own finding said why without drawing the
+      conclusion.** `material_you` names `themes::{Palette, material3}`, so as it stands
+      `melodia-artwork` would depend on whichever crate holds the registry. It creates no cycle
+      (platform is core-only), and the two answers are to accept the edge or to notice that
+      `Palette` is sixteen `u32`s with no behaviour and belongs further down. **Phase C decides
+      it**; the module doc carries the question so it cannot be decided by accident.
 - [ ] **B6. `services/` regroups into net, platform, integrations and app.** The largest item, and
       three of its four groups changed under findings 18 and 19.
       - **`net/`**: B1's primitives, `radio_browser/`, `radio_blocklist/` with its bake left wired

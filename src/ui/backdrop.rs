@@ -23,7 +23,9 @@ use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast;
 use slint::{Brush, ComponentHandle};
 
-use crate::services::material_you::{clamp_to_tone_band, population_seeds, to_tone_capped_chroma};
+use crate::media::image::material_you::{
+    clamp_to_tone_band, population_seeds, to_tone_capped_chroma,
+};
 use crate::ui::appearance::theme_apply::{brush, brush_to_rgb, brush_with_alpha};
 use crate::ui::artwork_cache::BlurSpec;
 use crate::{AppWindow, Theme as ThemeGlobal};

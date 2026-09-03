@@ -14,7 +14,7 @@
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use crate::media::image_decode::{FilterType, MAX_SOURCE_DIM, decode_capped};
+use crate::media::image::image_decode::{FilterType, MAX_SOURCE_DIM, decode_capped};
 
 use super::{
     HASH_HEX_LEN, HashingWriter, STORE_JPEG_QUALITY, STORE_MAX_DIM, persist_unless_exists,

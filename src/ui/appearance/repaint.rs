@@ -9,7 +9,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use super::accent_picker::{accent_idx_in_grid, accent_swatches_with_my, effective_accent_id};
 use super::{apply_and_seed_to_i32, theme_picker};
 use crate::library;
-use crate::services::material_you::SchemeStyle;
+use crate::media::image::material_you::SchemeStyle;
 use crate::state::AppState;
 use crate::themes::{self, SystemColorState};
 use crate::{AppWindow, Settings};

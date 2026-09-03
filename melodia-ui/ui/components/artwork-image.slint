@@ -172,7 +172,7 @@ export component ArtworkImage inherits Rectangle {
         opacity: root.fade;
     }
     // A station whose logo is absent, plain-http, or too small for the store to keep — see
-    // `media::station_logo` for why each of those is a glyph rather than a download.
+    // `media::fetch::station_logo` for why each of those is a glyph rather than a download.
     if root.shows-glyph && root.fallback-icon == "radio": Image {
         source: @image-url("../assets/icons/radio.svg");
         colorize: root.tile-icon-color;

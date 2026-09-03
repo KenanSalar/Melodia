@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::database::queries;
 use crate::entities::tags::{FieldEdit, TagEdit};
 use crate::error::AppError;
-use crate::media::rating_tags;
+use crate::media::ingest::rating_tags;
 use crate::player::state::{PlayerAction, lock_state, sync_current_track_if_in, with_state_emit};
 use crate::state::AppState;
 use crate::tasks::rating_writeback;

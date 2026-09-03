@@ -154,7 +154,7 @@ silently miss the other.
   since the slot carries one fade for everything in it.
 
 - **`MosaicHeroTile`** is the 140 px artwork square both curated heroes draw, and it draws **one
-  composed collage, never a live `CoverMosaic`** — `media::artwork`'s `COMPOSITE_LAYOUTS` owns the
+  composed collage, never a live `CoverMosaic`** — `media::image::artwork`'s `COMPOSITE_LAYOUTS` owns the
   1/2/3/4 arrangement, so the square, the banner blur and a playlist thumbnail are all laid out the
   same. **What they do not share is what an unreadable source costs**, and the asymmetry is
   deliberate: the heroes go through `compose_cover`, which drops that source and picks the layout

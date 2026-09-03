@@ -8,7 +8,7 @@ use tempfile::TempDir;
 use super::*;
 use crate::entities::scan::ExistingTrackSummary;
 use crate::error::AppError;
-use crate::media::artwork::CoverCache;
+use crate::media::image::artwork::CoverCache;
 use crate::utils::audio_ext::AUDIO_EXTENSIONS;
 
 fn create_test_files(dir: &Path, names: &[&str]) -> Result<(), AppError> {
@@ -134,7 +134,7 @@ fn create_minimal_wav(path: &std::path::Path) -> Result<(), AppError> {
 }
 
 fn test_cover_cache() -> CoverCache {
-    crate::media::artwork::new_cover_cache()
+    crate::media::image::artwork::new_cover_cache()
 }
 
 #[test]
@@ -221,7 +221,7 @@ fn scan_files_parallel_calls_progress_callback() -> Result<(), AppError> {
 fn existing_for(path: &Path) -> Result<HashMap<String, ExistingTrackSummary>, AppError> {
     let meta = std::fs::metadata(path)?;
     let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
-    let mtime = crate::media::metadata::date_modified_from_metadata(&meta);
+    let mtime = crate::media::ingest::metadata::date_modified_from_metadata(&meta);
     let mut map = HashMap::new();
     map.insert(
         path.to_string_lossy().into_owned(),

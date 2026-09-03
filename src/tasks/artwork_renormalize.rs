@@ -1,6 +1,6 @@
 //! Brings an existing artwork store inside the size bounds the writers now enforce, once.
 //!
-//! [`crate::media::artwork::store_image`] only reaches files scanned after it shipped:
+//! [`crate::media::image::artwork::store_image`] only reaches files scanned after it shipped:
 //! `scanner::track_is_current` skips an unchanged track, so its cover is never re-derived and an
 //! install that scanned its library last year keeps whatever its tags happened to carry — up to
 //! the 8192 px `MAX_SOURCE_DIM` allows, decoded whole by every tier that draws it.
@@ -17,7 +17,7 @@ use crate::config::Paths;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::error::{AppError, AppResult};
-use crate::media::artwork;
+use crate::media::image::artwork;
 use crate::state::AppState;
 use crate::tasks::{TaskSpawner, one_shot};
 

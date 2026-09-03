@@ -194,7 +194,7 @@ fn the_tier_follows_the_card_it_draws() {
     assert!(super::cover_size(500, 1.0) > wide);
 
     // Nothing may exceed what the store keeps, however extreme the pairing.
-    assert_eq!(super::cover_size(400, 4.0), crate::media::artwork::STORE_MAX_DIM);
+    assert_eq!(super::cover_size(400, 4.0), crate::media::image::artwork::STORE_MAX_DIM);
 }
 
 /// **The tier has to hold still through a resize drag.** `WindowChrome.display-changed` re-derives
@@ -248,7 +248,7 @@ fn the_tier_covers_the_card_at_every_sidebar_width() {
                 let tier = super::cover_size(logical_w, scale);
                 // The store's own cap is the one honest exception — past it there is no sharper
                 // source left to decode.
-                if tier == crate::media::artwork::STORE_MAX_DIM {
+                if tier == crate::media::image::artwork::STORE_MAX_DIM {
                     continue;
                 }
                 assert!(

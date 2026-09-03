@@ -28,12 +28,12 @@ const IMAGE_RESAMPLERS: [&str; 6] = [
 /// `extract_source_argb` downscales to 64 px to seed a *palette*, so changing its filter moves
 /// every generated theme colour. It is also the cold half of that path — the live one reads a
 /// `CoverThumbs` buffer that is already through `resize_rgb8`.
-const EXEMPT: &str = "services/material_you.rs";
+const EXEMPT: &str = "media/image/material_you.rs";
 
 /// This file, which spells every needle in [`IMAGE_RESAMPLERS`] and would otherwise be its own
 /// first hit. Skipped rather than forgiven, and held to still naming one — a pin that stopped
 /// spelling its needles has stopped checking anything.
-const PIN: &str = "media/tests/image_decode_tests.rs";
+const PIN: &str = "media/image/tests/image_decode_tests.rs";
 
 /// **An equality, not a floor.** A new site reaching for `image`'s own resampler compiles clean
 /// and is invisible in review, while costing the per-cover milliseconds this module exists to
@@ -88,7 +88,7 @@ fn a_scaled_decode_still_covers_its_target() -> TestResult {
 /// The same contract on a source that isn't square, which is the half a square fixture cannot
 /// fail. `jpeg-decoder` takes the first scale where *either* axis clears the request, always the
 /// long one — so a request of `target` alone comes back under it on the short edge, and
-/// [`crate::media::cover_thumbs`]'s square resize enlarges what it was handed.
+/// [`crate::media::image::cover_thumbs`]'s square resize enlarges what it was handed.
 #[test]
 fn a_scaled_decode_covers_its_target_on_the_short_edge_too() -> TestResult {
     // 16:9 and a banner, either side of the ratio where a long-edge bound starts falling short.

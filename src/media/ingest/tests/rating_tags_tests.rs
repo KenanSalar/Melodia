@@ -246,7 +246,7 @@ fn clamp_stars_bounds_both_ends_of_the_strip() {
 /// the markup would silently leave every percentage reading one star short.
 #[test]
 fn the_strip_draws_exactly_max_stars_glyphs() {
-    const STRIP: &str = include_str!("../../../melodia-ui/ui/components/star-rating.slint");
+    const STRIP: &str = include_str!("../../../../melodia-ui/ui/components/star-rating.slint");
 
     let needle = format!("for i in {MAX_STARS}:");
     assert!(

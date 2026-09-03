@@ -34,7 +34,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   spawned beside `retroactive_hash`). It deletes by reference rather than by refcount — artwork is
   shared, so no per-track delete can safely unlink a file, and a sweep cannot undercount because it
   never counts. Two gates, both required: the name has to parse back into the scheme
-  `media::artwork` writes, and nothing in the reference set may name it. **That set is six
+  `media::image::artwork` writes, and nothing in the reference set may name it. **That set is six
   columns** — `tracks.artwork_path`, `albums.artwork_path`, `artists.image_path`,
   **`playlists.thumbnail_path`**, **`radio_stations.artwork_path`** and
   **`radio_logo_answers.artwork_path`**. The last three are the ones that bite, each reachable
@@ -153,7 +153,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 ## Write-through to files
 
 - **Tag editing = "Edit Track Information", write-through the scan pipeline**
-  (`src/library/tags.rs::apply_tag_edit`, `src/media/tag_writer.rs`). Right-click rows → **Edit
+  (`src/library/tags.rs::apply_tag_edit`, `src/media/ingest/tag_writer.rs`). Right-click rows → **Edit
   Tags…** (`Dialog.kind == "edit-tags"`); **batch is the point** — **touched-tracking is a
   Rust-side diff against a populate-time snapshot** (Keep/Clear/Set), so only changed fields write.
   **Lyrics live in the file, not the DB** (single-track tab only). The writer always targets the

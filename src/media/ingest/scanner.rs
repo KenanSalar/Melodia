@@ -6,7 +6,7 @@ use serde::Serialize;
 use walkdir::WalkDir;
 
 use crate::entities::scan::{ExistingTrackSummary, ScannedFile};
-use crate::media::metadata::extract_or_filename_row;
+use crate::media::ingest::metadata::extract_or_filename_row;
 use crate::utils::audio_ext::is_audio_extension;
 
 #[derive(Debug, Clone, Serialize)]
@@ -43,7 +43,7 @@ pub fn collect_media_files(dir: &Path) -> Vec<PathBuf> {
 pub fn scan_files_parallel(
     files: &[PathBuf],
     artwork_dir: &Path,
-    cover_cache: &crate::media::artwork::CoverCache,
+    cover_cache: &crate::media::image::artwork::CoverCache,
     progress_callback: &(dyn Fn(u32, &str) + Send + Sync),
 ) -> Vec<ScannedFile> {
     let total = files.len();
@@ -108,7 +108,7 @@ pub fn track_is_current<S: std::hash::BuildHasher>(
     // Derive the mtime string from the `meta` already in hand — no second
     // `stat`. Goes through the shared formatter so it can't drift from the
     // format `extract_date_modified` stored in `date_modified`.
-    let on_disk_mtime = crate::media::metadata::date_modified_from_metadata(&meta);
+    let on_disk_mtime = crate::media::ingest::metadata::date_modified_from_metadata(&meta);
     on_disk_mtime.is_some() && on_disk_mtime.as_deref() == row.date_modified.as_deref()
 }
 

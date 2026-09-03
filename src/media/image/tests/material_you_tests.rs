@@ -4,7 +4,7 @@ use image::{ImageBuffer, Rgb};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use tempfile::NamedTempFile;
 
-use crate::services::material_you::{
+use crate::media::image::material_you::{
     SchemeStyle, SeedCache, clamp_to_tone_band, extract_source_argb, extract_source_argb_from_rgb8,
     generate_palette, to_tone_capped_chroma,
 };

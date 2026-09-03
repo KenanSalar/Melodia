@@ -433,7 +433,7 @@ fn a_superseded_filter_build_does_not_reach_the_grid() {
 #[test]
 fn every_filter_write_moves_the_token_the_deferred_build_carries() {
     let rp_ui = super::RecentlyPlayedUi::new(
-        std::sync::Arc::new(crate::media::cover_thumbs::CoverThumbs::new()),
+        std::sync::Arc::new(crate::media::image::cover_thumbs::CoverThumbs::new()),
         None,
     );
 

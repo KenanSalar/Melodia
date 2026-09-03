@@ -15,7 +15,7 @@ use slint::ComponentHandle;
 /// life of the app, and there is no `Weak<…Ui>` anywhere in the tree — so a
 /// field here would be a keepalive guarding nothing.
 pub struct UiHandles {
-    pub cover_thumbs: Arc<media::cover_thumbs::CoverThumbs>,
+    pub cover_thumbs: Arc<media::image::cover_thumbs::CoverThumbs>,
     pub tracks_ui: Arc<ui::tracks::TracksUi>,
     pub albums_ui: Arc<ui::albums::AlbumsUi>,
     pub artists_ui: Arc<ui::artists::ArtistsUi>,
@@ -28,7 +28,10 @@ pub struct UiHandles {
 /// through the one shared row-tier LRU. Rows carry only the artwork path, so
 /// only instantiated rows pay a lookup and nothing pins evicted buffers. Part of
 /// no slice's `install`, serving every view.
-fn install_row_covers(app: &AppWindow, cover_thumbs: &Arc<media::cover_thumbs::CoverThumbs>) {
+fn install_row_covers(
+    app: &AppWindow,
+    cover_thumbs: &Arc<media::image::cover_thumbs::CoverThumbs>,
+) {
     let ct = cover_thumbs.clone();
     // `generation` is read for its effect on the binding, never its value — see `RowCovers`.
     app.global::<melodia::RowCovers>().on_request(move |path, _generation| {
@@ -81,7 +84,7 @@ pub fn install_views(
     ui::my_library::install(app, state);
 
     // Ahead of the first `install`, every slice cloning the cache into its handle.
-    let cover_thumbs = Arc::new(media::cover_thumbs::CoverThumbs::new());
+    let cover_thumbs = Arc::new(media::image::cover_thumbs::CoverThumbs::new());
     install_row_covers(app, &cover_thumbs);
 
     let cx = ui::view_ctx::ViewCtx {
@@ -182,7 +185,7 @@ pub fn install_views(
         ui::radio::tune_cache_for_display(&app, &tune_radio);
         // The row tier belongs to no view, so it has no
         // `tune_cache_for_display` — but it owes the same post-show read.
-        tune_rows.set_thumb_size(media::cover_thumbs::row_cover_size(f64::from(
+        tune_rows.set_thumb_size(media::image::cover_thumbs::row_cover_size(f64::from(
             app.window().scale_factor(),
         )));
     };

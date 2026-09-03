@@ -13,8 +13,8 @@
 
 use image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage};
 
-use crate::media::artwork::STORE_MAX_DIM;
-use crate::media::image_decode::{FilterType, fit_within, resize_rgb8};
+use crate::media::image::artwork::STORE_MAX_DIM;
+use crate::media::image::image_decode::{FilterType, fit_within, resize_rgb8};
 
 /// Alpha at or below which a pixel counts as transparent rather than faint. Above zero because an
 /// exporter's fully-clear pixels are not always exactly clear, and a mark's own soft edge is the

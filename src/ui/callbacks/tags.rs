@@ -28,7 +28,7 @@ use crate::entities::track::TagEditRow;
 use crate::error::AppError;
 use crate::library;
 use crate::library::tags::TagEditReport;
-use crate::media::image_decode::{
+use crate::media::image::image_decode::{
     FilterType, MAX_SOURCE_DIM, decode_capped, fit_within, resize_rgb8,
 };
 use crate::state::AppState;
