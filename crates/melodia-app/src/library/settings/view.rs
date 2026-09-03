@@ -3,15 +3,16 @@
 
 use crate::services;
 use crate::state::AppState;
+use melodia_core::entities::locale::SUPPORTED_LOCALES;
 use melodia_core::error::AppError;
 
-/// Persist the active locale. Validates against [`services::settings::SUPPORTED_LOCALES`] before
+/// Persist the active locale. Validates against [`SUPPORTED_LOCALES`] before
 /// the disk write, so a malformed UI write can't pin `settings.json` to a code with no bundled
 /// `.po`. The runtime application happens synchronously in
 /// `ui::settings::locale::wire_language_changed` *before* this async persist — the UI re-renders
 /// immediately, and this write only carries the choice across the next boot.
 pub fn set_locale(state: &AppState, code: String) -> Result<(), AppError> {
-    if !services::settings::SUPPORTED_LOCALES.contains(&code.as_str()) {
+    if !SUPPORTED_LOCALES.contains(&code.as_str()) {
         return Err(AppError::Validation(format!("Unsupported locale: {code}")));
     }
     services::settings::mutate_settings(&state.paths, move |settings| {

@@ -1329,6 +1329,17 @@ naming either once the shims are gone. That is one fewer test binary, 41 rather 
       crates, roughly 63 sites. It is `#[cfg(test)] pub(crate) use melodia_testkit as test_support`
       and launders nothing, but it is the last place one crate wears two names, and the 42
       integration tests already spell the second.
+- [x] **E13b. The three the crate-root sweep did not reach.** Not facades in the phase's sense and
+      not new either: `library::search`'s `SearchResults`, `services::updater`'s two
+      `install_kind` items and `services::settings`'s `SUPPORTED_LOCALES`, each a module-level
+      `pub use` the rewrite merely respelled. Each gave one item two spellings across crates that
+      already name its owner, which is what the After-E check now says cannot happen. Two of the
+      three arguments had also expired: the `SearchResults` comment claimed the alternative
+      spelling was a `queries::` path, which stopped being true when the DTO moved to
+      `entities/`, and re-exporting `install_kind` under the updater contradicts finding 19,
+      whose whole basis for moving it to platform was a second consumer. `SUPPORTED_LOCALES` was
+      argued from what callers already spelled, and `tests/translations.rs` was already spelling
+      the other one.
 - [ ] **E14. Docs.** Four claims in `CLAUDE.md` stop being true in their current form: the store
       bullet's `pub(crate)`-in-app's-facade half, the `melodia-ui` bullet's flat re-export sentence,
       the media bullet's "no outbound `crate::` edge" (which goes trivially true and stops meaning

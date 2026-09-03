@@ -15,8 +15,8 @@ use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
 use super::SearchUi;
 use super::apply::{apply_results_to_slint, clear_results_on_ui, set_loading_on_ui};
 use melodia_app::library;
-use melodia_app::library::search::SearchResults;
 use melodia_app::state::AppState;
+use melodia_core::entities::search::SearchResults;
 use melodia_core::error::AppResult;
 use melodia_ui::{AppWindow, Search};
 

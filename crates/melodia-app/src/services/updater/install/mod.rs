@@ -15,8 +15,8 @@ mod verify;
 
 use melodia_core::error::{AppError, AppResult};
 
-use super::install_target;
 use super::manifest::PlatformAsset;
+use melodia_platform::services::platform::install_kind::install_target;
 
 use download::download_to_file;
 use staging::{

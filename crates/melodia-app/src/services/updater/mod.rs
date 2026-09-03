@@ -24,18 +24,18 @@ pub mod manifest;
 pub mod minisign;
 pub mod version;
 
+use melodia_platform::services::platform::install_kind::install_target;
+
 pub use check::{CheckOutcome, check_for_update};
 pub use event::{FailureKind, UpdaterEvent};
 pub use install::{download_and_install, prune_stale_staging};
-// Re-exported from `platform::install_kind`, whose two other consumers are why it left this
-// directory. Kept here so the UI keeps asking the updater whether an install is a system one.
-pub use melodia_platform::services::platform::install_kind::{install_target, is_system_install};
 
 /// Whether this build has an in-app updater at all.
 ///
 /// A source build doesn't: `target/` belongs to cargo, so a swapped-in release is older than the
-/// tree above it and gone at the next build. Where [`is_system_install`] keeps the check and only
-/// trades the install button for a package-manager hint, this takes the whole section.
+/// tree above it and gone at the next build. Where `install_kind::is_system_install` keeps the
+/// check and only trades the install button for a package-manager hint, this takes the whole
+/// section.
 #[must_use]
 pub fn is_available() -> bool {
     !melodia_core::utils::exe::is_dev_build()
@@ -44,7 +44,7 @@ pub fn is_available() -> bool {
 /// `<install_target>.old` — the rollback copy [`install::swap_in_place`] retains on
 /// Linux atomic-swap installs (`AppImage` / tarball), so a failed post-swap smoke
 /// test can restore it before the user sees a broken installation and a successful
-/// boot can reap it from `main()`. Errors only if [`install_target`] does.
+/// boot can reap it from `main()`. Errors only if `install_kind::install_target` does.
 ///
 /// Linux-only: a Windows install is `msiexec /i` of a signed MSI, so Windows
 /// Installer's `MajorUpgrade` + Restart Manager own the replace and no `.old` is

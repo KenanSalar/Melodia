@@ -12,6 +12,8 @@
 
 use std::collections::HashMap;
 
+use melodia_core::entities::locale::SUPPORTED_LOCALES;
+
 use serde::{Deserialize, Serialize};
 
 use melodia_core::entities::integrations::{DiscordFlags, ScrobbleFlags};
@@ -682,11 +684,6 @@ impl Default for SettingsData {
         }
     }
 }
-
-/// The locale list, which is `entities::locale`'s: three tiers read it and none of them owns
-/// it. Re-exported rather than moved out of reach, `services::settings::SUPPORTED_LOCALES`
-/// being what the persisted-code validator and the Settings page already spell.
-pub use melodia_core::entities::locale::SUPPORTED_LOCALES;
 
 fn default_locale() -> String {
     detect_os_locale().unwrap_or_else(|| "en".to_owned())

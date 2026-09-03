@@ -360,7 +360,7 @@ fn main() -> AppResult<()> {
         startup_settings.as_ref().map(|s| s.updates.clone()).unwrap_or_default();
     if updater_settings_snapshot.auto_check_enabled
         && services::updater::is_available()
-        && !services::updater::is_system_install()
+        && !platform::install_kind::is_system_install()
     {
         tasks::updater_daily::spawn(&spawner, state.clone(), weak.clone(), updater_event_tx);
     } else {
@@ -368,7 +368,7 @@ fn main() -> AppResult<()> {
             "updater_daily: not spawning (auto_check_enabled={}, available={}, system_managed={})",
             updater_settings_snapshot.auto_check_enabled,
             services::updater::is_available(),
-            services::updater::is_system_install()
+            platform::install_kind::is_system_install()
         );
     }
 

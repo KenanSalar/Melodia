@@ -9,6 +9,7 @@ use melodia_app::services::updater::{
     self, CheckOutcome, FailureKind, UpdaterEvent, asset_cache, check_for_update,
 };
 use melodia_app::state::AppState;
+use melodia_platform::services::platform::install_kind::install_target;
 use melodia_ui::{AppWindow, MelodiaUpdater};
 
 use super::paint::{paint_error, paint_restart_needed, set_is_installing};
@@ -69,7 +70,7 @@ pub(super) fn spawn_install(
         // the post-exit respawn in `shutdown::respawn_if_requested` must
         // use this captured path. See `ui::window_chrome::set_respawn_exe`
         // for why the unlinking installs need no such capture.
-        let install_target = updater::install_target();
+        let install_target = install_target();
 
         let etag = read_etag(&state);
         // `force_refresh = false`: this re-fetch is the install path's

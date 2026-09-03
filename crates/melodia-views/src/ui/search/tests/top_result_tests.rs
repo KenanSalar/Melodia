@@ -9,10 +9,10 @@
 )]
 
 use super::{TopKind, TopSubtitle, compute_top_result};
-use melodia_app::library::search::SearchResults;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::genre::GenreStats;
+use melodia_core::entities::search::SearchResults;
 
 const CARD: &str = include_str!("../../../../../melodia-ui/ui/views/search/top-result-card.slint");
 const ROUTER: &str = include_str!("../callbacks/results.rs");
