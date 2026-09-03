@@ -121,7 +121,3 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
         s.persist_blocking("persist locale", move |s| library::settings::set_locale(s, code_owned));
     });
 }
-
-#[cfg(test)]
-#[path = "tests/locale_tests.rs"]
-mod tests;

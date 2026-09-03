@@ -683,10 +683,10 @@ impl Default for SettingsData {
     }
 }
 
-/// Locale codes the bundled `.po` files cover, in the Language dropdown's
-/// display order. Index 0 is the default and ships no catalogue — English is the
-/// msgid baseline, living in the `.slint` sources directly.
-pub const SUPPORTED_LOCALES: &[&str] = &["en", "de", "fr", "es", "tr", "el", "it"];
+/// The locale list, which is `entities::locale`'s: three tiers read it and none of them owns
+/// it. Re-exported rather than moved out of reach, `services::settings::SUPPORTED_LOCALES`
+/// being what the persisted-code validator and the Settings page already spell.
+pub use crate::entities::locale::SUPPORTED_LOCALES;
 
 fn default_locale() -> String {
     detect_os_locale().unwrap_or_else(|| "en".to_owned())

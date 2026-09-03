@@ -12,7 +12,7 @@
 //! direction — a Slint-side mount is lateral by construction, the two that aren't (a drill
 //! in, a back out) being Rust's and going through `ui::nav_transition`.
 
-use crate::test_support::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
+use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 
 /// The nine writes as of this pin — six closers and three index flips. A floor rather than
 /// an equality: a tenth is fine, a walk that stopped finding them is not.

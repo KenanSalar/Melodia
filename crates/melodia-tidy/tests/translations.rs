@@ -14,8 +14,8 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::services::settings::SUPPORTED_LOCALES;
-use crate::test_support::{
+use melodia_core::entities::locale::SUPPORTED_LOCALES;
+use melodia_testkit::{
     MIN_SLINT_SOURCES, UI_DIR, slint_sources, strip_line_comments, stripped_sources,
 };
 

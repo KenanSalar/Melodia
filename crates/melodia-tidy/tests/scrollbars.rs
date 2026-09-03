@@ -14,7 +14,7 @@
 //! search would let a scroller borrow the opt-out of the `TrackList` nested inside it,
 //! which is exactly the arrangement every composite view has.
 
-use crate::test_support::{
+use melodia_testkit::{
     MIN_SLINT_SOURCES, UI_DIR, blocks_named, normalize_ws as normalized, stripped_sources,
 };
 

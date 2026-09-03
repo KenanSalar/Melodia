@@ -64,19 +64,15 @@ pub mod window_chrome;
 // header row all three of those plus the Settings page share, and `IconButton`, whose
 // glyph sits outside the disc and places itself — nested it costs a layer per frame of a
 // band morph, centred by a layout it folds an animated press into every host's layout
-// cache. `scrollbar_tests` is the odd one out: it pins a *convention* across the
-// whole tree rather than one component's contract — as does `hero_blur_backdrop_tests`'
-// second half, which reaches the Now Playing view because that stack is the same three
-// layers written twice, `placeholder_tests`' two walks — one asking every page and every
-// shell container whether it hand-rolled a tooltip frame instead of mounting the shared
-// one, the other asking every shared band whether it drew a pill where it should have
-// published an anchor — and `nav_transition_tests`, which asks every mount whether it wrote
-// its own enter edge. That last one has a Rust module (`nav_transition`), but what it pins
-// is the Slint half of the same contract, so it sits with the other tree walks.
-// `startup_motion_tests` pins two components across that same seam: what the shell and the
+// cache. Each reads the one component it is about, by name.
+// `startup_motion_tests` pins two components across a second seam: what the shell and the
 // view mounted inside it do on the frame the window opens. `titlebar_tests` reaches a third
 // tree — it holds the brand mark's theme brush to the asset it is painted over, the only
 // thing here a dark-palette reviewer cannot see going wrong.
+//
+// What used to sit among them and no longer does is the set that walked the *tree* rather
+// than reading a component: those are `melodia-tidy`'s, on the rule that a check
+// enumerating a corpus does not belong in a crate the corpus contains.
 #[cfg(test)]
 #[path = "tests/aurora_backdrop_tests.rs"]
 mod aurora_backdrop_tests;
@@ -99,17 +95,11 @@ mod library_tab_band_tests;
 #[path = "tests/mosaic_tab_hero_tests.rs"]
 mod mosaic_tab_hero_tests;
 #[cfg(test)]
-#[path = "tests/nav_transition_tests.rs"]
-mod nav_transition_tests;
-#[cfg(test)]
 #[path = "tests/placeholder_tests.rs"]
 mod placeholder_tests;
 #[cfg(test)]
 #[path = "tests/play_count_badge_tests.rs"]
 mod play_count_badge_tests;
-#[cfg(test)]
-#[path = "tests/scrollbar_tests.rs"]
-mod scrollbar_tests;
 #[cfg(test)]
 #[path = "tests/startup_motion_tests.rs"]
 mod startup_motion_tests;
