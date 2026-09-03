@@ -8,7 +8,7 @@ below is exactly what #84 exists to stop evaporating.
 Status: **Phases A, B, C and D complete; Phase E open** · Issue:
 [#83](https://github.com/KenanSalar/Melodia/issues/83) · Created: 2026-09-03 · Validated against
 `93b47dfa`, Phase A landed on `a1c087e4`, Phase B over five commits from `e506b490`, Phase C over
-four from `1060d8f1` to `01c314a8`, Phase D over five from `37cad90f`
+four from `1060d8f1` to `01c314a8`, Phase D over seven from `37cad90f` to `8cbbe055`
 
 > **Phase A's twelve items are done and its checks pass**, so the counts below that describe
 > `src/` describe the tree *before* it. Where a Phase B item's inventory has moved, its own entry
@@ -1163,7 +1163,8 @@ to reach. De-facade in Phase D once the graph is proven, one crate at a time.
 
 ## Phase D: make the repo workspace-native
 
-Five commits. Everything below is done.
+Seven commits, `37cad90f` to `8cbbe055`. Everything below is done; the last two are a count the
+first five got wrong and the tidy crate folded back in.
 
 - [x] **D1. The binary becomes `crates/melodia`; the root goes virtual.** `src/`, `build.rs` and the
       four integration tests move; the package is `melodia` and `[[bin]] name = "Melodia"` keeps the
@@ -1235,20 +1236,21 @@ Five commits. Everything below is done.
 
 **Counts the plan carried that the tree did not.** Rule entries 182, not 165 — the pin's own doc
 comment said 165/96 and is a floor now rather than a census, which is prose that needed rewriting
-on every rule added. Intra-doc links 147, not 162. Test binaries 18 at the start of Phase D and 43
+on every rule added. Intra-doc links 147, not 162. Test binaries 18 at the start of Phase D and 42
 at its end, against the "roughly fourteen" predicted and the "five" `pr-validation.yml` claimed.
 The scope-clippy-to-one-crate convention was never in the repo: what was there is two command
 blocks omitting `--workspace`, and a virtual root retires the question by making every-member the
 default selection.
 
 **The one measurement left open is the CI test job's memory cap.** `CARGO_BUILD_JOBS: 4` is argued
-against the number of test binaries linked, and that number is 43 rather than the five its comment
-claimed or the "roughly fourteen" this plan predicted — collecting the walks alone turned 18 into 42, each
+against the number of test binaries linked, and that number is 42 rather than the five its comment
+claimed or the "roughly fourteen" this plan predicted — collecting the walks turned 18 into 42, each
 walk file being a binary of its own. The count is corrected in the comment; whether 4 is still the
 right cap is a question only a runner can answer, since what it holds down is peak RSS during
-linking and this machine has more memory than one. Cheap to raise if the job's wall clock starts to
-matter, and the failure mode if it is too high is a swap rather than an error, so leave it where it
-is until a run says otherwise.
+linking and this machine has more memory than one. What can be said from here is that the walks are
+not what would strain it: relinking all of them costs under a second at roughly 400 MB. So leave the
+cap where it is until a run says otherwise — too high fails as a swap that looks like a hang, which
+is the expensive direction to guess at.
 
 ## Phase E: de-facade
 
