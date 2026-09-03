@@ -3,7 +3,7 @@ paths:
   - melodia-ui/ui/**/*.slint
   - src/ui/**/*.rs
   - src/boot/**/*.rs
-  - src/utils/toast.rs
+  - crates/melodia-core/src/utils/toast.rs
   - melodia-ui/build.rs
 ---
 

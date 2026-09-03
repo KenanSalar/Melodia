@@ -1,7 +1,7 @@
 ---
 paths:
   - src/database/**/*.rs
-  - src/entities/**/*.rs
+  - crates/melodia-core/src/entities/**/*.rs
   - src/library/**/*.rs
   - src/tasks/**/*.rs
   - migrations/**/*.sql

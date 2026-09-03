@@ -26,7 +26,7 @@ fn nothing_tests_a_url_scheme_by_prefix() {
 /// The streamed body read [`super::read_capped`] owns.
 const RAW_BODY_READ: &str = "bytes_stream()";
 
-/// Where it may appear, and how often. Paths are relative to `SRC_DIR`.
+/// Where it may appear, and how often. Paths are relative to the crate root that holds them.
 const BODY_READ_EXEMPT: [(&str, usize); 3] = [
     ("services/net/mod.rs", 1),
     // The updater's download, and a genuinely different shape: it streams to a file and reports

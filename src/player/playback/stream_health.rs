@@ -9,7 +9,7 @@
 //!
 //! **Every arm is a storm vector, hence no logging at all**: an xrun per failed
 //! `snd_pcm_writei`, and an unclassified error `continue`s inside cpal's worker
-//! loop. [`crate::tasks::audio_health`] drains and decides.
+//! loop. `tasks::audio_health` drains and decides.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -81,7 +81,7 @@ impl AudioStreamHealth {
     /// Take everything recorded since the last call.
     ///
     /// A quiet window is a zeroed report rather than an absence, and that is the whole of why
-    /// this returns no `Option`: [`crate::tasks::audio_health`]'s warn latch re-arms on the zero,
+    /// this returns no `Option`: `tasks::audio_health`'s warn latch re-arms on the zero,
     /// so a caller that could skip an empty window would leave the first fault of a session the
     /// only one ever warned about. The early return keeps the lock off that path either way.
     pub fn drain(&self) -> StreamHealthReport {

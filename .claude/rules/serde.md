@@ -1,12 +1,12 @@
 ---
 paths:
-  - src/entities/**/*.rs
+  - crates/melodia-core/src/entities/**/*.rs
   - src/services/**/*.rs
   - src/library/**/*.rs
   - src/state/**/*.rs
   - src/player/**/*.rs
   - src/media/**/*.rs
-  - src/error.rs
+  - crates/melodia-core/src/error.rs
 ---
 
 # Serde Best Practices

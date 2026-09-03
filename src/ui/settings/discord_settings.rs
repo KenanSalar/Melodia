@@ -13,10 +13,10 @@
 use async_compat::Compat;
 use slint::ComponentHandle;
 
+use crate::entities::integrations::DiscordFlags;
 use crate::error::AppError;
 use crate::library;
 use crate::services::integrations::discord::DiscordStatus;
-use crate::services::settings::DiscordFlags;
 use crate::state::AppState;
 use crate::{AppWindow, Settings};
 

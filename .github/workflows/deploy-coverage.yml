@@ -59,7 +59,7 @@ jobs:
           IGNORE_GENERATED: '.*/build/melodia-ui-[^/]*/out/.*'
         run: |
           set -o pipefail
-          cargo llvm-cov --locked --no-report
+          cargo llvm-cov --locked --workspace --no-report
           cargo llvm-cov report --html --ignore-filename-regex "$IGNORE_GENERATED"
           cargo llvm-cov report --summary-only --ignore-filename-regex "$IGNORE_GENERATED" \
             | tee coverage-summary.txt

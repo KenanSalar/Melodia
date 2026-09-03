@@ -5,7 +5,7 @@ order the cuts come out in. Harvest into `docs/adr/` when
 [#84](https://github.com/KenanSalar/Melodia/issues/84) ships, not before: the boundary rationale
 below is exactly what #84 exists to stop evaporating.
 
-Status: **Phases A and B complete**, Phase C next · Issue:
+Status: **Phases A and B complete**, Phase C in progress · Issue:
 [#83](https://github.com/KenanSalar/Melodia/issues/83) · Created: 2026-09-03 · Validated against
 `93b47dfa`, Phase A landed on `a1c087e4`, Phase B over five commits from `e506b490`
 
@@ -28,8 +28,13 @@ Status: **Phases A and B complete**, Phase C next · Issue:
 - [x] Radio ships.
 - [x] #79 ships, `PlaybackSource` included. Closed 2026-09-01; `src/player/CLAUDE.md` documents
       `source_allows(PlaybackSource::advances_queue)` and the five surviving `is_radio` sites.
-- [ ] `cargo build --timings` on a clean target, kept, so the extraction phases can be judged
-      rather than assumed.
+- [x] `cargo build --timings` on a clean target, so the extraction phases can be judged rather than
+      assumed. Taken at C1, the last point at which the "before" is one crate: **4m 03s wall over
+      766 units and 1,330 unit-seconds**, the four heaviest being `melodia-ui` at 79s,
+      `aws-lc-sys`'s build script at 57s, `i-slint-compiler` at 49s and **`Melodia` itself at 33s**.
+      That last one is the number Phase D compares against, being the single unit the split turns
+      into twelve that can compile at once; the three above it are dependencies the split does not
+      move and cannot improve.
 
 ## What validation changed
 
@@ -45,7 +50,7 @@ cut is cheapest; the edges decide the shape of the graph.
 | `ui` reaches `tasks` at 27 | 29, and 25 of them are one function |
 | `player` reaches `services` at ~6 | 13 lines, 12 of them code; `player/hls/` postdates the issue entirely |
 | `ui` reaches `media` at 34, 26 `cover_thumbs` | 28 non-test, 22 of them `cover_thumbs` |
-| ~134 of 225 `.claude/rules` globs break | **83 of 165**, and 134 of 165 once `melodia-ui`, `tests/` and `build.rs` move too |
+| ~134 of 225 `.claude/rules` globs break | **83 of 165**, and 134 of 165 once `melodia-ui`, `tests/` and `build.rs` move too. Re-measured at C1 the ruleset had grown to 169: 87 `src/`, 43 `melodia-ui/`, 5 `tests/`, 3 `build.rs`, so **138 of 169** |
 | 21 test files anchor on a tree root | **28**: 27 through the seven constants, plus `library/tests/radio_tests.rs:17` direct |
 | 241 relative `include_str!` across 46 files | **243 across 47 files** (254 literal-arg sites across 48, but the 11 without a `../` are `minisign_tests.rs`'s crate-local `fixtures/`); the 135 reaching `melodia-ui/ui/` is exact |
 | ten non-binary `CARGO_PKG_VERSION` sites | 10 expansions, **9 non-binary, 7 non-test**, and `ui/callbacks/updater/install.rs:83` is missing from the list |
@@ -259,9 +264,10 @@ Ranked by how quietly they fail.
     buy one manifest line and cost a wrapper whose only purpose is the diagram. Views already
     depends on app, app already depends on integrations, so the edge closes no cycle and adds no
     reach: **the graph gains `views -> integrations`.**
-21. **Three leaf predicates sit one layer above where anything needs them.** `is_dev_build` is
+21. **Three leaf predicates sit one layer above where anything needs them.** ~~`is_dev_build` is
     called from `config.rs:73`, so **`melodia-core` names `melodia-services` today**, which is a
-    cycle no item in the first pass records. `media::is_audio_extension` is a dependency-free
+    cycle no item in the first pass records.~~ **The cycle went in B1**, which moved `is_dev_build`
+    to `utils/exe.rs`; `config.rs:73` still calls it and the call is now core-internal. `media::is_audio_extension` is a dependency-free
     `eq_ignore_ascii_case` fold that `services/single_instance.rs:31` reaches for, and it is that
     file's only `crate::` path of any kind. `media/self_writes.rs` has no `crate::` import at all
     and only `parking_lot`, and its consumers are `library/{mbid,tags}.rs` and
@@ -282,7 +288,8 @@ Thirteen members plus `melodia-ui`. Four changes from the issue's nine, each res
 code already has rather than on an abstraction invented to satisfy the split.
 
 ```
-melodia-core          error, config, entities (+ the boundary DTOs), utils,
+melodia-core          error, config, entities (+ the boundary DTOs and the
+                      two settings flag structs), utils, themes whole,
                       describe, atomic json/text writers, the binary-path
                       and home-redaction pair, is_audio_extension,
                       self_writes                                          -> nothing
@@ -293,8 +300,8 @@ melodia-net           http primitives, 4 fetchers, radio_browser,
                       radio_blocklist + its bake                           -> core, artwork
 melodia-platform      tray, single_instance, allocator, logging,
                       crash_report, system_theme, desktop_integration,
-                      always_on_top, dwm_titlebar's lower half, palette
-                      derivation, the updater's install-kind sliver        -> core
+                      always_on_top, dwm_titlebar's lower half,
+                      the updater's install-kind sliver                    -> core
 melodia-audio         audio.rs vocabulary, decode, file/stream/hls
                       sources, aac                                         -> core, net
 melodia-playback      output device/mixer/convert, EQ, ReplayGain,
@@ -427,6 +434,19 @@ is why B3 is a three-way split and `themes/tests/apply_tests.rs` (already gated 
 `tasks/rss_sampler.rs`, which A2 removes; `tasks/updater_daily.rs`, which lands in app and may keep
 it; and `services/dwm_titlebar.rs`, which lands in platform and may not. B4 narrows the third, and
 only with it does `melodia-platform` depend on core alone.
+
+**Where the palette half lands is core, not platform, and C2 corrected that.** Two things were wrong
+with platform. It is a cycle: `themes/system_color_state.rs:23` and `themes/kde.rs:139` both take
+`platform::system_theme::KdeColorPalette` while `system_theme.rs:112,121` take
+`themes::SystemColorState`, which cargo cannot express across two crates. And platform is the crate
+that owns the tray, zbus, ksni and libc, so putting the registry there makes `melodia-artwork` — a
+pure image crate — depend on the OS-integration crate to name sixteen `u32`s
+(`media/image/material_you.rs:33`). What is left of `themes/` after B3 is static tables, four
+plain-data structs and pure functions over them, which is `entities/`'s category rather than a
+service's, and in core it sits below all four of its consumers. The cycle breaks by moving
+`KdeColorPalette` into `themes/kde.rs` beside the `palette_from_kde` that consumes it; platform
+keeps the half that is a platform concern, which is reading `kdeglobals` and the portal and
+*producing* those two types.
 
 ### What is deliberately not split
 
@@ -846,53 +866,177 @@ turn it red; the fix is the glob edit in the same commit, never a skip. That is 
 
 ## Phase C: extract the crates
 
-Order, each landing green: **core, testkit, artwork, net, platform, audio, playback, engine, store,
-integrations, app, views, bin.**
+Thirteen steps in **three commits, 4 / 4 / 5**, the way Phase A's eleven items landed: C1-C4, then
+C5-C8, then C9-C13. Order inside a group is forced by the graph, and the compiler does most of the
+work, nothing building until a step's `pub(crate)` widenings and facade lines are right. The full
+gate runs at each commit boundary.
 
-- [ ] Move every dependency more than one member names into `[workspace.dependencies]` first
-      (finding 12), starting with `reqwest`, `stream-download`, `icy-metadata`, `sqlx`, `symphonia`,
-      `cpal`, `tokio`, `serde`, `image`, `log`, `blake3`. Members take `<dep>.workspace = true`.
-- [ ] Per-member manifest, modelled on `melodia-ui/Cargo.toml`, which already gets this right:
+**Crates land at `crates/melodia-<name>/`, each keeping the `src/`-relative directory path of the
+files it owns** — `melodia-artwork` is `crates/melodia-artwork/src/media/image/**`, not
+`crates/melodia-artwork/src/**`. That is not cosmetic. Every intra-crate `crate::` path resolves
+unchanged, so a moved file needs edits only where it genuinely crosses a boundary; and every corpus
+walk's exemption table keeps its spelling, `crates/melodia-core/src/utils/exe.rs` relativized
+against `crates/melodia-core/src` being exactly what it was against `src/`.
 
-      ```toml
-      [package]
-      name = "melodia-<x>"
-      version.workspace = true       # never "0.0.0"; see finding 3
-      edition.workspace = true
-      rust-version.workspace = true
-      license.workspace = true
-      repository.workspace = true    # new entry in [workspace.package]
-      publish = false
+The root package stays the binary and a shrinking facade for the whole phase. Phase D moves
+`main.rs`, `boot/`, `shutdown.rs` and `tests/` into `crates/melodia/` and makes the root virtual.
 
-      [lib]
-      doctest = false                # matters more once --workspace is the default
+### What Phase B left open, decided once
 
-      [lints]
-      workspace = true               # omitting this silently leaves the gate
-      ```
+Phase B closed asking for one decision rather than three: `integrations` names
+`settings::{ScrobbleFlags, DiscordFlags}`, `media/image` names `themes::Palette`, and all of them
+are plain data one layer above every reader. A read of the tree found a third edge of the same
+shape and one hard cycle, so the answer is a rule rather than three placements.
 
-- [ ] The per-crate build-script work, because these are compile errors the moment a boundary
-      appears: `sqlx::migrate!`'s path, `minisign.rs`'s `include_str!`, `radio_blocklist`'s `OUT_DIR`
-      bake and its two dotfiles, `load_dotenv()` moving to `melodia-integrations`, and the Windows
-      `winresource` embed staying with the binary with its `assets/melodia.ico` hop rewritten.
-- [ ] `test_support` becomes `melodia-testkit` **with no workspace dependency** (finding 2).
-      `paths_in()` goes to `melodia-core`'s own `#[cfg(test)]` support and `resolved_home()` to the
-      crate owning `home_dir_string`.
+**Plain data shared by more than one tier lives in core.**
+
+- **`themes/` goes to core whole**, not to platform, and `KdeColorPalette` moves into `themes/kde.rs`
+  with it. The "Why `themes/` splits" section above carries the argument: platform is a cycle, and it
+  would put the tray's dependency tree under a pure image crate.
+- **`ScrobbleFlags` and `DiscordFlags` go to `entities/`.** They are the only `services::settings`
+  items integrations names, at four production sites and two test ones. The on-disk shape is
+  unchanged; the parent struct is what flattens them into `settings.json`.
+
+Two further decisions the phase needs and the doc did not carry:
+
+- **A `#[cfg(test)]` fixture cannot cross a crate boundary, so the two that must become
+  `#[doc(hidden)] pub`.** `player/tests/helpers.rs` spans all three player tiers *and* has consumers
+  in app (`library/tests/playback_tests.rs:493`) and views
+  (`ui/now_playing/tests/now_playing_tests.rs:6`). It splits three ways: the pure `f32` helpers name
+  no audio type and go to testkit; `TestSource` and `shape` become a fixtures module on
+  `melodia-audio`, whose whole argument is that a new source kind is a new `AudioSource`; the three
+  engine-typed builders become one on `melodia-engine`. The precedent is `DbPool::test_pool()`,
+  `#[doc(hidden)]` and deliberately not `cfg(test)` for this exact reason, and `lto = "fat"` is what
+  makes it cost the shipped binary nothing.
+- **Finding 2's fix for `melodia-testkit` no longer fits and the leaf property wins.** It assumed
+  two call sites where the tree has 24 across three crates. `resolved_home()` is a one-line wrapper
+  over `utils::redact::home_dir_string()` and is deleted, its 4 sites calling the production
+  function directly — which is what its own doc comment argues for. `paths_in(dir)` is
+  `Paths::rooted_at` plus `create_dirs`, and each of the three crates whose tests want a throwaway
+  data root keeps its own four-line copy. Four lines of fixture scaffolding in three places is the
+  price of testkit naming no workspace type at all.
+
+### The steps
+
+- [x] **C1. Workspace scaffolding.** The `--timings` baseline in Prerequisites, taken here because
+      this is the last point at which the "before" is one crate. Every dependency into
+      `[workspace.dependencies]` — **all of them, not only the shared ones**: a dep used by one
+      member still wants its version and the paragraph arguing it in one place, and a member that
+      decides nothing cannot drift. `repository` and `homepage` into `[workspace.package]`, without
+      which `ui::settings::about`'s `CARGO_PKG_REPOSITORY` goes empty and only *logs* about it.
+      The nine upward intra-doc links in what becomes core, artwork, playback and engine demoted to
+      backticked prose, since nothing in the gate runs `cargo doc` (finding 17) and they would
+      otherwise degrade silently; `utils/exe.rs:23` was doubly stale, naming a re-export path B6 had
+      already moved.
+
+      **`--workspace` onto the CI gate belongs here rather than in Phase D.** With a root package
+      present a bare `cargo test --locked` selects that package alone, so every extraction from C2
+      on would have silently dropped its own crate's tests from CI. Five commands take it, across
+      `pr-validation.yml` and `deploy-coverage.yml`. A11 is what made it free.
+
+      `members` does **not** gain `crates/*` here: cargo errors on a member glob that matches
+      nothing, so that line lands with the first crate.
+- [x] **C2. `melodia-testkit`.** Ahead of core rather than behind it, the doc's graph order being
+      about dependencies where what binds here is the dev-dependency: core's own tests name
+      `test_support`, so it cannot leave while the testkit is still inside the package it left.
+      36 `pub(crate)` items widen to `pub`, `glob`, `image` and `tempfile` become its own
+      dependencies, and Decision 4 removes the two typed helpers first so the crate names no
+      workspace type at all.
+
+      **`SRC_DIR` was the design item and it is gone**, replaced by `rust_sources()` over a root
+      *list* — `src/` plus each `crates/*/src` — since "every Rust file in the app" is one walk per
+      crate now. Paths come back relative to the crate root that produced them, which the layout
+      rule keeps unique below the top level, so all ten exemption tables and the 13-entry
+      `CALLBACK_HOMES` equality read exactly as they did. Files sitting directly in a crate's
+      `src/` take their crate's name in front, every crate otherwise having a `lib.rs`.
+
+      **Four tree-wide rule globs had to gain `crates/**/*.rs` and the pin cannot see why.**
+      `code-style.md`, `rust-performance.md`, `tokio.md` and `unsafe-rust.md` all say `src/**/*.rs`
+      meaning *all Rust*, and that keeps matching a directory that is emptying out. `unsafe-rust.md`
+      is the one that shows it: the sanctioned `set_var` block it exists to govern is now in
+      testkit, which its glob had stopped reaching. B1's lesson again — a path that moves fails
+      loudly, a path whose contents move does not.
+
+- [x] **C3. `melodia-core`.** `error.rs`, `config.rs`, `entities/`, `utils/`, `themes/`, and
+      `src/tests/{config,error}_tests.rs` — the last two reached by `#[path]` from `error.rs` and
+      `config.rs`, so they resolve outside every directory a per-directory grep would walk. Carries
+      both halves of the decision above, and the four `material3` semantic consts widen to `pub`
+      because the palette generator reusing them verbatim is now in another crate.
+
+      **The cycle break landed as the decision predicted and cost one struct.** `KdeColorPalette`
+      moved into `themes/kde.rs`, beside the `palette_from_kde` that consumes it and the
+      `SystemColorState` that carries it; `system_theme.rs` imports it now rather than declaring
+      it, and dropped its `serde::Serialize` with it. `melodia-core`'s manifest names no workspace
+      member, which is the property eleven other crates rest on.
+
+- [x] **C4. `melodia-artwork`** — `media/image/`. Core and `slint`, and after the themes decision
+      that is the whole production set. Four `pub(crate)` functions widened, all of them the store's
+      write side (`store_image`, `cache_image_file`, `compose_artwork`, `compose_cover`), which is
+      the interface being stated rather than churn: every one is called from a crate that now has
+      to name artwork in its manifest to reach it.
+
+      **Four more rule globs went silently out of reach**, the same shape as C2's. `lofty.md`,
+      `rayon.md`, `blake3.md` and `library-data.md` all say `src/media/**/*.rs`, which still matches
+      `fetch/` and `ingest/` while no longer reaching the tier that does the BLAKE3 hashing, the
+      rayon decode pool and the lofty picture reads. `serde.md` says the same and is the one that
+      genuinely does not govern the image tier, so it was left alone.
+
+      > **Commit 1 lands here.** Four crates out, `melodia-testkit` a leaf, and the same 2,237 tests
+      > passing across nine binaries rather than six.
+
+- [ ] **C5. `melodia-net`** — `services/net/` + `media/fetch/`. `services/net/` alone names only
+      core; `media/fetch/` is the entire reason the `net -> artwork` edge exists. Takes
+      `radio_blocklist`'s bake into its own `build.rs`, the two `.env.radio.*.local` files staying
+      at the repo root through `CARGO_MANIFEST_DIR/../..` so the `gh secret` workflow keeps its
+      paths.
+- [ ] **C6. `melodia-platform`** — `services/platform/`. Core alone.
+- [ ] **C7. `melodia-audio`** — `player/source/`. Core plus `services::net`'s four functions.
+- [ ] **C8. `melodia-playback`** — `player/playback/`. Core plus audio.
+> **Commit 2 lands here.**
+
+- [ ] **C9. `melodia-engine`** — `player/engine/`.
+- [ ] **C10. `melodia-store`** — `database/` + `media/ingest/`. Carries `sqlx::migrate!` at
+      `database/mod.rs:214` and `:313`; note the second is inside `test_pool()`, which is
+      `#[doc(hidden)]` rather than `cfg(test)` and so compiles into release. `migrations/` stays at
+      the repo root, being shipped and checksummed, so the macro argument becomes the hop to it.
+- [ ] **C11. `melodia-integrations`** — `services/integrations/`. Takes `load_dotenv()` into its own
+      `build.rs`, reading `.env` from the repo root. Finding 5's hard constraint, and the one whose
+      failure is invisible: CI passes the keys as environment variables and the environment wins, so
+      only a local build would ever notice a missed hop.
+- [ ] **C12. `melodia-app`.** `library/`, `tasks/`, `state/`, and the flat remainder of `services/`.
+      Two literals break and neither is a `crate::` path: `library/tests/radio_tests.rs:17`
+      hard-codes `src/library/radio` in a `concat!`, and `services/tests/view_state_tests.rs:123`
+      `include_str!`s a bin file, joining the cross-tier pins B7 moved to `tests/`.
+- [ ] **C13. `melodia-views`, with the `melodia-ui` relocation.** `src/ui/` and `melodia-ui/` move in
+      the same commit, because the 135 `include_str!` hops into `melodia-ui/ui/` are relative paths
+      whose depth changes with *either* move; together they are rewritten once rather than twice.
+      That pulls the `melodia-ui` half of Phase D forward: its 43 rule globs, the `UI_DIR` /
+      `UI_SRC_DIR` / `FONTS_DIR` anchors, `locale_tests.rs:22`'s hard-coded `translations` path, the
+      three `scripts/` font and icon helpers, and `.gitignore`'s anchored
+      `/melodia-ui/ui/assets/fonts/originals/`, which would otherwise stop working silently and make
+      the pristine faces committable.
+
+Rolling work, fixed in the step that surfaces it rather than batched: `pub(crate)` widening where an
+item crosses its new boundary (181 production candidates, every one named by rustc);
+`[lints] workspace = true` and `[lib] doctest = false` on each member; the relative `include_str!`
+hops, each moved file gaining one `../`; and the rule globs, against A10's pin, whose own doc
+comment is stale besides (165 entries / 96 literal, against 169 / 99 today).
 
 **Landing tactic for the 2,721 `crate::` paths.** Each consuming crate re-exports what it took
-(`pub use melodia_core::{error, config, entities, utils};` in its `lib.rs`), so `crate::error::AppError`
-keeps resolving and the diff stays about topology rather than import churn. Enforcement is unaffected
-for the crates a member does not name at all: a re-export cannot reach a crate absent from the
-manifest. It *is* affected the other way, so finding 13's rule applies from the first re-export:
-never `pub use` a type out of a crate your dependents are meant to be unable to reach. De-facade in
-Phase D once the graph is proven, one crate at a time.
+(`pub use melodia_core::{error, config, entities, themes, utils};` in its `lib.rs`), with a nested
+shim where a directory spans crates, so `crate::error::AppError` keeps resolving and the diff stays
+about topology rather than import churn. Enforcement is unaffected for the crates a member does not
+name at all: a re-export cannot reach a crate absent from the manifest. It *is* affected the other
+way, so finding 13's rule applies from the first re-export and **every facade is an explicit item
+list, never a glob**: never `pub use` a type out of a crate your dependents are meant to be unable
+to reach. De-facade in Phase D once the graph is proven, one crate at a time.
 
 ## Phase D: make the repo workspace-native
 
 - [ ] Virtual root manifest, `members = ["crates/*"]`, `exclude = ["winit"]`. No `default-members`
       (finding 11). Profiles and `[patch.crates-io]` stay at the root, as do the four version scrapes.
-      `melodia-ui` moves to `crates/melodia-ui/` unchanged; that is what keeps the 135 Slint
-      `include_str!` hops resolving from files at the same depth.
+      `melodia-ui` is already at `crates/melodia-ui/`: C13 moved it beside views rather than leaving
+      it here, so the 135 Slint `include_str!` hops were rewritten once instead of twice.
 - [ ] `[[bin]] name = "Melodia"` on the binary crate (finding 4), so the artifact name survives.
 - [ ] `[package.metadata.deb]` moves to the binary crate with all eight asset paths and `license-file`
       rewritten, then a real `cargo deb --target … --no-build` to confirm the `target/release/` prefix
@@ -906,8 +1050,8 @@ Phase D once the graph is proven, one crate at a time.
       `no_result_carries_its_error_as_a_string`, and both halves of the radio off-switch pin. One
       home, one reach, walking `$MELODIA_REPO_ROOT/crates`.
 - [ ] The 243 relative `include_str!` hops, as they surface.
-- [ ] All 134 `.claude/rules` globs (83 naming `src/`, 43 `melodia-ui/`, 5 `tests/`, 3 `build.rs`),
-      against the pin A10 already made honest.
+- [ ] Whatever `.claude/rules` globs Phase C did not already have to fix as it moved their paths —
+      the `tests/` and `build.rs` ones, and any `src/` entry still naming the bin.
 - [ ] `CLAUDE.md`'s module map and its "every path below is `src/`-relative" convention, the README
       architecture section, `src/player/CLAUDE.md`'s heading, and the 162 bracketed intra-doc links
       (`\[\`?crate::`).
@@ -954,10 +1098,11 @@ Phase boundaries:
   changes no behaviour, and a module boundary costs the binary nothing.
   Two flagship checks now answer in one line each: `crate::media` in `src/ui/` returns
   `crate::media::image` and nothing else, and `crate::services` in `src/player/` returns four
-  `services::net::` primitives and nothing else. **What Phase C inherits** is one open question
+  `services::net::` primitives and nothing else. **What Phase C inherited** was one open question
   rather than a list: `integrations` names `settings::{ScrobbleFlags, DiscordFlags}`, `media/image`
   names `themes::Palette`, and all of them are plain data one layer above every reader, which is
-  what `entities/` is for. Decide it once.
+  what `entities/` is for. Answered at the head of Phase C, as one rule and not three placements —
+  and the read that answered it found a third edge of the same shape and a hard cycle besides.
 - After **C**: delete a `path` dependency from one manifest and confirm rustc names the crate in the
   error. **The `melodia-views` manifest must list neither `melodia-store` nor `melodia-net`**, the
   `melodia-audio` manifest must not name `cpal`, and `melodia-platform` must not name `melodia-ui`.

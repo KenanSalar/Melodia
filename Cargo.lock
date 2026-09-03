@@ -17,7 +17,6 @@ dependencies = [
  "fast_image_resize",
  "flexi_logger",
  "futures-util",
- "glob",
  "icy-metadata",
  "image",
  "interprocess",
@@ -29,6 +28,9 @@ dependencies = [
  "lru",
  "material-colors",
  "md5",
+ "melodia-artwork",
+ "melodia-core",
+ "melodia-testkit",
  "melodia-ui",
  "minisign-verify",
  "natord",
@@ -3672,6 +3674,54 @@ name = "mediatype"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0695a693e38d35838dd34bc3ab19911395f6837ccf55c7271189cfb12cb8b57f"
+
+[[package]]
+name = "melodia-artwork"
+version = "0.12.0"
+dependencies = [
+ "blake3",
+ "color-thief",
+ "fast_image_resize",
+ "image",
+ "jpeg-decoder",
+ "lofty",
+ "log",
+ "lru",
+ "material-colors",
+ "melodia-core",
+ "melodia-testkit",
+ "parking_lot",
+ "rayon",
+ "slint",
+ "tempfile",
+]
+
+[[package]]
+name = "melodia-core"
+version = "0.12.0"
+dependencies = [
+ "chrono",
+ "dirs",
+ "dunce",
+ "log",
+ "melodia-testkit",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+]
+
+[[package]]
+name = "melodia-testkit"
+version = "0.12.0"
+dependencies = [
+ "glob",
+ "image",
+ "tempfile",
+]
 
 [[package]]
 name = "melodia-ui"

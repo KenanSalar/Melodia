@@ -8,7 +8,7 @@
 //! `src/` is the whole reach it needs: `melodia-ui` depends on `slint` alone, so the
 //! other package has no `rfd` to build a dialog with.
 
-use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
+use crate::test_support::rust_sources;
 
 /// The two names nothing outside the helper may spell: the crate the dialogs come from,
 /// and the parenting call the helper exists for.
@@ -40,7 +40,7 @@ const MIN_CALLERS: usize = 5;
 /// because prose about the rule reads exactly like a violation of it — this file's own
 /// header would otherwise be the first hit.
 fn sources() -> Vec<(String, String)> {
-    stripped_sources(SRC_DIR, "rs", MIN_SOURCES)
+    rust_sources()
 }
 
 /// The parenting is what stops the OS picker opening *behind* Melodia on Windows

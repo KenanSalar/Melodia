@@ -8,9 +8,7 @@
 
 use std::path::Path;
 
-use crate::test_support::{
-    MIN_SOURCES, REPO_ROOT, SRC_DIR, font_sources, rel_path, stripped_sources,
-};
+use crate::test_support::{REPO_ROOT, font_sources, rel_path, rust_sources};
 
 /// The setters that spell a thread name: `std::thread::Builder`'s, and the fixed-string form
 /// tokio's and rayon's builders share. Anchored on the setter rather than on `Builder::new()`,
@@ -28,7 +26,7 @@ const MAX_THREAD_NAME: usize = 15;
 const MIN_THREAD_NAMES: usize = 5;
 
 /// The files that compute a name rather than spelling one, where reading the literal measures
-/// nothing. Paths are relative to [`SRC_DIR`].
+/// nothing. Paths are relative to the crate root that holds them.
 const RUNTIME_NAMED: [&str; 2] = [
     // `cover-decode-{i}`, whose budget is the prefix plus the widest index the decode pool's
     // clamp can reach; raising that clamp is a thread-name change.
@@ -55,7 +53,7 @@ fn no_thread_name_outgrows_what_the_kernel_keeps() {
     let mut names = Vec::new();
     let mut computed = Vec::new();
 
-    for (path, src) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
+    for (path, src) in rust_sources() {
         for setter in NAME_SETTERS {
             for start in src.match_indices(setter).map(|(at, _)| at + setter.len()) {
                 if let Some(len) = src[start..].find('"') {

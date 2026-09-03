@@ -19,7 +19,7 @@ use std::sync::{Arc, OnceLock, mpsc};
 use parking_lot::{Mutex, RwLock};
 use tokio::sync::watch;
 
-use crate::services::settings::DiscordFlags;
+use crate::entities::integrations::DiscordFlags;
 use ipc::Command;
 use model::Presence;
 

@@ -9,7 +9,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
+use crate::test_support::rust_sources;
 
 /// This file, which spells the needles below and would otherwise be its own first hit. Skipped
 /// rather than forgiven, and held to still naming one.
@@ -48,7 +48,7 @@ fn every_scheduling_cover_lookup_names_a_generation() {
     let mut pin_seen = false;
     let mut offenders = Vec::new();
 
-    for (path, code) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
+    for (path, code) in rust_sources() {
         if path == PIN {
             pin_seen = code.contains("grid_cover(");
             continue;
@@ -82,7 +82,7 @@ fn every_scheduling_tier_installs_a_notifier() {
     let mut pin_seen = false;
     let mut found = BTreeSet::new();
 
-    for (path, code) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
+    for (path, code) in rust_sources() {
         if path == PIN {
             pin_seen = code.contains("notify_on_decode(");
             continue;

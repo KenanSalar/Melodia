@@ -7,7 +7,8 @@ use super::{
     timestamp_of,
 };
 use crate::error::AppError;
-use crate::test_support::{reading_env, resolved_home};
+use crate::test_support::reading_env;
+use crate::utils::redact::home_dir_string;
 
 /// Everything in `dir`, sorted. Report names are fixed-width, so lexicographic
 /// order is chronological order — the same property retention leans on.
@@ -74,7 +75,7 @@ fn a_report_survives_missing_fields() {
 /// holds a real name — must not ride along in the payload or the backtrace.
 #[test]
 fn a_report_redacts_the_home_directory() {
-    let Some(home) = resolved_home() else {
+    let Some(home) = home_dir_string() else {
         return;
     };
     reading_env(|| {

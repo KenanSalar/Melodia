@@ -1,6 +1,7 @@
 ---
 paths:
   - src/media/**/*.rs
+  - crates/melodia-artwork/src/media/image/**/*.rs
   - src/tasks/**/*.rs
   - src/library/playlist_files.rs
   - src/library/playlist_files/**/*.rs

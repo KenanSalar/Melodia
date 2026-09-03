@@ -21,13 +21,13 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, SharedString};
 
+use crate::entities::integrations::ScrobbleFlags;
 use crate::error::AppError;
 use crate::library;
 use crate::services::integrations::scrobble::providers::{lastfm, listenbrainz};
 use crate::services::integrations::scrobble::{
     ListenBrainzCredentials, LoveTarget, ScrobbleService, ScrobbleStatus,
 };
-use crate::services::settings::ScrobbleFlags;
 use crate::state::AppState;
 use crate::ui::launcher;
 use crate::utils::toast::{self, ToastKind};

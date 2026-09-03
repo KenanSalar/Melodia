@@ -125,7 +125,7 @@ pub async fn get_system_theme() -> String {
 // `services::settings::*` directly.
 
 #[cfg(target_os = "linux")]
-pub fn get_kde_colors() -> Option<crate::services::platform::system_theme::KdeColorPalette> {
+pub fn get_kde_colors() -> Option<crate::themes::kde::KdeColorPalette> {
     crate::services::platform::system_theme::get_kde_colors()
 }
 

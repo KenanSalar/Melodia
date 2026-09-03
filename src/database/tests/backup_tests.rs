@@ -9,7 +9,18 @@ use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::tests::helpers::insert_test_track;
 use crate::error::AppError;
-use crate::test_support::paths_in;
+
+/// A [`Paths`] rooted in a throwaway directory, with the subdirectories [`Paths::resolve`]
+/// creates already in place. Creation is best-effort — a failure surfaces as a missing-file
+/// error in the test body.
+///
+/// Per-crate rather than shared: the testkit names no workspace type, which is what keeps it a
+/// leaf every other crate can dev-depend on without a cycle.
+fn paths_in(dir: &Path) -> Paths {
+    let paths = Paths::rooted_at(dir.to_path_buf());
+    let _ = paths.create_dirs();
+    paths
+}
 
 /// Everything in `dir`, sorted. Backup names are equal-width within a
 /// generation, so lexicographic order is chronological order — the same

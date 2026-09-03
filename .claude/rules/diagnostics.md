@@ -3,7 +3,7 @@ paths:
   - src/services/platform/logging.rs
   - src/services/platform/crash_report.rs
   - src/services/diagnostics.rs
-  - src/utils/redact.rs
+  - crates/melodia-core/src/utils/redact.rs
   - src/ui/settings/diagnostics.rs
   - src/main.rs
 ---

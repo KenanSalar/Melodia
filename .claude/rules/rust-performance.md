@@ -1,6 +1,7 @@
 ---
 paths:
   - src/**/*.rs
+  - crates/**/*.rs
   - tests/**/*.rs
   - build.rs
   - melodia-ui/build.rs

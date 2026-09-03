@@ -5,11 +5,22 @@ use super::{
     ScrobbleTrack,
 };
 use crate::config::Paths;
+use crate::entities::integrations::ScrobbleFlags;
 use crate::entities::track::ScrobbleRow;
-use crate::services::settings::ScrobbleFlags;
-use crate::test_support::paths_in;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+/// A [`Paths`] rooted in a throwaway directory, with the subdirectories [`Paths::resolve`]
+/// creates already in place. Creation is best-effort — a failure surfaces as a missing-file
+/// error in the test body.
+///
+/// Per-crate rather than shared: the testkit names no workspace type, which is what keeps it a
+/// leaf every other crate can dev-depend on without a cycle.
+fn paths_in(dir: &std::path::Path) -> Paths {
+    let paths = Paths::rooted_at(dir.to_path_buf());
+    let _ = paths.create_dirs();
+    paths
+}
 
 /// Build a service with a fresh (never-built) shared client `OnceLock` — the
 /// credential/queue tests here never touch the network.

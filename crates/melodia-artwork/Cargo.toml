@@ -1,0 +1,42 @@
+[package]
+name = "melodia-artwork"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Image decode, resize, the artwork store and the thumbnail cache for Melodia"
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+melodia-core = { path = "../melodia-core" }
+
+# A refcounted pixel buffer and nothing else — `cover_thumbs` holds `SharedPixelBuffer`s because
+# `slint::Image` is deliberately not `Send`, and builds the handle at the edge.
+slint.workspace = true
+
+image.workspace = true
+fast_image_resize.workspace = true
+# The store is content-addressed: a picture's BLAKE3 digest is its file name.
+blake3.workspace = true
+# The picture frame a cover is read out of, and the MIME type that decides its extension.
+lofty.workspace = true
+jpeg-decoder.workspace = true
+lru.workspace = true
+material-colors.workspace = true
+color-thief.workspace = true
+parking_lot.workspace = true
+# The decode pool behind `cover_thumbs`, the one rayon pool in the tree that names its threads.
+rayon.workspace = true
+# The composite's staging file, written then renamed like everything else in the store.
+tempfile.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+melodia-testkit = { path = "../melodia-testkit" }
+
+[lints]
+workspace = true

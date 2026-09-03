@@ -14,6 +14,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::entities::integrations::{DiscordFlags, ScrobbleFlags};
 use crate::player::engine::types::RepeatMode;
 use crate::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
 use crate::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
@@ -313,50 +314,6 @@ impl Default for WindowFlags {
 pub struct TrayFlags {
     pub tray_enabled: bool,
     pub close_to_tray: bool,
-}
-
-/// Scrobbling toggles, all off by default. The Last.fm / `ListenBrainz`
-/// *credentials* live in a separate `scrobble_credentials.json`, never here.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "independent scrobble toggles, serde-flattened into settings.json — nesting would change the on-disk shape and break existing installs"
-)]
-pub struct ScrobbleFlags {
-    pub lastfm_enabled: bool,
-    pub listenbrainz_enabled: bool,
-    /// Mirror favorites to Last.fm Loved Tracks. Independent of
-    /// `lastfm_enabled` — loving isn't scrobbling — and of its sibling below.
-    pub lastfm_love_enabled: bool,
-    /// Mirror favorites to `ListenBrainz` recording feedback.
-    pub listenbrainz_love_enabled: bool,
-    /// Auto-tag scanned tracks with their `MusicBrainz` Recording ID, into both
-    /// the DB and the file, so loves work on untagged libraries.
-    pub mbid_auto_tag: bool,
-}
-
-/// Discord Rich Presence toggles. Nothing lives outside `settings.json` here —
-/// the application id is a compile-time constant, not a credential.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct DiscordFlags {
-    pub discord_rpc_enabled: bool,
-    /// Show album artwork on the card. Its own toggle because it drives an
-    /// outbound cover lookup; inert until the parent is enabled.
-    pub discord_rpc_artwork: bool,
-    /// Hide the card entirely while paused instead of showing a paused marker.
-    pub discord_rpc_hide_when_paused: bool,
-}
-
-impl Default for DiscordFlags {
-    fn default() -> Self {
-        Self {
-            discord_rpc_enabled: false,
-            discord_rpc_artwork: true,
-            discord_rpc_hide_when_paused: false,
-        }
-    }
 }
 
 /// The Radio section's master switch, off by default. An upgrade has to be silent

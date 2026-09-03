@@ -5,7 +5,7 @@ use reqwest::Url;
 use crate::player::source::stream_source::{
     first_stream_url, is_playlist_content_type, is_playlist_url, reconnect_delay,
 };
-use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
+use crate::test_support::rust_sources;
 
 /// `Some(verdict)` when `raw` parsed, `None` when it didn't — so a typo in a test URL fails the
 /// assertion instead of quietly satisfying a negative one.
@@ -172,7 +172,7 @@ fn nothing_reaches_the_convenience_constructors() {
 
     let mut offenders = Vec::new();
     let mut exempt_seen = false;
-    for (path, source) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
+    for (path, source) in rust_sources() {
         if path == EXEMPT {
             exempt_seen = true;
             continue;

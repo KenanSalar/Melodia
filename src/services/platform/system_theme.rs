@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use serde::Serialize;
 use tokio::sync::watch;
 use zbus::MatchRule;
+
+use crate::themes::kde::KdeColorPalette;
 
 /// Color scheme values from the XDG Desktop Portal specification.
 /// See: <https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.Settings.html>
@@ -179,18 +180,6 @@ fn owned_value_to_u32(value: &zbus::zvariant::OwnedValue) -> u32 {
 // ---------------------------------------------------------------------------
 // KDE color scheme reading from ~/.config/kdeglobals
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Serialize)]
-pub struct KdeColorPalette {
-    pub colors: HashMap<String, String>,
-    pub accent: String,
-    /// The three `[Colors:View]` status foregrounds — `ForegroundNegative`,
-    /// `ForegroundPositive`, `ForegroundNeutral`. Kept out of `colors` because
-    /// they're semantic roles, not part of the surface ramp that map keys.
-    pub red: String,
-    pub green: String,
-    pub yellow: String,
-}
 
 fn kdeglobals_path() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from("~/.config")).join("kdeglobals")

@@ -1,6 +1,7 @@
 ---
 paths:
   - src/media/**/*.rs
+  - crates/melodia-artwork/src/media/image/**/*.rs
   - src/library/tags.rs
   - src/library/mbid.rs
   - src/tasks/file_event_processor/**/*.rs

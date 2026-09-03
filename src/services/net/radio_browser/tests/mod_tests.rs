@@ -2,7 +2,7 @@
 //! and the walk holding the module's own reach prohibition.
 
 use super::{ApiStation, DEFAULT_PAGE_LIMIT, FALLBACK_HOST, SERVERS_URL, page_from, url_for};
-use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
+use crate::test_support::rust_sources;
 
 /// A bare name, so [`url_for`] stays the one place a scheme or a separator is
 /// spelled. A host carrying either would produce `https://https://…` or a
@@ -86,7 +86,7 @@ fn an_unset_limit_is_measured_against_the_default_page_size() {
     assert!(!page_from(full_page(default - 1), 0).has_more);
 }
 
-/// Where this module may be named, relative to [`SRC_DIR`]: its own declaration.
+/// Where this module may be named, relative to its crate root: its own declaration.
 ///
 /// An allowlist rather than the per-file *counts* `services::tests::mod_tests` pins `current_exe`
 /// with. There a second call in an exempt file is itself the regression; here the facade is meant
@@ -121,7 +121,7 @@ fn only_the_radio_facade_reaches_the_directory_client() {
     let mut declaration_seen = false;
     let mut facade_files = 0usize;
 
-    for (path, src) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
+    for (path, src) in rust_sources() {
         if path.starts_with(OWN_TREE) || !src.contains(NEEDLE) {
             continue;
         }

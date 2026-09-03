@@ -13,8 +13,9 @@
 //! The tiers land in three different crates, so the direction matters more than the grouping:
 //! `image` below `ingest` and `fetch`, and nothing pointing back up.
 
+pub use melodia_artwork::media::image;
+
 pub mod fetch;
-pub mod image;
 pub mod ingest;
 
 // A walking pin rather than a module's own tests: what it asks is where in `src/` a lofty parse

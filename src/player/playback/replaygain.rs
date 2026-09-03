@@ -3,7 +3,7 @@
 //! `ReplayGain` tags record how loud a track (or its album) is relative to a
 //! reference level. Applying the stored gain at playback normalizes perceived
 //! loudness across a library so tracks don't jump in volume. Melodia already
-//! parses the tags at scan time ([`crate::media::ingest::metadata`]) into the `tracks`
+//! parses the tags at scan time (`media::ingest::metadata`) into the `tracks`
 //! table; this module carries them into the audio path.
 //!
 //! Two pieces, mirroring the equalizer:

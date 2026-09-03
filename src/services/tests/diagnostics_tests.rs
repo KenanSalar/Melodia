@@ -7,7 +7,20 @@ use super::{
     settings_block, suggested_file_name, tail_of,
 };
 use crate::error::AppError;
-use crate::test_support::{paths_in, reading_env, resolved_home};
+use crate::test_support::reading_env;
+use crate::utils::redact::home_dir_string;
+
+/// A [`Paths`] rooted in a throwaway directory, with the subdirectories [`Paths::resolve`]
+/// creates already in place. Creation is best-effort — a failure surfaces as a missing-file
+/// error in the test body.
+///
+/// Per-crate rather than shared: the testkit names no workspace type, which is what keeps it a
+/// leaf every other crate can dev-depend on without a cycle.
+fn paths_in(dir: &Path) -> Paths {
+    let paths = Paths::rooted_at(dir.to_path_buf());
+    let _ = paths.create_dirs();
+    paths
+}
 
 /// A file of `lines` numbered lines, each padded to a known width so a byte
 /// budget maps onto a predictable number of them.
@@ -68,7 +81,7 @@ fn a_short_file_keeps_its_first_line() -> Result<(), AppError> {
 /// name, so it may not survive the trip — in the log body or the file header.
 #[test]
 fn the_tail_redacts_the_home_directory() -> Result<(), AppError> {
-    let Some(home) = resolved_home() else {
+    let Some(home) = home_dir_string() else {
         return Ok(());
     };
     let tmp = tempfile::tempdir()?;
@@ -222,7 +235,7 @@ fn the_two_kinds_of_empty_logs_read_differently() {
 /// the one string here that could grow a path without anyone editing this file.
 #[test]
 fn the_unavailable_reason_is_redacted_like_everything_else() {
-    let Some(home) = resolved_home() else {
+    let Some(home) = home_dir_string() else {
         return;
     };
     let block = reading_env(|| {
@@ -238,7 +251,7 @@ fn the_unavailable_reason_is_redacted_like_everything_else() {
 /// here goes through.
 #[test]
 fn the_report_names_the_data_root_and_redacts_it() {
-    let Some(home) = resolved_home() else {
+    let Some(home) = home_dir_string() else {
         return;
     };
     let paths = Paths::rooted_at(Path::new(&home).join("Melodia-dev"));

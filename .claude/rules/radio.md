@@ -8,7 +8,7 @@ paths:
   - src/player/source/prebuffer.rs
   - src/player/source/stream_decode.rs
   - src/media/fetch/station_logo.rs
-  - src/entities/radio.rs
+  - crates/melodia-core/src/entities/radio.rs
   - src/database/queries/radio.rs
   - src/tasks/radio_logo_cache.rs
   - src/library/settings/radio.rs

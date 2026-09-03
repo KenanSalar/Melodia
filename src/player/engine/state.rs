@@ -60,7 +60,7 @@ pub struct PlayerState {
     /// Sleep-timer "End of current track" mode: when armed, the playback
     /// monitor pauses at the next end-of-stream boundary instead of advancing
     /// the queue. Session-only (never persisted). Set via
-    /// [`crate::library::playback::player_set_pause_at_track_end`]; surfaced to
+    /// `library::playback::player_set_pause_at_track_end`; surfaced to
     /// the UI as `sleep_at_track_end` on the light `ViewModel` so the overflow
     /// menu's sleep row auto-clears once the monitor fires and disarms it.
     pub pause_after_current_track: bool,

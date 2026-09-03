@@ -5,8 +5,8 @@ edition.workspace = true
 rust-version.workspace = true
 description = "Cross-platform desktop music player (Slint + Rust)"
 license.workspace = true
-repository = "https://github.com/KenanSalar/Melodia"
-homepage = "https://github.com/KenanSalar/Melodia"
+repository.workspace = true
+homepage.workspace = true
 authors = ["Kenan Salar <kenansalar@users.noreply.github.com>"]
 keywords = ["music", "player", "audio", "slint"]
 categories = ["multimedia::audio"]
@@ -17,25 +17,33 @@ publish = false
 # than twice per `cargo test` (rlib plus `--test` harness). `winit` carries its own
 # `[workspace]`; excluding it survives an upstream re-sync that drops that table.
 [workspace]
-members = ["melodia-ui"]
+members = ["melodia-ui", "crates/*"]
 exclude = ["winit"]
 
+# Inherited by every package. Four toolchain-less scrapes (`release-prepare.yml`,
+# `build-{rpm,appimage,tarball}.sh`) anchor on this table by name and take the
+# first `version = ` inside it, so that entry stays first.
 [workspace.package]
-# Inherited by both packages. Four toolchain-less scrapes (`release-prepare.yml`,
-# `build-{rpm,appimage,tarball}.sh`) anchor on this table by name.
 version = "0.12.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
 rust-version = "1.97"
+# Here rather than on `[package]` because `ui::settings::about` reads
+# `CARGO_PKG_REPOSITORY`, and a member that inherits nothing gets an empty string
+# and only *logs* about it.
+repository = "https://github.com/KenanSalar/Melodia"
+homepage = "https://github.com/KenanSalar/Melodia"
 
-# Declared once rather than in both manifests: a drifted version resolves two
-# `slint` crates and the build dies in a wall of `expected slint::Weak, found
-# slint::Weak`. `raw-window-handle-06` parents the rfd pickers;
-# `unstable-winit-030` exposes `WinitWindowAccessor` for `drag_window()` and
-# `WindowEvent::Resized` (slint-ui#2521, #6273, #4817); `renderer-femtovg` because
-# the software renderer can't clip to `border-radius` (slint#4176).
+# Every dependency is declared here rather than in the member that uses it, and the
+# reason is the one `slint` taught: a drifted version resolves two copies of a crate
+# and the build dies in a wall of `expected slint::Weak, found slint::Weak`. Members
+# take `<dep>.workspace = true` and decide nothing.
 [workspace.dependencies]
+# `raw-window-handle-06` parents the rfd pickers; `unstable-winit-030` exposes
+# `WinitWindowAccessor` for `drag_window()` and `WindowEvent::Resized` (slint-ui#2521,
+# #6273, #4817); `renderer-femtovg` because the software renderer can't clip to
+# `border-radius` (slint#4176).
 slint = { version = "1.16.1", default-features = false, features = [
     "std",
     "backend-default",
@@ -48,65 +56,6 @@ slint = { version = "1.16.1", default-features = false, features = [
 # Must match the `slint` version above; the pair is declared adjacently for that.
 slint-build = "1.16.1"
 
-# Lowercase so `use melodia::…` stays idiomatic; the package name drives the binary.
-[lib]
-name = "melodia"
-# Nothing consumes this as a library and every doc example is an `ignore` fence.
-doctest = false
-
-# Drives the `.deb` in release CI; the polkit helper and policy are what
-# `updater/install/swap.rs` looks for at `/usr/libexec/melodia-update-helper`. Dest
-# paths follow the Debian FHS and match the RPM `%files` layout, except licences:
-# Policy 12.5 wants `/usr/share/doc/<pkg>/copyright` and Debian has no
-# `/usr/share/licenses`, while RPM's `%license` tag survives `--excludedocs`.
-[package.metadata.deb]
-section = "sound"
-priority = "optional"
-# Copied verbatim only because it opens with DEP-5 keys (cargo-deb reads the first
-# ten lines); otherwise it prepends a generated header declaring one author and a
-# whole-package AGPL, which the fonts and the vendored winit falsify. Bare string,
-# not the `[path, skip-lines]` pair: that is a `Vec<String>`, so a `0` won't parse.
-license-file = "packaging/debian-copyright"
-# `$auto` keeps the detected shared-library deps. `policykit-1` is transitional in
-# Trixie, so apt takes `pkexec` there and falls back on Bookworm and older Ubuntu.
-depends = "$auto, pkexec | policykit-1"
-# Not `depends`: both ship `debian/triggers` on the two cache directories, so dpkg
-# refreshes them per transaction and a server install that skips them is a no-op.
-recommends = "desktop-file-utils, hicolor-icon-theme"
-extended-description = """
-Melodia is a modern, local-first desktop music player with a Material
-3-inspired interface. Your music collection lives entirely on your own
-machine, and every online feature is a setting you control: scrobbling,
-Discord presence and internet radio all ship switched off. It pairs a
-Slint user interface with a pure-Rust backend: gapless playback via
-Symphonia and cpal (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis,
-WAV, AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
-full-text search, browsing by album, artist, genre and playlist, OS
-media controls (MPRIS), and pluggable themes including system light/dark
-and Material You."""
-# The reverse-DNS dest names match the AppStream component id, which is what makes
-# Discover / GNOME Software merge the desktop entry with the MetaInfo component.
-assets = [
-    ["target/release/Melodia", "usr/bin/melodia", "755"],
-    ["scripts/Melodia.desktop", "usr/share/applications/com.github.kenansalar.melodia.desktop", "644"],
-    ["packaging/com.github.kenansalar.melodia.metainfo.xml", "usr/share/metainfo/com.github.kenansalar.melodia.metainfo.xml", "644"],
-    ["assets/icons/logo-with-background.svg", "usr/share/icons/hicolor/scalable/apps/melodia.svg", "644"],
-    ["LICENSE", "usr/share/doc/melodia/LICENSE", "644"],
-    # The fonts and the vendored winit compile into the binary, so this package owes
-    # their licence text. Globbed, so a fourth file needs no edit here, unlike
-    # `wix/main.wxs`, which has to name each one.
-    ["licenses/*", "usr/share/doc/melodia/licenses/", "644"],
-    ["packaging/melodia-update-helper", "usr/libexec/melodia-update-helper", "755"],
-    ["packaging/com.github.kenansalar.melodia.update.policy", "usr/share/polkit-1/actions/com.github.kenansalar.melodia.update.policy", "644"],
-]
-
-[dependencies]
-# The Slint compiler's output, re-exported by `src/lib.rs` so the generated types
-# stay reachable as `crate::AppWindow`, `crate::TrackRow`, ….
-melodia-ui = { path = "melodia-ui" }
-
-slint.workspace = true
-
 # Async runtime / utilities
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
 tokio-util = { version = "0.7.19", features = ["rt"] }
@@ -118,9 +67,9 @@ parking_lot = "0.12.5"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "derive", "macros"] }
 
 # Audio
-# The device stream `player::output` opens, and the `ErrorKind`s
-# `player::stream_health` classifies; with rodio gone (#90) it is the whole output
-# dependency. 0.18 is a floor: `tasks::audio_health` reads device loss off
+# The device stream `player::playback::output` opens, and the `ErrorKind`s
+# `player::playback::stream_health` classifies; with rodio gone (#90) it is the whole
+# output dependency. 0.18 is a floor: `tasks::audio_health` reads device loss off
 # `DeviceNotAvailable`, which the ALSA host only began reporting there, and
 # `output::device`'s ladder assumes its paused-until-`play()` streams.
 cpal = "0.18.2"
@@ -128,8 +77,8 @@ cpal = "0.18.2"
 # rodio pinned: 0.5 picks a demuxer off a two-byte marker and hands an MPEG-2 ADTS
 # stream to the MP3 demuxer, where 0.6 scores candidates against the frames that
 # follow. The feature list is the union of what stations serve and what
-# `media::AUDIO_EXTENSIONS` ingests: a gap is a format the scanner offers and
-# nothing plays.
+# `utils::audio_ext::AUDIO_EXTENSIONS` ingests: a gap is a format the scanner offers
+# and nothing plays.
 symphonia = { version = "0.6.1", default-features = false, features = [
     # The ADTS demuxer as well as the codec.
     "aac",
@@ -177,7 +126,8 @@ natord = "1.0.9"
 # `remove_diacritics 2` tokenizer does.
 unicode-normalization = "0.1.25"
 # The superset of what a lofty picture's MIME type can name and what the cover
-# pickers accept, which `media::artwork`'s `STORED_EXTENSIONS` is written against.
+# pickers accept, which `media::image::artwork`'s `STORED_EXTENSIONS` is written
+# against.
 image = { version = "0.25.10", default-features = false, features = [
     "jpeg",
     "png",
@@ -185,12 +135,12 @@ image = { version = "0.25.10", default-features = false, features = [
     "gif",
     "bmp",
     "tiff",
-    # Only `media::station_logo` produces this; a logo field is a favicon field.
+    # Only `media::fetch::station_logo` produces this; a logo field is a favicon field.
     "ico",
 ] }
 # `image`'s resamplers go through `get_pixel`; this is the same convolution over the
 # flat slice with SIMD. It carries `unsafe` internally, which `unsafe_code = "deny"`
-# can't reach; `media::image_decode::resize_rgb8` is the only place it is named.
+# can't reach; `media::image::image_decode::resize_rgb8` is the only place it is named.
 fast_image_resize = { version = "6.1.0", features = ["image"] }
 # Scale-on-decode, which `image`'s JPEG path can't reach (`zune-jpeg` picks reduced
 # IDCTs by coefficient content, not by request). Every tier draws a cover far smaller
@@ -260,7 +210,6 @@ minisign-verify = "0.2.5"
 semver = "1.0.28"
 futures-util = { version = "0.3.33", default-features = false, features = ["std"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
 # Do NOT enable the `tokio` feature: cargo unifies it onto Slint's accesskit_unix →
 # atspi → zbus chain, whose a11y thread has no tokio context and panics at startup.
 # Always-on-top uses `zbus::blocking::*` inside `spawn_blocking`.
@@ -278,7 +227,6 @@ ksni = { version = "0.3.6", default-features = false, features = ["blocking", "a
 # retained pages back.
 libc = "0.2.189"
 
-[target.'cfg(target_os = "windows")'.dependencies]
 # `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, for when
 # `Melodia.exe.old` is still loaded, and `GetUserDefaultLocaleName`. Declarations
 # from here rather than a hand-rolled `extern` block only review can keep true.
@@ -289,30 +237,154 @@ windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem", "Win
 # Browse rows out as disk-only. Reached through `utils::canonicalize_path`.
 dunce = "1.0.5"
 
-[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 # Defaults off to drop `gtk` and `libxdo`, the Linux paths `ksni` covers. The icon is
 # created on the main thread, its menu events pumped from Slint's winit loop.
 tray-icon = { version = "0.24.2", default-features = false }
 
+# Embeds the `ICON` resource so the taskbar and Explorer entries aren't the generic
+# placeholder. `wix/main.wxs` reads the same `assets/melodia.ico`.
+winresource = "0.1.31"
+
+glob = "0.3.4"
+
+# Lowercase so `use melodia::…` stays idiomatic; the package name drives the binary.
+[lib]
+name = "melodia"
+# Nothing consumes this as a library and every doc example is an `ignore` fence.
+doctest = false
+
+# Drives the `.deb` in release CI; the polkit helper and policy are what
+# `updater/install/swap.rs` looks for at `/usr/libexec/melodia-update-helper`. Dest
+# paths follow the Debian FHS and match the RPM `%files` layout, except licences:
+# Policy 12.5 wants `/usr/share/doc/<pkg>/copyright` and Debian has no
+# `/usr/share/licenses`, while RPM's `%license` tag survives `--excludedocs`.
+[package.metadata.deb]
+section = "sound"
+priority = "optional"
+# Copied verbatim only because it opens with DEP-5 keys (cargo-deb reads the first
+# ten lines); otherwise it prepends a generated header declaring one author and a
+# whole-package AGPL, which the fonts and the vendored winit falsify. Bare string,
+# not the `[path, skip-lines]` pair: that is a `Vec<String>`, so a `0` won't parse.
+license-file = "packaging/debian-copyright"
+# `$auto` keeps the detected shared-library deps. `policykit-1` is transitional in
+# Trixie, so apt takes `pkexec` there and falls back on Bookworm and older Ubuntu.
+depends = "$auto, pkexec | policykit-1"
+# Not `depends`: both ship `debian/triggers` on the two cache directories, so dpkg
+# refreshes them per transaction and a server install that skips them is a no-op.
+recommends = "desktop-file-utils, hicolor-icon-theme"
+extended-description = """
+Melodia is a modern, local-first desktop music player with a Material
+3-inspired interface. Your music collection lives entirely on your own
+machine, and every online feature is a setting you control: scrobbling,
+Discord presence and internet radio all ship switched off. It pairs a
+Slint user interface with a pure-Rust backend: gapless playback via
+Symphonia and cpal (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis,
+WAV, AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
+full-text search, browsing by album, artist, genre and playlist, OS
+media controls (MPRIS), and pluggable themes including system light/dark
+and Material You."""
+# The reverse-DNS dest names match the AppStream component id, which is what makes
+# Discover / GNOME Software merge the desktop entry with the MetaInfo component.
+assets = [
+    ["target/release/Melodia", "usr/bin/melodia", "755"],
+    ["scripts/Melodia.desktop", "usr/share/applications/com.github.kenansalar.melodia.desktop", "644"],
+    ["packaging/com.github.kenansalar.melodia.metainfo.xml", "usr/share/metainfo/com.github.kenansalar.melodia.metainfo.xml", "644"],
+    ["assets/icons/logo-with-background.svg", "usr/share/icons/hicolor/scalable/apps/melodia.svg", "644"],
+    ["LICENSE", "usr/share/doc/melodia/LICENSE", "644"],
+    # The fonts and the vendored winit compile into the binary, so this package owes
+    # their licence text. Globbed, so a fourth file needs no edit here, unlike
+    # `wix/main.wxs`, which has to name each one.
+    ["licenses/*", "usr/share/doc/melodia/licenses/", "644"],
+    ["packaging/melodia-update-helper", "usr/libexec/melodia-update-helper", "755"],
+    ["packaging/com.github.kenansalar.melodia.update.policy", "usr/share/polkit-1/actions/com.github.kenansalar.melodia.update.policy", "644"],
+]
+
+[dependencies]
+# The Slint compiler's output, re-exported by `src/lib.rs` so the generated types
+# stay reachable as `crate::AppWindow`, `crate::TrackRow`, ….
+melodia-ui = { path = "melodia-ui" }
+melodia-core = { path = "crates/melodia-core" }
+melodia-artwork = { path = "crates/melodia-artwork" }
+
+slint.workspace = true
+
+tokio.workspace = true
+tokio-util.workspace = true
+async-compat.workspace = true
+parking_lot.workspace = true
+sqlx.workspace = true
+
+cpal.workspace = true
+symphonia.workspace = true
+biquad.workspace = true
+realfft.workspace = true
+lofty.workspace = true
+
+walkdir.workspace = true
+rand.workspace = true
+notify.workspace = true
+notify-debouncer-full.workspace = true
+rayon.workspace = true
+blake3.workspace = true
+natord.workspace = true
+unicode-normalization.workspace = true
+image.workspace = true
+fast_image_resize.workspace = true
+jpeg-decoder.workspace = true
+lru.workspace = true
+material-colors.workspace = true
+color-thief.workspace = true
+
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+
+reqwest.workspace = true
+stream-download.workspace = true
+icy-metadata.workspace = true
+md5.workspace = true
+
+log.workspace = true
+flexi_logger.workspace = true
+thiserror.workspace = true
+tempfile.workspace = true
+
+souvlaki.workspace = true
+rfd.workspace = true
+open.workspace = true
+interprocess.workspace = true
+
+minisign-verify.workspace = true
+semver.workspace = true
+futures-util.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus.workspace = true
+ksni.workspace = true
+libc.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys.workspace = true
+dunce.workspace = true
+
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+tray-icon.workspace = true
+
 # The build script hashes with the same primitive the crate looks up with, compiling
 # one shared file twice; pinned to the runtime version, two of them being two hashes.
 [build-dependencies]
-blake3 = "1.8.5"
+blake3.workspace = true
 
-# Embeds the `ICON` resource so the taskbar and Explorer entries aren't the generic
-# placeholder. `wix/main.wxs` reads the same `assets/melodia.ico`.
 [target.'cfg(target_os = "windows")'.build-dependencies]
-winresource = "0.1.31"
+winresource.workspace = true
 
 [dev-dependencies]
-tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "test-util"] }
-# The rules-frontmatter pin asks whether each `paths:` entry still matches anything, and half
-# of them are globs. Hand-rolling `**` inside the one test that exists to catch silent drift is
-# the wrong place to be clever; this crate has no dependencies of its own.
-glob = "0.3.4"
+tokio = { workspace = true, features = ["test-util"] }
+melodia-testkit = { path = "crates/melodia-testkit" }
 
-# Workspace-level and inherited by both packages, so `melodia-ui` can't sit outside
-# the gate; its generated module carries a blanket `#[allow]`.
+# Workspace-level and inherited by every package, so no member can sit outside the
+# gate; `melodia-ui`'s generated module carries a blanket `#[allow]`.
 [lints]
 workspace = true
 

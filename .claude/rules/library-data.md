@@ -2,11 +2,12 @@
 paths:
   - src/library/**/*.rs
   - src/database/**/*.rs
-  - src/entities/**/*.rs
+  - crates/melodia-core/src/entities/**/*.rs
   - src/media/**/*.rs
+  - crates/melodia-artwork/src/media/image/**/*.rs
   - src/tasks/**/*.rs
-  - src/utils/audio_ext.rs
-  - src/utils/self_writes.rs
+  - crates/melodia-core/src/utils/audio_ext.rs
+  - crates/melodia-core/src/utils/self_writes.rs
   - src/ui/playlists/callbacks/**/*.rs
   - migrations/**/*.sql
   - melodia-ui/ui/components/dialog/smart-playlist-editor-body.slint
@@ -182,7 +183,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 ## Smart playlists
 
 - **Smart / dynamic playlists = virtual, criteria-derived membership**
-  (`src/entities/smart_criteria.rs`, `src/database/queries/smart_playlist.rs`,
+  (`crates/melodia-core/src/entities/smart_criteria.rs`, `src/database/queries/smart_playlist.rs`,
   `src/library/smart_playlists.rs`). `playlists.is_smart` + `smart_criteria TEXT` store a JSON
   `SmartCriteria` rule set instead of `playlist_items` — **resolved at read time**, never
   materialized (updates live). `#[serde(default)]` + a `version` field keep it forward-compatible.

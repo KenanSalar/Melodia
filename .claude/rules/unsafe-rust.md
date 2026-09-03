@@ -1,6 +1,7 @@
 ---
 paths:
   - src/**/*.rs
+  - crates/**/*.rs
   - melodia-ui/src/**/*.rs
   - tests/**/*.rs
   - build.rs
@@ -91,7 +92,8 @@ process state, and `cargo test` runs in parallel by default. There is one shape:
 
 **lock → snapshot → clear → set → `catch_unwind(body)` → restore → `resume_unwind`**
 
-and it is written once, in **`test_support::with_env_set`** (`src/test_support.rs`).
+and it is written once, in **`test_support::with_env_set`**
+(`crates/melodia-testkit/src/lib.rs`).
 Call it. Don't re-roll it — each of those seven steps has been missing from a hand-rolled
 copy at some point, and the restore is the one that goes first.
 

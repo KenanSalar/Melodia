@@ -1,7 +1,8 @@
 ---
 paths:
   - src/**/*.rs
-  - src/error.rs
+  - crates/**/*.rs
+  - crates/melodia-core/src/error.rs
   - src/main.rs
   - src/lib.rs
   - melodia-ui/src/**/*.rs

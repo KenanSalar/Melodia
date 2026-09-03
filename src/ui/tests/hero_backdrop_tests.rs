@@ -498,11 +498,7 @@ fn the_palette_is_never_written_without_re_solving_the_backdrops() {
     const SELF: &str = "ui/tests/hero_backdrop_tests.rs";
 
     let mut callers = Vec::new();
-    for (rel, code) in crate::test_support::stripped_sources(
-        crate::test_support::SRC_DIR,
-        "rs",
-        crate::test_support::MIN_SOURCES,
-    ) {
+    for (rel, code) in crate::test_support::rust_sources() {
         if rel != SELF && code.contains("theme_apply::apply(") {
             callers.push(rel);
         }

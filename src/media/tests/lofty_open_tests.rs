@@ -8,7 +8,7 @@
 //! `src/` is the whole reach it needs — `melodia-ui` depends on `slint` alone, so the other
 //! package has no lofty to open a file with.
 
-use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
+use crate::test_support::rust_sources;
 
 /// What an exempt file has to keep spelling: the type rather than the module path, so it holds
 /// under either import shape.
@@ -49,7 +49,7 @@ fn every_lofty_open_goes_through_the_shared_reader() {
 
     // Comment-stripped, because prose about the rule reads exactly like a violation of it —
     // this file's own header would otherwise be the first hit.
-    for (path, src) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
+    for (path, src) in rust_sources() {
         if let Some((_, owed)) = EXEMPT.iter().find(|(exempt, _)| *exempt == path) {
             assert!(
                 src.contains(owed),
