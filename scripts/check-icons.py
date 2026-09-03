@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drift guard for the subsetted Material Symbols faces.
 
-The bundled icon TTFs under `melodia-ui/ui/assets/fonts/` are trimmed to exactly the icons in
+The bundled icon TTFs under `crates/melodia-ui/ui/assets/fonts/` are trimmed to exactly the icons in
 `scripts/icons.txt` (see `subset-icon-fonts.sh`). An icon used in code but absent
 from that list renders as a blank box. This script catches that drift:
 
@@ -28,7 +28,7 @@ from fontTools.ttLib import TTFont
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ICONS_TXT = os.path.join(ROOT, "scripts", "icons.txt")
 SRC = os.path.join(ROOT, "scripts", "fonts-src", "MaterialSymbolsRounded.ttf")
-UI_DIR = os.path.join(ROOT, "melodia-ui", "ui")
+UI_DIR = os.path.join(ROOT, "crates", "melodia-ui", "ui")
 OUT_OUTLINED = os.path.join(UI_DIR, "assets", "fonts", "MaterialSymbolsRounded.ttf")
 OUT_FILLED = os.path.join(UI_DIR, "assets", "fonts", "MaterialSymbolsRoundedFilled.ttf")
 

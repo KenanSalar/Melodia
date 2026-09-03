@@ -285,7 +285,7 @@ pub fn classify_logo_answer(answer: &radio::StoredLogoAnswer, now: &str) -> Logo
 ///
 /// **A newtype over the `reqwest::Url` rather than the URL itself**, so a caller can hold one
 /// without naming the transport crate. `ui::radio::logos` builds a page's worth of these per
-/// browse and was the whole of `src/ui/` that reached for `reqwest`; the facade is meant to be the
+/// browse and was the whole of the UI layer that reached for `reqwest`; the facade is meant to be the
 /// seam that ends at HTTP, and a `Vec<reqwest::Url>` in a view slice is that seam leaking.
 ///
 /// The backoff, the session memo and the fetch all have to agree on one spelling of "this

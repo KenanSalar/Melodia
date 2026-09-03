@@ -55,7 +55,7 @@ tests included. Reach for `?`, for `expect()` with the invariant in the message,
 for `let ... else`.
 
 If you add a user-facing string, wrap it in `@tr(...)` and add the same msgid to all
-catalogues under `melodia-ui/translations/`. A catalogue that is missing one falls
+catalogues under `crates/melodia-ui/translations/`. A catalogue that is missing one falls
 back to English silently.
 
 ## What CI runs

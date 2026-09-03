@@ -73,7 +73,7 @@ pub fn set_browse_view_mode(state: &AppState, mode: i32) -> Result<(), AppError>
 }
 
 /// Persist the active sidebar tab so the next launch reopens on the same section. Indices follow
-/// `melodia-ui/ui/globals/nav.slint`. Out-of-range writes are clamped so a corrupt file can't pin
+/// `crates/melodia-ui/ui/globals/nav.slint`. Out-of-range writes are clamped so a corrupt file can't pin
 /// the app to an unselectable tab.
 pub fn set_last_nav_index(state: &AppState, idx: i32) -> Result<(), AppError> {
     let clamped = idx.clamp(0, services::view_state::MAX_NAV_INDEX);

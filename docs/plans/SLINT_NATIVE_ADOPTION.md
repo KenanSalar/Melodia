@@ -36,7 +36,7 @@ used to point at is gone — the checklist lives here now.)
       feature renames touch our set — `unstable-winit-030` and `slint::winit_030` are
       unchanged in 1.17.x, and `i-slint-backend-winit` still wants `winit = "0.30.2"`, so the
       vendored fork's `[patch.crates-io]` keeps applying. MSRV 1.92 vs our 1.97.0 pin: fine.
-- [ ] Re-apply the blocker-1 fix in `melodia-ui/ui/components/view-transition.slint` — read the animated
+- [ ] Re-apply the blocker-1 fix in `crates/melodia-ui/ui/components/view-transition.slint` — read the animated
       properties once in `init` so 1.17's eager instantiation still establishes a from-value.
       It was reverted with the rollback; the file is currently back to the plain 1ms-Timer form.
 - [ ] Re-measure frame pacing on the queue sheet (blocker 2) before touching anything else.
@@ -44,12 +44,12 @@ used to point at is gone — the checklist lives here now.)
       instantiation touches ~134 `if`-gated mounts.
 - [ ] **Locale decimal separator** — 1.17 routes float→string through the locale's separator
       (exposed as `Platform.decimal-separator`). Exactly one site yields a fractional value:
-      `melodia-ui/ui/views/settings/playback-section.slint:138`, which renders `2,5 s` instead of `2.5 s`
+      `crates/melodia-ui/ui/views/settings/playback-section.slint:138`, which renders `2,5 s` instead of `2.5 s`
       in de/fr/es/tr/el/it. Arguably the correct localization; check the `.po` strings still
       read naturally. Everything else is integer-valued (the `round(…)` dB/volume readouts) or
       a string literal (`current-speed-label()`), so unaffected.
 - [ ] Default font size is now read from system settings on Windows/Linux. We pin
-      `default-font-size` at `melodia-ui/ui/app-window.slint:129` and have a single `Window` root, so this
+      `default-font-size` at `crates/melodia-ui/ui/app-window.slint:129` and have a single `Window` root, so this
       should be inert — visual-check on a non-default font scale anyway, since the patched
       Vazirmatn metrics assume our size.
 - [ ] Visual-check every popup: 1.17.1 changed non-native popup clipping (#12324).
@@ -79,7 +79,7 @@ foundation only — watch, not yet usable.
   release cut from `feature/winit-0.31` that surfaces external drops as file paths on
   `DropArea`. Note this also means `unstable-winit-030` → `unstable-winit-031` and a
   `slint::winit_030` → `winit_031` rename across `winit_filter.rs`, `main.rs`,
-  `src/ui/albums/grid.rs` — the fork retirement and the winit major bump land together.
+  `crates/melodia-views/src/ui/albums/grid.rs` — the fork retirement and the winit major bump land together.
 - **Migration:** delete `winit/` + the `[patch.crates-io]` block; replace the `winit_filter`
   DnD arms + `drop_coalescer` with a `DropArea` over the content panel feeding
   `queue_import_files`; re-check the queue-sheet drop gating (`is_open` atomic filter).
@@ -95,7 +95,7 @@ foundation only — watch, not yet usable.
 ## 🟡 `SystemTrayIcon` element → retire the dual tray stack
 
 - **Today:** `src/services/tray/` cfg-split (Linux `ksni` with the zbus-feature footgun; Win/mac
-  `tray-icon` with deferred init + pre-exit drop), `src/ui/tray_bridge.rs`, embedded `tray.png`,
+  `tray-icon` with deferred init + pre-exit drop), `crates/melodia-views/src/ui/tray_bridge.rs`, embedded `tray.png`,
   restart-gated enable toggle, close-to-tray geometry-restore timer dance.
 - **Upstream in 1.17:** declarative `SystemTrayIcon` element. Brand new — already accumulating
   feature requests upstream (icon-by-name, macOS template images), so let it bake a release or
@@ -110,7 +110,7 @@ foundation only — watch, not yet usable.
 
 ## 🟡 Built-in `Tooltip` element → retire our tooltip component
 
-- **Today:** `melodia-ui/ui/components/tooltip.slint` (hand-rolled, `reveal-timer` at line 55) — our
+- **Today:** `crates/melodia-ui/ui/components/tooltip.slint` (hand-rolled, `reveal-timer` at line 55) — our
   component name shadows the new built-in, which compiles fine but is confusing long-term.
   Twelve call sites in eleven files, all importing ours explicitly — five in-tree
   (`icon-button.slint:95`, `macos-traffic-light.slint:77`, `action-pill.slint:149`,
@@ -135,7 +135,7 @@ foundation only — watch, not yet usable.
 ## 🟢 Two-way model row bindings → slim the model-patch walkers
 
 - **Today:** optimistic favorite/rating flips walk the `VecModel` from Rust via
-  `src/ui/model_patch.rs::patch_track_row_by_id` (+ per-view `apply_*` one-liners, `wire_row_flag!`
+  `crates/melodia-views/src/ui/model_patch.rs::patch_track_row_by_id` (+ per-view `apply_*` one-liners, `wire_row_flag!`
   macro); queue-sheet selection mirrors through `ShadowEntry` snapshots.
 - **Upstream in 1.17:** two-way bindings to model row data — a row's control can write back
   into the model directly.
@@ -245,8 +245,8 @@ foundation only — watch, not yet usable.
 ### Backdrop blur / frosted glass — checked 2026-07-25
 
 - **Wanted for:** frosted-glass fills on the Now-Playing metadata chips (`MetaChip`,
-  `melodia-ui/ui/views/now-playing-view.slint`) and the Up Next row hover slab
-  (`melodia-ui/ui/components/now-playing/up-next-list.slint`). Both currently fake depth with a flat
+  `crates/melodia-ui/ui/views/now-playing-view.slint`) and the Up Next row hover slab
+  (`crates/melodia-ui/ui/components/now-playing/up-next-list.slint`). Both currently fake depth with a flat
   `Player.np-accent-bright.with-alpha(0.16)` tint over the blurred-artwork backdrop.
 - **Status: absent upstream, and not on the roadmap.** Verified in source, not docs:
   `i-slint-compiler`'s `typeregister.rs` registers exactly two blur-typed properties in the
@@ -282,7 +282,7 @@ foundation only — watch, not yet usable.
   Next" heading against a blurred rather than tinted ground. Measure — a per-element backdrop
   read-back every frame is exactly what Memory Discipline exists for.
 - **Meanwhile:** the only in-engine approximation is the pre-blurred-`Image` trick already
-  used for the NP backdrop (`src/ui/now_playing_artwork.rs`), and it degrades badly for these
+  used for the NP backdrop (`crates/melodia-views/src/ui/now_playing_artwork.rs`), and it degrades badly for these
   two surfaces — chips reflow across rows on resize, the hover slab moves per row and scrolls,
   so each would need its own correctly-offset crop recomputed on every layout change. The flat
   tint is the right stand-in until upstream lands.

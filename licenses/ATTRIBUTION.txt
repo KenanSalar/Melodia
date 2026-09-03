@@ -35,9 +35,9 @@ and push centred Latin text upward at the app's UI sizes. Glyph outlines,
 capHeight, x-height and the usWin* clip bounds are untouched.
 
 Files:
-  melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-Regular.ttf
-  melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-Medium.ttf
-  melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf
+  crates/melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-Regular.ttf
+  crates/melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-Medium.ttf
+  crates/melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf
 
 Upstream declares NO Reserved Font Name -- its copyright line names the project
 and stops there -- so OFL section 5 imposes no rename on the patched build, and
@@ -62,8 +62,8 @@ ligatures listed in `scripts/icons.txt`, by glyph id with --no-layout-closure so
 the closure can't pull the rest of the catalogue back in. No outline is altered.
 
 Files:
-  melodia-ui/ui/assets/fonts/MaterialSymbolsRounded.ttf
-  melodia-ui/ui/assets/fonts/MaterialSymbolsRoundedFilled.ttf
+  crates/melodia-ui/ui/assets/fonts/MaterialSymbolsRounded.ttf
+  crates/melodia-ui/ui/assets/fonts/MaterialSymbolsRoundedFilled.ttf
 
 Neither face carries a license string in its name table, in the subsets or in
 the pristine upstream sources -- Apache-2.0.txt is the only copy that travels
@@ -105,7 +105,7 @@ which is also why it is an SVG Image rather than an icon-font glyph -- the mark
 is three colours and a glyph would be one.
 
 Files:
-  melodia-ui/ui/assets/icons/kofi-symbol.svg
+  crates/melodia-ui/ui/assets/icons/kofi-symbol.svg
 
 A trade mark rather than licensed software, so there is no license text beside
 this file for it and none to ship. Ko-fi publishes the mark as a brand asset for

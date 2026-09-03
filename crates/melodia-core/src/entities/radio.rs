@@ -275,7 +275,7 @@ pub struct StationEdit {
 /// What an earlier session's attempt at one logo URL left behind.
 ///
 /// Here rather than beside the query that reads it, for the reason every other row type is: it
-/// crosses `library::radio`'s public signature and is read in `src/ui/radio`, and a boundary type
+/// crosses `library::radio`'s public signature and is read in `melodia-views`' `ui/radio`, and a boundary type
 /// spelled `queries::radio::…` at those call sites is the UI naming the database layer.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct StoredLogoAnswer {
@@ -301,7 +301,7 @@ pub const UNKNOWN_CODEC: &str = "UNKNOWN";
 /// know different things. The directory knows how popular a station is and
 /// whether its own last check reached it, none of which the table has a column
 /// for; the table's id, stored logo, sort key and play stats mean nothing until
-/// the user keeps the station. Keeping the wire shape out of `src/ui/` is the
+/// the user keeps the station. Keeping the wire shape out of `melodia-views`' `ui/` is the
 /// other half of it: a callback names this and never `services::net::radio_browser`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DirectoryStation {

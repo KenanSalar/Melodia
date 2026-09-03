@@ -20,7 +20,7 @@ use crate::services::settings::{ColumnWidths, ViewSort};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ViewStateData {
-    /// Keyed by view-id (`src/ui/track_list_view.rs::view_id`); one map each
+    /// Keyed by view-id (`melodia-views`' `ui/track_list_view.rs::view_id`); one map each
     /// covers every list or grid view.
     pub view_columns: HashMap<String, Vec<String>>,
     pub view_column_widths: HashMap<String, ColumnWidths>,

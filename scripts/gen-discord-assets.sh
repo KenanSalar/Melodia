@@ -29,7 +29,7 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # AppImage), the without-background one is a UI asset the custom titlebar
 # `@image-url`s, so it belongs to the `melodia-ui` crate.
 readonly BRAND_SRC="$ROOT/assets/icons"
-readonly UI_SRC="$ROOT/melodia-ui/ui/assets/icons"
+readonly UI_SRC="$ROOT/crates/melodia-ui/ui/assets/icons"
 readonly OUT="$ROOT/assets/discord"
 
 # Brand tokens (Catppuccin Mocha): base background + the logo's blue->teal

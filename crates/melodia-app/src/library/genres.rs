@@ -1,7 +1,7 @@
 //! Genre library API — thin wrappers over the `queries::genre` /
 //! `queries::track` layer, mirroring `library/albums.rs`. Each function
 //! takes `&AppState` and returns `Result<_, AppError>`; the UI bridge
-//! (`src/ui/genres/`) does the in-memory sorting / filtering / chunking.
+//! (`melodia-views`' `ui/genres/`) does the in-memory sorting / filtering / chunking.
 
 use crate::database::queries;
 use crate::entities::{genre, track};

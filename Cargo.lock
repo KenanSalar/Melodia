@@ -7,34 +7,23 @@ name = "Melodia"
 version = "0.12.0"
 dependencies = [
  "async-compat",
- "chrono",
- "futures-util",
- "image",
  "log",
- "lru",
- "material-colors",
  "melodia-app",
  "melodia-artwork",
  "melodia-audio",
  "melodia-core",
  "melodia-engine",
  "melodia-integrations",
- "melodia-net",
  "melodia-platform",
  "melodia-playback",
  "melodia-store",
  "melodia-testkit",
  "melodia-ui",
- "open",
- "parking_lot",
- "rand 0.10.2",
- "rfd",
+ "melodia-views",
  "slint",
  "sqlx",
  "tempfile",
  "tokio",
- "tokio-util",
- "unicode-normalization",
  "winresource",
 ]
 
@@ -3888,6 +3877,37 @@ version = "0.12.0"
 dependencies = [
  "slint",
  "slint-build",
+]
+
+[[package]]
+name = "melodia-views"
+version = "0.12.0"
+dependencies = [
+ "async-compat",
+ "chrono",
+ "futures-util",
+ "image",
+ "log",
+ "lru",
+ "material-colors",
+ "melodia-app",
+ "melodia-artwork",
+ "melodia-core",
+ "melodia-engine",
+ "melodia-integrations",
+ "melodia-platform",
+ "melodia-playback",
+ "melodia-testkit",
+ "melodia-ui",
+ "open",
+ "parking_lot",
+ "rand 0.10.2",
+ "rfd",
+ "slint",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "unicode-normalization",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 //! Artist library API — thin wrappers over the `queries::artist` /
 //! `queries::album` / `queries::track` layer, mirroring `library/albums.rs`.
 //! Each function takes `&AppState` and returns `Result<_, AppError>`; the UI
-//! bridge (`src/ui/artists/`) does the in-memory sorting / filtering /
+//! bridge (`melodia-views`' `ui/artists/`) does the in-memory sorting / filtering /
 //! chunking.
 
 use crate::database::queries;

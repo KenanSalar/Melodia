@@ -144,7 +144,7 @@ pub struct PositionTick {
 /// don't re-clone the queue projection on every player tick.
 ///
 /// The bool fields mirror the Slint `PlayerVm`/`QueueVm` structs in
-/// `melodia-ui/ui/models.slint`; the shape must match exactly across the boundary, so
+/// `crates/melodia-ui/ui/models.slint`; the shape must match exactly across the boundary, so
 /// they cannot be collapsed into a bitflags wrapper.
 #[allow(
     clippy::struct_excessive_bools,

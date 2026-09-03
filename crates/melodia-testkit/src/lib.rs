@@ -15,7 +15,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 // below spell none of their own.
 
 /// The root of the Slint tree, for the pins that walk it rather than naming files.
-pub const UI_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "melodia-ui/ui");
+pub const UI_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "crates/melodia-ui/ui");
 
 /// Vacuity floor for a walk over [`UI_DIR`], so a traversal that found nothing can't pass
 /// every pin standing on it. Loose on purpose — one tight enough to matter would trip on an
@@ -30,7 +30,7 @@ pub const MIN_SOURCES: usize = 200;
 
 /// The bundled font faces, which the Slint build compiles into the binary — so every
 /// artifact this repo ships redistributes them and owes their licence text.
-pub const FONTS_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "melodia-ui/ui/assets/fonts");
+pub const FONTS_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "crates/melodia-ui/ui/assets/fonts");
 
 /// The repo root, for the pins that reach packaging — it lives beside `src/`, not under it.
 pub const REPO_ROOT: &str = env!("MELODIA_REPO_ROOT");
@@ -40,10 +40,10 @@ pub const REPO_ROOT: &str = env!("MELODIA_REPO_ROOT");
 pub const ASSETS_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "tests/assets");
 
 /// The Rust UI tree, for the pins asking the same question of every slice's wiring. Anchored
-/// on the repo root like its siblings: a bare `"src/ui"` resolves against the harness's working
-/// directory, which is the package root only because that is what `cargo test` sets — and the
-/// package root stops being the tree root the moment `src/` becomes several crates.
-pub const UI_SRC_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "src/ui");
+/// on the repo root like its siblings, which is what the C13 extraction cashed in: a bare
+/// `"src/ui"` resolves against the harness's working directory, and that stopped being this
+/// tree the moment views became a crate of its own.
+pub const UI_SRC_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "crates/melodia-views/src/ui");
 
 /// The subsystem-contract rules, whose `paths:` frontmatter decides which loads for which
 /// file. Pinned because a stale glob fails *silently* — the rule stops loading for the code

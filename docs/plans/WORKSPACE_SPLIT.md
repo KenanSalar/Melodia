@@ -5,7 +5,7 @@ order the cuts come out in. Harvest into `docs/adr/` when
 [#84](https://github.com/KenanSalar/Melodia/issues/84) ships, not before: the boundary rationale
 below is exactly what #84 exists to stop evaporating.
 
-Status: **Phases A and B complete**, Phase C through C12 · Issue:
+Status: **Phases A, B and C complete** · Issue:
 [#83](https://github.com/KenanSalar/Melodia/issues/83) · Created: 2026-09-03 · Validated against
 `93b47dfa`, Phase A landed on `a1c087e4`, Phase B over five commits from `e506b490`
 
@@ -1082,15 +1082,64 @@ Two further decisions the phase needs and the doc did not carry:
       > `melodia-integrations` no schema, both now cargo's answer rather than a grep's. The same
       > 2,237 tests across seventeen binaries.
 
-- [ ] **C13. `melodia-views`, with the `melodia-ui` relocation.** Its own commit, for the reason
+- [x] **C13. `melodia-views`, with the `melodia-ui` relocation.** Its own commit, for the reason
       given above. `src/ui/` and `melodia-ui/` move in
-      the same commit, because the 135 `include_str!` hops into `melodia-ui/ui/` are relative paths
+      the same commit, because the `include_str!` hops into `melodia-ui/ui/` are relative paths
       whose depth changes with *either* move; together they are rewritten once rather than twice.
-      That pulls the `melodia-ui` half of Phase D forward: its 43 rule globs, the `UI_DIR` /
-      `UI_SRC_DIR` / `FONTS_DIR` anchors, `locale_tests.rs:22`'s hard-coded `translations` path, the
-      three `scripts/` font and icon helpers, and `.gitignore`'s anchored
-      `/melodia-ui/ui/assets/fonts/originals/`, which would otherwise stop working silently and make
-      the pristine faces committable.
+      **131 of them, in 31 files, all +1** — the file goes two levels deeper and the target one, so
+      the delta is uniform whatever the file's depth. The other 91 `include_str!` under `src/ui/`
+      read a *sibling* `.rs` and needed nothing, both endpoints moving together. That pulls the
+      `melodia-ui` half of Phase D forward: its 43 rule globs, the `UI_DIR` / `UI_SRC_DIR` /
+      `FONTS_DIR` anchors, `locale_tests.rs:22`'s hard-coded `translations` path, the `scripts/`
+      font and icon helpers — **four, not three: `gen-discord-assets.sh` writes into the icon tree
+      too** — and `.gitignore`'s anchored `/melodia-ui/ui/assets/fonts/originals/`, which would
+      otherwise stop working silently and make the pristine faces committable.
+
+      **The crate-rooted `include_str!` sites are four rather than three, and the fourth is the
+      one a grep misses**: `entities/tests/smart_criteria_tests.rs` puts the macro on one line and
+      its path literal on the next. All four lose a `../`, the opposite sign from the 131 inside
+      views, which is the shape of mistake a single mechanical pass makes.
+
+      **No `pub(crate)` widened, and the rolling-work paragraph is what predicted otherwise.**
+      `main.rs`, `boot/` and `tests/` are already separate crates from the lib and reach views as
+      `use melodia::{… ui}`, so everything they touch was `pub` before the cut; the 80 production
+      `pub(crate)` under `src/ui/` are all intra-directory and the 350 `pub(super)` are unaffected
+      by a subtree that moves whole. C13 is the one step cheaper than the plan.
+
+      **Views names each crate it reaches rather than re-exporting `melodia_app`'s shims**, which
+      would have compiled — app's facade exposes exactly `media::image` and `player::{engine,
+      playback}` — and would have left five of the eight edges out of the manifest, making the
+      After-C check vacuous. Under the facade form, deleting `melodia-artwork` from views produces
+      no error at all. The eight are core, artwork, platform, playback, engine, integrations, app
+      and `melodia-ui`; store and net are the absence the check reads.
+
+      **`crate::services::diagnostics` was missed by the survey and caught by rustc**, because the
+      views shim enumerates sub-paths and two of its callers spell the bare `services::` form after
+      a `use crate::services;`. The same trap holds `library::` at 330 lines against 98 for
+      `crate::library`, which cost nothing only because that one is a whole-module re-export.
+
+      **The root package loses `melodia-net` and eleven third-party dependencies.** Nothing left
+      in it opens a socket, so `services::net` and `media::fetch` came off the shims and the
+      manifest line with them; `tokio-util`, `parking_lot`, `rand`, `unicode-normalization`,
+      `image`, `lru`, `material-colors`, `chrono`, `rfd`, `open` and `futures-util` all went to
+      views. What the binary still spells is `slint`, `tokio`, `log` and `async-compat`.
+
+      **Two things nothing in the gate could have caught.** `rust_source_roots()` enumerates
+      `crates/*/src`, so moving `melodia-ui` under `crates/` silently enrolled its `lib.rs` in all
+      eleven corpus walks — benign, and verified by running them rather than by reading it. And
+      `packaging/debian-copyright`'s four DEP-5 `Files:` stanzas name the font paths while its pin
+      checks only the header and the quoted licence bodies, so those would have gone stale with
+      nothing to say so and left the bundled fonts under the package's blanket AGPL declaration.
+      `licenses/ATTRIBUTION.txt` is the same paths and *is* pinned, on `rel_path(REPO_ROOT, …)`.
+
+      **The four `env!` package reads under `src/ui/` are the silent regression finding 3
+      predicted**, and the manifest is what answers them: `CARGO_PKG_VERSION` at three updater
+      sites and `CARGO_PKG_REPOSITORY` at `ui/settings/about.rs:18` go to whatever crate the files
+      land in. Checked by evidence rather than by reading — `libmelodia_views.rlib` carries both
+      the repository URL and `0.12.0`.
+
+      23 `.slint` prose comments named `src/ui/…` and five more were already stale from C3 and
+      C12, none of them walked for; B5 met this class and it has not stopped being true.
 
 Rolling work, fixed in the step that surfaces it rather than batched: `pub(crate)` widening where an
 item crosses its new boundary (181 production candidates, every one named by rustc);
@@ -1109,10 +1158,10 @@ to reach. De-facade in Phase D once the graph is proven, one crate at a time.
 
 ## Phase D: make the repo workspace-native
 
-- [ ] Virtual root manifest, `members = ["crates/*"]`, `exclude = ["winit"]`. No `default-members`
-      (finding 11). Profiles and `[patch.crates-io]` stay at the root, as do the four version scrapes.
-      `melodia-ui` is already at `crates/melodia-ui/`: C13 moved it beside views rather than leaving
-      it here, so the 135 Slint `include_str!` hops were rewritten once instead of twice.
+- [ ] Virtual root manifest. `members = ["crates/*"]` and `exclude = ["winit"]` are already that
+      shape — C13 dropped the explicit `melodia-ui` entry when the glob started covering it — so
+      what is left is the root `[package]` going away. No `default-members` (finding 11). Profiles
+      and `[patch.crates-io]` stay at the root, as do the four version scrapes.
 - [ ] `[[bin]] name = "Melodia"` on the binary crate (finding 4), so the artifact name survives.
 - [ ] `[package.metadata.deb]` moves to the binary crate with all eight asset paths and `license-file`
       rewritten, then a real `cargo deb --target … --no-build` to confirm the `target/release/` prefix
@@ -1180,11 +1229,13 @@ Phase boundaries:
   names `themes::Palette`, and all of them are plain data one layer above every reader, which is
   what `entities/` is for. Answered at the head of Phase C, as one rule and not three placements —
   and the read that answered it found a third edge of the same shape and a hard cycle besides.
-- After **C**: delete a `path` dependency from one manifest and confirm rustc names the crate in the
-  error. **The `melodia-views` manifest must list neither `melodia-store` nor `melodia-net`**, the
-  `melodia-audio` manifest must not name `cpal`, and `melodia-platform` must not name `melodia-ui`.
-  Those are the flagship rules turning into compile errors, and they are the whole point of the
-  exercise.
+- After **C** — **all passing as of C13**. `cargo tree -p melodia-views --depth 1` lists eight
+  members and neither `melodia-store` nor `melodia-net`; `melodia-audio` names no `cpal` and
+  `melodia-platform` no `melodia-ui`, both over the whole tree rather than the first level. And the
+  exclusion errors rather than merely being absent: adding `pub use melodia_app::database;` and
+  `pub use melodia_app::services::net;` to views fails with `module database is private` and
+  `module net is private`, each naming the `melodia-app` facade line that seals it. Those are the
+  flagship rules turned into compile errors, and they are the whole point of the exercise.
 - After **D**: `cargo deb -p melodia` plus `scripts/build-{rpm,appimage,tarball}.sh` each produce an
   artifact and the produced binary is still named `Melodia`; `cargo build --timings` against the
   prerequisite baseline; `/usr/bin/time -v target/release/Melodia` for peak RSS. No RSS change is

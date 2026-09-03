@@ -22,7 +22,7 @@ Part of #
 - [ ] `cargo clippy --all-targets --locked -- -D warnings` passes
 - [ ] `cargo test --locked` passes
 - [ ] Docs updated where behaviour or conventions changed (`CLAUDE.md`, the relevant `.claude/rules/*.md`, `README.md`)
-- [ ] New user-facing strings are wrapped in `@tr(...)` and added to every `melodia-ui/translations/*/LC_MESSAGES/melodia-ui.po`
+- [ ] New user-facing strings are wrapped in `@tr(...)` and added to every `crates/melodia-ui/translations/*/LC_MESSAGES/melodia-ui.po`
 
 ## Notes for review
 

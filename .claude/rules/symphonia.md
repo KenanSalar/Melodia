@@ -7,7 +7,8 @@ paths:
 # Symphonia Best Practices
 
 Decoding only. The layer under it — the device stream, the two decks, the rate conversion and the
-clock — is `src/player/output/`, which is a directory with its own anchor files and argues itself
+clock — is `crates/melodia-playback/src/player/playback/output/`, which is a directory with its
+own anchor files and argues itself
 there; `.claude/rules/audio-stack.md` holds what spans it and the DSP chain above it.
 
 ## Symphonia — Audio Decoding

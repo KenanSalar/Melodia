@@ -2,10 +2,10 @@
 paths:
   - src/**/*.rs
   - crates/**/*.rs
-  - melodia-ui/src/**/*.rs
+  - crates/melodia-ui/src/**/*.rs
   - tests/**/*.rs
   - build.rs
-  - melodia-ui/build.rs
+  - crates/melodia-ui/build.rs
   - Cargo.toml
 ---
 

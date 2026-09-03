@@ -158,13 +158,13 @@ are gated internally.
 `src/tasks/mod.rs`
 - Gate `pub mod updater_daily;` (`src/tasks/mod.rs:22`).
 
-`src/ui/callbacks/mod.rs`
+`crates/melodia-views/src/ui/callbacks/mod.rs`
 - Gate `mod updater;` (line 25) and `pub use updater::wire as wire_updater;`
-  (line 52). The `src/ui/callbacks/updater/` dir (`check.rs`, `install.rs`,
+  (line 52). The `crates/melodia-views/src/ui/callbacks/updater/` dir (`check.rs`, `install.rs`,
   `paint.rs`, `mod.rs`) is referenced **only** via `wire_updater` (verified — no
   other module imports it), so gating the whole dir is clean.
 
-`src/ui/settings/updater_settings.rs`
+`crates/melodia-views/src/ui/settings/updater_settings.rs`
 - **`install()` stays ungated** — it seeds `MelodiaUpdater.current-version`
   (also read by `about-section.slint` for the About version row),
   `system-managed` (via the ungated `is_system_install`), and `platform-kind`.
@@ -184,9 +184,9 @@ are gated internally.
 ## Slint touch points
 
 **[fix] Nothing to add — the property already exists.**
-`melodia-ui/ui/globals/updater.slint` carries
+`crates/melodia-ui/ui/globals/updater.slint` carries
 `in property <bool> updates-supported: true;`, and
-`melodia-ui/ui/views/settings/update-section.slint` already ANDs it into
+`crates/melodia-ui/ui/views/settings/update-section.slint` already ANDs it into
 `has-matches`, which takes the card and its settings-search hits together (every
 row lives inside `if has-matches: SectionCard`, so no per-row AND is needed).
 Seed it as above and the feature-off build gets the same collapse the source-build
@@ -195,7 +195,7 @@ the feature off the Rust side simply never wires or invokes them (unwired Slint
 callbacks are no-ops).
 
 > **Slint pitfall — do NOT wrap the mount in `if`.** In
-> `melodia-ui/ui/views/settings/pages/about-page.slint:27` the section is
+> `crates/melodia-ui/ui/views/settings/pages/about-page.slint:27` the section is
 > `updates := UpdateSection { … }`, and the page's `has-matches` references it by
 > id (`updates.has-matches`, line 14), which the tab-level no-results predicate in
 > `settings-tabs.slint` then reads. Wrapping `updates` in an `if` would put the id
@@ -203,7 +203,7 @@ callbacks are no-ops).
 > `vertical-stretch` collapse math). Keep the component mounted; gate its content
 > + `has-matches` internally instead.
 
-`melodia-ui/ui/views/settings/about-section.slint` — unchanged (reads `current-version`,
+`crates/melodia-ui/ui/views/settings/about-section.slint` — unchanged (reads `current-version`,
 still seeded by the ungated `install()`).
 
 ## Doc-comment cleanup (avoids `cargo doc --no-default-features` warnings)
@@ -215,7 +215,7 @@ intra-doc-link warnings. These do **not** fail the clippy/build gate below
 converting the `[path]` links to plain backticked text:
 - `src/services/updater/system_install.rs:~13` → `super::install::download_and_install`
 - `src/services/updater/linux_pkg.rs:~14` → `super::install::download_and_install`
-- `src/ui/settings/updater_settings.rs:~3, ~12` → `UpdaterEvent`
+- `crates/melodia-views/src/ui/settings/updater_settings.rs:~3, ~12` → `UpdaterEvent`
 
 (`event.rs:75`'s link to `install` is fine — `event` is gated, so it only
 compiles when `install` also exists.)

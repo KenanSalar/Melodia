@@ -77,7 +77,7 @@ jobs:
 
       # `--locked` is honest on every platform: the winit fork is vendored at
       # `winit/` and `[patch.crates-io]` points there, so checkout brings it along.
-      # No RUSTFLAGS stack workaround on Windows: `melodia-ui/build.rs` runs the
+      # No RUSTFLAGS stack workaround on Windows: `crates/melodia-ui/build.rs` runs the
       # Slint compile on a 16 MiB thread. (The root build.rs does no Slint work.)
       - name: cargo build --release
         run: cargo build --release --target ${{ inputs.target }} --locked
@@ -172,8 +172,10 @@ jobs:
           # arch in the name because upload-artifact requires unique names across
           # a job's slots; the publish job flattens them with `merge-multiple`.
           # Keep every glob extension-qualified: a bare `melodia-*` also matches
-          # DIRECTORIES, so `melodia-ui/` rode along on every slot and the publish
-          # job's `gh release upload artifacts/*` died on "is a directory".
+          # DIRECTORIES, so the `melodia-ui/` that sat at the repo root rode along
+          # on every slot and the publish job's `gh release upload artifacts/*`
+          # died on "is a directory". It lives under `crates/` now; the qualifier
+          # is what stops the next one repeating it.
           name: ${{ inputs.kind }}-${{ inputs.arch }}
           path: |
             melodia-*.tar.gz

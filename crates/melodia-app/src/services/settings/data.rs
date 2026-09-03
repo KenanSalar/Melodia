@@ -82,7 +82,7 @@ pub struct ColumnWidths {
 
 impl Default for ColumnWidths {
     fn default() -> Self {
-        // Mirrors the initial values in `melodia-ui/ui/globals/tracks.slint`;
+        // Mirrors the initial values in `crates/melodia-ui/ui/globals/tracks.slint`;
         // the fixed column model needs `title` to carry a real width.
         Self {
             number: 56.0,
@@ -533,7 +533,7 @@ impl Default for BackdropFlags {
 
 // OS / desktop-environment probes behind the defaults above. They sit in
 // `services/` rather than `library/` because that is the dependency direction;
-// `src/ui/appearance/` imports them from `services::settings::` directly.
+// `melodia-views`' `ui/appearance/` imports them from `services::settings::` directly.
 
 /// Whether the active session is KDE Plasma. Seeds
 /// `LayoutFlags.match_unfocused_to_system_bg` and hides the matching Appearance

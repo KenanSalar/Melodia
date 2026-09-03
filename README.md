@@ -365,23 +365,29 @@ HTTP). There is no WebView and no IPC boundary:
   blocking socket read off that callback and feeding a ring the decoder pulls
   from.
 
-```
-src/
-├── boot/        startup sequencing
-├── database/    SQLx + SQLite (WAL, FTS5, migrations)
-├── entities/    domain model types (track, album, artist, genre, playlist, …)
-├── library/     playback, queue, tracks, albums, artists, genres, playlists, search, settings
-├── media/       scanner, metadata, artwork, cover-thumbnail cache, folder watcher
-├── player/      playback state machine + Symphonia decode + output layer (cpal device, dual-deck mixer, rate and channel conversion, clock) + graphic equalizer, ReplayGain, crossfade, spectrum & waveform DSP, live-stream buffering
-├── tasks/       background tasks (playback monitor, file events, queue prune, Material You)
-├── themes/      pluggable theme registry
-├── services/    updater, desktop integration, system theme, radio directory client
-├── state/       AppState, error types
-└── ui/          Slint bridge, callbacks, view handles, models
+A cargo workspace, layered so the compiler enforces the direction rather than a
+convention: each crate names only what sits below it, and the ones that must not
+meet cannot. The UI has no database or socket in its manifest; the decoders have
+no mixer; the tag writer has no state machine.
 
-melodia-ui/          the UI in its own crate, so it builds once
-├── ui/              the .slint sources, plus the fonts and icons they embed
-└── translations/    bundled .po catalogues
+```
+src/                     the binary: startup sequencing, shutdown, the window
+crates/
+├── melodia-core         errors, paths, domain types, the theme registry
+├── melodia-testkit      shared fixtures and corpus walkers (dev-only, names nothing)
+├── melodia-artwork      decode, resize, the artwork store, the thumbnail cache
+├── melodia-net          the HTTP primitives, the artwork/logo fetchers, the radio directory
+├── melodia-platform     tray, logging, crash reports, single instance, system theme
+├── melodia-audio        the AudioSource vocabulary, Symphonia decode, file/stream/HLS sources
+├── melodia-playback     the DSP chain and everything under it: EQ, ReplayGain, crossfade,
+│                        spectrum & waveform taps, the decks, the cpal device and clock
+├── melodia-engine       the playback state machine, its queue and the action list
+├── melodia-store        SQLx + SQLite (WAL, FTS5, migrations), scanner, tags, folder watcher
+├── melodia-integrations scrobbling, Discord presence, OS media controls
+├── melodia-app          the command layer: the library API, background tasks, AppState, settings
+├── melodia-views        the Slint bridge: view slices, callbacks, the shared component library
+└── melodia-ui           the .slint sources, the fonts and icons they embed, the .po catalogues,
+                         compiled once into its own crate
 ```
 
 See [`CLAUDE.md`](CLAUDE.md) for a detailed architecture reference.

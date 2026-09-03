@@ -247,7 +247,7 @@ Ownership rules, so this doesn't sprawl:
 - **`wasapi.rs`'s format ladder and period math live above the `cfg`**, plain Rust
   with their own tests, so they compile and run on Linux CI. rox's reasoning, and it
   applies harder here since nobody develops this tree on Windows.
-- **`src/ui/` reaches the output layer through `library::playback::*`**, never
+- **`melodia-views` reaches the output layer through `library::playback::*`**, never
   directly — the repo-wide rule, and the device picker is the obvious place to break it.
 - **`player/output/` owns no persistence.** Settings go through `mutate_settings` +
   the kick-after-persist rule like every other playback flag.

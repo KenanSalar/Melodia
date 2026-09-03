@@ -5,7 +5,7 @@ paths:
   - crates/melodia-app/src/library/tags.rs
   - crates/melodia-app/src/library/mbid.rs
   - crates/melodia-app/src/tasks/file_event_processor/**/*.rs
-  - src/ui/callbacks/tags.rs
+  - crates/melodia-views/src/ui/callbacks/tags.rs
 ---
 
 # Lofty Best Practices

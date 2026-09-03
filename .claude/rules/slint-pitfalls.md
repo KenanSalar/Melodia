@@ -1,10 +1,10 @@
 ---
 paths:
-  - melodia-ui/ui/**/*.slint
-  - src/ui/**/*.rs
+  - crates/melodia-ui/ui/**/*.slint
+  - crates/melodia-views/src/ui/**/*.rs
   - src/boot/**/*.rs
   - crates/melodia-core/src/themes/**/*.rs
-  - melodia-ui/build.rs
+  - crates/melodia-ui/build.rs
 ---
 
 # Slint Pitfalls (battle-tested)
@@ -342,7 +342,7 @@ this file is what builds, looks right, and is wrong.
 - **Reusable filter SearchBar pattern.** (1) `text <=> SomeGlobal.filter`,
   `blur-trigger: SomeGlobal.blur-search-tick`; (2) backdrop
   `TouchArea { clicked => { SomeGlobal.blur-search-tick += 1; } }` at view root before content;
-  (3) clear filter + bump blur tick on nav-away. Match in Rust through `src/ui/row_match.rs`,
+  (3) clear filter + bump blur tick on nav-away. Match in Rust through `crates/melodia-views/src/ui/row_match.rs`,
   never a hand-rolled `to_lowercase().contains(…)`; Settings routes there via
   `pure callback SettingsPage.matches(...)`.
   **A page whose box describes more than one surface takes the same three steps against one global
@@ -387,7 +387,7 @@ this file is what builds, looks right, and is wrong.
   trigger; a transparent full-popup `TouchArea` **declared first** closes on stray clicks.
 
 - **Sleep timer = a session-only cancel-and-replace tokio countdown + a `PlayerState`
-  end-of-track flag.** In `src/ui/sleep_timer.rs` — a **UI-layer** module, because `tasks/` may
+  end-of-track flag.** In `crates/melodia-views/src/ui/sleep_timer.rs` — a **UI-layer** module, because `tasks/` may
   not import `ui::*` and the countdown writes a Slint property. **Duration is
   playback-linked**: each 1 s tick decrements only while `status_atomic == Playing` (lock-free),
   so pausing holds the timer and it never expires on a paused player. Never persisted; bounds

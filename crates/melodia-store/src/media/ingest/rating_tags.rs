@@ -20,7 +20,7 @@
 use lofty::prelude::ItemKey;
 use lofty::tag::{Tag, TagType};
 
-/// The top of the scale, matching the strip `melodia-ui/ui/components/star-rating.slint` draws.
+/// The top of the scale, matching the strip `crates/melodia-ui/ui/components/star-rating.slint` draws.
 pub const MAX_STARS: i32 = 5;
 
 /// One star's worth of the 0–100 scale Vorbis comments and the MP4 `rate` atom carry.

@@ -1,21 +1,21 @@
 ---
 paths:
-  - src/ui/window_chrome/**/*.rs
-  - src/ui/shell/tray_bridge.rs
-  - src/ui/shell/event_sink.rs
+  - crates/melodia-views/src/ui/window_chrome/**/*.rs
+  - crates/melodia-views/src/ui/shell/tray_bridge.rs
+  - crates/melodia-views/src/ui/shell/event_sink.rs
   - crates/melodia-platform/src/services/platform/tray/**/*.rs
   - crates/melodia-integrations/src/services/integrations/media_controls/**/*.rs
   - crates/melodia-platform/src/services/platform/always_on_top/**/*.rs
   - crates/melodia-platform/src/services/platform/dwm_titlebar.rs
-  - src/ui/appearance/theme_apply.rs
+  - crates/melodia-views/src/ui/appearance/theme_apply.rs
   - src/main.rs
   - src/shutdown.rs
   - src/boot/**/*.rs
-  - melodia-ui/ui/app-window.slint
-  - melodia-ui/ui/components/custom-titlebar.slint
-  - melodia-ui/ui/components/macos-titlebar-cluster.slint
-  - melodia-ui/ui/components/macos-traffic-light.slint
-  - melodia-ui/ui/views/settings/window-chrome-section.slint
+  - crates/melodia-ui/ui/app-window.slint
+  - crates/melodia-ui/ui/components/custom-titlebar.slint
+  - crates/melodia-ui/ui/components/macos-titlebar-cluster.slint
+  - crates/melodia-ui/ui/components/macos-traffic-light.slint
+  - crates/melodia-ui/ui/views/settings/window-chrome-section.slint
 ---
 
 # The desktop shell — window chrome, tray, media keys
@@ -155,7 +155,7 @@ The other way paths arrive from outside, and the one that can arrive before ther
   `with_state_emit` to flush playback. Linux MPRIS / macOS MediaPlayer attach eagerly; `event_tx`
   retained Windows-only for the late rewire.
 
-- **System tray** — `src/services/platform/tray/` cfg-split (Linux `ksni`, Win/mac `tray-icon 0.24`) behind
+- **System tray** — `crates/melodia-platform/src/services/platform/tray/` cfg-split (Linux `ksni`, Win/mac `tray-icon 0.24`) behind
   a `mod.rs` façade (`TrayAction`, `TraySnapshot`, embedded `tray.png`, `init_tray`).
   `ui/shell/tray_bridge.rs` runs one task off a bounded `mpsc<TrayAction>`: playback reuses
   souvlaki's `EventSink`, `ShowHideWindow`/`Quit` hop to the UI via `invoke_from_event_loop`, a

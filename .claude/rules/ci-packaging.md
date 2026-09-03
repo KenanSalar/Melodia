@@ -265,7 +265,7 @@ walks the directory instead.
   compiling nothing is not the same as being unexercised. The other four needles live in
   `scripts/`, `Cargo.toml` and `wix/`, which the denylist never reaches.
 
-- **A face added under `melodia-ui/ui/assets/fonts/` owes an entry in
+- **A face added under `crates/melodia-ui/ui/assets/fonts/` owes an entry in
   `licenses/ATTRIBUTION.txt`** — `every_bundled_font_is_named_in_the_attribution` walks the
   directory rather than listing the faces, keying on each face's repo-relative path, the family
   name not being derivable from the file.
@@ -279,10 +279,11 @@ identifying a thing by *name* that was unambiguous with one member, and both dee
 - `cargo wix` picks a package for you only when the workspace has exactly *one*, so the MSI step
   now names `--package Melodia`.
 
-- The artifact upload's `path:` was a bare **`melodia-*`**, a prefix glob matching the new
-  `melodia-ui/` **directory** — all ten slots uploaded the Slint source tree and
+- The artifact upload's `path:` was a bare **`melodia-*`**, a prefix glob matching what was then a
+  `melodia-ui/` **directory** at the repo root — all ten slots uploaded the Slint source tree and
   `gh release upload artifacts/*` died on "is a directory". Now extension-qualified like the attest
-  and sign steps, **the third spelling of one list**.
+  and sign steps, **the third spelling of one list**. C13 moved that directory under `crates/`, so
+  the collision is gone and the qualifier is what keeps the next one from landing.
 
 Four places scrape the version out of the manifest rather than asking cargo, because they run
 without a toolchain (`release-prepare.yml`, `build-rpm.sh`, `build-appimage.sh`,

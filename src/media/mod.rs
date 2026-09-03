@@ -1,21 +1,16 @@
-//! Everything that reads or writes a media file, in three tiers that do not depend on each other
-//! symmetrically.
+//! The image tier, which is the whole of `media/` the binary reaches.
 //!
-//! - [`image`]: decode, resize, the content-addressed artwork store, the thumbnail cache and the
-//!   palette extraction over it. **No outbound `crate::` edge at all**, which is what makes it the
-//!   one tier the others may lean on.
-//! - [`ingest`]: the scanner, the tag reader and writer, and the filesystem watcher. Reads
-//!   `image` for covers, and holds the directory's one edge into `player`
-//!   (`ingest::metadata`'s duration probe for the containers lofty can't measure).
-//! - [`fetch`]: the four things that open a socket for artwork or a station logo. Reads `image` to
-//!   store what it got, and the shared HTTP primitives to get it.
+//! Its two siblings are crates of their own now and neither is re-exported here, because nothing
+//! left in this package names them: `ingest` (the scanner, the tag reader and writer, the watcher)
+//! is `melodia-store`'s and reached through `library`, and `fetch` (the four things that open a
+//! socket for artwork or a logo) is `melodia-net`'s and reached through `tasks`. Dropping the two
+//! lines is what takes `melodia-net` off this package's manifest.
 //!
-//! The tiers land in three different crates, so the direction matters more than the grouping:
-//! `image` below `ingest` and `fetch`, and nothing pointing back up.
+//! The direction between the three has not changed and is the reason they are three crates:
+//! `image` has no outbound `crate::` edge at all, the other two read it, and nothing points back
+//! up.
 
 pub use melodia_artwork::media::image;
-pub use melodia_net::media::fetch;
-pub use melodia_store::media::ingest;
 
 // A walking pin rather than a module's own tests: what it asks is where in the workspace a lofty
 // parse may start, which no one file in any of the three tiers is positioned to answer.

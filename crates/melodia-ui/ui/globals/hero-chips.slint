@@ -1,0 +1,53 @@
+// The hero band's metadata chips, written by `crates/melodia-views/src/ui/hero_chips.rs`. **One global for six views**,
+// only one hero being mountable at a time — the `globals/hero-backdrop.slint` argument.
+//
+// **The chips are built in Rust rather than composed here.** The facts already live there —
+// `AlbumStats.disc_count` and `.is_compilation` never reach `AlbumRow` — so it costs no new query,
+// and it makes "which chips, in what order, omitted when" a tested pure function instead of six
+// ternary chains. What Rust cannot do is translate; hence the trampolines below.
+export global HeroChips {
+    // Rows of chips — the `MetaChipStrip` contract. A hero wraps into at most
+    // `ui::hero_chips::HERO_MAX_ROWS` and drops the overflow. Empty means no chips at all.
+    in-out property <[[string]]> rows;
+
+    // Strip → Rust: the width to chunk against. `MetaChipStrip` owns the width mirror and the
+    // mount seed; each hero forwards its `measured` here.
+    callback recompute(length);
+
+    // Translated chip labels, resolved by Rust on the UI thread. The plural pairs deliberately
+    // reuse msgids the catalogues already carry from the meta lines these chips replace.
+    pure callback tracks(int /*count*/) -> string;
+    tracks(count) => {
+        return @tr("{n} track" | "{n} tracks" % count);
+    }
+
+    pure callback albums(int /*count*/) -> string;
+    albums(count) => {
+        return @tr("{n} album" | "{n} albums" % count);
+    }
+
+    pure callback artists(int /*count*/) -> string;
+    artists(count) => {
+        return @tr("{n} artist" | "{n} artists" % count);
+    }
+
+    pure callback favorites(int /*count*/) -> string;
+    favorites(count) => {
+        return @tr("{n} favorite" | "{n} favorites" % count);
+    }
+
+    pure callback discs(int /*count*/) -> string;
+    discs(count) => {
+        return @tr("{n} disc" | "{n} discs" % count);
+    }
+
+    pure callback plays(int /*count*/) -> string;
+    plays(count) => {
+        return @tr("{n} play" | "{n} plays" % count);
+    }
+
+    pure callback compilation() -> string;
+    compilation() => {
+        return @tr("Compilation");
+    }
+}

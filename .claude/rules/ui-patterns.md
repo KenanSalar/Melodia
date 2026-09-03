@@ -1,10 +1,10 @@
 ---
 paths:
-  - melodia-ui/ui/**/*.slint
-  - src/ui/**/*.rs
+  - crates/melodia-ui/ui/**/*.slint
+  - crates/melodia-views/src/ui/**/*.rs
   - src/boot/**/*.rs
   - crates/melodia-core/src/utils/toast.rs
-  - melodia-ui/build.rs
+  - crates/melodia-ui/build.rs
 ---
 
 # UI patterns — what already exists
@@ -14,7 +14,8 @@ are wrong* are `slint-pitfalls.md`, which loads on the same globs and owns every
 file points at rather than restates.
 
 A rule rather than a `CLAUDE.md` beside the code: UI features cut across two trees (`.slint`
-under `melodia-ui/ui/`, Rust under `src/ui/`), so a per-directory file would reach one and
+under `crates/melodia-ui/ui/`, Rust under `crates/melodia-views/src/ui/`), so a per-directory
+file would reach one and
 silently miss the other.
 
 ## Shared components
@@ -455,7 +456,7 @@ silently miss the other.
 
 ### Filtering
 
-- **Every filter box answers "does this row match" through `src/ui/row_match.rs`, and none of them
+- **Every filter box answers "does this row match" through `crates/melodia-views/src/ui/row_match.rs`, and none of them
   spells `to_lowercase().contains(…)`.** It owns `search_fields` (ordered like the `tracks_fts`
   column list it mirrors), the `fold_needle` pair folding case **and accents**, and the predicates
   over them. Sixteen surfaces route through it; on all three tabbed pages the needle is **one

@@ -52,8 +52,10 @@ rustc-ice-*.txt
 # `build-tarball.sh` and `build-appimage.sh` default to writing their artifact at
 # the repo root; the release slots always pass an output path, a local run never
 # does. (`build-rpm.sh` writes under ~/rpmbuild and needs no entry.) Anchored and
-# extension-qualified for the same reason the workflow globs are: a bare
-# `melodia-*` also matches the `melodia-ui/` directory.
+# extension-qualified for the same reason the workflow globs are: a bare `melodia-*`
+# used to match the `melodia-ui/` directory, which sat here before C13 moved it under
+# `crates/`. Kept in that form because the next thing named `melodia-something` at the
+# root will be a directory too.
 /melodia-*.tar.gz
 /Melodia-*.AppImage
 
@@ -136,14 +138,14 @@ __pycache__/
 
 # ─── Fonts ───────────────────────────────────────────────────────────────────
 # Pristine (full) Material Symbols source faces fed to `scripts/subset-icon-fonts.sh`.
-# The bundled TTFs under `melodia-ui/ui/assets/fonts/` are the trimmed *outputs*
+# The bundled TTFs under `crates/melodia-ui/ui/assets/fonts/` are the trimmed *outputs*
 # (committed); the multi-MiB un-subset sources live here, are never committed, and
 # are re-downloadable from google/material-design-icons. See the script header.
 /scripts/fonts-src/
 
 # Same deal for Vazirmatn: `scripts/patch_vazirmatn.py` reads pristine upstream
 # faces from here and writes the patched, committed ones next door.
-/melodia-ui/ui/assets/fonts/originals/
+/crates/melodia-ui/ui/assets/fonts/originals/
 
 # ─── Misc ────────────────────────────────────────────────────────────────────
 # Personal scratch space — useful but should not be committed

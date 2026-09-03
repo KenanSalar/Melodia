@@ -4,7 +4,7 @@ paths:
   - crates/melodia-platform/src/services/platform/crash_report.rs
   - crates/melodia-app/src/services/diagnostics.rs
   - crates/melodia-core/src/utils/redact.rs
-  - src/ui/settings/diagnostics.rs
+  - crates/melodia-views/src/ui/settings/diagnostics.rs
   - src/main.rs
 ---
 

@@ -100,7 +100,7 @@ pub fn set_dynamic_color_style(state: &AppState, style: String) -> Result<(), Ap
 
 /// Persist the user toggle for "Match Unfocused Window Background".
 /// The runtime gate (focus event → `Theme.window-focused` write) lives
-/// in `src/ui/window_chrome/`'s winit filter; this helper only commits
+/// in `melodia-views`' `ui/window_chrome/`'s winit filter; this helper only commits
 /// the new value to disk so the next process boot picks it up.
 pub fn set_match_unfocused_to_system_bg(state: &AppState, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
@@ -112,7 +112,7 @@ pub fn set_match_unfocused_to_system_bg(state: &AppState, on: bool) -> Result<()
 /// `0..=MAX_CORNER_RADIUS` so a malformed UI write can't push an
 /// out-of-range value into `settings.json`. The runtime application
 /// (mirroring the value into `Theme.shell-radius`) happens synchronously
-/// in `src/ui/appearance/`'s `wire_corner_radius_changed` *before* this
+/// in `melodia-views`' `ui/appearance/`'s `wire_corner_radius_changed` *before* this
 /// async persist, so the UI repaints immediately even when the disk
 /// write hasn't completed.
 pub fn set_corner_radius(state: &AppState, px: u32) -> Result<(), AppError> {

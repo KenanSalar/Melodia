@@ -13,11 +13,10 @@ categories = ["multimedia::audio"]
 # `melodia-ui` is depended on by path with no version, so a publish could never work.
 publish = false
 
-# `melodia-ui` is the Slint compiler's output, split off so it builds once rather
-# than twice per `cargo test` (rlib plus `--test` harness). `winit` carries its own
-# `[workspace]`; excluding it survives an upstream re-sync that drops that table.
+# `winit` carries its own `[workspace]`; excluding it survives an upstream re-sync
+# that drops that table.
 [workspace]
-members = ["melodia-ui", "crates/*"]
+members = ["crates/*"]
 exclude = ["winit"]
 
 # Inherited by every package. Four toolchain-less scrapes (`release-prepare.yml`,
@@ -302,13 +301,16 @@ assets = [
 [dependencies]
 # The Slint compiler's output, re-exported by `src/lib.rs` so the generated types
 # stay reachable as `crate::AppWindow`, `crate::TrackRow`, ….
-melodia-ui = { path = "melodia-ui" }
-# All eleven, because `src/lib.rs` and the three shim modules beside it are what
-# keeps `crate::database`, `crate::media::fetch` and their siblings resolving for
-# `src/ui/`, `src/boot/` and `tests/`. Phase C13 narrows this as views leaves.
+melodia-ui = { path = "crates/melodia-ui" }
+# The whole UI layer, re-exported as `ui` so `main.rs`, `boot/` and `tests/` keep
+# spelling `ui::`.
+melodia-views = { path = "crates/melodia-views" }
+# Ten of the twelve, because `src/lib.rs` and the three shim modules beside it are
+# what keeps `crate::database`, `crate::media::image` and their siblings resolving
+# for `src/boot/` and `tests/`. `melodia-net` is not among them: nothing left in
+# this package opens a socket or spells one.
 melodia-core = { path = "crates/melodia-core" }
 melodia-artwork = { path = "crates/melodia-artwork" }
-melodia-net = { path = "crates/melodia-net" }
 melodia-platform = { path = "crates/melodia-platform" }
 melodia-audio = { path = "crates/melodia-audio" }
 melodia-playback = { path = "crates/melodia-playback" }
@@ -317,31 +319,14 @@ melodia-store = { path = "crates/melodia-store" }
 melodia-integrations = { path = "crates/melodia-integrations" }
 melodia-app = { path = "crates/melodia-app" }
 
-# What is left once the extraction crates own their own third-party lines: the
-# renderer, the runtime the UI thread bridges onto, and what `src/ui/` itself
-# draws with. Nothing here is named by a crate above — a dependency this package
-# no longer spells is one it no longer compiles.
+# What the binary itself draws with, once views owns the fifteen the UI layer
+# needs: the renderer it builds a window from, the runtime the UI thread bridges
+# onto, and the bridge. Nothing here is named by a crate above — a dependency this
+# package no longer spells is one it no longer compiles.
 slint.workspace = true
-
 tokio.workspace = true
-tokio-util.workspace = true
 async-compat.workspace = true
-parking_lot.workspace = true
-
-# Shuffle-all picks its starting row here.
-rand.workspace = true
-# Accent folding for the per-view filter boxes, matching what `tracks_fts` does.
-unicode-normalization.workspace = true
-image.workspace = true
-lru.workspace = true
-material-colors.workspace = true
-chrono.workspace = true
-
 log.workspace = true
-
-rfd.workspace = true
-open.workspace = true
-futures-util.workspace = true
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 winresource.workspace = true

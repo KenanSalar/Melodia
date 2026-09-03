@@ -4,7 +4,7 @@ paths:
   - crates/**/*.rs
   - tests/**/*.rs
   - build.rs
-  - melodia-ui/build.rs
+  - crates/melodia-ui/build.rs
   - Cargo.toml
 ---
 

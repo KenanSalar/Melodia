@@ -27,7 +27,7 @@ melodia-engine = { path = "../melodia-engine" }
 melodia-store = { path = "../melodia-store" }
 melodia-integrations = { path = "../melodia-integrations" }
 # `tasks::updater_daily` drives the in-app updater banner, which is a Slint global.
-melodia-ui = { path = "../../melodia-ui" }
+melodia-ui = { path = "../melodia-ui" }
 
 slint.workspace = true
 tokio.workspace = true

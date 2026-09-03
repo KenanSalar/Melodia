@@ -8,11 +8,11 @@ paths:
   - crates/melodia-app/src/tasks/**/*.rs
   - crates/melodia-core/src/utils/audio_ext.rs
   - crates/melodia-core/src/utils/self_writes.rs
-  - src/ui/playlists/callbacks/**/*.rs
+  - crates/melodia-views/src/ui/playlists/callbacks/**/*.rs
   - migrations/**/*.sql
-  - melodia-ui/ui/components/dialog/smart-playlist-editor-body.slint
-  - melodia-ui/ui/components/dialog/tag-editor-body.slint
-  - melodia-ui/ui/components/star-rating.slint
+  - crates/melodia-ui/ui/components/dialog/smart-playlist-editor-body.slint
+  - crates/melodia-ui/ui/components/dialog/tag-editor-body.slint
+  - crates/melodia-ui/ui/components/star-rating.slint
 ---
 
 # The library — scan, projections, and the write-through paths
@@ -140,7 +140,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 ## Ratings
 
 - **Star ratings mirror the favorite path.** Inert `tracks.rating` (0–5) surfaced via a
-  **hover-revealed** `StarRating` (`melodia-ui/ui/components/star-rating.slint`) inside the
+  **hover-revealed** `StarRating` (`crates/melodia-ui/ui/components/star-rating.slint`) inside the
   track-row Title cell — no rating column, no in-table sort. Rides on `TrackListRow` +
   `TrackSummary`. Writes via `library::ratings::{set_rating, set_current_rating}` (clamped 0–5),
   mirroring `favorites::{set_favorite, toggle_current_favorite}` down to the `sync_current_track_*`
@@ -175,8 +175,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   **skip-and-report**: re-match each entry by `file_path` then BLAKE3 `file_hash`, always **create
   a new playlist** (the name isn't unique), count misses; never auto-imports on-disk files. UI is
   the Import / Export pills in the My Library band's Playlists-tab row
-  (`melodia-ui/ui/views/my-library/tab-pills.slint`), callbacks in
-  `src/ui/playlists/callbacks/files/`. A **tag edit rewrites the file and changes its
+  (`crates/melodia-ui/ui/views/my-library/tab-pills.slint`), callbacks in
+  `crates/melodia-views/src/ui/playlists/callbacks/files/`. A **tag edit rewrites the file and changes its
   `file_hash`**, so a previously exported `#MELODIA-HASH` line goes stale — the `file_path`-first
   re-match degrades gracefully, but re-export after retagging if hash portability matters.
 

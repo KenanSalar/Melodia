@@ -122,7 +122,7 @@ fn on_accent_picks_dark_text_for_light_accent() {
     assert_eq!(on_accent_hex(0x00000000), 0x00ffffff);
 }
 
-const THEME_SLINT: &str = include_str!("../../../../../melodia-ui/ui/theme.slint");
+const THEME_SLINT: &str = include_str!("../../../../melodia-ui/ui/theme.slint");
 
 /// Whitespace-normalized, so re-wrapping a Slint expression doesn't fail a pin.
 fn theme_slint_flat() -> String {

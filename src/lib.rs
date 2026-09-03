@@ -10,6 +10,10 @@ pub use melodia_core::{config, entities, error, themes, utils};
 
 pub use melodia_app::{library, state, tasks};
 pub use melodia_store::database;
+// `src/ui/` is `melodia-views` now, re-exported under the name `main.rs`, `boot/` and `tests/`
+// already spell. The crate is aliased at its `ui` module rather than at its root so those call
+// sites read `ui::callbacks::wire_all` unchanged — which `boot`'s own source-text pins count.
+pub use melodia_views::ui;
 
 pub mod media;
 pub mod player;
@@ -19,4 +23,3 @@ pub mod services;
 // test modules spelling it already say.
 #[cfg(test)]
 pub(crate) use melodia_testkit as test_support;
-pub mod ui;

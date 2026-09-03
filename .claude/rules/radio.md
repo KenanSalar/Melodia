@@ -1,6 +1,6 @@
 ---
 paths:
-  - src/ui/radio/**/*.rs
+  - crates/melodia-views/src/ui/radio/**/*.rs
   - crates/melodia-app/src/library/radio/**/*.rs
   - crates/melodia-app/src/library/radio_files.rs
   - crates/melodia-net/src/services/net/radio_browser/**/*.rs
@@ -12,20 +12,20 @@ paths:
   - crates/melodia-store/src/database/queries/radio.rs
   - crates/melodia-app/src/tasks/radio_logo_cache.rs
   - crates/melodia-app/src/library/settings/radio.rs
-  - src/ui/settings/radio_settings.rs
-  - melodia-ui/ui/globals/radio.slint
-  - melodia-ui/ui/components/station-facts.slint
-  - melodia-ui/ui/views/radio-view.slint
-  - melodia-ui/ui/views/radio/browse-tab.slint
-  - melodia-ui/ui/views/radio/kept-stations-tab.slint
-  - melodia-ui/ui/views/radio/station-detail.slint
-  - melodia-ui/ui/views/radio/station-card.slint
-  - melodia-ui/ui/views/radio/station-grid.slint
-  - melodia-ui/ui/views/radio/facet-chip.slint
-  - melodia-ui/ui/views/radio/suggestion-pill.slint
-  - melodia-ui/ui/views/radio/tab-pills.slint
-  - melodia-ui/ui/views/settings/radio-section.slint
-  - melodia-ui/ui/components/dialog/add-station-body.slint
+  - crates/melodia-views/src/ui/settings/radio_settings.rs
+  - crates/melodia-ui/ui/globals/radio.slint
+  - crates/melodia-ui/ui/components/station-facts.slint
+  - crates/melodia-ui/ui/views/radio-view.slint
+  - crates/melodia-ui/ui/views/radio/browse-tab.slint
+  - crates/melodia-ui/ui/views/radio/kept-stations-tab.slint
+  - crates/melodia-ui/ui/views/radio/station-detail.slint
+  - crates/melodia-ui/ui/views/radio/station-card.slint
+  - crates/melodia-ui/ui/views/radio/station-grid.slint
+  - crates/melodia-ui/ui/views/radio/facet-chip.slint
+  - crates/melodia-ui/ui/views/radio/suggestion-pill.slint
+  - crates/melodia-ui/ui/views/radio/tab-pills.slint
+  - crates/melodia-ui/ui/views/settings/radio-section.slint
+  - crates/melodia-ui/ui/components/dialog/add-station-body.slint
   - migrations/20260820000000_radio_stations.sql
 ---
 
@@ -33,7 +33,7 @@ paths:
 
 The couplings no single file can hold: an off switch enforced one place and observable from four,
 two tables the artwork sweep has to know about, a stream whose prohibitions and dependency pins
-reach out of `src/player/`, and a handful of numbers spelled in both trees.
+reach out of `melodia-audio`, and a handful of numbers spelled in both trees.
 
 The page's own shape belongs to `.claude/rules/ui-patterns.md` — the Browse box and its scope
 pills, `StationCard` as an `EntityCard` host, and why three tabs share one `SectionActiveGate`.

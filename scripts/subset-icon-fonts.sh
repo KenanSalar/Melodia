@@ -26,7 +26,7 @@
 # Source faces (pristine, multi-MiB, gitignored under scripts/fonts-src/)
 # ----------------------------------------------------------------------
 # The script reads its inputs from `scripts/fonts-src/` and writes the trimmed
-# outputs to `melodia-ui/ui/assets/fonts/` — it never overwrites its own input, so a face can
+# outputs to `crates/melodia-ui/ui/assets/fonts/` — it never overwrites its own input, so a face can
 # always be re-subset (e.g. after adding an icon). Populate scripts/fonts-src/ with
 # the full faces named exactly as the outputs:
 #   scripts/fonts-src/MaterialSymbolsRounded.ttf
@@ -38,8 +38,8 @@
 #
 # Prereqs:  pip install --user fonttools   (provides pyftsubset)
 # Outputs (in place, committed):
-#   melodia-ui/ui/assets/fonts/MaterialSymbolsRounded.ttf
-#   melodia-ui/ui/assets/fonts/MaterialSymbolsRoundedFilled.ttf
+#   crates/melodia-ui/ui/assets/fonts/MaterialSymbolsRounded.ttf
+#   crates/melodia-ui/ui/assets/fonts/MaterialSymbolsRoundedFilled.ttf
 
 set -euo pipefail
 
@@ -48,7 +48,7 @@ cd "$REPO_ROOT"
 
 ICONS="$REPO_ROOT/scripts/icons.txt"
 SRC_DIR="$REPO_ROOT/scripts/fonts-src"
-FONT_DIR="$REPO_ROOT/melodia-ui/ui/assets/fonts"
+FONT_DIR="$REPO_ROOT/crates/melodia-ui/ui/assets/fonts"
 
 command -v pyftsubset >/dev/null || {
   echo "ERROR: pyftsubset not on PATH. Install with: pip install --user fonttools"

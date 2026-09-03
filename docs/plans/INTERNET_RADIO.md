@@ -251,7 +251,7 @@ filter defaults to hiding them, with a toggle.
 > survives as that filter's input. Everything below that reads D13 as live is history.
 
 **D14. The Radio Browser client is a service, and the UI's only door is `library::radio`.**
-`src/ui/` reaching `crate::database` directly is already forbidden and the same logic
+`crates/melodia-views/src/ui/` reaching `crate::database` directly is already forbidden and the same logic
 applies to a network directory: one facade in `library/` fronts both the local table and
 the remote search, so a callback never has to know which side answered.
 
@@ -298,23 +298,23 @@ persisted `last_nav_index` of 10 is folded on read at the next boot, the way
 | `src/services/radio_browser/query.rs` | Search and facet-list request construction, paging |
 | `src/player/stream_source.rs` | Opening a URL into a decodable reader: stream-download, ICY, playlist resolution |
 | `src/player/prebuffer.rs` | The ring buffer and its feed thread (D8) |
-| `src/ui/radio/mod.rs` | Slice install, the `RadioUi` handle, row and cover plumbing |
-| `src/ui/radio/tabs.rs` | `RadioTab`, the tab resolve, the persisted-tab seed |
-| `src/ui/radio/detail.rs` | The station detail: open, close, hero artwork, the restart seed |
-| `src/ui/radio/callbacks.rs` | Browse, Favorites, detail and playback wiring. A directory once it outgrows one file, as Favorites' and Recently Played's did |
-| `melodia-ui/ui/globals/radio.slint` | The `Radio` global |
-| `melodia-ui/ui/views/radio-view.slint` | Page chrome only: the band and tab routing. **No page-level scroller** — every tabbed page in the tree puts it in the tab body, and Browse's grid is a virtualized `ListView` a page `ScrollView` above it would fight |
-| `melodia-ui/ui/views/radio/browse-tab.slint` | Browse tab body |
-| `melodia-ui/ui/views/radio/favorites-tab.slint` | Favorites tab body |
-| `melodia-ui/ui/views/radio/station-detail.slint` | The detail body under the morphed band |
-| `melodia-ui/ui/views/radio/station-card.slint` | One station, shared by both tabs |
-| `melodia-ui/ui/components/dialog/add-station-body.slint` | The add-by-URL dialog body |
-| `melodia-ui/ui/views/settings/radio-section.slint` | The Settings card: the master toggle and its sub-rows |
+| `crates/melodia-views/src/ui/radio/mod.rs` | Slice install, the `RadioUi` handle, row and cover plumbing |
+| `crates/melodia-views/src/ui/radio/tabs.rs` | `RadioTab`, the tab resolve, the persisted-tab seed |
+| `crates/melodia-views/src/ui/radio/detail.rs` | The station detail: open, close, hero artwork, the restart seed |
+| `crates/melodia-views/src/ui/radio/callbacks.rs` | Browse, Favorites, detail and playback wiring. A directory once it outgrows one file, as Favorites' and Recently Played's did |
+| `crates/melodia-ui/ui/globals/radio.slint` | The `Radio` global |
+| `crates/melodia-ui/ui/views/radio-view.slint` | Page chrome only: the band and tab routing. **No page-level scroller** — every tabbed page in the tree puts it in the tab body, and Browse's grid is a virtualized `ListView` a page `ScrollView` above it would fight |
+| `crates/melodia-ui/ui/views/radio/browse-tab.slint` | Browse tab body |
+| `crates/melodia-ui/ui/views/radio/favorites-tab.slint` | Favorites tab body |
+| `crates/melodia-ui/ui/views/radio/station-detail.slint` | The detail body under the morphed band |
+| `crates/melodia-ui/ui/views/radio/station-card.slint` | One station, shared by both tabs |
+| `crates/melodia-ui/ui/components/dialog/add-station-body.slint` | The add-by-URL dialog body |
+| `crates/melodia-ui/ui/views/settings/radio-section.slint` | The Settings card: the master toggle and its sub-rows |
 | `.claude/rules/radio.md` | The contract, once it spans Rust, `.slint`, a migration and the packaging deps |
 
 **The table above is what was planned, and the slice outgrew it.** Left current rather than
 rewritten, since which files a phase *added* is recorded in each phase's own "Shipped" line and the
-gap between the two is the more useful record. What it never named: `src/ui/radio/`'s
+gap between the two is the more useful record. What it never named: `crates/melodia-views/src/ui/radio/`'s
 `browse`, `covers`, `facets`, `filter`, `history`, `identity`, `kept`, `logos`, `rows` and
 `suggest`; a `callbacks/` directory that is eight files today, Phase 6 having correctly recorded
 the three it split into and Phase 7 having added the rest;
@@ -328,17 +328,17 @@ the three it split into and Phase 7 having added the rest;
 | Path | Edit |
 |---|---|
 | `Cargo.toml` | Two dependencies, both feature-pinned (see Phase 3), and possibly `image`'s `ico` (D7) |
-| `melodia-ui/ui/layout/sidebar.slint` | One `SidebarItem` after My Library, behind a `Divider` — everything above it is the local library and this is the one row that reaches the network |
-| `melodia-ui/ui/globals/nav.slint` | The index map, which is authoritative and now runs to 10 |
-| `melodia-ui/ui/app-window.slint` | The `export { }` name list, one `ViewTransition` branch, the `!= 10` term on the placeholder fall-through, one `SectionActiveGate` mount, one `view-title` arm |
-| `melodia-ui/ui/models.slint` | `RadioStationRow`, plus the live fields on `PlayerVm` |
-| `melodia-ui/ui/settings.slint` | `radio-enabled` and its changed callback on the `Settings` global |
-| `melodia-ui/ui/views/settings/pages/services-page.slint` | A third card, and one more term in `has-matches` |
+| `crates/melodia-ui/ui/layout/sidebar.slint` | One `SidebarItem` after My Library, behind a `Divider` — everything above it is the local library and this is the one row that reaches the network |
+| `crates/melodia-ui/ui/globals/nav.slint` | The index map, which is authoritative and now runs to 10 |
+| `crates/melodia-ui/ui/app-window.slint` | The `export { }` name list, one `ViewTransition` branch, the `!= 10` term on the placeholder fall-through, one `SectionActiveGate` mount, one `view-title` arm |
+| `crates/melodia-ui/ui/models.slint` | `RadioStationRow`, plus the live fields on `PlayerVm` |
+| `crates/melodia-ui/ui/settings.slint` | `radio-enabled` and its changed callback on the `Settings` global |
+| `crates/melodia-ui/ui/views/settings/pages/services-page.slint` | A third card, and one more term in `has-matches` |
 | `src/services/settings/data.rs` | `RadioFlags`, flattened into `SettingsData`, defaulting off |
 | `src/boot/ui_setup/views.rs` | The nav-index guard, the tab seed, the slice install; later, folding a persisted 10 when radio is off |
 | `src/services/view_state.rs` | `radio_tab: i32`, and `MAX_NAV_INDEX` — the bound the persisted nav index's write clamp and read guard now share |
 | `src/library/settings/view.rs` | `set_radio_tab`, and `set_last_nav_index`'s clamp off that const |
-| `src/ui/view_tag.rs` | The nav-10 arm, naming the tab like the other three tabbed pages |
+| `crates/melodia-views/src/ui/view_tag.rs` | The nav-10 arm, naming the tab like the other three tabbed pages |
 | `src/test_support.rs` | `CALLBACK_HOMES` grows to 13 |
 | `src/database/queries/artwork.rs` | The fifth reference column (D12) |
 | `src/player/state.rs` | The radio arm of the state machine |
@@ -348,7 +348,7 @@ the three it split into and Phase 7 having added the rest;
 | `src/library/playback.rs` | `player_play_station`, and the radio branch on play / toggle |
 | `src/state/contexts.rs` | `PlaybackContext.http`, so a transport command can re-open a station |
 | `scripts/icons.txt` | `radio` and whatever else the cards use |
-| `melodia-ui/translations/*/LC_MESSAGES/melodia-ui.po` | Every new msgid, in all six |
+| `crates/melodia-ui/translations/*/LC_MESSAGES/melodia-ui.po` | Every new msgid, in all six |
 
 ### What must not grow
 
@@ -364,7 +364,7 @@ the three it split into and Phase 7 having added the rest;
   `REFERENCED_PATHS`, both grown by one. Not a new list, and not a query that re-derives
   them somewhere else.
 - **No second "does this row match" predicate.** The Favorites filter goes through
-  `src/ui/row_match.rs` like the other sixteen surfaces.
+  `crates/melodia-views/src/ui/row_match.rs` like the other sixteen surfaces.
 - **No second tab bar, and no third band.** `LibraryTabBand` is mounted, not copied, and
   not parameterised into a shared ancestor with `MosaicTabHero`. The two are siblings for
   reasons `ui-patterns.md` argues, and `ui::library_tab_band_tests` holds them to it.
@@ -495,8 +495,8 @@ and the fifth artwork reference column in both halves of the ledger.
   indistinguishable from a playable one.
 - **No `RadioStationRow` yet.** Nothing in `src/entities/` references Slint; the `*Row`
   structs are the generated ones from `models.slint` and all 16 `to_slint_*` converters
-  live in `src/ui/<view>/mod.rs`. **Phase 4 owes both halves**: the struct in
-  `models.slint` and `to_slint_radio_station_row` in `src/ui/radio/mod.rs`.
+  live in `crates/melodia-views/src/ui/<view>/mod.rs`. **Phase 4 owes both halves**: the struct in
+  `models.slint` and `to_slint_radio_station_row` in `crates/melodia-views/src/ui/radio/mod.rs`.
 
 **Two things Phase 5 inherits.** `library::radio` is already the single door D15's guard
 needs, and it deliberately does not bump `library_changed`, no library view showing a
@@ -570,7 +570,7 @@ What later phases reach for:
 - **The directory answers with `entities::radio::DirectoryStation`, not the wire struct.**
   It carries the facts the table has no column for (`votes`, `click_count`, `state`, the
   country's full name, `last_check_ok`) and none of the six that mean nothing before a row
-  exists. `services::radio_browser::model` stays private, which is what keeps `src/ui/`
+  exists. `services::radio_browser::model` stays private, which is what keeps `crates/melodia-views/src/ui/`
   from ever naming it (D14). `ssl_error` is deliberately not carried: nothing filters on
   it yet, and `hidebroken=true` already excludes most of what it would catch.
 - **Direction belongs to the order, so `StationSearch` has no `reverse`.** Every
@@ -703,9 +703,9 @@ The sidebar row, the page, its two tabs and the persistence. The tabs are empty 
 fills in Phase 6, Favorites in Phase 7, the band's hero half in Phase 8 — so what landed is
 the shell and the boot ordering under it, which is the half that cannot be retrofitted.
 
-Shipped: `melodia-ui/ui/globals/radio.slint`, `views/radio-view.slint` and its two tab
+Shipped: `crates/melodia-ui/ui/globals/radio.slint`, `views/radio-view.slint` and its two tab
 bodies, the sidebar row, the router branch and its `!= 10` term on the placeholder
-fall-through, one `SectionActiveGate`, `src/ui/radio/` (`mod`, `tabs`, `callbacks`),
+fall-through, one `SectionActiveGate`, `crates/melodia-views/src/ui/radio/` (`mod`, `tabs`, `callbacks`),
 `radio_tab` in `views.json` with its setter, and the nav-index bound both halves of that
 round trip now share.
 
@@ -834,7 +834,7 @@ differently from the text below; both departures are recorded under it.
    of `fold_retired_nav_index` rather than an extension of it. The two answer different
    questions (retired index, disabled feature) and `boot::ui_setup` composes them.
 
-7. `melodia-ui/ui/views/settings/radio-section.slint` on the Services tab, a third card
+7. `crates/melodia-ui/ui/views/settings/radio-section.slint` on the Services tab, a third card
    beside Scrobbling and Discord, with one more term in the page's `has-matches`. The
    Services page's own doc comment says "the outside accounts Melodia talks to" and needs
    widening to services, radio having no account.
@@ -900,13 +900,13 @@ Library, and with it off nothing in the app makes a request to radio-browser.inf
 8. Counts hold `UNFETCHED_COUNT` until fetched and are rewound by the section leave and by
    a tab pick, and are written above any signature guard.
 
-Shipped: `src/ui/radio/{browse,covers,facets,filter,logos,rows}.rs` and
-`src/ui/radio/callbacks/` split into `{browse,facets,lifecycle}`,
-`melodia-ui/ui/views/radio/{browse-tab,station-grid,station-card,facet-chip}.slint`, the
+Shipped: `crates/melodia-views/src/ui/radio/{browse,covers,facets,filter,logos,rows}.rs` and
+`crates/melodia-views/src/ui/radio/callbacks/` split into `{browse,facets,lifecycle}`,
+`crates/melodia-ui/ui/views/radio/{browse-tab,station-grid,station-card,facet-chip}.slint`, the
 three boundary structs in `models.slint`, `media::station_logo`, `player::stream_decode`
 with the Symphonia 0.6 dependency behind it, `image`'s `ico` feature and the widened
 `artwork::STORED_EXTENSIONS`, `RadioFlags`' two sub-toggles with their Settings rows, and
-`melodia-ui/ui/assets/icons/radio.svg`.
+`crates/melodia-ui/ui/assets/icons/radio.svg`.
 
 **This is the phase the feature was first heard**, and the two things a listen found were
 invisible to every static gate. Both are written up in full in
@@ -946,7 +946,7 @@ they cost:
   The numbers are at D7.
 - **The artwork tile did not already support the radio glyph.** D7 says the band "takes its
   `fallback-icon` path with the `radio` glyph, which it already supports"; it did not.
-  `melodia-ui/ui/assets/icons/radio.svg` and a seventh `ArtworkImage` branch were added for
+  `crates/melodia-ui/ui/assets/icons/radio.svg` and a seventh `ArtworkImage` branch were added for
   it.
 
 **Gates run:** fmt, `clippy --all-targets --locked -- -D warnings` at the root (both crates
@@ -973,7 +973,7 @@ leaving and re-entering the section does not refetch what is already on screen. 
 
 Shipped: the third tab, both kept grids, add-by-URL with a real validation probe and ICY
 autofill, edit and remove, a per-tab `row_match` needle, the Favorites sort, and station
-list import/export. `src/ui/radio/kept.rs` and `callbacks/{kept,stations,files}.rs`,
+list import/export. `crates/melodia-views/src/ui/radio/kept.rs` and `callbacks/{kept,stations,files}.rs`,
 `src/library/radio_files.rs`, `views/radio/{recent-tab,tab-pills}.slint`,
 `components/dialog/add-station-body.slint`, and the `RadioForm` global.
 
@@ -1100,7 +1100,7 @@ postponed without stranding the rest.
 
 Shipped: the fourth body branch and its hero, the page's labelled facts list, the session
 song history, the actions in the band's pill slot, the boot restore and the Mouse-4/5 walk.
-`src/ui/radio/detail.rs` and `callbacks/detail.rs`, `views/radio/station-detail.slint`, the
+`crates/melodia-views/src/ui/radio/detail.rs` and `callbacks/detail.rs`, `views/radio/station-detail.slint`, the
 `Radio` global's detail half, and `hero_chips::publish_station` with `ChipOwner::Station`.
 
 What later phases reach for:

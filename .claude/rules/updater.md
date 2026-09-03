@@ -4,7 +4,7 @@ paths:
   - crates/melodia-platform/src/services/platform/install_kind/**/*.rs
   - crates/melodia-platform/src/services/platform/desktop_integration.rs
   - crates/melodia-app/src/tasks/updater_daily.rs
-  - src/ui/settings/updater_settings.rs
+  - crates/melodia-views/src/ui/settings/updater_settings.rs
   - wix/main.wxs
   - scripts/build-latest-json.py
   - scripts/build-appimage.sh
