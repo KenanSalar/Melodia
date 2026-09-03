@@ -87,7 +87,7 @@ pub fn respawn_target() -> Option<PathBuf> {
     if let Some(recorded) = respawn_exe() {
         return Some(recorded);
     }
-    match crate::services::current_exe() {
+    match crate::utils::exe::current_exe() {
         Ok(exe) => Some(exe),
         Err(e) => {
             log::warn!("respawn: executable lookup failed: {e}");

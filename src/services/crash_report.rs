@@ -27,7 +27,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::{DateTime, Local, NaiveDateTime};
 
-use crate::services::redact_home;
+use crate::utils::redact::redact_home;
 
 /// How many reports survive a [`prune`].
 ///

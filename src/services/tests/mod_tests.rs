@@ -1,228 +1,16 @@
-use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+//! What is left here after B1 walks the *tree* rather than `services`, and none of it names a
+//! `services` item any more: thread-name length, the bundled fonts against their attribution,
+//! the five package formats' licence directories, two CI-workflow pins and two MSI ones, the
+//! Debian copyright, and the bundled licence texts.
+//!
+//! Finding 8 in `docs/plans/WORKSPACE_SPLIT.md` gives them one home in Phase D; until then this
+//! is where they sit, because moving them twice is worse than the name being wrong once.
 
-#[cfg(unix)]
-use super::redact_home;
-use super::{redact_prefix, undeleted_exe};
-#[cfg(unix)]
-use crate::test_support::with_env_var;
+use std::path::Path;
+
 use crate::test_support::{
     MIN_SOURCES, REPO_ROOT, SRC_DIR, font_sources, rel_path, stripped_sources,
 };
-
-/// A Windows home directory, spelled the way `Path::display` spells it. Nothing on a Linux runner
-/// can exercise `dirs::home_dir`'s Windows arm, so the *shape* is pinned here instead.
-#[test]
-fn a_windows_home_is_redacted_like_a_unix_one() {
-    let redacted =
-        redact_prefix(r"WARN scan failed for C:\Users\Alice\Music\x.flac", r"C:\Users\Alice");
-
-    assert_eq!(redacted, r"WARN scan failed for ~\Music\x.flac");
-}
-
-/// Every occurrence, not just the first: one log line can name a source path and a destination,
-/// and a backtrace names the home once per frame.
-#[test]
-fn every_occurrence_goes() {
-    let redacted = redact_prefix("moved /home/alice/a.flac to /home/alice/b.flac", "/home/alice");
-
-    assert_eq!(redacted, "moved ~/a.flac to ~/b.flac");
-}
-
-/// The common case is a line with no home in it at all, and it must not allocate a copy of every
-/// log record on the way past.
-#[test]
-fn text_without_the_home_is_borrowed() {
-    let borrowed = redact_prefix("INFO Melodia starting", "/home/alice");
-    assert!(matches!(borrowed, Cow::Borrowed(_)));
-}
-
-/// The Unix half of the resolution: `dirs::home_dir` reads `$HOME` before it falls back to the
-/// password database. Gated, because that is exactly the arm Windows doesn't have —
-/// `known_folder_profile` ignores the variable, and the two platforms resolving differently is the
-/// point.
-#[cfg(unix)]
-#[test]
-fn the_home_directory_comes_from_the_environment_on_unix() {
-    let redacted = with_env_var("HOME", Some("/home/testuser"), || {
-        redact_home("/home/testuser/Music/x.flac").into_owned()
-    });
-
-    assert_eq!(redacted, "~/Music/x.flac");
-}
-
-/// Every process asks for its own path at least once a run, and almost none of them is running
-/// from an unlinked file — so the suffix test has to come before the filesystem. Counted rather
-/// than asserted on the result, since returning the path unchanged is what *both* orderings do.
-#[test]
-fn a_path_without_the_marker_costs_no_filesystem_question() {
-    let asked = std::cell::Cell::new(0_u32);
-    let exe = PathBuf::from("/usr/bin/Melodia");
-
-    let resolved = undeleted_exe(exe.clone(), |_| {
-        asked.set(asked.get() + 1);
-        true
-    });
-
-    assert_eq!(resolved, exe);
-    assert_eq!(asked.get(), 0);
-}
-
-/// A file genuinely named `… (deleted)` is not this bug, and redirecting it to a sibling would be
-/// a worse failure than the one being fixed — silently running a different binary. The live-file
-/// guard is the only thing separating the two cases, both of which end in the marker.
-#[test]
-fn a_live_file_named_deleted_keeps_its_own_path() {
-    let odd = PathBuf::from("/srv/builds/Melodia (deleted)");
-
-    // Both it and its would-be sibling exist; the suffixed one wins.
-    let resolved = undeleted_exe(odd.clone(), |_| true);
-
-    assert_eq!(resolved, odd);
-}
-
-/// The case this exists for: a package upgrade (or a cargo re-uplift) unlinked the running binary
-/// and put its replacement at the same path. Resolving to that replacement is what makes the
-/// respawn relaunch what the user now has installed rather than dying.
-#[test]
-fn an_unlinked_binary_resolves_to_the_file_that_replaced_it() {
-    let replacement = Path::new("/usr/bin/Melodia");
-
-    let resolved = undeleted_exe(PathBuf::from("/usr/bin/Melodia (deleted)"), |p| p == replacement);
-
-    assert_eq!(resolved, replacement);
-}
-
-/// Nothing at either path — the binary was uninstalled rather than replaced. Handing back the
-/// kernel's own string keeps the caller's error report honest about what it was told.
-#[test]
-fn an_unresolvable_marker_comes_back_verbatim() {
-    let reported = PathBuf::from("/usr/bin/Melodia (deleted)");
-
-    let resolved = undeleted_exe(reported.clone(), |_| false);
-
-    assert_eq!(resolved, reported);
-}
-
-/// The raw call, in the one spelling that can't be dodged: every path form has to name the module
-/// (`std::env::current_exe`, or `env::current_exe` under a `use std::env`). The evasion left is a
-/// `use std::env::current_exe` and a bare call, the same hole `ui::file_dialog`'s pin documents
-/// for a renaming `use`.
-const RAW_CALL: &str = "env::current_exe";
-
-/// The files that may spell it, and **how many times each**. A count rather than a file-level
-/// pass: `services/mod.rs` holds both the helper and the one sanctioned raw reader, so forgiving
-/// the file would pre-authorise a third call written between them. Paths are relative to
-/// [`SRC_DIR`].
-const EXEMPT: [(&str, usize); 2] = [
-    // `current_exe` itself, plus `is_dev_build` — which takes `parent()/parent()`, so the marker
-    // lands on a file name it never looks at.
-    ("services/mod.rs", 2),
-    // This pin, which has to spell the needle to grep for it.
-    ("services/tests/mod_tests.rs", 1),
-];
-
-/// A test comparing `install_target()` against `services::current_exe()` cannot fail: with no
-/// marker in the test process the two agree, so it passes just as well against the raw call it
-/// exists to rule out. The routing is only checkable from the corpus, and what this guards is a
-/// *next* call site rather than any existing one.
-///
-/// Its reach is [`SRC_DIR`], where a call that matters can live — a binary path is executed,
-/// installed to or written down by the app, not by `tests/` or a build script. Two seams it does
-/// not cover, both shared with the tree's other corpus pins: `strip_line_comments` handles `//`
-/// and not `/* */`, and the needle is a substring rather than a parse.
-#[test]
-fn nothing_outside_the_helper_asks_the_os_for_the_binary_path() {
-    let raw = spellings_outside(RAW_CALL, &EXEMPT);
-
-    assert!(
-        raw.is_empty(),
-        "{raw:?} ask the OS for the binary path directly — use `services::current_exe`, \
-         which resolves the `\" (deleted)\"` marker an unlinked executable gets"
-    );
-}
-
-/// Every file under [`SRC_DIR`] that spells `needle`, minus the ones `exempt` names — each of
-/// which is held to its exact count rather than forgiven wholesale, since a second call written
-/// into a sanctioned file is itself the regression.
-fn spellings_outside(needle: &str, exempt: &[(&str, usize)]) -> Vec<String> {
-    let mut offenders = Vec::new();
-    let mut exempt_seen = Vec::new();
-
-    for (path, src) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
-        let found = src.matches(needle).count();
-        match exempt.iter().find(|(name, _)| *name == path) {
-            Some((_, allowed)) => {
-                assert_eq!(
-                    found, *allowed,
-                    "{path} spells `{needle}` {found} time(s), not {allowed} — either route the \
-                     new one through the shared helper, or drop the stale entry from the list"
-                );
-                exempt_seen.push(path);
-            }
-            None if found > 0 => offenders.push(path),
-            None => {}
-        }
-    }
-
-    assert_eq!(
-        exempt_seen.len(),
-        exempt.len(),
-        "the exemptions for `{needle}` name {exempt:?} but the walk only reached \
-         {exempt_seen:?} — a moved or renamed entry pre-authorises whatever takes its path next"
-    );
-    offenders
-}
-
-/// A URL scheme tested by prefix, in the substring both spellings share.
-const RAW_SCHEME_TEST: &str = "starts_with(\"http";
-
-/// Nobody, this one included: the needle carries a quote, so the declaration above spells it `\"`
-/// in the source and cannot match itself the way [`RAW_BODY_READ`]'s does.
-const SCHEME_EXEMPT: [(&str, usize); 0] = [];
-
-/// Four sites tested a scheme by prefix — a station's website field, its logo URL, a `.pls`/`.m3u`
-/// line and an import line — and two admitted a bare `http://`, which names no host; on the import
-/// path that became a row. [`super::http_url`] is the one parse now, and only a corpus walk can
-/// see a fifth copy: a prefix test reads as ordinary code and is wrong only on input nobody types
-/// by hand.
-#[test]
-fn nothing_tests_a_url_scheme_by_prefix() {
-    let raw = spellings_outside(RAW_SCHEME_TEST, &SCHEME_EXEMPT);
-
-    assert!(
-        raw.is_empty(),
-        "{raw:?} test a URL's scheme by prefix — use `services::http_url`, whose parse also \
-         rejects a scheme naming no host"
-    );
-}
-
-/// The streamed body read [`super::read_capped`] owns.
-const RAW_BODY_READ: &str = "bytes_stream()";
-
-/// Where it may appear, and how often. Paths are relative to [`SRC_DIR`].
-const BODY_READ_EXEMPT: [(&str, usize); 3] = [
-    ("services/mod.rs", 1),
-    // The updater's download, and a genuinely different shape: it streams to a file and reports
-    // progress rather than collecting a capped `Vec` in memory.
-    ("services/updater/install/download.rs", 1),
-    // This pin.
-    ("services/tests/mod_tests.rs", 1),
-];
-
-/// Five bounded fetches each had their own copy of the stream-under-a-cap loop, and one of them
-/// (the artist image) was a `bytes()` measured afterwards — which had already allocated whatever
-/// the host sent. A sixth copy is invisible in review, so it is walked for rather than reviewed.
-#[test]
-fn every_capped_body_read_goes_through_the_shared_one() {
-    let raw = spellings_outside(RAW_BODY_READ, &BODY_READ_EXEMPT);
-
-    assert!(
-        raw.is_empty(),
-        "{raw:?} stream a response body themselves — use `services::read_capped`, which refuses \
-         as soon as the body crosses the caller's cap"
-    );
-}
 
 /// The setters that spell a thread name: `std::thread::Builder`'s, and the fixed-string form
 /// tokio's and rayon's builders share. Anchored on the setter rather than on `Builder::new()`,
@@ -610,7 +398,7 @@ const MSI_EXTENSION_KEYS: [&str; 2] = [
 ];
 
 /// Windows offers a file type only where `main.wxs` writes the rows for it, and there is no glob
-/// there any more than for the licences — so a new entry in [`crate::media::AUDIO_EXTENSIONS`]
+/// there any more than for the licences — so a new entry in [`crate::utils::audio_ext::AUDIO_EXTENSIONS`]
 /// is one the app imports happily and Explorer never offers.
 ///
 /// A walk rather than a list, and comment-stripped first, both for
@@ -623,7 +411,7 @@ fn the_msi_offers_every_audio_extension() {
     let wxs = strip_xml_comments(&raw);
 
     let mut unoffered = Vec::new();
-    for ext in crate::media::AUDIO_EXTENSIONS {
+    for ext in crate::utils::audio_ext::AUDIO_EXTENSIONS {
         for key in MSI_EXTENSION_KEYS {
             if !wxs.contains(&format!("Key=\"{key}\" Name=\".{ext}\"")) {
                 unoffered.push(format!(".{ext} under {key}"));

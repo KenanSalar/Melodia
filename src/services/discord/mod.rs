@@ -133,7 +133,7 @@ impl DiscordPresenceService {
     /// Resolve an album cover URL for the presence card's `large_image`, cache
     /// first. Driven by the detector task on a track change only.
     pub async fn resolve_artwork(&self, artist: &str, album: &str) -> Option<String> {
-        let client = self.http.get_or_init(crate::services::build_http_client).clone();
+        let client = self.http.get_or_init(crate::services::net::build_http_client).clone();
         artwork::resolve_album_cover(&client, &self.artwork_cache, artist, album).await
     }
 

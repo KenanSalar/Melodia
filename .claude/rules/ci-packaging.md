@@ -223,7 +223,7 @@ work, and the two shipped apart for a whole release.
   Win10/11 reads for Default apps), and `Extension` claims `HKCR\.mp3`'s default outright.
   **`ApplicationDescription` is required** — without it the app is absent from that list and every
   key under it unreachable. `MultiSelectModel=Player` hands a whole selection to one invocation.
-  `the_msi_offers_every_audio_extension` walks `media::AUDIO_EXTENSIONS` against the
+  `the_msi_offers_every_audio_extension` walks `utils::audio_ext::AUDIO_EXTENSIONS` against the
   comment-stripped wxs, the one format no Linux runner builds.
 
 ## Licences — every format ships `licenses/`, and the five spellings are pinned by name

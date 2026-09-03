@@ -109,7 +109,7 @@ async fn decode_search<T: serde::de::DeserializeOwned>(
         return Ok(DeezerAnswer::HttpStatus(status));
     }
 
-    let body = crate::services::read_capped(response, what, MAX_SEARCH_BYTES).await?;
+    let body = crate::services::net::read_capped(response, what, MAX_SEARCH_BYTES).await?;
 
     classify(&body, what)
 }
@@ -236,7 +236,8 @@ pub async fn download_and_cache_artist_image(
     // Streamed under the cap rather than `bytes()`-ed and measured afterwards: the header check
     // above is only as good as the header, and a host that omits or understates it had already
     // been allocated in full by the time the old check could refuse it.
-    let bytes = crate::services::read_capped(response, "Artist image", MAX_IMAGE_BYTES).await?;
+    let bytes =
+        crate::services::net::read_capped(response, "Artist image", MAX_IMAGE_BYTES).await?;
 
     // Through the shared store so an artist image is bounded and deduplicated exactly as a cover
     // is. Deezer serves these at a fixed 250 px, so the bounds don't fire today — what matters is

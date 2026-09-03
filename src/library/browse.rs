@@ -6,8 +6,8 @@ use crate::entities::browse::{BrowseFile, BrowseFolder, BrowseResult};
 use crate::entities::folder::Folder;
 use crate::entities::track::TrackListRow;
 use crate::error::AppError;
-use crate::media::is_audio_extension;
 use crate::state::AppState;
+use crate::utils::audio_ext::is_audio_extension;
 
 /// Result of the blocking filesystem scan, returned from `spawn_blocking`.
 struct DirScanResult {

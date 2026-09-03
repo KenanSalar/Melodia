@@ -172,7 +172,7 @@ async fn open_and_start_station(
     station: &Arc<RadioNowPlaying>,
     generation: u64,
 ) -> Result<(), AppError> {
-    let client = ctx.http.get_or_init(crate::services::build_http_client).clone();
+    let client = ctx.http.get_or_init(crate::services::net::build_http_client).clone();
     let opened = stream_source::open(&client, &station.stream_url).await;
 
     match opened {

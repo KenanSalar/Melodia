@@ -138,7 +138,7 @@ pub fn drop_runtime_in_background(runtime: tokio::runtime::Runtime) {
 ///
 /// Which binary is `window_chrome::respawn_target`'s answer: the path the
 /// updater recorded before its install swapped the file, else the running one
-/// through `services::current_exe` — so a package upgrade mid-session can't hand
+/// through `utils::exe::current_exe` — so a package upgrade mid-session can't hand
 /// back the `<path> (deleted)` the kernel appends to an unlinked executable.
 ///
 /// **Unix** — `CommandExt::exec` (`execvp`) replaces the process atomically:

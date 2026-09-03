@@ -5,13 +5,18 @@ order the cuts come out in. Harvest into `docs/adr/` when
 [#84](https://github.com/KenanSalar/Melodia/issues/84) ships, not before: the boundary rationale
 below is exactly what #84 exists to stop evaporating.
 
-Status: **Phase A complete**, Phase B next · Issue:
+Status: **Phase A complete**, Phase B in progress · Issue:
 [#83](https://github.com/KenanSalar/Melodia/issues/83) · Created: 2026-09-03 · Validated against
 `93b47dfa`, Phase A landed on `a1c087e4`
 
 > **Phase A's twelve items are done and its checks pass**, so the counts below that describe
 > `src/` describe the tree *before* it. Where a Phase B item's inventory has moved, its own entry
 > says so and carries the remeasured one; nothing else here has been re-derived.
+
+> **Phase B was re-read against the tree before its first commit**, and the pass moved four crate
+> boundaries, corrected ten claims and found four edges no item carried. The Phase B items below
+> are the rewritten ones, renumbered into the order they land in; findings 18 to 21 carry what had
+> no item at all. The After-A checks were re-run on that same read and all six still pass.
 
 > The issue body carries the argument for *why* a workspace. This doc carries what a read of the
 > tree found that the body does not, and it is the source [#84](https://github.com/KenanSalar/Melodia/issues/84)
@@ -48,8 +53,9 @@ cut is cheapest; the edges decide the shape of the graph.
 
 Four edges the issue's table omits, each a real call and not a doc link:
 
-- `media/metadata.rs:248` calls `player::file_decode::probe_duration`, so **store depends on audio**.
-  It is the sole edge `media/` has into that directory, which `src/player/CLAUDE.md` already says.
+- `media/metadata.rs:212` calls `player::file_decode::probe_duration`, so **store depends on audio**.
+  It is the sole edge `media/` has into that directory, which `src/player/CLAUDE.md` already says,
+  and the sole edge `media/` has into anything but `entities`, `error`, `services` and itself.
 - `station_logo.rs:140` and `deezer.rs:245` call `artwork::store_image`, so **net depends on artwork**.
 - `scanner.rs:52` and `metadata.rs:178` take `&artwork::CoverCache`, so **store depends on artwork**.
 - `services/artist_images.rs:9-12` names `database::{DbPool, queries}` *and* `media::deezer`, so a
@@ -59,7 +65,7 @@ Four edges the issue's table omits, each a real call and not a doc link:
 Four files outside `src/ui/` name `crate::AppWindow`, not the two the issue lists: `themes/apply.rs:8`,
 `tasks/updater_daily.rs:47`, `tasks/rss_sampler.rs:47` and `services/dwm_titlebar.rs:24`
 (Windows-gated). Two of the four survive the plan below: `updater_daily`, which lands in app and may
-name it, and `dwm_titlebar`, which lands in platform and may not, so B8 narrows it.
+name it, and `dwm_titlebar`, which lands in platform and may not, so B4 narrows it.
 
 And the three-way `media/` split has a hole: `mod.rs` declares 14 modules and the issue's tiers name
 13. `rating_tags.rs` is unassigned and belongs with ingest. Going the other way,
@@ -220,6 +226,49 @@ Ranked by how quietly they fail.
 17. **Nothing in the gate runs `cargo doc`.** The 162 bracketed intra-doc links that will stop
     resolving degrade silently to plain text rather than failing. Either accept that explicitly or
     add a `cargo doc` step, but do not leave it unstated.
+18. **`media_controls` cannot be platform, and the reason it is not is that it is the shape of
+    Discord.** `media_controls/mod.rs:11-14` names four `crate::player::` types
+    (`EventSink`/`MediaControlsSync`/`PlayerEvent`, `SourceSummary`, `PlayerViewModelLight`,
+    `PlaybackStatus`) and `:334` calls `player::state::volume_to_amplitude`, so a
+    `melodia-platform` that owns it depends on engine, and with it on playback and cpal, under
+    every crate that leans on platform for a tray icon. The placement that costs nothing is
+    already in the graph: publish now-playing state to a surface outside the app, take transport
+    commands back, is exactly what `discord/` does, and `integrations -> engine` is an edge that
+    exists. **`media_controls` is an integration.** `always_on_top/` reads as the same problem and
+    is not: its `&AppState` (`mod.rs:129`, `kwin.rs:21`) is two field reads,
+    `state.paths.data_dir` and `state.always_on_top.method`, so narrowing the two parameters
+    leaves a clean platform module rather than moving it.
+19. **The updater is a feature, and splitting it four ways to satisfy a layer diagram is the
+    abstraction this doc's own stopping rule forbids.** `melodia-app` depends on net, platform and
+    core, so an updater living whole in app violates nothing, and `install/` is a four-file
+    sequence (download, staging, verify, swap) whose cohesion is real. What does have to leave is
+    what has a *second consumer*, which is the only evidence that separates a platform primitive
+    from a feature's internals: `crash_report.rs:198` and `desktop_integration.rs:32` both reach
+    `updater::{target::current_target_key, install_target, linux_pkg}`. That set closes under
+    `probe` and `system_install` and under nothing else, so **`{install_target, target, linux_pkg,
+    probe, system_install}` goes to platform as `install_kind` and the rest of `updater/` stays
+    together in app**. Three of the first pass's per-file calls were wrong besides: `manifest.rs`
+    is core rather than net (`serde` and `HashMap`, no `reqwest`), `probe.rs` is platform rather
+    than core (`create_new` plus `process::id()`), and `asset_cache.rs` was unlisted and is core.
+    The directory holds 16 source files, not 24.
+20. **`melodia-views` names `melodia-integrations`, and the graph should say so.**
+    `ui/settings/discord_settings.rs:18` takes `DiscordStatus`, and
+    `ui/settings/scrobbling_settings.rs:26-27` takes `providers::{lastfm, listenbrainz}` plus four
+    more types, then drives the whole Last.fm and ListenBrainz connect flow inline
+    (`get_token`, `get_session`, `validate_token`). Routing that through an app-layer facade would
+    buy one manifest line and cost a wrapper whose only purpose is the diagram. Views already
+    depends on app, app already depends on integrations, so the edge closes no cycle and adds no
+    reach: **the graph gains `views -> integrations`.**
+21. **Three leaf predicates sit one layer above where anything needs them.** `is_dev_build` is
+    called from `config.rs:73`, so **`melodia-core` names `melodia-services` today**, which is a
+    cycle no item in the first pass records. `media::is_audio_extension` is a dependency-free
+    `eq_ignore_ascii_case` fold that `services/single_instance.rs:31` reaches for, and it is that
+    file's only `crate::` path of any kind. `media/self_writes.rs` has no `crate::` import at all
+    and only `parking_lot`, and its consumers are `library/{mbid,tags}.rs` and
+    `tasks/file_event_processor/`, so it is grouped with the lofty-heavy ingest modules by
+    adjacency rather than by membership. All three belong in core, and moving them also clears
+    three test-only edges the tiers cannot carry (`player/tests/file_decode_tests.rs:61` and
+    `services/tests/mod_tests.rs:613,626` both read `media::AUDIO_EXTENSIONS`).
 
 **Survives untouched**, verified, so no work is planned for it: the four `[workspace.package]`
 version scrapes (they anchor on `^\[`, so the `[package]` table vanishing is fine),
@@ -234,15 +283,18 @@ code already has rather than on an abstraction invented to satisfy the split.
 
 ```
 melodia-core          error, config, entities (+ the boundary DTOs), utils,
-                      describe, atomic json/text writers                   -> nothing
+                      describe, atomic json/text writers, the binary-path
+                      and home-redaction pair, is_audio_extension,
+                      self_writes                                          -> nothing
 melodia-testkit       env lock, path anchors, corpus walkers               -> nothing (dev-dep of all)
 melodia-artwork       artwork/, cover_thumbs, image_decode, logo_tile,
                       material_you                                         -> core, slint
 melodia-net           http primitives, 4 fetchers, radio_browser,
-                      radio_blocklist + its bake, updater's net half       -> core, artwork
-melodia-platform      tray, media keys, single_instance, logging,
-                      crash_report, system_theme, dwm_titlebar, palette
-                      derivation, updater's platform half                  -> core
+                      radio_blocklist + its bake                           -> core, artwork
+melodia-platform      tray, single_instance, allocator, logging,
+                      crash_report, system_theme, desktop_integration,
+                      always_on_top, dwm_titlebar's lower half, palette
+                      derivation, the updater's install-kind sliver        -> core
 melodia-audio         audio.rs vocabulary, decode, file/stream/hls
                       sources, aac                                         -> core, net
 melodia-playback      output device/mixer/convert, EQ, ReplayGain,
@@ -251,13 +303,16 @@ melodia-playback      output device/mixer/convert, EQ, ReplayGain,
 melodia-engine        PlayerState, queue, actions, handlers, types,
                       now_playing, event_sink, backend                     -> core, audio, playback
 melodia-store         database/, scanner, metadata, watcher, tag_writer,
-                      rating_tags, self_writes                             -> core, artwork, audio
-melodia-integrations  scrobble, discord, and load_dotenv with them         -> core, net, engine
+                      rating_tags                                          -> core, artwork, audio
+melodia-integrations  scrobble, discord, media_controls, and load_dotenv
+                      with them                                            -> core, net, engine
 melodia-app           library/, tasks/, state/, settings, view_state,
-                      artist_images, updater orchestration                 -> all above, melodia-ui
-melodia-views         src/ui/, themes::apply                               -> app, engine, playback,
+                      artist_images, diagnostics, the updater whole but
+                      for its install-kind sliver                          -> all above, melodia-ui
+melodia-views         src/ui/ (incl. the brush half of themes::apply)      -> app, engine, playback,
                                                                               artwork, platform,
-                                                                              core, melodia-ui
+                                                                              integrations, core,
+                                                                              melodia-ui
 melodia (bin)         main, boot/, shutdown, tests/                        -> views, app
                       [[bin]] name = "Melodia"
 ```
@@ -270,6 +325,11 @@ Deltas from the issue: audio sits below store rather than beside it; artwork is 
 store and views rather than being their peer; the single `melodia-audio` becomes three crates;
 scrobble and Discord become their own crate because `load_dotenv` forces it; `themes` splits so
 platform no longer carries `melodia-ui`; and `melodia-testkit` is a leaf rather than a cycle.
+
+Four further deltas, each from a code edge the first pass did not walk, argued as findings 18 to 21:
+`media_controls` is an integration rather than a platform service, the updater stays whole in app
+but for one sliver, `melodia-views` names `melodia-integrations`, and core grows the three leaf
+predicates that were sitting one layer too high.
 
 ### Why the audio stack is three crates and not one
 
@@ -359,10 +419,14 @@ The issue puts `themes` in app and an earlier draft of this doc put it in platfo
 that has no business drawing anything carry `melodia-ui`. The seam is inside the directory. Palette
 computation (the registry, the `kdeglobals` and Material You derivations, `on_accent_hex`) names no
 Slint type. `apply.rs` is 260 lines and is the only half that does, importing `crate::AppWindow` at
-`:8` and writing 19 brushes at `:133`. Palette to platform, `apply` to views. That leaves three
-non-views `AppWindow` namers: `tasks/rss_sampler.rs`, which A2 removes; `tasks/updater_daily.rs`,
-which lands in app and may keep it; and `services/dwm_titlebar.rs`, which lands in platform and may
-not. B8 narrows the third, and only with it does `melodia-platform` depend on core alone.
+`:8` and `crate::Theme` at `:9`, and writing 19 brushes at `:133`. Palette to platform, the brush
+half to views. **The seam is inside `apply.rs` too, not only inside the directory**: about 55 of its
+lines are palette computation with no Slint type in any signature, `on_accent_hex` among them, which
+is why B3 is a three-way split and `themes/tests/apply_tests.rs` (already gated to the
+`palette_from_kde` half) travels with them. That leaves three non-views `AppWindow` namers:
+`tasks/rss_sampler.rs`, which A2 removes; `tasks/updater_daily.rs`, which lands in app and may keep
+it; and `services/dwm_titlebar.rs`, which lands in platform and may not. B4 narrows the third, and
+only with it does `melodia-platform` depend on core alone.
 
 ### What is deliberately not split
 
@@ -444,7 +508,8 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
 
       **The flagship exclusion now holds**: `grep -rn 'crate::media' src/ui/` returns only
       `cover_thumbs`, `artwork` and `image_decode`. `UnsupportedFields` is a fifth companion type
-      the item does not assign; it is named nowhere outside `media/`, so it stays for B3.
+      the item does not assign; it is named nowhere outside `tag_writer.rs` itself, so B5 leaves it
+      there.
 - [x] **A5. Persistence and the toast bridge leave `player/`.** Three moves:
       - ~~Install `play_count_flusher` in the test contexts that need it, then~~ delete the two
         direct-UPDATE fallbacks. **There was no such test context** — nothing anywhere runs
@@ -562,62 +627,149 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
 
 ## Phase B: reshape in place, still one crate
 
-- [ ] **B1. Split monolithic `services/mod.rs`.** **Remeasured after A6: 285 lines, not 376, and
-      the split is now 7 net against 4 core rather than nine and seven.** A6 already took
-      `describe` and `load_json_or_default{,_sync}` / `write_{json,text}_atomic_sync`, so what is
-      left of the core half is `current_exe`, `is_dev_build`, `redact_home` and `home_dir_string`
-      (plus the private `undeleted_exe` and `redact_prefix` each is the pure half of). The net half
-      is untouched: `build_http_client`, `http_url`, `is_http_url`, `is_http`, `get_capped`,
-      `get_capped_text`, `read_capped`.
+Every file ends up in the sub-module of the crate that will own it, while the tree stays one crate
+and stays green. **The shape is sub-modules under the directories that already exist**, not new
+top-level ones: `services/{net,platform,integrations}/`, `media/{image,ingest,fetch}/`,
+`player/{source,engine}/` beside the `output/` that is already the worked example. Phase C's
+`git mv src/services/net crates/melodia-net/src` is no less mechanical for it, the crates and the
+directories do not nest alike anyway, and it is what keeps every `src/<dir>/**/*.rs` rule glob
+matching so only the literal-path ones need editing.
 
-      Still the **hard prerequisite for everything else** — all four media fetchers plus
-      `radio_browser`, both scrobble providers, `updater/github` and `player/hls/` depend on the
-      net half, and those five `player/hls/` and `stream_source` lines are the whole of what the
-      After-A check still allows out of `src/player/`.
+Renumbered into landing order, so nothing moves twice. Each is its own commit, and each ends green
+on `cargo clippy --all-targets --locked -- -D warnings` then `cargo test --locked`.
 
-      **The core four have a home now**: `src/utils/`, which A6 created and A5b filled out. So B1
-      is a move into an existing module rather than the invention of one.
-- [ ] **B2. `services/` regroups into net, platform, integrations and app.** `updater/`'s 24 files
-      straddle all of them and do not move wholesale: net is `check`, `github`, `manifest`,
-      `install/download`; platform is `target`, `linux_pkg`, `system_install`,
-      `install/{staging,verify,swap}`; core is `minisign`, `version`, `probe`; the rest is
-      orchestration. `scrobble/` and `discord/` go to integrations together (finding 5).
-      `artist_images.rs` goes to app, not net (finding, `What validation changed`). `diagnostics.rs`
-      names `database` and `state`, so it is app too.
+**`test_support_tests::every_path_a_rule_names_still_matches_something` is this phase's automatic
+gate.** Nine rules name a `src/services/…` or `src/media/…` path literally, so most items below
+turn it red; the fix is the glob edit in the same commit, never a skip. That is A10 working.
 
-      Two changes out of Phase A: **`toast.rs` is no longer in this directory** — A5b moved it
-      whole to `utils::toast`, being producer end to end — and **`allocator.rs` is new and is
-      platform**, holding the two glibc knobs and being the only module that may name `libc`.
-- [ ] **B3. `media/` regroups three ways.** Image tier, ingest, fetchers. Assign `rating_tags.rs` to
-      ingest, and pull `services/material_you.rs` into the image tier. A4b left `tag_writer` and
-      `station_logo` holding only their writers, their types now being `entities`'; that changes
-      neither file's tier, and `UnsupportedFields` is the one type left here to place.
-- [ ] **B4. `single_instance.rs:31`'s `crate::media::is_audio_extension`** is the one import between
-      that file and a dependency-free platform module. Take the predicate to core — `src/utils/`,
-      which now exists.
-- [ ] **B5. Move the cross-tier size assertions out of the image tier.**
-      `media/artwork/tests/artwork_tests.rs:119-121` reach `ui::grid_prewarm` and `ui::util` to check
-      `STORE_MAX_DIM` against the UI's cover tiers. They cannot compile inside a leaf crate, so they
-      become integration tests under `crates/melodia/tests/`.
-- [ ] **B6. `themes/` splits palette from apply**, per the graph section. `apply.rs` is the views
-      half; everything else is the platform half.
-- [ ] **B7. `player/` regroups into `source`, `output` and `engine` modules** ahead of the manifests,
-      so the three-way extraction in Phase C is a move rather than a design decision made under a
-      compile error. `output/` already exists and needs no change, and A8 already put the numeric
-      trio in `audio.rs`, so the one wrong-direction edge inside the directory is gone before the
-      regroup starts. What A5 leaves for it: the engine tier's only remaining outbound edges are
-      the five HTTP primitive calls, all in the source tier's `hls/` and `stream_source`, which is
-      the seam the three-way cut wants anyway.
-- [ ] **B8. `dwm_titlebar` splits, and only its lower half is platform.** `apply`
-      (`services/dwm_titlebar.rs:41`) needs a window handle and a `u32` colour, and `win32_hwnd` at
-      `:76` is the only reason *it* names `crate::AppWindow`: a `WinitWindowAccessor` hop the caller
-      can do. `reapply_from_theme` at `:50` does not follow it down, because it reads `Theme.mantle`
-      back off the Slint global and so names `crate::Theme` as well; that half belongs in views
-      beside `themes::apply`. Both callers already sit above platform (`main.rs:466`, and
-      `themes/apply.rs:171`, which has `p.mantle` in hand and needs no read-back), so nothing has to
-      be threaded. Moving the hop is what keeps `melodia-platform` off `melodia-ui`, and it is
-      invisible on the two platforms it does not compile on, so it lands before the manifests rather
-      than under one.
+- [x] **B0. This pass.** Findings 18 to 21, ten corrections folded into the items below, the graph
+      redrawn, and the After-A checks re-run. Docs only.
+- [x] **B1. Split monolithic `services/mod.rs`, 285 lines, 7 net against 4 core.** The hard
+      prerequisite for the rest: all four media fetchers, `radio_browser`, both scrobble providers,
+      `updater/github` and `player/hls/` depend on the net half, and those five `hls/` and
+      `stream_source` lines are the whole of what the After-A check still allows out of
+      `src/player/`.
+      - **Core half to `src/utils/`, as two modules rather than one grab-bag.** `utils/exe.rs`
+        takes `current_exe`, `is_dev_build` and the private `undeleted_exe`; `utils/redact.rs`
+        takes `redact_home`, `home_dir_string` and the private `redact_prefix`. Roughly 18 call
+        sites. **This is what deletes finding 21's `config` to `services` cycle**, and the one
+        `super::` spelling of any of the thirteen (`desktop_integration.rs:71`).
+      - **Net half to `src/services/net/`**, a directory from the first commit so B6 only adds
+        siblings. Roughly 24 call sites, `read_capped` carrying 12 of them. All four
+        `build_http_client` uses are `OnceLock::get_or_init` *function references*, so it stays a
+        plain `fn` path rather than becoming a method.
+      - **The test module splits three ways, and its shared helper decides where.**
+        `services/tests/mod_tests.rs` is 733 lines and is two files: eight unit tests plus the
+        `current_exe` corpus walk are the core half, two corpus walks are the net half, and the
+        remaining ~500 lines (9 tests, 7 helpers, 9 consts) walk packaging, CI workflows, the
+        bundled fonts and thread-name length, answering nothing about `services` at all. **The
+        three corpus walks share `spellings_outside` (`:148`), which has no dependency on either
+        half, so it hoists into `test_support`** rather than being copied twice; that is the leaf
+        `melodia-testkit` becomes. The tree walks stay where they are for now under a name that
+        says what they are, since finding 8's one-home question is Phase D's.
+      - Two exemption tables hard-code `SRC_DIR`-relative paths this item invalidates (`EXEMPT`
+        `:117`, `BODY_READ_EXEMPT` `:204`). Both assert their exemptions were *reached*, so a
+        stale path fails loudly. `hls/playlist.rs:189`'s explicit intra-doc link alias breaks too.
+
+      **The rules-glob pin stayed green and that is the one thing it could not have caught.**
+      `diagnostics.md` names `src/services/mod.rs`, which still exists and now holds nothing but
+      module declarations, so the glob matched a file that had stopped carrying what the rule
+      describes. A path that moves fails loudly; a path whose *contents* move does not, and the
+      only defence is reading the frontmatter of every rule an item touches. It now names
+      `src/utils/redact.rs`.
+
+      Nine prose references outside the code went stale with the move and are fixed here rather
+      than left for Phase D, four of them prohibitions in the root `CLAUDE.md`: the two corpus
+      walks are `utils::exe`'s and `services::net::tests`' now, not `services::tests`'.
+- [x] **B2. The three leaf predicates go to core** (finding 21). `AUDIO_EXTENSIONS` and
+      `is_audio_extension` from `media/mod.rs` to `utils/audio_ext.rs`, and `media/self_writes.rs`
+      to `utils/self_writes.rs`. Five call sites for the first, four for the second. It lands
+      beside B1's new `utils/` work and clears three things at once: `single_instance.rs:31`,
+      after which the only `crate::` path that file holds points at core rather than at store,
+      and the two test-only reads of `AUDIO_EXTENSIONS` from `player/` and `services/`.
+
+      **`library-data.md` is the second rule whose globs had to follow its prose**, for
+      B1's reason: it argues both the extension predicate and `SelfWrites`, and named only
+      `src/media/**`. The pin cannot see that either, both files having existed all along.
+- [ ] **B3. `themes/` splits three ways, not two.** The first pass had `apply.rs` as the views half
+      whole, and it is not: it also names `crate::Theme` at `:9`, and it carries about 55 lines of
+      pure palette computation the graph section already calls palette. `parse_hex_color` (`:94`),
+      `palette_from_kde` (`:108`), `LUMA_R/G/B/THRESHOLD` (`:229`) and `on_accent_hex` (`:246`)
+      move into `themes/palette.rs`, which today has zero `use` lines, taking
+      `themes/tests/apply_tests.rs` with them and ending `registry_tests.rs:6`'s cross-half import.
+      What is left is `write_palette`'s 19 brushes, `accent_brushes` and the six brush/colour
+      converters, and it goes to `src/ui/appearance/theme_apply.rs` beside its only production
+      caller (`ui/appearance/mod.rs:104`). **`themes/mod.rs:34-37` inverts**: the palette half
+      stops re-exporting the Slint half upward, and the seven `crate::themes::{brush,color,…}`
+      importers under `src/ui/` re-point. `ui/tests/hero_backdrop_tests.rs:490-513`, the walk
+      enforcing that `themes::apply(` has exactly one caller, re-anchors with them.
+- [ ] **B4. `dwm_titlebar` splits, and the duplicate `win32_hwnd` collapses with it.** Six
+      functions, not four: `set_immersive_dark` (`:92`) and `set_caption_color` (`:124`) are the
+      actual FFI bodies and take only `*mut c_void` plus a scalar, so they follow `apply` down
+      unchanged. The platform half is those two, `is_dark_from_rgb`, and an
+      `apply(hwnd, caption_rgb)`; `reapply_from_theme` reads `Theme.mantle` back off the global
+      and joins `ui/appearance/theme_apply.rs` from B3. **`win32_hwnd` exists twice**, at `:76` and
+      again at `main.rs:500` for souvlaki's SMTC attach, with identical bodies and no import
+      relationship. One survives, in `ui/window_chrome/`, serving `theme_apply` and `main.rs:415`
+      both: doing the `WinitWindowAccessor` hop once rather than twice is the point of moving it at
+      all. The file is **not** `cfg`-gated at the module level (`services/mod.rs:10` declares it
+      unconditionally), so check the manifest rather than assuming a `cfg` will catch a mistake.
+      Its caller is `main.rs:446`, not `:466`.
+- [ ] **B5. `media/` regroups three ways**, into `media/{image,ingest,fetch}/`:
+      `image/` is `artwork/`, `cover_thumbs`, `image_decode`, `logo_tile` and
+      `services/material_you.rs` pulled in (~2,190 lines, and the only tier with no outbound
+      `crate::` edge at all); `ingest/` is `scanner`, `metadata`, `watcher`, `tag_writer` and
+      `rating_tags` (~1,180); `fetch/` is `deezer`, `itunes`, `station_logo` and `logo_discovery`
+      (~670, every one a caller of B1's net primitives). `self_writes` has already gone to core in
+      B2. **`UnsupportedFields` answers its own question**: it is named nowhere outside
+      `tag_writer.rs`, so it stays there at no call-site cost. `logo_tile` stays in the image tier
+      although `station_logo` is its only consumer anywhere, since net already depends on artwork
+      and the alternative puts pixel composition in the crate that owns sockets.
+      `media/tests/image_decode_tests.rs:31` pins `EXEMPT = "services/material_you.rs"` as an
+      equality, so the `material_you` move breaks it by design.
+- [ ] **B6. `services/` regroups into net, platform, integrations and app.** The largest item, and
+      three of its four groups changed under findings 18 and 19.
+      - **`net/`**: B1's primitives, `radio_browser/`, `radio_blocklist/` with its bake left wired
+        as it is until Phase C.
+      - **`platform/`**: `allocator`, `tray/`, `logging`, `crash_report`, `single_instance` (a leaf
+        after B2), `system_theme`, `desktop_integration`, `always_on_top/` with its two `&AppState`
+        parameters narrowed to `&Paths` and the cached method, B4's lower half of `dwm_titlebar`,
+        and the updater's closed sliver as `install_kind/` (`install_target` folded in from
+        `updater/mod.rs`, plus `target`, `linux_pkg`, `probe`, `system_install`).
+      - **`integrations/`**: `scrobble/`, `discord/` and **`media_controls/`**, the three that will
+        share the crate `load_dotenv` owns.
+      - **App remainder, flat at `src/services/`**: `settings/`, `view_state.rs`,
+        `search_history.rs`, `artist_images.rs`, `diagnostics.rs`, and `updater/` whole but for the
+        sliver. `artist_images` is app rather than net because it orchestrates rather than fetches,
+        and `diagnostics` because it names `database` and `state`.
+      Five rules name a moved file literally and are edited in this commit: `blake3.md` and
+      `updater.md` (`desktop_integration`), `desktop-shell.md` (`tray`, `media_controls`,
+      `always_on_top`, `dwm_titlebar`), `diagnostics.md` (`logging`, `crash_report`, and
+      `services/mod.rs` from B1), `radio.md` (`radio_browser`).
+- [ ] **B7. The cross-tier assertions leave the tiers that cannot hold them.** Four tests, not one,
+      reach upward across a boundary they will not be able to cross, so all four become integration
+      tests under `tests/` where Phase D is taking the corpus walks anyway.
+      `media/artwork/tests/artwork_tests.rs:118` needs `ui::grid_prewarm::cover_size` as a
+      *function* over a 9x5 sweep, so it cannot reduce to a `const _` assertion, and
+      **`STORE_MAX_DIM` is `pub(crate)`** so it widens to `pub` with the move.
+      `services/tests/view_state_tests.rs:120` reaches `ui::radio::NAV_RADIO`;
+      `services/tests/dwm_titlebar_tests.rs` takes its oracle from `themes::apply::on_accent_hex`,
+      which B3 puts in views, so a platform test would be reading views; and
+      `media/tests/image_decode_tests.rs:43` walks `SRC_DIR` under two repo-relative literals B5
+      has already touched.
+- [ ] **B8. `player/` regroups into `source`, `engine` and the `output` that already exists**, so
+      the three-way extraction in Phase C is a move rather than a design decision made under a
+      compile error. **Verified clean to cut**: zero wrong-direction `use` edges in all three
+      directions, A8 having taken the last one (`file_decode.rs` now reads `frames_in`,
+      `frames_to_duration` and `interleaved` from `audio.rs`). Tiers measure 3,523 / 4,463 / 3,650
+      production lines. Two things it owes beyond the moves. **Six intra-doc links cross a tier
+      upward** and would degrade to plain text rather than failing (`audio.rs:6` and `:23`,
+      `prebuffer.rs:15`, `crossfade.rs:132` and `:352`, `visualizer.rs:336`); re-word them rather
+      than re-pointing them, since pointing up is the whole problem. And **`player/tests/helpers.rs`
+      imports the engine tier** (`state::PlayerViewModelLight`, `types::RadioNowPlaying`) while all
+      three tiers' tests use it, which needs nothing while the tree is one crate and needs an
+      answer in Phase C. `src/player/CLAUDE.md` names about twenty modules by bare filename and
+      every one takes its tier prefix; `radio.md` names three of them literally.
 
 ## Phase C: extract the crates
 
@@ -715,6 +867,18 @@ Phase boundaries:
   nothing (A7) and `grep -rn 'crate::player' src/entities/` returns nothing (A1). The residue in
   the first two is prose — an intra-doc link to `crate::tasks::audio_health`, and two comments that
   name `DbPool` to say why the engine holds none — which finding 17's `cargo doc` gap covers.
+  **Re-run before Phase B's first commit and all six still passed.**
+- After **B**, the After-A set again, plus one grep per boundary the phase draws. Each is
+  `grep -rn`, each must return nothing but prose:
+  `crate::services::\(is_dev_build\|current_exe\|redact_home\|home_dir_string\)` over `src/` (B1);
+  `crate::` over `src/services/single_instance.rs`, which ends the phase naming none (B2);
+  `slint\|AppWindow\|crate::Theme` over `src/themes/` (B3); `fn win32_hwnd` over `src/`, which must
+  count **one** (B4); `crate::services\|crate::player` over `src/media/image/` (B5);
+  `crate::state\|crate::player` over `src/services/platform/` and
+  `crate::services::net` over `src/services/{platform,integrations}/` (B6); and
+  `use super::\(output\|state\|backend\|decks\)` over `src/player/source/` (B8).
+  Nothing here is measured: no release build, no `/usr/bin/time -v`. The phase moves modules and
+  changes no behaviour, and a module boundary costs the binary nothing.
 - After **C**: delete a `path` dependency from one manifest and confirm rustc names the crate in the
   error. **The `melodia-views` manifest must list neither `melodia-store` nor `melodia-net`**, the
   `melodia-audio` manifest must not name `cpal`, and `melodia-platform` must not name `melodia-ui`.

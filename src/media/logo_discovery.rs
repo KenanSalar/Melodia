@@ -15,7 +15,7 @@
 
 use crate::error::AppError;
 use crate::media::station_logo::{LOGO_REQUEST_TIMEOUT, fetchable_url};
-use crate::services::read_capped;
+use crate::services::net::read_capped;
 
 /// Ceiling on the page read. A `<head>` that has not named an icon inside this much markup is not
 /// going to; the cap is what stops a site streaming a document into a station refresh.

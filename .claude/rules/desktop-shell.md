@@ -61,7 +61,7 @@ the OS owns has to be attached late or not at all on at least one platform.
   `ToastKind::RestartRequired`; every caller has persisted its setting by then, so a toast asking
   the user to close and reopen is an honest answer — the change lands on the next manual launch.
   `respawn_target()` is the updater's recorded pre-swap path (`set_respawn_exe`) if there is one,
-  else `services::current_exe()` — the marker-resolving form, so a package upgrade mid-session
+  else `utils::exe::current_exe()` — the marker-resolving form, so a package upgrade mid-session
   can't hand back a `<path> (deleted)` string. Don't inline the flag store + `quit_event_loop` pair
   at a fourth site; outside `window_chrome` you can't, both statics being private, so the rule only
   binds *inside* that module.
@@ -116,7 +116,7 @@ The other way paths arrive from outside, and the one that can arrive before ther
   Matching only the first left *every* Windows relaunch `Claim::Unenforced`: a second window and a
   second writer over one database, on the platform the MSI registers associations for.
   `name_is_taken` is the single place that decides, and **its pure half takes the platform as an
-  argument** — `services::redact_prefix`'s shape, for the same reason. A `cfg!` inside the
+  argument** — `utils::redact::redact_prefix`'s shape, for the same reason. A `cfg!` inside the
   predicate is a branch the Linux gate compiles out and can never exercise, so a
   "simplification" back to one spelling merges green; `name_is_taken_on` is what
   `a_taken_name_is_recognised_in_both_spellings` can ask both ways. A genuine ACL denial takes the

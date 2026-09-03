@@ -16,7 +16,7 @@ use melodia::{
     error::{AppError, AppResult},
     library, services,
     state::AppState,
-    tasks, ui,
+    tasks, ui, utils,
 };
 use slint::ComponentHandle;
 use tokio::sync::watch;
@@ -113,7 +113,7 @@ fn main() -> AppResult<()> {
     // Which root this boot landed on is the one startup fact nothing downstream can infer: a dev
     // build and `MELODIA_DATA_DIR` both move it. The diagnostics bundle carries it as a field of
     // its own; this is the copy a live tail has.
-    log::info!("data directory: {}", services::redact_home(&paths.data_dir.to_string_lossy()));
+    log::info!("data directory: {}", utils::redact::redact_home(&paths.data_dir.to_string_lossy()));
     // The claim happened before there was anywhere to say this.
     if let Some(e) = unenforced_reason {
         log::warn!(

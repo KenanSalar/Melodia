@@ -63,7 +63,7 @@ from `main.rs` without ever opening this file.
 
 - **Replacing the binary under a running process breaks its own path two different ways, and only
   one of them is recoverable after the fact.** An RPM/DEB upgrade *unlinks* `/usr/bin/Melodia` and
-  the kernel marks `/proc/self/exe` `" (deleted)"`; `services::current_exe` resolves that centrally
+  the kernel marks `/proc/self/exe` `" (deleted)"`; `utils::exe::current_exe` resolves that centrally
   (root `CLAUDE.md` argues the rule) and `install_target()` is the single updater consumer. **The
   marker can only appear mid-session** — you cannot exec an unlinked path — so the callers that
   meet one are the late ones: the post-exit respawn, and `spawn_install`'s pre-swap

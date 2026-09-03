@@ -46,7 +46,8 @@ pub async fn search_album_cover(
     }
 
     let bytes =
-        crate::services::read_capped(response, "iTunes album response", MAX_RESPONSE_BYTES).await?;
+        crate::services::net::read_capped(response, "iTunes album response", MAX_RESPONSE_BYTES)
+            .await?;
     let body: ItunesSearchResponse = serde_json::from_slice(&bytes)
         .map_err(|e| AppError::network("Failed to parse iTunes album response", e))?;
 

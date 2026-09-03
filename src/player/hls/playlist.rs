@@ -183,15 +183,15 @@ fn audio_rendition(list: &str, base: &Url) -> Option<Url> {
 /// **Every URI in a playlist is resolved here**, including the bare lines that name a variant or a
 /// segment. `Url::join` hands an absolute URI back unchanged, so a `file://` or `data:` line comes
 /// out of it looking like any other address, and by the time one reaches the fetch its text form is
-/// gone — [`services::is_http`] is the same rule `stream_source` applies to a `.pls` line, asked of
+/// gone — [`services::net::is_http`] is the same rule `stream_source` applies to a `.pls` line, asked of
 /// the parsed value.
 ///
-/// [`services::is_http`]: crate::services::is_http
+/// [`services::net::is_http`]: crate::services::net::is_http
 fn joined(base: &Url, uri: &str) -> Option<Url> {
     if uri.is_empty() {
         return None;
     }
-    base.join(uri).ok().filter(crate::services::is_http)
+    base.join(uri).ok().filter(crate::services::net::is_http)
 }
 
 /// Split an attribute list on the commas that are not inside a quoted value, which is the one

@@ -28,9 +28,9 @@ use crate::error::AppError;
 use crate::error::describe;
 use crate::media::artwork::{self, CoverCache};
 use crate::media::metadata::extract_metadata;
-use crate::media::self_writes::SelfWrites;
 use crate::media::tag_writer;
 use crate::state::AppState;
+use crate::utils::self_writes::SelfWrites;
 
 /// Width cap for the tag-write fan-out. The MP4 save clones the embedded cover,
 /// so an unbounded `par_iter` would hold `num_cpus × (image + its clone)`

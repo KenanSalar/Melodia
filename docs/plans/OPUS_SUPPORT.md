@@ -11,7 +11,7 @@ Working doc. Delete when the feature ships.
 >
 > **What is left of this plan:** add `symphonia-adapter-libopus` to `Cargo.toml`, call
 > `register_audio_decoder::<OpusDecoder>()` in `decode.rs`, add `"opus"` to
-> `media::AUDIO_EXTENSIONS` (which pulls in a `silence.opus` fixture, since
+> `utils::audio_ext::AUDIO_EXTENSIONS` (which pulls in a `silence.opus` fixture, since
 > `file_decode_tests::every_scanned_extension_reaches_a_decoder` walks that list), and
 > check the licence against the five packaging formats. Phases 1 and 2 below are about a
 > rodio bump and do not apply; the container findings and the licence work still do.

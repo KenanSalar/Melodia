@@ -184,8 +184,8 @@ fn install_target_uses_appimage_path_when_set() -> TestResult {
                 assert_eq!(target, PathBuf::from("/home/u/Apps/Melodia.AppImage"));
             } else {
                 // On non-Linux platforms `$APPIMAGE` is ignored — falls
-                // back to `services::current_exe()`.
-                let cur = crate::services::current_exe()?;
+                // back to `utils::exe::current_exe()`.
+                let cur = crate::utils::exe::current_exe()?;
                 assert_eq!(target, cur);
             }
             Ok(())
@@ -195,7 +195,7 @@ fn install_target_uses_appimage_path_when_set() -> TestResult {
     result.into_inner()
 }
 
-/// The fallback is `services::current_exe`, not `std::env::current_exe` — it
+/// The fallback is `utils::exe::current_exe`, not `std::env::current_exe` — it
 /// resolves Linux's `" (deleted)"` marker, and the whole reason this function
 /// routes through it is that the updater's answer gets executed and written
 /// down. The assertion **states** that and cannot check it: no marker exists in
@@ -209,7 +209,7 @@ fn install_target_falls_back_to_current_exe_when_appimage_unset() -> TestResult 
     with_appimage_env(None, || {
         let r: TestResult = (|| {
             let target = install_target()?;
-            let cur = crate::services::current_exe()?;
+            let cur = crate::utils::exe::current_exe()?;
             assert_eq!(target, cur);
             Ok(())
         })();
@@ -224,7 +224,7 @@ fn install_target_ignores_empty_appimage_var() -> TestResult {
     with_appimage_env(Some(""), || {
         let r: TestResult = (|| {
             let target = install_target()?;
-            let cur = crate::services::current_exe()?;
+            let cur = crate::utils::exe::current_exe()?;
             assert_eq!(target, cur);
             Ok(())
         })();

@@ -25,8 +25,9 @@ use crate::database::queries;
 use crate::error::{AppError, AppResult};
 use crate::services::crash_report::FILE_TS_FORMAT;
 use crate::services::settings::read_settings;
-use crate::services::{crash_report, logging, redact_home};
+use crate::services::{crash_report, logging};
 use crate::state::AppState;
+use crate::utils::redact::redact_home;
 
 /// How many recent crash reports the bundle embeds. A panic that reproduces is
 /// worth two samples; past that the older ones describe a version the reporter

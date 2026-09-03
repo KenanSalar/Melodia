@@ -501,7 +501,7 @@ async fn follow_playlist(
 
 /// Read at most [`PLAYLIST_MAX_BYTES`] of `url` as text.
 async fn fetch_playlist(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    crate::services::get_capped_text(
+    crate::services::net::get_capped_text(
         client,
         url,
         "Station playlist",
@@ -554,7 +554,8 @@ fn first_stream_url(body: &str) -> Option<String> {
             line.split_once('=').map(|(_, value)| value.trim()),
             Some(line),
         ];
-        if let Some(url) = readings.into_iter().flatten().find(|c| crate::services::is_http_url(c))
+        if let Some(url) =
+            readings.into_iter().flatten().find(|c| crate::services::net::is_http_url(c))
         {
             return Some(url.to_owned());
         }

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::media::self_writes::SelfWrites;
 use crate::media::watcher::FileEvent;
+use crate::utils::self_writes::SelfWrites;
 
 use super::{deduplicate_events, suppress_self_writes};
 

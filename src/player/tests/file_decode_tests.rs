@@ -58,7 +58,7 @@ fn probe_duration_is_none_when_nothing_decodes() -> Result<(), AppError> {
 /// move to 0.6 was for, and it went untested under a hand-written list.
 #[test]
 fn every_scanned_extension_reaches_a_decoder() -> Result<(), AppError> {
-    for extension in crate::media::AUDIO_EXTENSIONS {
+    for extension in crate::utils::audio_ext::AUDIO_EXTENSIONS {
         let decoder = FileDecoder::open(&asset(&format!("silence.{extension}")))?;
         assert!(decoder.sample_rate().get() > 0, "{extension}");
         assert!(decoder.channels().get() > 0, "{extension}");

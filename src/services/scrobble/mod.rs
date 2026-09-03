@@ -30,7 +30,7 @@ use tokio::sync::{Notify, watch};
 use crate::config::Paths;
 use crate::entities::track::ScrobbleRow;
 use crate::error::{AppError, AppResult};
-use crate::services::build_http_client;
+use crate::services::net::build_http_client;
 use crate::services::settings::ScrobbleFlags;
 use providers::lastfm;
 use providers::listenbrainz;

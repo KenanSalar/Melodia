@@ -16,7 +16,6 @@ use crate::database::{self, DbPool};
 use crate::error::{AppError, AppResult};
 use crate::media::{
     artwork::CoverCache,
-    self_writes::SelfWrites,
     watcher::{FileEvent, FolderWatcher},
 };
 use crate::player::backend::PlaybackEngine;
@@ -35,6 +34,7 @@ use crate::services::{
     search_history::SearchHistoryState,
     settings,
 };
+use crate::utils::self_writes::SelfWrites;
 
 /// One scan-progress sample published while a folder scan is running. `None`
 /// on the channel means "no scan in progress" — the UI uses that to clear the
@@ -302,14 +302,14 @@ impl AppState {
 
     /// The shared `reqwest::Client`, built on first call and reused for the
     /// process lifetime. Construction is deferred out of `init` (see
-    /// [`crate::services::build_http_client`]) so the rustls TLS stack and
+    /// [`crate::services::net::build_http_client`]) so the rustls TLS stack and
     /// connection pool never load at boot/idle — only the updater, the post-scan
     /// Deezer artist-image fetch, and scrobbling pull them in. reqwest's
     /// connection pool lives on the client, so callers reuse this accessor (and
     /// `ScrobbleService`, which shares the same `OnceLock`) rather than
     /// constructing a new client per request.
     pub fn http_client(&self) -> &reqwest::Client {
-        self.http_client.get_or_init(crate::services::build_http_client)
+        self.http_client.get_or_init(crate::services::net::build_http_client)
     }
 
     /// The still-unbuilt cell behind [`Self::http_client`], for the one consumer that has to carry

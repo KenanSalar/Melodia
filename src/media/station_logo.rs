@@ -82,7 +82,8 @@ pub async fn fetch(
         )));
     }
 
-    let bytes = crate::services::read_capped(response, "Station logo body", MAX_LOGO_BYTES).await?;
+    let bytes =
+        crate::services::net::read_capped(response, "Station logo body", MAX_LOGO_BYTES).await?;
 
     let dir = artwork_dir.to_path_buf();
     tokio::task::spawn_blocking(move || store_if_big_enough(&bytes, ext, &dir))
@@ -97,7 +98,7 @@ pub async fn fetch(
 /// little: no credential is sent, and what comes back is only ever bytes the store decodes as an
 /// image, bounds and re-encodes.
 pub(super) fn fetchable_url(favicon_url: &str) -> Result<reqwest::Url, AppError> {
-    crate::services::http_url(favicon_url).ok_or_else(|| {
+    crate::services::net::http_url(favicon_url).ok_or_else(|| {
         AppError::network_msg("Station logo URL must be an http:// or https:// address")
     })
 }

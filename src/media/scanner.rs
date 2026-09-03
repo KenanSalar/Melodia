@@ -5,9 +5,9 @@ use rayon::prelude::*;
 use serde::Serialize;
 use walkdir::WalkDir;
 
-use super::is_audio_extension;
 use crate::entities::scan::{ExistingTrackSummary, ScannedFile};
 use crate::media::metadata::extract_or_filename_row;
+use crate::utils::audio_ext::is_audio_extension;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ScanProgress {

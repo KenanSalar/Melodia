@@ -40,7 +40,7 @@ pub use system_install::is_system_install;
 /// trades the install button for a package-manager hint, this takes the whole section.
 #[must_use]
 pub fn is_available() -> bool {
-    !crate::services::is_dev_build()
+    !crate::utils::exe::is_dev_build()
 }
 
 /// `<install_target>.old` — the rollback copy [`install::swap_in_place`] retains on
@@ -63,7 +63,7 @@ pub fn install_target_old() -> AppResult<PathBuf> {
 /// path-touching module here routes through this, the **only** function in the
 /// updater that asks for the running binary's path.
 ///
-/// The other arm goes through [`crate::services::current_exe`] rather than
+/// The other arm goes through [`crate::utils::exe::current_exe`] rather than
 /// `std::env::current_exe()`, which on Linux hands back a `<path> (deleted)` string
 /// once the binary has been replaced on disk — an RPM/DEB upgrade mid-session is
 /// exactly that, and this answer is what `desktop_integration` bakes into the user's
@@ -75,7 +75,7 @@ pub fn install_target() -> AppResult<PathBuf> {
     {
         return Ok(PathBuf::from(p));
     }
-    Ok(crate::services::current_exe()?)
+    Ok(crate::utils::exe::current_exe()?)
 }
 
 #[cfg(test)]

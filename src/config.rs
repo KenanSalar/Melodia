@@ -70,11 +70,11 @@ impl Paths {
 
     /// The root [`resolve`](Self::resolve) hands to [`rooted_at`](Self::rooted_at).
     fn data_root() -> AppResult<PathBuf> {
-        Self::data_root_for(crate::services::is_dev_build())
+        Self::data_root_for(crate::utils::exe::is_dev_build())
     }
 
     /// The half a test can drive, with the one answer it cannot steer passed in: a test binary
-    /// carries `debug_assertions`, so [`is_dev_build`](crate::services::is_dev_build) is pinned to
+    /// carries `debug_assertions`, so [`is_dev_build`](crate::utils::exe::is_dev_build) is pinned to
     /// `true` there and the installed branch below would otherwise never run.
     ///
     /// The environment read stays here rather than being lifted with it, so a test still proves

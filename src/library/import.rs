@@ -6,9 +6,9 @@ use serde::Serialize;
 use crate::database::queries;
 use crate::entities::track::TrackSummary;
 use crate::error::AppError;
-use crate::media::is_audio_extension;
 use crate::media::scanner::scan_files_parallel;
 use crate::state::AppState;
+use crate::utils::audio_ext::is_audio_extension;
 
 /// Result of importing files into the library (shared by playlist and queue import).
 ///

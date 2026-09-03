@@ -304,7 +304,7 @@ async fn send<K: Serialize>(
         .await
         .map_err(|e| AppError::network("Last.fm request failed", e))?;
     let bytes =
-        crate::services::read_capped(response, "Last.fm response", RESPONSE_MAX_BYTES).await?;
+        crate::services::net::read_capped(response, "Last.fm response", RESPONSE_MAX_BYTES).await?;
     let body: serde_json::Value = serde_json::from_slice(&bytes)
         .map_err(|e| AppError::network("Failed to parse Last.fm response", e))?;
     if let Some(code) = body.get("error").and_then(serde_json::Value::as_u64) {

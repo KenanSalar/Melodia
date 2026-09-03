@@ -588,7 +588,7 @@ pub(crate) fn reading_env<F: FnOnce() -> R, R>(body: F) -> R {
     body()
 }
 
-/// The home directory `services::redact_home` will actually resolve, if there is one.
+/// The home directory `utils::redact::redact_home` will actually resolve, if there is one.
 ///
 /// A redaction test builds its fixture from this rather than spelling `/home/testuser` under a
 /// faked `$HOME`: `dirs::home_dir()` asks Win32 for the profile folder and never reads the
@@ -599,9 +599,49 @@ pub(crate) fn reading_env<F: FnOnce() -> R, R>(body: F) -> R {
 /// home its own way would agree with `redact_home` only by coincidence, and the coincidence
 /// breaks on whichever platform the two happen to disagree about — which is the entire class
 /// of bug this helper exists because of. The Unix `$HOME` arm is pinned separately, by
-/// `services::tests::mod_tests`, which is where a faked variable still belongs.
+/// `utils::redact`'s own tests, which is where a faked variable still belongs.
 pub(crate) fn resolved_home() -> Option<String> {
-    crate::services::home_dir_string()
+    crate::utils::redact::home_dir_string()
+}
+
+/// Every file under [`SRC_DIR`] that spells `needle`, minus the ones `exempt` names — each of
+/// which is held to its exact count rather than forgiven wholesale, since a second call written
+/// into a sanctioned file is itself the regression.
+///
+/// Shared rather than per-pin because the three walks standing on it now live in three
+/// different modules, and a copy apiece is a copy that can drift on the exemption semantics —
+/// which is the half a reviewer cannot check by reading one of them.
+///
+/// Two seams it does not cover, both shared with the tree's other corpus pins:
+/// `strip_line_comments` handles `//` and not `/* */`, and the needle is a substring rather
+/// than a parse.
+pub(crate) fn spellings_outside(needle: &str, exempt: &[(&str, usize)]) -> Vec<String> {
+    let mut offenders = Vec::new();
+    let mut exempt_seen = Vec::new();
+
+    for (path, src) in stripped_sources(SRC_DIR, "rs", MIN_SOURCES) {
+        let found = src.matches(needle).count();
+        match exempt.iter().find(|(name, _)| *name == path) {
+            Some((_, allowed)) => {
+                assert_eq!(
+                    found, *allowed,
+                    "{path} spells `{needle}` {found} time(s), not {allowed} — either route the \
+                     new one through the shared helper, or drop the stale entry from the list"
+                );
+                exempt_seen.push(path);
+            }
+            None if found > 0 => offenders.push(path),
+            None => {}
+        }
+    }
+
+    assert_eq!(
+        exempt_seen.len(),
+        exempt.len(),
+        "the exemptions for `{needle}` name {exempt:?} but the walk only reached \
+         {exempt_seen:?} — a moved or renamed entry pre-authorises whatever takes its path next"
+    );
+    offenders
 }
 
 #[cfg(test)]

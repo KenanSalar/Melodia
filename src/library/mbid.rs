@@ -26,9 +26,9 @@ use crate::error::AppError;
 use crate::error::describe;
 use crate::media::artwork::CoverCache;
 use crate::media::metadata::extract_metadata;
-use crate::media::self_writes::SelfWrites;
 use crate::media::tag_writer;
 use crate::state::AppState;
+use crate::utils::self_writes::SelfWrites;
 
 /// Same bound as the tag editor's fan-out ([`crate::library::tags`]): the write
 /// is I/O-bound and the MP4 save clones the embedded cover, so extra width buys

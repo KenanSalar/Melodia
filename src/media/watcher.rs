@@ -7,7 +7,7 @@ use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, ne
 use tokio::sync::mpsc;
 
 use crate::error::AppError;
-use crate::media::is_audio_extension;
+use crate::utils::audio_ext::is_audio_extension;
 
 /// Classified file system event sent through the mpsc channel to the event processor.
 #[derive(Debug, Clone, PartialEq)]

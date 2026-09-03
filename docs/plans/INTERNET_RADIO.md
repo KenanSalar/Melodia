@@ -93,7 +93,7 @@ The alternatives were considered and lost:
   stations arrive already resolved past `.pls`/`.m3u` indirection.
 
 The one thing it asks in return is a descriptive `User-Agent` of the form
-`appname/appversion`. `services::build_http_client` already sends `Melodia/<version>`,
+`appname/appversion`. `services::net::build_http_client` already sends `Melodia/<version>`,
 so the shared client satisfies it with no change.
 
 ---
@@ -368,7 +368,7 @@ the three it split into and Phase 7 having added the rest;
 - **No second tab bar, and no third band.** `LibraryTabBand` is mounted, not copied, and
   not parameterised into a shared ancestor with `MosaicTabHero`. The two are siblings for
   reasons `ui-patterns.md` argues, and `ui::library_tab_band_tests` holds them to it.
-- **No second HTTP client.** `services::build_http_client`'s pool is process-wide and its
+- **No second HTTP client.** `services::net::build_http_client`'s pool is process-wide and its
   User-Agent is what the directory asks for. The stream path needs an `Icy-MetaData: 1`
   default header that the directory and favicon paths should not send, and that is a
   newtype implementing stream-download's `Client` trait over the shared client (Phase 3),

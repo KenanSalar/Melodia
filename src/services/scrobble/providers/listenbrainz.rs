@@ -83,9 +83,12 @@ pub async fn validate_token(
     if !status.is_success() {
         return Err(server_error(status, response).await);
     }
-    let bytes =
-        crate::services::read_capped(response, "ListenBrainz validate-token", ANSWER_MAX_BYTES)
-            .await?;
+    let bytes = crate::services::net::read_capped(
+        response,
+        "ListenBrainz validate-token",
+        ANSWER_MAX_BYTES,
+    )
+    .await?;
     let validated: ValidatedToken = serde_json::from_slice(&bytes).map_err(|e| {
         AppError::network("Failed to parse ListenBrainz validate-token response", e)
     })?;
@@ -175,7 +178,7 @@ pub async fn lookup_recording_mbids_bulk(
     if !status.is_success() {
         return Err(error_for(status, response).await);
     }
-    let bytes = crate::services::read_capped(
+    let bytes = crate::services::net::read_capped(
         response,
         "ListenBrainz bulk metadata-lookup",
         ANSWER_MAX_BYTES,
@@ -234,7 +237,7 @@ async fn error_for(status: StatusCode, response: reqwest::Response) -> ListenBra
 /// message.
 async fn server_error(status: StatusCode, response: reqwest::Response) -> ListenBrainzError {
     let message =
-        crate::services::read_capped(response, "ListenBrainz error body", ERROR_MAX_BYTES)
+        crate::services::net::read_capped(response, "ListenBrainz error body", ERROR_MAX_BYTES)
             .await
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
             .unwrap_or_default();

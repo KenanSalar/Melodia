@@ -14,8 +14,8 @@ use crate::database::queries::tests::helpers::insert_test_track;
 use crate::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use crate::error::AppError;
 use crate::media::artwork;
-use crate::media::self_writes::SelfWrites;
 use crate::test_support::ASSETS_DIR;
+use crate::utils::self_writes::SelfWrites;
 
 fn assets_dir() -> PathBuf {
     PathBuf::from(ASSETS_DIR)

@@ -172,7 +172,7 @@ fn trimmed(value: Option<&str>) -> Option<String> {
 /// `None` is the empty field, which clears the column. Anything else has to parse as an HTTP(S)
 /// URL with a host: the value ends up behind a button that opens the user's browser, so a typo is
 /// caught while they are looking at the field rather than handed to `open::that_detached`. Through
-/// [`crate::services::http_url`], which the logo fetch and the playlist reader share.
+/// [`crate::services::net::http_url`], which the logo fetch and the playlist reader share.
 ///
 /// Normalized through `Url` rather than stored as typed, so `nidaa.fm` and a trailing-slash-less
 /// spelling of the same site do not read as two different links.
@@ -181,7 +181,7 @@ pub(super) fn website_url(website: &str) -> Result<Option<String>, AppError> {
     if website.is_empty() {
         return Ok(None);
     }
-    crate::services::http_url(website).map(|url| Some(url.to_string())).ok_or_else(|| {
+    crate::services::net::http_url(website).map(|url| Some(url.to_string())).ok_or_else(|| {
         AppError::Validation("A station website must be an http:// or https:// address".into())
     })
 }

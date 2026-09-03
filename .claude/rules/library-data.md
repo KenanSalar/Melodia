@@ -5,6 +5,8 @@ paths:
   - src/entities/**/*.rs
   - src/media/**/*.rs
   - src/tasks/**/*.rs
+  - src/utils/audio_ext.rs
+  - src/utils/self_writes.rs
   - src/ui/playlists/callbacks/**/*.rs
   - migrations/**/*.sql
   - melodia-ui/ui/components/dialog/smart-playlist-editor-body.slint
@@ -58,7 +60,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   while closed. That reconcile is the scan path's *common* case (almost nothing to re-parse), which
   is why its incremental filter is the part worth keeping fast.
 
-- **One audio-extension predicate: `media::is_audio_extension(ext)`.** Case-folded
+- **One audio-extension predicate: `utils::audio_ext::is_audio_extension(ext)`.** Case-folded
   (`eq_ignore_ascii_case` against ASCII `AUDIO_EXTENSIONS`), allocating nothing — the library walk
   asks it for *every* file in the tree. The walk, the watcher's `is_audio_file`, DnD/import
   validation and Browse all route through it; don't re-roll `ext.to_lowercase()` +

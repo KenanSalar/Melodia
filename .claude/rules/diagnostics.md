@@ -3,7 +3,7 @@ paths:
   - src/services/logging.rs
   - src/services/crash_report.rs
   - src/services/diagnostics.rs
-  - src/services/mod.rs
+  - src/utils/redact.rs
   - src/ui/settings/diagnostics.rs
   - src/main.rs
 ---

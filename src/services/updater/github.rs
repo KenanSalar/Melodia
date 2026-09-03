@@ -84,7 +84,7 @@ pub async fn fetch_latest_manifest(
     }
 
     let etag = resp.headers().get(ETAG).and_then(|v| v.to_str().ok()).map(str::to_owned);
-    let body = crate::services::read_capped(resp, "latest.json", MANIFEST_MAX_BYTES).await?;
+    let body = crate::services::net::read_capped(resp, "latest.json", MANIFEST_MAX_BYTES).await?;
 
     // Fetch the sibling .minisig. A missing or non-200 response is
     // treated as a verification failure — we'd rather refuse to install
@@ -105,7 +105,8 @@ pub async fn fetch_latest_manifest(
         )));
     }
     let sig_bytes =
-        crate::services::read_capped(sig_resp, "latest.json.minisig", SIGNATURE_MAX_BYTES).await?;
+        crate::services::net::read_capped(sig_resp, "latest.json.minisig", SIGNATURE_MAX_BYTES)
+            .await?;
     let sig_text = String::from_utf8_lossy(&sig_bytes);
 
     let pubkey = minisign::embedded_pubkey()

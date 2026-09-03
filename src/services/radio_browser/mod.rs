@@ -4,7 +4,7 @@
 //!
 //! Takes the shared `reqwest::Client` rather than building one. The directory
 //! asks callers for a descriptive `User-Agent` of the form `appname/appversion`
-//! and `services::build_http_client` already sends `Melodia/<version>`, so
+//! and `services::net::build_http_client` already sends `Melodia/<version>`, so
 //! reusing it is what satisfies the request as well as what shares the pool.
 //!
 //! [`model`] holds the wire shapes and [`query`] every parameter name; both are
@@ -296,7 +296,7 @@ async fn get_json<T: serde::de::DeserializeOwned>(
         )));
     }
 
-    let body = crate::services::read_capped(
+    let body = crate::services::net::read_capped(
         response,
         &format!("Radio directory {what}"),
         DIRECTORY_MAX_BYTES,

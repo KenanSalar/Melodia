@@ -16,10 +16,10 @@ mod reconcile;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, Instant};
 
-use crate::media::self_writes::SelfWrites;
 use crate::media::watcher::FileEvent;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use crate::utils::self_writes::SelfWrites;
 
 use dedup::deduplicate_events;
 use reconcile::process_batch;

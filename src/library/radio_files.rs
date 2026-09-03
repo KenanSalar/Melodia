@@ -383,7 +383,7 @@ fn parse(body: &str) -> Vec<StationEntry> {
         if let Some((key, value)) = line.split_once('=') {
             let value = value.trim();
             if let Some(index) = indexed_key(key.trim(), "File") {
-                if crate::services::is_http_url(value) {
+                if crate::services::net::is_http_url(value) {
                     pls_slots.push((index, entries.len()));
                     entries.push(pending.claim(value.to_owned()));
                 }
@@ -403,7 +403,7 @@ fn parse(body: &str) -> Vec<StationEntry> {
             // through to the URL reading rather than being swallowed here.
         }
 
-        if crate::services::is_http_url(line) {
+        if crate::services::net::is_http_url(line) {
             entries.push(pending.claim(line.to_owned()));
         }
     }

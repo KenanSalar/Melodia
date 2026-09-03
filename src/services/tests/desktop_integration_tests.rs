@@ -227,7 +227,7 @@ fn all_desktop_sources_agree_on_mime_and_wmclass() {
     // The full set the production template carries; every format declares it or
     // the associations diverge.
     //
-    // Hand-maintained rather than derived from `media::AUDIO_EXTENSIONS`, because the
+    // Hand-maintained rather than derived from `utils::audio_ext::AUDIO_EXTENSIONS`, because the
     // two don't correspond: freedesktop maps `.oga` to four types and `.caf` to none,
     // so a derived assertion would be wrong in both directions.
     const CANONICAL_MIME_TYPES: &[&str] = &[

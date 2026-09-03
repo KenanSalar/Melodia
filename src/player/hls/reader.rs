@@ -349,7 +349,7 @@ impl Scheduler {
 
 /// Read at most [`MANIFEST_MAX_BYTES`] of one playlist, as text.
 async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    crate::services::get_capped_text(
+    crate::services::net::get_capped_text(
         client,
         url,
         "Station playlist",
@@ -361,6 +361,12 @@ async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, A
 
 /// Read at most [`SEGMENT_MAX_BYTES`] of one segment.
 async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, AppError> {
-    crate::services::get_capped(client, url, "Station segment", SEGMENT_TIMEOUT, SEGMENT_MAX_BYTES)
-        .await
+    crate::services::net::get_capped(
+        client,
+        url,
+        "Station segment",
+        SEGMENT_TIMEOUT,
+        SEGMENT_MAX_BYTES,
+    )
+    .await
 }

@@ -28,7 +28,7 @@ use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Name, Strea
 /// depending on `interprocess` itself.
 pub use interprocess::local_socket::Listener;
 
-use crate::media::is_audio_extension;
+use crate::utils::audio_ext::is_audio_extension;
 
 /// Checked against the *declared* length before a buffer is sized for it, so a
 /// hostile peer gets no allocation out of asking for more. A thousand paths fit.

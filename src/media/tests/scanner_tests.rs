@@ -8,8 +8,8 @@ use tempfile::TempDir;
 use super::*;
 use crate::entities::scan::ExistingTrackSummary;
 use crate::error::AppError;
-use crate::media::AUDIO_EXTENSIONS;
 use crate::media::artwork::CoverCache;
+use crate::utils::audio_ext::AUDIO_EXTENSIONS;
 
 fn create_test_files(dir: &Path, names: &[&str]) -> Result<(), AppError> {
     for name in names {
