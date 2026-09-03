@@ -8,6 +8,7 @@
 //! `crates/melodia/tests/` quietly out of its own source with it.
 
 use std::fs;
+use std::path::Path;
 
 use melodia_testkit::{REPO_ROOT, rust_sources};
 
@@ -20,7 +21,7 @@ const MIN_MEMBERS: usize = 10;
 /// Read off `crates/` rather than off the root manifest's `members`, which is a glob —
 /// [`every_member_lives_where_the_corpus_walks_can_see_it`] is what holds the two together.
 fn member_manifests() -> Vec<(String, String)> {
-    let crates = std::path::Path::new(REPO_ROOT).join("crates");
+    let crates = Path::new(REPO_ROOT).join("crates");
     let listing = fs::read_dir(&crates);
     assert!(listing.is_ok(), "`{}` would not list", crates.display());
 
@@ -138,7 +139,7 @@ fn inherits_workspace_lints(manifest: &str) -> bool {
 fn every_member_lives_where_the_corpus_walks_can_see_it() {
     const PATTERN: &str = "crates/*";
 
-    let root = std::path::Path::new(REPO_ROOT).join("Cargo.toml");
+    let root = Path::new(REPO_ROOT).join("Cargo.toml");
     let manifest = fs::read_to_string(&root).unwrap_or_default();
     assert!(!manifest.is_empty(), "`{}` would not read", root.display());
 

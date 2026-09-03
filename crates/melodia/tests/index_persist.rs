@@ -15,9 +15,9 @@ fn inside_block(src: &str, open: usize, needle: usize) -> bool {
     melodia_testkit::depth_between(src, open, needle).is_some_and(|depth| depth >= 1)
 }
 
-/// The wiring under [`UI_SRC_DIR`], less the pins over it: `callbacks/tests/index_persist_tests.rs`
-/// and `radio/tests/radio_tests.rs` both name the needles below, so a walk that kept them would
-/// answer about the prose describing the rule rather than about the wiring obeying it.
+/// The wiring under [`UI_SRC_DIR`], less the pins over it. A pin that quotes a call site to
+/// describe it reads as one, and `every_writer_publishes_before_it_spawns` counts writers by
+/// equality, so such a pin lands as a seventh writer that is only a sentence about the rule.
 fn wiring_sources() -> Vec<(String, String)> {
     stripped_sources(UI_SRC_DIR, "rs", MIN_UI_SOURCES)
         .into_iter()

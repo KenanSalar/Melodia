@@ -32,9 +32,10 @@ use minisign_verify::{Error as MinisignVerifyError, PublicKey, Signature};
 ///      release signed with the new key. Clients on prior releases stay stuck on their installed
 ///      version until the user manually downloads and installs from the GitHub release page.
 ///
-/// Relative rather than through `MELODIA_REPO_ROOT` like the corpus walkers: that variable comes
-/// from `.cargo/config.toml`, which cargo resolves against the *working directory*, so a build
-/// invoked from anywhere else stops compiling. This one ships inside the binary.
+/// Relative rather than through `MELODIA_REPO_ROOT`, which only the corpus walkers may use,
+/// being dev-dependencies: cargo finds `.cargo/config.toml` by walking up from the *working
+/// directory*, so a `cargo install --git` or a `--manifest-path` build from elsewhere never
+/// defines it and this file stops compiling.
 const EMBEDDED_PUBKEY: &str = include_str!("../../../../../assets/updater-pubkey.b64");
 
 #[derive(Debug, thiserror::Error)]
