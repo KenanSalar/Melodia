@@ -3,10 +3,14 @@ paths:
   - crates/melodia-core/src/entities/**/*.rs
   - crates/melodia-app/src/services/**/*.rs
   - crates/melodia-integrations/src/services/integrations/**/*.rs
+  - crates/melodia-net/src/services/net/**/*.rs
+  - crates/melodia-net/src/media/fetch/**/*.rs
+  - crates/melodia-platform/src/services/platform/**/*.rs
   - crates/melodia-app/src/library/**/*.rs
   - crates/melodia-app/src/state/**/*.rs
   - crates/melodia-engine/src/player/engine/**/*.rs
   - crates/melodia-store/src/media/ingest/**/*.rs
+  - crates/melodia-core/src/utils/atomic_file.rs
   - crates/melodia-core/src/error.rs
 ---
 

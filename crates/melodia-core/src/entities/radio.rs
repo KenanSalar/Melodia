@@ -416,6 +416,19 @@ pub enum SearchOrder {
     Random,
 }
 
+/// Stations per page, and the fallback whenever a caller leaves
+/// [`StationSearch::limit`] at zero.
+///
+/// There is no "unlimited" option to offer instead: the API's own default is the
+/// entire directory, tens of thousands of rows.
+///
+/// Here rather than beside the request builder that sends it because the pager on
+/// screen needs it too — an offset advances by exactly the limit the request
+/// carried, and the two coming from one definition is what stops paging skipping
+/// or repeating a page. `melodia-views` cannot name `melodia-net`, so the shared
+/// number belongs in the crate both of them do name.
+pub const DEFAULT_PAGE_LIMIT: u32 = 50;
+
 /// A directory query, filled in by the caller and turned into request parameters
 /// by `services::net::radio_browser`.
 ///

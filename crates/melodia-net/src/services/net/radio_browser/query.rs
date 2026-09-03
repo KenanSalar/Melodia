@@ -8,14 +8,7 @@
 
 use std::collections::BTreeMap;
 
-use melodia_core::entities::radio::{FacetKind, SearchOrder, StationSearch};
-
-/// Stations per page, and the fallback whenever a caller leaves
-/// [`StationSearch::limit`] at zero.
-///
-/// There is no "unlimited" option to offer instead: the API's own default is the
-/// entire directory, tens of thousands of rows.
-pub const DEFAULT_PAGE_LIMIT: u32 = 50;
+use melodia_core::entities::radio::{DEFAULT_PAGE_LIMIT, FacetKind, SearchOrder, StationSearch};
 
 /// Ceiling on the tag list, which is the one facet the directory does not curate.
 ///

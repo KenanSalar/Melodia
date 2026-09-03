@@ -682,8 +682,12 @@ pub fn reading_env<F: FnOnce() -> R, R>(body: F) -> R {
 /// `strip_line_comments` handles `//` and not `/* */`, and the needle is a substring rather
 /// than a parse.
 pub fn spellings_outside(needle: &str, exempt: &[(&str, usize)]) -> Vec<String> {
+    use std::collections::BTreeSet;
+
     let mut offenders = Vec::new();
-    let mut exempt_seen = Vec::new();
+    // A set rather than a tally: paths are crate-`src/`-relative now, so two crates can hand back
+    // one key, and counting matches would let a doubled hit stand in for an entry matching nothing.
+    let mut exempt_seen = BTreeSet::new();
 
     for (path, src) in rust_sources() {
         let found = src.matches(needle).count();
@@ -694,7 +698,7 @@ pub fn spellings_outside(needle: &str, exempt: &[(&str, usize)]) -> Vec<String> 
                     "{path} spells `{needle}` {found} time(s), not {allowed} — either route the \
                      new one through the shared helper, or drop the stale entry from the list"
                 );
-                exempt_seen.push(path);
+                exempt_seen.insert(path);
             }
             None if found > 0 => offenders.push(path),
             None => {}

@@ -305,10 +305,11 @@
                           One ProgId across every extension rather than
                           one apiece: the cost is a generic "Audio File" in
                           Explorer's Type column, against a further four
-                          rows per extension all needing to stay in step
-                          with `media::AUDIO_EXTENSIONS`. The list is
-                          pinned against that constant by
-                          `services::tests::the_msi_offers_every_audio_extension`.
+                          rows per extension all needing to stay in step with
+                          `melodia_core::utils::audio_ext::AUDIO_EXTENSIONS`.
+                          The list is pinned against that constant by
+                          `crates/melodia/tests/packaging.rs`'s
+                          `the_msi_offers_every_audio_extension`.
                         -->
                         <Component Id="FileAssociations" Guid="3C1F84A0-6D25-4E9B-9A73-0B5E2C8F41D7">
                             <RegistryValue Root="HKLM" Key="Software\Melodia\Components" Name="FileAssociations" Type="integer" Value="1" KeyPath="yes" />

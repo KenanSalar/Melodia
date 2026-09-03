@@ -29,8 +29,6 @@ use melodia_core::entities::radio::{
 use melodia_core::error::AppError;
 use model::{ApiFacet, ApiServer, ApiStation, ApiVote};
 
-pub use query::DEFAULT_PAGE_LIMIT;
-
 /// Where the mirror list lives. One name in front of every mirror, so it needs
 /// no discovery of its own.
 const SERVERS_URL: &str = "https://all.api.radio-browser.info/json/servers";

@@ -43,15 +43,7 @@ pub(super) use authoring::{resolve_station_name, validated_overrides};
 use crate::state::AppState;
 use melodia_core::entities::radio;
 use melodia_core::error::AppError;
-use melodia_net::services::net::radio_browser;
 use melodia_store::database::queries;
-
-/// Stations per directory page.
-///
-/// Re-exported rather than restated so a caller can page without naming the client: an offset
-/// advances by exactly the limit the request carried, and the two coming from one definition is
-/// what stops paging skipping or repeating a page.
-pub use radio_browser::DEFAULT_PAGE_LIMIT;
 
 /// How far back the recently-played station list reaches.
 ///

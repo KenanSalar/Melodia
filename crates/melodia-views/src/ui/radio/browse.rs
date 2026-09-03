@@ -20,7 +20,9 @@ use crate::ui::grid_rows::{chunk_built_rows, write_grid};
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::entities::radio::{DirectoryStation, StationPage, StationSearch};
+use melodia_core::entities::radio::{
+    DEFAULT_PAGE_LIMIT, DirectoryStation, StationPage, StationSearch,
+};
 use melodia_ui::{AppWindow, Radio, RadioStationGridRow};
 
 use super::{RadioUi, covers, logos, rows};
@@ -44,7 +46,7 @@ impl Default for BrowseState {
             // `StationSearch::default()` is the first screen with nothing typed: most-clicked
             // first, no filters. The limit is spelled because the offset advances by it.
             search: StationSearch {
-                limit: library::radio::DEFAULT_PAGE_LIMIT,
+                limit: DEFAULT_PAGE_LIMIT,
                 ..StationSearch::default()
             },
             stations: Vec::new(),

@@ -146,6 +146,11 @@ fn every_bundled_font_is_named_in_the_attribution() {
     );
 }
 
+/// The MSI source, repo-root-relative. Under the package rather than beside `packaging/`
+/// because that is where cargo-wix looks for the wxs of the package it installs, and a flag
+/// pointing it elsewhere would be exercised by nothing short of a tagged Windows release.
+const MSI_SOURCE: &str = "crates/melodia/wix/main.wxs";
+
 /// Which packaging file carries `licenses/`, and the spelling that does it.
 ///
 /// The needle is the mechanism rather than the word: every one of these files can mention the
@@ -155,11 +160,6 @@ fn every_bundled_font_is_named_in_the_attribution() {
 /// The RPM stages and ships in separate statements, so the needle has to be the second: drop the
 /// `%files` line and the staged copy goes unread in the *build* directory, which `check-files`
 /// never looks at — no warning, and a pin on the `cp` still green.
-/// The MSI source, repo-root-relative. Under the package rather than beside `packaging/`
-/// because that is where cargo-wix looks for the wxs of the package it installs, and a flag
-/// pointing it elsewhere would be exercised by nothing short of a tagged Windows release.
-const MSI_SOURCE: &str = "crates/melodia/wix/main.wxs";
-
 const LICENSE_SHIPPERS: [(&str, &str); 5] = [
     ("scripts/build-rpm.sh", "%license LICENSE licenses/"),
     // The binary's manifest, not the workspace root's: `[package.metadata.deb]` is package
@@ -404,8 +404,9 @@ const MSI_EXTENSION_KEYS: [&str; 2] = [
 ];
 
 /// Windows offers a file type only where `main.wxs` writes the rows for it, and there is no glob
-/// there any more than for the licences — so a new entry in [`crate::utils::audio_ext::AUDIO_EXTENSIONS`]
-/// is one the app imports happily and Explorer never offers.
+/// there any more than for the licences — so a new entry in
+/// [`melodia_core::utils::audio_ext::AUDIO_EXTENSIONS`] is one the app imports happily and
+/// Explorer never offers.
 ///
 /// A walk rather than a list, and comment-stripped first, both for
 /// [`the_msi_names_every_licence_file`]'s reasons.

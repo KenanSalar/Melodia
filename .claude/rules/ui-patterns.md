@@ -103,7 +103,7 @@ silently miss the other.
   `↑`/`↓` into the label. It exists for what it makes *unspellable*: the per-pill slot, ternary and
   `active` comparison could each go missing at one site and look right until the sort moved. What
   the *mount* still owes is the two arrays lining up — a label with no matching field sorts by the
-  empty string — so both pins check lengths through `test_support::sort_pill_row_arrays`. `labels`
+  empty string — so both pins check lengths through `melodia_testkit::sort_mount_arrays`. `labels`
   stays an inline `[@tr("…"), …]` literal.
 
 ### Grids, strips, cards

@@ -86,7 +86,7 @@ assets = [
 melodia-ui = { path = "../melodia-ui" }
 # The UI layer, whose `ui` module is what `boot/` wires.
 melodia-views = { path = "../melodia-views" }
-# The eight the binary itself spells. `melodia-net` is absent because nothing here
+# The seven the binary itself spells. `melodia-net` is absent because nothing here
 # opens a socket, and `melodia-audio` and `melodia-playback` are dev-dependencies
 # below: only `tests/` reaches under the DSP chain.
 melodia-core = { path = "../melodia-core" }

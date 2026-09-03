@@ -3,7 +3,8 @@
 //! The walk holding this module's reach prohibition is `tests/radio_facade.rs`: its other half
 //! asks the same question of `melodia-app`, and neither covers the other's direction.
 
-use super::{ApiStation, DEFAULT_PAGE_LIMIT, FALLBACK_HOST, SERVERS_URL, page_from, url_for};
+use super::{ApiStation, FALLBACK_HOST, SERVERS_URL, page_from, url_for};
+use melodia_core::entities::radio::DEFAULT_PAGE_LIMIT;
 
 /// A bare name, so [`url_for`] stays the one place a scheme or a separator is
 /// spelled. A host carrying either would produce `https://https://…` or a

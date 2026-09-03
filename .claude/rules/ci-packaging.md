@@ -138,7 +138,7 @@ coverage on this path.
   job and sets nothing: it never codegens, so it doesn't reach that peak. **`RUST_TEST_THREADS` is
   deliberately not capped alongside it** — `.cargo/config.toml`'s 8 stands, oversubscribing a
   4-core runner 2:1, because the cap answers a memory ceiling and most harness threads are waiting
-  rather than running. `tests/crossfade.rs` is the exception, its eleven tests each turning the
+  rather than running. `tests/crossfade.rs` is the exception, its thirteen tests each turning the
   mixer from a spin loop, and what that reached was a wait budgeted in frames rather than in wall
   clock: the budget then measures the puller's throughput, not the thing it waits for.
   `CONTROL_OP_BUDGET` is what replaced it, and `taskset -c 0` against a couple of dozen spinners
@@ -146,7 +146,7 @@ coverage on this path.
   1 s `recv_timeout`s, tighter for standing up a real transport, and the first place to read if
   `test-windows` reddens.
 
-- **`test` and `test-windows` cap build time as well as memory.** `cargo test` links five test
+- **`test` and `test-windows` cap build time as well as memory.** `cargo test` links 42 test
   binaries and full debuginfo is most of that tail, worst on MSVC where it is PDBs. Cold on both
   sides, cargo's own build phase reads 18m29s → 12m39s on Linux and 31m13s → 17m54s on Windows, so
   the MSVC half is where it pays. Both set `CARGO_PROFILE_{DEV,TEST}_DEBUG` to `line-tables-only`,

@@ -7,6 +7,7 @@
 //! `[lints]` compiles, and a member outside `crates/` compiles and takes every walk in
 //! `crates/melodia/tests/` quietly out of its own source with it.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
@@ -59,15 +60,18 @@ fn member_manifests() -> Vec<(String, String)> {
 /// something private, and the second error is the harder one to misread. `pub(crate)` is the
 /// weaker fix rather than a middle course, so it is named here too.
 ///
-/// The needle is the crate prefix, which every cross-member path has to spell — there being no
-/// re-export to reach one through, a member cannot be named any other way.
+/// **Two shapes, because the crate prefix is not on the re-export line in either of the
+/// interesting ones.** A plain `pub use melodia_x::Thing;` spells it; a `use melodia_x::…::m;`
+/// followed by `pub use m::Thing;` does not, and that is the form `melodia-app`'s radio facade
+/// shipped — `melodia-views` reached a `melodia-net` constant through it while naming neither.
+/// So the names each file binds from a member are collected first, and a re-export whose path
+/// starts at one of them counts.
 #[test]
 fn no_crate_re_exports_another_members_items() {
-    const NEEDLES: [&str; 2] = ["pub use melodia_", "pub(crate) use melodia_"];
-
     let mut offenders = Vec::new();
     for (path, code) in rust_sources() {
-        if NEEDLES.iter().any(|needle| code.contains(needle)) {
+        let bound = names_bound_from_members(&code);
+        if re_export_heads(&code).any(|head| head.starts_with("melodia_") || bound.contains(head)) {
             offenders.push(path);
         }
     }
@@ -78,6 +82,53 @@ fn no_crate_re_exports_another_members_items() {
          import, so the layer is named at the site that reads it — a re-export hands a dependent \
          a crate its manifest was drawn to keep out of reach"
     );
+}
+
+/// Every name a `use melodia_*::…;` in `code` brings into scope: the tail of each path it names,
+/// and the alias wherever one is spelled.
+///
+/// Statements are read to their `;` rather than to the end of a line, a grouped import being the
+/// one rustfmt wraps. Braces are treated as separators, so a nested group contributes its inner
+/// names too — which only ever widens the set, and the set is what a re-export is checked against.
+fn names_bound_from_members(code: &str) -> BTreeSet<&str> {
+    let mut bound = BTreeSet::new();
+    let mut from = 0;
+    while let Some(at) = code[from..].find("use melodia_").map(|rel| rel + from) {
+        let path_start = at + "use ".len();
+        let Some(len) = code[path_start..].find(';') else {
+            break;
+        };
+        let statement = &code[path_start..path_start + len];
+        from = path_start + len;
+
+        for item in statement.split(['{', '}', ',']) {
+            let item = item.trim();
+            let name = item.rsplit(" as ").next().unwrap_or(item);
+            let name = name.rsplit("::").next().unwrap_or(name).trim();
+            if !name.is_empty() && !name.starts_with("melodia_") && name != "self" && name != "*" {
+                bound.insert(name);
+            }
+        }
+    }
+    bound
+}
+
+/// The first path segment of every re-export in `code`, in any visibility `pub` can carry.
+///
+/// `pub(super) use` and `pub(in …) use` are here for the same reason `pub(crate)` is: each one
+/// hands the item to somewhere its own manifest does not reach.
+fn re_export_heads(code: &str) -> impl Iterator<Item = &str> {
+    code.lines().filter_map(|line| {
+        let rest = line.trim_start().strip_prefix("pub")?;
+        // `pub(crate)`, `pub(super)`, `pub(in path)` — or nothing at all.
+        let rest = match rest.strip_prefix('(') {
+            Some(scoped) => scoped.split_once(')')?.1,
+            None => rest,
+        };
+        let path = rest.trim_start().strip_prefix("use ")?.trim_start();
+        let head = path.split(|c: char| !c.is_alphanumeric() && c != '_').next()?;
+        (!head.is_empty()).then_some(head)
+    })
 }
 
 /// **Every member inherits `[workspace.lints]`.**
@@ -152,6 +203,21 @@ fn every_member_lives_where_the_corpus_walks_can_see_it() {
         "{elsewhere:?} are workspace members outside `{PATTERN}`. `rust_source_roots` walks \
          `crates/*/src` and only that, so a member reached by any other path drops out of every \
          corpus walk at once, each of which goes on passing"
+    );
+
+    // The glob is only half the property. `rust_source_roots` keys on `crates/*/src`, so a member
+    // pointing `[lib] path` at a directory of another name satisfies the pattern above and still
+    // contributes nothing — and `MIN_SOURCES` cannot see it, the tree being large enough that
+    // losing a whole crate clears the floor.
+    let sourceless: Vec<String> = member_manifests()
+        .into_iter()
+        .map(|(name, _)| name)
+        .filter(|name| !Path::new(REPO_ROOT).join("crates").join(name).join("src").is_dir())
+        .collect();
+    assert!(
+        sourceless.is_empty(),
+        "{sourceless:?} are members with no `src/`, so `rust_sources()` reaches none of their \
+         code and every walk over it passes without asking about them"
     );
 }
 

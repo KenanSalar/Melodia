@@ -1447,9 +1447,9 @@ Phase boundaries:
   `cpal` and `melodia-platform` no `melodia-ui`; `melodia-playback`'s manifest still names no
   `reqwest`, the four `cargo tree` hits for it arriving through `melodia-audio`.
 
-  **The same 2,237 tests pass, across 41 binaries rather than 42.** The one that went is the
+  **The same tests pass, across one binary fewer.** The one that went is the
   binary's own lib target, which held no test and existed only to carry the facade; `cargo
-  metadata` reports `melodia` with a single `Melodia` bin target, eight `melodia-*` dependencies
+  metadata` reports `melodia` with a single `Melodia` bin target, nine `melodia-*` dependencies
   and `melodia-audio` / `melodia-playback` demoted to dev-dependencies, nothing outside `tests/`
   reaching below `melodia-engine` any more.
 

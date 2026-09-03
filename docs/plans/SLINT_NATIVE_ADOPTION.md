@@ -31,8 +31,8 @@ highest-value action available: every 🟢 item below queues behind it.
 Run this when a release lands that clears both blockers. (The 1.17.0-attempt plan file this
 used to point at is gone — the checklist lives here now.)
 
-- [ ] Bump `slint` (`Cargo.toml:73`) + `slint-build` (`Cargo.toml:84`) + `Cargo.lock`. Both
-      live in `[workspace.dependencies]` since the `melodia-ui` split, not `[dependencies]`. No
+- [ ] Bump `slint` + `slint-build` + `Cargo.lock`. Both live in the root
+      `[workspace.dependencies]`, declared adjacently so the pair can't drift. No
       feature renames touch our set — `unstable-winit-030` and `slint::winit_030` are
       unchanged in 1.17.x, and `i-slint-backend-winit` still wants `winit = "0.30.2"`, so the
       vendored fork's `[patch.crates-io]` keeps applying. MSRV 1.92 vs our 1.97.0 pin: fine.

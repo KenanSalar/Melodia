@@ -49,8 +49,14 @@ const VERBOSE_LEVEL: &str = "debug";
 const SPEC_TAIL: &str = "symphonia_bundle_mp3::layer3=error, sctk_adwaita::buttons=error";
 
 /// Dependency warnings, our own narrative at `level`, and nothing else. A bare `"info"` would
-/// floor every crate in the graph, spending our rotation budget on their choices. Both tokens are
-/// real targets: `melodia` the lib, `Melodia` the bin. `RUST_LOG` overrides it.
+/// floor every crate in the graph, spending our rotation budget on their choices. `RUST_LOG`
+/// overrides it.
+///
+/// **`melodia` is a prefix, not a target.** No crate is named that — the library members are
+/// `melodia_app`, `melodia_core` and nine more — and what reaches them is that a directive matches
+/// by `writing_module.starts_with(name)`, so one token covers every member the split will ever add.
+/// The capitalised sibling is the binary, whose crate really is `Melodia`; the match is
+/// case-sensitive, so it needs its own token.
 fn spec_for(level: &str) -> String {
     format!("warn, melodia={level}, Melodia={level}, {SPEC_TAIL}")
 }

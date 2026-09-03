@@ -88,7 +88,7 @@ process state, and `cargo test` runs in parallel by default. There is one shape:
 
 **lock → snapshot → clear → set → `catch_unwind(body)` → restore → `resume_unwind`**
 
-and it is written once, in **`test_support::with_env_set`**
+and it is written once, in **`melodia_testkit::with_env_set`**
 (`crates/melodia-testkit/src/lib.rs`).
 Call it. Don't re-roll it — each of those seven steps has been missing from a hand-rolled
 copy at some point, and the restore is the one that goes first.
@@ -119,7 +119,7 @@ copy at some point, and the restore is the one that goes first.
   sibling test that merely *reads*, and consolidating the three locks did not close that:
   four tests in `settings_tests.rs` built a `SettingsData::default()` — which reaches
   `XDG_CURRENT_DESKTOP` and all four locale variables through its serde defaults — beside
-  the tests mutating both. **`test_support::reading_env(body)`** takes the same lock
+  the tests mutating both. **`melodia_testkit::reading_env(body)`** takes the same lock
   without touching a variable and is how such a test opts in. Nothing enforces it, so a
   reader you find unwrapped is a live race, not a style nit.
 - **It is not reentrant, and that is the cost of one lock.** A helper called from inside
@@ -149,7 +149,7 @@ narrowest-item rule above.
 | `transmute` between plain-data slices | `bytemuck::cast_slice`. Already in the lock file transitively, so adopting it costs a direct-dependency line rather than a build — but it still has to earn one against what it saves |
 | uninit buffer + `set_len` | `Vec::with_capacity` + `extend`, or build with the fill you need. Every buffer in the DSP and visualizer paths is allocated once per source and reused, which is the win that actually mattered |
 | `std::arch` SIMD | measure first, and read the shape of the work: ten cascaded biquads are *serially dependent*, so there is nothing to vectorise across bands, and two channels caps the other axis at 2× |
-| `unsafe impl Send` / `Sync` | the `const _: fn() = \|\| { fn check<T: Send + Sync>() {} check::<FooUi>(); };` assertion — nine of them in the tree already |
+| `unsafe impl Send` / `Sync` | the `const _: fn() = \|\| { fn check<T: Send + Sync>() {} check::<FooUi>(); };` assertion — ten of them in the tree already |
 | a raw pointer to dodge a lifetime | an owned `Arc` clone. `PlaybackContext` exists for precisely this and says so |
 
 ## Before reaching for unsafe on a hot path

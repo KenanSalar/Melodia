@@ -4,11 +4,8 @@
 
 use std::collections::BTreeMap;
 
-use super::{
-    DEFAULT_PAGE_LIMIT, FACET_LIMIT, TAG_FACET_LIMIT, facet_params, facet_path, order_params,
-    search_params,
-};
-use melodia_core::entities::radio::{FacetKind, SearchOrder, StationSearch};
+use super::{FACET_LIMIT, TAG_FACET_LIMIT, facet_params, facet_path, order_params, search_params};
+use melodia_core::entities::radio::{DEFAULT_PAGE_LIMIT, FacetKind, SearchOrder, StationSearch};
 
 const EVERY_FACET: [FacetKind; 4] = [
     FacetKind::Countries,
