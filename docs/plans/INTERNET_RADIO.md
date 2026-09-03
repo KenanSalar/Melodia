@@ -462,7 +462,8 @@ The things that are silent when missed. Each is checked off in the phase that ow
 - [x] No `unwrap()`, no `#[allow(dead_code)]`, no `sed`-driven edits. The first two are the
       clippy gate's; the third is nobody's but yours.
 - [x] Thread names stay under 15 bytes. The stream's feed thread is `radio-buffer`, and
-      `services::tests::no_thread_name_outgrows_what_the_kernel_keeps` walks `src/` for it.
+      `tests/packaging.rs`'s `no_thread_name_outgrows_what_the_kernel_keeps` walks every
+      crate's `src/` for it.
 - [x] Nothing logs a stream URL that carries a token in its query string —
       `PlayerAction::PlayStream` renders its session number rather than its URL, and
       `player::stream_source` names the station in every message and the URL in none

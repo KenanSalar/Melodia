@@ -39,7 +39,8 @@ const NANOS_PER_SEC: u64 = 1_000_000_000;
 /// [`frames_to_duration`] is the way back but not an inverse: both floor, so a value off a frame
 /// boundary loses its remainder and a round trip loses it twice. The bound is one frame, downward
 /// — which is all the transport needs, every `Duration` it produces being a whole number of
-/// milliseconds, and dozens of frames at any rate. `player::tests::dsp_tests` pins both halves.
+/// milliseconds, and dozens of frames at any rate. `melodia-playback`'s
+/// `player::playback::dsp::tests` pins both halves.
 pub fn frames_in(span: Duration, rate: SampleRate) -> u64 {
     let rate = u64::from(rate.get());
     let subsec = u64::from(span.subsec_nanos()) * rate / NANOS_PER_SEC;

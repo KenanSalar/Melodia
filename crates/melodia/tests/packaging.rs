@@ -95,8 +95,8 @@ const ATTRIBUTION: &str = include_str!("../../../licenses/ATTRIBUTION.txt");
 /// A floor rather than an exact set, and the asymmetry is the point: it blocks the silent *loss*
 /// the walk can't see while permitting the *addition* the pin exists to catch. Retiring a face
 /// moves this number deliberately; a subdirectory dropping out of the walk does not, and three of
-/// the five sit in one. Tight rather than loose, unlike `test_support`'s source-tree floors — five
-/// files changing once a release cycle, where catching *most* of a loss buys nothing.
+/// the five sit in one. Tight rather than loose, unlike `melodia_testkit`'s source-tree floors —
+/// five files changing once a release cycle, where catching *most* of a loss buys nothing.
 ///
 /// Beside the pin rather than `FONTS_DIR` because it has one caller and, being tight, asserts
 /// about the corpus rather than guarding the walk against vacuity. Move it the day a second pin

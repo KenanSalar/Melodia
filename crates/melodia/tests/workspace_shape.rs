@@ -113,25 +113,49 @@ fn names_bound_from_members(code: &str) -> BTreeSet<&str> {
     bound
 }
 
-/// The first path segment of every re-export in `code`, in any visibility `pub` can carry.
+/// The first path segment of every re-export in `code`, in any visibility `pub` can carry, and one
+/// per path where a line spells more than one.
 ///
 /// `pub(super) use` and `pub(in …) use` are here for the same reason `pub(crate)` is: each one
 /// hands the item to somewhere its own manifest does not reach.
 fn re_export_heads(code: &str) -> impl Iterator<Item = &str> {
-    code.lines().filter_map(|line| {
-        let rest = line.trim_start().strip_prefix("pub")?;
-        // `pub(crate)`, `pub(super)`, `pub(in path)` — or nothing at all.
-        let rest = match rest.strip_prefix('(') {
-            Some(scoped) => scoped.split_once(')')?.1,
-            None => rest,
+    code.lines().flat_map(|line| {
+        let Some(path) = re_export_path(line) else {
+            return Vec::new();
         };
-        let path = rest.trim_start().strip_prefix("use ")?.trim_start();
-        // A leading `::` is the same re-export with a rooted path, and it would otherwise split to
-        // an empty head and read as a line with no path on it at all.
-        let path = path.strip_prefix("::").unwrap_or(path);
-        let head = path.split(|c: char| !c.is_alphanumeric() && c != '_').next()?;
-        (!head.is_empty()).then_some(head)
+        // A group at the root spells no head of its own and reaches one path per item, so
+        // `pub use {a::X, b::Y};` owes two answers rather than whichever it lists first. Splitting
+        // on the comma lets a nested group contribute its inner names too, which only ever widens
+        // the set the caller tests, and `melodia-views` writes the flat form for its macros.
+        match path.strip_prefix('{') {
+            Some(group) => group.split(',').filter_map(path_head).collect(),
+            None => path_head(path).into_iter().collect(),
+        }
     })
+}
+
+/// The path a `pub use` line re-exports through, past whatever names the module's own namespace
+/// rather than a segment inside it.
+///
+/// A leading `::` is the rooted spelling, and `self::` is the namespace a `use` puts its binding
+/// in, so `pub use self::m::Thing;` re-exports whatever `m` names. Neither is the head. The third
+/// spelling that reaches the same binding, a module naming itself absolutely, is past what a text
+/// walk can resolve.
+fn re_export_path(line: &str) -> Option<&str> {
+    let rest = line.trim_start().strip_prefix("pub")?;
+    // `pub(crate)`, `pub(super)`, `pub(in path)` — or nothing at all.
+    let rest = match rest.strip_prefix('(') {
+        Some(scoped) => scoped.split_once(')')?.1,
+        None => rest,
+    };
+    let path = rest.trim_start().strip_prefix("use ")?.trim_start();
+    Some(path.strip_prefix("::").or_else(|| path.strip_prefix("self::")).unwrap_or(path))
+}
+
+/// `path`'s first segment, or `None` where it opens with something that is not one.
+fn path_head(path: &str) -> Option<&str> {
+    let head = path.trim_start().split(|c: char| !c.is_alphanumeric() && c != '_').next()?;
+    (!head.is_empty()).then_some(head)
 }
 
 /// **Every member inherits `[workspace.lints]`.**

@@ -36,7 +36,7 @@ const BAND_DIR: &str = "components/hero/";
 /// A top-layer tooltip — one whose host sits somewhere Slint paints over afterwards — is a
 /// frame tracking the host's rect with the pill inside it, which
 /// `components/tooltip-frame.slint` is. This walks [`FRAME_DIRS`] rather than naming the
-/// hosts for the reason `ui::file_dialog::tests` walks the whole corpus: the site that gets it wrong
+/// hosts for the reason `tests/file_dialog.rs` walks the whole corpus: the site that gets it wrong
 /// is the one nobody has written yet, and a written inventory had already missed one.
 ///
 /// **The name says "shell" rather than "view" because `layout/` is neither** — those files
