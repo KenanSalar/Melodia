@@ -1233,6 +1233,15 @@ The scope-clippy-to-one-crate convention was never in the repo: what was there i
 blocks omitting `--workspace`, and a virtual root retires the question by making every-member the
 default selection.
 
+**The one measurement left open is the CI test job's memory cap.** `CARGO_BUILD_JOBS: 4` is argued
+against the number of test binaries linked, and that number is 43 rather than the five its comment
+claimed or the "roughly fourteen" this plan predicted — the tidy split alone turned 18 into 43, each
+walk file being a binary of its own. The count is corrected in the comment; whether 4 is still the
+right cap is a question only a runner can answer, since what it holds down is peak RSS during
+linking and this machine has more memory than one. Cheap to raise if the job's wall clock starts to
+matter, and the failure mode if it is too high is a swap rather than an error, so leave it where it
+is until a run says otherwise.
+
 ## Phase E: de-facade
 
 Each crate `pub use`s what it took, so `crate::error::AppError` still resolves everywhere and the
