@@ -1,12 +1,11 @@
 //! The set of files *we* just rewrote, so the folder watcher can ignore its own echo.
 //!
-//! [`tag_writer::apply_to_file`](super::tag_writer::apply_to_file) rewrites a file's bytes in
-//! place, which comes back as a [`FileEvent::Modified`](super::watcher::FileEvent) — a re-hash, a
-//! lofty re-parse, an artwork re-extract and a redundant row write per file, seconds after the
-//! edit already landed. It can't loop, a DB write firing no filesystem event, but a batch pays for
-//! itself twice. So the tag orchestrator [`mark`](SelfWrites::mark)s each path immediately before
-//! writing it, and the file-event processor drops any `Modified` whose path
-//! [`take_recent`](SelfWrites::take_recent)s true.
+//! `melodia-store`'s `tag_writer::apply_to_file` rewrites a file's bytes in place, which comes
+//! back as a `FileEvent::Modified` — a re-hash, a lofty re-parse, an artwork re-extract and a
+//! redundant row write per file, seconds after the edit already landed. It can't loop, a DB write
+//! firing no filesystem event, but a batch pays for itself twice. So the tag orchestrator
+//! [`mark`](SelfWrites::mark)s each path immediately before writing it, and the file-event
+//! processor drops any `Modified` whose path [`take_recent`](SelfWrites::take_recent)s true.
 //!
 //! **Mark per file, not per batch.** The TTL has to line up with the event it catches, and marking
 //! a whole batch up front starts the clock on the last file long before it is written.
@@ -17,10 +16,9 @@
 //! **silent no-op**.
 //!
 //! **Suppression makes the orchestrator the row's only writer**, so it must keep re-extracting
-//! through [`metadata::extract_metadata`](super::metadata::extract_metadata) after the write — the
-//! dropped event also refreshed `file_hash`, `file_size` and `date_modified`, all three of which
-//! change on every tag write. `.claude/rules/library-data.md` argues why that must never become a
-//! hand-built UPDATE.
+//! through `metadata::extract_metadata` after the write — the dropped event also refreshed
+//! `file_hash`, `file_size` and `date_modified`, all three of which change on every tag write.
+//! `.claude/rules/library-data.md` argues why that must never become a hand-built UPDATE.
 //!
 //! ## Accepted trades
 //!

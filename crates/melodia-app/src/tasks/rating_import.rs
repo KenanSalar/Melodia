@@ -35,7 +35,7 @@ const PAGE_ROWS: i64 = 2_000;
 
 /// Run the import unless this install has already had one.
 ///
-/// [`OnFailure::Retry`], which is where this parts company with [`super::artwork_renormalize`]'s
+/// [`one_shot::OnFailure::Retry`], which is where this parts company with [`super::artwork_renormalize`]'s
 /// otherwise identical shape. Two of the three ways this can fail write no rows at all, and the
 /// marker is the only gate there is, so recording one would put every rating in this library's
 /// files out of reach for the life of the install. A renormalize that half-ran is repaired by the

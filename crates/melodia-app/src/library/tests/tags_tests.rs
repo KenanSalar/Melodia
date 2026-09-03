@@ -1,6 +1,6 @@
 //! Orchestrator tests — target the testable `write_tag_edit` core (no
 //! `AppState`, no player) against a `test_pool` and real fixtures copied out of
-//! `tests/assets/` into a `TempDir`. Never write to the checked-in asset.
+//! `test-assets/` into a `TempDir`. Never write to the checked-in asset.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

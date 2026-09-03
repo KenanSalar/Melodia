@@ -10,7 +10,7 @@ and emits `latest.json` to `--out`.
 in-app updater can drive `pkexec dnf install` / `pkexec apt install`
 on systems where `/usr/bin/melodia` is owned by `rpm` or `dpkg`
 respectively. Client-side detection lives in
-`src/services/updater/linux_pkg.rs`.
+`crates/melodia-platform/src/services/platform/install_kind/linux_pkg.rs`.
 
 Usage (from the release workflow):
     python3 scripts/build-latest-json.py \\

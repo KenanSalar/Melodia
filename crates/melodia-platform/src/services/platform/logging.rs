@@ -80,13 +80,11 @@ static ENV_SPEC_WINS: OnceLock<bool> = OnceLock::new();
 /// **Infallible on purpose** — `.claude/rules/diagnostics.md` argues it; it degrades to
 /// stderr-only rather than refusing to start Melodia over a log file.
 ///
-/// Reads the Verbose Logging flag itself rather than taking it as an argument: applied later from
-/// the UI, the whole boot would stay at [`NORMAL_LEVEL`], and a boot going wrong is the window the
-/// switch is worth having.
-///
-/// `verbose` is passed in rather than read here: the flag lives in `settings.json`, which is the
-/// app's file, and a platform adapter that opens it names a layer sitting above this one. `main`
-/// holds the `Paths` already and does the read one line earlier, so the ordering is unchanged.
+/// `verbose` arrives as an argument because the flag lives in `settings.json`, which is the app's
+/// file, and a platform adapter that opens it names a layer sitting above this one. `main` holds
+/// the `Paths` already and does the read one line earlier, so the ordering is unchanged — and it
+/// has to happen at boot rather than being applied later from the UI, or the whole boot stays at
+/// [`NORMAL_LEVEL`] and a boot going wrong is the window the switch is worth having.
 pub fn install(paths: &Paths, verbose: bool) {
     let _ = ENV_SPEC_WINS.set(std::env::var_os("RUST_LOG").is_some());
 

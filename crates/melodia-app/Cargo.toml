@@ -13,8 +13,8 @@ doctest = false
 
 # Names every crate below it, which is what makes it the app layer rather than another tier: the
 # question it answers is what to do, and every answer needs a database, a socket, a decoder or the
-# OS. What it must not name is `melodia-views`, and the facade in `lib.rs` is `pub(crate)` for the
-# four paths views is meant to be unable to reach through it.
+# OS. What it must not name is `melodia-views`, and `lib.rs` re-exports nothing, so the crates
+# absent from views' own table stay unreachable rather than arriving through here.
 [dependencies]
 melodia-core = { path = "../melodia-core" }
 melodia-artwork = { path = "../melodia-artwork" }

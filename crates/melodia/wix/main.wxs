@@ -57,8 +57,9 @@
       Three hops, not one: this file sits at `crates/melodia/wix/`, which is
       cargo-wix's own default location for the package it installs, while every
       other packaging input stays at the repo root beside `packaging/`. The two
-      pins in `mod_tests.rs` read this file by path and are what catch a wrong
-      count here, the MSI itself being buildable on no Linux runner.
+      pins in `crates/melodia/tests/packaging.rs` read this file through
+      `MSI_SOURCE` and are what catch a wrong count here, the MSI itself being
+      buildable on no Linux runner.
     -->
     <?define RepoRoot = $(sys.SOURCEFILEDIR)..\..\.. ?>
 

@@ -7,7 +7,7 @@ paths:
 
 # Unsafe Rust — the posture, and what to reach for instead
 
-`unsafe_code = "deny"` sits in `[workspace.lints.rust]` and both packages inherit it.
+`unsafe_code = "deny"` sits in `[workspace.lints.rust]` and every member inherits it.
 Two things follow, and they're the whole of this file: the one category that earns an
 `#[allow]`, and the table of what to use instead of the ones that don't.
 
@@ -42,7 +42,7 @@ because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of t
 
 | site | what |
 |---|---|
-| `src/main.rs` | `env::set_var` for `PIPEWIRE_ALSA` |
+| `crates/melodia/src/main.rs` | `env::set_var` for `PIPEWIRE_ALSA` |
 | `crates/melodia-platform/…/allocator.rs` | `libc::mallopt` ×3 (the glibc arena / mmap / trim knobs), `libc::malloc_trim` |
 | `crates/melodia-platform/…/dwm_titlebar.rs` | `DwmSetWindowAttribute` ×3 |
 | `crates/melodia-app/…/settings/data.rs` | `GetUserDefaultLocaleName` |

@@ -155,7 +155,7 @@ fn a_malformed_box_tree_is_given_up_on() -> Result<(), AppError> {
 ///
 /// Those files state 220502 frames of presentation over a 222208-frame track carrying 1600 of
 /// priming, so deriving the length as duration minus priming leaves 106 frames of padding at
-/// exactly the boundary they exist to test. Nothing in `tests/assets/` distinguishes the two
+/// exactly the boundary they exist to test. Nothing in `test-assets/` distinguishes the two
 /// answers, every fixture there agreeing on both, so this states them directly.
 #[test]
 fn the_edit_lists_own_length_wins_over_the_one_derived_from_the_duration() -> Result<(), AppError> {
@@ -217,7 +217,7 @@ fn resolved(duration: Option<u64>, delay: u64, playable: Option<u64>) -> Option<
 
 /// The walk's branches that no fixture states.
 ///
-/// ffmpeg writes one shape and it is the only one in `tests/assets/`: a version 0 edit list of a
+/// ffmpeg writes one shape and it is the only one in `test-assets/`: a version 0 edit list of a
 /// single entry, under 32-bit box headers, in a file with one track. Everything below is legal MP4
 /// the walk has to read the same way, so the boxes are written out here the way
 /// `tests/crossfade.rs` writes its WAV headers.

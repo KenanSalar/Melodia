@@ -33,7 +33,9 @@ pub enum LinuxPackageFormat {
 
 /// The unset cell means "no probe yet"; the inner `Option` is the answer.
 /// Skipped under `cfg(test)`, so the test binary's own path can't poison a
-/// later run that wants to override the probe.
+/// later run that wants to override the probe — which reaches **this crate's**
+/// test binary only, `cfg(test)` not crossing a crate boundary. A test elsewhere
+/// that wants the override has to live here.
 static CACHED: OnceLock<Option<LinuxPackageFormat>> = OnceLock::new();
 
 /// The package format owning the running binary, or `None` when no probe

@@ -12,11 +12,10 @@
 
 use std::collections::HashMap;
 
-use melodia_core::entities::locale::SUPPORTED_LOCALES;
-
 use serde::{Deserialize, Serialize};
 
 use melodia_core::entities::integrations::{DiscordFlags, ScrobbleFlags};
+use melodia_core::entities::locale::SUPPORTED_LOCALES;
 use melodia_engine::player::engine::types::RepeatMode;
 use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
 use melodia_playback::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};

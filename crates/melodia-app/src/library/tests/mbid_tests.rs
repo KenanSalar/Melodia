@@ -1,6 +1,6 @@
 //! Backfill-writer tests — target the testable `write_mbids` core (no
 //! `AppState`) against a `test_pool` and real fixtures copied out of
-//! `tests/assets/` into a `TempDir`. Never write to the checked-in asset.
+//! `test-assets/` into a `TempDir`. Never write to the checked-in asset.
 
 use std::path::PathBuf;
 use std::sync::Arc;

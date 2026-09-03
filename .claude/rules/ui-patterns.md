@@ -689,7 +689,7 @@ silently miss the other.
   owns the `weak.upgrade()` + `.set_parent(…)` half; the caller chains its own
   `add_filter`/`pick_*`/`save_file`. **Never build one inline**, and the reason is that the bug is
   invisible here: without the parent it z-orders behind Melodia on Windows and macOS, while Linux's
-  XDG portal parents OS-side regardless. Held by a test that **walks `src/`** rather than naming
+  XDG portal parents OS-side regardless. Held by a test that **walks every crate's `src/`** rather than naming
   the five sites, and carries a caller floor so a caller that stops opening a dialog trips it too.
 
 - **Keyboard shortcuts** — the root `FocusScope` is `ShortcutScope`, which owns every binding and

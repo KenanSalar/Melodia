@@ -211,7 +211,7 @@ fn assets_dir() -> std::path::PathBuf {
 }
 
 /// Copy a checked-in fixture into `tmp` under `name`, so a rename is free and the
-/// artwork lookup can't see `tests/assets/cover.jpg` sitting beside the original.
+/// artwork lookup can't see `test-assets/cover.jpg` sitting beside the original.
 fn stage_as(tmp: &TempDir, fixture: &str, name: &str) -> Result<std::path::PathBuf, AppError> {
     let dst = tmp.path().join(name);
     std::fs::copy(assets_dir().join(fixture), &dst)?;

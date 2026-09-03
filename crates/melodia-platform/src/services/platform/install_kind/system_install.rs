@@ -4,10 +4,10 @@
 //! where there is no viable in-app update path. Three shapes have one: a per-user
 //! install whose directory we can `rename(2)` (`AppImage`, tarball); a direct-download
 //! RPM/deb, whose root-owned `/usr/bin/melodia` is still updatable because
-//! [`super::install::download_and_install`] goes through `pkexec dnf/apt install`
-//! rather than a raw `mv`, keeping the package DB consistent; and a per-machine
-//! Windows MSI, where handing the next signed one to `msiexec /i` lets UAC, `WiX`'s
-//! `MajorUpgrade` and Restart Manager do the swap.
+//! `melodia-app`'s `updater::install::download_and_install` goes through
+//! `pkexec dnf/apt install` rather than a raw `mv`, keeping the package DB
+//! consistent; and a per-machine Windows MSI, where handing the next signed one to
+//! `msiexec /i` lets UAC, `WiX`'s `MajorUpgrade` and Restart Manager do the swap.
 //!
 //! Two still report system-managed. A tarball hand-dropped under a root-owned
 //! directory — the `pkexec mv` path exists for it, but the UI stays hidden to keep

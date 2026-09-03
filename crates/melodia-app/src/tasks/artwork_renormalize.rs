@@ -36,7 +36,7 @@ struct Outcome {
 
 /// Run the pass unless this install has already had one.
 ///
-/// [`OnFailure::Mark`]: a store that half-normalized is still correct — every row points at a file
+/// [`one_shot::OnFailure::Mark`]: a store that half-normalized is still correct — every row points at a file
 /// that exists — and retrying the same failure on every launch buys nothing a re-scan wouldn't.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     one_shot::spawn(

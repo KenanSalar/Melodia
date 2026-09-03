@@ -158,4 +158,4 @@ subset_font "MaterialSymbolsRounded.ttf"       0
 subset_font "MaterialSymbolsRoundedFilled.ttf" 1
 
 echo
-echo "Done. Re-run \`cargo build --release\` to embed the new subsets."
+echo "Done. Re-run \`cargo build --release -p melodia\` to embed the new subsets."

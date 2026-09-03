@@ -3,8 +3,9 @@
 //! `slint::include_modules!()` pulls in one enormous generated compilation unit.
 //! Inside `melodia` it was rebuilt on every Rust change and built twice per
 //! `cargo test`; here it moves only when a `.slint` source or a translation
-//! catalog does. `melodia` re-exports it, so call sites still name
-//! `crate::AppWindow`, `crate::TrackRow` and the rest.
+//! catalog does. **Nothing re-exports it**, so every call site spells
+//! `melodia_ui::AppWindow`, `melodia_ui::TrackRow` and the rest, and the import
+//! says where the type is generated.
 
 // Generated code — a lint hit would land in a file that doesn't exist until build
 // time. `warnings` covers every warn-level entry in `[workspace.lints]` including

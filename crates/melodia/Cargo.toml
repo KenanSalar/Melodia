@@ -17,8 +17,6 @@ categories = ["multimedia::audio"]
 # `melodia-ui` is depended on by path with no version, so a publish could never work.
 publish = false
 
-# `winit` carries its own `[workspace]`; excluding it survives an upstream re-sync
-
 # The artifact name is load-bearing and is not the package name: `target/release/Melodia`
 # is spelled in the three packaging scripts, `release-build.yml`'s BINARY, and
 # `wix/main.wxs`'s `Melodia.exe` File, RestartResource and
