@@ -7,7 +7,8 @@ below is exactly what #84 exists to stop evaporating.
 
 Status: **Phases A, B and C complete** · Issue:
 [#83](https://github.com/KenanSalar/Melodia/issues/83) · Created: 2026-09-03 · Validated against
-`93b47dfa`, Phase A landed on `a1c087e4`, Phase B over five commits from `e506b490`
+`93b47dfa`, Phase A landed on `a1c087e4`, Phase B over five commits from `e506b490`, Phase C over
+four from `1060d8f1` to `01c314a8`
 
 > **Phase A's twelve items are done and its checks pass**, so the counts below that describe
 > `src/` describe the tree *before* it. Where a Phase B item's inventory has moved, its own entry
@@ -1021,7 +1022,7 @@ Two further decisions the phase needs and the doc did not carry:
       and the one that survived is the one with content: `RadioNowPlaying` has thirteen fields and
       `PlayerViewModelLight` thirteen more, where a `Shape` constructor is five lines.
 
-      > **Commit 2 lands here.** Eight crates out; `melodia-audio` names no cpal and
+      > **Commit 2 landed here** (`4c8ad257`). Eight crates out; `melodia-audio` names no cpal and
       > `melodia-playback` no reqwest, both now enforced by cargo rather than asserted by a grep.
       > 2,237 tests across thirteen binaries.
 
@@ -1078,7 +1079,7 @@ Two further decisions the phase needs and the doc did not carry:
       graph. Pruned here, `sqlx` demoted to a dev-dependency, and the eleven `melodia-*` path lines
       are what remain of the topology at the top.
 
-      > **Commit 3 lands here.** Twelve crates out; `melodia-store` names no socket and
+      > **Commit 3 landed here** (`8a38451a`). Twelve crates out; `melodia-store` names no socket and
       > `melodia-integrations` no schema, both now cargo's answer rather than a grep's. The same
       > 2,237 tests across seventeen binaries.
 
@@ -1140,6 +1141,10 @@ Two further decisions the phase needs and the doc did not carry:
 
       23 `.slint` prose comments named `src/ui/…` and five more were already stale from C3 and
       C12, none of them walked for; B5 met this class and it has not stopped being true.
+
+      > **Commit 4 landed here** (`01c314a8`), and with it Phase C. Thirteen crates; the UI layer
+      > names neither the schema nor a socket, which is cargo's answer rather than a grep's and
+      > was the exercise. The same 2,237 tests across eighteen binaries.
 
 Rolling work, fixed in the step that surfaces it rather than batched: `pub(crate)` widening where an
 item crosses its new boundary (181 production candidates, every one named by rustc);
