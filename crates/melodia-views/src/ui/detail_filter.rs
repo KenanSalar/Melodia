@@ -15,9 +15,9 @@ use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
 use crate::TrackListRow as UiTrackListRow;
-use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::ui::detail_selection::RowSelectionView;
 use crate::ui::row_match::{Needle, track_matches};
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 /// Re-apply selection from the view's `selected-ids` onto freshly-built rows before they
 /// are swapped in — `to_slint_track_list_row` defaults `selected` to `false`, so a

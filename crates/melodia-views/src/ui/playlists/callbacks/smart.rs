@@ -19,12 +19,12 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use crate::entities::smart_criteria as sc;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, Dialog, SmartEditor, SmartRuleRow};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::smart_criteria as sc;
 
 /// Wire the Smart-Playlist editor callbacks + install its rules model. See
 /// [`super::wire`].

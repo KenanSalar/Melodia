@@ -7,11 +7,11 @@
 //! `.slint`, so the text is resolved on the UI thread by
 //! `apply::write_top_result`.
 
-use crate::entities::album::AlbumStats;
-use crate::entities::artist::ArtistStats;
-use crate::entities::genre::GenreStats;
-use crate::library::search::SearchResults;
 use crate::ui::row_match::fold_needle;
+use melodia_app::library::search::SearchResults;
+use melodia_core::entities::album::AlbumStats;
+use melodia_core::entities::artist::ArtistStats;
+use melodia_core::entities::genre::GenreStats;
 
 /// Top Result discriminator. Matches the `top-kind` string slot in the
 /// Slint `Search` global ("album" / "artist" / "genre" / ""). A genre

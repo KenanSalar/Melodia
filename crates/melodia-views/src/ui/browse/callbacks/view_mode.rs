@@ -5,12 +5,12 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
 use crate::ui::callbacks::macros::spawn_blocking_logged;
 use crate::ui::tab_bar::should_announce_warm;
 use crate::{AppWindow, Browse};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
     let g = ui.global::<Browse>();

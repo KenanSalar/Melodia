@@ -8,10 +8,10 @@
 //! each is a newtype over the machinery here.
 //!
 //! Deliberately **separate, small** caches rather than a share of the row-tier
-//! [`crate::media::image::cover_thumbs::CoverThumbs`]: mixing these much larger buffers into that
-//! LRU would evict row thumbnails wholesale. Buffers rather than `Image`, `slint::Image`
-//! being neither `Send` nor `Sync` and so unable to cross the `spawn_blocking` boundary
-//! the decode runs on.
+//! [`melodia_artwork::media::image::cover_thumbs::CoverThumbs`]: mixing these much larger
+//! buffers into that LRU would evict row thumbnails wholesale. Buffers rather than `Image`,
+//! `slint::Image` being neither `Send` nor `Sync` and so unable to cross the `spawn_blocking`
+//! boundary the decode runs on.
 
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -22,11 +22,11 @@ use lru::LruCache;
 use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::media::image::image_decode::{
-    FilterType, MAX_SOURCE_DIM, decode_capped_to, fit_within, resize_rgb8,
-};
 use crate::ui::backdrop::BackdropSample;
 use crate::ui::util::{BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
+use melodia_artwork::media::image::image_decode::{
+    FilterType, MAX_SOURCE_DIM, decode_capped_to, fit_within, resize_rgb8,
+};
 
 /// The blurred half's shape: [`BLUR_TARGET`] wide by `height`, softened at `sigma`. The
 /// width is shared, a backdrop carrying no fine detail either way.

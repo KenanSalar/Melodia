@@ -5,12 +5,12 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::entities::track::MostPlayedFavorite;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{
     AppWindow, EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow,
     RecentlyPlayed, TrackListRow as UiTrackListRow,
 };
+use melodia_core::entities::track::MostPlayedFavorite;
 
 /// Bind empty Slint `VecModel`s for the Most Played grid, the Songs list and the
 /// selection set. Subsequent updates locate them by downcasting back to

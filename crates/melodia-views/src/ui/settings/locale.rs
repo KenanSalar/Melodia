@@ -19,10 +19,10 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::library;
-use crate::services;
-use crate::state::AppState;
 use crate::{AppWindow, Settings};
+use melodia_app::library;
+use melodia_app::services;
+use melodia_app::state::AppState;
 
 /// Native-name labels for [`services::settings::SUPPORTED_LOCALES`]. Indices
 /// match 1:1 — adding a locale means appending to both arrays.

@@ -6,10 +6,10 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::search::{SearchUi, fetch::push_recent_rows_to_slint};
 use crate::{AppWindow, Search};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// Wire the recent-pick / recent-remove / recent-clear callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {

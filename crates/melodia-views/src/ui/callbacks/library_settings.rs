@@ -4,12 +4,12 @@ use async_compat::Compat;
 use slint::ComponentHandle;
 
 use super::macros::{spawn_logged, spawn_logged_toast};
-use crate::error::AppError;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::file_dialog;
 use crate::ui::settings::library_settings as lib_settings_ui;
 use crate::{AppWindow, LibrarySettings};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::error::AppError;
 
 /// Wire the `LibrarySettings.*` callbacks. Pairs with
 /// `ui::settings::library_settings::install`, which handles the push side (folder list
@@ -49,8 +49,8 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
                         // screen by the time the scan starts.
                         if let Err(e) = library::settings::scan_folder(&s, folder.id).await {
                             log::warn!("scan after add_folder: {e}");
-                            crate::utils::toast::notify(
-                                crate::utils::toast::ToastKind::OperationFailed,
+                            melodia_core::utils::toast::notify(
+                                melodia_core::utils::toast::ToastKind::OperationFailed,
                                 e.to_string(),
                             );
                         }

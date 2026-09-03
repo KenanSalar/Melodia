@@ -12,11 +12,11 @@ use std::time::Duration;
 
 use slint::ComponentHandle;
 
-use crate::error::AppError;
-use crate::state::AppState;
 use crate::ui::launcher;
 use crate::ui::shell::notifications::{NotificationsUi, RowText};
 use crate::{AppWindow, Settings};
+use melodia_app::state::AppState;
+use melodia_core::error::AppError;
 
 /// A literal rather than a manifest field — Cargo has no `funding` key to read it out
 /// of, unlike `about.rs`'s `CARGO_PKG_REPOSITORY`.
@@ -73,7 +73,7 @@ fn schedule_prompt(
         let counting = state.clone();
         let due = state
             .runtime
-            .spawn_blocking(move || crate::library::settings::record_launch(&counting))
+            .spawn_blocking(move || melodia_app::library::settings::record_launch(&counting))
             .await;
         match due {
             Ok(Ok(true)) => {}
@@ -93,7 +93,7 @@ fn schedule_prompt(
 
         state.persist_blocking(
             "persist support_prompt_seen",
-            crate::library::settings::mark_support_prompt_seen,
+            melodia_app::library::settings::mark_support_prompt_seen,
         );
 
         // Sticky, for the crash notice's reason: this fires once ever, so a notice the

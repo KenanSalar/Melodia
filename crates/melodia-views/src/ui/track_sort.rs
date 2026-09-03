@@ -20,7 +20,7 @@
 //! (`ui::track_list_cache`), and forking it would give the app two spellings of its sort
 //! semantics.
 
-use crate::entities::track::TrackListRow as RsTrackListRow;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 /// The fields a track-list sort compares, so the comparator can be handed either a DB row
 /// or a cached display row. The flattening rules live here rather than in the arms, so

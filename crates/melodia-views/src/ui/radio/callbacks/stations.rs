@@ -9,12 +9,12 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::entities::radio::DirectoryStation;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::launcher;
 use crate::ui::radio::{RadioUi, browse, kept};
 use crate::{AppWindow, Radio, RadioStationRow};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::radio::DirectoryStation;
 
 /// Whether a row names a station that already has a database row.
 fn is_kept(row: &RadioStationRow) -> bool {
@@ -70,7 +70,7 @@ fn play_kept(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &slint::Weak<AppWi
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), weak.clone());
     state.runtime.spawn(async move {
         if let Err(e) = library::radio::play_station(&s, id).await {
-            log::warn!("radio::play_station: {}", crate::error::describe(&e));
+            log::warn!("radio::play_station: {}", melodia_core::error::describe(&e));
         }
         refresh_lists(&s, &ru, &weak);
     });
@@ -88,7 +88,7 @@ fn play_browsed(
     state.runtime.spawn(async move {
         if let Err(e) = library::radio::play_directory_station(&s, &station, logo.as_deref()).await
         {
-            log::warn!("radio::play_station: {}", crate::error::describe(&e));
+            log::warn!("radio::play_station: {}", melodia_core::error::describe(&e));
         }
         refresh_lists(&s, &ru, &weak);
     });
@@ -132,7 +132,7 @@ fn toggle_kept(
             library::radio::remove_from_favorites(&s, id).await
         };
         if let Err(e) = flipped {
-            log::warn!("radio: favorite toggle failed: {}", crate::error::describe(&e));
+            log::warn!("radio: favorite toggle failed: {}", melodia_core::error::describe(&e));
             return;
         }
         refresh_lists(&s, &ru, &weak);
@@ -174,7 +174,7 @@ fn toggle_browsed(
                 Err(e) => Err(e),
             };
         if let Err(e) = flipped {
-            log::warn!("radio: favorite toggle failed: {}", crate::error::describe(&e));
+            log::warn!("radio: favorite toggle failed: {}", melodia_core::error::describe(&e));
             // Put the star back rather than leaving it claiming a row that was never written. A
             // routine failure, so it is a log line and not a toast.
             ru.set_local_favorite(&uuid, !wanted);

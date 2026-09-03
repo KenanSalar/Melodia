@@ -7,7 +7,6 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::state::AppState;
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
@@ -17,6 +16,7 @@ use crate::{
     AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, Playlists,
     TrackListRow as UiTrackListRow,
 };
+use melodia_app::state::AppState;
 
 /// Wire the Playlists section-lifecycle callbacks. See
 /// [`super::wire`].

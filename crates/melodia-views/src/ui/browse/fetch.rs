@@ -12,14 +12,14 @@ use super::cards::{self, BrowseViewMode};
 use super::models::{replace_breadcrumb_model, replace_folder_model, replace_rows_model};
 use super::selection::{apply_selection_to_rows, reset_selection};
 use super::{BrowseUi, to_slint_browse_track_row};
-use crate::entities::browse::BrowseFolder;
-use crate::error::AppResult;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::model_patch;
 use crate::{
     AppWindow, Browse, BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
 };
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::browse::BrowseFolder;
+use melodia_core::error::AppResult;
 
 /// Re-fetch the current folder (root or otherwise) and push the result
 /// into the Slint models. Async — runs on the tokio runtime; the UI

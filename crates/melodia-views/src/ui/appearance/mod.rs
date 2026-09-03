@@ -1,7 +1,7 @@
 //! Wiring for the Appearance section's Theme / Variant / Accent rows.
 //!
 //! Reads the persisted `theme_id` / `theme_variant` / `accent_color` from
-//! `services::settings`, populates the Slint `Settings` global, and applies
+//! `melodia_app::services::settings`, populates the Slint `Settings` global, and applies
 //! the resolved palette via `theme_apply::apply()`. Three callbacks
 //! (`theme-changed` / `variant-changed` / `accent-changed`) update the
 //! global, repaint the Theme tokens, and persist the new selection on the
@@ -22,12 +22,12 @@ use std::sync::Arc;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::sync::watch;
 
-use crate::library;
-#[cfg(target_os = "linux")]
-use crate::services;
-use crate::state::{AppState, Signal};
-use crate::themes::{self, SystemColorState, ThemeDef};
 use crate::{AppWindow, Settings};
+use melodia_app::library;
+use melodia_app::state::{AppState, Signal};
+use melodia_core::themes::{self, SystemColorState, ThemeDef};
+#[cfg(target_os = "linux")]
+use melodia_platform::services::platform;
 
 pub use install::install;
 pub use repaint::{apply_and_seed, repaint_from_settings};
@@ -63,8 +63,8 @@ pub(super) fn read_initial_system_state() -> SystemColorState {
     #[cfg(target_os = "linux")]
     {
         SystemColorState {
-            theme: services::platform::system_theme::get_system_theme_blocking(),
-            kde_palette: services::platform::system_theme::get_kde_colors(),
+            theme: platform::system_theme::get_system_theme_blocking(),
+            kde_palette: platform::system_theme::get_kde_colors(),
             material_you: None,
         }
     }

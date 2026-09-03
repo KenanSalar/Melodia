@@ -1316,7 +1316,7 @@ naming either once the shims are gone. That is one fewer test binary, 41 rather 
       manifest is the enforcement, and views not listing `melodia-store` is a harder error than a
       private module: the import does not resolve at all rather than resolving to something
       private. The After-C check is restated in that form.
-- [ ] **E10. `melodia-views`**, roughly 321 layering lines.
+- [x] **E10. `melodia-views`**, roughly 321 layering lines.
 - [ ] **E11. `melodia-views`, the generated types.** Roughly 224 lines across 174 files, 157 of
       them grouped imports translating one for one to `use melodia_ui::{AppWindow, Settings};`.
       Its own commit because it answers a different question from E10 and reviews separately.

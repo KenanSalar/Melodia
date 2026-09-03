@@ -1,9 +1,9 @@
 //! The Favorite Artists order. Most Played has none: its SQL rank is the
 //! tab's whole meaning.
 
-use crate::entities::artist::FavoriteArtist;
-use crate::services::settings::{SortDir, ViewSort};
 use crate::ui::favorites::FavoritesUi;
+use melodia_app::services::settings::{SortDir, ViewSort};
+use melodia_core::entities::artist::FavoriteArtist;
 
 /// Order the Favorite Artists cache in place.
 ///

@@ -1,4 +1,5 @@
-//! Glue between the system tray ([`crate::services::platform::tray`]) and the rest of the app.
+//! Glue between the system tray ([`melodia_platform::services::platform::tray`]) and the rest of
+//! the app.
 //!
 //! Three pieces:
 //!
@@ -17,13 +18,15 @@ use std::sync::{Arc, Mutex};
 
 use slint::ComponentHandle;
 
-use crate::player::engine::event_sink::{EventSink, PlayerEvent};
-use crate::player::engine::state::PlayerViewModelLight;
-use crate::services::platform::tray::{self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TraySnapshot};
-use crate::state::AppState;
-use crate::tasks::TaskSpawner;
 use crate::ui::shell::event_sink::SlintEventSink;
 use crate::{AppWindow, Settings, Visualizer};
+use melodia_app::state::AppState;
+use melodia_app::tasks::TaskSpawner;
+use melodia_engine::player::engine::event_sink::{EventSink, PlayerEvent};
+use melodia_engine::player::engine::state::PlayerViewModelLight;
+use melodia_platform::services::platform::tray::{
+    self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TraySnapshot,
+};
 
 /// Mirrors `settings.tray.close_to_tray`, so `window_chrome`'s close handlers
 /// read the preference without touching disk.
@@ -367,7 +370,9 @@ fn spawn_state_subscriber_linux(spawner: &TaskSpawner, state: &AppState, tray: t
 /// `tray-icon` handle being `!Send`. Must be spawned from there — `install` calls it
 /// inside `invoke_from_event_loop`.
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-fn spawn_state_subscriber_local(sinks: &Arc<crate::player::engine::event_sink::PlayerSinks>) {
+fn spawn_state_subscriber_local(
+    sinks: &Arc<melodia_engine::player::engine::event_sink::PlayerSinks>,
+) {
     let mut rx = sinks.view_model.subscribe();
     let res = slint::spawn_local(async_compat::Compat::new(async move {
         // Diff as the Linux subscriber does.

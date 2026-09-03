@@ -5,14 +5,14 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::library;
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::track_list_view::view_id;
 use crate::{AlbumDetail, Albums, AppWindow};
+use melodia_app::library;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 /// Wire the `Albums` grid callbacks. See [`super::wire`].
 pub(super) fn wire(

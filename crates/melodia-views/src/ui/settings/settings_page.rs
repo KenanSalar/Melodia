@@ -9,12 +9,12 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::row_match::{self, Needle};
 use crate::ui::tab_bar::clamp_tab;
 use crate::{AppWindow, SettingsPage};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// Which Settings tab is showing. The `FavoritesTab` / `RecentlyPlayedTab` shape.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

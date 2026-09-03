@@ -6,9 +6,9 @@
 //! returns, then persist on the blocking pool. A failed disk write must not undo the
 //! applied value — the warn from [`AppState::persist_blocking`] is the only report.
 
-use crate::error::AppError;
-use crate::services::settings::{self, SettingsData};
-use crate::state::{AppState, PlaybackContext};
+use melodia_app::services::settings::{self, SettingsData};
+use melodia_app::state::{AppState, PlaybackContext};
+use melodia_core::error::AppError;
 
 /// Persisted settings for an installer to seed its global from, falling back to the inert
 /// defaults if the file is missing or unreadable. Deriving that fallback from

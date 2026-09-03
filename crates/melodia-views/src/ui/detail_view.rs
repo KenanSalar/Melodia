@@ -139,11 +139,11 @@ pub(crate) use impl_detail_view_helpers;
 /// view type. It reads the file each call, which is what those want and what a boot-time seed
 /// does not: reach for [`crate::ui::callbacks::persisted_sort`] there instead.
 pub fn resolve_view_sort(
-    state: &crate::state::AppState,
+    state: &melodia_app::state::AppState,
     view_id: &str,
     default_field: &str,
 ) -> (String, String) {
-    crate::library::settings::get_view_sort(state, view_id).map_or_else(
+    melodia_app::library::settings::get_view_sort(state, view_id).map_or_else(
         || (default_field.to_owned(), "asc".to_owned()),
         |s| (s.field, s.dir.as_str().to_owned()),
     )

@@ -6,11 +6,11 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::{AppWindow, Playlists};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// Wire the `Playlists` grid callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {

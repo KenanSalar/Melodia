@@ -16,12 +16,12 @@ use std::time::{Duration, Instant};
 use parking_lot::Mutex;
 use slint::{ComponentHandle, Weak};
 
-use crate::entities::radio::{DirectoryStation, StationPage, StationSearch};
-use crate::library;
-use crate::state::AppState;
 use crate::ui::grid_rows::{chunk_built_rows, write_grid};
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Radio, RadioStationGridRow};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::radio::{DirectoryStation, StationPage, StationSearch};
 
 use super::{RadioUi, covers, logos, rows};
 
@@ -309,7 +309,7 @@ fn fetch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, append: bool
         let landed = match outcome {
             Ok(page) => ru.browse.lock().finish(generation, page, append),
             Err(e) => {
-                log::warn!("radio: directory search failed: {}", crate::error::describe(&e));
+                log::warn!("radio: directory search failed: {}", melodia_core::error::describe(&e));
                 let current = ru.browse.lock().fail(generation, append);
                 if current {
                     let _ = weak.upgrade_in_event_loop(|ui| {

@@ -8,9 +8,9 @@
 
 use slint::{Model, VecModel};
 
-use crate::player::playback::spectrum::SpectrumAnalyzer;
-use crate::player::playback::visualizer::VisualizerShared;
-use crate::player::playback::waveform::{self, WaveformAnalyzer};
+use melodia_playback::player::playback::spectrum::SpectrumAnalyzer;
+use melodia_playback::player::playback::visualizer::VisualizerShared;
+use melodia_playback::player::playback::waveform::{self, WaveformAnalyzer};
 
 /// Below this level a drawing is visually at rest, so the driving Timer can stop.
 const IDLE_LEVEL: f32 = 0.001;

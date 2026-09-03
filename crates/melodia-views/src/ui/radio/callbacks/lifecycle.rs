@@ -19,11 +19,11 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::state::AppState;
-use crate::tasks::TaskSpawner;
 use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
 use crate::ui::radio::{RadioUi, browse, covers, detail, facets, kept};
 use crate::{AppWindow, Radio};
+use melodia_app::state::AppState;
+use melodia_app::tasks::TaskSpawner;
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     let g = ui.global::<Radio>();
@@ -91,11 +91,11 @@ fn leave(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     } else {
         // The tier release above runs on the UI thread, where the arena walk may not, and the
         // seated arm gets its trim from `release_detail_artwork`. This is the other leave.
-        state.runtime.spawn_blocking(crate::services::platform::allocator::trim);
+        state.runtime.spawn_blocking(melodia_platform::services::platform::allocator::trim);
     }
 
     // The browsed-logo cache only grows while this page is open, so the leave is when it stops —
     // and the artwork sweep's own trigger is a library scan, which a user who browses radio and
     // never touches their music folders may not run for weeks.
-    crate::tasks::radio_logo_cache::spawn(&TaskSpawner::from_state(state), state);
+    melodia_app::tasks::radio_logo_cache::spawn(&TaskSpawner::from_state(state), state);
 }

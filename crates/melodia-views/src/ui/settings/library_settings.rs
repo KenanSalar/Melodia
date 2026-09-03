@@ -12,10 +12,10 @@ use std::rc::Rc;
 use async_compat::Compat;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::util::{clamp_i64_to_i32, count_as_i32};
 use crate::{AppWindow, Dialog, FolderListRow, LibrarySettings};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// Wire up the `LibrarySettings` global: initial folder fetch +
 /// scan-progress subscriber + library-changed re-fetch subscriber. Call once

@@ -29,7 +29,7 @@ use slint::winit_030::winit::window::Window as WinitWindow;
 use slint::{ComponentHandle, LogicalPosition, LogicalSize};
 
 use crate::AppWindow;
-use crate::services::settings::SettingsData;
+use melodia_app::services::settings::SettingsData;
 
 /// Lower bound for a restored window size, mirroring `app-window.slint`'s own — a guard
 /// against a corrupt `settings.json` producing a 0×0 window.

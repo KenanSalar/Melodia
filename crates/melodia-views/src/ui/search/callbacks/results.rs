@@ -8,9 +8,6 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Model, SharedString};
 
 use super::NAV_SEARCH;
-use crate::library;
-use crate::services::settings::ViewSort;
-use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::cross_tab_nav;
@@ -21,6 +18,9 @@ use crate::ui::callbacks::{
 use crate::ui::search::{self as search_ui_mod, SearchUi, fetch};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Search};
+use melodia_app::library;
+use melodia_app::services::settings::ViewSort;
+use melodia_app::state::AppState;
 
 /// Wire the cross-tab open / Top Result / row-action / sort / selection
 /// callbacks.

@@ -8,15 +8,15 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString, Weak};
 
-use crate::entities::radio;
-use crate::error::AppError;
-use crate::library;
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::radio::{RadioTab, RadioUi, kept};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Dialog, Radio, RadioForm};
+use melodia_app::library;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
+use melodia_core::entities::radio;
+use melodia_core::error::AppError;
 
 pub(super) fn wire(
     ui: &AppWindow,
@@ -114,7 +114,7 @@ fn remove(
             RemoveFrom::Recent => library::radio::remove_from_recent(&s, id).await,
         };
         if let Err(e) = removed {
-            log::warn!("radio: station removal failed: {}", crate::error::describe(&e));
+            log::warn!("radio: station removal failed: {}", melodia_core::error::describe(&e));
             return;
         }
         let _ = weak.upgrade_in_event_loop(move |ui| kept::refresh(&ui, &s, &ru));
@@ -215,7 +215,7 @@ fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak
                     kept::refresh(&ui, &s, &ru);
                 }
                 Err(e) => {
-                    log::warn!("radio: station form: {}", crate::error::describe(&e));
+                    log::warn!("radio: station form: {}", melodia_core::error::describe(&e));
                     form.set_error(form_error(&form, &e));
                 }
             }

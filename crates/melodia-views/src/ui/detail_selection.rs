@@ -21,9 +21,9 @@ use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
 use crate::TrackListRow as UiTrackListRow;
-use crate::entities::track::TrackListRow as RsTrackListRow;
 pub use crate::ui::list_selection::RowSelectionView;
 use crate::ui::util::clamp_i64_to_i32;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 /// Borrows of the Rust-side caches a detail view keeps alongside its Slint
 /// model: the track rows in display order, and the selection set currently

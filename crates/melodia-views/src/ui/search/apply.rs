@@ -12,16 +12,16 @@ use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
 use super::state::COMPACT_TRACK_LIMIT;
 use super::top_result::{TopKind, TopResult, TopSubtitle, compute_top_result};
 use super::{SearchUi, restamp_rows, to_slint_album_strip_row, to_slint_artist_strip_row};
-use crate::entities::artist::ArtistStats;
-use crate::entities::track::TrackListRow as RsTrackListRow;
-use crate::library::search::SearchResults;
-use crate::services::settings::SortDir;
 use crate::ui::genres::genre_accent;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{
     AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
 };
+use melodia_app::library::search::SearchResults;
+use melodia_app::services::settings::SortDir;
+use melodia_core::entities::artist::ArtistStats;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 /// Push the freshly-fetched `results` into all four Slint models,
 /// compute + apply the Top Result, set `tracks-total`, and honour the
@@ -64,7 +64,7 @@ pub fn apply_results_to_slint(
 /// cheap.
 fn sort_track_rows(
     tracks: &[RsTrackListRow],
-    sort: &crate::services::settings::ViewSort,
+    sort: &melodia_app::services::settings::ViewSort,
 ) -> (Vec<UiTrackListRow>, i32) {
     // The FTS5 `ORDER BY rank` lands these rank-ordered, but the user may
     // have picked a different sort after the fact.

@@ -4,9 +4,6 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
-use crate::library;
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{
     collect_track_ids, next_sort, persist_view_sort, persisted_sort, play_row_start,
@@ -14,6 +11,9 @@ use crate::ui::callbacks::{
 use crate::ui::track_list_view::view_id;
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
 use crate::{AppWindow, Tracks};
+use melodia_app::library;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 /// Wire the list's own callbacks, and seed the sort header they persist through.
 pub(super) fn wire(

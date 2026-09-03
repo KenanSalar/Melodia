@@ -10,8 +10,6 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, SharedString};
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::file_dialog;
 use crate::ui::radio::{RadioUi, kept};
 use crate::ui::shell::notifications::{
@@ -19,6 +17,8 @@ use crate::ui::shell::notifications::{
 };
 use crate::ui::util::count_as_i32;
 use crate::{AppWindow, Radio, Settings};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// The extensions a station list arrives in. `.pls` is the one most stations are handed out as,
 /// which is why the importer reads it at all.
@@ -71,7 +71,7 @@ pub fn wire(
                             log::warn!(
                                 "radio: import {}: {}",
                                 handle.path().display(),
-                                crate::error::describe(&e)
+                                melodia_core::error::describe(&e)
                             );
                         }
                     }
@@ -139,7 +139,7 @@ pub fn wire(
                         );
                     }
                     Err(e) => {
-                        log::warn!("radio: export: {}", crate::error::describe(&e));
+                        log::warn!("radio: export: {}", melodia_core::error::describe(&e));
                         notifications.show_localized(&ui, "error", "", |ui| {
                             let g = ui.global::<Settings>();
                             RowText::plain(

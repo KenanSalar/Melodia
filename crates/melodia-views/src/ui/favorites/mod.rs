@@ -28,14 +28,14 @@ mod tabs;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
-use crate::entities::track::FavoriteStats;
-use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::track::FavoriteStats;
 
 use state::{FavoritesUiState, GRID_THUMB_CAP};
 
@@ -238,7 +238,7 @@ impl FavoritesUi {
         // whatever the flags held on the way out.
         self.mark_songs_dirty();
         self.mark_grids_dirty();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     pub(crate) fn state(&self) -> &FavoritesUiState {

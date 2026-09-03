@@ -1,11 +1,11 @@
 use super::apply::build_filtered_grids;
 use super::sort::{set_artist_sort, sort_artists};
 use super::warm::mounted_content;
-use crate::entities::artist::FavoriteArtist;
-use crate::entities::track::MostPlayedFavorite;
-use crate::media::image::cover_thumbs::CoverThumbs;
-use crate::services::settings::SortDir;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi};
+use melodia_app::services::settings::SortDir;
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::artist::FavoriteArtist;
+use melodia_core::entities::track::MostPlayedFavorite;
 
 /// Exhaustive struct literals on purpose: a new field on either entity fails
 /// this file to compile, which is the prompt to check that it also belongs in

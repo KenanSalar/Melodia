@@ -1,9 +1,9 @@
 use image::{ImageBuffer, Rgb, RgbImage};
 
 use super::*;
-use crate::error::AppError;
 use crate::ui::detail_artwork::BLUR as DETAIL_BLUR;
 use crate::ui::util::{BLUR_TARGET, COVER_SIZE};
+use melodia_core::error::AppError;
 
 fn solid(width: u32, height: u32, rgb: [u8; 3]) -> RgbImage {
     ImageBuffer::from_pixel(width, height, Rgb(rgb))

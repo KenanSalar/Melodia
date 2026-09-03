@@ -26,14 +26,14 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use crate::library;
-use crate::player::playback::spectrum::{FFT_SIZE, NUM_BANDS, SpectrumAnalyzer};
-use crate::player::playback::visualizer::RING_CAP;
-use crate::player::playback::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
-use crate::state::AppState;
 use crate::ui::settings_bind::read_or_default;
 use crate::ui::shell::tray_bridge;
 use crate::{AppWindow, Visualizer};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_playback::player::playback::spectrum::{FFT_SIZE, NUM_BANDS, SpectrumAnalyzer};
+use melodia_playback::player::playback::visualizer::RING_CAP;
+use melodia_playback::player::playback::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
 
 const STYLE_BARS: &str = "bars";
 const STYLE_WAVEFORM: &str = "waveform";
@@ -118,9 +118,9 @@ impl FrameWatch {
 /// Style keys in picker order. Two things mirror this **by position** and the compiler checks
 /// neither: the `viz-style-names` `@tr` array in `components/now-playing/flyout-presets.slint`,
 /// and the branch in `visualizer-strip.slint` that mounts on the key. A third mirror is
-/// [`crate::services::settings::DEFAULT_VIZ_STYLE`], which has to be the key at index 0 — where
-/// both fallbacks below land — and stays a separate literal, a test pinning the two together only
-/// being able to fail if they are two.
+/// [`melodia_app::services::settings::DEFAULT_VIZ_STYLE`], which has to be the key at index 0
+/// — where both fallbacks below land — and stays a separate literal, a test pinning the two
+/// together only being able to fail if they are two.
 const STYLES: [&str; 3] = [STYLE_BARS, STYLE_MIRRORED, STYLE_WAVEFORM];
 
 /// Picker index for a persisted key. An unrecognized key — a hand-edited file, or one written by a

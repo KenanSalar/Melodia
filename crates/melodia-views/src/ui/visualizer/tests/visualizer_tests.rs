@@ -16,7 +16,7 @@
 //! downstream would correct a wrong one.
 
 use super::*;
-use crate::services::settings::{DEFAULT_VIZ_STYLE, VisualizerFlags};
+use melodia_app::services::settings::{DEFAULT_VIZ_STYLE, VisualizerFlags};
 
 const PLAYBACK_SECTION: &str =
     include_str!("../../../../../melodia-ui/ui/views/settings/playback-section.slint");

@@ -18,9 +18,9 @@ mod view_mode;
 use std::sync::Arc;
 
 use crate::AppWindow;
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::browse::BrowseUi;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 /// Wire every `Browse.*` callback to its `library::*` counterpart and the `browse_ui`
 /// shared state, plus a `library_changed` subscriber that re-fetches the current path

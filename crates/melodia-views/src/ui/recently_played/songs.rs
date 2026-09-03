@@ -11,12 +11,12 @@ use slint::{ComponentHandle, Model, VecModel, Weak};
 
 use super::state::SongsTotals;
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
-use crate::error::AppResult;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::row_match::{self, Needle};
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::error::AppResult;
 
 /// Read-and-return the active filter needle, folded by [`set_filter`] and ready to hand to a
 /// `row_match` predicate.

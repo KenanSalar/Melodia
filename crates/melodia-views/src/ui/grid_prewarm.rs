@@ -14,8 +14,8 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Image};
 
 use crate::AppWindow;
-use crate::media::image::artwork::STORE_MAX_DIM;
-use crate::media::image::cover_thumbs::CoverThumbs;
+use melodia_artwork::media::image::artwork::STORE_MAX_DIM;
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 
 /// Deduplicated, non-empty artwork paths from an iterator of optional path strings,
 /// first-seen order preserved, stopping at `cap`.
@@ -119,11 +119,12 @@ const BODY_CHROME_W: u32 = 400 + 2 * 16;
 /// taking the cheap end.
 pub const GRID_COVER_FALLBACK: u32 = 256;
 
-/// Steps the derived size falls on. Quantized because [`crate::media::image::cover_thumbs::CoverThumbs`]
-/// **clears the whole tier** when the size genuinely moves, and `WindowChrome.display-changed`
-/// re-derives it on every winit `Resized`: the answer has to be flat across a resize drag, not
-/// merely close. [`widest_card`] is what makes it flat; the step is what collapses the column
-/// counts a desktop drags through into a handful of tiers.
+/// Steps the derived size falls on. Quantized because
+/// [`melodia_artwork::media::image::cover_thumbs::CoverThumbs`] **clears the whole tier** when
+/// the size genuinely moves, and `WindowChrome.display-changed` re-derives it on every winit
+/// `Resized`: the answer has to be flat across a resize drag, not merely close. [`widest_card`]
+/// is what makes it flat; the step is what collapses the column counts a desktop drags through
+/// into a handful of tiers.
 const SIZE_STEP: u32 = 32;
 
 /// The widest card `GridGeometry` can pack into the body of a window this wide.

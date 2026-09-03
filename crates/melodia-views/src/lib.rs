@@ -3,9 +3,9 @@
 //!
 //! It sits above every other crate and below nothing, which is what lets the exclusion be a
 //! manifest rather than a convention: **no `melodia-store`, no `melodia-net`**. The UI reaches
-//! the database through `melodia-app`'s library API, and it opens no socket at all. `melodia-app`
-//! keeps `database`, `media::{ingest,fetch}`, `services::net` and `player::source` `pub(crate)`
-//! for the same reason, so neither door is open.
+//! the database through `melodia-app`'s library API, and it opens no socket at all. Nothing
+//! below re-exports either, so `melodia_store::database` does not resolve here at all rather
+//! than resolving to something private.
 //!
 //! Not split further, and the argument is in `docs/plans/WORKSPACE_SPLIT.md`: the slices are a
 //! dense mesh, the component library imports fourteen of them, and cutting it needs a view
@@ -14,25 +14,6 @@
 // The Slint compiler's output. Flat, so every call site keeps naming the generated types as
 // `crate::AppWindow`, `crate::TrackRow`, … — roughly seventy of them arrive this way.
 pub use melodia_ui::*;
-
-pub use melodia_core::{config, entities, error, themes, utils};
-
-pub use melodia_app::{library, state, tasks};
-
-pub mod media {
-    pub use melodia_artwork::media::image;
-}
-
-pub mod player {
-    pub use melodia_engine::player::engine;
-    pub use melodia_playback::player::playback;
-}
-
-pub mod services {
-    pub use melodia_app::services::{diagnostics, settings, updater, view_state};
-    pub use melodia_integrations::services::integrations;
-    pub use melodia_platform::services::platform;
-}
 
 pub mod ui;
 

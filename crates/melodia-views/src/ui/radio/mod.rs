@@ -39,9 +39,9 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
 
-use crate::state::AppState;
 use crate::ui::view_ctx::ViewCtx;
 use crate::{AppWindow, Nav, Radio, RadioFacetRow, RadioStationGridRow, RadioSuggestionRow};
+use melodia_app::state::AppState;
 
 use tabs::section_is_up;
 
@@ -82,7 +82,7 @@ pub fn fold_disabled_nav_index(idx: i32, radio_enabled: bool) -> i32 {
 /// that no longer routes, a selected index the router no longer has a branch for, and a
 /// tooltip left naming a row that no longer exists.
 pub fn disable(ui: &AppWindow, state: &AppState) {
-    if let Err(e) = crate::library::playback::player_stop_station(&state.playback_ctx()) {
+    if let Err(e) = melodia_app::library::playback::player_stop_station(&state.playback_ctx()) {
         log::warn!("radio: stop station on disable: {e}");
     }
     crate::ui::nav_history::nav().history().forget_section(NAV_RADIO);

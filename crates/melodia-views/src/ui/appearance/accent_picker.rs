@@ -10,9 +10,9 @@ use parking_lot::RwLock;
 use slint::{Brush, ComponentHandle, SharedString};
 
 use super::theme_apply::{accent_brushes, brush};
-use crate::state::{AppState, Signal};
-use crate::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
 use crate::{AppWindow, Settings};
+use melodia_app::state::{AppState, Signal};
+use melodia_core::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
 
 use super::{PersistedAccent, persist, registry_get, usize_from};
 

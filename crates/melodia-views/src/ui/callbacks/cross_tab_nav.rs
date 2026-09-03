@@ -24,8 +24,6 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Weak};
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
@@ -36,6 +34,8 @@ use crate::{
     AlbumDetail, AppWindow, ArtistDetail, Browse, Favorites, GenreDetail, MyLibrary, Nav,
     NavEnterFrom, PlaylistDetail, RecentlyPlayed, Search, Tracks,
 };
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// Where the user is standing when a "Go to …" fires: the nav index, plus the My Library
 /// tab when that index *is* My Library. Both halves are read synchronously, before any

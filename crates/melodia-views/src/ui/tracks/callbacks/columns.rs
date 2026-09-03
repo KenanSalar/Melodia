@@ -2,11 +2,11 @@
 
 use slint::ComponentHandle;
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::callbacks::macros::spawn_blocking_logged;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Tracks};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// toggle-column: the popup has already flipped the matching `show-*` flag for instant
 /// visual feedback. We persist the new visible-column list to `views.json`'s

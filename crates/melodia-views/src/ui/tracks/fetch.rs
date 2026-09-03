@@ -6,13 +6,13 @@ use std::path::PathBuf;
 use slint::{ComponentHandle, Model, VecModel, Weak};
 
 use super::TracksUi;
-use crate::error::AppResult;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::model_patch;
 use crate::ui::row_match::fold_needle;
 use crate::ui::track_list_cache::CacheData;
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::error::AppResult;
 
 /// Re-fetch the full list from the DB, store it in `tracks_ui`, then push the
 /// filtered+sorted view into the Slint model. Async — runs on the tokio

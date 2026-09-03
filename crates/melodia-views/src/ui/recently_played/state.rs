@@ -8,10 +8,10 @@ use std::num::NonZeroUsize;
 
 use parking_lot::Mutex;
 
-use crate::entities::track::{MostPlayedFavorite, TrackListRow as RsTrackListRow};
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::mosaic_hero::MosaicGuard;
 use crate::ui::row_match::Needle;
+use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow as RsTrackListRow};
 
 /// What the Songs tab's band states about the recency set.
 ///

@@ -4,9 +4,9 @@
 //! depends on. Keeping souvlaki decoupled from Slint matters for the
 //! `EventSink` trait contract in `services::integrations::media_controls`.
 
-use crate::library;
-use crate::player::engine::event_sink::{EventSink, PlayerEvent};
-use crate::state::AppState;
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_engine::player::engine::event_sink::{EventSink, PlayerEvent};
 
 pub struct SlintEventSink {
     pub state: AppState,

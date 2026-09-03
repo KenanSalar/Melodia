@@ -16,8 +16,8 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::state::AppState;
 use crate::{AppWindow, Radio};
+use melodia_app::state::AppState;
 
 use super::{RadioTab, RadioUi, browse, kept, mounted_tab, suggest};
 

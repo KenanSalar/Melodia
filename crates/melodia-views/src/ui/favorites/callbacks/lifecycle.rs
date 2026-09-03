@@ -6,7 +6,6 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::state::AppState;
 use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
 use crate::ui::favorites::NAV_FAVORITES;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
@@ -15,6 +14,7 @@ use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
     AppWindow, EntityGridRow as UiEntityGridRow, Favorites, Nav, TrackListRow as UiTrackListRow,
 };
+use melodia_app::state::AppState;
 
 /// Wire the Favorites section-lifecycle callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {

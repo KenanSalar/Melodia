@@ -37,11 +37,11 @@ use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowLevel;
 
-use crate::error::AppError;
-use crate::services::platform::always_on_top::AlwaysOnTopMethod;
-use crate::state::AppState;
-use crate::utils::toast::{self, ToastKind};
 use crate::{AppWindow, Theme};
+use melodia_app::state::AppState;
+use melodia_core::error::AppError;
+use melodia_core::utils::toast::{self, ToastKind};
+use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
 
 /// Armed once the new setting is persisted, read at the very end of `main()` — after the
 /// event loop has exited and every background task wound down. Spawning *before* shutdown
@@ -87,7 +87,7 @@ pub fn respawn_target() -> Option<PathBuf> {
     if let Some(recorded) = respawn_exe() {
         return Some(recorded);
     }
-    match crate::utils::exe::current_exe() {
+    match melodia_core::utils::exe::current_exe() {
         Ok(exe) => Some(exe),
         Err(e) => {
             log::warn!("respawn: executable lookup failed: {e}");
@@ -155,7 +155,7 @@ pub fn win32_hwnd(app: &AppWindow) -> Option<*mut std::ffi::c_void> {
 /// Hydrate `Theme.use-native-titlebar` from the persisted setting and wire the
 /// `WindowChrome` callbacks. Must run between `AppWindow::new()` and `app.run()`.
 pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
-    let settings = crate::library::settings::get_settings(state)?;
+    let settings = melodia_app::library::settings::get_settings(state)?;
     let use_native = settings.window.use_native_titlebar;
 
     app.global::<Theme>().set_use_native_titlebar(use_native);
@@ -197,7 +197,7 @@ fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool)
                 // KWin enumerates `workspace.stackingOrder` by PID, so the window has to
                 // be mapped by the compositor first.
                 tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                if let Err(e) = crate::services::platform::always_on_top::apply(
+                if let Err(e) = melodia_platform::services::platform::always_on_top::apply(
                     state.always_on_top.method,
                     &state.paths.data_dir,
                     true,

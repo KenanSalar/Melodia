@@ -20,14 +20,15 @@ use async_compat::Compat;
 use chrono::Local;
 use slint::{ComponentHandle, SharedString, Weak};
 
-use crate::error::{AppError, AppResult};
-use crate::state::AppState;
 use crate::ui::shell::notifications::{
     NotificationParams, NotificationsUi, RowText, TOAST_AUTO_DISMISS_MS,
 };
 use crate::ui::{file_dialog, launcher};
 use crate::{AppWindow, Settings};
-use crate::{library, services};
+use melodia_app::state::AppState;
+use melodia_app::{library, services};
+use melodia_core::error::{AppError, AppResult};
+use melodia_platform::services::platform;
 
 /// Routing key shared with the `Notifications.action` dispatcher.
 const CRASH_TOAST_KIND: &str = "crash-report";
@@ -109,9 +110,11 @@ async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<N
 /// `atomic_file::write_text_sync` is not async, unlike the playlist export this
 /// otherwise mirrors — hence the hop off the UI thread for one file write.
 async fn write_report(path: PathBuf, text: String) -> AppResult<()> {
-    tokio::task::spawn_blocking(move || crate::utils::atomic_file::write_text_sync(&path, &text))
-        .await
-        .map_err(AppError::io_source)?
+    tokio::task::spawn_blocking(move || {
+        melodia_core::utils::atomic_file::write_text_sync(&path, &text)
+    })
+    .await
+    .map_err(AppError::io_source)?
 }
 
 /// Apply the Verbose Logging switch live, then persist it.
@@ -128,7 +131,7 @@ fn wire_verbose_logging(ui: &AppWindow, state: &AppState) {
     ui.global::<Settings>().on_verbose_logging_changed(move |on| {
         // Live first: a failed disk write must not undo what the user can
         // already see working.
-        services::platform::logging::set_verbose(on);
+        platform::logging::set_verbose(on);
         state.persist_blocking("persist verbose_logging", move |s| {
             library::settings::set_verbose_logging(s, on)
         });
@@ -142,7 +145,7 @@ fn wire_verbose_logging(ui: &AppWindow, state: &AppState) {
 /// one `read_dir` over a directory holding at most a handful of entries, and a
 /// marker write only when there is actually something to report.
 fn notify_previous_crash(ui: &AppWindow, state: &AppState, notifications: &NotificationsUi) {
-    let Some(report) = services::platform::crash_report::take_unseen(&state.paths.logs_dir) else {
+    let Some(report) = platform::crash_report::take_unseen(&state.paths.logs_dir) else {
         return;
     };
     log::info!("previous run left a crash report: {}", report.display());

@@ -23,13 +23,13 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::callbacks::macros::release_detail_hero_images;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::{
     AppWindow, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow, Playlists, TagEditor,
 };
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// Wire the playlist dialog + CRUD callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
@@ -87,7 +87,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             // release it here — this is the one `on_closed`, extended not
             // duplicated.
             ui.global::<TagEditor>().set_cover(Image::default());
-            s.runtime.spawn_blocking(crate::services::platform::allocator::trim);
+            s.runtime.spawn_blocking(melodia_platform::services::platform::allocator::trim);
         });
     }
 

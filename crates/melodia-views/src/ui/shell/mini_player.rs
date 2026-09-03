@@ -14,11 +14,11 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::error::AppError;
-use crate::state::AppState;
 use crate::ui::now_playing::NowPlayingState;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, MiniPlayer};
+use melodia_app::state::AppState;
+use melodia_core::error::AppError;
 
 /// Hydrate `np_state.mini_square` from the live global, because `square-changed` only
 /// fires on actual flips — a window already square before entering mini would leave the
@@ -35,7 +35,7 @@ fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowPlayingArtwo
     let np = np_artwork.clone();
     state.runtime.spawn_blocking(move || {
         np.clear();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     });
 }
 

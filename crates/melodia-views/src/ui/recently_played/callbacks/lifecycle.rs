@@ -8,7 +8,6 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::state::AppState;
 use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::NAV_RECENTLY_PLAYED;
@@ -20,6 +19,7 @@ use crate::{
     AppWindow, EntityGridRow as UiEntityGridRow, Nav, RecentlyPlayed,
     TrackListRow as UiTrackListRow,
 };
+use melodia_app::state::AppState;
 
 /// Wire the Recently-Played section-lifecycle callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {

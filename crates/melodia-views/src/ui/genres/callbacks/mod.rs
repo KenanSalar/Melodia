@@ -14,9 +14,9 @@ mod lifecycle;
 use std::sync::Arc;
 
 use crate::AppWindow;
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::genres::GenresUi;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 /// Wire every `Genres.*` / `GenreDetail.*` callback to its `library::*` counterpart
 /// and the `genres_ui` shared state, plus a `library_changed` subscriber that

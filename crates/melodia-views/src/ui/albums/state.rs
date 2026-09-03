@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::entities::album::AlbumStats;
-use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::ui::row_match::Needle;
+use melodia_core::entities::album::AlbumStats;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 /// An album's pre-lowercased name + artist, computed once per `fetch_grid`
 /// so the name / artist sorts allocate nothing. Positionally aligned with

@@ -13,12 +13,12 @@
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::entities::integrations::DiscordFlags;
-use crate::error::AppError;
-use crate::library;
-use crate::services::integrations::discord::DiscordStatus;
-use crate::state::AppState;
 use crate::{AppWindow, Settings};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::integrations::DiscordFlags;
+use melodia_core::error::AppError;
+use melodia_integrations::services::integrations::discord::DiscordStatus;
 
 /// Paint the connection/enabled props from a status snapshot. The single writer
 /// of these props — called once for the seed and then on every `subscribe_status`
@@ -54,10 +54,10 @@ fn discord_toggle_binding(
         set_field(&mut flags, on);
         state.discord.set_flags(flags);
         if nudge_detector {
-            crate::player::engine::state::with_state_emit(
+            melodia_engine::player::engine::state::with_state_emit(
                 &state.player_state,
                 &state.sinks,
-                |_: &mut crate::player::engine::state::PlayerState| {},
+                |_: &mut melodia_engine::player::engine::state::PlayerState| {},
             );
         }
         state.persist_blocking(label, move |s| persist(s, on));

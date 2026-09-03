@@ -11,11 +11,6 @@ use slint::{ComponentHandle, SharedString, Weak};
 
 use super::selection::{apply_selection_to_rows, write_selection};
 use super::{GenresUi, genre_accent, to_slint_genre_row};
-use crate::entities::genre::GenreStats;
-use crate::entities::track::TrackListRow as RsTrackListRow;
-use crate::error::AppResult;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::appearance::theme_apply::color_to_rgb;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_selection::prune_selection_to;
@@ -27,6 +22,11 @@ use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, GenreDetail, NavEnterFrom, TrackListRow as UiTrackListRow};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::genre::GenreStats;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_core::error::AppResult;
 
 /// Publish the genre's hero band from both of its hash-derived pairs — [`genre_accent`] picks them
 /// off a name hash, and which one reaches the surface is the backdrop's to decide.

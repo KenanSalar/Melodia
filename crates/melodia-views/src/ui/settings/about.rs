@@ -9,9 +9,9 @@
 
 use slint::ComponentHandle;
 
-use crate::state::AppState;
 use crate::ui::launcher;
 use crate::{AppWindow, Settings};
+use melodia_app::state::AppState;
 
 /// Empty only if the `repository` field is removed from `Cargo.toml`; the callback guards
 /// against handing a blank URL to `open`.

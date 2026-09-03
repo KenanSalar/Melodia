@@ -11,12 +11,12 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Weak};
 
 use super::FavoritesUi;
-use crate::entities::track::FavoriteStats;
-use crate::error::AppResult;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::detail_view::impl_detail_view_helpers;
 use crate::{AppWindow, Favorites};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::track::FavoriteStats;
+use melodia_core::error::AppResult;
 
 // Only the artwork half — this page's track model is not a detail `tracks` list.
 impl_detail_view_helpers!(curated Favorites, FavoritesUi, crate::ui::hero_chips::publish_favorites);

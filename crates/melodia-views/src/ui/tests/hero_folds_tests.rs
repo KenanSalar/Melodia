@@ -5,8 +5,8 @@
 //! along the same seam their sources do.
 
 use super::{HeroFold, MostPlayedTotals, dominant_genre, fold_most_played, fold_tracks, year_span};
-use crate::entities::album::AlbumStats;
-use crate::entities::track::{MostPlayedFavorite, TrackListRow};
+use melodia_core::entities::album::AlbumStats;
+use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
 
 /// Only the four fields the folds and the genre tally read.
 fn track(artist_id: Option<i64>, album_id: Option<i64>, genre: Option<&str>) -> TrackListRow {

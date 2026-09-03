@@ -8,16 +8,16 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
 use super::state::{DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{PlaylistsUi, to_slint_playlist_row};
-use crate::entities::smart_criteria::SmartCriteria;
-use crate::error::AppResult;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
 use crate::{
     AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
 };
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::smart_criteria::SmartCriteria;
+use melodia_core::error::AppResult;
 
 /// How much smart-playlist counting a grid refresh pays for.
 #[derive(Clone, Copy)]

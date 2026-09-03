@@ -7,9 +7,9 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use super::NAV_SEARCH;
-use crate::state::AppState;
 use crate::ui::search::{SearchUi, apply::teardown_models_on_leave};
 use crate::{AppWindow, Nav, Search};
+use melodia_app::state::AppState;
 
 /// Wire the Search section-lifecycle callback.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {

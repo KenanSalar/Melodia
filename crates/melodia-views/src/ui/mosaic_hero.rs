@@ -11,11 +11,11 @@ use std::path::PathBuf;
 
 use parking_lot::Mutex;
 
-use crate::media::image::artwork::compose_cover;
-use crate::state::AppState;
 use crate::ui::artwork_cache::{BlurSpec, pair_from_image};
 use crate::ui::detail_artwork::DetailPair;
 use crate::ui::util::COVER_SIZE;
+use melodia_app::state::AppState;
+use melodia_artwork::media::image::artwork::compose_cover;
 
 /// [`compose_hero_pair`] on the blocking pool.
 ///

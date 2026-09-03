@@ -5,14 +5,14 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AlbumDetail, AppWindow};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// Wire the `AlbumDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {

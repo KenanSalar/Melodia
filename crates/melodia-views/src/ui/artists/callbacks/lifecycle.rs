@@ -7,7 +7,6 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
@@ -18,6 +17,7 @@ use crate::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow, Artists,
     TrackListRow as UiTrackListRow,
 };
+use melodia_app::state::AppState;
 
 /// Wire the Artists section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(

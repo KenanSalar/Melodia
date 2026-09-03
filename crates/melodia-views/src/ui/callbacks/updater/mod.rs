@@ -40,11 +40,11 @@ use std::rc::Rc;
 use slint::ComponentHandle;
 use tokio::sync::watch;
 
-use crate::library;
-use crate::services::updater::UpdaterEvent;
-use crate::state::AppState;
 use crate::ui::shell::notifications::NotificationsUi;
 use crate::{AppWindow, MelodiaUpdater};
+use melodia_app::library;
+use melodia_app::services::updater::UpdaterEvent;
+use melodia_app::state::AppState;
 
 use check::spawn_manual_check;
 use install::spawn_install;
@@ -140,7 +140,7 @@ pub fn wire(
 /// The cached `If-None-Match` `ETag` from the last successful manifest fetch,
 /// or `None` when no usable tag is on disk.
 fn read_etag(state: &AppState) -> Option<String> {
-    crate::services::settings::read_settings(&state.paths)
+    melodia_app::services::settings::read_settings(&state.paths)
         .ok()
         .map(|s| s.updates.last_manifest_etag)
         .filter(|tag| !tag.is_empty())
@@ -148,7 +148,7 @@ fn read_etag(state: &AppState) -> Option<String> {
 
 /// The release version the user explicitly skipped, or an empty string.
 fn current_skipped_release(state: &AppState) -> String {
-    crate::services::settings::read_settings(&state.paths)
+    melodia_app::services::settings::read_settings(&state.paths)
         .ok()
         .map(|s| s.updates.skipped_release)
         .unwrap_or_default()

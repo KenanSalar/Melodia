@@ -31,8 +31,8 @@ use slint::winit_030::winit::event::{
 };
 use slint::winit_030::winit::window::Window as WinitWindow;
 
-use crate::state::AppState;
 use crate::{AppWindow, CompositeScroll, PlaylistDetail, PopupHighlight, Queue, Theme};
+use melodia_app::state::AppState;
 
 use super::{drop_coalescer, geometry};
 

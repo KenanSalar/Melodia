@@ -30,9 +30,6 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
-use crate::entities::album::AlbumStats;
-use crate::entities::artist::ArtistStats;
-use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::util::clamp_i64_to_i32;
@@ -40,6 +37,9 @@ use crate::ui::view_ctx::ViewCtx;
 use crate::{
     AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
 };
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::album::AlbumStats;
+use melodia_core::entities::artist::ArtistStats;
 
 use state::{ALBUM_STRIP_THUMB_SIZE, ARTIST_STRIP_THUMB_SIZE, STRIP_THUMB_CAP, SearchUiState};
 
@@ -127,7 +127,7 @@ impl SearchUi {
         *self.inner.last_results.lock() = None;
         self.inner.last_query.lock().clear();
         self.inner.applied_selection.lock().clear();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// [`Self::release_section_state`]'s release, run while the user is still on
@@ -145,7 +145,7 @@ impl SearchUi {
         *self.inner.last_results.lock() = None;
         self.inner.last_query.lock().clear();
         self.inner.applied_selection.lock().clear();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     pub(crate) fn state(&self) -> &SearchUiState {

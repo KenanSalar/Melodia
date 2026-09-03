@@ -11,10 +11,10 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Weak};
 
 use super::RecentlyPlayedUi;
-use crate::entities::track::TrackListRow as RsTrackListRow;
-use crate::state::AppState;
 use crate::ui::detail_view::impl_detail_view_helpers;
 use crate::{AppWindow, RecentlyPlayed};
+use melodia_app::state::AppState;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 // Only the artwork half — this page's track model is its own tabbed cache's.
 impl_detail_view_helpers!(

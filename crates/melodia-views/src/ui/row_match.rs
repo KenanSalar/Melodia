@@ -18,7 +18,7 @@ use std::cell::RefCell;
 use unicode_normalization::UnicodeNormalization;
 use unicode_normalization::char::is_combining_mark;
 
-use crate::entities::track::{MostPlayedFavorite, TrackListRow};
+use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
 
 /// The searchable text of a track row, in the order `tracks_fts` lists its columns. `year`
 /// joins through [`any_field_matches`], being an integer.

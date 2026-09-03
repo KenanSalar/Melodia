@@ -6,10 +6,10 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::callbacks::cross_tab_nav;
 use crate::{AppWindow, ArtistDetail};
+use melodia_app::state::AppState;
 
 /// Wire the Artist Detail Albums sub-section callbacks. See
 /// [`super::wire`].

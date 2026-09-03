@@ -1,5 +1,5 @@
 use super::*;
-use crate::entities::track::TrackListRow as RsTrackListRow;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 fn folder(name: &str, path: &str) -> BrowseFolder {
     BrowseFolder {

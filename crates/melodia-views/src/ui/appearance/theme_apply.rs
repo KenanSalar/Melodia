@@ -4,15 +4,15 @@
 //!
 //! It lives here rather than under `themes/` because it is the only half of that directory that
 //! names a Slint type, and carrying it there would put `melodia-ui` under every crate wanting a
-//! palette. What it reads is `crate::themes`: tables, the registry, and the two derivations.
+//! palette. What it reads is `melodia_core::themes`: tables, the registry, and the two derivations.
 
 use slint::{Brush, Color, ComponentHandle};
 
-use crate::themes::palette::{
+use crate::{AppWindow, Theme as ThemeGlobal};
+use melodia_core::themes::palette::{
     MATERIAL_YOU_ACCENT_ID, Palette, SYSTEM_VARIANT_ID, ThemeDef, on_accent_hex,
 };
-use crate::themes::system_color_state::SystemColorState;
-use crate::{AppWindow, Theme as ThemeGlobal};
+use melodia_core::themes::system_color_state::SystemColorState;
 
 /// Brushes for the colour-dot picker — one per accent in `theme`, each
 /// rendered in `variant_id`'s shade.
@@ -34,7 +34,7 @@ pub fn apply(
     accent_id: &str,
     system: &SystemColorState,
 ) {
-    let theme = crate::themes::get(theme_id);
+    let theme = melodia_core::themes::get(theme_id);
 
     // A dynamic palette wins over the static M3 variants whatever the variant
     // id, which is why this sits above the System branch. The accent picker
@@ -68,15 +68,15 @@ pub fn apply(
         if theme_id == "kde-breeze"
             && let Some(kde) = &system.kde_palette
         {
-            let palette = crate::themes::kde::palette_from_kde(kde);
+            let palette = melodia_core::themes::kde::palette_from_kde(kde);
             let accent_hex =
-                crate::themes::kde::parse_hex_color(&kde.accent).unwrap_or(0x003d_aee9);
+                melodia_core::themes::kde::parse_hex_color(&kde.accent).unwrap_or(0x003d_aee9);
             // The *only* path pulling a real OS inactive-titlebar colour, so
             // our painted surfaces match the frame exactly on focus loss.
             let mantle_unfocused_hex = kde
                 .colors
                 .get("mantle_unfocused")
-                .and_then(|s| crate::themes::kde::parse_hex_color(s))
+                .and_then(|s| melodia_core::themes::kde::parse_hex_color(s))
                 .unwrap_or(palette.base);
             write_palette(ui, &palette, accent_hex, mantle_unfocused_hex);
             return;
@@ -129,10 +129,10 @@ fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_
 
     // Paint the OS-drawn caption in the same mantle so it blends into the chrome
     // below. Nothing to paint until the window is shown, which `main.rs`'s
-    // post-show one-shot covers. See [`crate::services::platform::dwm_titlebar`].
+    // post-show one-shot covers. See [`melodia_platform::services::platform::dwm_titlebar`].
     #[cfg(target_os = "windows")]
     if let Some(hwnd) = crate::ui::window_chrome::win32_hwnd(ui) {
-        crate::services::platform::dwm_titlebar::apply(hwnd, p.mantle);
+        melodia_platform::services::platform::dwm_titlebar::apply(hwnd, p.mantle);
     }
 }
 
@@ -149,7 +149,7 @@ pub fn reapply_from_theme(app: &AppWindow) {
         return;
     };
     let mantle = color_to_rgb(app.global::<ThemeGlobal>().get_mantle().color());
-    crate::services::platform::dwm_titlebar::apply(hwnd, mantle);
+    melodia_platform::services::platform::dwm_titlebar::apply(hwnd, mantle);
 }
 
 /// A `0x00RRGGBB` value as an opaque solid `Brush`. `pub(crate)` because Now

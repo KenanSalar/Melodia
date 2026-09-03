@@ -27,8 +27,6 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::entities::artist::ArtistStats;
-use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
@@ -40,6 +38,8 @@ use crate::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow,
     ArtistRow as UiArtistRow, Artists, TrackListRow as UiTrackListRow,
 };
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::artist::ArtistStats;
 
 use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
 use state::{ArtistDetailState, ArtistGridState, DEFAULT_GRID_COVER_CAP, GridData};
@@ -167,20 +167,20 @@ impl ArtistsUi {
             self.detail.filter.lock().clear();
             self.detail.applied_selection.lock().clear();
         }
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// Drop just the grid-tier cover cache. Called off the UI thread when the user opens an
     /// artist: the grid view is unmounted by the `ArtistDetail.artist-id` flip.
     pub fn release_grid_covers(&self) {
         self.grid_covers.clear();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// Drop just the detail-tier `(cover, blur)` pair cache. Called when the user closes a detail.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// Re-decode the first screenful of grid covers into the grid-tier cache after a release.

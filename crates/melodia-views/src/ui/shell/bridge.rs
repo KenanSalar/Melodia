@@ -14,13 +14,13 @@ use slint::{ComponentHandle, SharedString, Weak};
 use tokio::runtime::Handle;
 use tokio::sync::watch;
 
-use crate::entities::track::TrackSummary;
-use crate::media::image::cover_thumbs::CoverThumbs;
-use crate::player::engine::event_sink::PlayerSinks;
-use crate::player::engine::state::{PlayerViewModelLight, PositionTick, QueueViewModel};
-use crate::player::engine::types::RadioNowPlaying;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{AppWindow, Player, PlayerVm, QueueVm, RadioVm, TrackSummaryRow};
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::track::TrackSummary;
+use melodia_engine::player::engine::event_sink::PlayerSinks;
+use melodia_engine::player::engine::state::{PlayerViewModelLight, PositionTick, QueueViewModel};
+use melodia_engine::player::engine::types::RadioNowPlaying;
 
 /// Subscribe to the lightweight player `ViewModel` (status, current track,
 /// volume, `has_next/prev`). Fires on every state change; replaces the whole

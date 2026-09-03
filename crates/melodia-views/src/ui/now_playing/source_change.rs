@@ -18,15 +18,15 @@ use slint::{ComponentHandle, Image, Weak};
 use super::metadata::to_slint_track_meta;
 use super::write_crossfade_slot;
 use super::{NowPlayingSource, NowPlayingState, SourceKey};
-use crate::entities::track::TrackSummary;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::appearance::theme_apply::color;
 use crate::ui::aurora;
 use crate::ui::backdrop::{self, BackdropSample};
 use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Player, TrackMetaRow};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::track::TrackSummary;
 
 thread_local! {
     /// The measurement behind whatever is in the `Player.np-*` tier now, so a palette change can

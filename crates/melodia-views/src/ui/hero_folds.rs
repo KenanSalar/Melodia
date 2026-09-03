@@ -11,9 +11,9 @@
 
 use std::collections::HashSet;
 
-use crate::entities::album::AlbumStats;
-use crate::entities::track::{MostPlayedFavorite, TrackListRow};
 use crate::ui::util::len_as_i32;
+use melodia_core::entities::album::AlbumStats;
+use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
 
 #[cfg(test)]
 #[path = "tests/hero_folds_tests.rs"]

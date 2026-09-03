@@ -22,16 +22,16 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Weak};
 
-use crate::entities::radio::{DirectoryStation, RadioStation};
-use crate::error::{AppError, AppResult};
-use crate::library;
-use crate::state::AppState;
 use crate::ui::detail_artwork::{DetailPair, decode_detail_pair};
 use crate::ui::detail_view::impl_detail_view_helpers;
 use crate::ui::hero_chips::{self, StationFacts};
 use crate::ui::track_list_view::view_id;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, NavEnterFrom, Radio, RadioStationRow};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::radio::{DirectoryStation, RadioStation};
+use melodia_core::error::{AppError, AppResult};
 
 use super::tabs::{RadioTab, mounted_tab, section_is_up};
 use super::{RadioUi, browse, kept, rows};
@@ -415,7 +415,7 @@ pub(super) async fn refresh_from_directory(
         Ok(Some(found)) => found,
         Ok(None) => return,
         Err(e) => {
-            log::debug!("radio: station details not read: {}", crate::error::describe(&e));
+            log::debug!("radio: station details not read: {}", melodia_core::error::describe(&e));
             return;
         }
     };
@@ -723,7 +723,7 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, radio_ui: &Ar
         if let Err(e) =
             open_station(&state, &radio_ui, weak.clone(), station, NavEnterFrom::Below).await
         {
-            log::warn!("radio: restore station detail: {}", crate::error::describe(&e));
+            log::warn!("radio: restore station detail: {}", melodia_core::error::describe(&e));
         }
         let _ = weak.upgrade_in_event_loop(|ui| {
             ui.global::<Radio>().set_restoring(false);

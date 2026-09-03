@@ -8,11 +8,11 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
-use crate::utils::toast::{self, ToastKind};
 use crate::{AppWindow, NavEnterFrom, Radio};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::utils::toast::{self, ToastKind};
 
 use super::super::{RadioUi, detail};
 
@@ -31,7 +31,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
                 if let Err(e) =
                     detail::open_station(&s, &ru, weak, station, NavEnterFrom::Below).await
                 {
-                    log::warn!("radio: open station: {}", crate::error::describe(&e));
+                    log::warn!("radio: open station: {}", melodia_core::error::describe(&e));
                 }
             });
         });
@@ -111,7 +111,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             let (s, ru, weak) = (s.clone(), ru.clone(), weak.clone());
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::radio::vote(&s, &station.uuid).await {
-                    toast::notify(ToastKind::RadioVote, crate::error::describe(&e));
+                    toast::notify(ToastKind::RadioVote, melodia_core::error::describe(&e));
                     return;
                 }
                 // Re-read rather than adding one locally: the server deduplicates, so a local

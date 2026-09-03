@@ -22,8 +22,6 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::entities::genre::GenreStats;
-use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
 use crate::ui::util::clamp_i64_to_i32;
@@ -32,6 +30,8 @@ use crate::{
     AppWindow, GenreDetail, GenreGridRow as UiGenreGridRow, GenreRow as UiGenreRow, Genres,
     TrackListRow as UiTrackListRow,
 };
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::genre::GenreStats;
 
 use state::{GenreDetailState, GenreGridState, GridData};
 
@@ -116,7 +116,7 @@ impl GenresUi {
     /// close-detail trim, where wiping the grid would be wrong — the user is now
     /// looking at it. A section leave takes [`Self::release_section_state`].
     pub fn release_caches(&self) {
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// Drop *everything* the section keeps resident — the canonical grid data,
@@ -144,7 +144,7 @@ impl GenresUi {
             self.detail.all_tracks.lock().clear();
             self.detail.applied_selection.lock().clear();
         }
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// Genre id currently open in the detail view (`-1` = grid).

@@ -13,9 +13,9 @@ use std::sync::Arc;
 
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::state::AppState;
 use crate::ui::artwork_cache::{ArtworkCache, ArtworkPair, BlurSpec, CachedArtwork};
 use crate::ui::backdrop::BackdropSample;
+use melodia_app::state::AppState;
 
 /// Landscape, and lighter than the Now Playing tier's wash: the hero region
 /// paints full content-panel width by a band `Theme.hero-artwork` tall, and

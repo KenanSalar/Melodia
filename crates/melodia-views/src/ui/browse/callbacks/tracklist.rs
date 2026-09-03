@@ -4,9 +4,6 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
-use crate::library;
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{
@@ -14,6 +11,9 @@ use crate::ui::callbacks::{
 };
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Browse};
+use melodia_app::library;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 /// Wire the list's own callbacks, and seed the sort the first navigation applies.
 pub(super) fn wire(

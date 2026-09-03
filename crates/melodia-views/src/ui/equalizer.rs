@@ -17,11 +17,11 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
-use crate::library;
-use crate::player::playback::equalizer;
-use crate::state::AppState;
 use crate::ui::settings_bind::{read_or_default, toggle_binding};
 use crate::{AppWindow, Equalizer};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_playback::player::playback::equalizer;
 
 pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
     // Dropdown index of the synthetic "Custom" entry (one past the last

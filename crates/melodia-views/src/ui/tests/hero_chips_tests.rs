@@ -2,13 +2,13 @@ use super::{
     ChipLabels, ChipOwner, FavoritesFacts, RecentlyPlayedFacts, album_chips, artist_chips,
     favorites_chips, genre_chips, playlist_chips, recently_played_chips, should_clear,
 };
-use crate::entities::album::AlbumStats;
-use crate::entities::artist::ArtistStats;
-use crate::entities::genre::GenreStats;
-use crate::entities::playlist::PlaylistStats;
 use crate::ui::favorites::FavoritesTab;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::recently_played::RecentlyPlayedTab;
+use melodia_core::entities::album::AlbumStats;
+use melodia_core::entities::artist::ArtistStats;
+use melodia_core::entities::genre::GenreStats;
+use melodia_core::entities::playlist::PlaylistStats;
 use slint::SharedString;
 
 const STRIP: &str = include_str!("../../../../melodia-ui/ui/components/meta-chip-strip.slint");

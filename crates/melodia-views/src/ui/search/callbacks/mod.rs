@@ -25,15 +25,15 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::library;
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::persisted_sort;
 use crate::ui::search::{SearchUi, fetch::push_recent_rows_to_slint};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Search};
+use melodia_app::library;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 /// Nav-sidebar index of the Search tab. Used by the cross-tab
 /// open-album / open-artist hand-offs to stamp

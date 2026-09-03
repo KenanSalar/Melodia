@@ -10,9 +10,9 @@
 
 use slint::ComponentHandle;
 
-use crate::library;
-use crate::state::AppState;
 use crate::{AppWindow, Settings};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 pub fn install(ui: &AppWindow, state: &AppState) {
     // Seeded off the shadow rather than off `settings.json`, as `radio_settings` does: `AppState`

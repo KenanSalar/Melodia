@@ -13,8 +13,8 @@ use slint::Image;
 use super::state::{GRID_PREWARM_AHEAD, GRID_THUMB_CAP};
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::AppWindow;
-use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::grid_prewarm::grid_cover;
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 
 impl RecentlyPlayedUi {
     /// First-screenful cover paths for the Most Played tab, in display order.
@@ -100,7 +100,7 @@ impl RecentlyPlayedUi {
             self.most_played_thumbs.clear();
         }
         let warm = self.prewarm_tab_covers(entering);
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
         warm
     }
 

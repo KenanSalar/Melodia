@@ -14,13 +14,13 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use super::VIEW_ID;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::ui::track_list_view::TrackListColumnState;
 use crate::{AppWindow, RecentlyPlayed};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// Wire the list row / filter / column / selection / header callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {

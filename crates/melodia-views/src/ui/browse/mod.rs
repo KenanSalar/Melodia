@@ -38,16 +38,16 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::entities::browse::{BrowseFile, BrowseFolder};
-use crate::media::image::cover_thumbs::CoverThumbs;
-use crate::services::view_state;
-use crate::state::AppState;
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
 use crate::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
     BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
 };
+use melodia_app::services::view_state;
+use melodia_app::state::AppState;
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::browse::{BrowseFile, BrowseFolder};
 
 // `boot::ui_setup` retunes the cover cap once the window is live.
 pub use cards::tune_cache_for_display;
@@ -206,7 +206,7 @@ impl BrowseUi {
     /// toggle of the session".
     pub fn release_grid_covers(&self) {
         self.grid_covers.clear();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     pub fn current_path(&self) -> String {

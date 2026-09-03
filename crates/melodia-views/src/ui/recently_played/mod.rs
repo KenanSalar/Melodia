@@ -26,12 +26,12 @@ mod tabs;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
-use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 
 use state::{GRID_THUMB_CAP, RecentlyPlayedUiState, SongsTotals};
 
@@ -208,7 +208,7 @@ impl RecentlyPlayedUi {
         // the flag guards, and relying on the leave's own `mark_dirty` is a coupling two files
         // apart that a second caller of this function would not know to honour.
         self.mark_grid_dirty();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     pub(crate) fn state(&self) -> &RecentlyPlayedUiState {

@@ -20,12 +20,12 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::library;
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::view_tag;
 use crate::{AppWindow, Radio};
+use melodia_app::library;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 use super::{RadioTab, RadioUi, filter, tab_from_index};
 

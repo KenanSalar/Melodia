@@ -23,12 +23,12 @@ use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast;
 use slint::{Brush, ComponentHandle};
 
-use crate::media::image::material_you::{
-    clamp_to_tone_band, population_seeds, to_tone_capped_chroma,
-};
 use crate::ui::appearance::theme_apply::{brush, brush_to_rgb, brush_with_alpha};
 use crate::ui::artwork_cache::BlurSpec;
 use crate::{AppWindow, Theme as ThemeGlobal};
+use melodia_artwork::media::image::material_you::{
+    clamp_to_tone_band, population_seeds, to_tone_capped_chroma,
+};
 
 /// HCT tone the composited blur is driven down to. Below it a light hue-carrying chrome tone
 /// clears WCAG's 3:1 non-text bar with margin and body text clears 4.5:1 without washing out.

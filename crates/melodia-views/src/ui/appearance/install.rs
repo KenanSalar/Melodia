@@ -14,11 +14,11 @@ use super::{
     AppearanceHandles, PersistedAccent, accent_picker, apply_and_seed, material_you_sync,
     read_initial_system_state, seed_theme_names, system_watcher, theme_picker, window_settings,
 };
-use crate::error::AppError;
-use crate::library;
-use crate::services;
-use crate::state::{AppState, Signal};
 use crate::{AppWindow, Settings, Theme};
+use melodia_app::library;
+use melodia_app::services;
+use melodia_app::state::{AppState, Signal};
+use melodia_core::error::AppError;
 
 /// Hydrate the Settings global from `settings.json`, paint the resolved
 /// palette, and wire chip-click callbacks. Call once during startup,

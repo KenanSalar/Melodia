@@ -1,5 +1,5 @@
 use super::accent_brushes;
-use crate::themes::get;
+use melodia_core::themes::get;
 
 /// One swatch per accent the theme declares, for each of the three accent-count shapes in the
 /// registry. It sits here rather than beside the registry tables because the count it checks is

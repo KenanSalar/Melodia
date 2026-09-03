@@ -12,9 +12,9 @@ use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowLevel;
 
 use crate::AppWindow;
-use crate::error::AppError;
-use crate::services::platform::always_on_top::AlwaysOnTopMethod;
-use crate::state::AppState;
+use melodia_app::state::AppState;
+use melodia_core::error::AppError;
+use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
 
 pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool>) {
     let chrome = app.global::<crate::WindowChrome>();
@@ -108,7 +108,9 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             let weak = weak.clone();
             let state_inner = state.clone();
             state.runtime.spawn(async move {
-                if let Err(e) = crate::library::window::set_always_on_top(&state_inner, new).await {
+                if let Err(e) =
+                    melodia_app::library::window::set_always_on_top(&state_inner, new).await
+                {
                     log::warn!("set_always_on_top: {e}");
                     let _ = weak.upgrade_in_event_loop(move |ui| {
                         ui.global::<crate::WindowChrome>().set_always_on_top_active(!new);
@@ -136,19 +138,19 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
         app,
         state,
         "use_native_titlebar",
-        crate::library::window::set_use_native_titlebar,
+        melodia_app::library::window::set_use_native_titlebar,
     ));
     chrome.on_restart_tray(restart_toggle(
         app,
         state,
         "tray_enabled",
-        crate::library::window::set_tray_enabled,
+        melodia_app::library::window::set_tray_enabled,
     ));
     chrome.on_restart_backdrop(restart_toggle(
         app,
         state,
         "aurora_backdrop",
-        crate::library::window::set_aurora_backdrop,
+        melodia_app::library::window::set_aurora_backdrop,
     ));
 }
 

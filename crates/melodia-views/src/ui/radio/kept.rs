@@ -17,14 +17,14 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Weak};
 
-use crate::entities::radio::RadioStation;
-use crate::library;
-use crate::services::settings::SortDir;
-use crate::state::AppState;
 use crate::ui::grid_rows::{chunk_built_rows, write_grid};
 use crate::ui::row_match::{self, Needle};
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Radio, RadioStationGridRow};
+use melodia_app::library;
+use melodia_app::services::settings::SortDir;
+use melodia_app::state::AppState;
+use melodia_core::entities::radio::RadioStation;
 
 use super::{RadioTab, RadioUi, covers, mounted_tab, rows};
 
@@ -243,14 +243,14 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         let favorites = match library::radio::get_favorites(&s).await {
             Ok(favorites) => favorites,
             Err(e) => {
-                log::warn!("radio: kept stations: {}", crate::error::describe(&e));
+                log::warn!("radio: kept stations: {}", melodia_core::error::describe(&e));
                 return;
             }
         };
         let recent = match library::radio::get_recent(&s).await {
             Ok(recent) => recent,
             Err(e) => {
-                log::warn!("radio: recent stations: {}", crate::error::describe(&e));
+                log::warn!("radio: recent stations: {}", melodia_core::error::describe(&e));
                 return;
             }
         };

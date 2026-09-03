@@ -14,9 +14,9 @@ use std::sync::atomic::AtomicBool;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, VecModel, Weak};
 
-use crate::media::image::cover_thumbs::{CoverThumbs, row_cover_size};
-use crate::state::AppState;
 use crate::{AppWindow, Queue, QueueRow};
+use melodia_app::state::AppState;
+use melodia_artwork::media::image::cover_thumbs::{CoverThumbs, row_cover_size};
 
 pub(crate) use rows::to_slint_queue_row;
 

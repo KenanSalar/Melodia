@@ -35,8 +35,6 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::entities::playlist::PlaylistStats;
-use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
@@ -47,6 +45,8 @@ use crate::{
     AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow,
     Playlists, TrackListRow as UiTrackListRow,
 };
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::playlist::PlaylistStats;
 
 use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
 use state::{DEFAULT_GRID_COVER_CAP, GridData, PlaylistDetailState, PlaylistGridState};
@@ -161,21 +161,21 @@ impl PlaylistsUi {
             self.detail.position_order.lock().clear();
             self.detail.applied_selection.lock().clear();
         }
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// Drop just the grid-tier cover cache — called when the user opens
     /// a playlist (the grid is unmounted).
     pub fn release_grid_covers(&self) {
         self.grid_covers.clear();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// Drop just the detail-tier `(cover, blur)` pair cache — called
     /// when the user closes a playlist detail.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     pub fn prewarm_visible_covers(&self) {

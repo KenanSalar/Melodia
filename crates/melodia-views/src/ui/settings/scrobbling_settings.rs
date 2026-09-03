@@ -21,17 +21,17 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, SharedString};
 
-use crate::entities::integrations::ScrobbleFlags;
-use crate::error::AppError;
-use crate::library;
-use crate::services::integrations::scrobble::providers::{lastfm, listenbrainz};
-use crate::services::integrations::scrobble::{
+use crate::ui::launcher;
+use crate::{AppWindow, Dialog, ScrobbleUi, Settings};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::integrations::ScrobbleFlags;
+use melodia_core::error::AppError;
+use melodia_core::utils::toast::{self, ToastKind};
+use melodia_integrations::services::integrations::scrobble::providers::{lastfm, listenbrainz};
+use melodia_integrations::services::integrations::scrobble::{
     ListenBrainzCredentials, LoveTarget, ScrobbleService, ScrobbleStatus,
 };
-use crate::state::AppState;
-use crate::ui::launcher;
-use crate::utils::toast::{self, ToastKind};
-use crate::{AppWindow, Dialog, ScrobbleUi, Settings};
 
 /// Paint the per-service connection/enabled props from a status snapshot. The
 /// single writer of these props — called once for the seed and then on every

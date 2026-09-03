@@ -20,11 +20,11 @@ use lru::LruCache;
 use parking_lot::Mutex;
 use tokio::task::JoinSet;
 
-use crate::entities::radio::StoredLogo;
-use crate::error::AppError;
-use crate::library;
-use crate::library::radio::{LogoAnswer, SiteOrigin};
-use crate::state::AppState;
+use melodia_app::library;
+use melodia_app::library::radio::{LogoAnswer, SiteOrigin};
+use melodia_app::state::AppState;
+use melodia_core::entities::radio::StoredLogo;
+use melodia_core::error::AppError;
 
 /// How many logo answers to remember.
 ///
@@ -226,7 +226,7 @@ async fn record_answer(
         Err(e) => {
             // Debug rather than warn: a dead favicon is the normal condition on a directory of
             // 60,000 community-maintained entries, and the card has a monogram to fall back to.
-            log::debug!("radio: logo fetch failed: {}", crate::error::describe(&e));
+            log::debug!("radio: logo fetch failed: {}", melodia_core::error::describe(&e));
             memo.record(url, None);
             return false;
         }
@@ -348,7 +348,7 @@ async fn seed_from_store(
         return false;
     };
 
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
     let mut answered: HashSet<String> = HashSet::new();
     let mut landed = false;
     for answer in answers {

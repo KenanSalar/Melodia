@@ -12,7 +12,6 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::state::AppState;
 use crate::ui::callbacks::macros::{release_shared_hero, spawn_logged};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::model_diff::clear_vec_model;
@@ -21,6 +20,7 @@ use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
     AppWindow, GenreDetail, GenreGridRow as UiGenreGridRow, Genres, TrackListRow as UiTrackListRow,
 };
+use melodia_app::state::AppState;
 
 /// Wire the Genres section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {

@@ -9,12 +9,12 @@ use slint::{ComponentHandle, VecModel};
 
 use super::source_change::apply_source_change;
 use super::{NowPlayingState, UP_NEXT_N, current_track_id};
-use crate::player::engine::state::QueueViewModel;
-use crate::state::AppState;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::ui::queue_sheet::to_slint_queue_row;
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Nav, NowPlaying, QueueRow};
+use melodia_app::state::AppState;
+use melodia_engine::player::engine::state::QueueViewModel;
 
 /// Subscribe to `sinks.queue`. Closed, the subscriber only stashes the latest snapshot
 /// into `NowPlayingState::latest_qvm`; open, it rebuilds the Up Next list when the
@@ -140,7 +140,7 @@ pub(super) fn wire_now_playing_open(
             let np_artwork = np_artwork.clone();
             state.runtime.spawn_blocking(move || {
                 np_artwork.clear();
-                crate::services::platform::allocator::trim();
+                melodia_platform::services::platform::allocator::trim();
             });
             return;
         }

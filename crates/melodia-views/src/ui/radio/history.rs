@@ -20,7 +20,7 @@ use async_compat::Compat;
 use slint::ComponentHandle;
 
 use crate::AppWindow;
-use crate::player::engine::event_sink::PlayerSinks;
+use melodia_engine::player::engine::event_sink::PlayerSinks;
 
 use super::{RadioUi, detail};
 

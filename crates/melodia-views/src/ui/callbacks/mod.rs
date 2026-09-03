@@ -22,11 +22,11 @@ use std::sync::Arc;
 use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
 
-use crate::library;
-use crate::services::settings::{SortDir, ViewSort};
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::{AppWindow, Nav, Player};
+use melodia_app::library;
+use melodia_app::services::settings::{SortDir, ViewSort};
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 use index_persist::IndexPersist;
 use macros::{spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
@@ -224,8 +224,9 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
         player.on_set_volume(move |level| {
             let s = s.clone();
             // Negative → 0 (try_from fails); then cap at the volume ceiling.
-            let vol =
-                u32::try_from(level).unwrap_or(0).min(crate::player::engine::state::MAX_VOLUME);
+            let vol = u32::try_from(level)
+                .unwrap_or(0)
+                .min(melodia_engine::player::engine::state::MAX_VOLUME);
             spawn_logged_sync!(
                 s,
                 "set_volume",

@@ -17,9 +17,9 @@ use std::rc::Rc;
 
 use slint::ComponentHandle;
 
-use crate::library;
-use crate::services::settings;
-use crate::state::AppState;
+use melodia_app::library;
+use melodia_app::services::settings;
+use melodia_app::state::AppState;
 
 use crate::ui::shell::notifications::{NotificationsUi, RowText};
 use crate::{AppWindow, Settings};

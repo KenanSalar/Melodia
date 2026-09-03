@@ -6,8 +6,6 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::callbacks::macros::spawn_logged;
@@ -18,6 +16,8 @@ use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::{UNFETCHED_COUNT, should_announce_warm};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// Wire the card-action and sub-view-routing callbacks.
 pub(super) fn wire(

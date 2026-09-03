@@ -7,9 +7,9 @@ use std::collections::HashSet;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
-use crate::entities::genre::GenreStats;
-use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::ui::row_match::Needle;
+use melodia_core::entities::genre::GenreStats;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 /// A genre's pre-lowercased name, computed once per `fetch_grid` so the name sort allocates
 /// nothing. Positionally aligned with [`GridData::genres`]. One field, unlike `AlbumSortKey` —

@@ -9,12 +9,12 @@ use async_compat::Compat;
 use slint::{ComponentHandle, Model};
 
 use super::{add_pick_disabled, refresh_add_selection_meta, set_all_picks, toggle_pick};
-use crate::library;
-use crate::state::AppState;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Dialog, PlaylistPickRow as UiPlaylistPickRow, Playlists, Settings};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 pub(super) fn wire(
     ui: &AppWindow,

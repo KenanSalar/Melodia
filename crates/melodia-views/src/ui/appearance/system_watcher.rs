@@ -8,8 +8,8 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 
 use crate::AppWindow;
-use crate::state::{AppState, Signal};
-use crate::themes::SystemColorState;
+use melodia_app::state::{AppState, Signal};
+use melodia_core::themes::SystemColorState;
 
 #[cfg(target_os = "linux")]
 use slint::ComponentHandle;
@@ -17,11 +17,11 @@ use slint::ComponentHandle;
 use tokio::sync::watch;
 
 #[cfg(target_os = "linux")]
-use crate::library;
+use melodia_app::library;
 #[cfg(target_os = "linux")]
-use crate::services;
+use melodia_core::themes;
 #[cfg(target_os = "linux")]
-use crate::themes;
+use melodia_platform::services::platform;
 
 #[cfg(target_os = "linux")]
 use super::apply_and_seed;
@@ -39,7 +39,7 @@ pub(super) fn spawn_os_state_watcher(
     kick: Signal,
 ) {
     let (tx, mut rx) = watch::channel(initial);
-    services::platform::system_theme::spawn_color_watcher(tx);
+    platform::system_theme::spawn_color_watcher(tx);
 
     let weak = ui.as_weak();
     let s = state.clone();

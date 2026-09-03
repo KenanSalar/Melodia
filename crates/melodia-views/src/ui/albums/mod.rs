@@ -24,8 +24,6 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::entities::album::AlbumStats;
-use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::row_match::Needle;
@@ -36,6 +34,8 @@ use crate::{
     AlbumDetail, AlbumGridRow as UiAlbumGridRow, AlbumRow as UiAlbumRow, Albums, AppWindow,
     TrackListRow as UiTrackListRow,
 };
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::album::AlbumStats;
 
 use crate::ui::grid_prewarm::GRID_COVER_FALLBACK;
 use state::{AlbumDetailState, AlbumGridState, DEFAULT_GRID_COVER_CAP, GridData};
@@ -154,7 +154,7 @@ impl AlbumsUi {
             self.detail.all_tracks.lock().clear();
             self.detail.applied_selection.lock().clear();
         }
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// Drop just the grid tier, on opening an album: the grid unmounts the
@@ -163,7 +163,7 @@ impl AlbumsUi {
     /// grid re-warms through [`Self::prewarm_visible_covers`].
     pub fn release_grid_covers(&self) {
         self.grid_covers.clear();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// The mirror image, on closing one: the detail's slots aren't queried again
@@ -171,7 +171,7 @@ impl AlbumsUi {
     /// stays warm.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// Re-decode the first screenful of grid covers, so a section enter over

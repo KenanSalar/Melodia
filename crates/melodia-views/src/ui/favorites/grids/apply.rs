@@ -7,7 +7,6 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Weak};
 
 use super::warm::mounted_content;
-use crate::entities::artist::FavoriteArtist;
 use crate::ui::favorites::{
     FavoritesTab, FavoritesUi, tab_from_index, to_slint_fav_artist_row, to_slint_most_played_row,
 };
@@ -16,6 +15,7 @@ use crate::ui::row_match::most_played_matches;
 use crate::ui::tab_bar::{grid_signature, should_announce_warm};
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, EntityStripRow as UiEntityStripRow, Favorites};
+use melodia_core::entities::artist::FavoriteArtist;
 
 /// The mounted grid's filtered rows, prepared away from the UI thread by
 /// [`build_filtered_grids`] and consumed by [`write_filtered_grids`].

@@ -10,11 +10,6 @@ use slint::{ComponentHandle, SharedString, Weak};
 
 use super::selection::{apply_selection_to_rows, write_selection};
 use super::{PlaylistsUi, to_slint_playlist_row};
-use crate::entities::playlist::PlaylistStats;
-use crate::entities::track::TrackListRow as RsTrackListRow;
-use crate::error::AppResult;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_selection::prune_selection_to;
@@ -25,6 +20,11 @@ use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{AppWindow, NavEnterFrom, PlaylistDetail, TrackListRow as UiTrackListRow};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::playlist::PlaylistStats;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_core::error::AppResult;
 
 // `apply_detail_artwork` (cover + hero-blur write) and `replace_tracks_model` (in-place `tracks`
 // `VecModel` swap) — see `src/ui/detail_view.rs`. Playlist Detail keeps its own position-aware
@@ -55,7 +55,7 @@ async fn fetch_playlist_detail(
         // Smart playlists have no `playlist_items` rows — resolve membership live from the stored
         // criteria, and derive the header stats from the resolved set, the junction-maintained
         // `track_count`/`total_duration_ms` staying 0 for a virtual playlist.
-        let criteria = crate::entities::smart_criteria::SmartCriteria::from_json_opt(
+        let criteria = melodia_core::entities::smart_criteria::SmartCriteria::from_json_opt(
             detail.smart_criteria.as_deref(),
         );
         let rows = library::smart_playlists::evaluate(state, &criteria).await?;

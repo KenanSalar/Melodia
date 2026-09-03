@@ -12,9 +12,9 @@ mod lifecycle;
 use std::sync::Arc;
 
 use crate::AppWindow;
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 /// Wire every `Albums.*` / `AlbumDetail.*` callback to its `library::*`
 /// counterpart and the `albums_ui` shared state, plus a

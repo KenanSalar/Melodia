@@ -7,8 +7,6 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::file_dialog;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::shell::notifications::{
@@ -16,6 +14,8 @@ use crate::ui::shell::notifications::{
 };
 use crate::ui::util::count_as_i32;
 use crate::{AppWindow, Playlists, Settings};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 pub(super) fn wire(
     ui: &AppWindow,

@@ -23,14 +23,14 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
-use crate::entities::track::TrackSummary;
-use crate::media::image::cover_thumbs::CoverThumbs;
-use crate::player::engine::now_playing::SourceId;
-use crate::player::engine::state::{PlayerViewModelLight, QueueViewModel, lock_state};
-use crate::state::AppState;
 use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Nav, NowPlaying, Player, QueueRow};
+use melodia_app::state::AppState;
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::track::TrackSummary;
+use melodia_engine::player::engine::now_playing::SourceId;
+use melodia_engine::player::engine::state::{PlayerViewModelLight, QueueViewModel, lock_state};
 
 use async_compat::Compat;
 

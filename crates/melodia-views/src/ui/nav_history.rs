@@ -24,13 +24,13 @@ use std::sync::{Arc, LazyLock};
 use parking_lot::Mutex;
 use slint::{ComponentHandle, Weak};
 
-use crate::state::AppState;
 use crate::ui::my_library::{
     self, MyLibraryTab, NAV_MY_LIBRARY, persist_tab, tab_from_index, tab_of_section,
 };
 use crate::ui::radio::NAV_RADIO;
 use crate::ui::view_tag;
 use crate::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Queue, Radio};
+use melodia_app::state::AppState;
 
 const HISTORY_CAP: usize = 24;
 

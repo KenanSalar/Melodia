@@ -6,14 +6,14 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::library;
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, GenreDetail, Genres};
+use melodia_app::library;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 /// Wire the `Genres` grid callbacks. See [`super::wire`].
 pub(super) fn wire(

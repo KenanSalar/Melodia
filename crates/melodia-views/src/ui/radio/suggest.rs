@@ -20,11 +20,11 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
-use crate::entities::radio::{Facet, StationSearch};
-use crate::state::AppState;
 use crate::ui::grid_rows::write_grid;
 use crate::ui::row_match::{self, Needle};
 use crate::{AppWindow, Radio, RadioSuggestionRow};
+use melodia_app::state::AppState;
+use melodia_core::entities::radio::{Facet, StationSearch};
 
 use super::facets::{self, ChipFilter, FacetIndex};
 use super::{RadioTab, RadioUi, browse, mounted_tab};

@@ -1,7 +1,7 @@
 //! Technical-metadata chip row formatter + display helpers.
 
 use crate::TrackMetaRow;
-use crate::entities::track::TrackMeta;
+use melodia_core::entities::track::TrackMeta;
 use slint::SharedString;
 
 /// Format the `TrackMeta` projection into the pre-formatted display

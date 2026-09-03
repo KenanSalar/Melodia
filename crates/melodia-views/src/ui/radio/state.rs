@@ -10,10 +10,10 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::DetailArtwork;
 use crate::ui::section_state::SectionState;
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 
 use super::browse::BrowseState;
 use super::logos::LogoMemo;
@@ -64,7 +64,7 @@ pub struct RadioUi {
     /// The open picker's list, whole. Kept beside the Slint model because the picker's needle
     /// narrows it and Slint cannot filter an array, so every keystroke rebuilds the model from
     /// here rather than re-asking the facade across the runtime.
-    pub(super) facet_list: Mutex<Option<Arc<[crate::entities::radio::Facet]>>>,
+    pub(super) facet_list: Mutex<Option<Arc<[melodia_core::entities::radio::Facet]>>>,
     /// All four directory lists at once, filled by `facets::prime` on the first section enter.
     ///
     /// The sibling above is whichever list the open picker is narrowing and answers a question
@@ -132,7 +132,7 @@ impl RadioUi {
     /// event loop.
     pub(super) fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
-        crate::services::platform::allocator::trim();
+        melodia_platform::services::platform::allocator::trim();
     }
 
     /// Whether the page is the section on screen.

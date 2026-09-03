@@ -30,10 +30,6 @@ use std::cell::RefCell;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::entities::album::AlbumStats;
-use crate::entities::artist::ArtistStats;
-use crate::entities::genre::GenreStats;
-use crate::entities::playlist::PlaylistStats;
 use crate::ui::chips;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi, NAV_FAVORITES};
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
@@ -46,6 +42,10 @@ use crate::{
     AlbumDetail, AppWindow, ArtistDetail, GenreDetail, HeroChips, MyLibrary, Nav, PlaylistDetail,
     Radio,
 };
+use melodia_core::entities::album::AlbumStats;
+use melodia_core::entities::artist::ArtistStats;
+use melodia_core::entities::genre::GenreStats;
+use melodia_core::entities::playlist::PlaylistStats;
 
 /// How many rows a hero band gives its chips before dropping the rest.
 ///

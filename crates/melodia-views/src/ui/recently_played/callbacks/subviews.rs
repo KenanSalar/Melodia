@@ -6,8 +6,6 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::library;
-use crate::state::AppState;
 use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::spawn_play_then_shuffle;
@@ -15,6 +13,8 @@ use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::ui::tab_bar::{UNFETCHED_COUNT, should_announce_warm};
 use crate::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// Wire the card-action and sub-view-routing callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {

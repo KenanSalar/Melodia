@@ -26,13 +26,13 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::persisted_sort;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Favorites};
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 /// Wire every `Favorites.*` callback.
 ///

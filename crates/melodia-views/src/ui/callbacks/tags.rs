@@ -23,19 +23,19 @@ use std::rc::Rc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedString};
 
-use crate::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
-use crate::entities::track::TagEditRow;
-use crate::error::AppError;
-use crate::library;
-use crate::library::tags::TagEditReport;
-use crate::media::image::image_decode::{
-    FilterType, MAX_SOURCE_DIM, decode_capped, fit_within, resize_rgb8,
-};
-use crate::state::AppState;
 use crate::ui::file_dialog;
 use crate::ui::shell::notifications::{NotificationParams, NotificationsUi, RowText};
 use crate::ui::util::{COVER_SIZE, buffer_from_rgb};
 use crate::{AppWindow, Dialog, Settings, TagEditor};
+use melodia_app::library;
+use melodia_app::library::tags::TagEditReport;
+use melodia_app::state::AppState;
+use melodia_artwork::media::image::image_decode::{
+    FilterType, MAX_SOURCE_DIM, decode_capped, fit_within, resize_rgb8,
+};
+use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
+use melodia_core::entities::track::TagEditRow;
+use melodia_core::error::AppError;
 
 /// Canonical field order, shared by the three positional lists that must stay
 /// aligned: the `commit` getter array, `populate`'s `field!` calls, and

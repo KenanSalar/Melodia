@@ -17,8 +17,8 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 
-use crate::library;
-use crate::state::AppState;
+use melodia_app::library;
+use melodia_app::state::AppState;
 
 /// Atomic mirror of `Queue.open`, which the `DroppedFile` handler consults to decide
 /// whether the user is targeting the queue sheet. A `OnceLock` so the queue sheet can
@@ -115,8 +115,8 @@ pub(super) fn schedule_drop_flush(state: &AppState, path: PathBuf) {
                 }
                 Err(e) => {
                     log::warn!("queue_import_files (drop): {e}");
-                    crate::utils::toast::notify(
-                        crate::utils::toast::ToastKind::OperationFailed,
+                    melodia_core::utils::toast::notify(
+                        melodia_core::utils::toast::ToastKind::OperationFailed,
                         e.to_string(),
                     );
                 }

@@ -15,10 +15,10 @@ mod lifecycle;
 use std::sync::Arc;
 
 use crate::AppWindow;
-use crate::services::view_state::ViewStateData;
-use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
+use melodia_app::services::view_state::ViewStateData;
+use melodia_app::state::AppState;
 
 /// Wire every `Artists.*` / `ArtistDetail.*` callback. Mirrors the Albums
 /// slice's, plus an `ArtistDetail.open-album` that moves to the Albums tab and

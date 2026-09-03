@@ -10,12 +10,6 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 
 use super::selection::{apply_selection_to_rows, write_selection};
 use super::{ArtistsUi, to_slint_artist_row};
-use crate::entities::album::AlbumStats;
-use crate::entities::artist::ArtistStats;
-use crate::entities::track::TrackListRow as RsTrackListRow;
-use crate::error::AppResult;
-use crate::library;
-use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_selection::prune_selection_to;
@@ -29,6 +23,12 @@ use crate::ui::util::clamp_i64_to_i32;
 use crate::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, NavEnterFrom, TrackListRow as UiTrackListRow,
 };
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_core::entities::album::AlbumStats;
+use melodia_core::entities::artist::ArtistStats;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_core::error::AppResult;
 
 // `apply_detail_artwork` (cover + hero-blur write) and `replace_tracks_model` (in-place `tracks`
 // `VecModel` swap) — see `src/ui/detail_view.rs`.
