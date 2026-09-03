@@ -27,7 +27,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::{DateTime, Local, NaiveDateTime};
 
-use crate::utils::redact::redact_home;
+use melodia_core::utils::redact::redact_home;
 
 /// How many reports survive a [`prune`].
 ///
@@ -211,7 +211,7 @@ pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
 
     let marker = logs_dir.join(LAST_SEEN_FILE);
     let seen: LastSeen =
-        crate::utils::atomic_file::load_json_or_default_sync(&marker).unwrap_or_default();
+        melodia_core::utils::atomic_file::load_json_or_default_sync(&marker).unwrap_or_default();
     if seen.newest.as_deref().and_then(parse_stamp) >= Some(newest) {
         return None;
     }
@@ -219,7 +219,7 @@ pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
     let record = LastSeen {
         newest: Some(newest.format(FILE_TS_FORMAT).to_string()),
     };
-    if let Err(e) = crate::utils::atomic_file::write_json_sync(&marker, &record) {
+    if let Err(e) = melodia_core::utils::atomic_file::write_json_sync(&marker, &record) {
         // Hand the report over anyway. The hook wrote into this same directory
         // moments before, so a failure here is close to impossible — and a
         // notice that repeats beats one that never arrives.

@@ -5,7 +5,7 @@
 //! `test-windows` is the only place this runs.
 
 use super::is_dark_from_rgb;
-use crate::themes::on_accent_hex;
+use melodia_core::themes::on_accent_hex;
 
 /// Asks the twin in its own terms. `on_accent_hex` answers with an ink rather than a bool, so the
 /// ink a known-dark surface gets is what "dark" means here — no fourth copy of the weights.

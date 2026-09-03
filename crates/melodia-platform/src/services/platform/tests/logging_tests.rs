@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use flexi_logger::{FlexiLoggerError, LogSpecification};
 use log::LevelFilter;
 
-use crate::error::describe;
+use melodia_core::error::describe;
 
 use super::{NORMAL_LEVEL, VERBOSE_LEVEL, newest_first, spec_for};
 

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use tokio::sync::watch;
 use zbus::MatchRule;
 
-use crate::themes::kde::KdeColorPalette;
+use melodia_core::themes::kde::KdeColorPalette;
 
 /// Color scheme values from the XDG Desktop Portal specification.
 /// See: <https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.Settings.html>
@@ -100,7 +100,7 @@ fn query_portal_color_scheme_blocking() -> Option<u32> {
 }
 
 /// Spawn a background task that listens for XDG portal `SettingChanged`
-/// signals and forwards a fresh [`crate::themes::SystemColorState`] on every appearance
+/// signals and forwards a fresh [`melodia_core::themes::SystemColorState`] on every appearance
 /// change. The payload bundles the current dark/light theme *and* the
 /// re-read KDE palette so the UI consumer doesn't have to coordinate two
 /// separate channels — KDE's `kdeglobals` is the same file Plasma rewrites
@@ -110,7 +110,7 @@ fn query_portal_color_scheme_blocking() -> Option<u32> {
 /// Uses `zbus::blocking::*` inside `spawn_blocking` so it doesn't share an
 /// async zbus connection with Slint's a11y subsystem (see CLAUDE.md zbus
 /// footgun).
-pub fn spawn_color_watcher(state_tx: watch::Sender<crate::themes::SystemColorState>) {
+pub fn spawn_color_watcher(state_tx: watch::Sender<melodia_core::themes::SystemColorState>) {
     tokio::task::spawn_blocking(move || {
         if let Err(e) = watch_color_changes(&state_tx) {
             log::warn!("System theme watcher stopped: {e}");
@@ -119,7 +119,7 @@ pub fn spawn_color_watcher(state_tx: watch::Sender<crate::themes::SystemColorSta
 }
 
 fn watch_color_changes(
-    state_tx: &watch::Sender<crate::themes::SystemColorState>,
+    state_tx: &watch::Sender<melodia_core::themes::SystemColorState>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let conn = zbus::blocking::Connection::session()?;
 

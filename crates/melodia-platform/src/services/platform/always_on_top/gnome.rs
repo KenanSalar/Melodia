@@ -9,7 +9,7 @@
 //! Same threading rules as `kwin.rs`: `zbus::blocking::*` only,
 //! everything inside `tokio::task::spawn_blocking`.
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 use super::session_connection;
 

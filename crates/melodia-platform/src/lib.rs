@@ -7,8 +7,6 @@
 //! the UI, and the two edges that used to break that — `always_on_top`'s `&AppState` and
 //! `logging::install` opening `settings.json` itself — were narrowed in Phase B.
 
-pub use melodia_core::{config, entities, error, themes, utils};
-
 pub mod services {
     pub mod platform;
 }

@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use crate::error::AppResult;
+use melodia_core::error::AppResult;
 
 pub mod linux_pkg;
 pub mod probe;
@@ -22,7 +22,7 @@ pub use system_install::is_system_install;
 /// path-touching module in the updater routes through this, the **only** function
 /// there or here that asks for the running binary's path.
 ///
-/// The other arm goes through [`crate::utils::exe::current_exe`] rather than
+/// The other arm goes through [`melodia_core::utils::exe::current_exe`] rather than
 /// `std::env::current_exe()`, which on Linux hands back a `<path> (deleted)` string
 /// once the binary has been replaced on disk — an RPM/DEB upgrade mid-session is
 /// exactly that, and this answer is what `desktop_integration` bakes into the user's
@@ -34,5 +34,5 @@ pub fn install_target() -> AppResult<PathBuf> {
     {
         return Ok(PathBuf::from(p));
     }
-    Ok(crate::utils::exe::current_exe()?)
+    Ok(melodia_core::utils::exe::current_exe()?)
 }

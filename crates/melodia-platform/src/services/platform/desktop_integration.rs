@@ -27,7 +27,7 @@
 
 use std::path::Path;
 
-use crate::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult};
 
 use super::install_kind::{install_target, linux_pkg};
 
@@ -68,7 +68,7 @@ pub fn refresh_user_install() -> AppResult<()> {
     // Under `cargo run` the binary sits in `target/{debug,release}/`, and a
     // `.desktop` pointing `Exec=` there would hijack the installed entry. No
     // installed tarball / RPM / DEB binary matches.
-    if crate::utils::exe::is_dev_build() {
+    if melodia_core::utils::exe::is_dev_build() {
         log::info!(
             "desktop_integration: skipping — running a development build \
              (would clobber the installed .desktop Exec= path)"

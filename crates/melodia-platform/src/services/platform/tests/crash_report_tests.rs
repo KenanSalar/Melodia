@@ -6,9 +6,9 @@ use super::{
     LAST_SEEN_FILE, MAX_CRASH_REPORTS, file_name, format_report, prune, recent, take_unseen,
     timestamp_of,
 };
-use crate::error::AppError;
 use crate::test_support::reading_env;
-use crate::utils::redact::home_dir_string;
+use melodia_core::error::AppError;
+use melodia_core::utils::redact::home_dir_string;
 
 /// Everything in `dir`, sorted. Report names are fixed-width, so lexicographic
 /// order is chronological order — the same property retention leans on.

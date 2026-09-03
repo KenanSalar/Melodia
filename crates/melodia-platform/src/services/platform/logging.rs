@@ -29,7 +29,7 @@ use flexi_logger::{
     LogSpecification, LogfileSelector, Logger, LoggerHandle, Naming, WriteMode, detailed_format,
 };
 
-use crate::config::Paths;
+use melodia_core::config::Paths;
 
 /// What our own two targets log at with Verbose Logging off.
 const NORMAL_LEVEL: &str = "info";
@@ -99,7 +99,7 @@ pub fn install(paths: &Paths, verbose: bool) {
         }
         // Not `to_string()`: `OutputIo` never interpolates its `io::Error`, so without the chain a
         // root-owned file and a full disk read identically.
-        Err(e) => crate::error::describe(&e),
+        Err(e) => melodia_core::error::describe(&e),
     };
 
     if let Ok(handle) = base_logger(&spec).start() {

@@ -186,7 +186,7 @@ fn install_target_uses_appimage_path_when_set() -> TestResult {
             } else {
                 // On non-Linux platforms `$APPIMAGE` is ignored — falls
                 // back to `utils::exe::current_exe()`.
-                let cur = crate::utils::exe::current_exe()?;
+                let cur = melodia_core::utils::exe::current_exe()?;
                 assert_eq!(target, cur);
             }
             Ok(())
@@ -210,7 +210,7 @@ fn install_target_falls_back_to_current_exe_when_appimage_unset() -> TestResult 
     with_appimage_env(None, || {
         let r: TestResult = (|| {
             let target = install_target()?;
-            let cur = crate::utils::exe::current_exe()?;
+            let cur = melodia_core::utils::exe::current_exe()?;
             assert_eq!(target, cur);
             Ok(())
         })();
@@ -225,7 +225,7 @@ fn install_target_ignores_empty_appimage_var() -> TestResult {
     with_appimage_env(Some(""), || {
         let r: TestResult = (|| {
             let target = install_target()?;
-            let cur = crate::utils::exe::current_exe()?;
+            let cur = melodia_core::utils::exe::current_exe()?;
             assert_eq!(target, cur);
             Ok(())
         })();

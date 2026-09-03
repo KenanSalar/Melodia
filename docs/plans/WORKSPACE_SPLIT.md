@@ -1305,7 +1305,7 @@ naming either once the shims are gone. That is one fewer test binary, 41 rather 
 - [x] **E0. This section.** Docs only.
 - [x] **E1. `melodia-artwork`**, 4 lines.
 - [x] **E2. `melodia-net`**, 13. Also `crate::media::image`.
-- [ ] **E3. `melodia-platform`**, 13.
+- [x] **E3. `melodia-platform`**, 13.
 - [ ] **E4. `melodia-audio`**, 11. Its `pub mod services { }` shim empties and goes with the line.
 - [ ] **E5. `melodia-playback`**, 21.
 - [ ] **E6. `melodia-engine`**, 22.

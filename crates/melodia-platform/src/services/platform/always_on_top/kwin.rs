@@ -14,7 +14,7 @@
 use zbus::zvariant::ObjectPath;
 
 use super::session_connection;
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 pub async fn set_always_on_top(data_dir: &std::path::Path, pinned: bool) -> Result<(), AppError> {
     let pid = std::process::id();

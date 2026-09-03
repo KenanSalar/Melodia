@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 #[cfg(target_os = "linux")]
 pub mod gnome;
