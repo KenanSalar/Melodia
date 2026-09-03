@@ -178,7 +178,7 @@ this file is what builds, looks right, and is wrong.
   Both draggable lists opt out outright, `draggable-track-list.slint` on both axes (a diagonal
   drag steals sideways once the columns overflow) and `queue-sheet.slint`, pinned by
   `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
-  under a pointer; the click-to-act grids and lists are pinned by `ui::scrollbar_tests`.
+  under a pointer; the click-to-act grids and lists are pinned by `melodia-tidy`'s `scrollbars`.
   **`!reorder-enabled` is what that binding used to say, and is the trap worth keeping**: it reads
   as leaving a `true` default alone and instead *enables* the pan on every sort that retires the
   drag. `!interactive` still forwards wheel events, so only drag-to-pan goes.

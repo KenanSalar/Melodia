@@ -5,7 +5,7 @@
 //! is a crate rather than a directory: a URL from outside the app is *parsed* rather than
 //! prefix-tested, and a body is streamed under a cap rather than allocated and measured after.
 //! Both are violable from any file and neither fails visibly, so the corpus walks in
-//! `services::net::tests` hold them.
+//! `melodia-tidy`'s `net_primitives` hold them.
 
 pub use melodia_core::{config, entities, error, themes, utils};
 

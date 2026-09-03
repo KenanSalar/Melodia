@@ -5,10 +5,10 @@ order the cuts come out in. Harvest into `docs/adr/` when
 [#84](https://github.com/KenanSalar/Melodia/issues/84) ships, not before: the boundary rationale
 below is exactly what #84 exists to stop evaporating.
 
-Status: **Phases A, B and C complete** · Issue:
+Status: **Phases A, B, C and D complete; Phase E open** · Issue:
 [#83](https://github.com/KenanSalar/Melodia/issues/83) · Created: 2026-09-03 · Validated against
 `93b47dfa`, Phase A landed on `a1c087e4`, Phase B over five commits from `e506b490`, Phase C over
-four from `1060d8f1` to `01c314a8`
+four from `1060d8f1` to `01c314a8`, Phase D over five from `37cad90f`
 
 > **Phase A's twelve items are done and its checks pass**, so the counts below that describe
 > `src/` describe the tree *before* it. Where a Phase B item's inventory has moved, its own entry
@@ -1163,36 +1163,96 @@ to reach. De-facade in Phase D once the graph is proven, one crate at a time.
 
 ## Phase D: make the repo workspace-native
 
-- [ ] Virtual root manifest. `members = ["crates/*"]` and `exclude = ["winit"]` are already that
-      shape — C13 dropped the explicit `melodia-ui` entry when the glob started covering it — so
-      what is left is the root `[package]` going away. No `default-members` (finding 11). Profiles
-      and `[patch.crates-io]` stay at the root, as do the four version scrapes.
-- [ ] `[[bin]] name = "Melodia"` on the binary crate (finding 4), so the artifact name survives.
-- [ ] `[package.metadata.deb]` moves to the binary crate with all eight asset paths and `license-file`
-      rewritten, then a real `cargo deb --target … --no-build` to confirm the `target/release/` prefix
-      rewrite still fires. Re-key `LICENSE_SHIPPERS`' `("Cargo.toml", ...)` entry in
-      `services/tests/mod_tests.rs:398`, which fails loudly and correctly when it moves.
-- [ ] `release-build.yml:83` and `:124` take `-p melodia`; `:143`'s `cargo wix --package` follows.
-      A bare `cargo build` at a virtual root builds every member.
-- [ ] `tests/` moves to `crates/melodia/tests/`, and every corpus walk moves with it (findings 6 and
-      8): the `rfd` pin, `current_exe`, thread-name length, the single-resampler equality,
-      `CALLBACK_HOMES`, the scrollbar brace-matching, the rules-glob pin,
-      `no_result_carries_its_error_as_a_string`, and both halves of the radio off-switch pin. One
-      home, one reach, walking `$MELODIA_REPO_ROOT/crates`.
-- [ ] The 243 relative `include_str!` hops, as they surface.
-- [ ] Whatever `.claude/rules` globs Phase C did not already have to fix as it moved their paths —
-      the `tests/` and `build.rs` ones, and any `src/` entry still naming the bin.
-- [ ] `CLAUDE.md`'s module map and its "every path below is `src/`-relative" convention, the README
-      architecture section, and the 162 bracketed intra-doc links (`\[\`?crate::`). The nested
-      `src/player/CLAUDE.md` is already gone — C9 turned it into `.claude/rules/audio-stack.md`,
-      the directory having stopped being able to reach two of its three tiers.
-- [ ] Drop the scope-clippy-to-one-crate convention. `feature-unification = "workspace"` is
-      nightly-only and the toolchain is pinned to stable, so a scoped invocation reselects features
-      for shared dependencies and rebuilds them. `--workspace` on all three gate commands is the only
-      correct form, which a workspace makes the natural one anyway.
-- [ ] Measure the CI test job. It caps `CARGO_BUILD_JOBS: 4` with a comment naming five test binaries
-      and warning that past the ceiling the runner swaps rather than fails; the split takes that to
-      roughly fourteen.
+Five commits. Everything below is done.
+
+- [x] **D1. The binary becomes `crates/melodia`; the root goes virtual.** `src/`, `build.rs` and the
+      four integration tests move; the package is `melodia` and `[[bin]] name = "Melodia"` keeps the
+      artifact name every download URL, `.desktop` Exec= line and MSI registry key already spells.
+      `path` is required beside it — cargo only infers `src/main.rs` for a bin named after its
+      package — and `[lib] name` becomes deletable, having existed only to lowercase `Melodia`.
+
+      **A virtual root infers no resolver from its members**, which the plan did not carry: with a
+      `[package]` here, edition 2024 implied resolver 3, and dropping that table fell back to
+      resolver 1 silently. `resolver = "3"` is spelled out.
+
+      **`[package.metadata.deb]`'s ninth path must not gain `../../`.** `target/release/` is a magic
+      literal cargo-deb strips before joining any root and then resolves against the real target
+      dir; the other eight and `license-file` are package-root-relative and do gain it. Read out of
+      cargo-deb 3.7.0's own source rather than assumed, and checked with a real `cargo deb -p melodia`.
+
+      `tests/assets/` is `test-assets/` at the root — three crates read it through one `ASSETS_DIR`,
+      so it cannot sit in one member's `tests/`. `tests/fixtures/` stays the binary's own and keeps
+      its own directory: `headless` scans it and counts what lands, so holding exactly one file is
+      the assertion rather than an accident, which the plan's "merge them" line would have broken.
+
+      Two pins went red and both were right: `LICENSE_SHIPPERS` read the root manifest for the deb
+      asset glob, and the rules pin named all 22 root-anchored globs at once. **`.gitattributes` had
+      been stale since C12 with nothing to say so**, pinning the signed updater fixtures `-text
+      -merge` at a path that moved to `melodia-app` — the one file in the tree no test reads.
+- [x] **D2. Packaging and CI name the package.** `-p melodia` on the release build, the deb and the
+      RPM script's `--build` hook; `--package melodia` on the MSI. Without it `cargo deb` does not
+      merely build too much, it stops: `Cargo.toml is a workspace, not a package`.
+
+      **`wix/` moves under the binary rather than staying at the root behind `-I`.** cargo-wix reads
+      `wix/main.wxs` relative to the manifest `--package` selects, and the flag's resolution base is
+      undocumented and exercised by nothing short of a tagged Windows release. Its default layout
+      costs three `..` in `RepoRoot` and re-points two pins the local suite runs.
+- [x] **D3. `crates/melodia-tidy` — the repo-wide checks get one home.** A leaf naming only
+      `melodia-testkit` and `melodia-core`, so `cargo test -p melodia-tidy` compiles the walkers and
+      stops. rustc keeps the same checks in `src/tools/tidy` and rust-analyzer behind `cargo xtask
+      tidy`; rust-analyzer's contributor guide asks for the narrowest useful test command, which
+      this tree could not offer while a `melodia-net` test compiled `melodia-views`' sources.
+
+      **The criterion is the corpus, not the subject**: a check that *enumerates* one moves, a pin
+      on one named file stays. Both halves of the radio off-switch pin land together, which is what
+      finding 8 wanted and neither crate could give.
+
+      **Nine self-exemptions are deleted rather than re-pointed.** A walk inside the corpus it walks
+      is its own first hit, so each named itself, and two had bent their shape around it —
+      `error_as_string` split its needle as `concat!("Result", "<")` and `cover_generation` skipped
+      itself while asserting it still spelled what it greps for.
+- [x] **D4. The Slint-tree walks follow.** Twenty-four more, reading `crates/melodia-ui/ui` from
+      inside `melodia-views`; `melodia-ui` cannot host them, `[lib] test = false` being A11.
+      `depth_between` goes to the testkit, being needed on both sides of the split and the same
+      category as `blocks_named` beside it. **`SUPPORTED_LOCALES` goes to `entities::locale`** on
+      Phase C's own rule — three tiers read it, and leaving it in `melodia-app` would have put the
+      command layer on tidy's dependency line for seven string literals.
+
+      The criterion is exhaustive rather than aspirational: no crate's `src/` calls a corpus
+      enumerator at all. Fifty-four checks in twenty-four files.
+- [x] **D5. Globs, docs and the gate.** The module map leads with the crate that owns each bullet;
+      the four `src/`-era "walks `src/`" claims, the two command blocks missing `--workspace`, and
+      twenty references naming a moved pin by its old module path. `CLAUDE.md` gains the tidy rule
+      beside its testing conventions.
+
+**Counts the plan carried that the tree did not.** Rule entries 182, not 165 — the pin's own doc
+comment said 165/96 and is a floor now rather than a census, which is prose that needed rewriting
+on every rule added. Intra-doc links 147, not 162. Test binaries 18 at the start of Phase D and 43
+at its end, against the "roughly fourteen" predicted and the "five" `pr-validation.yml` claimed.
+The scope-clippy-to-one-crate convention was never in the repo: what was there is two command
+blocks omitting `--workspace`, and a virtual root retires the question by making every-member the
+default selection.
+
+## Phase E: de-facade
+
+Each crate `pub use`s what it took, so `crate::error::AppError` still resolves everywhere and the
+Phase C diffs stayed about topology. That was the migration tactic and it has a stopping point.
+rust-analyzer's style guide is the shortest statement of why: *"By default, avoid re-exports.
+Rationale: for non-library code, re-exports introduce two ways to use something and allow for
+inconsistency."* The stronger argument is this repo's own — the split exists so the compiler
+enforces topology, and `crate::error::AppError` inside `melodia-views` hides the very layering it
+was drawn to expose, where `melodia_core::error::AppError` shows it at the import.
+
+- [ ] One crate per commit, bottom-up. Delete that crate's facade lines, bulk-rewrite the prefixes
+      they covered, then let `cargo clippy -p <crate> --all-targets` enumerate what the rewrite
+      could not reach — chiefly grouped `use crate::{error, config, …}` imports. Validation is the
+      compile plus a read of the diff.
+- [ ] `melodia-app`'s four `pub(crate) use` enforcement lines go with the rest: with call sites
+      naming `melodia_store::database` directly, the manifest is the enforcement, and views not
+      listing `melodia-store` is a harder error than a private module. The After-C check is restated
+      in that form.
+- [ ] The doc churn that rides along: `CLAUDE.md` and `.claude/rules/*.md` quote `crate::` paths in
+      prose, and several corpus walks match on them.
 
 ## Verification
 
@@ -1241,10 +1301,21 @@ Phase boundaries:
   `pub use melodia_app::services::net;` to views fails with `module database is private` and
   `module net is private`, each naming the `melodia-app` facade line that seals it. Those are the
   flagship rules turned into compile errors, and they are the whole point of the exercise.
-- After **D**: `cargo deb -p melodia` plus `scripts/build-{rpm,appimage,tarball}.sh` each produce an
-  artifact and the produced binary is still named `Melodia`; `cargo build --timings` against the
-  prerequisite baseline; `/usr/bin/time -v target/release/Melodia` for peak RSS. No RSS change is
-  expected, `lto = "fat"` with `codegen-units = 1` recovering cross-crate inlining.
+- After **D** — **all passing**. `cargo metadata` reports no root package and a `melodia` member
+  whose bin target is still `Melodia`, which `--version` confirms by printing `Melodia 0.12.0`;
+  `cargo deb -p melodia` resolves `target/release/Melodia` to the *workspace* target dir and the
+  other eight assets off the new manifest dir. `grep -rn 'rust_sources()\|slint_sources()\|
+  spellings_outside(' crates/*/src` returns nothing outside `melodia-testkit`, and `cargo tree -p
+  melodia-tidy` lists `melodia-core` and `melodia-testkit` and nothing else. The same 2,237 tests
+  pass, across 43 binaries rather than 18.
+
+  Left for the release gate, which needs a release build: `scripts/build-{rpm,appimage,tarball}.sh`
+  each producing an artifact, `cargo build --timings` against the prerequisite baseline, and
+  `/usr/bin/time -v target/release/Melodia` for peak RSS. No RSS change is expected, `lto = "fat"`
+  with `codegen-units = 1` recovering cross-crate inlining.
+- After **E**: `grep -rn 'pub use melodia_' crates/*/src/lib.rs` returns nothing, and the After-C
+  exclusion still holds — `cargo tree -p melodia-views --depth 1` lists neither `melodia-store` nor
+  `melodia-net`, now because the manifest says so rather than because a facade line is `pub(crate)`.
 
 One thing gets better rather than staying level: `[profile.dev.package.melodia-playback] opt-level = 2`
 becomes possible, so the DSP chain stops being debugged unoptimized, without also optimizing the state

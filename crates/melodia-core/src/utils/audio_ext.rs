@@ -6,7 +6,7 @@
 /// Each is a container an encoder actually emits. That is why there is no `alac`: Apple
 /// Lossless lives inside `.m4a`, so the entry would match nothing on disk while still
 /// costing the walk a lookup for anything named that way. Adding one owes two
-/// `wix/main.wxs` rows (`services::tests::the_msi_offers_every_audio_extension`) and,
+/// `wix/main.wxs` rows (`melodia-tidy`'s `packaging::the_msi_offers_every_audio_extension`) and,
 /// where freedesktop defines a type for it, a MIME entry in the four `.desktop` sources.
 pub const AUDIO_EXTENSIONS: &[&str] = &[
     "mp3", "flac", "m4a", "m4b", "aac", "ogg", "oga", "wav", "aiff", "aif", "aifc", "mka", "caf",

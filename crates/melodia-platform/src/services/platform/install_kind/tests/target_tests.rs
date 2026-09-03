@@ -202,7 +202,7 @@ fn install_target_uses_appimage_path_when_set() -> TestResult {
 /// down. The assertion **states** that and cannot check it: no marker exists in
 /// a test process, so the two calls agree and this passes against either. What
 /// catches a revert of `install_target`'s last line is
-/// `services::tests::nothing_outside_the_helper_asks_the_os_for_the_binary_path`,
+/// `melodia-tidy`'s `binary_path`,
 /// from the corpus.
 #[test]
 fn install_target_falls_back_to_current_exe_when_appimage_unset() -> TestResult {

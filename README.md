@@ -257,11 +257,11 @@ sudo dnf install fontconfig-devel freetype-devel alsa-lib-devel \
 git clone https://github.com/KenanSalar/Melodia.git
 cd Melodia
 
-cargo run                                      # debug build, runs the app
-cargo build --release                          # release build → target/release/Melodia
+cargo run -p melodia                           # debug build, runs the app
+cargo build --release -p melodia               # release build → target/release/Melodia
 cargo fmt --all                                # format
-cargo clippy --all-targets -- -D warnings      # lint
-cargo test                                     # run tests
+cargo clippy --all-targets --workspace -- -D warnings   # lint
+cargo test --workspace                         # run tests
 ```
 
 > **Note: a source build keeps its own library.**
@@ -371,10 +371,10 @@ meet cannot. The UI has no database or socket in its manifest; the decoders have
 no mixer; the tag writer has no state machine.
 
 ```
-src/                     the binary: startup sequencing, shutdown, the window
 crates/
 ├── melodia-core         errors, paths, domain types, the theme registry
 ├── melodia-testkit      shared fixtures and corpus walkers (dev-only, names nothing)
+├── melodia-tidy         repo-wide checks over the tree as text, outside every crate they check
 ├── melodia-artwork      decode, resize, the artwork store, the thumbnail cache
 ├── melodia-net          the HTTP primitives, the artwork/logo fetchers, the radio directory
 ├── melodia-platform     tray, logging, crash reports, single instance, system theme
@@ -386,8 +386,9 @@ crates/
 ├── melodia-integrations scrobbling, Discord presence, OS media controls
 ├── melodia-app          the command layer: the library API, background tasks, AppState, settings
 ├── melodia-views        the Slint bridge: view slices, callbacks, the shared component library
-└── melodia-ui           the .slint sources, the fonts and icons they embed, the .po catalogues,
-                         compiled once into its own crate
+├── melodia-ui           the .slint sources, the fonts and icons they embed, the .po catalogues,
+│                        compiled once into its own crate
+└── melodia              the binary: startup sequencing, shutdown, the window
 ```
 
 See [`CLAUDE.md`](CLAUDE.md) for a detailed architecture reference.

@@ -290,7 +290,7 @@ pub fn rust_sources() -> Vec<(String, String)> {
 /// ever left: a write hoisted out of the ordering closure and into any block after it ends
 /// the range back above zero and reads as though it never moved.
 ///
-/// `ui::scrollbar_tests`' walk asks the other way round: that one lifts a block's body,
+/// `melodia-tidy`'s `scrollbars`' walk asks the other way round: that one lifts a block's body,
 /// this one asks whether two offsets share one. Comments are stripped by the caller for
 /// the same reason the quotes are handled — a brace inside either unbalances the count.
 /// Continuation bytes are all `>= 0x80`, so walking bytes can't mistake one for a brace.
