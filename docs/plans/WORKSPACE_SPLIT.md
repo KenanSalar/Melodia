@@ -5,9 +5,13 @@ order the cuts come out in. Harvest into `docs/adr/` when
 [#84](https://github.com/KenanSalar/Melodia/issues/84) ships, not before: the boundary rationale
 below is exactly what #84 exists to stop evaporating.
 
-Status: **not started** · Issue:
+Status: **Phase A complete**, Phase B next · Issue:
 [#83](https://github.com/KenanSalar/Melodia/issues/83) · Created: 2026-09-03 · Validated against
-`93b47dfa`
+`93b47dfa`, Phase A landed on `a1c087e4`
+
+> **Phase A's twelve items are done and its checks pass**, so the counts below that describe
+> `src/` describe the tree *before* it. Where a Phase B item's inventory has moved, its own entry
+> says so and carries the remeasured one; nothing else here has been re-derived.
 
 > The issue body carries the argument for *why* a workspace. This doc carries what a read of the
 > tree found that the body does not, and it is the source [#84](https://github.com/KenanSalar/Melodia/issues/84)
@@ -95,6 +99,10 @@ Ranked by how quietly they fail.
    net there. Both are the rule the root `CLAUDE.md` already states, so both are cheap, and both
    have to land in Phase A: until they do, the post-extraction check this whole issue is verified
    by is false on the day it is written.
+
+   **Closed by A4b.** `grep -rn 'crate::media' src/ui/` now returns only `cover_thumbs`, `artwork`
+   and `image_decode`, so the exclusion is true for the first time and stays checkable by grep
+   until Phase C makes it a manifest.
 2. **`melodia-testkit` as the issue draws it does not compile.** Cargo permits a dev-dependency
    cycle for *resolution*, and the resolver reference then says why that is not enough: a test
    binary may link two distinct copies of the same library. Building `melodia-store`'s unit-test
@@ -196,21 +204,19 @@ Ranked by how quietly they fail.
     stopping rule: **a crate must not `pub use` a type from a crate its own dependents are meant to
     be unable to reach.** `melodia-app` re-exporting a store type hands views that type back without
     views ever naming store in its manifest, and the compile error the exercise buys never fires.
-14. **`toast` and `play_count_flusher` are the same primitive written twice**: a
-    `OnceLock<UnboundedSender<E>>` plus a plain enum, producer half dependency-free, consumer half
-    owning the I/O. `services/toast.rs:10` already notices the resemblance in prose. What must not
-    be flattened along with it: `try_send` returns `bool` because callers branch on it, `notify`
-    returns `()`.
-15. **`player` names `DbPool` for a test fallback in one file and for real in another.** The direct
-    UPDATE at `actions.rs:107-127` runs only when `try_send` returns false, and the comment there
-    says exactly that: install the flusher in test contexts and `db: &DbPool` leaves
-    `execute_actions` and `emit_and_execute`. But `handlers.rs:239` holds `pub db: DbPool` as a real
-    field and `:441` runs `queries::track::update_last_position` in production with nothing behind
-    it, so A5's third bullet is not optional. One of those two is a deletion; the other is the
-    snapshot-upward move.
-16. **Stale doc comment** at `tasks/rss_sampler.rs:16-21` names an `ui::window_chrome::is_queue_sheet_open`
-    import that no longer exists anywhere in `src/tasks/`; the real imports are `crate::AppWindow`
-    and `ui::view_tag::format_view` at `:45-49`.
+14. ~~**`toast` and `play_count_flusher` are the same primitive written twice.**~~ **Done in A5b**,
+    as `utils::event_bridge`. Both producers moved to core with it, which the finding did not
+    anticipate and the After-A check forced: extracting the primitive alone left `player/` naming
+    `tasks` and `services` to reach the senders. The asymmetry the finding says not to flatten
+    survived — `try_send` returns `bool`, `notify` `()`.
+15. ~~**`player` names `DbPool` for a test fallback in one file and for real in another.**~~
+    **Done in A5.** The reading was right about `handlers.rs` and wrong about `actions.rs`: the
+    fallback's comment claims a test contract no test has, so it was a deletion with no fixture
+    work in front of it rather than an install-then-delete. `src/player/` now names `DbPool`
+    nowhere, and lost its `config::Paths` edge with it.
+16. ~~**Stale doc comment** at `tasks/rss_sampler.rs:16-21`.~~ **Done in A2**, which deleted the
+    paragraph rather than correcting it: the exception it documented is gone, `src/tasks/` naming
+    nothing under `ui::` and no `AppWindow` outside `updater_daily`.
 17. **Nothing in the gate runs `cargo doc`.** The 162 bracketed intra-doc links that will stop
     resolving degrade silently to plain text rather than failing. Either accept that explicitly or
     add a `cargo doc` step, but do not leave it unstated.
@@ -556,13 +562,21 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
 
 ## Phase B: reshape in place, still one crate
 
-- [ ] **B1. Split monolithic `services/mod.rs`** (376 lines). It is simultaneously the
-      core-primitives module (`load_json_or_default*`, `write_*_atomic_sync`, `current_exe`,
-      `is_dev_build`, `redact_home`, `home_dir_string`, `describe`) and the HTTP module
-      (`build_http_client`, `http_url`, `is_http_url`, `is_http`, `get_capped`, `get_capped_text`,
-      `read_capped`), nine and seven exports respectively. **Hard prerequisite for everything else**:
-      all four media fetchers plus `radio_browser`, both scrobble providers, `updater/github` and
-      `player/hls/` depend on the net half, so nothing can move before this does.
+- [ ] **B1. Split monolithic `services/mod.rs`.** **Remeasured after A6: 285 lines, not 376, and
+      the split is now 7 net against 4 core rather than nine and seven.** A6 already took
+      `describe` and `load_json_or_default{,_sync}` / `write_{json,text}_atomic_sync`, so what is
+      left of the core half is `current_exe`, `is_dev_build`, `redact_home` and `home_dir_string`
+      (plus the private `undeleted_exe` and `redact_prefix` each is the pure half of). The net half
+      is untouched: `build_http_client`, `http_url`, `is_http_url`, `is_http`, `get_capped`,
+      `get_capped_text`, `read_capped`.
+
+      Still the **hard prerequisite for everything else** — all four media fetchers plus
+      `radio_browser`, both scrobble providers, `updater/github` and `player/hls/` depend on the
+      net half, and those five `player/hls/` and `stream_source` lines are the whole of what the
+      After-A check still allows out of `src/player/`.
+
+      **The core four have a home now**: `src/utils/`, which A6 created and A5b filled out. So B1
+      is a move into an existing module rather than the invention of one.
 - [ ] **B2. `services/` regroups into net, platform, integrations and app.** `updater/`'s 24 files
       straddle all of them and do not move wholesale: net is `check`, `github`, `manifest`,
       `install/download`; platform is `target`, `linux_pkg`, `system_install`,
@@ -570,10 +584,17 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
       orchestration. `scrobble/` and `discord/` go to integrations together (finding 5).
       `artist_images.rs` goes to app, not net (finding, `What validation changed`). `diagnostics.rs`
       names `database` and `state`, so it is app too.
+
+      Two changes out of Phase A: **`toast.rs` is no longer in this directory** — A5b moved it
+      whole to `utils::toast`, being producer end to end — and **`allocator.rs` is new and is
+      platform**, holding the two glibc knobs and being the only module that may name `libc`.
 - [ ] **B3. `media/` regroups three ways.** Image tier, ingest, fetchers. Assign `rating_tags.rs` to
-      ingest, and pull `services/material_you.rs` into the image tier.
+      ingest, and pull `services/material_you.rs` into the image tier. A4b left `tag_writer` and
+      `station_logo` holding only their writers, their types now being `entities`'; that changes
+      neither file's tier, and `UnsupportedFields` is the one type left here to place.
 - [ ] **B4. `single_instance.rs:31`'s `crate::media::is_audio_extension`** is the one import between
-      that file and a dependency-free platform module. Take the predicate to core.
+      that file and a dependency-free platform module. Take the predicate to core — `src/utils/`,
+      which now exists.
 - [ ] **B5. Move the cross-tier size assertions out of the image tier.**
       `media/artwork/tests/artwork_tests.rs:119-121` reach `ui::grid_prewarm` and `ui::util` to check
       `STORE_MAX_DIM` against the UI's cover tiers. They cannot compile inside a leaf crate, so they
@@ -582,7 +603,11 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
       half; everything else is the platform half.
 - [ ] **B7. `player/` regroups into `source`, `output` and `engine` modules** ahead of the manifests,
       so the three-way extraction in Phase C is a move rather than a design decision made under a
-      compile error. `output/` already exists and needs no change.
+      compile error. `output/` already exists and needs no change, and A8 already put the numeric
+      trio in `audio.rs`, so the one wrong-direction edge inside the directory is gone before the
+      regroup starts. What A5 leaves for it: the engine tier's only remaining outbound edges are
+      the five HTTP primitive calls, all in the source tier's `hls/` and `stream_source`, which is
+      the seam the three-way cut wants anyway.
 - [ ] **B8. `dwm_titlebar` splits, and only its lower half is platform.** `apply`
       (`services/dwm_titlebar.rs:41`) needs a window handle and a `u32` colour, and `win32_hwnd` at
       `:76` is the only reason *it* names `crate::AppWindow`: a `WinitWindowAccessor` hop the caller
@@ -671,9 +696,8 @@ Phase D once the graph is proven, one crate at a time.
 
 ## Verification
 
-Per commit. Only `cargo fmt --all` is workspace-wide today; the other two select the root package
-and grow a `--workspace` in Phase D. Carrying it from the first commit is free once A11 lands, and
-not before:
+Per commit. **All three carry `--workspace` from Phase A onward**, which A11 is what made free;
+the plan to grow it only in Phase D is spent:
 
 ```bash
 cargo fmt --all --check
@@ -683,9 +707,14 @@ cargo test --locked --workspace
 
 Phase boundaries:
 
-- After **A**: `grep -rn 'crate::database\|crate::tasks' src/player/` returns nothing, and
+- After **A** — **all passing as of `a1c087e4`**:
+  `grep -rn 'crate::database\|crate::tasks' src/player/` returns nothing, and
   `grep -rn 'crate::services' src/player/` returns only the HTTP primitives. `grep -rn 'crate::ui' src/tasks/`
   returns nothing. `grep -rn 'crate::media' src/ui/` returns only the image tier.
+  Two the list did not name and Phase A also bought: `grep -rn 'crate::ui' src/state/` returns
+  nothing (A7) and `grep -rn 'crate::player' src/entities/` returns nothing (A1). The residue in
+  the first two is prose — an intra-doc link to `crate::tasks::audio_health`, and two comments that
+  name `DbPool` to say why the engine holds none — which finding 17's `cargo doc` gap covers.
 - After **C**: delete a `path` dependency from one manifest and confirm rustc names the crate in the
   error. **The `melodia-views` manifest must list neither `melodia-store` nor `melodia-net`**, the
   `melodia-audio` manifest must not name `cpal`, and `melodia-platform` must not name `melodia-ui`.
