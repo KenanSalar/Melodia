@@ -4,7 +4,7 @@
 //! Decode and downscale to a fixed quantizer input, dropping the full-resolution
 //! buffer before quantization; take the seed off the clusters
 //! ([`seed_from_pixels`] argues the fallback); build a `DynamicScheme` of the
-//! requested style and map the M3 roles into a [`crate::themes::Palette`].
+//! requested style and map the M3 roles into a [`melodia_core::themes::Palette`].
 //!
 //! **[`population_seeds`] answers to none of that**, and is here because this is
 //! where a cover becomes colours: the backdrop asks what the artwork mostly *is*
@@ -30,7 +30,7 @@ use material_colors::score::Score;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::media::image::image_decode::decode_capped;
-use crate::themes::{Palette, material3};
+use melodia_core::themes::{Palette, material3};
 
 /// The seven Material 3 scheme variants, plus a `None` that disables Material
 /// You and falls back to the static M3 palette.
@@ -305,7 +305,7 @@ pub fn rotate_hue(argb: u32, degrees: f64) -> u32 {
 }
 
 /// Build a `DynamicScheme` of `style` × `is_dark` from the seed and map the M3
-/// roles onto a [`crate::themes::Palette`] plus accent. Pure CPU and
+/// roles onto a [`melodia_core::themes::Palette`] plus accent. Pure CPU and
 /// sub-millisecond, so a tokio worker can call it without `spawn_blocking`.
 pub fn generate_palette(source_argb: u32, is_dark: bool, style: SchemeStyle) -> (Palette, u32) {
     let hct = Hct::new(Argb::from_u32(source_argb));

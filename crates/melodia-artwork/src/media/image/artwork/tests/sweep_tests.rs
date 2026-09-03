@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime};
 
 use super::super::is_stored_name;
 use super::super::sweep::{SweepReport, collect_candidates, retire};
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 /// Long enough that nothing a test writes is ever old enough to sweep on its own.
 const HOUR: Duration = Duration::from_hours(1);

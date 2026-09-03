@@ -7,8 +7,6 @@
 //! for that, and for the two alternatives that cost more than they save, is in
 //! `docs/plans/WORKSPACE_SPLIT.md`.
 
-pub use melodia_core::{config, entities, error, themes, utils};
-
 pub mod media {
     pub mod image;
 }
