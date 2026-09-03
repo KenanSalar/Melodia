@@ -11,7 +11,7 @@ use symphonia::core::codecs::audio::well_known::{CODEC_ID_AAC, CODEC_ID_MP3};
 use symphonia::core::codecs::audio::{AudioCodecParameters, AudioDecoder, AudioDecoderOptions};
 
 use super::{core_layer_config, demote_he_aac};
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 /// Object type 5 (SBR), core 22050 (index 7), stereo, extension 44100 (index 4), core type 2.
 const HE_AAC: [u8; 4] = [0x2B, 0x92, 0x08, 0x00];

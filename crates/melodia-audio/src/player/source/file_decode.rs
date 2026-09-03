@@ -20,7 +20,7 @@ use symphonia::core::formats::{FormatReader, SeekMode, SeekTo};
 use symphonia::core::io::MediaSource;
 use symphonia::core::units::{TimeBase, Timestamp};
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 use super::aac_trim::{self, Trim};
 use super::audio::{

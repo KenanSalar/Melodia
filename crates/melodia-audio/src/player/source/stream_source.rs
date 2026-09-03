@@ -26,8 +26,8 @@ use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
 
-use crate::error::AppError;
-use crate::error::describe;
+use melodia_core::error::AppError;
+use melodia_core::error::describe;
 
 use super::audio::Shape;
 use super::hls;
@@ -501,7 +501,7 @@ async fn follow_playlist(
 
 /// Read at most [`PLAYLIST_MAX_BYTES`] of `url` as text.
 async fn fetch_playlist(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    crate::services::net::get_capped_text(
+    melodia_net::services::net::get_capped_text(
         client,
         url,
         "Station playlist",
@@ -555,7 +555,7 @@ fn first_stream_url(body: &str) -> Option<String> {
             Some(line),
         ];
         if let Some(url) =
-            readings.into_iter().flatten().find(|c| crate::services::net::is_http_url(c))
+            readings.into_iter().flatten().find(|c| melodia_net::services::net::is_http_url(c))
         {
             return Some(url.to_owned());
         }

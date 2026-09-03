@@ -10,14 +10,8 @@
 //! Names the network in four files and cpal in none. `melodia-playback` is the other way round,
 //! and the two dependency sets do not intersect.
 
-pub use melodia_core::{config, entities, error, themes, utils};
-
 pub mod player {
     pub mod source;
-}
-
-pub mod services {
-    pub use melodia_net::services::net;
 }
 
 #[cfg(test)]

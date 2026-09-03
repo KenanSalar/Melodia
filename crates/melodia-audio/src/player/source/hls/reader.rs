@@ -7,10 +7,10 @@ use std::time::Duration;
 use reqwest::Url;
 use tokio::sync::mpsc;
 
-use crate::error::AppError;
-use crate::error::describe;
 use crate::player::source::prebuffer::StreamShared;
 use crate::player::source::stream_source::ABANDON_POLL;
+use melodia_core::error::AppError;
+use melodia_core::error::describe;
 
 use super::playlist::{self, MediaPlaylist, Playlist};
 use super::segment::SegmentReader;
@@ -349,7 +349,7 @@ impl Scheduler {
 
 /// Read at most [`MANIFEST_MAX_BYTES`] of one playlist, as text.
 async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    crate::services::net::get_capped_text(
+    melodia_net::services::net::get_capped_text(
         client,
         url,
         "Station playlist",
@@ -361,7 +361,7 @@ async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, A
 
 /// Read at most [`SEGMENT_MAX_BYTES`] of one segment.
 async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, AppError> {
-    crate::services::net::get_capped(
+    melodia_net::services::net::get_capped(
         client,
         url,
         "Station segment",

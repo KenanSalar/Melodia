@@ -17,7 +17,7 @@ use symphonia::core::formats::FormatReader;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::io::MediaSource;
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 use super::audio::{Sample, Shape};
 use super::decode;

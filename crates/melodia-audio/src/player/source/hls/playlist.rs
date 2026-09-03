@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use reqwest::Url;
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 /// Mandatory in a media playlist, so its presence is what separates one from a plain Extended M3U.
 const TARGET_DURATION_TAG: &str = "#EXT-X-TARGETDURATION:";
@@ -186,12 +186,12 @@ fn audio_rendition(list: &str, base: &Url) -> Option<Url> {
 /// gone — [`services::net::is_http`] is the same rule `stream_source` applies to a `.pls` line, asked of
 /// the parsed value.
 ///
-/// [`services::net::is_http`]: crate::services::net::is_http
+/// [`services::net::is_http`]: melodia_net::services::net::is_http
 fn joined(base: &Url, uri: &str) -> Option<Url> {
     if uri.is_empty() {
         return None;
     }
-    base.join(uri).ok().filter(crate::services::net::is_http)
+    base.join(uri).ok().filter(melodia_net::services::net::is_http)
 }
 
 /// Split an attribute list on the commas that are not inside a quoted value, which is the one

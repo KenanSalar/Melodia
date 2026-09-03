@@ -9,10 +9,10 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::{FileDecoder, probe_duration};
-use crate::error::AppError;
 use crate::player::source::aac_trim;
 use crate::player::source::audio::AudioSource;
 use crate::test_support::ASSETS_DIR;
+use melodia_core::error::AppError;
 
 fn asset(name: &str) -> PathBuf {
     Path::new(ASSETS_DIR).join(name)
@@ -58,7 +58,7 @@ fn probe_duration_is_none_when_nothing_decodes() -> Result<(), AppError> {
 /// move to 0.6 was for, and it went untested under a hand-written list.
 #[test]
 fn every_scanned_extension_reaches_a_decoder() -> Result<(), AppError> {
-    for extension in crate::utils::audio_ext::AUDIO_EXTENSIONS {
+    for extension in melodia_core::utils::audio_ext::AUDIO_EXTENSIONS {
         let decoder = FileDecoder::open(&asset(&format!("silence.{extension}")))?;
         assert!(decoder.sample_rate().get() > 0, "{extension}");
         assert!(decoder.channels().get() > 0, "{extension}");
