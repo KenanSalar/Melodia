@@ -26,6 +26,8 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
+use crate::entities::track::TrackSummary;
+
 use super::dsp::{AtomicF32, Generation, db_to_linear};
 
 /// Preamp (extra gain applied on top of the tag value) range, in decibels.
@@ -120,6 +122,20 @@ pub struct TrackReplayGain {
     pub track_peak: Option<f32>,
     pub album_gain: Option<f32>,
     pub album_peak: Option<f32>,
+}
+
+/// On this side of the boundary rather than as a method on `TrackSummary`: a row type has no
+/// business naming the transport newtype, and that one method was `entities`' only edge into
+/// this directory.
+impl From<&TrackSummary> for TrackReplayGain {
+    fn from(track: &TrackSummary) -> Self {
+        Self {
+            track_gain: track.replaygain_track_gain,
+            track_peak: track.replaygain_track_peak,
+            album_gain: track.replaygain_album_gain,
+            album_peak: track.replaygain_album_peak,
+        }
+    }
 }
 
 /// Compute the linear gain factor to apply for one track under the given master

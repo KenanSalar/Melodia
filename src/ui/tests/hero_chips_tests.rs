@@ -709,9 +709,9 @@ fn the_section_leave_drops_the_folds_with_the_caches_they_summarise() {
     // Anchored on the statement the teardown ends with, so a window that
     // truncated early fails here rather than passing over nothing.
     assert!(
-        body.contains("heap_trim::trim()"),
+        body.contains("allocator::trim()"),
         "favorites/mod.rs no longer defines `release_section_state` as a body ending in \
-         `heap_trim::trim()` — move this pin with it, or the checks below hold over an \
+         `allocator::trim()` — move this pin with it, or the checks below hold over an \
          empty window"
     );
     for (field, reset) in [

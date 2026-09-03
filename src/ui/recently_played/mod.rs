@@ -208,7 +208,7 @@ impl RecentlyPlayedUi {
         // the flag guards, and relying on the leave's own `mark_dirty` is a coupling two files
         // apart that a second caller of this function would not know to honour.
         self.mark_grid_dirty();
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     pub(crate) fn state(&self) -> &RecentlyPlayedUiState {

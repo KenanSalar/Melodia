@@ -206,7 +206,7 @@ impl BrowseUi {
     /// toggle of the session".
     pub fn release_grid_covers(&self) {
         self.grid_covers.clear();
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     pub fn current_path(&self) -> String {

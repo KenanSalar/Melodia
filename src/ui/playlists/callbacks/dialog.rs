@@ -66,7 +66,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     //      playlist grid-tier LRU at dialog-open; dropping it here releases
     //      it on the same tick the body branch unmounts.
     //
-    // Pair the Arc drop with an off-thread `heap_trim::trim()` (parity with
+    // Pair the Arc drop with an off-thread `allocator::trim()` (parity with
     // `release_detail_artwork`) so glibc returns the freed pages instead of
     // holding them in the arena. Trim must stay off the UI thread — it
     // walks arena free lists.
@@ -87,7 +87,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             // release it here — this is the one `on_closed`, extended not
             // duplicated.
             ui.global::<TagEditor>().set_cover(Image::default());
-            s.runtime.spawn_blocking(crate::tasks::heap_trim::trim);
+            s.runtime.spawn_blocking(crate::services::allocator::trim);
         });
     }
 

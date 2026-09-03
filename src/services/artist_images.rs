@@ -9,8 +9,8 @@ use crate::config::Paths;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::error::AppResult;
+use crate::error::describe;
 use crate::media::deezer::{self, DeezerAnswer};
-use crate::services::describe;
 
 /// Session-scoped negative memo: artist ids whose Deezer search returned a
 /// definitive "no match" this session. `spawn_fetch` runs after every scan

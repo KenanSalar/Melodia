@@ -27,7 +27,7 @@ use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
 
 use crate::error::AppError;
-use crate::services::describe;
+use crate::error::describe;
 
 use super::audio::Shape;
 use super::hls;

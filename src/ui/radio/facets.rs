@@ -166,7 +166,7 @@ pub fn prime(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
                 Err(e) => {
                     log::warn!(
                         "radio: priming the {kind:?} facet list failed: {}",
-                        crate::services::describe(&e)
+                        crate::error::describe(&e)
                     );
                     continue;
                 }
@@ -236,7 +236,7 @@ pub fn request(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, idx: i
                     write_filtered(&g, &facets, &g.get_facet_filter());
                 }
                 Err(e) => {
-                    log::warn!("radio: facet list failed: {}", crate::services::describe(&e));
+                    log::warn!("radio: facet list failed: {}", crate::error::describe(&e));
                     // The popup falls back to its empty copy, and nothing is memoized, so the
                     // next open asks again.
                     g.set_facet_shown(-1);

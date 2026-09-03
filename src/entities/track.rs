@@ -69,19 +69,6 @@ pub struct TrackSummary {
     pub replaygain_album_peak: Option<f32>,
 }
 
-impl TrackSummary {
-    /// Bundle the four `ReplayGain` columns into the playback transport newtype.
-    #[must_use]
-    pub fn replaygain(&self) -> crate::player::replaygain::TrackReplayGain {
-        crate::player::replaygain::TrackReplayGain {
-            track_gain: self.replaygain_track_gain,
-            track_peak: self.replaygain_track_peak,
-            album_gain: self.replaygain_album_gain,
-            album_peak: self.replaygain_album_peak,
-        }
-    }
-}
-
 /// Narrow a DB `REAL`/`f64` `ReplayGain` value to the `f32` the DSP uses. The
 /// values are tiny (dB gains and 0..~1 peaks), so the narrowing is sub-audible.
 #[allow(

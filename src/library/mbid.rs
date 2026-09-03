@@ -21,11 +21,11 @@ use rayon::prelude::*;
 
 use crate::database::{DbPool, queries};
 use crate::error::AppError;
+use crate::error::describe;
 use crate::media::artwork::CoverCache;
 use crate::media::metadata::{ExtractedMetadata, extract_metadata};
 use crate::media::self_writes::SelfWrites;
 use crate::media::tag_writer::{self, FieldEdit, TagEdit};
-use crate::services::describe;
 use crate::state::AppState;
 
 /// Same bound as the tag editor's fan-out ([`crate::library::tags`]): the write

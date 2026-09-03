@@ -106,10 +106,10 @@ async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<N
     }
 }
 
-/// `write_text_atomic_sync` is not async, unlike the playlist export this
+/// `atomic_file::write_text_sync` is not async, unlike the playlist export this
 /// otherwise mirrors — hence the hop off the UI thread for one file write.
 async fn write_report(path: PathBuf, text: String) -> AppResult<()> {
-    tokio::task::spawn_blocking(move || services::write_text_atomic_sync(&path, &text))
+    tokio::task::spawn_blocking(move || crate::utils::atomic_file::write_text_sync(&path, &text))
         .await
         .map_err(AppError::io_source)?
 }

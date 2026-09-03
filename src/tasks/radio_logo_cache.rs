@@ -10,9 +10,8 @@
 //! library scan, which a user who browses radio and never touches their music folders may not run
 //! for weeks.
 
-use crate::error::AppError;
+use crate::error::{AppError, describe};
 use crate::library;
-use crate::services;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 
@@ -25,7 +24,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let state = state.clone();
     spawner.spawn(async move {
         if let Err(e) = run(&state).await {
-            log::warn!("Radio logo cache pass failed: {}", services::describe(&e));
+            log::warn!("Radio logo cache pass failed: {}", describe(&e));
         }
     });
 }

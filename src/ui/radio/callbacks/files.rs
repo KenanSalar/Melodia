@@ -71,7 +71,7 @@ pub fn wire(
                             log::warn!(
                                 "radio: import {}: {}",
                                 handle.path().display(),
-                                crate::services::describe(&e)
+                                crate::error::describe(&e)
                             );
                         }
                     }
@@ -139,7 +139,7 @@ pub fn wire(
                         );
                     }
                     Err(e) => {
-                        log::warn!("radio: export: {}", crate::services::describe(&e));
+                        log::warn!("radio: export: {}", crate::error::describe(&e));
                         notifications.show_localized(&ui, "error", "", |ui| {
                             let g = ui.global::<Settings>();
                             RowText::plain(

@@ -114,7 +114,7 @@ fn remove(
             RemoveFrom::Recent => library::radio::remove_from_recent(&s, id).await,
         };
         if let Err(e) = removed {
-            log::warn!("radio: station removal failed: {}", crate::services::describe(&e));
+            log::warn!("radio: station removal failed: {}", crate::error::describe(&e));
             return;
         }
         let _ = weak.upgrade_in_event_loop(move |ui| kept::refresh(&ui, &s, &ru));
@@ -215,7 +215,7 @@ fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak
                     kept::refresh(&ui, &s, &ru);
                 }
                 Err(e) => {
-                    log::warn!("radio: station form: {}", crate::services::describe(&e));
+                    log::warn!("radio: station form: {}", crate::error::describe(&e));
                     form.set_error(form_error(&form, &e));
                 }
             }

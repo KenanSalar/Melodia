@@ -226,7 +226,7 @@ async fn record_answer(
         Err(e) => {
             // Debug rather than warn: a dead favicon is the normal condition on a directory of
             // 60,000 community-maintained entries, and the card has a monogram to fall back to.
-            log::debug!("radio: logo fetch failed: {}", crate::services::describe(&e));
+            log::debug!("radio: logo fetch failed: {}", crate::error::describe(&e));
             memo.record(url, None);
             return false;
         }

@@ -13,33 +13,18 @@
 //! piling up under a high repaint rate (`wl_closure_init` via
 //! `wl_display_read_events`). Reach for the producer, not the allocator.
 //!
-//! [`trim`] is still worth calling ad-hoc after a bulk free, such as clearing an
-//! artwork cache on view exit, where the memory really is free. No-op on non-glibc
-//! Linux and other platforms.
+//! [`services::allocator::trim`](crate::services::allocator::trim) is still worth calling
+//! ad-hoc after a bulk free, such as clearing an artwork cache on view exit, where the memory
+//! really is free. The call itself lives beside the other glibc knob; what lives here is only
+//! the schedule.
 
 use std::time::Duration;
 
+use crate::services::allocator::trim;
 use crate::tasks::TaskSpawner;
 
 /// How long to let the startup churn settle before the one-shot trim.
 const STARTUP_DELAY: Duration = Duration::from_secs(5);
-
-/// Hand glibc's retained free-list pages back to the kernel. A well-defined no-op
-/// when there is nothing to release, and a compile-time one off glibc-Linux. Cheap
-/// enough to call after any bulk free, but keep it off the UI thread — it walks the
-/// arena free lists.
-pub fn trim() {
-    #[cfg(all(target_os = "linux", target_env = "gnu"))]
-    #[allow(
-        unsafe_code,
-        reason = "FFI to glibc malloc_trim, well-defined no-op when nothing to release"
-    )]
-    // SAFETY: no pointers cross the boundary, and `malloc_trim` takes the arena
-    // locks itself, so any thread may call it at any time.
-    unsafe {
-        libc::malloc_trim(0);
-    }
-}
 
 pub fn spawn(spawner: &TaskSpawner) {
     spawner.spawn_cancellable(|shutdown| async move {

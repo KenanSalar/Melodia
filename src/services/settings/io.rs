@@ -8,14 +8,14 @@ use super::{MAX_CORNER_RADIUS, SettingsData};
 
 pub fn read_settings(paths: &Paths) -> AppResult<SettingsData> {
     let mut settings: SettingsData =
-        crate::services::load_json_or_default_sync(&paths.settings_path)?;
+        crate::utils::atomic_file::load_json_or_default_sync(&paths.settings_path)?;
     settings.volume = settings.volume.min(crate::player::state::MAX_VOLUME);
     settings.corner_radius = settings.corner_radius.min(MAX_CORNER_RADIUS);
     Ok(settings)
 }
 
 pub fn write_settings(paths: &Paths, settings: &SettingsData) -> AppResult<()> {
-    crate::services::write_json_atomic_sync(&paths.settings_path, settings)
+    crate::utils::atomic_file::write_json_sync(&paths.settings_path, settings)
         .map_err(|e| AppError::Settings(format!("Failed to write settings: {e}")))
 }
 

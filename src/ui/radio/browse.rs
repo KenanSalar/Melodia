@@ -309,7 +309,7 @@ fn fetch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, append: bool
         let landed = match outcome {
             Ok(page) => ru.browse.lock().finish(generation, page, append),
             Err(e) => {
-                log::warn!("radio: directory search failed: {}", crate::services::describe(&e));
+                log::warn!("radio: directory search failed: {}", crate::error::describe(&e));
                 let current = ru.browse.lock().fail(generation, append);
                 if current {
                     let _ = weak.upgrade_in_event_loop(|ui| {

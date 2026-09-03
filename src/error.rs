@@ -151,6 +151,34 @@ impl AppError {
 
 pub type AppResult<T> = Result<T, AppError>;
 
+/// Flatten an error and its causes onto one line.
+///
+/// A great many `Display` impls in and under this tree are a context sentence with the cause
+/// reachable only through `.source()`, so a bare `{e}` reports a root-owned file and a full disk
+/// in the same words.
+///
+/// **The other kind is what the `ends_with` skip is for, and why this is safe to reach for without
+/// knowing which variant you hold.** [`AppError`]'s three `#[from]` variants spell
+/// `#[error("… : {0}")]` over the field `#[from]` also makes the source, and sqlx does the same
+/// one level down, so an unconditional walk prints a constraint failure three times. A caller
+/// can't tell the two shapes apart; the error can — a message already ending in its cause has
+/// nothing left to add.
+///
+/// Reach for this in any `log::` call taking an error.
+pub fn describe(error: &dyn std::error::Error) -> String {
+    let mut text = error.to_string();
+    let mut cause = error.source();
+    while let Some(source) = cause {
+        let message = source.to_string();
+        if !text.ends_with(&message) {
+            text.push_str(": ");
+            text.push_str(&message);
+        }
+        cause = source.source();
+    }
+    text
+}
+
 #[cfg(test)]
 #[path = "tests/error_tests.rs"]
 mod tests;

@@ -99,7 +99,7 @@ pub fn install(paths: &Paths) {
         }
         // Not `to_string()`: `OutputIo` never interpolates its `io::Error`, so without the chain a
         // root-owned file and a full disk read identically.
-        Err(e) => super::describe(&e),
+        Err(e) => crate::error::describe(&e),
     };
 
     if let Ok(handle) = base_logger(&spec).start() {

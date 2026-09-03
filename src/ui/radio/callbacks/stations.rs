@@ -70,7 +70,7 @@ fn play_kept(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &slint::Weak<AppWi
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), weak.clone());
     state.runtime.spawn(async move {
         if let Err(e) = library::radio::play_station(&s, id).await {
-            log::warn!("radio::play_station: {}", crate::services::describe(&e));
+            log::warn!("radio::play_station: {}", crate::error::describe(&e));
         }
         refresh_lists(&s, &ru, &weak);
     });
@@ -88,7 +88,7 @@ fn play_browsed(
     state.runtime.spawn(async move {
         if let Err(e) = library::radio::play_directory_station(&s, &station, logo.as_deref()).await
         {
-            log::warn!("radio::play_station: {}", crate::services::describe(&e));
+            log::warn!("radio::play_station: {}", crate::error::describe(&e));
         }
         refresh_lists(&s, &ru, &weak);
     });
@@ -132,7 +132,7 @@ fn toggle_kept(
             library::radio::remove_from_favorites(&s, id).await
         };
         if let Err(e) = flipped {
-            log::warn!("radio: favorite toggle failed: {}", crate::services::describe(&e));
+            log::warn!("radio: favorite toggle failed: {}", crate::error::describe(&e));
             return;
         }
         refresh_lists(&s, &ru, &weak);
@@ -174,7 +174,7 @@ fn toggle_browsed(
                 Err(e) => Err(e),
             };
         if let Err(e) = flipped {
-            log::warn!("radio: favorite toggle failed: {}", crate::services::describe(&e));
+            log::warn!("radio: favorite toggle failed: {}", crate::error::describe(&e));
             // Put the star back rather than leaving it claiming a row that was never written. A
             // routine failure, so it is a log line and not a toast.
             ru.set_local_favorite(&uuid, !wanted);

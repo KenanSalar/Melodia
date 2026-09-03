@@ -9,7 +9,7 @@
 //!
 //! What the two genuinely differ on is [`OnFailure`], and that is the only knob here.
 
-use crate::error::AppResult;
+use crate::error::{AppResult, describe};
 use crate::services;
 use crate::services::settings::LibraryFlags;
 use crate::state::AppState;
@@ -56,13 +56,13 @@ where
             Ok(settings) if (sweep.done)(&settings.library) => return,
             Ok(_) => {}
             Err(e) => {
-                log::warn!("{} skipped: {}", sweep.label, services::describe(&e));
+                log::warn!("{} skipped: {}", sweep.label, describe(&e));
                 return;
             }
         }
 
         if let Err(e) = pass(state.clone()).await {
-            log::warn!("{} failed: {}", sweep.label, services::describe(&e));
+            log::warn!("{} failed: {}", sweep.label, describe(&e));
             if matches!(sweep.on_failure, OnFailure::Retry) {
                 return;
             }

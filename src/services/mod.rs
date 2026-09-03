@@ -1,3 +1,4 @@
+pub mod allocator;
 pub mod always_on_top;
 pub mod artist_images;
 pub mod crash_report;
@@ -24,55 +25,9 @@ pub mod updater;
 pub mod view_state;
 
 use std::borrow::Cow;
-use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-
-use crate::error::{AppError, AppResult};
-
-/// Read JSON from `path`, falling back to `T::default()` on a missing file or a parse error. The
-/// sync variant, for startup before the runtime exists.
-pub fn load_json_or_default_sync<T: DeserializeOwned + Default>(path: &Path) -> AppResult<T> {
-    if !path.exists() {
-        return Ok(T::default());
-    }
-    let content = std::fs::read_to_string(path)?;
-    Ok(serde_json::from_str::<T>(&content).unwrap_or_else(|e| {
-        log::warn!("Failed to parse {}, using defaults: {e}", path.display());
-        T::default()
-    }))
-}
-
-/// [`load_json_or_default_sync`]'s async twin.
-pub async fn load_json_or_default<T: DeserializeOwned + Default>(path: &Path) -> AppResult<T> {
-    let Ok(content) = tokio::fs::read_to_string(path).await else {
-        return Ok(T::default());
-    };
-    Ok(serde_json::from_str::<T>(&content).unwrap_or_else(|e| {
-        log::warn!("Failed to parse {}, using defaults: {e}", path.display());
-        T::default()
-    }))
-}
-
-/// Write `value` as pretty JSON through a temp file in the same directory, renaming on success —
-/// so a crash mid-write leaves the previous file intact, and nothing allocates the whole payload
-/// as a `String` first.
-pub fn write_json_atomic_sync<T: Serialize>(path: &Path, value: &T) -> AppResult<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
-    {
-        let mut writer = BufWriter::new(tmp.as_file_mut());
-        serde_json::to_writer_pretty(&mut writer, value).map_err(AppError::io_source)?;
-        writer.flush()?;
-    }
-    tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
-    Ok(())
-}
+use crate::error::AppError;
 
 /// Build the process-wide shared `reqwest::Client`. Kept out of any constructor so the rustls
 /// stack and connection pool load only on the first real request; both `OnceLock` holders init
@@ -222,23 +177,6 @@ pub(crate) async fn read_capped(
     Ok(body)
 }
 
-/// [`write_json_atomic_sync`]'s plain-text sibling, for M3U export. Bytes go out verbatim — the
-/// caller owns line endings and the trailing newline.
-pub fn write_text_atomic_sync(path: &Path, text: &str) -> AppResult<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
-    {
-        let mut writer = BufWriter::new(tmp.as_file_mut());
-        writer.write_all(text.as_bytes())?;
-        writer.flush()?;
-    }
-    tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
-    Ok(())
-}
-
 /// The running binary's path, with Linux's `" (deleted)"` marker resolved.
 ///
 /// `std::env::current_exe()` is a bare `readlink("/proc/self/exe")` on Linux, and the kernel
@@ -332,34 +270,6 @@ pub(crate) fn home_dir_string() -> Option<String> {
     let home = dirs::home_dir()?;
     let home = home.to_str()?;
     (!home.is_empty()).then(|| home.to_owned())
-}
-
-/// Flatten an error and its causes onto one line.
-///
-/// A great many `Display` impls in and under this tree are a context sentence with the cause
-/// reachable only through `.source()`, so a bare `{e}` reports a root-owned file and a full disk
-/// in the same words.
-///
-/// **The other kind is what the `ends_with` skip is for, and why this is safe to reach for without
-/// knowing which variant you hold.** `AppError`'s three `#[from]` variants spell
-/// `#[error("… : {0}")]` over the field `#[from]` also makes the source, and sqlx does the same
-/// one level down, so an unconditional walk prints a constraint failure three times. A caller
-/// can't tell the two shapes apart; the error can — a message already ending in its cause has
-/// nothing left to add.
-///
-/// Reach for this in any `log::` call taking an error.
-pub(crate) fn describe(error: &dyn std::error::Error) -> String {
-    let mut text = error.to_string();
-    let mut cause = error.source();
-    while let Some(source) = cause {
-        let message = source.to_string();
-        if !text.ends_with(&message) {
-            text.push_str(": ");
-            text.push_str(&message);
-        }
-        cause = source.source();
-    }
-    text
 }
 
 /// The pure half of [`redact_home`]. Borrows when there is nothing to replace,

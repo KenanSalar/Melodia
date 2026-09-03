@@ -1,3 +1,5 @@
+pub mod atomic_file;
+
 use std::io;
 use std::path::{Path, PathBuf};
 

@@ -118,7 +118,7 @@ pub async fn record_logo_outcome(state: &AppState, favicon_url: &str, logo: Opti
         None => note_logo_miss(state, favicon_url).await,
     };
     if let Err(e) = recorded {
-        log::debug!("radio: logo outcome not recorded: {}", crate::services::describe(&e));
+        log::debug!("radio: logo outcome not recorded: {}", crate::error::describe(&e));
     }
 }
 
@@ -199,7 +199,7 @@ pub(super) async fn ask_logo_url(state: &AppState, seed: &AnswerSeed, url: &str)
     let logo = match fetch_logo(state, url).await {
         Ok(logo) => logo,
         Err(e) => {
-            log::debug!("radio: station logo fetch failed: {}", crate::services::describe(&e));
+            log::debug!("radio: station logo fetch failed: {}", crate::error::describe(&e));
             return None;
         }
     };
@@ -388,7 +388,7 @@ pub(super) async fn adopted(state: &AppState, id: i64, path: String) -> Option<S
     match set_artwork(state, id, Some(&path)).await {
         Ok(()) => Some(path),
         Err(e) => {
-            log::debug!("radio: station logo not stored: {}", crate::services::describe(&e));
+            log::debug!("radio: station logo not stored: {}", crate::error::describe(&e));
             None
         }
     }
@@ -397,7 +397,7 @@ pub(super) async fn adopted(state: &AppState, id: i64, path: String) -> Option<S
 /// Record that a site advertised nothing usable.
 async fn note_site_miss(state: &AppState, origin: &str) {
     if let Err(e) = note_logo_miss(state, origin).await {
-        log::debug!("radio: site outcome not recorded: {}", crate::services::describe(&e));
+        log::debug!("radio: site outcome not recorded: {}", crate::error::describe(&e));
     }
 }
 
@@ -407,7 +407,7 @@ async fn discover_logo_url(state: &AppState, origin: &reqwest::Url) -> Option<St
     match crate::media::logo_discovery::icon_url(client, origin).await {
         Ok(url) => url,
         Err(e) => {
-            log::debug!("radio: station site not read: {}", crate::services::describe(&e));
+            log::debug!("radio: station site not read: {}", crate::error::describe(&e));
             None
         }
     }

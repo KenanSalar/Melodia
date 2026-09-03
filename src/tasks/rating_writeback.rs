@@ -18,8 +18,8 @@ use std::time::Duration;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio_util::sync::CancellationToken;
 
+use crate::error::describe;
 use crate::library::ratings;
-use crate::services::describe;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 

@@ -63,33 +63,9 @@ fn main() -> AppResult<()> {
             let _ = std::fs::remove_file(stale);
         }
     }
-    // Cap the arenas at 2. glibc's default `8 × num_cpus` gives every long-lived
-    // thread its own 64 MiB arena, and this process runs enough of them that the
-    // committed slack is pure per-thread free-list overhead. Capping trades it
-    // for malloc contention under heavy parallel allocation, which an
-    // idle-most-of-the-time player doesn't have. **Must precede the first malloc
-    // on any thread** — the logger and the runtime builder both allocate, so
-    // staying first covers it.
-    //
-    // The other two freeze the mmap and trim thresholds, which glibc otherwise
-    // ratchets upward on every mmap'd block freed: one full-resolution cover
-    // decode is enough to leave every later allocation coming off the arena free
-    // list, where freeing hands nothing back to the kernel. These *are* glibc's
-    // initial values — pinning where the process starts, not tuning — and the
-    // trade is more minor faults for less resident anonymous memory.
-    //
-    // `M_TRIM_THRESHOLD = -1`, `M_MMAP_THRESHOLD = -3`, `M_ARENA_MAX = -8` per
-    // glibc's `malloc.h`.
-    #[cfg(all(target_os = "linux", target_env = "gnu"))]
-    #[allow(unsafe_code, reason = "FFI to glibc mallopt with constant args")]
-    // SAFETY: no pointers cross the boundary — `int` in, `int` out. `mallopt` is
-    // MT-Unsafe during init and nothing has spawned a thread yet, so no
-    // concurrent allocation can observe a half-applied set.
-    unsafe {
-        libc::mallopt(-8, 2);
-        libc::mallopt(-3, 128 * 1024);
-        libc::mallopt(-1, 128 * 1024);
-    }
+    // Ahead of the logger and the runtime builder, both of which allocate; the
+    // module argues the numbers.
+    melodia::services::allocator::pin_arenas_and_thresholds();
 
     // Give PipeWire's ALSA-compat layer a clean stream name: CPAL opens the
     // default ALSA PCM, which PipeWire turns into a node auto-named
@@ -355,9 +331,13 @@ fn main() -> AppResult<()> {
 
     boot::ui_setup::install_toast_bridge(weak.clone(), notifications.clone())?;
 
-    // No-op unless `MELODIA_RSS_SAMPLE` is set. On the UI thread so it can read
-    // the Nav / *Detail globals for its view tag without an atomic shadow.
-    tasks::rss_sampler::install(&weak);
+    // No-op unless `MELODIA_RSS_SAMPLE` is set. The tag is read here rather than
+    // inside the sampler so `tasks/` names nothing under `ui::`; it runs on the UI
+    // thread, so the Nav / *Detail globals need no atomic shadow.
+    let tag_weak = weak.clone();
+    tasks::rss_sampler::install(move || {
+        tag_weak.upgrade().map(|ui| ui::view_tag::format_view(&ui))
+    });
 
     // One `watch` carries backend events from the daily task and the `Updater.*`
     // callbacks to the UI-thread subscriber that toasts them. The daily task

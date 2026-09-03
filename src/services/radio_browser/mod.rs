@@ -246,7 +246,7 @@ async fn mirror(client: &reqwest::Client) -> &'static str {
                     log::warn!(
                         "Radio directory mirror discovery failed ({}); using \
                          {FALLBACK_HOST} for this session",
-                        crate::services::describe(&e)
+                        crate::error::describe(&e)
                     );
                     FALLBACK_HOST.to_owned()
                 }

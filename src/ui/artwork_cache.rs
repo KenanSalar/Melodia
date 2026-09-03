@@ -91,7 +91,7 @@ impl ArtworkCache {
     }
 
     /// Drop every cached pair when the surface goes away. The caller pairs this with
-    /// `heap_trim::trim()` so glibc hands the freed pages back; re-opening re-decodes.
+    /// `allocator::trim()` so glibc hands the freed pages back; re-opening re-decodes.
     pub fn clear(&self) {
         self.cache.lock().clear();
     }

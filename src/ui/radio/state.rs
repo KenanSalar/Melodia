@@ -132,7 +132,7 @@ impl RadioUi {
     /// event loop.
     pub(super) fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     /// Whether the page is the section on screen.

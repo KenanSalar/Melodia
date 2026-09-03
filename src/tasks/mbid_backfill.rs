@@ -253,7 +253,7 @@ async fn backfill(
 /// unreadable file (a fresh sweep is the safe fallback). Stored as a plain id
 /// array for stable file contents.
 fn load_attempted(path: &Path) -> HashSet<i64> {
-    crate::services::load_json_or_default_sync::<Vec<i64>>(path)
+    crate::utils::atomic_file::load_json_or_default_sync::<Vec<i64>>(path)
         .unwrap_or_default()
         .into_iter()
         .collect()
@@ -264,8 +264,10 @@ fn load_attempted(path: &Path) -> HashSet<i64> {
 async fn persist_attempted(path: &Path, attempted: &HashSet<i64>) {
     let path = path.to_path_buf();
     let ids: Vec<i64> = attempted.iter().copied().collect();
-    match tokio::task::spawn_blocking(move || crate::services::write_json_atomic_sync(&path, &ids))
-        .await
+    match tokio::task::spawn_blocking(move || {
+        crate::utils::atomic_file::write_json_sync(&path, &ids)
+    })
+    .await
     {
         Ok(Ok(())) => {}
         Ok(Err(e)) => log::warn!("MBID backfill: failed to persist attempted set: {e}"),

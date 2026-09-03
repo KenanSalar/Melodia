@@ -2,7 +2,7 @@
 //! runtime drop in background, optional respawn.
 
 use melodia::services::single_instance::RESPAWN_ENV;
-use melodia::{AppWindow, Nav, services, state::AppState, ui};
+use melodia::{AppWindow, Nav, services, state::AppState, ui, utils};
 use slint::ComponentHandle;
 
 /// Persist playback position and queue before shutdown. Synchronous writes only:
@@ -87,7 +87,7 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
         log::warn!("save_state_on_exit: update_last_position {track_id}: {e}");
     }
 
-    if let Err(e) = services::write_json_atomic_sync(&state.paths.queue_path, &persistable) {
+    if let Err(e) = utils::atomic_file::write_json_sync(&state.paths.queue_path, &persistable) {
         log::warn!("save_state_on_exit: write queue.json: {e}");
     }
 }

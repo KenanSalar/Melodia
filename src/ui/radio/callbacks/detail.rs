@@ -31,7 +31,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
                 if let Err(e) =
                     detail::open_station(&s, &ru, weak, station, NavEnterFrom::Below).await
                 {
-                    log::warn!("radio: open station: {}", crate::services::describe(&e));
+                    log::warn!("radio: open station: {}", crate::error::describe(&e));
                 }
             });
         });
@@ -111,7 +111,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             let (s, ru, weak) = (s.clone(), ru.clone(), weak.clone());
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::radio::vote(&s, &station.uuid).await {
-                    toast::notify(ToastKind::RadioVote, crate::services::describe(&e));
+                    toast::notify(ToastKind::RadioVote, crate::error::describe(&e));
                     return;
                 }
                 // Re-read rather than adding one locally: the server deduplicates, so a local

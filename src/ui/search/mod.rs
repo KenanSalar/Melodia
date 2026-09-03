@@ -127,7 +127,7 @@ impl SearchUi {
         *self.inner.last_results.lock() = None;
         self.inner.last_query.lock().clear();
         self.inner.applied_selection.lock().clear();
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     /// [`Self::release_section_state`]'s release, run while the user is still on
@@ -145,7 +145,7 @@ impl SearchUi {
         *self.inner.last_results.lock() = None;
         self.inner.last_query.lock().clear();
         self.inner.applied_selection.lock().clear();
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     pub(crate) fn state(&self) -> &SearchUiState {

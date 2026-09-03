@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 
 use super::model::ScrobbleTrack;
 use crate::error::AppResult;
-use crate::services;
 
 /// Upper bound on queued-but-unsent scrobbles. Generous enough to cover a long
 /// offline stretch; beyond it the oldest listens are dropped (and logged) rather
@@ -133,12 +132,12 @@ impl ScrobbleQueue {
 
     /// Read the queue file, defaulting to empty on a missing or unparseable file.
     pub fn load(path: &Path) -> AppResult<Self> {
-        services::load_json_or_default_sync(path)
+        crate::utils::atomic_file::load_json_or_default_sync(path)
     }
 
     /// Atomically persist the queue to `path`.
     pub fn save(&self, path: &Path) -> AppResult<()> {
-        services::write_json_atomic_sync(path, self)
+        crate::utils::atomic_file::write_json_sync(path, self)
     }
 }
 

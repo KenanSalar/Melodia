@@ -116,7 +116,7 @@ impl GenresUi {
     /// close-detail trim, where wiping the grid would be wrong — the user is now
     /// looking at it. A section leave takes [`Self::release_section_state`].
     pub fn release_caches(&self) {
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     /// Drop *everything* the section keeps resident — the canonical grid data,
@@ -144,7 +144,7 @@ impl GenresUi {
             self.detail.all_tracks.lock().clear();
             self.detail.applied_selection.lock().clear();
         }
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     /// Genre id currently open in the detail view (`-1` = grid).

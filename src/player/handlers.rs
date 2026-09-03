@@ -164,7 +164,7 @@ pub fn evaluate_playing_tick(
         // Capture the next track's baked ReplayGain alongside its path — it must
         // travel with *its own* source (the preloaded track has different tags
         // than the playing one), so the gain is baked per source, not shared.
-        state.queue.peek_next().map(|t| (t.file_path.clone(), t.replaygain()))
+        state.queue.peek_next().map(|t| (t.file_path.clone(), t.as_ref().into()))
     } else {
         None
     };
@@ -449,7 +449,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 }
                 let queue_path = paths.queue_path.clone();
                 let join = tokio::task::spawn_blocking(move || {
-                    crate::services::write_json_atomic_sync(&queue_path, &persistable)
+                    crate::utils::atomic_file::write_json_sync(&queue_path, &persistable)
                 })
                 .await;
                 match join {

@@ -140,7 +140,7 @@ pub(super) fn wire_now_playing_open(
             let np_artwork = np_artwork.clone();
             state.runtime.spawn_blocking(move || {
                 np_artwork.clear();
-                crate::tasks::heap_trim::trim();
+                crate::services::allocator::trim();
             });
             return;
         }

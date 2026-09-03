@@ -205,7 +205,7 @@ impl FavoritesUi {
     /// Runs off the UI thread on section leave, which set `mark_dirty()` synchronously.
     ///
     /// Release order matches `AlbumsUi::release_section_state`: per-section LRUs first, then
-    /// mutated state under the section gate, then a `heap_trim::trim`.
+    /// mutated state under the section gate, then an `allocator::trim`.
     ///
     /// The gate serializes those stores but does **not** order them, so it is not what stops a
     /// fetch resolving *after* the leave from repopulating what this emptied. That is each
@@ -238,7 +238,7 @@ impl FavoritesUi {
         // whatever the flags held on the way out.
         self.mark_songs_dirty();
         self.mark_grids_dirty();
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     pub(crate) fn state(&self) -> &FavoritesUiState {

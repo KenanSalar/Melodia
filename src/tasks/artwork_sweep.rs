@@ -15,9 +15,8 @@ use std::time::Duration;
 use crate::config::Paths;
 use crate::database::DbPool;
 use crate::database::queries;
-use crate::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult, describe};
 use crate::media::artwork::sweep::{self, GRACE, SweepReport};
-use crate::services;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 
@@ -31,7 +30,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let paths = state.paths.clone();
     spawner.spawn(async move {
         if let Err(e) = run(&db, &paths).await {
-            log::warn!("Artwork sweep failed: {}", services::describe(&e));
+            log::warn!("Artwork sweep failed: {}", describe(&e));
         }
     });
 }

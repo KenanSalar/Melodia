@@ -510,7 +510,7 @@ impl PlayerState {
         Some(PlayerAction::Seek {
             position_ms,
             file_path: track.file_path.clone(),
-            replaygain: track.replaygain(),
+            replaygain: track.as_ref().into(),
         })
     }
 
@@ -850,7 +850,7 @@ fn begin_track(
 
     let start = TrackStart {
         file_path: track.file_path.clone(),
-        replaygain: track.replaygain(),
+        replaygain: track.as_ref().into(),
         volume: state.effective_volume(),
         speed: state.playback_speed,
         start_position_ms: clamped_pos,

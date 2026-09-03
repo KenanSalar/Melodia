@@ -166,7 +166,7 @@ impl CoverThumbs {
     }
 
     /// Drop every cached buffer, for a per-view tier released on section leave. Callers pair this
-    /// with `heap_trim::trim()` so glibc hands the freed pages back to the OS.
+    /// with `allocator::trim()` so glibc hands the freed pages back to the OS.
     pub fn clear(&self) {
         self.reset();
     }

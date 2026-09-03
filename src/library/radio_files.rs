@@ -133,7 +133,7 @@ async fn write_station_list(db: &DbPool, dest: &Path) -> Result<u32, AppError> {
     let path = dest.to_path_buf();
 
     let written = u32::try_from(stations.len()).unwrap_or(u32::MAX);
-    tokio::task::spawn_blocking(move || crate::services::write_text_atomic_sync(&path, &text))
+    tokio::task::spawn_blocking(move || crate::utils::atomic_file::write_text_sync(&path, &text))
         .await
         .map_err(AppError::io_source)??;
     Ok(written)
@@ -247,12 +247,12 @@ async fn apply_overrides(
     let stored = match super::radio::validated_overrides(overrides) {
         Ok(stored) => stored,
         Err(e) => {
-            log::debug!("radio: imported details refused: {}", crate::services::describe(&e));
+            log::debug!("radio: imported details refused: {}", crate::error::describe(&e));
             return;
         }
     };
     if let Err(e) = queries::radio::set_local_fields_on(&mut **tx, id, &stored).await {
-        log::debug!("radio: imported details not stored: {}", crate::services::describe(&e));
+        log::debug!("radio: imported details not stored: {}", crate::error::describe(&e));
     }
 }
 

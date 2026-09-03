@@ -45,8 +45,8 @@ because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of t
 
 | site | what |
 |---|---|
-| `src/main.rs` | `libc::mallopt` ×3 (the glibc arena / mmap / trim knobs), `env::set_var` for `PIPEWIRE_ALSA` |
-| `src/tasks/heap_trim.rs` | `libc::malloc_trim` |
+| `src/main.rs` | `env::set_var` for `PIPEWIRE_ALSA` |
+| `src/services/allocator.rs` | `libc::mallopt` ×3 (the glibc arena / mmap / trim knobs), `libc::malloc_trim` |
 | `src/services/dwm_titlebar.rs` | `DwmSetWindowAttribute` ×3 |
 | `src/services/settings/data.rs` | `GetUserDefaultLocaleName` |
 | `src/services/updater/install/swap.rs` | `MoveFileExW` |

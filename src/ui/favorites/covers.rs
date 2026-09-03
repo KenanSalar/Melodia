@@ -74,7 +74,7 @@ impl FavoritesUi {
     /// Hand the grid tiers over to `entering`: drop whatever the tab being left was holding, then
     /// decode the new tab's first screenful. Blocking — call it from `spawn_blocking`.
     ///
-    /// Releasing first keeps the peak at one tier rather than two, and the single `heap_trim`
+    /// Releasing first keeps the peak at one tier rather than two, and the single `trim`
     /// comes last so the pages the prewarm needs aren't handed back and re-asked for. Songs holds
     /// neither tier, so entering it releases both and warms nothing.
     ///
@@ -94,7 +94,7 @@ impl FavoritesUi {
             self.artist_thumbs.clear();
         }
         let warm = self.prewarm_tab_covers(entering);
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
         warm
     }
 
@@ -103,7 +103,7 @@ impl FavoritesUi {
     /// [`crate::ui::albums::AlbumsUi::release_grid_covers`].
     pub fn release_artist_covers(&self) {
         self.artist_thumbs.clear();
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     /// Lazy cover lookup for the Most Played grid cards, via

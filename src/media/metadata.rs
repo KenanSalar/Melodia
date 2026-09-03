@@ -233,7 +233,7 @@ fn extract(
         Err(e) => match on_unreadable {
             OnUnreadableTags::Fail => return Err(e),
             OnUnreadableTags::FilenameRow => {
-                log::debug!("{}; keeping a filename-derived row", crate::services::describe(&e));
+                log::debug!("{}; keeping a filename-derived row", crate::error::describe(&e));
                 None
             }
         },

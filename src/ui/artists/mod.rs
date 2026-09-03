@@ -167,20 +167,20 @@ impl ArtistsUi {
             self.detail.filter.lock().clear();
             self.detail.applied_selection.lock().clear();
         }
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     /// Drop just the grid-tier cover cache. Called off the UI thread when the user opens an
     /// artist: the grid view is unmounted by the `ArtistDetail.artist-id` flip.
     pub fn release_grid_covers(&self) {
         self.grid_covers.clear();
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     /// Drop just the detail-tier `(cover, blur)` pair cache. Called when the user closes a detail.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     }
 
     /// Re-decode the first screenful of grid covers into the grid-tier cache after a release.

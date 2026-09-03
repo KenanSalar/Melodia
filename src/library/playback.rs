@@ -135,7 +135,7 @@ fn resume_station(ctx: &PlaybackContext) -> bool {
     let ctx = ctx.clone();
     tokio::spawn(async move {
         if let Err(e) = open_and_start_station(&ctx, &station, generation).await {
-            log::warn!("Could not resume {}: {}", station.name, crate::services::describe(&e));
+            log::warn!("Could not resume {}: {}", station.name, crate::error::describe(&e));
         }
     });
     true

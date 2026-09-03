@@ -78,7 +78,7 @@ pub fn scan_files_parallel(
                 // Only an unreadable file gets this far now; unparseable tags come back
                 // as a filename-derived row rather than a `None`.
                 Err(e) => {
-                    log::warn!("Skipping {}: {}", path.display(), crate::services::describe(&e));
+                    log::warn!("Skipping {}: {}", path.display(), crate::error::describe(&e));
                     None
                 }
             }

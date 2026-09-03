@@ -7,6 +7,30 @@
 use super::*;
 use crate::test_support::{MIN_SOURCES, SRC_DIR, stripped_sources};
 
+/// The two `Display` shapes in this tree, which is what makes `describe` reachable without knowing
+/// which one is in hand. `Network` names an operation and leaves the cause on `.source()`, so the
+/// walk is the whole point; `Io` is `#[error("IO error: {0}")]` over the field `#[from]` also
+/// makes the source, so an unconditional walk would print it twice — and sqlx nests that shape.
+#[test]
+fn a_cause_is_appended_once_and_never_repeated() {
+    let denied = || std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+    let cause = denied().to_string();
+
+    let with_context = AppError::network("Failed to parse Deezer response", denied());
+    assert_eq!(
+        describe(&with_context),
+        format!("Network error: Failed to parse Deezer response: {cause}"),
+        "a context message drops its cause without the walk"
+    );
+
+    let interpolated = AppError::Io(denied());
+    assert_eq!(
+        describe(&interpolated),
+        interpolated.to_string(),
+        "a `Display` that already prints its source has nothing left to append"
+    );
+}
+
 #[test]
 fn display_io() {
     let err = AppError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "gone"));
@@ -96,7 +120,7 @@ fn io_other_helper_wraps_message() {
 }
 
 /// An error carried as a `String` keeps its message and drops its cause, which is the whole of
-/// what `services::describe` walks. Nothing under [`SRC_DIR`] needs to: [`AppError`] reaches
+/// what [`describe`] walks. Nothing under [`SRC_DIR`] needs to: [`AppError`] reaches
 /// everywhere, and where it cannot (`radio_blocklist::source` is `include!`d into `build.rs`, so
 /// it may name no `crate::` path) the answer is a local type implementing `std::error::Error`.
 /// The rule is violable from any file and costs nothing to break, so a walk is what holds it.

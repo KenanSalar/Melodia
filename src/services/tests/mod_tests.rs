@@ -3,8 +3,7 @@ use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
 use super::redact_home;
-use super::{describe, redact_prefix, undeleted_exe};
-use crate::error::AppError;
+use super::{redact_prefix, undeleted_exe};
 #[cfg(unix)]
 use crate::test_support::with_env_var;
 use crate::test_support::{
@@ -298,30 +297,6 @@ fn no_thread_name_outgrows_what_the_kernel_keeps() {
         computed, RUNTIME_NAMED,
         "the set of files computing a thread name has moved; each one owes its own argument for \
          why the widest name it can produce still fits in {MAX_THREAD_NAME} bytes"
-    );
-}
-
-/// The two `Display` shapes in this tree, which is what makes `describe` reachable without knowing
-/// which one is in hand. `Network` names an operation and leaves the cause on `.source()`, so the
-/// walk is the whole point; `Io` is `#[error("IO error: {0}")]` over the field `#[from]` also
-/// makes the source, so an unconditional walk would print it twice — and sqlx nests that shape.
-#[test]
-fn a_cause_is_appended_once_and_never_repeated() {
-    let denied = || std::io::Error::from(std::io::ErrorKind::PermissionDenied);
-    let cause = denied().to_string();
-
-    let with_context = AppError::network("Failed to parse Deezer response", denied());
-    assert_eq!(
-        describe(&with_context),
-        format!("Network error: Failed to parse Deezer response: {cause}"),
-        "a context message drops its cause without the walk"
-    );
-
-    let interpolated = AppError::Io(denied());
-    assert_eq!(
-        describe(&interpolated),
-        interpolated.to_string(),
-        "a `Display` that already prints its source has nothing left to append"
     );
 }
 

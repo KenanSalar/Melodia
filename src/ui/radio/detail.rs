@@ -415,7 +415,7 @@ pub(super) async fn refresh_from_directory(
         Ok(Some(found)) => found,
         Ok(None) => return,
         Err(e) => {
-            log::debug!("radio: station details not read: {}", crate::services::describe(&e));
+            log::debug!("radio: station details not read: {}", crate::error::describe(&e));
             return;
         }
     };
@@ -723,7 +723,7 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, radio_ui: &Ar
         if let Err(e) =
             open_station(&state, &radio_ui, weak.clone(), station, NavEnterFrom::Below).await
         {
-            log::warn!("radio: restore station detail: {}", crate::services::describe(&e));
+            log::warn!("radio: restore station detail: {}", crate::error::describe(&e));
         }
         let _ = weak.upgrade_in_event_loop(|ui| {
             ui.global::<Radio>().set_restoring(false);

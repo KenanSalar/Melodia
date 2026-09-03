@@ -8,9 +8,9 @@ use reqwest::Url;
 use tokio::sync::mpsc;
 
 use crate::error::AppError;
+use crate::error::describe;
 use crate::player::prebuffer::StreamShared;
 use crate::player::stream_source::ABANDON_POLL;
-use crate::services::describe;
 
 use super::playlist::{self, MediaPlaylist, Playlist};
 use super::segment::SegmentReader;

@@ -243,14 +243,14 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         let favorites = match library::radio::get_favorites(&s).await {
             Ok(favorites) => favorites,
             Err(e) => {
-                log::warn!("radio: kept stations: {}", crate::services::describe(&e));
+                log::warn!("radio: kept stations: {}", crate::error::describe(&e));
                 return;
             }
         };
         let recent = match library::radio::get_recent(&s).await {
             Ok(recent) => recent,
             Err(e) => {
-                log::warn!("radio: recent stations: {}", crate::services::describe(&e));
+                log::warn!("radio: recent stations: {}", crate::error::describe(&e));
                 return;
             }
         };

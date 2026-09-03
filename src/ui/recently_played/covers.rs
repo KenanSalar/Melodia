@@ -80,7 +80,7 @@ impl RecentlyPlayedUi {
     /// from `spawn_blocking`, never on the UI thread.
     ///
     /// Releasing first is what keeps the peak at one tier rather than two; the
-    /// single `heap_trim` comes last, after the prewarm has taken the pages it
+    /// single `trim` comes last, after the prewarm has taken the pages it
     /// needs, so we don't hand them back only to ask for them again. Songs holds
     /// no tier of its own, so entering it releases and warms nothing.
     ///
@@ -100,7 +100,7 @@ impl RecentlyPlayedUi {
             self.most_played_thumbs.clear();
         }
         let warm = self.prewarm_tab_covers(entering);
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
         warm
     }
 

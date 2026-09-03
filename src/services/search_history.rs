@@ -31,7 +31,7 @@ impl SearchHistoryState {
     pub async fn init(paths: &Paths) -> Self {
         let path = paths.search_history_path.clone();
         let history: SearchHistory =
-            crate::services::load_json_or_default(&path).await.unwrap_or_default();
+            crate::utils::atomic_file::load_json_or_default(&path).await.unwrap_or_default();
         Self {
             inner: Mutex::new(history),
             path,
@@ -77,7 +77,7 @@ impl SearchHistoryState {
     async fn flush(&self, snapshot: SearchHistory) -> AppResult<()> {
         let path = self.path.clone();
         tokio::task::spawn_blocking(move || {
-            crate::services::write_json_atomic_sync(&path, &snapshot)
+            crate::utils::atomic_file::write_json_sync(&path, &snapshot)
         })
         .await
         .map_err(crate::error::AppError::io_source)?

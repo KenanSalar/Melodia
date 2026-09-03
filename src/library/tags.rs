@@ -23,11 +23,11 @@ use rayon::prelude::*;
 use crate::database::{DbPool, queries};
 use crate::entities::track::{TagEditRow, TrackSummary};
 use crate::error::AppError;
+use crate::error::describe;
 use crate::media::artwork::{self, CoverCache};
 use crate::media::metadata::{ExtractedMetadata, extract_metadata};
 use crate::media::self_writes::SelfWrites;
 use crate::media::tag_writer::{self, ArtworkEdit, TagEdit};
-use crate::services::describe;
 use crate::state::AppState;
 
 /// Width cap for the tag-write fan-out. The MP4 save clones the embedded cover,

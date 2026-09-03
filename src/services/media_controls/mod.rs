@@ -136,7 +136,7 @@ fn try_create_controls(
     match create_controls(hwnd, tx) {
         Ok(controls) => Some(controls),
         Err(e) => {
-            log::warn!("Failed to initialize OS media controls: {}", super::describe(&e));
+            log::warn!("Failed to initialize OS media controls: {}", crate::error::describe(&e));
             None
         }
     }

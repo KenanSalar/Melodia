@@ -44,7 +44,7 @@ Four decisions keep the trio a diagnostic rather than a liability, and each is a
 definition rather than here: `logging::install` returns nothing (infallible on purpose, degrading
 to stderr rather than refusing to boot); `log_files()` is newest-first only because `newest_first`
 reverses the rotated half; a crash report is `head_of` where a log is `tail_of`; and
-`services::describe` is what a `log::` call hands an error to, never `to_string()`. Read those four
+`error::describe` is what a `log::` call hands an error to, never `to_string()`. Read those four
 doc comments before changing any of them.
 
 **Never log a credential, token or session key.** `build_report` ships the tail of the rolling log

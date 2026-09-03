@@ -209,7 +209,8 @@ pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
     let (newest, path) = existing_reports(logs_dir).pop()?;
 
     let marker = logs_dir.join(LAST_SEEN_FILE);
-    let seen: LastSeen = crate::services::load_json_or_default_sync(&marker).unwrap_or_default();
+    let seen: LastSeen =
+        crate::utils::atomic_file::load_json_or_default_sync(&marker).unwrap_or_default();
     if seen.newest.as_deref().and_then(parse_stamp) >= Some(newest) {
         return None;
     }
@@ -217,7 +218,7 @@ pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
     let record = LastSeen {
         newest: Some(newest.format(FILE_TS_FORMAT).to_string()),
     };
-    if let Err(e) = crate::services::write_json_atomic_sync(&marker, &record) {
+    if let Err(e) = crate::utils::atomic_file::write_json_sync(&marker, &record) {
         // Hand the report over anyway. The hook wrote into this same directory
         // moments before, so a failure here is close to impossible — and a
         // notice that repeats beats one that never arrives.

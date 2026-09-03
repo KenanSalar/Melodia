@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use crate::error::AppError;
-use crate::services::describe;
+use crate::error::describe;
 use parking_lot::Mutex;
 
 use super::audio::AudioSource;

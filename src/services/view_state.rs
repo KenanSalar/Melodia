@@ -91,11 +91,11 @@ fn default_last_nav_index() -> i32 {
 pub const MAX_NAV_INDEX: i32 = 10;
 
 pub fn read_view_state(paths: &Paths) -> AppResult<ViewStateData> {
-    crate::services::load_json_or_default_sync(&paths.view_state_path)
+    crate::utils::atomic_file::load_json_or_default_sync(&paths.view_state_path)
 }
 
 pub fn write_view_state(paths: &Paths, view_state: &ViewStateData) -> AppResult<()> {
-    crate::services::write_json_atomic_sync(&paths.view_state_path, view_state)
+    crate::utils::atomic_file::write_json_sync(&paths.view_state_path, view_state)
         .map_err(|e| AppError::Settings(format!("Failed to write view state: {e}")))
 }
 

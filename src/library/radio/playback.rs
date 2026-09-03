@@ -59,7 +59,7 @@ pub async fn station_to_restore(state: &AppState, id: i64) -> Option<Arc<RadioNo
     match get_station(state, id).await {
         Ok(station) => Some(Arc::new(RadioNowPlaying::from(&station))),
         Err(e) => {
-            log::debug!("radio: not restoring station {id}: {}", crate::services::describe(&e));
+            log::debug!("radio: not restoring station {id}: {}", crate::error::describe(&e));
             None
         }
     }
@@ -132,7 +132,7 @@ fn spawn_click(state: &AppState, station_uuid: Option<&str>) {
             return;
         };
         if let Err(e) = radio_browser::count_click(client, &uuid).await {
-            log::debug!("radio: click report failed: {}", crate::services::describe(&e));
+            log::debug!("radio: click report failed: {}", crate::error::describe(&e));
         }
     });
 }

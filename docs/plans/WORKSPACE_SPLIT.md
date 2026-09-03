@@ -397,18 +397,33 @@ is the reason it is promoted out of "out of scope".
 Independent of each other, so they land in any order, whenever a gap opens. Each is its own commit,
 and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then `cargo test --locked`.
 
-- [ ] **A1. `TrackSummary::replaygain()` becomes `From<&TrackSummary>` on the engine side.**
+- [x] **A1. `TrackSummary::replaygain()` becomes `From<&TrackSummary>` on the engine side.**
       `entities/track.rs:73-82` moves into `player/replaygain.rs`. Both types are ours, so the orphan
-      rule does not bite. One method, one call site, and the `entities` to `player` cycle is gone.
-- [ ] **A2. `rss_sampler` takes a closure instead of calling `ui::view_tag`.** `install` at
-      `tasks/rss_sampler.rs:59` takes `impl Fn(&AppWindow) -> String`; the binary passes
-      `ui::view_tag::format_view` at the `boot` call site. That is the only `crate::ui::` reference in
-      all of `src/tasks/`, so it deletes a stated exception rather than relocating it. Delete the
-      stale doc comment at `:16-21` in the same commit.
-- [ ] **A3. `heap_trim::trim()` moves beside the other platform FFI.** It is a bare
+      rule does not bite. **Three call sites, not one** — `handlers.rs:167`, `state.rs:513` and
+      `:853` — but all three already sit inside `src/player/`, so the cycle goes with no
+      cross-directory churn. Each spells `track.as_ref().into()`, the receiver being an `Arc`.
+- [x] **A2. `rss_sampler` takes a closure instead of calling `ui::view_tag`.** Takes
+      `impl Fn() -> Option<String>` rather than `impl Fn(&AppWindow) -> String`: the `&AppWindow`
+      form leaves `crate::AppWindow` in the signature, and the "Why `themes/` splits" section counts
+      on this item removing the sampler from the non-views `AppWindow` namers. The closure captures
+      the weak handle and answers `None` once the window is gone, which is what ends the loop.
+      The call site is **`main.rs:360`**, not `boot/` — `boot/tasks.rs` never touches the sampler.
+      Its doc comment was stale on its own terms besides, naming two imports (`Nav`,
+      `ui::window_chrome::is_queue_sheet_open`) that had already moved into `ui::view_tag`.
+- [x] **A3. `heap_trim::trim()` moves beside the other platform FFI.** It is a bare
       `libc::malloc_trim` with no task machinery in it, and it is **25 of the 29** `ui` to `tasks`
-      edges. `spawn` and `STARTUP_DELAY` stay in `tasks/`, where the one-shot schedule belongs. Not in
-      the issue; it is the single cheapest structural win in the list.
+      edges, leaving 4 (three `TaskSpawner` imports and one `radio_logo_cache::spawn`). `spawn` and
+      `STARTUP_DELAY` stay in `tasks/`, where the one-shot schedule belongs.
+
+      **There was no "other platform FFI" to move it beside.** `libc::` appears in exactly two
+      places in the tree, this call and `main.rs`'s three `mallopt`s, and `Cargo.toml`'s dependency
+      comment documents `libc` as existing for exactly those two. So the landing spot is new —
+      `services/allocator.rs`, holding both, since they are one concern (pinning the trim threshold
+      is what leaves the trim anything to do) and `libc` becomes a single module's dependency for
+      `melodia-platform`'s manifest line. `main()` calls `pin_arenas_and_thresholds()` where the
+      block was; a call allocates nothing, so the ahead-of-the-first-malloc invariant holds.
+      `CLAUDE.md`'s "literal first statement in `main()`" was already wrong — `--version`,
+      `--logs` and the updater reap all precede it — and now says what the code says.
 - [ ] **A4. The three scan DTOs move to `entities/`.** `ExistingTrackSummary`
       (`database/queries/scan/lookups.rs:70`), `ScannedFile` and `ExtractedMetadata`, applying the
       rule the root `CLAUDE.md` already states. Fixes 7 sites in `database/queries/` plus
@@ -428,10 +443,22 @@ and each ends green on `cargo clippy --all-targets --locked -- -D warnings` then
       - The 30 s periodic save (`handlers.rs:443-460`, `PlaybackMonitorContext.db` and `paths`)
         publishes a snapshot the app layer writes, so the monitor stops owning `DbPool` and
         `write_json_atomic_sync`. This is the half that removes `handlers.rs:239` and `:441`.
-- [ ] **A6. `describe` and the atomic writers move to core.** `services/mod.rs:351`, plus
-      `write_json_atomic_sync`, `write_text_atomic_sync` and `load_json_or_default{,_sync}`. Resolves
-      4 of the 12 `player` to `services` edges by relocation. The rest resolve in Phase C by the
-      graph, audio depending on net.
+- [x] **A6. `describe` and the atomic writers move to core.** `describe` lands in `src/error.rs`,
+      beside the type it reads, widening from `pub(crate)` to `pub`; its test moves out of
+      `services/tests/mod_tests.rs` with it. The four file primitives land in a new
+      `src/utils/atomic_file.rs` (`utils.rs` becoming `utils/mod.rs`), where the module name carries
+      the argument the reads rest on: they are plain and unsynchronised, and safe because every
+      write goes through a temp file and a rename. The writers drop the now-stuttering `_atomic`
+      infix — `atomic_file::write_json_sync`, `write_text_sync`.
+
+      Resolves 4 of the 12 `player` to `services` edges by relocation, leaving 5 HTTP primitives, 2
+      toast (A5's) and one intra-doc link. **The count is order-dependent**: `handlers.rs:452` is
+      one of the four and is inside the block A5 deletes, so landing A5 first makes this 3.
+
+      78 call sites, the churn-heaviest item in Phase A: 59 for `describe` and 19 for the file
+      primitives. Four `services/mod.rs` items are equally core-shaped and deliberately stay put
+      (`current_exe`, `is_dev_build`, `redact_home`, `home_dir_string`) — B1 owns the full split and
+      moving them here would half-do it.
 - [ ] **A7. `nav_history` and `ui_handles` come off `AppState`.** `state/mod.rs:151,155,277,278,280`
       into a struct the binary owns and passes down. 6 sites in `boot/ui_setup/views.rs`, 18 inside
       `src/ui/` itself. `ui/my_library/tests/my_library_tests.rs:17` does

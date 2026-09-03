@@ -35,7 +35,7 @@ fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowPlayingArtwo
     let np = np_artwork.clone();
     state.runtime.spawn_blocking(move || {
         np.clear();
-        crate::tasks::heap_trim::trim();
+        crate::services::allocator::trim();
     });
 }
 

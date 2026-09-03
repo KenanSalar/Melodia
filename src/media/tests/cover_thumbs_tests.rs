@@ -204,7 +204,7 @@ fn a_remembered_failure_never_re_queues() -> TestResult {
     Ok(())
 }
 
-/// A tier releases its buffers on a section leave and pairs that with `heap_trim`, so a batch
+/// A tier releases its buffers on a section leave and pairs that with a `trim`, so a batch
 /// still decoding must not land behind it — that is the memory the leave exists to hand back,
 /// resident again behind a view nobody is looking at.
 ///

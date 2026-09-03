@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use flexi_logger::{FlexiLoggerError, LogSpecification};
 use log::LevelFilter;
 
-use crate::services::describe;
+use crate::error::describe;
 
 use super::{NORMAL_LEVEL, VERBOSE_LEVEL, newest_first, spec_for};
 

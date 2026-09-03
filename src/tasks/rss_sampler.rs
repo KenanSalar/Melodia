@@ -9,15 +9,14 @@
 //!
 //! Off by default to avoid log noise; no-op on non-Linux (no `/proc`).
 //! Cheap when enabled — one ~4 KiB pseudo-file read + a handful of Slint
-//! property reads per tick. Runs on the UI thread via `slint::spawn_local`
-//! so it can read the `Nav` / `AlbumDetail` / `ArtistDetail` / `GenreDetail`
-//! globals without an atomic-shadow plumbing pass through `ui/*`.
+//! property reads per tick. Runs on the UI thread via `slint::spawn_local`,
+//! which is what lets the tag be read off the `Nav` / `AlbumDetail` /
+//! `ArtistDetail` / `GenreDetail` globals without an atomic-shadow plumbing
+//! pass through `ui/*`.
 //!
-//! **Diagnostic exception to the `tasks/` no-`ui::*`-imports rule** — the
-//! file imports generated boundary types (`AppWindow`, `Nav`, …) and
-//! `ui::window_chrome::is_queue_sheet_open` so the view tag can include the
-//! overlay state. Acceptable because the whole module is gated behind an
-//! env var; production sessions never reach the import sites.
+//! **The tag arrives as a closure**, so this module names no `ui::` type and
+//! `tasks/` keeps its no-`ui::*` rule whole; `main.rs` supplies
+//! `ui::view_tag::format_view` over the weak handle.
 //!
 //! Sample output (INFO level):
 //!
@@ -37,26 +36,16 @@ use std::time::Duration;
 
 #[cfg(target_os = "linux")]
 use async_compat::Compat;
-#[cfg(target_os = "linux")]
-use slint::Weak;
-
-// `tasks/` imports no `ui::*` — this module is the documented, env-gated exception,
-// since a memory tag naming the view has to read the view's own globals. The tag
-// itself is `ui::view_tag`, shared with the verbose log's navigation line.
-#[cfg(target_os = "linux")]
-use crate::AppWindow;
-#[cfg(target_os = "linux")]
-use crate::ui::view_tag::format_view;
 
 #[cfg(target_os = "linux")]
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
 
 /// Env-var gate so the sampler only runs in diagnostic sessions. Anything
 /// non-empty enables (`MELODIA_RSS_SAMPLE=1`, `=on`, …); unset or empty
-/// keeps the task entirely unspawned. Called once at startup with the
-/// `AppWindow` weak handle so the per-tick loop can read Nav state on the
-/// UI thread.
-pub fn install(weak: &slint::Weak<crate::AppWindow>) {
+/// keeps the task entirely unspawned. Called once at startup with a closure
+/// that reads the current view tag on the UI thread and answers `None` once
+/// the window is gone, which is what ends the loop.
+pub fn install(view_tag: impl Fn() -> Option<String> + 'static) {
     if std::env::var_os("MELODIA_RSS_SAMPLE").is_none_or(|v| v.is_empty()) {
         return;
     }
@@ -64,21 +53,20 @@ pub fn install(weak: &slint::Weak<crate::AppWindow>) {
     #[cfg(target_os = "linux")]
     {
         log::info!("[MEM] sampler enabled (interval {} ms)", SAMPLE_INTERVAL.as_millis());
-        let _ = slint::spawn_local(Compat::new(run(weak.clone())));
+        let _ = slint::spawn_local(Compat::new(run(view_tag)));
     }
 
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = weak;
+        let _ = view_tag;
         log::info!("[MEM] sampler env set but no /proc on this platform — skipped");
     }
 }
 
-/// Per-tick loop: snapshot Slint nav state + `/proc/self/status`, format,
-/// emit one INFO line. Exits cleanly when the UI window is dropped (weak
-/// upgrade fails).
+/// Per-tick loop: snapshot the view tag + `/proc/self/status`, format, emit one
+/// INFO line. Exits cleanly once the tag reads `None`.
 #[cfg(target_os = "linux")]
-async fn run(weak: Weak<AppWindow>) {
+async fn run(view_tag: impl Fn() -> Option<String>) {
     let mut interval = tokio::time::interval(SAMPLE_INTERVAL);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     // Skip the immediate first tick — `tokio::time::interval` fires it
@@ -86,8 +74,7 @@ async fn run(weak: Weak<AppWindow>) {
     interval.tick().await;
     loop {
         interval.tick().await;
-        let Some(ui) = weak.upgrade() else { break };
-        let view = format_view(&ui);
+        let Some(view) = view_tag() else { break };
         if let Some(s) = read_mem_breakdown() {
             log::info!(
                 "[MEM view={view} VmRSS={} RssAnon={} RssFile={} RssShmem={} VmData={} (KiB)]",

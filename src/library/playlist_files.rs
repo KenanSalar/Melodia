@@ -85,7 +85,7 @@ pub async fn export_playlists_to_folder(
         let mut ok: u32 = 0;
         let mut errs: Vec<(String, String)> = Vec::new();
         for (path, text) in to_write {
-            match crate::services::write_text_atomic_sync(&path, &text) {
+            match crate::utils::atomic_file::write_text_sync(&path, &text) {
                 Ok(()) => ok += 1,
                 Err(e) => {
                     let label =
