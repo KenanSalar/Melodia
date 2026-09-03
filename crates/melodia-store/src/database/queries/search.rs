@@ -18,9 +18,9 @@
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
-use crate::entities::search::SearchResults;
-use crate::entities::{album, artist, genre, track};
-use crate::error::AppError;
+use melodia_core::entities::search::SearchResults;
+use melodia_core::entities::{album, artist, genre, track};
+use melodia_core::error::AppError;
 
 /// Build an FTS5 MATCH expression from a raw query string.
 /// Each whitespace-separated word is quoted and suffixed with `*` for prefix matching.

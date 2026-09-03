@@ -1,8 +1,8 @@
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
-use crate::entities::album;
-use crate::error::AppError;
+use melodia_core::entities::album;
+use melodia_core::error::AppError;
 
 pub async fn get_all_albums(db: &DbPool) -> Result<Vec<album::AlbumStats>, AppError> {
     let albums =

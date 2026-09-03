@@ -7,8 +7,8 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePo
 use std::str::FromStr;
 use std::time::Duration;
 
-use crate::config::Paths;
-use crate::error::AppError;
+use melodia_core::config::Paths;
+use melodia_core::error::AppError;
 
 /// `SQLite` bind variable limit — queries with more placeholders will fail.
 pub const SQLITE_BIND_LIMIT: usize = 999;
@@ -252,7 +252,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         return Err(e.into());
     }
 
-    // New writes route through `crate::utils::canonicalize_path`, which never
+    // New writes route through `melodia_core::utils::canonicalize_path`, which never
     // produces the prefix for a `MAX_PATH`-fitting path; this brings existing
     // rows in line, so Browse's path-keyed `HashMap` matches `read_dir` output.
     // `cfg!` const-folds, leaving the fn compiled and testable everywhere.

@@ -1,7 +1,7 @@
 use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 #[tokio::test]
 async fn get_all_albums_from_seeded_db() -> Result<(), AppError> {

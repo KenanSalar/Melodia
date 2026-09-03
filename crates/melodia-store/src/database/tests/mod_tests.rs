@@ -1,7 +1,7 @@
 use crate::database::queries;
 use crate::database::queries::fixtures::insert_test_track;
 use crate::database::{DbPool, SQLITE_BIND_LIMIT, chunked_in_query};
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 // Private to `database/mod.rs`; reachable from this child test module via `super::`.
 use super::{FTS_OPTIMIZE, strip_windows_verbatim_paths};

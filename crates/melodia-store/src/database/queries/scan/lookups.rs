@@ -4,8 +4,8 @@
 //! resolves hashes in batch via `batch_lookup_by_hash` / the reconcile
 //! pre-pass — there is no per-file hash lookup anymore.
 
-use crate::entities::scan::ExistingTrackSummary;
-use crate::error::AppError;
+use melodia_core::entities::scan::ExistingTrackSummary;
+use melodia_core::error::AppError;
 
 /// Check if a track with the given file path already exists.
 pub async fn track_exists_by_path(

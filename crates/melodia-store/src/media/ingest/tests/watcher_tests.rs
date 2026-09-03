@@ -245,7 +245,7 @@ fn rescan_flag_round_trips_through_notify_event() {
 /// scans on startup and then goes stale for the rest of the session.
 #[test]
 fn audio_file_covers_every_scanned_extension() {
-    for ext in crate::utils::audio_ext::AUDIO_EXTENSIONS {
+    for ext in melodia_core::utils::audio_ext::AUDIO_EXTENSIONS {
         let path = PathBuf::from("music").join(format!("song.{ext}"));
         assert!(super::is_audio_file(&path), "the watcher ignores .{ext}");
     }

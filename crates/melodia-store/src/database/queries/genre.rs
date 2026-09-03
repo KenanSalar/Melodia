@@ -1,6 +1,6 @@
 use crate::database::DbPool;
-use crate::entities::genre;
-use crate::error::AppError;
+use melodia_core::entities::genre;
+use melodia_core::error::AppError;
 
 pub async fn get_all_genres(db: &DbPool) -> Result<Vec<genre::GenreStats>, AppError> {
     let genres =

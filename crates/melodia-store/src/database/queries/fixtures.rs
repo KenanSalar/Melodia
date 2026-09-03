@@ -7,8 +7,8 @@
 
 use crate::database::DbPool;
 use crate::database::queries;
-use crate::entities::scan::ExtractedMetadata;
-use crate::error::AppError;
+use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::error::AppError;
 
 /// Create a default `ExtractedMetadata` with sensible test values.
 /// Override fields as needed after calling this.
@@ -91,7 +91,7 @@ pub async fn insert_test_track(
         folder_id: 1, // default folder
     };
 
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
     queries::scan::insert_track(&mut tx, file_path, file_name, &meta, &ids, &now).await?;
 
     tx.commit().await?;

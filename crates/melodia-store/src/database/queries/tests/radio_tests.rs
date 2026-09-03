@@ -2,8 +2,8 @@
 //! station with no uuid conflicts with nothing, and the two orderings the lists are read through.
 
 use crate::database::DbPool;
-use crate::entities::radio;
-use crate::error::AppError;
+use melodia_core::entities::radio;
+use melodia_core::error::AppError;
 
 use super::{
     clear_play_history, delete_station, get_favorite_stations, get_recent_stations,

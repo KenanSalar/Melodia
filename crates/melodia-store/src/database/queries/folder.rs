@@ -1,15 +1,15 @@
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
-use crate::entities::folder;
-use crate::error::AppError;
+use melodia_core::entities::folder;
+use melodia_core::error::AppError;
 
 pub async fn insert_folder(
     db: &DbPool,
     path: &str,
     is_enabled: bool,
 ) -> Result<folder::Folder, AppError> {
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
     let row = sqlx::query_as::<_, folder::Folder>(
         "INSERT INTO folders (path, is_enabled, added_at)
          VALUES (?, ?, ?)
@@ -69,7 +69,7 @@ pub async fn upsert_folder(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &str,
 ) -> Result<i64, AppError> {
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
     let id = sqlx::query_scalar::<_, i64>(
         "INSERT INTO folders (path, is_enabled, added_at)
          VALUES (?, FALSE, ?)

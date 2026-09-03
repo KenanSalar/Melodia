@@ -1,7 +1,7 @@
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::*;
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 #[tokio::test]
 async fn recalculate_stats_produces_correct_counts() -> Result<(), AppError> {

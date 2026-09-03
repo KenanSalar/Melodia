@@ -3,15 +3,15 @@ use std::collections::HashMap;
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
-use crate::entities::{playlist, playlist_item, track};
-use crate::error::AppError;
+use melodia_core::entities::{playlist, playlist_item, track};
+use melodia_core::error::AppError;
 
 pub async fn create_playlist(
     db: &DbPool,
     name: &str,
     description: Option<&str>,
 ) -> Result<playlist::Playlist, AppError> {
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
 
     let result = sqlx::query_as::<_, playlist::Playlist>(
         "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at)
@@ -29,7 +29,7 @@ pub async fn create_playlist(
 
 /// Create a smart (dynamic) playlist. Identical to [`create_playlist`] except
 /// `is_smart = TRUE` and `smart_criteria` holds the serialized
-/// [`crate::entities::smart_criteria::SmartCriteria`] JSON. Smart playlists
+/// [`melodia_core::entities::smart_criteria::SmartCriteria`] JSON. Smart playlists
 /// never get `playlist_items` rows — their membership is resolved live from the
 /// criteria (see [`crate::database::queries::smart_playlist`]).
 pub async fn create_smart_playlist(
@@ -38,7 +38,7 @@ pub async fn create_smart_playlist(
     description: Option<&str>,
     criteria_json: &str,
 ) -> Result<playlist::Playlist, AppError> {
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
 
     let result = sqlx::query_as::<_, playlist::Playlist>(
         "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at)
@@ -63,7 +63,7 @@ pub async fn update_smart_criteria(
     id: i64,
     criteria_json: &str,
 ) -> Result<playlist::Playlist, AppError> {
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
 
     sqlx::query_as::<_, playlist::Playlist>(
         "UPDATE playlists SET smart_criteria = ?, updated_at = ? WHERE id = ? RETURNING *",
@@ -100,7 +100,7 @@ pub async fn update_playlist(
     description: Option<&str>,
     clear_thumbnail: bool,
 ) -> Result<playlist::Playlist, AppError> {
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
 
     if clear_thumbnail {
         // Clear thumbnail entirely so the placeholder icon is shown.
@@ -223,7 +223,7 @@ pub async fn add_tracks_to_playlist(
     .fetch_one(&mut *tx)
     .await?;
 
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
     let start_position = max_pos.unwrap_or(-1) + 1;
 
     for (chunk_idx, chunk) in track_ids.chunks(CHUNK_SIZE).enumerate() {
@@ -444,7 +444,7 @@ pub async fn set_playlist_custom_thumbnail(
     playlist_id: i64,
     path: &str,
 ) -> Result<playlist::Playlist, AppError> {
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
 
     sqlx::query_as::<_, playlist::Playlist>(
         "UPDATE playlists SET thumbnail_path = ?, custom_thumbnail = TRUE, updated_at = ?
@@ -463,7 +463,7 @@ async fn update_playlist_thumbnail_and_timestamp_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     playlist_id: i64,
 ) -> Result<(), AppError> {
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
 
     sqlx::query(
         "UPDATE playlists SET

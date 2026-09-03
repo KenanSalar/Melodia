@@ -2,7 +2,7 @@
 //! return its rowid. Each returns the supplied "unknown" sentinel id (or
 //! `None`) for empty names so callers can stay branch-free.
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 /// Find or create an artist by name, returning the artist ID.
 /// Uses the provided `unknown_artist_id` for empty artist names.

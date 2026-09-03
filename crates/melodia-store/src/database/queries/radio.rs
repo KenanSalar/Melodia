@@ -1,7 +1,7 @@
 use crate::database::queries::scan::to_natural_sort_key;
 use crate::database::{DbPool, chunked_in_query};
-use crate::entities::radio::{self, StoredLogoAnswer};
-use crate::error::AppError;
+use melodia_core::entities::radio::{self, StoredLogoAnswer};
+use melodia_core::error::AppError;
 
 /// The columns [`save_station`] writes, in bind order.
 const INSERT_COLUMNS: &str = "station_uuid, name, stream_url, homepage, favicon_url, tags,
@@ -60,7 +60,7 @@ where
     E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
 {
     let sort_key = to_natural_sort_key(&station.name);
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
     let conflict = if station.station_uuid.is_some() {
         DIRECTORY_CONFLICT
     } else {
@@ -241,7 +241,7 @@ pub async fn mark_played(db: &DbPool, id: i64) -> Result<(), AppError> {
     sqlx::query(
         "UPDATE radio_stations SET play_count = play_count + 1, last_played = ? WHERE id = ?",
     )
-    .bind(crate::utils::now_rfc3339())
+    .bind(melodia_core::utils::now_rfc3339())
     .bind(id)
     .execute(db.write())
     .await?;

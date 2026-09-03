@@ -5,7 +5,7 @@ use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
 use crate::database::SQLITE_BIND_LIMIT;
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 /// Every column that points into the artwork stores, as `(table, column)`.
 ///

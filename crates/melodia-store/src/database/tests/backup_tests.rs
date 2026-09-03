@@ -4,11 +4,11 @@ use std::str::FromStr;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 use super::{MAX_BACKUPS, create, file_name, maintain, prune};
-use crate::config::Paths;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::insert_test_track;
-use crate::error::AppError;
+use melodia_core::config::Paths;
+use melodia_core::error::AppError;
 
 /// A [`Paths`] rooted in a throwaway directory, with the subdirectories [`Paths::resolve`]
 /// creates already in place. Creation is best-effort — a failure surfaces as a missing-file

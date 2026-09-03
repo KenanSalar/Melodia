@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use sqlx::AssertSqlSafe;
 
 use crate::database::SQLITE_BIND_LIMIT;
-use crate::entities::scan::ExtractedMetadata;
-use crate::error::AppError;
+use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::error::AppError;
 
 use super::ResolvedIds;
 use super::sort_key::to_natural_sort_key;
@@ -55,7 +55,7 @@ pub async fn update_track_artwork_if_missing(
 /// covers schema changes in one place.
 fn bind_track_columns<'q>(
     q: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>,
-    meta: &'q crate::entities::scan::ExtractedMetadata,
+    meta: &'q melodia_core::entities::scan::ExtractedMetadata,
     ids: &'q ResolvedIds,
     sort_key: &'q str,
 ) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments> {
@@ -103,7 +103,7 @@ pub async fn insert_track(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
     file_name: &str,
-    meta: &crate::entities::scan::ExtractedMetadata,
+    meta: &melodia_core::entities::scan::ExtractedMetadata,
     ids: &ResolvedIds,
     now: &str,
 ) -> Result<i64, AppError> {
@@ -300,7 +300,7 @@ pub async fn update_track_location(
 pub async fn update_track_metadata(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
-    meta: &crate::entities::scan::ExtractedMetadata,
+    meta: &melodia_core::entities::scan::ExtractedMetadata,
     ids: &ResolvedIds,
 ) -> Result<(), AppError> {
     let sort_key = to_natural_sort_key(&meta.title);

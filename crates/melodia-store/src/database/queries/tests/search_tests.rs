@@ -2,7 +2,7 @@ use super::*;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, setup_seeded_db};
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 #[test]
 fn build_fts_query_single_word() {
@@ -216,7 +216,7 @@ async fn a_narrow_retag_reindexes_the_new_fts_columns() -> Result<(), AppError> 
     .execute(db.write())
     .await?;
 
-    let hit = |r: &crate::entities::search::SearchResults| {
+    let hit = |r: &melodia_core::entities::search::SearchResults| {
         r.tracks.iter().any(|t| t.title == "Alpha Song")
     };
 

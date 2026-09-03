@@ -6,10 +6,10 @@ use std::sync::atomic::AtomicU32;
 use tempfile::TempDir;
 
 use super::*;
-use crate::entities::scan::ExistingTrackSummary;
-use crate::error::AppError;
-use crate::media::image::artwork::CoverCache;
-use crate::utils::audio_ext::AUDIO_EXTENSIONS;
+use melodia_artwork::media::image::artwork::CoverCache;
+use melodia_core::entities::scan::ExistingTrackSummary;
+use melodia_core::error::AppError;
+use melodia_core::utils::audio_ext::AUDIO_EXTENSIONS;
 
 fn create_test_files(dir: &Path, names: &[&str]) -> Result<(), AppError> {
     for name in names {
@@ -134,7 +134,7 @@ fn create_minimal_wav(path: &std::path::Path) -> Result<(), AppError> {
 }
 
 fn test_cover_cache() -> CoverCache {
-    crate::media::image::artwork::new_cover_cache()
+    melodia_artwork::media::image::artwork::new_cover_cache()
 }
 
 #[test]

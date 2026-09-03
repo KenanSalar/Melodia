@@ -44,9 +44,9 @@ pub async fn resolve_track_context(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &std::path::Path,
     path_str: &str,
-    meta: &crate::entities::scan::ExtractedMetadata,
+    meta: &melodia_core::entities::scan::ExtractedMetadata,
     context: &str,
-) -> Result<Option<ResolvedIds>, crate::error::AppError> {
+) -> Result<Option<ResolvedIds>, melodia_core::error::AppError> {
     let Some(folder_id) = find_folder_for_path(tx, path_str).await? else {
         log::debug!("{context} file not in any library folder, skipping: {}", path.display());
         return Ok(None);

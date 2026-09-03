@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use sqlx::AssertSqlSafe;
 
 use crate::database::{DbPool, chunked_in_query};
-use crate::entities::track;
-use crate::error::AppError;
+use melodia_core::entities::track;
+use melodia_core::error::AppError;
 
 /// The `ORDER BY` body every "most played" surface ranks with — the Favorites grid tab and the
 /// hero mosaic that has to agree with it.
@@ -294,7 +294,7 @@ pub async fn get_tracks_by_genre_for_list(
 }
 
 pub async fn update_play_count(db: &DbPool, id: i64) -> Result<(), AppError> {
-    let now = crate::utils::now_rfc3339();
+    let now = melodia_core::utils::now_rfc3339();
     sqlx::query("UPDATE tracks SET play_count = play_count + 1, last_played = ? WHERE id = ?")
         .bind(now)
         .bind(id)
@@ -406,7 +406,7 @@ pub async fn get_favorite_tracks_for_list(
 /// **Platform invariant**: `tracks.file_path` is stored verbatim from `Path::to_string_lossy()` at
 /// scan time, so it carries the platform's native separator and the LIKE pattern below matches
 /// that. Pass `dir_path` in native form too — callers route through
-/// `crate::utils::canonicalize_path`.
+/// `melodia_core::utils::canonicalize_path`.
 ///
 /// Query-plan note: `file_path` has a UNIQUE auto-index, but the `ESCAPE` clause disables
 /// `SQLite`'s prefix-`LIKE`→range-scan optimisation entirely. At realistic library sizes a one-off
@@ -484,8 +484,8 @@ pub async fn get_track_ids_by_hashes(
 #[cfg(test)]
 pub async fn get_duplicate_tracks(
     db: &DbPool,
-) -> Result<Vec<Vec<crate::entities::track::Track>>, AppError> {
-    let rows: Vec<crate::entities::track::Track> = sqlx::query_as(
+) -> Result<Vec<Vec<melodia_core::entities::track::Track>>, AppError> {
+    let rows: Vec<melodia_core::entities::track::Track> = sqlx::query_as(
         "WITH dup_hashes AS (
              SELECT file_hash FROM tracks
              WHERE file_hash IS NOT NULL
@@ -498,7 +498,7 @@ pub async fn get_duplicate_tracks(
     .fetch_all(db.read())
     .await?;
 
-    let mut groups: Vec<Vec<crate::entities::track::Track>> = Vec::new();
+    let mut groups: Vec<Vec<melodia_core::entities::track::Track>> = Vec::new();
     let mut cur_hash: Option<String> = None;
     for t in rows {
         // The CTE filter guarantees file_hash is Some for every row returned.

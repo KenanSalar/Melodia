@@ -11,12 +11,12 @@
 use sqlx::{QueryBuilder, Sqlite};
 
 use crate::database::DbPool;
-use crate::entities::smart_criteria::{
+use melodia_core::entities::smart_criteria::{
     LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
     ValueType, ops_for,
 };
-use crate::entities::track;
-use crate::error::AppError;
+use melodia_core::entities::track;
+use melodia_core::error::AppError;
 
 /// Resolve a smart playlist's current membership as list-view rows, in the
 /// criteria's order (and capped by its optional limit).

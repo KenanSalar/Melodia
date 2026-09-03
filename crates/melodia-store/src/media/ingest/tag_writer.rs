@@ -39,9 +39,9 @@ use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
 use super::{metadata, rating_tags};
-use crate::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
-use crate::error::AppError;
-use crate::media::image::image_decode;
+use melodia_artwork::media::image::image_decode;
+use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
+use melodia_core::error::AppError;
 
 /// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and a tag holding a
 /// 12-digit "tempo" is worse than one holding none.

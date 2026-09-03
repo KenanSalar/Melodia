@@ -1,6 +1,6 @@
 use crate::database::DbPool;
-use crate::entities::artist;
-use crate::error::AppError;
+use melodia_core::entities::artist;
+use melodia_core::error::AppError;
 
 pub async fn get_all_artists(db: &DbPool) -> Result<Vec<artist::ArtistStats>, AppError> {
     let artists =

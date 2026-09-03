@@ -7,9 +7,9 @@ use lofty::prelude::*;
 use lofty::properties::FileProperties;
 
 use super::rating_tags;
-use crate::entities::scan::ExtractedMetadata;
-use crate::error::AppError;
-use crate::media::image::artwork;
+use melodia_artwork::media::image::artwork;
+use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::error::AppError;
 
 /// Compute a full BLAKE3 hash of a file (64-char hex string).
 /// Uses `update_reader` for optimized streaming I/O with SIMD-friendly buffering.
@@ -198,7 +198,10 @@ fn extract(
         Err(e) => match on_unreadable {
             OnUnreadableTags::Fail => return Err(e),
             OnUnreadableTags::FilenameRow => {
-                log::debug!("{}; keeping a filename-derived row", crate::error::describe(&e));
+                log::debug!(
+                    "{}; keeping a filename-derived row",
+                    melodia_core::error::describe(&e)
+                );
                 None
             }
         },
@@ -210,7 +213,7 @@ fn extract(
         Some(props) => i64::try_from(props.duration().as_millis()).unwrap_or(i64::MAX),
         // Lofty reports duration off the parse that just failed, so the decoder is the
         // only thing left that knows. Still `0` where it can't say either.
-        None => crate::player::source::file_decode::probe_duration(path)
+        None => melodia_audio::player::source::file_decode::probe_duration(path)
             .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)),
     };
 

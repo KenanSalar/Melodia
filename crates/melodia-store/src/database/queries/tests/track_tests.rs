@@ -2,7 +2,7 @@ use crate::database::DbPool;
 use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 async fn seed_db() -> Result<DbPool, AppError> {
     let db = DbPool::test_pool().await?;

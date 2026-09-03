@@ -5,18 +5,10 @@
 //! asks for a duration the container won't state. Below everything that decides *what* to scan:
 //! nothing here names a setting, a task or the app's state.
 
-pub use melodia_core::{config, entities, error, themes, utils};
-
 pub mod database;
 
 pub mod media {
-    pub use melodia_artwork::media::image;
-
     pub mod ingest;
-}
-
-pub mod player {
-    pub use melodia_audio::player::source;
 }
 
 #[cfg(test)]

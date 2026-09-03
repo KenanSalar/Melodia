@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 // ── Trigger SQL constants ───────────────────────────────────────────────────
 // Must stay in sync with the stats triggers in

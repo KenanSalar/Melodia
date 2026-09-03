@@ -2,7 +2,7 @@ use crate::database::DbPool;
 use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 // === Pure unit tests for to_natural_sort_key ===
 

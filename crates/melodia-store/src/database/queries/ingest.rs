@@ -6,8 +6,8 @@ use sqlx::AssertSqlSafe;
 
 use crate::database::SQLITE_BIND_LIMIT;
 use crate::database::queries;
-use crate::entities::scan::ScannedFile;
-use crate::error::AppError;
+use melodia_core::entities::scan::ScannedFile;
+use melodia_core::error::AppError;
 
 /// Sentinel artist ID for tracks/albums with no known artist.
 /// Matches the row inserted in schema.sql.
@@ -423,7 +423,7 @@ async fn resolve_folder_id(
 /// Returns `None` when the file should be skipped (e.g. no parent directory).
 async fn resolve_ids(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    meta: &crate::entities::scan::ExtractedMetadata,
+    meta: &melodia_core::entities::scan::ExtractedMetadata,
     folder_resolution: &FolderResolution,
     file: &ScannedFile,
     file_path_str: &str,

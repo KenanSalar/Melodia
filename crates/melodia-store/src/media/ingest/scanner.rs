@@ -5,9 +5,9 @@ use rayon::prelude::*;
 use serde::Serialize;
 use walkdir::WalkDir;
 
-use crate::entities::scan::{ExistingTrackSummary, ScannedFile};
 use crate::media::ingest::metadata::extract_or_filename_row;
-use crate::utils::audio_ext::is_audio_extension;
+use melodia_core::entities::scan::{ExistingTrackSummary, ScannedFile};
+use melodia_core::utils::audio_ext::is_audio_extension;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ScanProgress {
@@ -43,7 +43,7 @@ pub fn collect_media_files(dir: &Path) -> Vec<PathBuf> {
 pub fn scan_files_parallel(
     files: &[PathBuf],
     artwork_dir: &Path,
-    cover_cache: &crate::media::image::artwork::CoverCache,
+    cover_cache: &melodia_artwork::media::image::artwork::CoverCache,
     progress_callback: &(dyn Fn(u32, &str) + Send + Sync),
 ) -> Vec<ScannedFile> {
     let total = files.len();
@@ -72,7 +72,11 @@ pub fn scan_files_parallel(
                 // Only an unreadable file gets this far now; unparseable tags come back
                 // as a filename-derived row rather than a `None`.
                 Err(e) => {
-                    log::warn!("Skipping {}: {}", path.display(), crate::error::describe(&e));
+                    log::warn!(
+                        "Skipping {}: {}",
+                        path.display(),
+                        melodia_core::error::describe(&e)
+                    );
                     None
                 }
             }

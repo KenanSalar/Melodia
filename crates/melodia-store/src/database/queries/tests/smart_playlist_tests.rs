@@ -3,11 +3,11 @@ use std::collections::HashSet;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::insert_test_track;
-use crate::entities::smart_criteria::{
+use melodia_core::entities::smart_criteria::{
     LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
 };
-use crate::entities::track::TrackListRow;
-use crate::error::AppError;
+use melodia_core::entities::track::TrackListRow;
+use melodia_core::error::AppError;
 
 /// RFC-3339 timestamp `n` days before now — for staging `last_played`.
 fn days_ago(n: i64) -> String {

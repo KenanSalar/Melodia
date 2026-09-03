@@ -1309,7 +1309,7 @@ naming either once the shims are gone. That is one fewer test binary, 41 rather 
 - [x] **E4. `melodia-audio`**, 11. Its `pub mod services { }` shim empties and goes with the line.
 - [x] **E5. `melodia-playback`**, 21.
 - [x] **E6. `melodia-engine`**, 22.
-- [ ] **E7. `melodia-store`**, 48. `crate::database` stays, being store's own.
+- [x] **E7. `melodia-store`**, 48. `crate::database` stays, being store's own.
 - [ ] **E8. `melodia-integrations`**, 26.
 - [ ] **E9. `melodia-app`**, roughly 157, plus the four `pub(crate) use` enforcement lines and
       `services/mod.rs`'s three. With call sites naming `melodia_store::database` directly the

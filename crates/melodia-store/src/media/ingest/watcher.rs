@@ -6,8 +6,8 @@ use notify::{EventKind, RecursiveMode};
 use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer};
 use tokio::sync::mpsc;
 
-use crate::error::AppError;
-use crate::utils::audio_ext::is_audio_extension;
+use melodia_core::error::AppError;
+use melodia_core::utils::audio_ext::is_audio_extension;
 
 /// Classified file system event sent through the mpsc channel to the event processor.
 #[derive(Debug, Clone, PartialEq)]

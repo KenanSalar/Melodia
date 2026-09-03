@@ -9,8 +9,8 @@ use sqlx::AssertSqlSafe;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, setup_seeded_db};
-use crate::entities::radio;
-use crate::error::AppError;
+use melodia_core::entities::radio;
+use melodia_core::error::AppError;
 
 use super::{ARTWORK_COLUMNS, REFERENCED_PATHS, repoint_all};
 

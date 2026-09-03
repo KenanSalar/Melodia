@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use sqlx::AssertSqlSafe;
 use sqlx::sqlite::SqlitePool;
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 /// How many backups survive a [`maintain`] sweep.
 ///
