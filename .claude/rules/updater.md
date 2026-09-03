@@ -5,7 +5,7 @@ paths:
   - crates/melodia-platform/src/services/platform/desktop_integration.rs
   - crates/melodia-app/src/tasks/updater_daily.rs
   - crates/melodia-views/src/ui/settings/updater_settings.rs
-  - wix/main.wxs
+  - crates/melodia/wix/main.wxs
   - scripts/build-latest-json.py
   - scripts/build-appimage.sh
   - scripts/build-rpm.sh
@@ -47,7 +47,7 @@ from `main.rs` without ever opening this file.
   `cfg(target_os = "linux")`, and macOS isn't a CI target, so `swap_in_place` falls through to
   `std::fs::rename`.
 
-- **Windows installs are per-machine MSIs at `C:\Program Files\Melodia\bin\`.** `wix/main.wxs`
+- **Windows installs are per-machine MSIs at `C:\Program Files\Melodia\bin\`.** `crates/melodia/wix/main.wxs`
   `Scope="perMachine"` + `ProgramFiles6432Folder`; UAC at install. The Start Menu shortcut
   Component under `ProgramMenuFolder` is what lets Windows Search find the app. Console suppressed
   via `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` — release runs as GUI,

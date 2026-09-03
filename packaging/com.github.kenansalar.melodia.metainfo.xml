@@ -14,7 +14,7 @@
   exact same file lands in each: the RPM (scripts/build-rpm.sh), the DEB
   ([package.metadata.deb] assets in Cargo.toml), the AppImage
   (scripts/build-appimage.sh) and per-user tarball installs
-  (src/services/desktop_integration.rs). Installed to
+  (crates/melodia-platform/src/services/platform/desktop_integration.rs). Installed to
   /usr/share/metainfo/ system-wide, or ~/.local/share/metainfo/ per-user.
 
   No <releases> block: the displayed version comes from the owning

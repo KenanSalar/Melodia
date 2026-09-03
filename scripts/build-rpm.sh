@@ -23,8 +23,10 @@ REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 if [[ "${1:-}" == "--build" ]]; then
-  echo "==> cargo build --release"
-  cargo build --release
+  # `-p melodia` because the root is virtual: a bare build would compile every
+  # member, testkit included, to produce the one binary packaged below.
+  echo "==> cargo build --release -p melodia"
+  cargo build --release -p melodia
 fi
 
 BINARY="${BINARY:-$REPO_ROOT/target/release/Melodia}"

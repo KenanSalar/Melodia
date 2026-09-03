@@ -154,6 +154,11 @@ fn every_bundled_font_is_named_in_the_attribution() {
 /// The RPM stages and ships in separate statements, so the needle has to be the second: drop the
 /// `%files` line and the staged copy goes unread in the *build* directory, which `check-files`
 /// never looks at — no warning, and a pin on the `cp` still green.
+/// The MSI source, repo-root-relative. Under the package rather than beside `packaging/`
+/// because that is where cargo-wix looks for the wxs of the package it installs, and a flag
+/// pointing it elsewhere would be exercised by nothing short of a tagged Windows release.
+const MSI_SOURCE: &str = "crates/melodia/wix/main.wxs";
+
 const LICENSE_SHIPPERS: [(&str, &str); 5] = [
     ("scripts/build-rpm.sh", "%license LICENSE licenses/"),
     // The binary's manifest, not the workspace root's: `[package.metadata.deb]` is package
@@ -161,7 +166,7 @@ const LICENSE_SHIPPERS: [(&str, &str); 5] = [
     ("crates/melodia/Cargo.toml", "licenses/*\""),
     ("scripts/build-tarball.sh", "cp -r \"$REPO_ROOT/licenses\""),
     ("scripts/build-appimage.sh", "cp -r \"$REPO_ROOT/licenses\""),
-    ("wix/main.wxs", "$(var.RepoRoot)\\licenses\\"),
+    (MSI_SOURCE, "$(var.RepoRoot)\\licenses\\"),
 ];
 
 /// Five formats built by five unrelated toolchains, four of which no reviewer on this machine can
@@ -361,8 +366,8 @@ fn strip_xml_comments(src: &str) -> String {
 #[test]
 fn the_msi_names_every_licence_file() {
     let root = Path::new(REPO_ROOT);
-    let raw = std::fs::read_to_string(root.join("wix/main.wxs")).unwrap_or_default();
-    assert!(!raw.is_empty(), "wix/main.wxs won't read — did the MSI source move?");
+    let raw = std::fs::read_to_string(root.join(MSI_SOURCE)).unwrap_or_default();
+    assert!(!raw.is_empty(), "{MSI_SOURCE} won't read — did the MSI source move?");
     let wxs = strip_xml_comments(&raw);
 
     let mut shipped = Vec::new();
@@ -405,9 +410,8 @@ const MSI_EXTENSION_KEYS: [&str; 2] = [
 /// [`the_msi_names_every_licence_file`]'s reasons.
 #[test]
 fn the_msi_offers_every_audio_extension() {
-    let raw =
-        std::fs::read_to_string(Path::new(REPO_ROOT).join("wix/main.wxs")).unwrap_or_default();
-    assert!(!raw.is_empty(), "wix/main.wxs won't read — did the MSI source move?");
+    let raw = std::fs::read_to_string(Path::new(REPO_ROOT).join(MSI_SOURCE)).unwrap_or_default();
+    assert!(!raw.is_empty(), "{MSI_SOURCE} won't read — did the MSI source move?");
     let wxs = strip_xml_comments(&raw);
 
     let mut unoffered = Vec::new();

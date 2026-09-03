@@ -57,7 +57,7 @@ case "$format" in
     rpm)
         # Prefer dnf5 (Fedora 41+) over the legacy dnf shim. Matches
         # the in-app updater's `resolve_install_program(Rpm)` preference
-        # order in src/services/updater/linux_pkg.rs so a helper run
+        # order in melodia-platform's install_kind/linux_pkg.rs so a helper run
         # behaves identically to a direct-pkexec fallback.
         # No `--` end-of-options token: dnf5 (Fedora 41+) rejects a bare
         # `--` placed after the subcommand. `$package` is already

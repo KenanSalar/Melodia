@@ -114,7 +114,8 @@ cp "$REPO_ROOT/assets/icons/logo-with-background.svg" "$APPDIR/melodia.svg"
 # DEB asset `scripts/Melodia.desktop` + `assets/desktop/Melodia.desktop.tmpl`.
 # Drift here means AppImage users can't open audio files via "Open with…"
 # and KDE shows two taskbar entries (no StartupWMClass to merge them).
-# The MIME drift-guard test in `src/services/tests/desktop_integration_tests.rs`
+# The MIME drift-guard test in
+# `crates/melodia-platform/src/services/platform/tests/desktop_integration_tests.rs`
 # covers the four sources — keep this body byte-identical bar the `Exec=`
 # command: AppImage binaries sit at the AppDir root so `Melodia` is the relative
 # name, RPM/DEB resolve `melodia` via PATH. The ` %F` is not optional; without it

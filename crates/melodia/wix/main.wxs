@@ -48,12 +48,19 @@
     <!--
       cargo-wix's variables all point into `target/`, and there is none for the
       repo. `sys.SOURCEFILEDIR` is the directory of *this* file (WiX appends the
-      separator itself), so `..` is the repo root without going through the
-      working directory. Every repo-relative source in this file spells it —
-      including the product icon, which was a bare `assets\melodia.ico` and
-      worked only because cargo-wix happens to run from the package root.
+      separator itself), so the hops out of it are the repo root without going
+      through the working directory. Every repo-relative source in this file
+      spells it — including the product icon, which was a bare
+      `assets\melodia.ico` and worked only because cargo-wix happens to run from
+      the package root.
+
+      Three hops, not one: this file sits at `crates/melodia/wix/`, which is
+      cargo-wix's own default location for the package it installs, while every
+      other packaging input stays at the repo root beside `packaging/`. The two
+      pins in `mod_tests.rs` read this file by path and are what catch a wrong
+      count here, the MSI itself being buildable on no Linux runner.
     -->
-    <?define RepoRoot = $(sys.SOURCEFILEDIR).. ?>
+    <?define RepoRoot = $(sys.SOURCEFILEDIR)..\..\.. ?>
 
     <Package Name="Melodia" UpgradeCode="D79812BC-9AE2-42C4-8D1B-418DB5A537B6" Manufacturer="Kenan Salar" Language="1033" Codepage="65001" Version="$(var.Version)" InstallerVersion="500" Scope="perMachine"><!--
           Per-machine MSI. Installs to `C:\Program Files\Melodia\` (or

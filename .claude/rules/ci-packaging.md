@@ -3,7 +3,7 @@ paths:
   - .github/**
   - packaging/**
   - licenses/**
-  - wix/main.wxs
+  - crates/melodia/wix/main.wxs
   - scripts/build-rpm.sh
   - scripts/build-appimage.sh
   - scripts/build-tarball.sh
@@ -27,7 +27,7 @@ which argues itself; a filename below names whichever of the four owns the thing
 
 `pr-validation.yml`, on PRs into `main`: `changes` (skip matrix) → `audit` ∥ `fmt` ∥ `clippy` ∥
 `test` ∥ `clippy-windows` ∥ `test-windows`. Both `clippy` jobs are one step
-(`--all-targets --locked -- -D warnings`, both packages); `test` is plain `cargo test --locked`.
+(`--all-targets --locked --workspace -- -D warnings`); `test` is `cargo test --locked --workspace`.
 All six hang off `changes` alone — chaining `test` behind `clippy` made the gate's wall clock their
 sum, and what waits on it is a person deciding whether to merge. That is also why `audit` and `fmt`
 stay siblings despite compiling nothing and finishing in seconds: as parents they would buy back
@@ -219,7 +219,7 @@ work, and the two shipped apart for a whole release.
   unescaping layers. Deliberate; a `$` or a backtick in `$HOME` doesn't earn shell-quoting
   gymnastics in an installer.
 
-- **Windows is `wix/main.wxs`'s `FileAssociations` component, plain `RegistryValue` rows.** WiX's
+- **Windows is `crates/melodia/wix/main.wxs`'s `FileAssociations` component, plain `RegistryValue` rows.** WiX's
   `ProgId`/`Extension`/`Verb` predate Vista: no `Capabilities` + `RegisteredApplications` (what
   Win10/11 reads for Default apps), and `Extension` claims `HKCR\.mp3`'s default outright.
   **`ApplicationDescription` is required** — without it the app is absent from that list and every
@@ -234,8 +234,8 @@ them and owes the licence text (Apache-2.0 §4(a); SIL's OFL FAQ recommends it f
 Five formats, five toolchains, one an MSI no Linux runner can build — so a format that quietly
 stops shipping the text fails nowhere until a packager files it.
 **`services::tests::every_package_format_ships_the_licenses_dir` holds a named list**
-(`build-rpm.sh`'s `%license`, `Cargo.toml`'s asset glob, `build-tarball.sh`'s `cp`,
-`build-appimage.sh`'s `cp`, `wix/main.wxs`'s `File` set), each needle the *mechanism* rather than
+(`build-rpm.sh`'s `%license`, the binary manifest's asset glob, `build-tarball.sh`'s `cp`,
+`build-appimage.sh`'s `cp`, `main.wxs`'s `File` set), each needle the *mechanism* rather than
 the word. Named because the set of formats is closed; the *font* set is open, so its sibling pin
 walks the directory instead.
 
@@ -278,7 +278,10 @@ The split to `melodia` + `melodia-ui` broke that workflow twice, both times on s
 identifying a thing by *name* that was unambiguous with one member, and both deep in a matrix slot:
 
 - `cargo wix` picks a package for you only when the workspace has exactly *one*, so the MSI step
-  now names `--package Melodia`.
+  names `--package melodia`. It selects the *manifest*, and cargo-wix then reads `wix/main.wxs`
+  relative to that, which is why the wxs sits under `crates/melodia/` rather than at the repo root
+  behind an `-I`: that flag's resolution base is undocumented and nothing short of a tagged Windows
+  release would exercise it.
 
 - The artifact upload's `path:` was a bare **`melodia-*`**, a prefix glob matching what was then a
   `melodia-ui/` **directory** at the repo root — all ten slots uploaded the Slint source tree and
@@ -288,7 +291,7 @@ identifying a thing by *name* that was unambiguous with one member, and both dee
 
 Four places scrape the version out of the manifest rather than asking cargo, because they run
 without a toolchain (`release-prepare.yml`, `build-rpm.sh`, `build-appimage.sh`,
-`build-tarball.sh`); all four anchor on `[workspace.package]` by name, and both packages carry
+`build-tarball.sh`); all four anchor on `[workspace.package]` by name, and every member carries
 `version.workspace = true`.
 
 **A toolchain bump moves four things in lockstep** — `rust-toolchain.toml`, `Cargo.toml`'s
