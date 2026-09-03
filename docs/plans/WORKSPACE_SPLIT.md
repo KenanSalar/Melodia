@@ -5,10 +5,11 @@ order the cuts come out in. Harvest into `docs/adr/` when
 [#84](https://github.com/KenanSalar/Melodia/issues/84) ships, not before: the boundary rationale
 below is exactly what #84 exists to stop evaporating.
 
-Status: **Phases A, B, C and D complete; Phase E open** · Issue:
+Status: **Phases A through E complete; only the release gate is open** · Issue:
 [#83](https://github.com/KenanSalar/Melodia/issues/83) · Created: 2026-09-03 · Validated against
 `93b47dfa`, Phase A landed on `a1c087e4`, Phase B over five commits from `e506b490`, Phase C over
-four from `1060d8f1` to `01c314a8`, Phase D over seven from `37cad90f` to `8cbbe055`
+four from `1060d8f1` to `01c314a8`, Phase D over seven from `37cad90f` to `8cbbe055`, Phase E over
+seventeen from `e444493f`
 
 > **Phase A's twelve items are done and its checks pass**, so the counts below that describe
 > `src/` describe the tree *before* it. Where a Phase B item's inventory has moved, its own entry
@@ -1340,13 +1341,39 @@ naming either once the shims are gone. That is one fewer test binary, 41 rather 
       whose whole basis for moving it to platform was a second consumer. `SUPPORTED_LOCALES` was
       argued from what callers already spelled, and `tests/translations.rs` was already spelling
       the other one.
-- [ ] **E14. Docs.** Four claims in `CLAUDE.md` stop being true in their current form: the store
+- [x] **E14. Docs.** Four claims in `CLAUDE.md` stop being true in their current form: the store
       bullet's `pub(crate)`-in-app's-facade half, the `melodia-ui` bullet's flat re-export sentence,
       the media bullet's "no outbound `crate::` edge" (which goes trivially true and stops meaning
       anything), and the services bullet's `crate::state`/`crate::player` prohibition, which is a
       manifest now. Plus one `crate::` path in `.claude/rules/library-data.md`. The 146 intra-doc
       links naming a `crate::` path need no demotion: the cross-crate ones resolve, every target
-      being a declared dependency.
+      being a declared dependency. **`CLAUDE.md` also gains the prohibition**, beside the `unwrap`
+      and `unsafe` ones and for their reason: no crate re-exports another member's items, and it is
+      violable from any `lib.rs` or `mod.rs`.
+
+**What the phase found that the items did not predict.**
+
+- **`pub(crate)` was not available as a middle course**, which is what decided the `melodia_ui`
+  glob. Clippy's `wildcard_imports` returns early unless the glob's visibility is
+  `Restricted(parent_module)`, so a `pub use x::*` is skipped while a `pub(crate) use x::*` at a
+  crate root is exactly that and gets linted; pedantic is denied here, so the compromise fails the
+  gate. Every glob standing in the tree today is a `prelude::*`, a `use super::*` in a test module,
+  or `pub use io::*` — one exemption each.
+- **The `-p <crate>` enumerator is not a gate and one crate proved it.** `cargo test -p
+  melodia-integrations` could not build at all: `discord::artwork`'s lookup test drives a paused
+  clock and the crate never asked for tokio's `test-util`, reaching it through `melodia`'s
+  dev-dependency under `--workspace` feature unification. Fixed on its own, ahead of E8. It is the
+  same trap the root `CLAUDE.md` names about scoping the gate, arriving from the other direction:
+  scoping *found* a bug that scoping is otherwise warned against.
+- **Three re-exports were not at a crate root** and the After-E grep as first written could not see
+  them; E13b argues them. Two of their three justifying comments had also expired on their own.
+- **`$crate::` is the one thing a prefix rewrite cannot touch.** Five sites inside `macro_rules!`
+  bodies would have become `$melodia_core::…`, an undefined metavariable. All five are
+  `pub(crate) use`d and expand only inside views, so each took the absolute path: naming the crate
+  that defines the *item* is stricter than naming the crate that defines the macro.
+- **Wrapped doc comments are the rewrite's real cost.** rustfmt reflows code and not prose, so
+  every paragraph a longer path pushed past `max_width` was rewrapped by hand — fourteen of them,
+  concentrated where an intra-doc link names a three-segment module path.
 
 ## Verification
 
@@ -1406,17 +1433,29 @@ Phase boundaries:
   each producing an artifact, `cargo build --timings` against the prerequisite baseline, and
   `/usr/bin/time -v target/release/Melodia` for peak RSS. No RSS change is expected, `lto = "fat"`
   with `codegen-units = 1` recovering cross-crate inlining.
-- After **E**: `grep -rn 'use melodia_' crates/*/src` returns ordinary imports and nothing else, no
-  `pub use`, no `pub(crate) use` and no glob. **The `crates/*/src/lib.rs` form this line used to
-  carry was too narrow**: two of the ten facade sites are not a `lib.rs`, being
-  `melodia-app/src/services/mod.rs` and the binary's three shim modules. And the After-C exclusion
-  holds harder rather than merely still holding. `cargo tree -p melodia-views --depth 1` lists
+- After **E** — **all passing**. `grep -rn 'use melodia_' crates/*/src` returns ordinary imports
+  and nothing else: no `pub use`, no `pub(crate) use` and no glob. **The `crates/*/src/lib.rs`
+  form this line used to carry was too narrow**: two of the ten facade sites are not a `lib.rs`,
+  being `melodia-app/src/services/mod.rs` and the binary's three shim modules. And the After-C
+  exclusion holds harder rather than merely still holding. `cargo tree -p melodia-views --depth 1` lists
   neither `melodia-store` nor `melodia-net`, and where the check used to be that adding
   `pub use melodia_app::database;` to views fails with `module database is private`, naming the
   facade line that sealed it, it is now that `melodia_store::database` names no crate views can
   reach. Both halves are worth spelling out, the second being the whole reason the four
-  `pub(crate) use` lines were safe to delete. `melodia-audio` still names no `cpal` and
-  `melodia-platform` no `melodia-ui`.
+  `pub(crate) use` lines were safe to delete. Verified by adding both lines back and reading the
+  error, which is `use of unresolved module or unlinked crate`. `melodia-audio` still names no
+  `cpal` and `melodia-platform` no `melodia-ui`; `melodia-playback`'s manifest still names no
+  `reqwest`, the four `cargo tree` hits for it arriving through `melodia-audio`.
+
+  **The same 2,237 tests pass, across 41 binaries rather than 42.** The one that went is the
+  binary's own lib target, which held no test and existed only to carry the facade; `cargo
+  metadata` reports `melodia` with a single `Melodia` bin target, eight `melodia-*` dependencies
+  and `melodia-audio` / `melodia-playback` demoted to dev-dependencies, nothing outside `tests/`
+  reaching below `melodia-engine` any more.
+
+  Not yet held by a test. The natural pin is a corpus walk in `crates/melodia/tests/` over
+  `rust_sources()` for a `pub use melodia_`, which is the shape `error_as_string` and
+  `net_primitives` already have and the one thing that would stop a facade growing back.
 
 One thing gets better rather than staying level: `[profile.dev.package.melodia-playback] opt-level = 2`
 becomes possible, so the DSP chain stops being debugged unoptimized, without also optimizing the state

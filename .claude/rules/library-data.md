@@ -93,7 +93,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 ## Query shape
 
-- **`crate::database::placeholders(n)` for IN-clause lists.** Single-pass,
+- **`melodia_store::database::placeholders(n)` for IN-clause lists.** Single-pass,
   capacity-preallocated; don't re-roll `repeat_n("?", n)…join`. Pair with `chunked_in_query`.
   Tuple-row CTE UPDATEs follow the `batch_update_hashes` / `flush_artwork_backfill` shape — one
   chunked UPDATE per N rows, not N UPDATEs. Runtime-built SQL `String`s (placeholder lists, column
