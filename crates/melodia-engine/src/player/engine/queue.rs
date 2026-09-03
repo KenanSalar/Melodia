@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-use crate::entities::track::TrackSummary;
+use melodia_core::entities::track::TrackSummary;
 
 use super::types::{PersistableQueue, RepeatMode};
 

@@ -2,8 +2,8 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::*;
-use crate::entities::track::TrackSummary;
-use crate::error::AppError;
+use melodia_core::entities::track::TrackSummary;
+use melodia_core::error::AppError;
 
 fn make_summary(id: i64, title: &str, duration_ms: i64) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {

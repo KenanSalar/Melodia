@@ -9,9 +9,9 @@
 
 use std::sync::Arc;
 
-use crate::entities::track::TrackSummary;
 use crate::player::engine::state::PlayerViewModelLight;
 use crate::player::engine::types::RadioNowPlaying;
+use melodia_core::entities::track::TrackSummary;
 
 /// A station for the transport tests, with only what they assert on filled in.
 ///

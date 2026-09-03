@@ -2,11 +2,11 @@ use std::sync::Mutex;
 
 use tokio::sync::watch;
 
-use crate::error::AppError;
 use crate::player::engine::backend::PlayerBackend;
 use crate::player::engine::event_sink::PlayerSinks;
 use crate::player::engine::state::{PlayerAction, PlayerStateHandle};
-use crate::player::playback::replaygain::TrackReplayGain;
+use melodia_core::error::AppError;
+use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
 /// Records all `PlayerBackend` calls for assertion in tests.
 #[derive(Debug, Default)]

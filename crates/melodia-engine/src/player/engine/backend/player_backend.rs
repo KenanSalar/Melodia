@@ -7,10 +7,10 @@
 //! now does. A blanket `impl<T: Deref>` used to spare three of them the `*` at the cost of forty
 //! lines forwarding twelve signatures a third time.
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 use super::PlaybackEngine;
-use crate::player::playback::replaygain::TrackReplayGain;
+use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
 /// Audio playback operations, so tests can stand a mock in for `PlaybackEngine`.
 pub trait PlayerBackend: Send + Sync {

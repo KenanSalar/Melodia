@@ -9,8 +9,8 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::entities::track::TrackSummary;
-use crate::player::playback::crossfade::CrossfadeSettings;
+use melodia_core::entities::track::TrackSummary;
+use melodia_playback::player::playback::crossfade::CrossfadeSettings;
 
 fn track(id: i64, album: Option<&str>) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {

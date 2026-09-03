@@ -7,11 +7,6 @@
 //! `fixtures` is `#[doc(hidden)] pub` rather than `#[cfg(test)]` because three crates read it and
 //! a `cfg(test)` item cannot cross a crate boundary; the module says so at its own head.
 
-pub use melodia_core::{config, entities, error, themes, utils};
-
 pub mod player {
-    pub use melodia_audio::player::source;
-    pub use melodia_playback::player::playback;
-
     pub mod engine;
 }

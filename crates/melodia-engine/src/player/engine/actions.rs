@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 use std::path::Path;
 
-use crate::error::AppError;
-use crate::utils::play_counts::{PlayCountEvent, try_send};
+use melodia_core::error::AppError;
+use melodia_core::utils::play_counts::{PlayCountEvent, try_send};
 
 use super::backend::PlayerBackend;
 use super::event_sink::PlayerSinks;
@@ -10,7 +10,7 @@ use super::state::{
     PlayerAction, PlayerState, PlayerStateHandle, play_track_inner, stop_end_of_queue,
     with_state_emit,
 };
-use crate::player::playback::replaygain::TrackReplayGain;
+use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
 /// Execute a list of `PlayerActions` against the audio backend and database.
 /// Called after releasing the `PlayerState` lock.
@@ -209,8 +209,8 @@ fn start_or_skip<B: PlayerBackend>(
     }
     if let Err(e) = start() {
         log::error!("Failed to {} {file_path}: {e}", mode.verb());
-        crate::utils::toast::notify(
-            crate::utils::toast::ToastKind::PlaybackFailed,
+        melodia_core::utils::toast::notify(
+            melodia_core::utils::toast::ToastKind::PlaybackFailed,
             toast_track_name(file_path),
         );
         if mode.stops_on_failure() {

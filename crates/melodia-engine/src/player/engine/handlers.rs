@@ -14,9 +14,9 @@ use super::state::{
     PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state, with_state_emit,
 };
 use super::types::{PersistedPlayback, PlaybackSource, PlaybackStatus};
-use crate::player::playback::crossfade;
-use crate::player::playback::replaygain::TrackReplayGain;
-use crate::player::source::prebuffer::StreamShared;
+use melodia_audio::player::source::prebuffer::StreamShared;
+use melodia_playback::player::playback::crossfade;
+use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
 /// How often the monitor wakes: tight enough that gapless preload triggers and
 /// end-of-stream detection stay responsive, loose enough not to spin.
@@ -181,7 +181,10 @@ pub fn evaluate_playing_tick(
 fn notify_station_ended(player_state: &PlayerStateHandle) {
     let station = lock_state(player_state).station().map(|s| s.name.clone());
     if let Some(name) = station {
-        crate::utils::toast::notify(crate::utils::toast::ToastKind::PlaybackFailed, name);
+        melodia_core::utils::toast::notify(
+            melodia_core::utils::toast::ToastKind::PlaybackFailed,
+            name,
+        );
     }
 }
 

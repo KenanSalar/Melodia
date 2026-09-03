@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 use super::*;
 

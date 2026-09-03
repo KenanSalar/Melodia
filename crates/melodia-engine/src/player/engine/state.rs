@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 
 use super::event_sink::PlayerSinks;
 use super::queue::QueueState;
-use crate::entities::track::TrackSummary;
-use crate::player::playback::crossfade::CrossfadeDecision;
-use crate::player::playback::replaygain::TrackReplayGain;
+use melodia_core::entities::track::TrackSummary;
+use melodia_playback::player::playback::crossfade::CrossfadeDecision;
+use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
 use super::types::{
     PersistableQueue, PersistedPlayback, PlaybackSource, PlaybackStatus, RadioNowPlaying,

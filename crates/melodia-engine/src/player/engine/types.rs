@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::entities::track::TrackSummary;
+use melodia_core::entities::track::TrackSummary;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -12,8 +12,9 @@ pub enum PlaybackStatus {
     Paused,
     /// Nothing is audible yet: a station is being connected to. Deliberately **not** what a
     /// rebuffer or a reconnect reports — those keep `Playing` and raise
-    /// [`crate::player::source::prebuffer::StreamShared::is_buffering`] instead, because the two OS
-    /// reporting sites map this to "stopped" and a station dipping its buffer has not stopped.
+    /// [`melodia_audio::player::source::prebuffer::StreamShared::is_buffering`] instead, because
+    /// the two OS reporting sites map this to "stopped" and a station dipping its buffer has not
+    /// stopped.
     Loading,
 }
 
@@ -52,7 +53,7 @@ impl RepeatMode {
 }
 
 /// The station the player is tuned to, which is the whole of what a live source has where a track
-/// has a [`crate::entities::track::TrackSummary`].
+/// has a [`melodia_core::entities::track::TrackSummary`].
 ///
 /// Deliberately not a `TrackSummary` with empty fields: a station has no duration, no album and no
 /// id in `tracks`, and every surface that reads one would have to learn which of its fields to
@@ -77,7 +78,8 @@ pub struct RadioNowPlaying {
     pub live_title: Option<String>,
     /// Whether the stream is currently running on empty. It lives here rather than on
     /// `PlayerState` because it means nothing without a station: reconciled by the playback
-    /// monitor off [`crate::player::source::prebuffer::StreamShared`], and gone the moment this is.
+    /// monitor off [`melodia_audio::player::source::prebuffer::StreamShared`], and gone the
+    /// moment this is.
     pub buffering: bool,
 
     // What the Now-Playing surfaces *state* about the station, as against what the machine needs
@@ -96,10 +98,10 @@ pub struct RadioNowPlaying {
     pub play_count: i32,
 }
 
-impl From<&crate::entities::radio::RadioStation> for RadioNowPlaying {
+impl From<&melodia_core::entities::radio::RadioStation> for RadioNowPlaying {
     /// What a stored station looks like to the player: everything a Now-Playing surface draws, and
     /// none of the popularity, codec or favourite bookkeeping that belongs to the library views.
-    fn from(station: &crate::entities::radio::RadioStation) -> Self {
+    fn from(station: &melodia_core::entities::radio::RadioStation) -> Self {
         Self {
             station_id: station.id,
             station_uuid: station.station_uuid.clone(),

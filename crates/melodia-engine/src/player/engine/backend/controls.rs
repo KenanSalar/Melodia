@@ -9,9 +9,9 @@
 use std::sync::Arc;
 
 use super::PlaybackEngine;
-use crate::player::playback::crossfade;
-use crate::player::playback::replaygain::RgMode;
-use crate::player::playback::visualizer::VisualizerShared;
+use melodia_playback::player::playback::crossfade;
+use melodia_playback::player::playback::replaygain::RgMode;
+use melodia_playback::player::playback::visualizer::VisualizerShared;
 
 impl PlaybackEngine {
     /// Enable / disable the graphic equalizer. Lock-free — every `EqSource`

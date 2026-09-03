@@ -18,20 +18,20 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
-use crate::error::AppError;
-use crate::error::describe;
+use melodia_core::error::AppError;
+use melodia_core::error::describe;
 use parking_lot::Mutex;
 
-use crate::player::playback::crossfade::{self, CrossfadeShared};
-use crate::player::playback::decks::{Deck, Decks, DeferredOp, lock_decks};
-use crate::player::playback::equalizer::{self, EqShared, EqSource};
-use crate::player::playback::output::mixer::Mixer;
-use crate::player::playback::replaygain::{ReplayGainShared, TrackReplayGain};
-use crate::player::playback::visualizer::{VisualizerShared, VisualizerTap};
-use crate::player::source::audio::AudioSource;
-use crate::player::source::file_decode::FileDecoder;
-use crate::player::source::prebuffer::StreamShared;
-use crate::player::source::stream_source::PreparedStream;
+use melodia_audio::player::source::audio::AudioSource;
+use melodia_audio::player::source::file_decode::FileDecoder;
+use melodia_audio::player::source::prebuffer::StreamShared;
+use melodia_audio::player::source::stream_source::PreparedStream;
+use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
+use melodia_playback::player::playback::decks::{Deck, Decks, DeferredOp, lock_decks};
+use melodia_playback::player::playback::equalizer::{self, EqShared, EqSource};
+use melodia_playback::player::playback::output::mixer::Mixer;
+use melodia_playback::player::playback::replaygain::{ReplayGainShared, TrackReplayGain};
+use melodia_playback::player::playback::visualizer::{VisualizerShared, VisualizerTap};
 
 /// Result of checking what is on the active deck in a single lock acquisition.
 #[derive(Debug, PartialEq)]
@@ -394,15 +394,16 @@ impl PlaybackEngine {
     /// `ReplayGain` and `deck`'s ramp cell, under a visualizer tap writing into `deck`'s own ring.
     ///
     /// Generic over the source rather than over a reader, because a live stream reaches here as a
-    /// [`crate::player::source::prebuffer::PrebufferSource`] and a file as a [`FileDecoder`] — the ring sits
-    /// between the stream's decoder and the DSP chain, so the two only meet at [`AudioSource`].
-    /// Everything downstream is identical, which is the point: the EQ, the limiter and the
-    /// visualizer work on a station with no code of their own.
+    /// [`melodia_audio::player::source::prebuffer::PrebufferSource`] and a file as a
+    /// [`FileDecoder`] — the ring sits between the stream's decoder and the DSP chain, so the two
+    /// only meet at [`AudioSource`]. Everything downstream is identical, which is the point: the
+    /// EQ, the limiter and the visualizer work on a station with no code of their own.
     ///
-    /// Always called with the deck the source is about to be appended to — see [`crate::player::playback::decks`]
-    /// for why the two can't be split. Building the tap also *claims* that ring for the life of
-    /// the value and stamps its history away if the deck was idle, both only correct for a source
-    /// about to play, so don't build one anywhere it might be held or discarded instead.
+    /// Always called with the deck the source is about to be appended to — see
+    /// [`melodia_playback::player::playback::decks`] for why the two can't be split. Building the
+    /// tap also *claims* that ring for the life of the value and stamps its history away if the
+    /// deck was idle, both only correct for a source about to play, so don't build one anywhere
+    /// it might be held or discarded instead.
     fn build_source<S: AudioSource + 'static>(
         &self,
         input: S,
