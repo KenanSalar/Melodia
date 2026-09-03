@@ -11,7 +11,7 @@ use slint::ComponentHandle;
 /// shutdown paths (window close and run-loop exit).
 pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::runtime::Runtime) {
     use melodia::database::queries;
-    use melodia::player::state::lock_state;
+    use melodia::player::engine::state::lock_state;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     static SAVED: AtomicBool = AtomicBool::new(false);

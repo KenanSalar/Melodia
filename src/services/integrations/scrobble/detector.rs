@@ -1,6 +1,6 @@
 //! Pure scrobble-detection state machine. Turns the player's view-model +
 //! position ticks into scrobble / now-playing decisions, mirroring the
-//! pure-function style of `player::handlers::evaluate_playing_tick`: a `&mut`
+//! pure-function style of `player::engine::handlers::evaluate_playing_tick`: a `&mut`
 //! state plus value inputs in, a decision value out — no I/O, locks, async, or
 //! clock reads (the `now_ts` UNIX-seconds timestamp is an input). The impure
 //! task in `tasks::scrobble` drives it and performs the DB fetch + service
@@ -14,7 +14,7 @@
 //! "scrobble on completion / skip-past-halfway" model). "Now playing" is sent
 //! once at each play's start.
 
-use crate::player::state::{PlayerViewModelLight, PositionTick};
+use crate::player::engine::state::{PlayerViewModelLight, PositionTick};
 use crate::services::integrations::scrobble::model::scrobble_threshold_ms;
 
 /// Largest forward position jump (ms) counted as real playback. A tick advancing

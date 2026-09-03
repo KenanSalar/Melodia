@@ -20,9 +20,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::entities::track::TrackSummary;
-use crate::player::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape};
-use crate::player::state::PlayerViewModelLight;
-use crate::player::types::RadioNowPlaying;
+use crate::player::engine::state::PlayerViewModelLight;
+use crate::player::engine::types::RadioNowPlaying;
+use crate::player::source::audio::{
+    AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape,
+};
 
 pub(crate) fn nz_u16(v: u16) -> ChannelCount {
     match NonZero::new(v) {
@@ -66,8 +68,9 @@ pub(crate) fn bits(v: &[f32]) -> Vec<u32> {
 /// Fill `buf` with a sine of `freq_hz` at `sample_rate`, scaled to `amplitude`.
 pub(crate) fn fill_sine(buf: &mut [f32], freq_hz: f32, sample_rate: f32, amplitude: f32) {
     for (i, sample) in buf.iter_mut().enumerate() {
-        let phase = 2.0 * std::f32::consts::PI * freq_hz * crate::player::dsp::index_to_f32(i)
-            / sample_rate;
+        let phase =
+            2.0 * std::f32::consts::PI * freq_hz * crate::player::playback::dsp::index_to_f32(i)
+                / sample_rate;
         *sample = amplitude * phase.sin();
     }
 }

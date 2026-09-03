@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
-use crate::player::state::PlayerViewModelLight;
+use crate::player::engine::state::PlayerViewModelLight;
 use crate::services::integrations::discord::DiscordPresenceService;
 use crate::services::integrations::discord::model::{PresenceState, Update};
 use crate::state::AppState;

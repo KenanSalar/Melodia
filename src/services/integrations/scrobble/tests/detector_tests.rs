@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{DetectorState, Effect};
 use crate::entities::track::TrackSummary;
-use crate::player::state::{PlayerViewModelLight, PositionTick};
+use crate::player::engine::state::{PlayerViewModelLight, PositionTick};
 
 /// UNIX-seconds "now" at each play's start; every scrobble should carry it as its
 /// timestamp.

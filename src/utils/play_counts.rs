@@ -1,6 +1,6 @@
 //! The producer half of the play-count flusher: what the engine says, and how it says it.
 //!
-//! Here rather than beside the flusher because `player::actions` is the only thing that sends,
+//! Here rather than beside the flusher because `player::engine::actions` is the only thing that sends,
 //! and the flusher is a `tasks/` job that owns a `DbPool` — an engine naming that directly is
 //! the edge the whole layering exists to forbid. What crosses is an enum and a `send`.
 //!

@@ -20,9 +20,9 @@ use std::sync::{Arc, OnceLock};
 
 use crate::config::Paths;
 use crate::database::DbPool;
-use crate::player::backend::PlaybackEngine;
-use crate::player::event_sink::PlayerSinks;
-use crate::player::state::{PlayerAction, PlayerState, PlayerStateHandle};
+use crate::player::engine::backend::PlaybackEngine;
+use crate::player::engine::event_sink::PlayerSinks;
+use crate::player::engine::state::{PlayerAction, PlayerState, PlayerStateHandle};
 
 use super::AppState;
 
@@ -44,14 +44,19 @@ pub struct PlaybackContext {
 
 impl PlaybackContext {
     /// Serialized mutate → emit → execute against this context's handles. Thin
-    /// forwarder over [`crate::player::actions::emit_and_execute`] so the
+    /// forwarder over [`crate::player::engine::actions::emit_and_execute`] so the
     /// `library::playback::*` / `library::queue::*` call sites stay one-liners
     /// while still routing through the shared execution lock.
     pub fn emit_and_execute<F>(&self, f: F)
     where
         F: FnOnce(&mut PlayerState) -> Vec<PlayerAction>,
     {
-        crate::player::actions::emit_and_execute(&*self.engine, &self.player_state, &self.sinks, f);
+        crate::player::engine::actions::emit_and_execute(
+            &*self.engine,
+            &self.player_state,
+            &self.sinks,
+            f,
+        );
     }
 }
 

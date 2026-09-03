@@ -5,9 +5,9 @@ order the cuts come out in. Harvest into `docs/adr/` when
 [#84](https://github.com/KenanSalar/Melodia/issues/84) ships, not before: the boundary rationale
 below is exactly what #84 exists to stop evaporating.
 
-Status: **Phase A complete**, Phase B in progress · Issue:
+Status: **Phases A and B complete**, Phase C next · Issue:
 [#83](https://github.com/KenanSalar/Melodia/issues/83) · Created: 2026-09-03 · Validated against
-`93b47dfa`, Phase A landed on `a1c087e4`
+`93b47dfa`, Phase A landed on `a1c087e4`, Phase B over five commits from `e506b490`
 
 > **Phase A's twelve items are done and its checks pass**, so the counts below that describe
 > `src/` describe the tree *before* it. Where a Phase B item's inventory has moved, its own entry
@@ -797,18 +797,27 @@ turn it red; the fix is the glob edit in the same commit, never a skip. That is 
       Either the flag structs and `Palette` go there, or three crates grow a dependency each on the
       crate that merely happens to declare them. Deciding it per-edge is how it gets decided three
       different ways.
-- [ ] **B7. The cross-tier assertions leave the tiers that cannot hold them.** Four tests, not one,
+- [x] **B7. The cross-tier assertions leave the tiers that cannot hold them.** Three tests, not four,
       reach upward across a boundary they will not be able to cross, so all four become integration
       tests under `tests/` where Phase D is taking the corpus walks anyway.
       `media/artwork/tests/artwork_tests.rs:118` needs `ui::grid_prewarm::cover_size` as a
       *function* over a 9x5 sweep, so it cannot reduce to a `const _` assertion, and
       **`STORE_MAX_DIM` is `pub(crate)`** so it widens to `pub` with the move.
-      `services/tests/view_state_tests.rs:120` reaches `ui::radio::NAV_RADIO`;
-      `services/tests/dwm_titlebar_tests.rs` takes its oracle from `themes::apply::on_accent_hex`,
-      which B3 puts in views, so a platform test would be reading views; and
-      `media/tests/image_decode_tests.rs:43` walks `SRC_DIR` under two repo-relative literals B5
-      has already touched.
-- [ ] **B8. `player/` regroups into `source`, `engine` and the `output` that already exists**, so
+      `services/tests/view_state_tests.rs:120` reaches `ui::radio::NAV_RADIO`, an app test naming
+      views.
+
+      **The item's list was wrong in both directions and a scan is what found that.** Asking every
+      tier's tests which `crate::` roots they name turned up a third the list did not have,
+      `database/queries/tests/search_tests.rs:349` reaching `ui::row_match::search_fields`, which
+      is store naming views. And two of the four listed are not blockers at all: the
+      `dwm_titlebar` oracle stopped being one when B3 put `on_accent_hex` in `themes::palette`
+      rather than in views, and `image_decode_tests.rs` walks source *text* through the testkit's
+      anchors and names no `ui::` type, so it compiles in a leaf crate and stays where it is until
+      Phase D moves the walks together.
+
+      The three land in `tests/cross_tier.rs`. `STORE_MAX_DIM` widens to `pub` as the item
+      predicted; nothing else needed to, every other symbol involved already being public.
+- [x] **B8. `player/` regroups into `source`, `playback` and `engine`**, so
       the three-way extraction in Phase C is a move rather than a design decision made under a
       compile error. **Verified clean to cut**: zero wrong-direction `use` edges in all three
       directions, A8 having taken the last one (`file_decode.rs` now reads `frames_in`,
@@ -821,6 +830,19 @@ turn it red; the fix is the glob edit in the same commit, never a skip. That is 
       three tiers' tests use it, which needs nothing while the tree is one crate and needs an
       answer in Phase C. `src/player/CLAUDE.md` names about twenty modules by bare filename and
       every one takes its tier prefix; `radio.md` names three of them literally.
+
+      **The middle tier is `playback/` with `output/` nested inside it, not `output/` widened.**
+      The item said "the `output` that already exists", but `melodia-playback` is `output/` *plus*
+      nine flat DSP files, so leaving `output/` alone buys the nine nothing and leaves the tier
+      non-contiguous. `output/` also has a precise meaning the crate does not share — everything
+      *under* the DSP chain — and nesting keeps that exact while giving each tier one directory.
+
+      **Thirty-six `super::` paths crossed a tier once the directories existed** and none of them
+      is visible as an edge before the move: `super::audio` reads identically whether it resolves
+      one directory up or three. They were rewritten by resolving each against its file's real
+      module path rather than by hand. The verification is what the split was for:
+      `source/` names the network in four files and cpal in none, `playback/` names cpal in eight
+      and the network in none, and the two sets do not intersect.
 
 ## Phase C: extract the crates
 
@@ -919,7 +941,7 @@ Phase boundaries:
   the first two is prose — an intra-doc link to `crate::tasks::audio_health`, and two comments that
   name `DbPool` to say why the engine holds none — which finding 17's `cargo doc` gap covers.
   **Re-run before Phase B's first commit and all six still passed.**
-- After **B**, the After-A set again, plus one grep per boundary the phase draws. Each is
+- After **B** — **all passing**. The After-A set again, plus one grep per boundary the phase draws. Each is
   `grep -rn`, each must return nothing but prose:
   `crate::services::\(is_dev_build\|current_exe\|redact_home\|home_dir_string\)` over `src/` (B1);
   `crate::` over `src/services/single_instance.rs`, which ends the phase naming none (B2);
@@ -930,6 +952,12 @@ Phase boundaries:
   `use super::\(output\|state\|backend\|decks\)` over `src/player/source/` (B8).
   Nothing here is measured: no release build, no `/usr/bin/time -v`. The phase moves modules and
   changes no behaviour, and a module boundary costs the binary nothing.
+  Two flagship checks now answer in one line each: `crate::media` in `src/ui/` returns
+  `crate::media::image` and nothing else, and `crate::services` in `src/player/` returns four
+  `services::net::` primitives and nothing else. **What Phase C inherits** is one open question
+  rather than a list: `integrations` names `settings::{ScrobbleFlags, DiscordFlags}`, `media/image`
+  names `themes::Palette`, and all of them are plain data one layer above every reader, which is
+  what `entities/` is for. Decide it once.
 - After **C**: delete a `path` dependency from one manifest and confirm rustc names the crate in the
   error. **The `melodia-views` manifest must list neither `melodia-store` nor `melodia-net`**, the
   `melodia-audio` manifest must not name `cpal`, and `melodia-platform` must not name `melodia-ui`.

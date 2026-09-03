@@ -14,7 +14,7 @@
 use slint::ComponentHandle;
 
 use crate::library;
-use crate::player::replaygain::{self, RgMode};
+use crate::player::playback::replaygain::{self, RgMode};
 use crate::state::AppState;
 use crate::ui::settings_bind::{read_or_default, toggle_binding};
 use crate::{AppWindow, ReplayGain};

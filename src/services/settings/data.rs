@@ -14,10 +14,10 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::player::crossfade::DEFAULT_CROSSFADE_MS;
-use crate::player::equalizer::{DEFAULT_PRESET, NUM_BANDS};
-use crate::player::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
-use crate::player::types::RepeatMode;
+use crate::player::engine::types::RepeatMode;
+use crate::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
+use crate::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
+use crate::player::playback::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
 
 pub const MAX_CORNER_RADIUS: u32 = 15;
 

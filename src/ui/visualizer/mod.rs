@@ -27,9 +27,9 @@ use std::rc::Rc;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::library;
-use crate::player::spectrum::{FFT_SIZE, NUM_BANDS, SpectrumAnalyzer};
-use crate::player::visualizer::RING_CAP;
-use crate::player::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
+use crate::player::playback::spectrum::{FFT_SIZE, NUM_BANDS, SpectrumAnalyzer};
+use crate::player::playback::visualizer::RING_CAP;
+use crate::player::playback::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
 use crate::state::AppState;
 use crate::ui::settings_bind::read_or_default;
 use crate::ui::shell::tray_bridge;

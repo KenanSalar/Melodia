@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::metadata::{format_channels, format_sample_rate};
 use super::{NowPlayingSource, SourceKey};
-use crate::player::now_playing::SourceId;
+use crate::player::engine::now_playing::SourceId;
 use crate::player::tests::helpers::{test_station, test_track, test_view_model};
 
 #[test]

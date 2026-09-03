@@ -4,9 +4,9 @@ paths:
   - src/library/radio/**/*.rs
   - src/library/radio_files.rs
   - src/services/net/radio_browser/**/*.rs
-  - src/player/stream_source.rs
-  - src/player/prebuffer.rs
-  - src/player/stream_decode.rs
+  - src/player/source/stream_source.rs
+  - src/player/source/prebuffer.rs
+  - src/player/source/stream_decode.rs
   - src/media/fetch/station_logo.rs
   - src/entities/radio.rs
   - src/database/queries/radio.rs

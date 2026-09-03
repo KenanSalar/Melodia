@@ -11,7 +11,7 @@ use slint::{ComponentHandle, Model, VecModel, Weak};
 
 use super::ShadowEntry;
 use crate::entities::track::TrackSummary;
-use crate::player::state::QueueViewModel;
+use crate::player::engine::state::QueueViewModel;
 use crate::state::AppState;
 use crate::ui::tracks::format_duration_ms;
 use crate::{AppWindow, Queue, QueueRow};

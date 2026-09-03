@@ -17,8 +17,8 @@ use std::sync::{Arc, Mutex};
 
 use slint::ComponentHandle;
 
-use crate::player::event_sink::{EventSink, PlayerEvent};
-use crate::player::state::PlayerViewModelLight;
+use crate::player::engine::event_sink::{EventSink, PlayerEvent};
+use crate::player::engine::state::PlayerViewModelLight;
 use crate::services::platform::tray::{self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TraySnapshot};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
@@ -367,7 +367,7 @@ fn spawn_state_subscriber_linux(spawner: &TaskSpawner, state: &AppState, tray: t
 /// `tray-icon` handle being `!Send`. Must be spawned from there — `install` calls it
 /// inside `invoke_from_event_loop`.
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-fn spawn_state_subscriber_local(sinks: &Arc<crate::player::event_sink::PlayerSinks>) {
+fn spawn_state_subscriber_local(sinks: &Arc<crate::player::engine::event_sink::PlayerSinks>) {
     let mut rx = sinks.view_model.subscribe();
     let res = slint::spawn_local(async_compat::Compat::new(async move {
         // Diff as the Linux subscriber does.

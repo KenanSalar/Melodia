@@ -54,10 +54,10 @@ fn discord_toggle_binding(
         set_field(&mut flags, on);
         state.discord.set_flags(flags);
         if nudge_detector {
-            crate::player::state::with_state_emit(
+            crate::player::engine::state::with_state_emit(
                 &state.player_state,
                 &state.sinks,
-                |_: &mut crate::player::state::PlayerState| {},
+                |_: &mut crate::player::engine::state::PlayerState| {},
             );
         }
         state.persist_blocking(label, move |s| persist(s, on));

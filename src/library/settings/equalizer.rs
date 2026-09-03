@@ -5,7 +5,7 @@
 //! choice. Mirrors the shape of [`super::playback`].
 
 use crate::error::AppError;
-use crate::player::equalizer;
+use crate::player::playback::equalizer;
 use crate::services;
 use crate::state::AppState;
 

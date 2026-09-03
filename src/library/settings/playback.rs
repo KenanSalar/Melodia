@@ -57,7 +57,8 @@ pub fn set_resume_on_startup(state: &AppState, on: bool) -> Result<(), AppError>
 /// `MIN_SPEED..=MAX_SPEED` range here too so a hand-edited `settings.json`
 /// can't pin an out-of-range value.
 pub fn set_playback_speed(state: &AppState, speed: f64) -> Result<(), AppError> {
-    let speed = speed.clamp(crate::player::state::MIN_SPEED, crate::player::state::MAX_SPEED);
+    let speed = speed
+        .clamp(crate::player::engine::state::MIN_SPEED, crate::player::engine::state::MAX_SPEED);
     services::settings::mutate_settings(&state.paths, move |settings| {
         settings.playback.playback_speed = speed;
     })

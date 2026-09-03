@@ -18,7 +18,7 @@ use std::rc::Rc;
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use crate::library;
-use crate::player::equalizer;
+use crate::player::playback::equalizer;
 use crate::state::AppState;
 use crate::ui::settings_bind::{read_or_default, toggle_binding};
 use crate::{AppWindow, Equalizer};

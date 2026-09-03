@@ -9,7 +9,7 @@
 use crate::database::queries;
 use crate::entities::radio;
 use crate::error::AppError;
-use crate::player::stream_source::{self, StationFacts};
+use crate::player::source::stream_source::{self, StationFacts};
 use crate::services::net::radio_blocklist;
 use crate::state::AppState;
 

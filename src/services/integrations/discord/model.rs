@@ -4,12 +4,12 @@
 //!
 //! No I/O, no locks, no clock reads — `now_ts` (UNIX **seconds**) is an input,
 //! the same shape as [`crate::services::integrations::scrobble::detector`] and
-//! `player::handlers::evaluate_playing_tick`. The impure task in
+//! `player::engine::handlers::evaluate_playing_tick`. The impure task in
 //! [`crate::tasks::discord_presence`] drives it; [`super::payload`] serializes
 //! the [`Presence`] it produces and [`super::ipc`] ships the bytes.
 
-use crate::player::now_playing::{SourceId, SourceSummary};
-use crate::player::state::PlayerViewModelLight;
+use crate::player::engine::now_playing::{SourceId, SourceSummary};
+use crate::player::engine::state::PlayerViewModelLight;
 use crate::services::settings::DiscordFlags;
 
 /// Fallback album line / large-image caption when a track is untagged.

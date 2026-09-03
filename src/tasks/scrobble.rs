@@ -18,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::entities::track::ScrobbleRow;
-use crate::player::state::{PlayerViewModelLight, PositionTick};
+use crate::player::engine::state::{PlayerViewModelLight, PositionTick};
 use crate::services::integrations::scrobble::detector::{DetectorState, Effect};
 use crate::services::integrations::scrobble::{ScrobbleService, ScrobbleTrack};
 use crate::state::AppState;

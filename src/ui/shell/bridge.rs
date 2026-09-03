@@ -16,9 +16,9 @@ use tokio::sync::watch;
 
 use crate::entities::track::TrackSummary;
 use crate::media::image::cover_thumbs::CoverThumbs;
-use crate::player::event_sink::PlayerSinks;
-use crate::player::state::{PlayerViewModelLight, PositionTick, QueueViewModel};
-use crate::player::types::RadioNowPlaying;
+use crate::player::engine::event_sink::PlayerSinks;
+use crate::player::engine::state::{PlayerViewModelLight, PositionTick, QueueViewModel};
+use crate::player::engine::types::RadioNowPlaying;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{AppWindow, Player, PlayerVm, QueueVm, RadioVm, TrackSummaryRow};
 

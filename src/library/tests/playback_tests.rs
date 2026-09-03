@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use super::{needs_station_reopen, resolve_start_slot};
 use crate::entities::track::TrackSummary;
-use crate::player::replaygain::TrackReplayGain;
-use crate::player::state::{
+use crate::player::engine::state::{
     MAX_VOLUME, PlayerAction, PlayerState, RESTART_THRESHOLD_MS, play_track_inner,
     resume_from_stopped,
 };
-use crate::player::types::{PlaybackStatus, RadioNowPlaying, RepeatMode};
+use crate::player::engine::types::{PlaybackStatus, RadioNowPlaying, RepeatMode};
+use crate::player::playback::replaygain::TrackReplayGain;
 
 fn make_summary(id: i64, duration_ms: i64) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {

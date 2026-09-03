@@ -224,7 +224,8 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
         player.on_set_volume(move |level| {
             let s = s.clone();
             // Negative → 0 (try_from fails); then cap at the volume ceiling.
-            let vol = u32::try_from(level).unwrap_or(0).min(crate::player::state::MAX_VOLUME);
+            let vol =
+                u32::try_from(level).unwrap_or(0).min(crate::player::engine::state::MAX_VOLUME);
             spawn_logged_sync!(
                 s,
                 "set_volume",

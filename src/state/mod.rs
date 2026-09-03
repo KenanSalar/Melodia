@@ -16,14 +16,14 @@ use crate::database::{self, DbPool};
 use crate::error::{AppError, AppResult};
 use crate::media::image::artwork::CoverCache;
 use crate::media::ingest::watcher::{FileEvent, FolderWatcher};
-use crate::player::backend::PlaybackEngine;
-use crate::player::decks::DECK_COUNT;
-use crate::player::event_sink::{MediaControlsSync, PlayerSinks};
-use crate::player::output::AudioOutput;
-use crate::player::state::{
+use crate::player::engine::backend::PlaybackEngine;
+use crate::player::engine::event_sink::{MediaControlsSync, PlayerSinks};
+use crate::player::engine::state::{
     PlayerStateHandle, PlayerViewModelLight, PositionTick, QueueViewModel, lock_state,
 };
-use crate::player::stream_health::{self, AudioStreamHealth};
+use crate::player::playback::decks::DECK_COUNT;
+use crate::player::playback::output::AudioOutput;
+use crate::player::playback::stream_health::{self, AudioStreamHealth};
 use crate::services::integrations::discord::DiscordPresenceService;
 use crate::services::integrations::media_controls::{self, MediaControlsHandle};
 use crate::services::integrations::scrobble::ScrobbleService;
@@ -155,7 +155,7 @@ pub struct StartupChannels {
 impl AppState {
     pub async fn init(paths: Paths, runtime: Handle) -> AppResult<(Self, StartupChannels)> {
         // The error callback records into counters rather than logging, because cpal calls it on
-        // the output worker thread; `player::stream_health` argues that.
+        // the output worker thread; `player::playback::stream_health` argues that.
         let audio_health = Arc::new(AudioStreamHealth::default());
         let audio_output =
             AudioOutput::open(DECK_COUNT, stream_health::error_callback(audio_health.clone()))?;
@@ -174,14 +174,14 @@ impl AppState {
         let player_state = Arc::new(PlayerStateHandle::default());
         {
             let mut s = lock_state(&player_state);
-            s.volume = settings.volume.min(crate::player::state::MAX_VOLUME);
+            s.volume = settings.volume.min(crate::player::engine::state::MAX_VOLUME);
             s.is_muted = settings.playback.is_muted;
             s.pre_mute_volume = s.volume;
             s.gapless_enabled = settings.playback.gapless_playback;
-            s.playback_speed = settings
-                .playback
-                .playback_speed
-                .clamp(crate::player::state::MIN_SPEED, crate::player::state::MAX_SPEED);
+            s.playback_speed = settings.playback.playback_speed.clamp(
+                crate::player::engine::state::MIN_SPEED,
+                crate::player::engine::state::MAX_SPEED,
+            );
             let vol = s.effective_volume();
             let speed = s.playback_speed;
             drop(s);
@@ -334,7 +334,7 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     // source at play time. Ships off by default; the mode string falls back to
     // Album on an unknown value.
     engine.set_replaygain_preamp(settings.replaygain.rg_preamp);
-    engine.set_replaygain_mode(crate::player::replaygain::RgMode::from_settings_str(
+    engine.set_replaygain_mode(crate::player::playback::replaygain::RgMode::from_settings_str(
         &settings.replaygain.rg_mode,
     ));
     engine.set_replaygain_prevent_clipping(settings.replaygain.rg_prevent_clipping);

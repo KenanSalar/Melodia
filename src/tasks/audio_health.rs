@@ -1,4 +1,4 @@
-//! Drains `player::stream_health` and decides what reaches the log and the user.
+//! Drains `player::playback::stream_health` and decides what reaches the log and the user.
 //!
 //! An xrun is expected and cpal has already recovered, so it is one coalesced
 //! `debug` line per window rather than a `warn` per event. A lost device is why

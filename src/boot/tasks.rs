@@ -7,7 +7,7 @@ use slint::ComponentHandle;
 
 use melodia::{
     AppWindow, library,
-    player::event_sink::EventSink,
+    player::engine::event_sink::EventSink,
     services,
     state::{AppState, StartupChannels},
     tasks, ui, utils,
@@ -90,7 +90,7 @@ pub fn maybe_resume_on_startup(
     // Bind the bool out so the guard drops *before* `player_play()`, which
     // re-enters the same lock through `with_state_emit`.
     let has_source = {
-        let s = melodia::player::state::lock_state(&state.player_state);
+        let s = melodia::player::engine::state::lock_state(&state.player_state);
         s.source.is_some()
     };
     if has_source && let Err(e) = library::playback::player_play(&state.playback_ctx()) {

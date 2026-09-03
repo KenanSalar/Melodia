@@ -8,10 +8,10 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-use crate::player::event_sink::{EventSink, MediaControlsSync, PlayerEvent};
-use crate::player::now_playing::SourceSummary;
-use crate::player::state::PlayerViewModelLight;
-use crate::player::types::PlaybackStatus;
+use crate::player::engine::event_sink::{EventSink, MediaControlsSync, PlayerEvent};
+use crate::player::engine::now_playing::SourceSummary;
+use crate::player::engine::state::PlayerViewModelLight;
+use crate::player::engine::types::PlaybackStatus;
 
 /// What was last handed to the OS panel.
 ///
@@ -331,7 +331,7 @@ impl MediaControlsSync for MediaControlsHandle {
 
         #[cfg(target_os = "linux")]
         if volume_changed {
-            let vol = crate::player::state::volume_to_amplitude(vm.volume, vm.is_muted);
+            let vol = crate::player::engine::state::volume_to_amplitude(vm.volume, vm.is_muted);
             if let Err(e) = controls.set_volume(vol) {
                 log::debug!("Failed to set media volume: {e}");
             }

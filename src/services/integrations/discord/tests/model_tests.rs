@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{Presence, PresenceState, Update, clamp_field};
 use crate::entities::track::TrackSummary;
-use crate::player::state::PlayerViewModelLight;
+use crate::player::engine::state::PlayerViewModelLight;
 use crate::services::settings::DiscordFlags;
 
 /// A fixed UNIX-seconds "now" for anchor arithmetic.

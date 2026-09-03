@@ -12,7 +12,7 @@ pub fn seed_initial_view_model(
     state: &AppState,
     cover_thumbs: &Arc<media::image::cover_thumbs::CoverThumbs>,
 ) {
-    use melodia::player::state::lock_state;
+    use melodia::player::engine::state::lock_state;
 
     let s = lock_state(&state.player_state);
     let light = s.to_view_model_light();

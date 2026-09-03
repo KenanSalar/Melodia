@@ -5,7 +5,7 @@
 //! `EventSink` trait contract in `services::integrations::media_controls`.
 
 use crate::library;
-use crate::player::event_sink::{EventSink, PlayerEvent};
+use crate::player::engine::event_sink::{EventSink, PlayerEvent};
 use crate::state::AppState;
 
 pub struct SlintEventSink {

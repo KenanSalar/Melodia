@@ -6,7 +6,7 @@
 //! else: the entries are URLs, there is no library to match them against, and the format most
 //! stations arrive in is `.pls`.
 //!
-//! **Not `player::stream_source::first_stream_url` either**, though the overlap looks total. That
+//! **Not `player::source::stream_source::first_stream_url` either**, though the overlap looks total. That
 //! one answers "which single URL is behind this pointer" against a byte-capped live response on
 //! the playback path, and deliberately carries no names. This one wants every entry *and* what it
 //! is called, off a file the user picked.

@@ -18,7 +18,7 @@
 use slint::ComponentHandle;
 
 use crate::library;
-use crate::player::crossfade;
+use crate::player::playback::crossfade;
 use crate::services::settings;
 use crate::state::AppState;
 use crate::ui::settings_bind::toggle_binding;

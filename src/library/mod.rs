@@ -5,7 +5,7 @@
 //! `&AppState` would over-couple) and return `Result<T, AppError>`.
 //!
 //! State propagation to the UI happens via the watch channels on `AppState::sinks`
-//! (driven by `with_state_emit` in `player::state`) — never `app.emit(...)`.
+//! (driven by `with_state_emit` in `player::engine::state`) — never `app.emit(...)`.
 
 pub mod albums;
 pub mod artists;

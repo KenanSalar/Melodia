@@ -421,7 +421,11 @@ fn main() -> AppResult<()> {
                     if mc.attach_smtc(hwnd) {
                         // `sync()` no-op'd while the controls were inert, so the
                         // OS panel is still empty.
-                        melodia::player::state::with_state_emit(&player_state, &sinks, |_| {});
+                        melodia::player::engine::state::with_state_emit(
+                            &player_state,
+                            &sinks,
+                            |_| {},
+                        );
                     }
                 }
                 None => {

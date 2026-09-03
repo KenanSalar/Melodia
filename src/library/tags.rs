@@ -118,10 +118,16 @@ pub async fn apply_tag_edit(
         // otherwise, but the fetch + `HashMap` build run before its own check,
         // so gate them on the same cheap membership probe.
         let touched: HashSet<i64> = updated_ids.iter().copied().collect();
-        if crate::player::state::any_tracked(&state.player_state, |id| touched.contains(&id)) {
+        if crate::player::engine::state::any_tracked(&state.player_state, |id| {
+            touched.contains(&id)
+        }) {
             let fresh = queries::track::get_track_summaries_by_ids(&state.db, &updated_ids).await?;
             let map: HashMap<i64, TrackSummary> = fresh.into_iter().map(|t| (t.id, t)).collect();
-            crate::player::state::sync_track_summaries(&state.player_state, &state.sinks, &map);
+            crate::player::engine::state::sync_track_summaries(
+                &state.player_state,
+                &state.sinks,
+                &map,
+            );
         }
 
         state.library_changed.bump();

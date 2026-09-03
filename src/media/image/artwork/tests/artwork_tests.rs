@@ -108,45 +108,9 @@ fn nothing_writes_into_the_store_without_staging_and_renaming() {
 
 // ── the store's bounds ──
 
-/// The invariant `STORE_MAX_DIM` was picked from: the store must hold at least what the largest
-/// tier decodes, or every tier upscales from a source the store already threw away.
-///
-/// A runtime test rather than a `const _`, `row_cover_size` being a function — and here rather
-/// than beside the tiers because it is the *store's* cap that has to clear them, so a tier bump
-/// should fail next to the number it invalidates.
-#[test]
-fn every_tier_decodes_within_the_store_cap() {
-    use crate::media::image::cover_thumbs::row_cover_size;
-    use crate::ui::grid_prewarm::{GRID_COVER_FALLBACK, cover_size};
-    use crate::ui::util::COVER_SIZE;
-
-    for (tier, size) in [
-        ("GRID_COVER_FALLBACK", GRID_COVER_FALLBACK),
-        ("COVER_SIZE", COVER_SIZE),
-        ("row_cover_size(1.0)", row_cover_size(1.0)),
-        ("row_cover_size(2.0)", row_cover_size(2.0)),
-    ] {
-        assert!(
-            size <= STORE_MAX_DIM,
-            "{tier} is {size}, past the {STORE_MAX_DIM} px the store keeps — raise \
-             `STORE_MAX_DIM` and renormalize, or the tier upscales from a capped source"
-        );
-    }
-
-    // The grid tier is derived rather than named, so the question is what it can *answer*: a
-    // panel narrow enough to pack one huge card, on a display scaled far past anything the two
-    // retired constants covered.
-    for logical_w in [320, 480, 640, 960, 1280, 1920, 2560, 3840, 7680] {
-        for scale in [1.0, 1.25, 1.5, 2.0, 3.0] {
-            let size = cover_size(logical_w, scale);
-            assert!(
-                size <= STORE_MAX_DIM,
-                "the grid tier answers {size} px at {logical_w} logical / {scale}×, past the \
-                 {STORE_MAX_DIM} px the store keeps"
-            );
-        }
-    }
-}
+// `STORE_MAX_DIM` has to clear every cover tier, or each one upscales from a source the store
+// already threw away. That assertion names `ui::grid_prewarm` and `ui::util`, so it cannot live
+// in the tier that owns the cap: `tests/cross_tier.rs` holds it from outside both.
 
 // ── store_image ──
 

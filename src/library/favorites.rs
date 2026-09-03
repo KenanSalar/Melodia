@@ -11,7 +11,9 @@ use std::sync::Arc;
 use crate::database::queries;
 use crate::entities::{artist, track};
 use crate::error::AppError;
-use crate::player::state::{PlayerAction, lock_state, sync_current_track_if_in, with_state_emit};
+use crate::player::engine::state::{
+    PlayerAction, lock_state, sync_current_track_if_in, with_state_emit,
+};
 use crate::services::integrations::scrobble::LoveTarget;
 use crate::state::AppState;
 use crate::utils::toast::{self, ToastKind};

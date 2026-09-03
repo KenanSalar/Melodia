@@ -11,7 +11,7 @@
 //!   sized against its volume.
 //! - **`warn`** — a user could notice. Expected, self-recovering and unbounded goes to `debug`
 //!   with a count instead; per occurrence it only teaches the reader to skim warnings
-//!   (`player::stream_health`).
+//!   (`player::playback::stream_health`).
 //! - **`debug`** — what the user did, as a narrative: one line per class of action at the seam
 //!   every path funnels through, and **nothing on a timer, frame or keystroke**. The *action*,
 //!   never the widget — a play/pause line at the button misses the shortcut, the tray, the media

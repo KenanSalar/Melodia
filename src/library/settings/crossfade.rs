@@ -6,7 +6,7 @@
 //! [`super::replaygain`].
 
 use crate::error::AppError;
-use crate::player::crossfade::clamp_crossfade_ms;
+use crate::player::playback::crossfade::clamp_crossfade_ms;
 use crate::services;
 use crate::state::AppState;
 

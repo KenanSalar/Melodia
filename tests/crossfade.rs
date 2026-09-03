@@ -19,10 +19,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use melodia::player::backend::PlaybackEngine;
-use melodia::player::decks::DECK_COUNT;
-use melodia::player::output::mixer::{self, MixerPull};
-use melodia::player::replaygain::TrackReplayGain;
+use melodia::player::engine::backend::PlaybackEngine;
+use melodia::player::playback::decks::DECK_COUNT;
+use melodia::player::playback::output::mixer::{self, MixerPull};
+use melodia::player::playback::replaygain::TrackReplayGain;
 
 mod common;
 use common::shape;
@@ -486,12 +486,12 @@ async fn stopping_a_paused_deck_clears_it_immediately() -> std::io::Result<()> {
 
     let stopper = Arc::clone(&engine);
     drive_until(&mut mix, move || {
-        stopper.stop_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
+        stopper.stop_with_fade(melodia::player::playback::crossfade::PAUSE_FADE_MS);
     });
 
     assert_eq!(
         engine.check_playback_state(),
-        melodia::player::backend::PlaybackCheck::EndOfStream,
+        melodia::player::engine::backend::PlaybackCheck::EndOfStream,
         "the decks must be cleared by the time `stop_with_fade` returns, not \
          behind a deferred clear waiting on a ramp that can never advance"
     );
@@ -547,7 +547,7 @@ async fn stopping_with_a_gapless_track_staged_clears_both_decks_at_once() -> std
 
     let stopper = Arc::clone(&engine);
     drive_until(&mut mix, move || {
-        stopper.stop_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
+        stopper.stop_with_fade(melodia::player::playback::crossfade::PAUSE_FADE_MS);
     });
 
     // The load-bearing one: `EndOfStream` needs the active deck genuinely
@@ -556,7 +556,7 @@ async fn stopping_with_a_gapless_track_staged_clears_both_decks_at_once() -> std
     // still reporting `Playing`.
     assert_eq!(
         engine.check_playback_state(),
-        melodia::player::backend::PlaybackCheck::EndOfStream,
+        melodia::player::engine::backend::PlaybackCheck::EndOfStream,
         "both decks — staged source included — must be cleared by the time \
          `stop_with_fade` returns, not behind a deferred clear"
     );
@@ -578,7 +578,7 @@ async fn pausing_with_a_gapless_track_staged_is_immediate() -> std::io::Result<(
     engine.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
     assert!(engine.is_gapless_preloaded(), "the next track must really be staged");
 
-    engine.pause_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
+    engine.pause_with_fade(melodia::player::playback::crossfade::PAUSE_FADE_MS);
     pull_lenient(&mut mix, frames_for_ms(20));
 
     // A ramp would still be near full volume this early, so silence is the tell.
@@ -608,7 +608,7 @@ async fn a_deferred_clear_takes_a_late_preload_with_it() -> std::io::Result<()> 
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
     // Nothing staged yet, so the fade is allowed and the clear really defers.
-    engine.stop_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
+    engine.stop_with_fade(melodia::player::playback::crossfade::PAUSE_FADE_MS);
     engine.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
     assert!(
         engine.is_gapless_preloaded(),
@@ -624,7 +624,7 @@ async fn a_deferred_clear_takes_a_late_preload_with_it() -> std::io::Result<()> 
 
     assert_eq!(
         engine.check_playback_state(),
-        melodia::player::backend::PlaybackCheck::EndOfStream,
+        melodia::player::engine::backend::PlaybackCheck::EndOfStream,
         "the deferred clear must empty both decks, staged source included"
     );
     Ok(())
@@ -659,7 +659,7 @@ async fn a_preload_that_outlives_the_stop_it_raced_is_refused() -> std::io::Resu
     );
     assert_eq!(
         engine.check_playback_state(),
-        melodia::player::backend::PlaybackCheck::EndOfStream,
+        melodia::player::engine::backend::PlaybackCheck::EndOfStream,
         "and the decks must stay empty — a source staged here would read as a \
          `GaplessTransition` off a stopped player"
     );

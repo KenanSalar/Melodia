@@ -30,7 +30,7 @@ use slint::ComponentHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::library;
-use crate::player::types::PlaybackStatus;
+use crate::player::engine::types::PlaybackStatus;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use crate::{AppWindow, Player};

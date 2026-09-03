@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::entities::track::TrackSummary;
 use crate::error::AppError;
-use crate::player::state::PlayerState;
+use crate::player::engine::state::PlayerState;
 
 use super::*;
 

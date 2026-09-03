@@ -71,7 +71,7 @@ const MAX_I32_DIGITS: usize = 11;
 
 /// Write `value` into `buf` back-to-front and hand back the digits. Years are printed once
 /// per row per digit-shaped keystroke, so this stays off the heap for the same reason
-/// `player::waveform::push_fixed` does. Both fallbacks are unreachable, and exist because
+/// `player::playback::waveform::push_fixed` does. Both fallbacks are unreachable, and exist because
 /// the alternatives are a silent `as` truncation and an `unwrap`.
 fn write_decimal(buf: &mut [u8; MAX_I32_DIGITS], value: i32) -> &str {
     // `unsigned_abs` rather than `abs` — `-i32::MIN` overflows.

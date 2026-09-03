@@ -31,7 +31,7 @@ use crate::media::image::cover_thumbs::CoverThumbs;
 use crate::media::image::material_you::{
     SchemeStyle, SeedCache, extract_source_argb_from_rgb8, generate_palette,
 };
-use crate::player::state::PlayerViewModelLight;
+use crate::player::engine::state::PlayerViewModelLight;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use crate::themes::{Palette, SystemColorState};

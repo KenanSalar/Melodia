@@ -257,7 +257,7 @@ fn find_external_cover(file_path: &Path, cover_cache: &CoverCache) -> Option<Pat
 /// before it resizes. A full-resolution artwork view would decode from the user's own file rather
 /// than raise this: the store exists to serve many small frequently-drawn tiles, and at 4K it
 /// would run to gigabytes across a few thousand covers.
-pub(crate) const STORE_MAX_DIM: u32 = 512;
+pub const STORE_MAX_DIM: u32 = 512;
 
 /// Byte ceiling, and a bound of its own rather than a consequence of [`STORE_MAX_DIM`] —
 /// dimensions drive decode cost, bytes drive disk, and a file can fail either alone. Ordinary

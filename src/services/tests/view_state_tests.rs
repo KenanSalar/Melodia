@@ -107,21 +107,10 @@ fn test_view_sort_in_view_state() -> Result<(), AppError> {
     Ok(())
 }
 
-/// **The persisted nav index has to survive a round trip at the top of its range**, and until
-/// Phase 4 of the radio work it did not: `set_last_nav_index` clamped writes to `0..=9` and
-/// `install_views` guarded reads with the same literal, so a Radio index was rewritten as Settings
-/// on the way out *and* dropped on the way in. Neither half is visible from the other, which is
-/// why both now read [`MAX_NAV_INDEX`] and why this pins the bound against the section that
-/// actually sits at the top of it.
-#[test]
-fn the_nav_bound_reaches_the_highest_section_that_routes() {
-    assert_eq!(
-        MAX_NAV_INDEX,
-        crate::ui::radio::NAV_RADIO,
-        "Radio is the highest index `nav.slint` routes, so the bound is its index — a section \
-         added above it moves both"
-    );
-}
+// The bound's *other* half — that `MAX_NAV_INDEX` equals the highest section `nav.slint`
+// actually routes — names `ui::radio` and so sits in `tests/cross_tier.rs`. What stays here is
+// the half this file can see: that both ends of the round trip read the const rather than a
+// literal.
 
 /// Both ends of that round trip must take the bound from [`MAX_NAV_INDEX`] rather than restate it.
 ///

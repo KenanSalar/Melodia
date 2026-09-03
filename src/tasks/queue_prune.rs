@@ -16,13 +16,13 @@ use sqlx::FromRow;
 
 use crate::database::DbPool;
 use crate::error::AppResult;
-use crate::player::actions::emit_and_execute;
-use crate::player::backend::PlaybackEngine;
-use crate::player::event_sink::PlayerSinks;
-use crate::player::state::{
+use crate::player::engine::actions::emit_and_execute;
+use crate::player::engine::backend::PlaybackEngine;
+use crate::player::engine::event_sink::PlayerSinks;
+use crate::player::engine::state::{
     PlayerAction, PlayerStateHandle, lock_state, play_track_inner, stop_end_of_queue,
 };
-use crate::player::types::PlaybackSource;
+use crate::player::engine::types::PlaybackSource;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 

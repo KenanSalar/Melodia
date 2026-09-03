@@ -9,7 +9,7 @@ use slint::{ComponentHandle, VecModel};
 
 use super::source_change::apply_source_change;
 use super::{NowPlayingState, UP_NEXT_N, current_track_id};
-use crate::player::state::QueueViewModel;
+use crate::player::engine::state::QueueViewModel;
 use crate::state::AppState;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::ui::queue_sheet::to_slint_queue_row;

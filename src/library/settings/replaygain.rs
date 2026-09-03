@@ -5,7 +5,7 @@
 //! persists the choice. Mirrors the shape of [`super::equalizer`].
 
 use crate::error::AppError;
-use crate::player::replaygain::{self, RgMode};
+use crate::player::playback::replaygain::{self, RgMode};
 use crate::services;
 use crate::state::AppState;
 
