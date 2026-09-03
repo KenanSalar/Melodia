@@ -7,15 +7,11 @@
 //! Both are violable from any file and neither fails visibly, so the corpus walks in
 //! `tests/net_primitives.rs` hold them.
 
-pub use melodia_core::{config, entities, error, themes, utils};
-
 pub mod services {
     pub mod net;
 }
 
 pub mod media {
-    pub use melodia_artwork::media::image;
-
     pub mod fetch;
 }
 

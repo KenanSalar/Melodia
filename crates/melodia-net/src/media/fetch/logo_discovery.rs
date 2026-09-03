@@ -13,9 +13,9 @@
 //! named: the kept-station heal, and a browse result narrow enough to be the station the user just
 //! searched for. `library::radio` is where that scoping lives. Nothing here logs a URL.
 
-use crate::error::AppError;
 use crate::media::fetch::station_logo::{LOGO_REQUEST_TIMEOUT, fetchable_url};
 use crate::services::net::read_capped;
+use melodia_core::error::AppError;
 
 /// Ceiling on the page read. A `<head>` that has not named an icon inside this much markup is not
 /// going to; the cap is what stops a site streaming a document into a station refresh.

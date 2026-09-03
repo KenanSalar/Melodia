@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 /// Ceiling on a search body. The query asks for `limit=1` and reads one field off it, so this is
 /// slack against a schema change rather than a budget.

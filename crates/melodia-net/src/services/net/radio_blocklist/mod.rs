@@ -20,7 +20,7 @@ use std::borrow::Cow;
 
 use source::TermKind;
 
-use crate::entities::radio::{DirectoryStation, Facet, FacetKind, NewRadioStation};
+use melodia_core::entities::radio::{DirectoryStation, Facet, FacetKind, NewRadioStation};
 
 // `BLOCKED_KEY`, the sorted `BLOCKED_TERMS`, and the substring half —
 // `BLOCKED_PATTERNS` with the `PATTERN_LENGTHS` that size their windows. Written by

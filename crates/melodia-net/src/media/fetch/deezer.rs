@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::path::Path;
 
-use crate::error::AppError;
-use crate::media::image::artwork;
+use melodia_artwork::media::image::artwork;
+use melodia_core::error::AppError;
 
 #[derive(serde::Deserialize)]
 struct DeezerSearchResponse {

@@ -12,7 +12,7 @@
 pub mod radio_blocklist;
 pub mod radio_browser;
 
-use crate::error::AppError;
+use melodia_core::error::AppError;
 
 /// Build the process-wide shared `reqwest::Client`. Kept out of any constructor so the rustls
 /// stack and connection pool load only on the first real request; both `OnceLock` holders init

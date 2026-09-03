@@ -15,10 +15,10 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::entities::radio::StoredLogo;
-use crate::error::AppError;
-use crate::media::image::logo_tile::Tile;
-use crate::media::image::{artwork, image_decode, logo_tile};
+use melodia_artwork::media::image::logo_tile::Tile;
+use melodia_artwork::media::image::{artwork, image_decode, logo_tile};
+use melodia_core::entities::radio::StoredLogo;
+use melodia_core::error::AppError;
 
 /// Ceiling on one logo download, checked against the header and again against the body.
 ///

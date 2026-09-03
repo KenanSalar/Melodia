@@ -5,7 +5,7 @@
 
 use super::source::{self, MIN_PATTERN_CHARS, ParseError, Refusal, TermKind};
 use super::{Blocklist, StationTerms};
-use crate::entities::radio::{Facet, FacetKind};
+use melodia_core::entities::radio::{Facet, FacetKind};
 
 /// The key every fixture hashes under, so a pinned fingerprint stays pinned.
 const SOURCE_KEY: &str = "key: test-key\n";

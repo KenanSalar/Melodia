@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::entities::radio::{FacetKind, SearchOrder, StationSearch};
+use melodia_core::entities::radio::{FacetKind, SearchOrder, StationSearch};
 
 /// Stations per page, and the fallback whenever a caller leaves
 /// [`StationSearch::limit`] at zero.

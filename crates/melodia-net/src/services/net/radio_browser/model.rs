@@ -8,7 +8,7 @@
 
 use serde::Deserialize;
 
-use crate::entities::radio::{DirectoryStation, Facet};
+use melodia_core::entities::radio::{DirectoryStation, Facet};
 
 /// One row of `/json/stations/search`.
 ///

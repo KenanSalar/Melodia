@@ -22,9 +22,11 @@ use std::time::Duration;
 use rand::RngExt;
 use tokio::sync::OnceCell;
 
-use crate::entities::radio::{DirectoryStation, Facet, FacetKind, StationPage, StationSearch};
-use crate::error::AppError;
 use crate::services::net::radio_blocklist;
+use melodia_core::entities::radio::{
+    DirectoryStation, Facet, FacetKind, StationPage, StationSearch,
+};
+use melodia_core::error::AppError;
 use model::{ApiFacet, ApiServer, ApiStation, ApiVote};
 
 pub use query::DEFAULT_PAGE_LIMIT;
@@ -246,7 +248,7 @@ async fn mirror(client: &reqwest::Client) -> &'static str {
                     log::warn!(
                         "Radio directory mirror discovery failed ({}); using \
                          {FALLBACK_HOST} for this session",
-                        crate::error::describe(&e)
+                        melodia_core::error::describe(&e)
                     );
                     FALLBACK_HOST.to_owned()
                 }
