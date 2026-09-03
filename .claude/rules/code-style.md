@@ -1,14 +1,6 @@
 ---
 paths:
-  - src/**/*.rs
   - crates/**/*.rs
-  - crates/melodia-core/src/error.rs
-  - src/main.rs
-  - src/lib.rs
-  - crates/melodia-ui/src/**/*.rs
-  - tests/**/*.rs
-  - build.rs
-  - crates/melodia-ui/build.rs
   - crates/melodia-ui/ui/**/*.slint
   - migrations/**/*.sql
   - scripts/*.py

@@ -1,7 +1,7 @@
 ---
 paths:
   - crates/melodia-audio/src/player/source/**/*.rs
-  - tests/**/*.rs
+  - crates/melodia/tests/**/*.rs
 ---
 
 # Symphonia Best Practices

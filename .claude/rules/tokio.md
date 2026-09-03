@@ -1,8 +1,6 @@
 ---
 paths:
-  - src/**/*.rs
   - crates/**/*.rs
-  - tests/**/*.rs
 ---
 
 # Tokio Best Practices

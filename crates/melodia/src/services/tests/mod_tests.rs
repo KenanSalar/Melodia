@@ -87,7 +87,7 @@ fn no_thread_name_outgrows_what_the_kernel_keeps() {
 }
 
 /// `licenses/ATTRIBUTION.txt`, which every pin below reads.
-const ATTRIBUTION: &str = include_str!("../../../licenses/ATTRIBUTION.txt");
+const ATTRIBUTION: &str = include_str!("../../../../../licenses/ATTRIBUTION.txt");
 
 /// The floor for the font walk: the five faces that ship today.
 ///
@@ -156,7 +156,9 @@ fn every_bundled_font_is_named_in_the_attribution() {
 /// never looks at — no warning, and a pin on the `cp` still green.
 const LICENSE_SHIPPERS: [(&str, &str); 5] = [
     ("scripts/build-rpm.sh", "%license LICENSE licenses/"),
-    ("Cargo.toml", "[\"licenses/*\""),
+    // The binary's manifest, not the workspace root's: `[package.metadata.deb]` is package
+    // metadata and went with the package. Its `../../` is why the needle stops at the glob.
+    ("crates/melodia/Cargo.toml", "licenses/*\""),
     ("scripts/build-tarball.sh", "cp -r \"$REPO_ROOT/licenses\""),
     ("scripts/build-appimage.sh", "cp -r \"$REPO_ROOT/licenses\""),
     ("wix/main.wxs", "$(var.RepoRoot)\\licenses\\"),

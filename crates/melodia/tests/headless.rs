@@ -30,7 +30,9 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
     let runtime = tokio::runtime::Handle::current();
     let (state, _channels) = AppState::init(paths, runtime).await?;
 
-    let fixtures = PathBuf::from(env!("MELODIA_REPO_ROOT")).join("tests/fixtures");
+    // Its own directory rather than the shared corpus, and that is the assertion below:
+    // this scans a folder and counts what lands, so the fixture set has to be exactly one.
+    let fixtures = PathBuf::from(env!("MELODIA_REPO_ROOT")).join("crates/melodia/tests/fixtures");
     assert!(fixtures.join("silence-1s.flac").exists(), "fixture missing — regenerate with ffmpeg");
 
     let folder =

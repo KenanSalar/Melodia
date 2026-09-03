@@ -3,31 +3,6 @@
 version = 4
 
 [[package]]
-name = "Melodia"
-version = "0.12.0"
-dependencies = [
- "async-compat",
- "log",
- "melodia-app",
- "melodia-artwork",
- "melodia-audio",
- "melodia-core",
- "melodia-engine",
- "melodia-integrations",
- "melodia-platform",
- "melodia-playback",
- "melodia-store",
- "melodia-testkit",
- "melodia-ui",
- "melodia-views",
- "slint",
- "sqlx",
- "tempfile",
- "tokio",
- "winresource",
-]
-
-[[package]]
 name = "ab_glyph"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3638,6 +3613,31 @@ name = "mediatype"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0695a693e38d35838dd34bc3ab19911395f6837ccf55c7271189cfb12cb8b57f"
+
+[[package]]
+name = "melodia"
+version = "0.12.0"
+dependencies = [
+ "async-compat",
+ "log",
+ "melodia-app",
+ "melodia-artwork",
+ "melodia-audio",
+ "melodia-core",
+ "melodia-engine",
+ "melodia-integrations",
+ "melodia-platform",
+ "melodia-playback",
+ "melodia-store",
+ "melodia-testkit",
+ "melodia-ui",
+ "melodia-views",
+ "slint",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "winresource",
+]
 
 [[package]]
 name = "melodia-app"

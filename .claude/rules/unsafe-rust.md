@@ -1,12 +1,8 @@
 ---
 paths:
-  - src/**/*.rs
   - crates/**/*.rs
-  - crates/melodia-ui/src/**/*.rs
-  - tests/**/*.rs
-  - build.rs
-  - crates/melodia-ui/build.rs
   - Cargo.toml
+  - crates/*/Cargo.toml
 ---
 
 # Unsafe Rust — the posture, and what to reach for instead

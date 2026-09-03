@@ -3,7 +3,7 @@ paths:
   - crates/melodia-audio/src/player/source/**/*.rs
   - crates/melodia-playback/src/player/playback/**/*.rs
   - crates/melodia-engine/src/player/engine/**/*.rs
-  - src/player/mod.rs
+  - crates/melodia/src/player/mod.rs
 ---
 
 # The audio stack

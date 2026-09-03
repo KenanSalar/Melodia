@@ -8,9 +8,9 @@ paths:
   - crates/melodia-platform/src/services/platform/always_on_top/**/*.rs
   - crates/melodia-platform/src/services/platform/dwm_titlebar.rs
   - crates/melodia-views/src/ui/appearance/theme_apply.rs
-  - src/main.rs
-  - src/shutdown.rs
-  - src/boot/**/*.rs
+  - crates/melodia/src/main.rs
+  - crates/melodia/src/shutdown.rs
+  - crates/melodia/src/boot/**/*.rs
   - crates/melodia-ui/ui/app-window.slint
   - crates/melodia-ui/ui/components/custom-titlebar.slint
   - crates/melodia-ui/ui/components/macos-titlebar-cluster.slint

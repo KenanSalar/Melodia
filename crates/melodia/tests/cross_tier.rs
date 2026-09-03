@@ -138,8 +138,10 @@ fn both_ends_of_the_nav_bound_take_it_from_one_const() {
         env!("MELODIA_REPO_ROOT"),
         "crates/melodia-app/src/library/settings/view.rs"
     ));
-    const READ: &str =
-        include_str!(concat!(env!("MELODIA_REPO_ROOT"), "src/boot/ui_setup/views.rs"));
+    const READ: &str = include_str!(concat!(
+        env!("MELODIA_REPO_ROOT"),
+        "crates/melodia/src/boot/ui_setup/views.rs"
+    ));
 
     let clamp = melodia_testkit::strip_line_comments(WRITE)
         .split_once("pub fn set_last_nav_index")

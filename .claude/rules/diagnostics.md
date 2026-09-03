@@ -5,7 +5,7 @@ paths:
   - crates/melodia-app/src/services/diagnostics.rs
   - crates/melodia-core/src/utils/redact.rs
   - crates/melodia-views/src/ui/settings/diagnostics.rs
-  - src/main.rs
+  - crates/melodia/src/main.rs
 ---
 
 # The diagnostics trio — logging, crash reports, the bug-report bundle

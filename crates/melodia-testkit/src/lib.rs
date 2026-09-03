@@ -37,7 +37,10 @@ pub const REPO_ROOT: &str = env!("MELODIA_REPO_ROOT");
 
 /// The checked-in fixtures, for the tests that need a real file rather than a synthesized one.
 /// Anchored on the repo root for the reason [`UI_SRC_DIR`] gives.
-pub const ASSETS_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "tests/assets");
+///
+/// At the root rather than inside a crate because three of them read it: a corpus this many
+/// members share cannot sit in one member's `tests/`, and the name says it is nobody's target.
+pub const ASSETS_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "test-assets");
 
 /// The Rust UI tree, for the pins asking the same question of every slice's wiring. Anchored
 /// on the repo root like its siblings, which is what the C13 extraction cashed in: a bare
@@ -220,16 +223,12 @@ pub fn stripped_sources(root: &str, ext: &str, floor: usize) -> Vec<(String, Str
 /// Every crate's source root, paired with the directory name that identifies it.
 ///
 /// "The Rust tree" is one walk per crate now, so the pins answering *does anything in the tree
-/// do X* need the set rather than a path. The still-unextracted root package counts as one,
-/// which is what keeps the corpus whole while the split is half-done.
+/// do X* need the set rather than a path. Every package is under `crates/`, the binary
+/// included, so the workspace root itself contributes nothing.
 fn rust_source_roots() -> Vec<(String, PathBuf)> {
     let repo = Path::new(REPO_ROOT);
     let mut roots = Vec::new();
 
-    let root_src = repo.join("src");
-    if root_src.is_dir() {
-        roots.push(("melodia".to_owned(), root_src));
-    }
     if let Ok(entries) = fs::read_dir(repo.join("crates")) {
         for entry in entries.flatten() {
             let src = entry.path().join("src");

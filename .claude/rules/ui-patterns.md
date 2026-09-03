@@ -2,7 +2,7 @@
 paths:
   - crates/melodia-ui/ui/**/*.slint
   - crates/melodia-views/src/ui/**/*.rs
-  - src/boot/**/*.rs
+  - crates/melodia/src/boot/**/*.rs
   - crates/melodia-core/src/utils/toast.rs
   - crates/melodia-ui/build.rs
 ---

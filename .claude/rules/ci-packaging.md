@@ -10,6 +10,7 @@ paths:
   - scripts/install-linux.sh
   - scripts/build-latest-json.py
   - Cargo.toml
+  - crates/melodia/Cargo.toml
   - rust-toolchain.toml
   - clippy.toml
   - .cargo/audit.toml
