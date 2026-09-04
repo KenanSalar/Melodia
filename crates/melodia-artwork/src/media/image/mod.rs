@@ -8,7 +8,7 @@
 //!
 //! That one edge decides a manifest line the split has not written yet: either the artwork crate
 //! depends on the one holding the theme registry, or `Palette` is plain enough to belong further
-//! down. `docs/plans/WORKSPACE_SPLIT.md` carries the question.
+//! down. Still open.
 
 pub mod artwork;
 pub mod cover_thumbs;

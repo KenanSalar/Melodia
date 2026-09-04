@@ -16,20 +16,12 @@ safe code fast. Reach for it first. Nothing here is a performance technique.
 
 ## Why the bar is where it is
 
+Argued in `docs/adr/0028-no-unsafe-outside-ffi-no-unwrap-anywhere.md`: what a soundness bug
+costs here, and why never for performance. What matters at this glob is the spelling.
+
 **`deny`, not `forbid`** — that's what makes the per-site `#[allow]` legal, and it's
 deliberate. Don't "tighten" it to `forbid`; the FFI below can't be deleted, so the only
 effect would be to move every allow into a `build.rs`-shaped workaround.
-
-Three things make a soundness bug cost more here than in an average crate:
-
-- **`panic = "abort"` in release.** UB doesn't surface as a clean crash with a
-  backtrace. It surfaces as a corrupted decode, a wrong colour, or a wrong answer weeks
-  later on someone else's machine.
-- **The app ships with an auto-updater.** A bad release reaches installs that never
-  asked for it, and the rollback path only covers a binary that fails its `--version`
-  smoke test — not one that runs and is quietly wrong.
-- **Miri is out of reach.** `rust-toolchain.toml` pins the compiler and that pin is the
-  only toolchain installed, so new `unsafe` ships verified by review and nothing else.
 
 ## The one sanctioned category: platform FFI
 

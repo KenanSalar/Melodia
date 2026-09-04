@@ -31,6 +31,20 @@ for whoever comes back to the repository in two years and asks why.
 | [17. No crate re-exports another member's items](0017-no-cross-crate-re-exports.md) | Accepted, 2026-09-03 |
 | [18. What is deliberately not split, and why there are zero Cargo features](0018-what-is-not-split-and-zero-features.md) | Accepted, 2026-09-03 |
 | [19. The updater's trust boundary is the GitHub repo](0019-updater-trust-boundary-is-the-repo.md) | Accepted, 2026-05-25 |
+| [20. Artwork is content-addressed and swept, never reference-counted](0020-artwork-swept-not-refcounted.md) | Accepted, 2026-08-19 |
+| [21. Lyrics live in the file, not in a column](0021-lyrics-live-in-the-file.md) | Accepted, 2026-07-20 |
+| [22. Smart playlist membership is derived at read time](0022-smart-playlists-derived-at-read-time.md) | Accepted, 2026-07-08 |
+| [23. Scrobbling is a read-only tap on the player, decided by a pure function](0023-scrobbling-is-a-read-only-tap.md) | Accepted, 2026-07-22 |
+| [24. Discord presence speaks its IPC directly, with no new dependency](0024-discord-ipc-is-hand-rolled.md) | Accepted, 2026-07-24 |
+| [25. A rotating log file and a crash hook that survives `panic = "abort"`](0025-flexi-logger-and-a-crash-hook-under-abort.md) | Accepted, 2026-08-06 |
+| [26. The backdrop is bounded washes of the cover's colours over the theme's own base](0026-aurora-bounded-washes-over-the-theme-base.md) | Accepted, 2026-08-17 |
+| [27. One instance per data directory, and binding the socket is the claim](0027-one-instance-per-data-directory.md) | Accepted, 2026-08-15 |
+| [28. No `unsafe` outside platform FFI, and no `unwrap` anywhere](0028-no-unsafe-outside-ffi-no-unwrap-anywhere.md) | Accepted, 2026-05-25 |
+| [29. A vendored winit fork, checked in, with a stated retirement](0029-vendored-winit-fork.md) | Accepted, 2026-05-25 |
+| [30. Memory is a product requirement, and three knobs hold it](0030-memory-is-a-product-requirement.md) | Accepted, 2026-05-25 |
+| [31. Melodia ships its own packages, in five formats](0031-five-package-formats.md) | Accepted, 2026-08-12 |
+| [32. A release is a pushed tag, not a merge](0032-release-from-a-pushed-tag.md) | Accepted, 2026-08-28 |
+| [33. The artwork crate depends on the UI toolkit, and stores its buffers](0033-artwork-depends-on-slint.md) | Accepted, 2026-09-03 |
 
 ## The shape
 

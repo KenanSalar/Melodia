@@ -5,7 +5,7 @@
 //! renderer-adjacent dependency is `slint`'s `SharedPixelBuffer` — a refcounted pixel buffer, the
 //! same category of thing as `bytes::Bytes`, and never the event loop or a widget. The argument
 //! for that, and for the two alternatives that cost more than they save, is in
-//! `docs/plans/WORKSPACE_SPLIT.md`.
+//! `docs/adr/0033-artwork-depends-on-slint.md`.
 
 pub mod media {
     pub mod image;
