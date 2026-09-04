@@ -19,15 +19,15 @@ scan and every tag edit. That is a fan-out with no natural boundary, and every o
 would be wrong in the same silent way: the playlist is stale and looks fine. Deriving means the
 rules are the only state, so there is nothing to be stale.
 
-What it costs is that opening one is a query rather than a lookup, and it cannot be paged as
-cheaply as a fixed list. It also means a smart playlist has no drop target, because dropping a
-track on it would mean nothing, and that asymmetry with ordinary playlists is visible in the UI.
+Opening one is then a query rather than a lookup, and it cannot be paged as cheaply as a fixed list.
+It also means a smart playlist has no drop target, because dropping a track on it would mean
+nothing, and that asymmetry with ordinary playlists is visible in the UI.
 
 The query is built rather than written, which is where the risk moved. Only enum-derived static
 fragments reach the SQL as text: the column name, the operator token and the ordering. Every user
-value goes through a bind. Relative dates are resolved to a cutoff in Rust before they get near
-the query. That contract is the reason a rule set can be user-authored at all, and it is the thing
-to preserve if the rule vocabulary ever grows.
+value goes through a bind. Relative dates are resolved to a cutoff in Rust before they get near the
+query. That contract is the reason a rule set can be user-authored at all, and it is the thing to
+preserve if the rule vocabulary ever grows.
 
 This ADR was written in September 2026 from the smart playlists working doc, deleted when the
 feature shipped.

@@ -3,13 +3,13 @@
 **Status:** Accepted, 2026-08-28
 
 The repository ran a permanent integration branch that a release merged into the default branch.
-That left the default branch, which is what a clone gets and what the project's front page shows,
-an entire release behind for most of every cycle: over a hundred commits at a time, on files that
-had been rewritten in the meantime, so a first contribution rebased into conflicts that had
-nothing to do with it.
+That left the default branch, which is what a clone gets and what the project's front page shows, an
+entire release behind for most of every cycle: over a hundred commits at a time, on files that had
+been rewritten in the meantime, so a first contribution rebased into conflicts that had nothing to
+do with it.
 
-Decision: the default branch is the integration branch, pull requests target it, and a release is
-a pushed version tag that triggers the build. Merging ships nothing on its own.
+Decision: the default branch is the integration branch, pull requests target it, and a release is a
+pushed version tag that triggers the build. Merging ships nothing on its own.
 
 Alternatives: keeping the integration branch; cutting a release branch per version and tagging on
 it, which is what larger projects do.
