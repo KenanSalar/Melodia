@@ -1,0 +1,407 @@
+TODO: TEST COVERAGE (REPO-WIDE)
+===============================
+
+Working doc for issue #38. Delete when the backlog below is spent.
+
+Status: survey complete, no tests written yet
+Created: 2026-09-04
+
+Numbers are from the published report at https://kenansalar.github.io/Melodia/,
+generated 2026-09-04 18:12. Absence claims ("nothing tests X") were each checked
+against the tree on the same day by grepping the test files rather than inferred
+from the percentage.
+
+The auto-updater has its own backlog in TODO.test-coverage.updater.txt and is not
+repeated here beyond the one blocker the two share. Read that file for the
+updater; read this one for everything else.
+
+
+THE SHAPE OF THE REPORT
+-----------------------
+
+One sentence explains almost every number below: this tree tests its primitives
+well and the orchestration around them not at all.
+
+The evidence is consistent wherever you cut it. The pure pieces are near-finished:
+hls/playlist.rs 100%, queries/radio.rs 100%, radio_browser/query.rs 100%,
+ingest/rating_tags.rs 100%, playlist_files/m3u.rs 98.9%, material_you.rs 98.5%,
+prebuffer.rs 97.9%, engine/queue.rs 95.7%, image_decode.rs 95.7%, scanner.rs 93.7%.
+The code that decides when to call them is at zero: rating_writeback.rs 0%,
+play_count_flusher.rs 0%, mbid_backfill.rs 0%, material_you.rs (the task) 0%,
+library/queue.rs 1.7%, library/ratings.rs 4.5%, library/playback.rs 4.9%.
+
+So the risk is not concentrated where the coverage is thinnest by volume. It is
+concentrated where a well-tested destructive primitive is called by an untested
+decision. tag_writer.rs is 84.7% covered and correct; nothing tests the coalescing
+map that picks which rating value it is handed.
+
+That is the thesis the priority order below is built on.
+
+
+WHERE IT STANDS
+---------------
+
+  TOTAL   function 38.9% (2278/5859)   line 37.0% (15542/42028)   region 34.7%
+
+  subsystem                                    line cov          uncovered
+  --------------------------------------------------------------------------
+  UI (melodia-views)                  13.9% ( 2701/19465)            16764
+  library API (melodia-app/library)   28.1% (  951/ 3382)             2431
+  background tasks (melodia-app/tasks) 12.2% (  227/ 1867)            1640
+  integrations (scrobble/discord/mpris) 41.3% (  763/ 1848)           1085
+  binary (main/boot/shutdown)          0.0% (    0/  831)              831
+  platform (tray, theme, logging)     43.6% (  522/ 1198)              676
+  updater (own doc)                   24.7% (  191/  773)              582
+  audio (sources, decode)             66.2% ( 1113/ 1682)              569
+  store (db queries, ingest, scanner) 85.8% ( 3022/ 3522)              500
+  net (radio dir, blocklist, fetch)   59.3% (  613/ 1034)              421
+  engine (player state machine)       77.8% ( 1396/ 1794)              398
+  app services (settings, state)      71.1% (  424/  596)              172
+  core (entities, utils, themes)      78.3% (  575/  734)              159
+  artwork (image, covers)             89.4% (  837/  936)               99
+  playback (dsp, decks, output)       94.9% ( 1778/ 1874)               96
+  app state                           69.4% (  118/  170)               52
+
+Read that column with the thesis in mind. melodia-store at 85.8% and
+melodia-playback at 94.9% are the two subsystems that are mostly primitives.
+melodia-app/tasks at 12.2% is almost entirely orchestration.
+
+Issue #38 says library-layer coverage is the priority and UI coverage is
+intentionally light. The UI's 16764 uncovered lines are therefore not on this list
+at all, which is why the largest number in the table generates no work.
+
+
+TWO BLOCKERS THAT GATE MOST OF THE BACKLOG
+------------------------------------------
+
+Neither is a test. Between them they gate roughly 3600 uncovered lines, which is
+most of what is worth writing. Both are structural and both should be settled
+before the tests that depend on them.
+
+B1. There is no HTTP test double in this tree.
+
+    No test stands up a local server (checked: no TcpListener, no 127.0.0.1, no
+    wiremock/httptest/axum dev-dependency anywhere). .claude/rules/testing.md is
+    explicit that adding a framework is an argument to make rather than a default,
+    and the argument does not need to be made: a std::net::TcpListener on port 0
+    with a thread speaking enough HTTP/1.1 to serve a canned status, headers and
+    body is about eighty lines and no new dependency. It names no workspace type,
+    so its home is melodia-testkit, which may name no member.
+
+    What it unlocks, by uncovered lines: scrobble/submit.rs (235),
+    radio_browser/mod.rs (144), listenbrainz.rs (170), lastfm.rs (132),
+    logo_discovery.rs (98), radio/logos.rs (205, partly), artist_images.rs (44),
+    net/mod.rs (46), plus the updater doc's P1.1 through P1.3 (213). Roughly 1250
+    lines behind one fixture, across four subsystems that share nothing else.
+
+B2. AppState cannot be built in a test, and the library API takes it.
+
+    AppState owns an AudioOutput, a PlaybackEngine and a tokio Handle, and only
+    AppState::init builds one, which opens the audio device. Every
+    library::* entry point takes &AppState, so the layer CLAUDE.md calls the only
+    door onto the database is unreachable from a unit test. That is the whole
+    reason library/ sits at 28.1% while the queries underneath it sit at 85.8%:
+    the query layer is testable and the composition over it is not.
+
+    The tree already contains the fix, one directory over. PlaybackContext exists
+    precisely so library::playback::* takes six Arc clones rather than &AppState.
+    The generalisation is to let the functions that only need the database take
+    what they only need. library/playlists.rs is the clean case: thirteen
+    functions, every one of them a single queries::playlist::* call through
+    &state.db, and taking &DbPool instead makes all thirteen testable against the
+    DbPool::test_pool() fixture that already exists.
+
+    Do not solve this by building a test AppState behind the headless-audio shim.
+    That works (headless.rs proves it) but it makes every library test pay for an
+    audio device to ask a question about SQL.
+
+
+================================================================================
+P0: USER DATA THAT CANNOT BE REGENERATED
+================================================================================
+
+Everything in this tier shares one property: when it goes wrong, rescanning does
+not fix it, because the thing that was lost or corrupted was not derived from the
+files. Ratings, play counts, the queue and favourites are the only state Melodia
+holds that a fresh library cannot reproduce, and two of these paths write into the
+user's own files besides.
+
+The destructive primitives are already well covered. What is missing every time is
+the decision above them.
+
+
+P0.1  Rating write-back coalescing (tasks/rating_writeback.rs, 0% of 72)
+-------------------------------------------------------------------------
+
+This is the highest-consequence untested code in the repo. It rewrites the user's
+audio files: lofty re-serializes the whole tag, so rating a 32 MB MP3 rewrites
+32 MB of the user's own music, and the value it writes is chosen by a coalescing
+map and a quiet period that nothing tests.
+
+The module's own doc names three behaviours, none of them pinned:
+
+  - a star strip is five adjacent click targets, so a user picking four stars
+    usually sends one, two, three and four on the way, and only the last may be
+    written
+  - the write-ratings-to-tags switch is read at flush time rather than at send,
+    because the switch can move while a burst is in flight
+  - the quiet period is what turns a walk across the strip into a single write
+
+Get the first wrong and a four-star rating lands in the file as one. Get the
+second wrong and Melodia writes to files after the user turned that off, which is
+the one behaviour a user would call a violation rather than a bug.
+
+The primitives beneath it are fine: ingest/rating_tags.rs is 100% and
+tag_writer.rs is 84.7%. The coalescing map is pure over (id, value, elapsed) and
+testable with a paused clock, which .claude/rules/tokio.md already covers.
+
+Pair it with library/ratings.rs (4.5% of 67, and ratings_tests.rs is thirteen
+lines) and tasks/rating_import.rs (0% of 52), which is the one-shot sweep that
+reads ratings out of files on first launch and is the same data flowing the other
+way.
+
+
+P0.2  The queue and the station seated under it (library/queue.rs, 1.7% of 240)
+--------------------------------------------------------------------------------
+
+queue.json is one file rather than two because, as CLAUDE.md puts it, a station
+leaves the queue seated underneath, so a restart owes both. That invariant is
+stated in prose and held by nothing. A restore that drops one half loses the
+user's queue, which is not recoverable from the library.
+
+queue_tests.rs exists and is 162 lines, all of it driving PlayerState in memory:
+shuffle, unshuffle, the repeat cycle, the current-track anchor. Good tests, and
+they are why the file is not worse. What they never touch is any of the thirteen
+functions that persist or restore, so the file reads 1.7%.
+
+The four cases worth writing are the corners, per .claude/rules/testing.md's
+cross-the-flags guidance: a queue with no station, a station with no queue, both
+together, and a restore of a persisted pair where one side's rows no longer exist
+in the database. The last is the one that actually happens, since a folder can be
+removed between sessions.
+
+Blocked on B2 for the persistence half. The restore decision itself is pure.
+
+
+P0.3  Play counts (tasks/play_count_flusher.rs, 0% of 124)
+-----------------------------------------------------------
+
+The batched UPDATE consumer of the play_counts bridge, and utils/play_counts.rs,
+the producer half, is 0% of 6. Play count and last_played are what Favorites'
+Most Played strip and the whole Recently Played page rank on, and they accumulate
+over the life of an install: a flush that drops a batch loses history no rescan
+returns.
+
+What to pin: a batch is flushed once and not twice, a flush at shutdown does not
+strand the pending map, and the stats_changed signal fires after the write rather
+than before it. The last matters because the two Signals are deliberately split so
+a per-song flush does not imply the library changed, and a subscriber reading
+before the commit sees the old count.
+
+
+P0.4  Watcher reconcile and the moved-file path (reconcile.rs, 13.6% of 242)
+-----------------------------------------------------------------------------
+
+handle_created, handle_renamed and handle_modified decide whether a file that
+appeared somewhere new is the same track relocated or a different track imported.
+Get it wrong in the relocating direction and two rows exist for one file; get it
+wrong the other way and the original row is deleted, taking its rating, play count
+and favourite with it.
+
+BLAKE3 plus the partial index idx_tracks_file_hash is the mechanism, the watcher
+retains the hash on delete so the match can be made, and tasks/retroactive_hash.rs
+backfills. Every piece of that is covered (scanner.rs 93.7%) except the reconcile
+that uses it, and ingest/watcher.rs itself is at 51.7%.
+
+This is testable today against DbPool::test_pool() with no blocker, because
+process_batch takes a DbPool and a Paths rather than an AppState. It is the
+largest no-blocker win in P0.
+
+Boundary cases worth the table: a rename inside the library, a rename in from
+outside it, a rename out of it, a delete followed by a create of identical bytes,
+and a modify that changes the hash (which is a re-tag, not a move).
+
+
+P0.5  mbid_backfill's persisted attempted set (0% of 164)
+-----------------------------------------------------------
+
+Listed here for a reason CLAUDE.md gives directly: this file and the rule
+describing it once came to disagree about whether the set was persisted, each
+correct on the day it was written. That is the exact drift a test would have
+caught and prose did not.
+
+load_attempted and persist_attempted are a HashSet<i64> over a JSON file, testable
+with a temp dir and no blocker at all. The behaviour worth pinning is that the set
+suppresses a re-lookup across a restart, that the manual kick clears both the set
+and the file, and that the writer does not bump library_changed, since that is
+what stops the task waking itself in a loop.
+
+
+================================================================================
+P1: THE LIBRARY API (2431 uncovered, blocked on B2)
+================================================================================
+
+CLAUDE.md is emphatic that melodia-app/src/library is the only door onto the
+database, and cargo enforces it: melodia-views names neither melodia-store nor
+melodia-net. Everything the user does passes through this layer. It is at 28.1%.
+
+The pure helpers in it are tested and tested well. playback_tests.rs is 541 lines
+and resolve_start_slot has all five of its branches, including the one the doc
+comment argues for, where a row vanished between the id list and the fetch.
+tags_tests.rs is 370 lines. radio_files_tests.rs is 593.
+
+What is untested is every pub async fn that touches state.db, because of B2. Do
+the context narrowing first, then take these in order of what a failure costs:
+
+  library/playback.rs      4.9% of 268   the play/pause/seek entry points
+  library/favorites.rs     0.0% of 102   set_favorite, and the love sync under it
+  library/playlists.rs     0.0% of 126   thirteen thin query wrappers, the easiest
+                                         win once B2 lands
+  library/browse.rs       23.1% of 130   folder-tree navigation
+  library/import.rs        0.0% of  88   the drop/open-with path
+  library/playlist_files  52.6% of 173   the M3U8 writer around a 98.9% formatter
+  library/settings/view.rs 6.2% of 128   views.json, the per-view UI state
+  library/tags.rs         69.7% of 234   the edit-track orchestrator
+
+library/tags.rs deserves a note out of order. Its doc comment warns not to
+shortcut the post-write re-extract into a hand-built UPDATE, because a fresh
+date_modified beside a stale file_hash is the one state scanner::track_is_current
+reads as current forever, meaning the row never self-corrects. That is a
+data-integrity trap with a named failure mode and no test.
+
+favorites.rs is the other one worth pulling forward: it ends in sync_love, so a
+favourite toggle reaches a third-party account, and the batching and best-effort
+policy are argued once there for every caller.
+
+
+================================================================================
+P2: INTEGRATIONS AND THE NETWORK (1085 + 421 uncovered, blocked on B1)
+================================================================================
+
+Scrobbling is the one subsystem whose bugs are published under the user's name.
+A wrong submission is a wrong listen on a public Last.fm or ListenBrainz profile,
+and deleting it is the user's problem, not ours.
+
+  scrobble/submit.rs        7.5% of 254
+  scrobble/providers/listenbrainz.rs  27.7% of 235
+  scrobble/providers/lastfm.rs        39.7% of 219
+  scrobble/mod.rs          65.0% of 260
+  tasks/scrobble.rs         0.0% of 123
+
+submit.rs is the drain, and its uncovered logic is the part that decides what gets
+sent and what happens when the provider says no: the 50-listen batch cap, the
+per-provider readiness gate, auto-disconnect on rejected auth, and the
+rate-limit backoff. The queue underneath it is at 75.5% and the model layer is
+covered; the drain is not.
+
+Two things there are pure and need no server, so write them before B1 lands:
+merge_retry and merge_opt (the backoff arithmetic) and take_batch (the cap).
+collect_writeback is the one that decides which queue entries survive a partial
+success, which is where a duplicate submission would come from.
+
+The rest of the network tier behind B1:
+
+  radio_browser/mod.rs      9.4% of 159   the directory client. Its query builder
+                                          is 100% and its model 91.8%; the client
+                                          around them is untested.
+  net/media/fetch/logo_discovery.rs  0% of 98
+  library/radio/logos.rs             0% of 205
+  services/artist_images.rs       63.0% of 119
+
+Discord and the OS media controls (ipc.rs 11.1%, media_controls 24.1%) are further
+down: a failure there is a missing rich-presence line, not lost or wrong data.
+
+
+================================================================================
+P3: THE AUDIO SOURCES THAT DRIVE THREADS
+================================================================================
+
+  stream_source.rs     14.8% of 332
+  hls/reader.rs         0.0% of 200
+  stream_decode.rs      0.0% of  33
+  engine/handlers.rs   31.7% of 202
+
+The same pattern one more time, and here it is the most stark. hls/playlist.rs is
+100%, hls/segment.rs is 95.5% and prebuffer.rs is 97.9%. hls/reader.rs, which is
+the scheduler that drives them from a thread, is zero.
+
+These are genuinely harder: what is untested is a feed thread filling a ring
+buffer against a blocking socket read, which is the arrangement that exists to
+keep the network off the audio callback (ADR 14). A test needs B1 plus a way to
+step the thread deterministically.
+
+Worth doing after P0 through P2, and worth scoping tightly when it happens: the
+ring's fill and drain boundaries, the abandon poll, and the live-edge segment
+choice are the parts where a constant is load-bearing. .claude/rules/radio.md
+already spells the numbers both trees have to agree on, which makes them the
+natural first assertions.
+
+engine/handlers.rs is listed here rather than P0 because the periodic queue and
+position save it owns writes through queries::track directly, deliberately off the
+PlayerAction list, and queries::track is at 73.9%. The loss window is one save
+interval rather than the whole queue.
+
+
+================================================================================
+P4: THE BINARY AND THE PLATFORM LAYER
+================================================================================
+
+melodia/src is 0% of 831: main.rs, the four boot/ui_setup files, boot/tasks.rs and
+shutdown.rs. headless.rs boots the real backend but not through main(), so the
+boot sequence itself has never been executed by a test.
+
+Most of it is wiring and should stay untested. Three things in it are not:
+
+  - the --version and --logs literal branches, which are P0.1 and P0.2 of
+    TODO.test-coverage.updater.txt and are the only items from that file that
+    belong to this tree rather than to the updater
+  - shutdown.rs (0% of 98), where the force-exit path and respawn_if_requested
+    decide whether a restart forwards to a live primary or waits for the socket
+    name, and MELODIA_RESPAWN is set on exactly one of the two arms
+  - single_instance.rs (75.0% of 168), already the best-covered thing in platform,
+    where what remains is the two spellings of the name and the claim-early
+    accept-late ordering
+
+The rest of the platform tier (tray 0%, always_on_top 0-20%, system_theme 44.9%,
+desktop_integration 30.3%) is FFI and D-Bus against services CI does not run.
+Leave it.
+
+
+================================================================================
+DELIBERATELY NOT ON THIS LIST
+================================================================================
+
+  - The UI (melodia-views, 16764 uncovered lines, 13.9%). Issue #38 says UI
+    coverage is intentionally light and should stay that way, and
+    .claude/rules/testing.md records that there is no slint::testing call
+    anywhere on purpose: the UI is pinned from the Rust side by include_str!ing
+    the .slint source, which catches the drift that actually happens. The corpus
+    walks in crates/melodia/tests/ are that coverage and they do not show up as a
+    percentage.
+
+  - Tray, always-on-top, desktop integration, DWM caption. FFI and D-Bus against
+    a session bus CI does not have.
+
+  - Discord IPC beyond the pure frame encoding. A named-pipe client against a
+    process CI does not run.
+
+  - Anything already above 90% (melodia-playback, melodia-artwork, the query
+    layer). The remaining lines there are error formatting.
+
+
+================================================================================
+SUGGESTED ORDER
+================================================================================
+
+  1. P0.4 (watcher reconcile) and P0.5 (mbid attempted set): highest consequence
+     of the no-blocker items, and both testable against fixtures that exist.
+  2. P0.1 (rating write-back) and P0.3 (play counts): the two that write user data,
+     both with a pure decision layer a paused clock can drive.
+  3. B2: narrow the contexts, starting with library/playlists.rs as the proof.
+  4. P0.2 (queue and station), then the P1 list in the order given.
+  5. B1: build the test server in melodia-testkit. Share it with the updater doc's
+     P1.1 through P1.3, which are the same fixture's first customers.
+  6. P2, then P3, then the three items worth keeping from P4.
+
+Steps 1 and 2 need no new infrastructure and cover every path where a defect costs
+the user something a reinstall does not return.

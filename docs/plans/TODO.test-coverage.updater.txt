@@ -1,0 +1,434 @@
+TODO: TEST COVERAGE
+===================
+
+Working doc for issue #38. Delete when the backlog below is spent.
+
+Status: survey complete, no tests written yet
+Created: 2026-09-04
+
+Numbers are from the published report at https://kenansalar.github.io/Melodia/,
+generated 2026-09-04 18:12. Absence claims ("nothing tests X") were each checked
+against the tree on the same day by grepping the test files rather than inferred
+from the percentage.
+
+This file covers the auto-updater only. The repo-wide backlog is in
+TODO.test-coverage.txt; B1 below is the one blocker the two share.
+
+
+WHY THE UPDATER RANKS FIRST
+---------------------------
+
+A broken updater is the one defect class the updater cannot fix. Every other
+subsystem gets a second chance on the next release; a client that rejects or
+mis-installs an update is stranded on the version it already has, and the only
+recovery is asking the user to download from the release page by hand. Melodia is
+publicly released with the updater wired, so the affected population is whoever
+has already installed.
+
+That inverts the usual cost calculation. A cheap test over a rarely-taken branch is
+worth writing here when it would not be elsewhere.
+
+
+WHERE IT STANDS
+---------------
+
+  layer                                              line              region
+  -------------------------------------------------------------------------------
+  backend (services/updater/**)                      24.7% (191/773)   24.0% (277/1154)
+  daily task (tasks/updater_daily.rs)                23.9% (50/209)    26.7% (88/329)
+  settings persistence (library/settings/updates.rs)  0.0% (0/44)       0.0% (0/47)
+  UI layer (ui/callbacks/updater/**, updater_settings) 0.0% (0/378)     0.0% (0/590)
+  -------------------------------------------------------------------------------
+  ALL UPDATER CODE                                   17.2% (241/1404)  17.2% (365/2120)
+
+Per file, worst first:
+
+  file                                   fn            line             region
+  -------------------------------------------------------------------------------
+  services/updater/check.rs                0% (0/2)      0% (0/34)        0% (0/36)
+  services/updater/event.rs                0% (0/2)      0% (0/16)        0% (0/20)
+  services/updater/github.rs               0% (0/8)      0% (0/64)        0% (0/91)
+  services/updater/asset_cache.rs          0% (0/5)      0% (0/13)        0% (0/17)
+  services/updater/install/mod.rs          0% (0/6)      0% (0/52)        0% (0/98)
+  services/updater/install/verify.rs       0% (0/6)      0% (0/64)        0% (0/83)
+  library/settings/updates.rs              0% (0/10)     0% (0/44)        0% (0/47)
+  services/updater/install/swap.rs      42.9% (3/7)   15.3% (17/111)   18.2% (30/165)
+  services/updater/install/download.rs  33.3% (4/12)  16.7% (23/138)   12.1% (27/223)
+  tasks/updater_daily.rs                44.0% (11/25) 23.9% (50/209)   26.7% (88/329)
+  services/updater/install/staging.rs   32.0% (8/25)  32.0% (49/153)   33.2% (84/253)
+  services/updater/minisign.rs          75.0% (9/12)  79.1% (83/105)   81.0% (111/137)
+  services/updater/mod.rs               50.0% (1/2)   42.9% (3/7)      33.3% (3/9)
+  services/updater/manifest.rs           100% (1/1)    100% (3/3)       100% (3/3)
+  services/updater/version.rs            100% (3/3)    100% (13/13)     100% (19/19)
+
+The percentage is a poor guide on its own here. minisign.rs reads as the
+best-covered file and is, but the three uncovered functions are not the gap that
+matters; version.rs reads as finished and is. The ranking below is by consequence,
+not by the column.
+
+
+TWO BLOCKERS THAT GATE SEVERAL ITEMS
+------------------------------------
+
+Neither is a test. Both are decisions to take before the items that depend on them.
+
+B1. There is no HTTP test double in this tree.
+
+    No test stands up a local server (checked: no TcpListener, no 127.0.0.1, no
+    wiremock/httptest/axum dev-dependency anywhere). Every item marked "needs B1"
+    below is blocked on one. .claude/rules/testing.md is explicit that adding a
+    framework is an argument to make rather than a default, and the argument does
+    not need to be made: a std::net::TcpListener on port 0 with a thread speaking
+    enough HTTP/1.1 to serve a canned status, headers and body is about eighty
+    lines and no new dependency. It names no workspace type, so its home is
+    melodia-testkit, which may name no member.
+
+B2. fetch_latest_manifest has no URL seam.
+
+    LATEST_JSON_URL and LATEST_JSON_SIG_URL are const in github.rs and the function
+    takes no base, so the whole manifest-fetch path is unreachable from a test even
+    with B1 solved. download_to_file is the opposite case: it already takes url, so
+    it needs only B1. The structural fix is to thread a base URL through
+    fetch_latest_manifest and check_for_update the way current_version is already
+    threaded "for testability". Prefer that over an env-var override, which would be
+    a second configuration surface on a security boundary.
+
+
+================================================================================
+P0: WRITE THESE FIRST
+================================================================================
+
+The common thread: each is a contract that spans two trees or two processes, none
+has an anchor file that could hold it, and every one of them fails silently in CI
+and loudly in a user's install.
+
+
+P0.1  The --version forward-compat contract is unpinned
+-------------------------------------------------------
+
+main.rs:31 is a literal-first branch printing "Melodia <CARGO_PKG_VERSION>", and
+the comment above it says it must stay there forever. It is the acceptance gate for
+every in-place update: verify_swapped_binary spawns the freshly swapped binary with
+--version, and a missing branch or changed prefix makes the smoke test fail, the
+rollback fire, and the update fail for every client already installed.
+
+Nothing tests it. There is no --version spawn anywhere in crates/melodia/tests/.
+
+The test spawns the binary cargo just built. crates/melodia/tests/ is the right
+home, env!("CARGO_BIN_EXE_Melodia") resolves the path, and the assertion is exit 0,
+stdout starting "Melodia ", and the version matching CARGO_PKG_VERSION. Cheap, and
+it pins the exact three properties the verifier reads.
+
+Pin --logs in the same file while there. It is the sibling branch, it must also
+precede anything that can fail, and it has the same zero coverage.
+
+
+P0.2  The CI trusted-comment format is unpinned on both sides
+--------------------------------------------------------------
+
+minisign.rs parses version= out of an artifact's trusted comment and manifest= out
+of the manifest's, and rejects the install when either is missing. The values are
+produced in three workflow files:
+
+  release-build.yml:174     version=<v> target=<kind> file={file}
+  release-publish.yml:92    version=<v> manifest=true
+  refresh-manifest.yml:117  version=<v> manifest=true
+
+Drop the -t flag, rename a token, or add a workflow that signs without one, and
+every client rejects the release as VersionMismatch. The signing action's own
+comment says as much. Nothing checks that the workflows still emit what the parser
+still reads.
+
+A walk in crates/melodia/tests/ reading the three workflow files and asserting each
+trusted-comment: line carries the fields the Rust side requires. It owes a vacuity
+floor (assert it found all three invocations) and should assert the count rather
+than a floor, so a fourth signing workflow added without the fields fails rather
+than passing unseen.
+
+
+P0.3  The manifest's platform keys and the client's are unpinned against each other
+------------------------------------------------------------------------------------
+
+format_key (Rust, melodia-platform) produces ten keys the client can ask for.
+scripts/build-latest-json.py maps release filenames onto twelve, two of which
+(windows-*-zip) no client asks for. The overlap is correct today. Nothing holds it.
+
+This has already shipped broken once: the script's own comment records that v0.8.0
+shipped a manifest with no deb entry at all, because the filename regex stopped
+matching what the build renamed, and deb users got nothing. A key the client asks
+for and the manifest lacks surfaces as
+
+  AppError::Validation("manifest reports version X but has no platform asset for '<key>'")
+
+which reaches the user as a failed update rather than a quiet no-op.
+
+The test asserts every key format_key can return appears in the script's mapping
+table. Cross-tree with no anchor, so crates/melodia/tests/. format_key is
+pub(crate) in melodia-platform, so this reads the key literals out of both sources
+rather than calling the function.
+
+
+P0.4  resolve_install_method is untested on Linux, and cannot be tested as written
+-----------------------------------------------------------------------------------
+
+staging.rs:41 maps the target key onto AtomicSwap / LinuxPackage(Rpm|Deb) /
+WindowsMsi. The enum's own doc comment says the point of folding both decisions into
+one value is that "picking an .rpm and then atomic-swapping it as a raw binary is
+the bug class that prevents". A typo in one of those six string literals falls
+through the _ arm to AtomicSwap and does exactly that: renames an .rpm over the live
+binary, which then fails the smoke test and rolls back, on the package-managed
+installs that are the majority of the Linux matrix.
+
+The only test is resolve_install_method_picks_windows_msi, gated
+#[cfg(target_os = "windows")]. On Linux CI the entire mapping is unexercised.
+
+It is untestable because it reads current_target_key() internally rather than taking
+it. The structural fix is the one format_key already made in the module next door,
+and for the same stated reason: split the pure mapping out as
+
+  install_method_for_key(key: Option<&str>) -> InstallMethod
+
+and leave resolve_install_method as the thin wrapper. Then the six keys plus None
+plus an unknown key are a table test on any host.
+
+Do the split before writing the test. Retrofitting a test onto the current shape
+means env manipulation for something that wants to be a pure function.
+
+
+P0.5  FailureKind::classify is unpinned
+----------------------------------------
+
+event.rs is 0% and classify is the whole of what it does that can be wrong. It
+recognises a signature failure by the substring "signature" in a Validation message,
+which is a coupling to prose written in three other modules: verify_staged says
+"update signature verification failed", github.rs says "manifest signature
+verification failed", and everything else in Validation is meant to read as Parse.
+
+Reword one of those messages and the failure silently reclassifies. The user-visible
+effect is the wrong toast on the one failure the threat model treats as adversarial
+until proven otherwise.
+
+A unit test beside the module, table-driven over the five buckets, constructing the
+error values the real call sites construct rather than hand-written strings. Pair it
+with as_kind_str, whose values are read by a Slint switch and are documented as not
+changeable without it.
+
+
+================================================================================
+P1: THE MID TIER
+================================================================================
+
+Real logic, partially covered, no cross-tree drift risk. Worth doing in this order.
+
+
+P1.1  The resume protocol (download.rs, 16.7% line)          [needs B1]
+------------------------------------------------------------------------
+
+The pure halves are already covered and covered well: plan_resume has all five
+branches, exceeds_size_bound works both sides of the 5% slack including saturation,
+capture_strong_etag pins the weak-tag filter, and the sidecar fingerprint has six
+tests. What is untested is download_to_file itself, which is where those pieces are
+wired together and where the interesting failures live:
+
+  - a 206 continues from the offset and appends rather than truncating
+  - a 200 answering a Range: request resets to zero rather than concatenating two
+    releases (the --clobber hole If-Range exists to close)
+  - the size-bound abort removes the partial file rather than retaining it
+  - Skip returns without a request when the bytes already match
+  - progress is computed against the manifest size, not the response's
+    Content-Length, so a resumed download does not restart the bar at zero
+
+Each of these is a distinct branch that a canned-response server exercises directly.
+This is the largest single coverage win in the subsystem and the only P1 item whose
+absence could corrupt an artifact rather than merely fail an install.
+
+
+P1.2  check_for_update's outcome ladder (check.rs, 0%)       [needs B1, B2]
+----------------------------------------------------------------------------
+
+Five outcomes, none exercised: NotModified, UnsupportedSchema (the forward-compat
+gate), UpToDate, NoAssetForTarget, Available, plus the missing-asset Err. The schema
+gate is the one worth writing first: it is the mechanism by which an older client
+refuses a manifest it cannot read, and getting it backwards means either refusing
+every valid manifest or acting on one it does not understand.
+
+Test the boundary on both sides. SUPPORTED_MANIFEST_SCHEMA is 1, so schema 1 must
+proceed and schema 2 must return UnsupportedSchema, and the etag must still be
+cached on the refusing path.
+
+
+P1.3  The manifest fetch fails closed (github.rs, 0%)        [needs B1, B2]
+----------------------------------------------------------------------------
+
+The module's doc comment states the security property: a missing .minisig, a
+non-200 on it, an invalid signature, or a trusted comment lacking manifest=true all
+refuse, because a fail-open posture would let a network attacker strip the
+signature. That is the updater's trust boundary (ADR 19) and it is entirely
+unexercised.
+
+Four cases, each a canned server response: sig 404, sig 200 with a wrong signature,
+sig 200 signed as an artifact rather than a manifest, and the happy path. The
+verification-before-parse ordering is worth asserting too: a body that is both
+unsigned and malformed JSON must report the signature failure, not the parse one.
+
+The cryptographic half of this is already well covered in minisign_tests.rs. What is
+missing is that github.rs actually calls it, on every path, before parsing.
+
+
+P1.4  install/mod.rs's orchestration (0%)
+------------------------------------------
+
+download_and_install is the sequencing this whole subsystem exists to get right, and
+the doc comment makes three promises none of which is tested: verification completes
+before any rename touches the live binary; a verify failure removes both the staged
+file and its sidecar; the sidecar is dropped before the smoke test so a rollback
+cannot leak it.
+
+Testing the real function means a server and an install target, so it is expensive.
+The cheaper 80% is a test that drives the failure path with a deliberately bad
+signature against a temp-dir target and asserts the target is byte-identical
+afterwards and both staged files are gone.
+
+
+P1.5  library/settings/updates.rs (0%)
+---------------------------------------
+
+Five setters, all mutate_settings closures. The existing updates_tests.rs tests
+UpdateFlags the struct, which is why the file reads 0%: nothing calls the setters.
+
+Low consequence individually, but two behaviours are load-bearing and asserted only
+by comment. record_check_success resets consecutive_failures and leaves
+last_known_release untouched when passed None (the 304 path). record_check_failure
+advances last_check_unix as well as the counter, and the comment explains that
+without it repeated failures re-fire every iteration. Both are round-trippable
+against a temp Paths and worth pinning at that cost.
+
+
+P1.6  The daily task's handle_outcome skip logic (updater_daily.rs, 23.9%)
+---------------------------------------------------------------------------
+
+The pure helpers are done: needs_check covers never-checked, the 24h boundary either
+side, and a future timestamp; backoff_delay_for covers the whole ladder including
+the u8::MAX cap. Good tests, and they are why the file is not in P0.
+
+What is untested is handle_outcome, and specifically the skip gate, which is the
+only genuinely conditional logic in the file:
+
+  - a skipped release equal to the live version suppresses the toast
+  - a strictly newer version clears the skip and re-notifies
+  - a malformed stored skip clears rather than muting notifications forever
+  - critical bypasses the skip filter entirely
+
+Those four are a table, and the last is the one with a user-visible security
+consequence: a critical release the user has muted must still surface. The function
+takes &AppState and a Weak<AppWindow>, so testing it as written needs both. The skip
+decision is pure over (skipped_release, version, critical) and would be worth
+lifting out on its own merits.
+
+
+================================================================================
+P2: COVERED WELL, STILL MISSING SOMETHING
+================================================================================
+
+
+P2.1  minisign.rs (79% line) misses the rotation tripwire
+----------------------------------------------------------
+
+The three uncovered functions are error formatting, not logic, and the cross-check
+tests are thorough: version match, version mismatch, missing version field, manifest
+tag match, mismatch, missing tag, artifact-signature cross-paste, tampered body,
+non-prehashed rejection, truncated signature. This is the best-tested file in the
+subsystem and it earns it.
+
+What it misses is that embedded_pubkey() parses but is never asserted to be the key
+production actually ships. embedded_pubkey_parses_as_full_file would pass against
+any well-formed key file, including a fixture key accidentally committed over
+assets/updater-pubkey.b64. Rotation is documented as one-way and disruptive; an
+accidental rotation is the same event without the intent.
+
+A pin on the key's own identity (its base64 key id, not the whole file) would catch
+a swap in review. Cheap, and it fails loudly exactly when someone means it to.
+
+
+P2.2  install/swap.rs (15.3% line) misses every failure branch
+---------------------------------------------------------------
+
+Four tests cover the happy path well: same-directory swap, byte replacement, .old
+retention, and a stale .old cleared before the new snapshot. What is untested is
+what happens when the second rename fails, which is the branch that decides whether
+the user is left with a working binary or no binary at all. linux_swap renames .old
+back and logs; the log must not override the original error.
+
+Testable on Linux by making the staged path unreadable or absent between the two
+renames. Worth it: the failure mode is an install that leaves nothing at the target.
+
+elevate_swap_via_pkexec and install_via_package_manager are not worth testing. Both
+are pkexec subprocess wrappers whose interesting behaviour is exit-code mapping over
+a binary CI does not have.
+
+
+P2.3  install/staging.rs (32% line) misses the pruner
+------------------------------------------------------
+
+prune_stale_staging is untested and is the only thing in the module that deletes
+files. Its 7-day cutoff, its file-vs-directory filter, and its silence on every
+error path are all unexercised. A temp dir with three files of controlled mtimes
+either side of the boundary settles it, which is the boundary discipline
+.claude/rules/testing.md asks for and the reason this is listed at all: the cutoff
+is exactly the kind of constant the rule names.
+
+staged_package_path is also untested on Linux (the .rpm/.deb suffix filter and the
+synthetic-name fallback), where its Windows twin staged_msi_path has two tests. Same
+function, same bug class, tested on one platform.
+
+
+P2.4  version.rs and manifest.rs are done
+------------------------------------------
+
+version.rs is 100% and the tests are the right ones, including the downgrade refusal
+and pre-release ordering. manifest.rs is 100% with back-compat parsing, unknown-key
+pass-through and the multi-line signature round trip.
+
+One gap, and it is really P0.3's neighbour: supported_schema_constant_is_one pins
+the Rust constant and then tells the reader in a comment to also update
+build-latest-json.py's default. That comment is the second copy of an argument
+CLAUDE.md says not to keep. The test can read the Python default and assert the two
+agree, which is the same check without the copy.
+
+
+================================================================================
+DELIBERATELY NOT ON THIS LIST
+================================================================================
+
+  - The UI layer (ui/callbacks/updater/**, ui/settings/updater_settings.rs, 378
+    uncovered lines). Issue #38 says library-layer coverage is the priority and UI
+    coverage is intentionally light. paint.rs is six upgrade_in_event_loop calls
+    with no logic. The one piece with real logic is install.rs's asset-cache
+    fallback ladder over the five CheckOutcome variants, and the honest way to test
+    that is to lift the decision out of the spawned future, not to drive Slint.
+
+  - asset_cache.rs (0%, 13 lines). A OnceLock<Mutex<Option<_>>> with three one-line
+    accessors. A test would assert that a mutex works.
+
+  - install_via_msiexec / install_via_package_manager / elevate_swap_via_pkexec.
+    Subprocess wrappers around binaries CI does not have.
+
+  - verify_swapped_binary's 5 s timeout. The timeout value is argued at its
+    definition against slow ARM hardware; a test would either sleep for five seconds
+    or re-assert the constant against itself.
+
+
+================================================================================
+SUGGESTED ORDER
+================================================================================
+
+  1. P0.1 (--version) and P0.5 (classify): no blockers, small, high consequence.
+  2. P0.4: do the install_method_for_key split, then the table.
+  3. P0.2 and P0.3: the two cross-tree walks, same shape, share a session.
+  4. B1: build the test server in melodia-testkit.
+  5. P1.1: the resume protocol, the largest win B1 unlocks.
+  6. B2, then P1.2 and P1.3.
+  7. P1.4 through P1.6, then the P2 tier.
+
+Steps 1 through 3 need no new infrastructure and close every item where the failure
+reaches an installed user rather than a developer.
