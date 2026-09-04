@@ -186,9 +186,9 @@ pub(super) fn install_via_msiexec(_staged: &Path) -> AppResult<()> {
 /// inode while this process's open fd stays valid — falling back to `pkexec mv`
 /// on `PermissionDenied` at a root-owned target. **Windows** refuses to rename a
 /// loaded executable at all, so it dances: running → `.old`, staged → running,
-/// then `.old` scheduled for delete on reboot. `main()`'s startup `remove_file`
-/// usually clears it first; the reboot fallback only matters if `.old` is still
-/// pinned.
+/// then `.old` scheduled for delete on reboot. That schedule is the cleanup
+/// rather than a fallback: `main()`'s startup reaper is Linux-only, so the only
+/// earlier clear is the best-effort `remove_file` at the top of the next swap.
 pub fn swap_in_place(target: &Path, staged: &Path) -> AppResult<()> {
     #[cfg(target_os = "windows")]
     {
