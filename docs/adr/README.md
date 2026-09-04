@@ -25,6 +25,7 @@ chronological and the groups are not, so a low number can sit anywhere.
 | [6. AGPL-3.0-or-later, and what every artifact then owes](0006-agpl-and-what-artifacts-owe.md) | Accepted, 2026-05-25 |
 | [28. No `unsafe` outside platform FFI, and no `unwrap` anywhere](0028-no-unsafe-outside-ffi-no-unwrap-anywhere.md) | Accepted, 2026-05-25 |
 | [30. Memory is a product requirement, and three knobs hold it](0030-memory-is-a-product-requirement.md) | Accepted, 2026-05-25 |
+| [34. Performance is held by profiling and by shape, not by a benchmark suite](0034-performance-is-profiled-not-benchmarked.md) | Accepted, 2026-09-04 |
 
 ### Audio
 

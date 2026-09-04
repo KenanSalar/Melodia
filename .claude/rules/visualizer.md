@@ -101,16 +101,14 @@ counter, both worth reading before changing a gate.
   *catch-all* branch, so switching Bars↔Mirrored re-evaluates one binding instead of rebuilding the
   whole 64-band subtree, and the column-width floor and two-axis radius clamp stay in one copy. The
   bar's `height` binding is its **total** height in both anchorings, so a centred bar puts
-  `level * H/2` either side rather than a full bar each way — as every mirrored analyzer that ships
-  does (CAVA halves its output for `ORIENT_SPLIT_H`, wavesurfer draws against a `halfHeight`,
-  audioMotion's "perfect mirror" is `reflexRatio: 0.5`); doubling would clip past level 0.5 at any
-  strip height. The word is overloaded — audioMotion's `mirror` and CAVA's `channels = stereo` mean
-  the *horizontal* fold (bass in the centre), which we don't build.
+  `level * H/2` either side rather than a full bar each way, which is what a mirrored analyzer
+  owes; doubling would clip past level 0.5 at any strip height. The word is overloaded elsewhere,
+  where *mirror* often means the horizontal fold with bass in the centre, which we don't build.
 
 - **Every style ticks at 33 ms** — one interval for all three (`visualizer-strip.slint`,
   `dormant ? 500ms : 33ms`), not one per style. 30 Hz rather than 60 because the bars' rounded-rect
   re-tessellation dominated allocation counts at vsync, and a trace has no decay animation to keep
-  smooth besides — a high rate only makes it look frantic (`foobar2000`'s scope caps at 20 Hz).
+  smooth besides, and a high rate only makes it look frantic.
   `VISUALIZER_DECAY` being per *frame*, one interval means all three settle in about the same
   second, and there is no per-style rate to retune. The trace's geometry crosses as an SVG
   `commands` string with a fixed viewbox rather than a model — `slint-pitfalls.md`'s `Path` entry.

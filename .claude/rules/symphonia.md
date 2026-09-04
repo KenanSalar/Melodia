@@ -55,11 +55,9 @@ loop {
   the length, so this is the common case rather than an edge one — `file_decode::SEEK_END_MARGIN`
 - **A demuxer seek lands on a packet boundary, so trim the head yourself.** Without it every seek
   replays the tail of what came before. `required_ts - actual_ts` through the track's timebase gives
-  the frames to drop. Note that neither reference player does this: `symphonia-play` skips whole
-  packets and says in its own comment that it should not, and termusic seeks `Coarse` and skips whole
-  packets too. rodio's `refine_position` was frame-accurate and was the bar; `file_decode::try_seek`
-  is what holds it now, and `file_decode_tests::a_seek_lands_on_the_frame_it_asked_for` is what says
-  so, since nothing else in the tree can tell you the trim went missing
+  the frames to drop. Nothing upstream does it for you, and `file_decode::try_seek` is what holds
+  it here; `file_decode_tests::a_seek_lands_on_the_frame_it_asked_for` is what says so, since
+  nothing else in the tree can tell you the trim went missing
 
 ### Gapless Support
 
@@ -78,9 +76,7 @@ loop {
   `player::aac_trim`, which reads the two places a file states its padding and hands `file_decode` a
   head and a playable length; that module argues the numbers,
   `docs/adr/0011-aac-trim-read-from-the-file.md` argues why we read them rather than trusting the
-  flag, and `.claude/rules/audio-stack.md` says why it sits outside the shared `decode`. rox reached the same
-  conclusion from the other direction, distrusting the trimming enough to plan its own before
-  verifying that MP3's holds, and then shipping only the harness that checks it
+  flag, and `.claude/rules/audio-stack.md` says why it sits outside the shared `decode`
 
 ### Performance
 
