@@ -1,0 +1,39 @@
+[package]
+name = "melodia-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Errors, paths, boundary DTOs, themes and shared primitives for Melodia"
+publish = false
+
+[lib]
+doctest = false
+
+# No workspace member appears here, and none may: this is the crate every other one depends on.
+[dependencies]
+# `AppError`'s two `#[from]` database variants, and every `FromRow` in `entities/`.
+sqlx.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# `utils::event_bridge`'s channel, which the toast and play-count producers publish through.
+tokio.workspace = true
+parking_lot.workspace = true
+# `config::Paths`' data root, and `utils::redact`'s home resolution.
+dirs.workspace = true
+# `utils::atomic_file`'s temp-then-rename pair.
+tempfile.workspace = true
+# `utils::now_rfc`, the timestamp every ingest row and JSON state file is stamped with.
+chrono.workspace = true
+log.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+dunce.workspace = true
+
+[dev-dependencies]
+melodia-testkit = { path = "../melodia-testkit" }
+
+[lints]
+workspace = true

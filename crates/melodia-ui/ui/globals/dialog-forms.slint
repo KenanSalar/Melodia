@@ -1,0 +1,254 @@
+import { SmartRuleRow } from "../models.slint";
+
+// The form-shaped dialogs' state. Each is populated by its own entry-point callback and read back
+// by the `Dialog.accepted` dispatcher — which is why they sit apart from `Dialog`: the dispatcher
+// imports them, never the reverse.
+
+// The Smart-Playlist rule builder (`kind == "smart-playlist-editor"`), owned by
+// `crates/melodia-views/src/ui/playlists/callbacks/smart.rs`. The entry points populate everything and open the dialog
+// from a fresh event-loop tick — a synchronous `Dialog.open = true` off a click trips the recursion
+// guard. `commit` reconstructs a `SmartCriteria` from the model plus the scalars.
+export global SmartEditor {
+    in-out property <[SmartRuleRow]> rules;
+    // 0 = match all (AND), 1 = match any (OR).
+    in-out property <int> match-mode-index;
+    in-out property <string> name;
+    in-out property <string> description;
+    in-out property <bool> limit-enabled;
+    in-out property <string> limit-count-text: "25";
+    in-out property <int> limit-order-index;
+    // -1 creates; otherwise the playlist being edited.
+    in-out property <int> target-id: -1;
+
+    callback request-new();
+    callback request-edit(int /*playlist_id*/);
+
+    // Rust rewrites the row, recomputing field-kind / input-kind.
+    callback add-rule();
+    callback remove-rule(int /*row*/);
+    callback set-rule-field(int /*row*/, int /*field index*/);
+    callback set-rule-op(int /*row*/, int /*op index*/);
+    callback set-rule-value(int /*row*/, string);
+
+    callback commit();
+}
+
+// The Edit-Track-Information dialog (`kind == "edit-tags"`), opened from a track row's context menu
+// over one *or many* rows and owned by `crates/melodia-views/src/ui/callbacks/tags.rs`. `request-edit` fetches,
+// populates and opens on the same fresh tick `SmartEditor` uses. `commit` diffs each field against
+// the populate-time snapshot into a Keep / Clear / Set tri-state, so only touched fields reach the
+// file.
+//
+// Batch editing is the point: a field that disagrees across the selection starts empty behind the
+// Rust-set ‹multiple values› sentinel. Lyrics and Summary are
+// single-selection only, and `tag-editor-body.slint` leaves those tabs unmounted
+// in multi mode rather than merely disabling them.
+export global TagEditor {
+    // Numbers cross as strings — Rust parses and validates them into a typed
+    // `TagEdit` on commit.
+    in-out property <string> title;
+    in-out property <string> artist;
+    in-out property <string> album-artist;
+    in-out property <string> album;
+    in-out property <string> genre;
+    in-out property <string> year;
+    in-out property <string> original-year;
+    in-out property <string> track-number;
+    in-out property <string> disc-number;
+    in-out property <string> composer;
+    in-out property <string> comment;
+    in-out property <string> bpm;
+    in-out property <string> lyrics;
+
+    // The sentinel where the selection disagrees, the normal hint otherwise.
+    in property <string> title-placeholder;
+    in property <string> artist-placeholder;
+    in property <string> album-artist-placeholder;
+    in property <string> album-placeholder;
+    in property <string> genre-placeholder;
+    in property <string> year-placeholder;
+    in property <string> original-year-placeholder;
+    in property <string> track-number-placeholder;
+    in property <string> disc-number-placeholder;
+    in property <string> composer-placeholder;
+    in property <string> comment-placeholder;
+    in property <string> bpm-placeholder;
+    in property <string> lyrics-placeholder;
+
+    // 1 = single selection (Lyrics + Summary available), >1 = batch.
+    in property <int> track-count;
+    // Rust resets this to 0 (Tags) on every populate.
+    in-out property <int> active-tab;
+    // Preview of the current or picked cover; `has-cover` gates Remove.
+    in-out property <image> cover;
+    in property <bool> has-cover;
+    in property <bool> lyrics-enabled;
+
+    // Read-only, preformatted by Rust.
+    in property <string> summary-path;
+    in property <string> summary-codec;
+    in property <string> summary-bitrate;
+    in property <string> summary-sample-rate;
+    in property <string> summary-bit-depth;
+    in property <string> summary-channels;
+    in property <string> summary-size;
+    in property <string> summary-duration;
+    in property <string> summary-modified;
+    in property <string> summary-hash;
+
+    callback request-edit([int] /*track ids*/);
+    // rfd on the UI thread.
+    callback pick-artwork();
+    callback remove-artwork();
+    callback commit();
+}
+
+// The two scrobble login dialogs, owned by `crates/melodia-views/src/ui/settings/scrobbling_settings.rs`; the
+// section resets this to defaults just before opening one. Last.fm is two-step
+// browser auth — `lastfm-open-auth()` fetches an unauthorized token, opens the
+// approval page and advances `lastfm-step`, then `lastfm-finish` exchanges it
+// for a session. ListenBrainz just validates a pasted token. `error` carries a
+// localized line, which Rust has to set through the `err-*` `@tr` callbacks —
+// Slint 1.16 exposes no Rust-callable `tr()`.
+export global ScrobbleUi {
+    in-out property <int> lastfm-step;      // 0 = open browser, 1 = finish
+    in-out property <string> lastfm-token;  // unauthorized token between steps
+    in-out property <string> lb-token;      // ListenBrainz token input
+    in-out property <bool> busy;
+    in-out property <string> error;
+
+    callback lastfm-open-auth();
+    callback lastfm-finish(string /*token*/);
+    callback listenbrainz-verify(string /*token*/);
+
+    // Resolved in the active locale at call time.
+    pure callback err-invalid-token() -> string;
+    err-invalid-token => {
+        return @tr("That token wasn't accepted. Check it and try again.");
+    }
+    pure callback err-network() -> string;
+    err-network => {
+        return @tr("Couldn't reach the service. Check your connection and try again.");
+    }
+    pure callback err-not-authorized() -> string;
+    err-not-authorized => {
+        return @tr("Not approved yet. Approve Melodia in your browser, then click Finish.");
+    }
+    pure callback err-save-failed() -> string;
+    err-save-failed => {
+        return @tr("Couldn't save your credentials.");
+    }
+}
+
+// The add / edit station form, owned by `crates/melodia-views/src/ui/radio/callbacks/kept.rs`. Both dialog kinds share
+// it, `edit-id` being the whole difference: `-1` adds, anything else rewrites that row.
+//
+// **The dialog stays open across `submit()`** — `components/dialog/dialog.slint` suppresses the
+// auto-close for both kinds — because the submit is a real connect: the URL is followed past any
+// playlist indirection and the container is probed, so a mount that cannot play is refused here
+// rather than at the first click. Rust closes the dialog once that succeeds.
+//
+// `error` carries a localized line, which Rust has to set through the `err-*` `@tr` callbacks —
+// Slint 1.16 exposes no Rust-callable `tr()`.
+export global RadioForm {
+    in-out property <int> edit-id: -1;
+    in-out property <string> url;
+    // Optional. Left blank, the station names itself off the stream's own headers.
+    in-out property <string> name;
+    in-out property <bool> busy;
+    in-out property <string> error;
+    // The row belongs to the directory, so name and stream URL are left out: they are rewritten
+    // from the directory on the next play, and offering them would be offering an edit that
+    // reverts. What remains is whatever the directory left blank.
+    in-out property <bool> directory-owned;
+
+    // The four the user may fill in, each shown only where the directory said nothing — a value it
+    // did supply is not theirs to overwrite, and an editor over it is one misclick from a typo.
+    // Rust answers each flag off the row; see `RadioStation::can_override`.
+    in-out property <string> website;
+    in-out property <bool> can-edit-website;
+    in-out property <string> logo-url;
+    in-out property <bool> can-edit-logo;
+    in-out property <string> genre;
+    in-out property <bool> can-edit-genre;
+    in-out property <string> country;
+    in-out property <bool> can-edit-country;
+
+    // The state an add opens on, and what a close hands back. Spelled once rather than at both
+    // sites: every property here has to be answered, a flag left at its `false` default being a
+    // field the add dialog never draws. A `public function` rather than a callback, per
+    // `Dialog.closed-teardown()` — a callback's single handler slot is clobberable.
+    public function reset() {
+        root.edit-id = -1;
+        root.url = "";
+        root.name = "";
+        root.website = "";
+        root.logo-url = "";
+        root.genre = "";
+        root.country = "";
+        // A station typed in by URL has no directory to disagree with, so all four are the user's;
+        // the editor answers them off the row it opens on.
+        root.directory-owned = false;
+        root.can-edit-website = true;
+        root.can-edit-logo = true;
+        root.can-edit-genre = true;
+        root.can-edit-country = true;
+        root.busy = false;
+        root.error = "";
+    }
+
+    callback submit();
+
+    // What Enter means in any of the form's six fields, stated once. Each field used to spell its
+    // own guard and two spellings grew: the URL and name fields required a URL, the four override
+    // fields did not — correct on a directory-owned station, which draws no URL field, and wrong
+    // on the add form, where Enter from the genre field attempted a submit that could not succeed.
+    // A `public function` rather than a callback, per `reset` above: a callback has one handler
+    // slot and Rust claims it.
+    public function submit-if-ready() {
+        if (!root.busy && (root.directory-owned || root.url != "")) {
+            root.submit();
+        }
+    }
+
+    // The edit dialog's chrome. Resolved here rather than written from Rust for the reason every
+    // string on this side is: `@tr` folds msgids at codegen, so a sentence Rust pushed would
+    // render untranslated. The *add* dialog opens from `views/radio/tab-pills.slint`, where the
+    // literals sit inline.
+    pure callback edit-title() -> string;
+    edit-title => {
+        return @tr("Edit Station");
+    }
+    pure callback details-title() -> string;
+    details-title => {
+        return @tr("Station Details");
+    }
+    pure callback save-label() -> string;
+    save-label => {
+        return @tr("Save");
+    }
+    pure callback cancel-label() -> string;
+    cancel-label => {
+        return @tr("Cancel");
+    }
+
+    // Resolved in the active locale at call time.
+    pure callback err-unreachable() -> string;
+    err-unreachable => {
+        return @tr("Couldn't reach that address. Check the URL and your connection.");
+    }
+    pure callback err-not-audio() -> string;
+    err-not-audio => {
+        return @tr("That address doesn't play as audio Melodia can decode.");
+    }
+    pure callback err-save-failed() -> string;
+    err-save-failed => {
+        return @tr("Couldn't save the station.");
+    }
+    // Both typed URLs refuse through this one — the sentence names neither field, so the website
+    // and the logo address share it.
+    pure callback err-bad-url() -> string;
+    err-bad-url => {
+        return @tr("That doesn't look like a web address. It should start with https://");
+    }
+}

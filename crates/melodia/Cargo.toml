@@ -1,0 +1,131 @@
+[package]
+# Lowercase, against the artifact being `Melodia`: `-p melodia` and
+# `cargo wix --package melodia` want a name nobody has to remember the case of,
+# and `[[bin]]` below is what keeps the file itself spelled the way every
+# download URL, `.desktop` Exec= line and MSI registry key already is.
+name = "melodia"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Cross-platform desktop music player (Slint + Rust)"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors = ["Kenan Salar <kenansalar@users.noreply.github.com>"]
+keywords = ["music", "player", "audio", "slint"]
+categories = ["multimedia::audio"]
+# `melodia-ui` is depended on by path with no version, so a publish could never work.
+publish = false
+
+# The artifact name is load-bearing and is not the package name: `target/release/Melodia`
+# is spelled in the three packaging scripts, `release-build.yml`'s BINARY, and
+# `wix/main.wxs`'s `Melodia.exe` File, RestartResource and
+# `HKLM\Software\Classes\Applications\Melodia.exe` keys — which are what an in-place MSI
+# upgrade matches on, so a rename strands the file associations of everyone already
+# installed. `path` is required rather than inferable: cargo only guesses `src/main.rs`
+# for a bin named after its package.
+[[bin]]
+name = "Melodia"
+path = "src/main.rs"
+
+# Drives the `.deb` in release CI; the polkit helper and policy are what
+# `updater/install/swap.rs` looks for at `/usr/libexec/melodia-update-helper`. Dest
+# paths follow the Debian FHS and match the RPM `%files` layout, except licences:
+# Policy 12.5 wants `/usr/share/doc/<pkg>/copyright` and Debian has no
+# `/usr/share/licenses`, while RPM's `%license` tag survives `--excludedocs`.
+[package.metadata.deb]
+section = "sound"
+priority = "optional"
+# Copied verbatim only because it opens with DEP-5 keys (cargo-deb reads the first
+# ten lines); otherwise it prepends a generated header declaring one author and a
+# whole-package AGPL, which the fonts and the vendored winit falsify. Bare string,
+# not the `[path, skip-lines]` pair: that is a `Vec<String>`, so a `0` won't parse.
+license-file = "../../packaging/debian-copyright"
+# `$auto` keeps the detected shared-library deps. `policykit-1` is transitional in
+# Trixie, so apt takes `pkexec` there and falls back on Bookworm and older Ubuntu.
+depends = "$auto, pkexec | policykit-1"
+# Not `depends`: both ship `debian/triggers` on the two cache directories, so dpkg
+# refreshes them per transaction and a server install that skips them is a no-op.
+recommends = "desktop-file-utils, hicolor-icon-theme"
+extended-description = """
+Melodia is a modern, local-first desktop music player with a Material
+3-inspired interface. Your music collection lives entirely on your own
+machine, and every online feature is a setting you control: scrobbling,
+Discord presence and internet radio all ship switched off. It pairs a
+Slint user interface with a pure-Rust backend: gapless playback via
+Symphonia and cpal (MP3, FLAC, M4A/M4B with AAC and ALAC, Ogg Vorbis,
+WAV, AIFF/AIFF-C, Matroska and CAF), a fast local SQLite library with
+full-text search, browsing by album, artist, genre and playlist, OS
+media controls (MPRIS), and pluggable themes including system light/dark
+and Material You."""
+# The reverse-DNS dest names match the AppStream component id, which is what makes
+# Discover / GNOME Software merge the desktop entry with the MetaInfo component.
+#
+# Every source but the first is `../../`, this manifest sitting two below the repo root
+# and each input staying beside the other packaging sources. The first is *not* an
+# oversight: `target/release/` is a magic literal cargo-deb strips off the string before
+# joining any root (`config.rs`'s `strip_prefix("target/release")`), then resolves against
+# the real target dir, which `--target` moves. Given a `../../` it would stop matching and
+# the binary would be looked for as an ordinary file that no build has put there.
+assets = [
+    ["target/release/Melodia", "usr/bin/melodia", "755"],
+    ["../../scripts/Melodia.desktop", "usr/share/applications/com.github.kenansalar.melodia.desktop", "644"],
+    ["../../packaging/com.github.kenansalar.melodia.metainfo.xml", "usr/share/metainfo/com.github.kenansalar.melodia.metainfo.xml", "644"],
+    ["../../assets/icons/logo-with-background.svg", "usr/share/icons/hicolor/scalable/apps/melodia.svg", "644"],
+    ["../../LICENSE", "usr/share/doc/melodia/LICENSE", "644"],
+    # The fonts and the vendored winit compile into the binary, so this package owes
+    # their licence text. Globbed, so a fourth file needs no edit here, unlike
+    # `wix/main.wxs`, which has to name each one.
+    ["../../licenses/*", "usr/share/doc/melodia/licenses/", "644"],
+    ["../../packaging/melodia-update-helper", "usr/libexec/melodia-update-helper", "755"],
+    ["../../packaging/com.github.kenansalar.melodia.update.policy", "usr/share/polkit-1/actions/com.github.kenansalar.melodia.update.policy", "644"],
+]
+
+[dependencies]
+# The generated Slint types `main.rs` and `boot/` name directly.
+melodia-ui = { path = "../melodia-ui" }
+# The UI layer, whose `ui` module is what `boot/` wires.
+melodia-views = { path = "../melodia-views" }
+# The seven the binary itself spells. `melodia-net` is absent because nothing here
+# opens a socket, and `melodia-audio` and `melodia-playback` are dev-dependencies
+# below: only `tests/` reaches under the DSP chain.
+melodia-core = { path = "../melodia-core" }
+melodia-artwork = { path = "../melodia-artwork" }
+melodia-platform = { path = "../melodia-platform" }
+melodia-engine = { path = "../melodia-engine" }
+melodia-store = { path = "../melodia-store" }
+melodia-integrations = { path = "../melodia-integrations" }
+melodia-app = { path = "../melodia-app" }
+
+# What the binary itself draws with, once views owns the fifteen the UI layer
+# needs: the renderer it builds a window from, the runtime the UI thread bridges
+# onto, and the bridge. Nothing here is named by a crate above — a dependency this
+# package no longer spells is one it no longer compiles.
+slint.workspace = true
+tokio.workspace = true
+async-compat.workspace = true
+log.workspace = true
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+winresource.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+melodia-testkit = { path = "../melodia-testkit" }
+# `crossfade`, `stream_rate` and `common/` drive the two lower audio tiers directly,
+# which is the only thing in this package that reaches below `melodia-engine`.
+melodia-audio = { path = "../melodia-audio" }
+melodia-playback = { path = "../melodia-playback" }
+tempfile.workspace = true
+# The rules pin asks whether each `.claude/rules` `paths:` entry still matches anything, and half
+# of them are globs. Hand-rolling `**` inside the one test that exists to catch silent drift is
+# the wrong place to be clever.
+glob.workspace = true
+# `tests/cross_tier.rs` reads `pragma_table_info` off a `test_pool`, which is the
+# only place this package touches the database directly.
+sqlx.workspace = true
+
+# Workspace-level and inherited by every package, so no member can sit outside the
+# gate; `melodia-ui`'s generated module carries a blanket `#[allow]`.
+[lints]
+workspace = true

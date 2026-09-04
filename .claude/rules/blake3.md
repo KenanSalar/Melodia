@@ -1,11 +1,12 @@
 ---
 paths:
-  - src/media/**/*.rs
-  - src/tasks/**/*.rs
-  - src/library/playlist_files.rs
-  - src/library/playlist_files/**/*.rs
-  - src/database/queries/**/*.rs
-  - src/services/desktop_integration.rs
+  - crates/melodia-store/src/media/ingest/**/*.rs
+  - crates/melodia-artwork/src/media/image/**/*.rs
+  - crates/melodia-app/src/tasks/**/*.rs
+  - crates/melodia-app/src/library/playlist_files.rs
+  - crates/melodia-app/src/library/playlist_files/**/*.rs
+  - crates/melodia-store/src/database/queries/**/*.rs
+  - crates/melodia-platform/src/services/platform/desktop_integration.rs
 ---
 
 # BLAKE3 Best Practices

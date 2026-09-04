@@ -1,10 +1,8 @@
 ---
 paths:
-  - src/**/*.rs
-  - tests/**/*.rs
-  - build.rs
-  - melodia-ui/build.rs
+  - crates/**/*.rs
   - Cargo.toml
+  - crates/*/Cargo.toml
 ---
 
 # Rust Performance Best Practices

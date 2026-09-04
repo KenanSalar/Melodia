@@ -11,7 +11,7 @@ Working doc. Delete when the feature ships.
 >
 > **What is left of this plan:** add `symphonia-adapter-libopus` to `Cargo.toml`, call
 > `register_audio_decoder::<OpusDecoder>()` in `decode.rs`, add `"opus"` to
-> `media::AUDIO_EXTENSIONS` (which pulls in a `silence.opus` fixture, since
+> `utils::audio_ext::AUDIO_EXTENSIONS` (which pulls in a `silence.opus` fixture, since
 > `file_decode_tests::every_scanned_extension_reaches_a_decoder` walks that list), and
 > check the licence against the five packaging formats. Phases 1 and 2 below are about a
 > rodio bump and do not apply; the container findings and the licence work still do.
@@ -22,6 +22,11 @@ Working doc. Delete when the feature ships.
 All upstream facts below were verified **2026-07-23**. Anything marked
 ⚠️ **re-verify** is expected to drift — check it again on the day rather than trusting
 this doc.
+
+Every bare `src/…` below names the pre-workspace tree, which
+[#83](https://github.com/KenanSalar/Melodia/issues/83) moved into `crates/<member>/src/`. Left as
+written, the sections holding them being the dead ones; the live summary above spells its own
+module paths and those are current.
 
 ---
 

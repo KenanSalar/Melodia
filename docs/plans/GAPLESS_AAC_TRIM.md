@@ -9,6 +9,13 @@ Status: **complete** · Created: 2026-09-02
 > registry, the checkout at `~/Development/Symphonia` (tag `v0.6.1`), and the rox and termusic
 > checkouts beside it.
 
+> **Every repo path below names the pre-workspace tree**, which
+> [#83](https://github.com/KenanSalar/Melodia/issues/83) has since moved: `src/player/` is
+> `crates/melodia-audio/src/player/source/`, `tests/assets/` is `test-assets/`, and the nested
+> `src/player/CLAUDE.md` folded into `.claude/rules/audio-stack.md`. Left as written rather than
+> rewritten, this file's only remaining job being to feed
+> [#84](https://github.com/KenanSalar/Melodia/issues/84)'s ADR pass, after which it is deleted.
+
 ---
 
 ## What ships

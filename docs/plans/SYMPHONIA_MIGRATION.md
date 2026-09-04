@@ -10,8 +10,12 @@ Status: **both phases done** · Issue:
 > everything here is a record of *why* rather than a description of what to do — which is exactly
 > what the architecture-decision pass needs as a source. Delete it once #84 has taken what it wants.
 >
-> Read `src/player/CLAUDE.md` and `src/player/output/` for the tree as it actually is; where this
-> doc and the code disagree, the code is right.
+> Read `.claude/rules/audio-stack.md` and
+> `crates/melodia-playback/src/player/playback/output/` for the tree as it actually is; where this
+> doc and the code disagree, the code is right. **Every other repo path below names the
+> pre-workspace tree**, which [#83](https://github.com/KenanSalar/Melodia/issues/83) has since
+> moved `src/` out of into `crates/<member>/src/`. Left as written rather than rewritten, for the
+> reason the paragraph above gives: what is left here is a record of why, and #84 takes it.
 >
 > **Phase 1 shipped first**, so the tree compiled one Symphonia while rodio was cut to `playback`.
 > Everything below about *two* majors is history rather than description. Six things that work

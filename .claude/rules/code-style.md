@@ -1,14 +1,7 @@
 ---
 paths:
-  - src/**/*.rs
-  - src/error.rs
-  - src/main.rs
-  - src/lib.rs
-  - melodia-ui/src/**/*.rs
-  - tests/**/*.rs
-  - build.rs
-  - melodia-ui/build.rs
-  - melodia-ui/ui/**/*.slint
+  - crates/**/*.rs
+  - crates/melodia-ui/ui/**/*.slint
   - migrations/**/*.sql
   - scripts/*.py
   - scripts/*.sh

@@ -1,16 +1,13 @@
 ---
 paths:
-  - src/**/*.rs
-  - melodia-ui/src/**/*.rs
-  - tests/**/*.rs
-  - build.rs
-  - melodia-ui/build.rs
+  - crates/**/*.rs
   - Cargo.toml
+  - crates/*/Cargo.toml
 ---
 
 # Unsafe Rust — the posture, and what to reach for instead
 
-`unsafe_code = "deny"` sits in `[workspace.lints.rust]` and both packages inherit it.
+`unsafe_code = "deny"` sits in `[workspace.lints.rust]` and every member inherits it.
 Two things follow, and they're the whole of this file: the one category that earns an
 `#[allow]`, and the table of what to use instead of the ones that don't.
 
@@ -45,11 +42,11 @@ because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of t
 
 | site | what |
 |---|---|
-| `src/main.rs` | `libc::mallopt` ×3 (the glibc arena / mmap / trim knobs), `env::set_var` for `PIPEWIRE_ALSA` |
-| `src/tasks/heap_trim.rs` | `libc::malloc_trim` |
-| `src/services/dwm_titlebar.rs` | `DwmSetWindowAttribute` ×3 |
-| `src/services/settings/data.rs` | `GetUserDefaultLocaleName` |
-| `src/services/updater/install/swap.rs` | `MoveFileExW` |
+| `crates/melodia/src/main.rs` | `env::set_var` for `PIPEWIRE_ALSA` |
+| `crates/melodia-platform/…/allocator.rs` | `libc::mallopt` ×3 (the glibc arena / mmap / trim knobs), `libc::malloc_trim` |
+| `crates/melodia-platform/…/dwm_titlebar.rs` | `DwmSetWindowAttribute` ×3 |
+| `crates/melodia-app/…/settings/data.rs` | `GetUserDefaultLocaleName` |
+| `crates/melodia-app/…/updater/install/swap.rs` | `MoveFileExW` |
 
 A new site outside that shape is a different *kind* of thing rather than one more of the
 same, and owes a justification somewhere a reviewer will read — not only in the
@@ -91,7 +88,8 @@ process state, and `cargo test` runs in parallel by default. There is one shape:
 
 **lock → snapshot → clear → set → `catch_unwind(body)` → restore → `resume_unwind`**
 
-and it is written once, in **`test_support::with_env_set`** (`src/test_support.rs`).
+and it is written once, in **`melodia_testkit::with_env_set`**
+(`crates/melodia-testkit/src/lib.rs`).
 Call it. Don't re-roll it — each of those seven steps has been missing from a hand-rolled
 copy at some point, and the restore is the one that goes first.
 
@@ -121,7 +119,7 @@ copy at some point, and the restore is the one that goes first.
   sibling test that merely *reads*, and consolidating the three locks did not close that:
   four tests in `settings_tests.rs` built a `SettingsData::default()` — which reaches
   `XDG_CURRENT_DESKTOP` and all four locale variables through its serde defaults — beside
-  the tests mutating both. **`test_support::reading_env(body)`** takes the same lock
+  the tests mutating both. **`melodia_testkit::reading_env(body)`** takes the same lock
   without touching a variable and is how such a test opts in. Nothing enforces it, so a
   reader you find unwrapped is a live race, not a style nit.
 - **It is not reentrant, and that is the cost of one lock.** A helper called from inside
@@ -138,7 +136,7 @@ none left anywhere, because the mutation moved behind the safe helpers.
 next, and one sat in `library/settings/tests/folders_tests.rs` over a file with no
 `unsafe` in it at all. Routing a file through the shared helper is exactly the edit that
 strands one, and it has retired four (`target_tests.rs`, `system_install_tests.rs`,
-`linux_pkg_tests.rs`, `settings_tests.rs`). `tests/headless.rs` is the fifth and got there
+`linux_pkg_tests.rs`, `settings_tests.rs`). `crates/melodia/tests/headless.rs` is the fifth and got there
 the other way — `Paths::rooted_at` left it no reason to touch the environment at all. The
 one that remains is on `with_env_set` itself — on the function, not the file, per the
 narrowest-item rule above.
@@ -147,11 +145,11 @@ narrowest-item rule above.
 
 | temptation | reach for |
 |---|---|
-| `get_unchecked` on a hot slice | iterator `zip` — already the idiom in `player/equalizer.rs`, and the comment there says why. Or put the length in the *type* (`[T; N]` over `Box<[T]>`) so the compiler proves the mask itself |
+| `get_unchecked` on a hot slice | iterator `zip` — already the idiom in `player/playback/equalizer.rs`, and the comment there says why. Or put the length in the *type* (`[T; N]` over `Box<[T]>`) so the compiler proves the mask itself |
 | `transmute` between plain-data slices | `bytemuck::cast_slice`. Already in the lock file transitively, so adopting it costs a direct-dependency line rather than a build — but it still has to earn one against what it saves |
 | uninit buffer + `set_len` | `Vec::with_capacity` + `extend`, or build with the fill you need. Every buffer in the DSP and visualizer paths is allocated once per source and reused, which is the win that actually mattered |
 | `std::arch` SIMD | measure first, and read the shape of the work: ten cascaded biquads are *serially dependent*, so there is nothing to vectorise across bands, and two channels caps the other axis at 2× |
-| `unsafe impl Send` / `Sync` | the `const _: fn() = \|\| { fn check<T: Send + Sync>() {} check::<FooUi>(); };` assertion — nine of them in the tree already |
+| `unsafe impl Send` / `Sync` | the `const _: fn() = \|\| { fn check<T: Send + Sync>() {} check::<FooUi>(); };` assertion — ten of them in the tree already |
 | a raw pointer to dodge a lifetime | an owned `Arc` clone. `PlaybackContext` exists for precisely this and says so |
 
 ## Before reaching for unsafe on a hot path

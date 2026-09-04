@@ -11,7 +11,7 @@ Files: *
 Copyright: 2026 Kenan Salar <kenansalar@users.noreply.github.com>
 License: AGPL-3.0-or-later
 
-Files: melodia-ui/ui/assets/fonts/vazirmatn/*
+Files: crates/melodia-ui/ui/assets/fonts/vazirmatn/*
 Copyright: 2015 The Vazirmatn Project Authors <https://github.com/rastikerdar/vazirmatn>
 License: OFL-1.1
 Comment: Metric-patched by scripts/patch_vazirmatn.py, which rewrites the OS/2
@@ -19,8 +19,8 @@ Comment: Metric-patched by scripts/patch_vazirmatn.py, which rewrites the OS/2
  declares no Reserved Font Name, so OFL section 5 imposes no rename on the
  patched build.
 
-Files: melodia-ui/ui/assets/fonts/MaterialSymbolsRounded.ttf
- melodia-ui/ui/assets/fonts/MaterialSymbolsRoundedFilled.ttf
+Files: crates/melodia-ui/ui/assets/fonts/MaterialSymbolsRounded.ttf
+ crates/melodia-ui/ui/assets/fonts/MaterialSymbolsRoundedFilled.ttf
 Copyright: 2026 Google LLC
 License: Apache-2.0
 Comment: Subset by scripts/subset-icon-fonts.sh down to the icon ligatures
@@ -33,7 +33,7 @@ License: Apache-2.0
 Comment: Vendored fork of winit 0.30.13 carrying three Wayland drag-and-drop
  commits, applied through Cargo's [patch.crates-io]. See winit/README.md.
 
-Files: melodia-ui/ui/assets/icons/kofi-symbol.svg
+Files: crates/melodia-ui/ui/assets/icons/kofi-symbol.svg
 Copyright: Ko-fi
 License: Ko-fi-brand-asset
 Comment: Ko-fi's cup symbol, exactly as published, painted on the one button

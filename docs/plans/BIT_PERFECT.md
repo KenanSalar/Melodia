@@ -10,7 +10,7 @@ Status: **proposed** · Created: 2026-08-14
 > `crates/rox-playback/src/output/`).
 >
 > **Re-read against #90 before acting on any of it.** rodio is gone and
-> `src/player/output/` exists, so findings 1 through 3 and Phase 1 are largely spent —
+> `crates/melodia-playback/src/player/playback/output/` exists, so findings 1 through 3 and Phase 1 are largely spent —
 > each is marked where it changed. Everything about exclusive mode is untouched.
 >
 > **cpal has since moved to 0.18.2**, which changes three premises below: a built stream now
@@ -46,7 +46,7 @@ That holds only when **all** of these are true, and the UI states which one is n
 | Volume == 100% | see below |
 
 The visualizer tap is the one thing that **stays on**: it is read-only and taps
-before the deck's conversion, pause and volume (`src/player/CLAUDE.md`), so it observes
+before the deck's conversion, pause and volume (`.claude/rules/audio-stack.md`), so it observes
 without touching. That's a Melodia advantage worth keeping — most players kill their
 visualizer in exclusive mode.
 
@@ -137,7 +137,7 @@ it is the half worth porting.
 | claims `hw:` with no coordination | acquire `org.freedesktop.ReserveDevice1` first, release on drop | on a stock PipeWire desktop — which is every Fedora/Ubuntu install — the card is already reserved. Without this, Linux exclusive fails for most users and the reason string blames the hardware |
 | `fill()` pops the ring one sample at a time, re-reads `slots()` per frame, matches on channel count per frame | drain in contiguous chunks, hoist the channel decision out of the loop | this is the measurable inefficiency. `rtrb::read_chunk` hands back slices; per-frame atomic loads and a per-frame `match` on a value that never changes are pure overhead on the RT thread |
 | bit-exactness argued in the ADR, tested only in `f32` | a round-trip test: known 16- and 24-bit fixtures → the full chain, bypassed → assert bit-identical | rox's hardware tests are `#[ignore]`d, so nothing in CI pins the claim. Melodia can pull `MixerPull` in a plain unit test and prove it without a device |
-| `Result<_, String>` throughout | `AppError` with the boundary variants | the tree's error contract; `services::describe` needs a typed cause |
+| `Result<_, String>` throughout | `AppError` with the boundary variants | the tree's error contract; `error::describe` needs a typed cause |
 | hand-declares ~300 lines of CoreAudio `extern "C"` + four-char constants | use `objc2-core-audio` | finding 4 — it's already in our lock file, needs no SDK and no bindgen, and covers the whole surface |
 
 Straight answer on "not optimized": the *design* is sound and the FFI is careful.
@@ -211,11 +211,11 @@ CPU does.
 
 ## Structure
 
-**The directory exists.** #90 built `src/player/output/` for the shared backend, so this is no
+**The directory exists.** #90 built `crates/melodia-playback/src/player/playback/output/` for the shared backend, so this is no
 longer a greenfield layout — it is four files to extend rather than one `shared.rs` to write:
 
 ```
-src/player/output/
+crates/melodia-playback/src/player/playback/output/
   mod.rs        AudioOutput: the open handle, and the only door onto Mixer
   device.rs     the cpal stream, the config ladder, Negotiated, the period math
   mixer.rs      the unclamped sum, in LOCKSTEP_FRAMES steps
@@ -247,7 +247,7 @@ Ownership rules, so this doesn't sprawl:
 - **`wasapi.rs`'s format ladder and period math live above the `cfg`**, plain Rust
   with their own tests, so they compile and run on Linux CI. rox's reasoning, and it
   applies harder here since nobody develops this tree on Windows.
-- **`src/ui/` reaches the output layer through `library::playback::*`**, never
+- **`melodia-views` reaches the output layer through `library::playback::*`**, never
   directly — the repo-wide rule, and the device picker is the obvious place to break it.
 - **`player/output/` owns no persistence.** Settings go through `mutate_settings` +
   the kick-after-persist rule like every other playback flag.
@@ -262,7 +262,7 @@ doesn't exist.
 
 ### Phase 1 — The output seam · **mostly done by #90**
 
-`src/player/output/` exists, `AudioOutput` is owned on `AppState`, `device::open` carries
+`crates/melodia-playback/src/player/playback/output/` exists, `AudioOutput` is owned on `AppState`, `device::open` carries
 the fallback ladder and the `stream_health` callback, and `mixer::fill` is the single
 point samples reach a device buffer — the ownership rule this doc wrote for `pump()`,
 adopted there. What is left of this phase is the exclusive-mode vocabulary, which had
@@ -282,7 +282,8 @@ clean, playback behaves identically. No user-visible change.
 
 1. Add `sample_rate`, `channels`, `bit_depth` to `TrackSummary` (`Option<i32>`,
    `#[serde(default)]` — the queue round-trip persists it).
-2. Carry them through the projection queries in `src/database/queries/track.rs` and
+2. Carry them through the projection queries in
+   `crates/melodia-store/src/database/queries/track.rs` and
    whatever else builds a `TrackSummary`. Follow the ReplayGain columns exactly.
 3. Surface the negotiated-vs-source pair in the UI as read-only text (Now Playing
    detail, or Settings → Playback). It reads "FLAC 44.1 kHz / 24-bit → device 48 kHz"
@@ -321,7 +322,7 @@ end of the phase).
 
 ### Phase 4 — The bit-perfect contract · settings + the truth panel
 
-1. `BitPerfectFlags` in `src/services/settings/data.rs` — `#[serde(default)]`,
+1. `BitPerfectFlags` in `crates/melodia-app/src/services/settings/data.rs` — `#[serde(default)]`,
    `#[serde(flatten)]`'d like `PlaybackFlags`. Fields: `enabled`, `mode`
    (`shared` / `exclusive`), `device_id`, `period_ms`, `resync_delay_ms`.
    Ships **off**, per the new-visible-behaviour default.
@@ -335,7 +336,7 @@ end of the phase).
    `Negotiated::reason`. This is the deliverable that makes the claim checkable.
 4. **The round-trip test.** Fixtures: a short 16-bit and a short 24-bit WAV. Build
    the full chain with everything bypassed, pull `MixerPull` directly (via
-   `output::mixer::pair`, as `tests/crossfade.rs` already does), assert the
+   `output::mixer::pair`, as `crates/melodia/tests/crossfade.rs` already does), assert the
    samples are bit-identical to the decoder's output. No device needed. This is the
    test rox doesn't have, and it's what stops a future DSP change quietly breaking
    the claim.
@@ -417,7 +418,8 @@ path; toggling off restores system audio.
    `#[allow(unsafe_code, reason = "…")]` under the rule's "unless every item in it is
    FFI" clause. Don't leave the rule silently out of date.
 5. `README.md` feature list, `CLAUDE.md` conventions, and a new
-   `.claude/rules/bit-perfect.md` scoped to `src/player/output/**` holding the
+   `.claude/rules/bit-perfect.md` scoped to
+   `crates/melodia-playback/src/player/playback/output/**` holding the
    contract and the per-platform quirks — it cuts across enough that a nested
    `CLAUDE.md` would miss the settings and UI halves.
 

@@ -1,15 +1,18 @@
 ---
 paths:
-  - src/library/**/*.rs
-  - src/database/**/*.rs
-  - src/entities/**/*.rs
-  - src/media/**/*.rs
-  - src/tasks/**/*.rs
-  - src/ui/playlists/callbacks/**/*.rs
+  - crates/melodia-app/src/library/**/*.rs
+  - crates/melodia-store/src/database/**/*.rs
+  - crates/melodia-core/src/entities/**/*.rs
+  - crates/melodia-store/src/media/ingest/**/*.rs
+  - crates/melodia-artwork/src/media/image/**/*.rs
+  - crates/melodia-app/src/tasks/**/*.rs
+  - crates/melodia-core/src/utils/audio_ext.rs
+  - crates/melodia-core/src/utils/self_writes.rs
+  - crates/melodia-views/src/ui/playlists/callbacks/**/*.rs
   - migrations/**/*.sql
-  - melodia-ui/ui/components/dialog/smart-playlist-editor-body.slint
-  - melodia-ui/ui/components/dialog/tag-editor-body.slint
-  - melodia-ui/ui/components/star-rating.slint
+  - crates/melodia-ui/ui/components/dialog/smart-playlist-editor-body.slint
+  - crates/melodia-ui/ui/components/dialog/tag-editor-body.slint
+  - crates/melodia-ui/ui/components/star-rating.slint
 ---
 
 # The library — scan, projections, and the write-through paths
@@ -32,7 +35,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   spawned beside `retroactive_hash`). It deletes by reference rather than by refcount — artwork is
   shared, so no per-track delete can safely unlink a file, and a sweep cannot undercount because it
   never counts. Two gates, both required: the name has to parse back into the scheme
-  `media::artwork` writes, and nothing in the reference set may name it. **That set is six
+  `media::image::artwork` writes, and nothing in the reference set may name it. **That set is six
   columns** — `tracks.artwork_path`, `albums.artwork_path`, `artists.image_path`,
   **`playlists.thumbnail_path`**, **`radio_stations.artwork_path`** and
   **`radio_logo_answers.artwork_path`**. The last three are the ones that bite, each reachable
@@ -58,7 +61,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   while closed. That reconcile is the scan path's *common* case (almost nothing to re-parse), which
   is why its incremental filter is the part worth keeping fast.
 
-- **One audio-extension predicate: `media::is_audio_extension(ext)`.** Case-folded
+- **One audio-extension predicate: `utils::audio_ext::is_audio_extension(ext)`.** Case-folded
   (`eq_ignore_ascii_case` against ASCII `AUDIO_EXTENSIONS`), allocating nothing — the library walk
   asks it for *every* file in the tree. The walk, the watcher's `is_audio_file`, DnD/import
   validation and Browse all route through it; don't re-roll `ext.to_lowercase()` +
@@ -90,7 +93,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 ## Query shape
 
-- **`crate::database::placeholders(n)` for IN-clause lists.** Single-pass,
+- **`melodia_store::database::placeholders(n)` for IN-clause lists.** Single-pass,
   capacity-preallocated; don't re-roll `repeat_n("?", n)…join`. Pair with `chunked_in_query`.
   Tuple-row CTE UPDATEs follow the `batch_update_hashes` / `flush_artwork_backfill` shape — one
   chunked UPDATE per N rows, not N UPDATEs. Runtime-built SQL `String`s (placeholder lists, column
@@ -125,7 +128,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 - **`tracks_fts` indexes eight columns, and adding a ninth is a migration, not an edit.** fts5 has
   no `ALTER`, so a change means dropping the table plus all three triggers and rebuilding.
   Migration `20260802000001` carries the column list, the tokenizer and the bm25 weights with the
-  argument for each; `src/database/queries/search.rs` carries the query shape and the folding
+  argument for each; `crates/melodia-store/src/database/queries/search.rs` carries the query shape and the folding
   asymmetry. Two things neither of them can tell you: **a ninth column is two edits**, since the
   per-view filter boxes never touch this index and walk in-memory caches through
   `ui::row_match::search_fields`, which mirrors the column list by hand
@@ -137,7 +140,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 ## Ratings
 
 - **Star ratings mirror the favorite path.** Inert `tracks.rating` (0–5) surfaced via a
-  **hover-revealed** `StarRating` (`melodia-ui/ui/components/star-rating.slint`) inside the
+  **hover-revealed** `StarRating` (`crates/melodia-ui/ui/components/star-rating.slint`) inside the
   track-row Title cell — no rating column, no in-table sort. Rides on `TrackListRow` +
   `TrackSummary`. Writes via `library::ratings::{set_rating, set_current_rating}` (clamped 0–5),
   mirroring `favorites::{set_favorite, toggle_current_favorite}` down to the `sync_current_track_*`
@@ -151,7 +154,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 ## Write-through to files
 
 - **Tag editing = "Edit Track Information", write-through the scan pipeline**
-  (`src/library/tags.rs::apply_tag_edit`, `src/media/tag_writer.rs`). Right-click rows → **Edit
+  (`crates/melodia-app/src/library/tags.rs::apply_tag_edit`, `crates/melodia-store/src/media/ingest/tag_writer.rs`). Right-click rows → **Edit
   Tags…** (`Dialog.kind == "edit-tags"`); **batch is the point** — **touched-tracking is a
   Rust-side diff against a populate-time snapshot** (Keep/Clear/Set), so only changed fields write.
   **Lyrics live in the file, not the DB** (single-track tab only). The writer always targets the
@@ -165,23 +168,23 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   watcher via `SelfWrites` (TTL 30 s, `mark` per-file *before* its write). Post-commit refresh is
   the `library_changed` bump, **not** an optimistic patch — a retag can change list membership.
 
-- **Playlist import/export = Extended M3U8** (`src/library/playlist_files.rs` + the pure `m3u`
+- **Playlist import/export = Extended M3U8** (`crates/melodia-app/src/library/playlist_files.rs` + the pure `m3u`
   submodule; hand-rolled writer/parser, no crate). One `.m3u8` per playlist; writer emits
   `#EXTM3U`/`#PLAYLIST:`/`#EXTINF:` + a custom `#MELODIA-HASH:<blake3>` line + an absolute native
   path, parser tolerantly ignores unknown `#` comments and a leading BOM. Import is
   **skip-and-report**: re-match each entry by `file_path` then BLAKE3 `file_hash`, always **create
   a new playlist** (the name isn't unique), count misses; never auto-imports on-disk files. UI is
   the Import / Export pills in the My Library band's Playlists-tab row
-  (`melodia-ui/ui/views/my-library/tab-pills.slint`), callbacks in
-  `src/ui/playlists/callbacks/files/`. A **tag edit rewrites the file and changes its
+  (`crates/melodia-ui/ui/views/my-library/tab-pills.slint`), callbacks in
+  `crates/melodia-views/src/ui/playlists/callbacks/files/`. A **tag edit rewrites the file and changes its
   `file_hash`**, so a previously exported `#MELODIA-HASH` line goes stale — the `file_path`-first
   re-match degrades gracefully, but re-export after retagging if hash portability matters.
 
 ## Smart playlists
 
 - **Smart / dynamic playlists = virtual, criteria-derived membership**
-  (`src/entities/smart_criteria.rs`, `src/database/queries/smart_playlist.rs`,
-  `src/library/smart_playlists.rs`). `playlists.is_smart` + `smart_criteria TEXT` store a JSON
+  (`crates/melodia-core/src/entities/smart_criteria.rs`, `crates/melodia-store/src/database/queries/smart_playlist.rs`,
+  `crates/melodia-app/src/library/smart_playlists.rs`). `playlists.is_smart` + `smart_criteria TEXT` store a JSON
   `SmartCriteria` rule set instead of `playlist_items` — **resolved at read time**, never
   materialized (updates live). `#[serde(default)]` + a `version` field keep it forward-compatible.
   The evaluator builds WHERE via `sqlx::QueryBuilder` — **only** enum-derived

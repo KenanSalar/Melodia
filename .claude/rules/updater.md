@@ -1,10 +1,11 @@
 ---
 paths:
-  - src/services/updater/**/*.rs
-  - src/services/desktop_integration.rs
-  - src/tasks/updater_daily.rs
-  - src/ui/settings/updater_settings.rs
-  - wix/main.wxs
+  - crates/melodia-app/src/services/updater/**/*.rs
+  - crates/melodia-platform/src/services/platform/install_kind/**/*.rs
+  - crates/melodia-platform/src/services/platform/desktop_integration.rs
+  - crates/melodia-app/src/tasks/updater_daily.rs
+  - crates/melodia-views/src/ui/settings/updater_settings.rs
+  - crates/melodia/wix/main.wxs
   - scripts/build-latest-json.py
   - scripts/build-appimage.sh
   - scripts/build-rpm.sh
@@ -46,7 +47,7 @@ from `main.rs` without ever opening this file.
   `cfg(target_os = "linux")`, and macOS isn't a CI target, so `swap_in_place` falls through to
   `std::fs::rename`.
 
-- **Windows installs are per-machine MSIs at `C:\Program Files\Melodia\bin\`.** `wix/main.wxs`
+- **Windows installs are per-machine MSIs at `C:\Program Files\Melodia\bin\`.** `crates/melodia/wix/main.wxs`
   `Scope="perMachine"` + `ProgramFiles6432Folder`; UAC at install. The Start Menu shortcut
   Component under `ProgramMenuFolder` is what lets Windows Search find the app. Console suppressed
   via `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` — release runs as GUI,
@@ -63,7 +64,7 @@ from `main.rs` without ever opening this file.
 
 - **Replacing the binary under a running process breaks its own path two different ways, and only
   one of them is recoverable after the fact.** An RPM/DEB upgrade *unlinks* `/usr/bin/Melodia` and
-  the kernel marks `/proc/self/exe` `" (deleted)"`; `services::current_exe` resolves that centrally
+  the kernel marks `/proc/self/exe` `" (deleted)"`; `utils::exe::current_exe` resolves that centrally
   (root `CLAUDE.md` argues the rule) and `install_target()` is the single updater consumer. **The
   marker can only appear mid-session** — you cannot exec an unlinked path — so the callers that
   meet one are the late ones: the post-exit respawn, and `spawn_install`'s pre-swap
@@ -84,7 +85,7 @@ from `main.rs` without ever opening this file.
   **`ui::window_chrome::set_respawn_exe`** still has to capture the target *before* the swap and
   stays load-bearing. Don't read the central fix as retiring it.
 
-- **`services::desktop_integration` self-deploys `.desktop` + icon on boot for tarball installs.**
+- **`services::platform::desktop_integration` self-deploys `.desktop` + icon on boot for tarball installs.**
   Compiled-in payloads `assets/desktop/Melodia.desktop.tmpl` (`@EXEC@`) +
   `logo-with-background.svg`; BLAKE3-gated idempotent writes to
   `~/.local/share/applications/…desktop` + `~/.local/share/icons/…/melodia.svg`. Skipped on
@@ -115,7 +116,7 @@ from `main.rs` without ever opening this file.
   `latest.json` in `artifacts/` alongside them is what broke v0.9.0's refresh on the first publish
   after that guard landed.
 
-- **Manifest schema gate + critical-release flag** (`src/services/updater/manifest.rs`).
+- **Manifest schema gate + critical-release flag** (`crates/melodia-app/src/services/updater/manifest.rs`).
   `manifest_schema_version: u32` (default 1) — `check.rs` returns `CheckOutcome::UnsupportedSchema`
   when `> SUPPORTED_MANIFEST_SCHEMA`, treated like `NoAssetForTarget`; bumping it means bumping
   `build-latest-json.py`'s `--manifest-schema-version` and the CI invocation. `critical: bool`

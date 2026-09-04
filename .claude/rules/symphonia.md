@@ -1,14 +1,15 @@
 ---
 paths:
-  - src/player/**/*.rs
-  - tests/**/*.rs
+  - crates/melodia-audio/src/player/source/**/*.rs
+  - crates/melodia/tests/**/*.rs
 ---
 
 # Symphonia Best Practices
 
 Decoding only. The layer under it — the device stream, the two decks, the rate conversion and the
-clock — is `src/player/output/`, which is a directory with its own anchor files and argues itself
-there; `src/player/CLAUDE.md` holds what spans it and the DSP chain above it.
+clock — is `crates/melodia-playback/src/player/playback/output/`, which is a directory with its
+own anchor files and argues itself
+there; `.claude/rules/audio-stack.md` holds what spans it and the DSP chain above it.
 
 ## Symphonia — Audio Decoding
 
@@ -76,7 +77,7 @@ loop {
   `pre_skip` for a decoder 0.6.1 does not ship. So AAC is trimmed here rather than upstream, in
   `player::aac_trim`, which reads the two places a file states its padding and hands `file_decode` a
   head and a playable length; that module argues the whole design and the numbers, and
-  `src/player/CLAUDE.md` says why it sits outside the shared `decode`. rox reached the same
+  `.claude/rules/audio-stack.md` says why it sits outside the shared `decode`. rox reached the same
   conclusion from the other direction, distrusting the trimming enough to plan its own before
   verifying that MP3's holds, and then shipping only the harness that checks it
 

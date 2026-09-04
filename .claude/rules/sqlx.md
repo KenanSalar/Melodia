@@ -1,9 +1,9 @@
 ---
 paths:
-  - src/database/**/*.rs
-  - src/entities/**/*.rs
-  - src/library/**/*.rs
-  - src/tasks/**/*.rs
+  - crates/melodia-store/src/database/**/*.rs
+  - crates/melodia-core/src/entities/**/*.rs
+  - crates/melodia-app/src/library/**/*.rs
+  - crates/melodia-app/src/tasks/**/*.rs
   - migrations/**/*.sql
 ---
 
@@ -14,7 +14,7 @@ paths:
 - Use **two-pool architecture** for SQLite:
   - Write pool: `max_connections(1)` — SQLite only supports one concurrent writer
   - Read pool: `max_connections(num_cpus)` with `.read_only(true)` — multiple concurrent readers in WAL mode
-    - **Desktop caveat (Melodia):** a single-user desktop app issues tiny, effectively-sequential reads, so scaling per-core just multiplies idle per-connection page-cache/statement-cache memory. Clamp to a small fixed band (`.clamp(2, 4)`) and add an `idle_timeout` so boot-burst connections get reaped. See `init_database` in `src/database/mod.rs`.
+    - **Desktop caveat (Melodia):** a single-user desktop app issues tiny, effectively-sequential reads, so scaling per-core just multiplies idle per-connection page-cache/statement-cache memory. Clamp to a small fixed band (`.clamp(2, 4)`) and add an `idle_timeout` so boot-burst connections get reaped. See `init_database` in `crates/melodia-store/src/database/mod.rs`.
 - A single shared pool degrades write performance by ~20x due to reader/writer contention
 
 ## Pragmas & Configuration
@@ -65,7 +65,7 @@ paths:
 - Avoid `SELECT *` — specify only needed columns
 - Use covering indexes for frequently accessed column combinations
 - Regular `VACUUM` for reclaiming space after bulk deletes (but not during normal operation)
-- `VACUUM INTO '<path>'` is the safe way to copy a *live* database — it runs through the open connection, so WAL content is folded in and the output needs no `-wal`/`-shm` beside it. Takes no bind parameter, so the path is interpolated (wrap in `AssertSqlSafe`, double any `'`). **It silently no-ops against an in-memory pool**: `sqlite::memory:` through sqlx returns `Ok` and writes no file, while the identical statement in the `sqlite3` CLI against `:memory:` does write one. So a test covering a backup path must build a **file-backed** pool — `DbPool::test_pool()` will pass while proving nothing. `src/database/tests/backup_tests.rs::open_db` is the worked example.
+- `VACUUM INTO '<path>'` is the safe way to copy a *live* database — it runs through the open connection, so WAL content is folded in and the output needs no `-wal`/`-shm` beside it. Takes no bind parameter, so the path is interpolated (wrap in `AssertSqlSafe`, double any `'`). **It silently no-ops against an in-memory pool**: `sqlite::memory:` through sqlx returns `Ok` and writes no file, while the identical statement in the `sqlite3` CLI against `:memory:` does write one. So a test covering a backup path must build a **file-backed** pool — `DbPool::test_pool()` will pass while proving nothing. `crates/melodia-store/src/database/tests/backup_tests.rs::open_db` is the worked example.
 
 ## Fetch Methods
 

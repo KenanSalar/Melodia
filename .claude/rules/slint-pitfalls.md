@@ -1,10 +1,10 @@
 ---
 paths:
-  - melodia-ui/ui/**/*.slint
-  - src/ui/**/*.rs
-  - src/boot/**/*.rs
-  - src/themes/**/*.rs
-  - melodia-ui/build.rs
+  - crates/melodia-ui/ui/**/*.slint
+  - crates/melodia-views/src/ui/**/*.rs
+  - crates/melodia/src/boot/**/*.rs
+  - crates/melodia-core/src/themes/**/*.rs
+  - crates/melodia-ui/build.rs
 ---
 
 # Slint Pitfalls (battle-tested)
@@ -178,7 +178,7 @@ this file is what builds, looks right, and is wrong.
   Both draggable lists opt out outright, `draggable-track-list.slint` on both axes (a diagonal
   drag steals sideways once the columns overflow) and `queue-sheet.slint`, pinned by
   `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
-  under a pointer; the click-to-act grids and lists are pinned by `ui::scrollbar_tests`.
+  under a pointer; the click-to-act grids and lists are pinned by `crates/melodia/tests/scrollbars.rs`.
   **`!reorder-enabled` is what that binding used to say, and is the trap worth keeping**: it reads
   as leaving a `true` default alone and instead *enables* the pan on every sort that retires the
   drag. `!interactive` still forwards wheel events, so only drag-to-pan goes.
@@ -342,7 +342,7 @@ this file is what builds, looks right, and is wrong.
 - **Reusable filter SearchBar pattern.** (1) `text <=> SomeGlobal.filter`,
   `blur-trigger: SomeGlobal.blur-search-tick`; (2) backdrop
   `TouchArea { clicked => { SomeGlobal.blur-search-tick += 1; } }` at view root before content;
-  (3) clear filter + bump blur tick on nav-away. Match in Rust through `src/ui/row_match.rs`,
+  (3) clear filter + bump blur tick on nav-away. Match in Rust through `crates/melodia-views/src/ui/row_match.rs`,
   never a hand-rolled `to_lowercase().contains(…)`; Settings routes there via
   `pure callback SettingsPage.matches(...)`.
   **A page whose box describes more than one surface takes the same three steps against one global
@@ -387,13 +387,13 @@ this file is what builds, looks right, and is wrong.
   trigger; a transparent full-popup `TouchArea` **declared first** closes on stray clicks.
 
 - **Sleep timer = a session-only cancel-and-replace tokio countdown + a `PlayerState`
-  end-of-track flag.** In `src/ui/sleep_timer.rs` — a **UI-layer** module, because `tasks/` may
+  end-of-track flag.** In `crates/melodia-views/src/ui/sleep_timer.rs` — a **UI-layer** module, because `tasks/` may
   not import `ui::*` and the countdown writes a Slint property. **Duration is
   playback-linked**: each 1 s tick decrements only while `status_atomic == Playing` (lock-free),
   so pausing holds the timer and it never expires on a paused player. Never persisted; bounds
   `[30 s, 2 h]`; `Player.set-sleep-timer(minutes)` takes 0 off / `>0` duration / `-1`
   End-of-track, the last arming `PlayerState::pause_after_current_track` (monitor half in
-  `src/player/CLAUDE.md`).
+  `.claude/rules/audio-stack.md`).
 
 - **Flash-free image cross-fade = two slots, never cleared.** Two stacked `Image`s + `use-a` bool;
   Rust writes the new image into the *inactive* slot then flips the bool so both `opacity`

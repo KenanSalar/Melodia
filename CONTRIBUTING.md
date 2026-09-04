@@ -46,8 +46,8 @@ Before pushing:
 
 ```bash
 cargo fmt --all
-cargo clippy --all-targets --locked -- -D warnings
-cargo test --locked
+cargo clippy --all-targets --locked --workspace -- -D warnings
+cargo test --locked --workspace
 ```
 
 The lint configuration is strict on purpose, and `unwrap()` is denied everywhere,
@@ -55,7 +55,7 @@ tests included. Reach for `?`, for `expect()` with the invariant in the message,
 for `let ... else`.
 
 If you add a user-facing string, wrap it in `@tr(...)` and add the same msgid to all
-catalogues under `melodia-ui/translations/`. A catalogue that is missing one falls
+catalogues under `crates/melodia-ui/translations/`. A catalogue that is missing one falls
 back to English silently.
 
 ## What CI runs
@@ -64,7 +64,7 @@ Every pull request runs **PR Validation**: a `cargo audit` advisory scan, a `car
 check, `clippy` with `-D warnings`, and the test suite on both Linux and Windows — the
 Windows job skips the one integration test that needs an audio device. The aggregate
 `pr-validation` check has to be green before a merge. Documentation-only changes skip
-all five.
+all six.
 
 The Windows job is the one that can go red on a change you tested green locally, and
 the usual cause is a path: build them with `Path::join` or `MAIN_SEPARATOR_STR` rather

@@ -1,20 +1,21 @@
 ---
 paths:
-  - src/ui/window_chrome/**/*.rs
-  - src/ui/shell/tray_bridge.rs
-  - src/ui/shell/event_sink.rs
-  - src/services/tray/**/*.rs
-  - src/services/media_controls/**/*.rs
-  - src/services/always_on_top/**/*.rs
-  - src/services/dwm_titlebar.rs
-  - src/main.rs
-  - src/shutdown.rs
-  - src/boot/**/*.rs
-  - melodia-ui/ui/app-window.slint
-  - melodia-ui/ui/components/custom-titlebar.slint
-  - melodia-ui/ui/components/macos-titlebar-cluster.slint
-  - melodia-ui/ui/components/macos-traffic-light.slint
-  - melodia-ui/ui/views/settings/window-chrome-section.slint
+  - crates/melodia-views/src/ui/window_chrome/**/*.rs
+  - crates/melodia-views/src/ui/shell/tray_bridge.rs
+  - crates/melodia-views/src/ui/shell/event_sink.rs
+  - crates/melodia-platform/src/services/platform/tray/**/*.rs
+  - crates/melodia-integrations/src/services/integrations/media_controls/**/*.rs
+  - crates/melodia-platform/src/services/platform/always_on_top/**/*.rs
+  - crates/melodia-platform/src/services/platform/dwm_titlebar.rs
+  - crates/melodia-views/src/ui/appearance/theme_apply.rs
+  - crates/melodia/src/main.rs
+  - crates/melodia/src/shutdown.rs
+  - crates/melodia/src/boot/**/*.rs
+  - crates/melodia-ui/ui/app-window.slint
+  - crates/melodia-ui/ui/components/custom-titlebar.slint
+  - crates/melodia-ui/ui/components/macos-titlebar-cluster.slint
+  - crates/melodia-ui/ui/components/macos-traffic-light.slint
+  - crates/melodia-ui/ui/views/settings/window-chrome-section.slint
 ---
 
 # The desktop shell — window chrome, tray, media keys
@@ -61,7 +62,7 @@ the OS owns has to be attached late or not at all on at least one platform.
   `ToastKind::RestartRequired`; every caller has persisted its setting by then, so a toast asking
   the user to close and reopen is an honest answer — the change lands on the next manual launch.
   `respawn_target()` is the updater's recorded pre-swap path (`set_respawn_exe`) if there is one,
-  else `services::current_exe()` — the marker-resolving form, so a package upgrade mid-session
+  else `utils::exe::current_exe()` — the marker-resolving form, so a package upgrade mid-session
   can't hand back a `<path> (deleted)` string. Don't inline the flag store + `quit_event_loop` pair
   at a fourth site; outside `window_chrome` you can't, both statics being private, so the rule only
   binds *inside* that module.
@@ -116,7 +117,7 @@ The other way paths arrive from outside, and the one that can arrive before ther
   Matching only the first left *every* Windows relaunch `Claim::Unenforced`: a second window and a
   second writer over one database, on the platform the MSI registers associations for.
   `name_is_taken` is the single place that decides, and **its pure half takes the platform as an
-  argument** — `services::redact_prefix`'s shape, for the same reason. A `cfg!` inside the
+  argument** — `utils::redact::redact_prefix`'s shape, for the same reason. A `cfg!` inside the
   predicate is a branch the Linux gate compiles out and can never exercise, so a
   "simplification" back to one spelling merges green; `name_is_taken_on` is what
   `a_taken_name_is_recognised_in_both_spellings` can ask both ways. A genuine ACL denial takes the
@@ -154,7 +155,7 @@ The other way paths arrive from outside, and the one that can arrive before ther
   `with_state_emit` to flush playback. Linux MPRIS / macOS MediaPlayer attach eagerly; `event_tx`
   retained Windows-only for the late rewire.
 
-- **System tray** — `src/services/tray/` cfg-split (Linux `ksni`, Win/mac `tray-icon 0.24`) behind
+- **System tray** — `crates/melodia-platform/src/services/platform/tray/` cfg-split (Linux `ksni`, Win/mac `tray-icon 0.24`) behind
   a `mod.rs` façade (`TrayAction`, `TraySnapshot`, embedded `tray.png`, `init_tray`).
   `ui/shell/tray_bridge.rs` runs one task off a bounded `mpsc<TrayAction>`: playback reuses
   souvlaki's `EventSink`, `ShowHideWindow`/`Quit` hop to the UI via `invoke_from_event_loop`, a

@@ -1,11 +1,11 @@
 ---
 paths:
-  - src/services/logging.rs
-  - src/services/crash_report.rs
-  - src/services/diagnostics.rs
-  - src/services/mod.rs
-  - src/ui/settings/diagnostics.rs
-  - src/main.rs
+  - crates/melodia-platform/src/services/platform/logging.rs
+  - crates/melodia-platform/src/services/platform/crash_report.rs
+  - crates/melodia-app/src/services/diagnostics.rs
+  - crates/melodia-core/src/utils/redact.rs
+  - crates/melodia-views/src/ui/settings/diagnostics.rs
+  - crates/melodia/src/main.rs
 ---
 
 # The diagnostics trio — logging, crash reports, the bug-report bundle
@@ -44,7 +44,7 @@ Four decisions keep the trio a diagnostic rather than a liability, and each is a
 definition rather than here: `logging::install` returns nothing (infallible on purpose, degrading
 to stderr rather than refusing to boot); `log_files()` is newest-first only because `newest_first`
 reverses the rotated half; a crash report is `head_of` where a log is `tail_of`; and
-`services::describe` is what a `log::` call hands an error to, never `to_string()`. Read those four
+`error::describe` is what a `log::` call hands an error to, never `to_string()`. Read those four
 doc comments before changing any of them.
 
 **Never log a credential, token or session key.** `build_report` ships the tail of the rolling log

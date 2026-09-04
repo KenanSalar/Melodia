@@ -3,13 +3,14 @@ paths:
   - .github/**
   - packaging/**
   - licenses/**
-  - wix/main.wxs
+  - crates/melodia/wix/main.wxs
   - scripts/build-rpm.sh
   - scripts/build-appimage.sh
   - scripts/build-tarball.sh
   - scripts/install-linux.sh
   - scripts/build-latest-json.py
   - Cargo.toml
+  - crates/melodia/Cargo.toml
   - rust-toolchain.toml
   - clippy.toml
   - .cargo/audit.toml
@@ -26,7 +27,7 @@ which argues itself; a filename below names whichever of the four owns the thing
 
 `pr-validation.yml`, on PRs into `main`: `changes` (skip matrix) → `audit` ∥ `fmt` ∥ `clippy` ∥
 `test` ∥ `clippy-windows` ∥ `test-windows`. Both `clippy` jobs are one step
-(`--all-targets --locked -- -D warnings`, both packages); `test` is plain `cargo test --locked`.
+(`--all-targets --locked --workspace -- -D warnings`); `test` is `cargo test --locked --workspace`.
 All six hang off `changes` alone — chaining `test` behind `clippy` made the gate's wall clock their
 sum, and what waits on it is a person deciding whether to merge. That is also why `audit` and `fmt`
 stay siblings despite compiling nothing and finishing in seconds: as parents they would buy back
@@ -42,7 +43,7 @@ coverage on this path.
   two, a `results=( … )` bash array restating `needs:`, and a job in only the first was silently
   unenforced. What `toJSON` cannot see is a job that never reached `needs:` at all — the aggregate
   then doesn't wait on it and reports green while it is still running — so
-  `services::tests::the_aggregate_waits_on_every_job_in_the_gate_workflow` walks the file for that.
+  `crates/melodia/tests/packaging.rs`'s `the_aggregate_waits_on_every_job_in_the_gate_workflow` walks the file for that.
 
 - **The advisory scan is one policy with two callers.** `.github/actions/cargo-audit` (composite)
   holds the `taiki-e/install-action` pin and `cargo audit --deny unsound --deny unmaintained`;
@@ -75,7 +76,7 @@ coverage on this path.
   a change to the clippy invocation or the job list merge without the jobs it governs ever running.
   Anything new under `.github/` runs everything by default — an exclusion is earned.
 
-- **Headless audio** — `test` runs `tests/headless.rs` and `AppState::init` opens cpal's default
+- **Headless audio** — `test` runs `crates/melodia/tests/headless.rs` and `AppState::init` opens cpal's default
   device, which no runner has. `.github/actions/headless-audio` is the whole shim and argues
   itself. It works because the shim is an *ALSA* one and `output::device` opens whatever
   `pcm.!default` names, then walks every config the device reports rather than giving up on the
@@ -98,7 +99,7 @@ coverage on this path.
   `MoveFileExW` all rest on today. A release build never passes `--cfg test` either, so a
   `cfg(windows)` test has never been type-checked, let alone run: `updater::install`'s four and
   the `all(test, target_os = "windows")` re-export written to feed them were authored blind. That
-  is the bigger half of what this job unlocks. `services::dwm_titlebar::is_dark_from_rgb`, the
+  is the bigger half of what this job unlocks. `services::platform::dwm_titlebar::is_dark_from_rgb`, the
   third copy of the luminance threshold, split on `lum < 0.5` where its two siblings split on
   `lum > 0.5` for *light*, so the caption disagreed with the chrome under it on every colour
   landing exactly on the threshold; the pin that holds it now is a `cfg(windows)` test, which is to
@@ -137,7 +138,7 @@ coverage on this path.
   job and sets nothing: it never codegens, so it doesn't reach that peak. **`RUST_TEST_THREADS` is
   deliberately not capped alongside it** — `.cargo/config.toml`'s 8 stands, oversubscribing a
   4-core runner 2:1, because the cap answers a memory ceiling and most harness threads are waiting
-  rather than running. `tests/crossfade.rs` is the exception, its eleven tests each turning the
+  rather than running. `crates/melodia/tests/crossfade.rs` is the exception, its thirteen tests each turning the
   mixer from a spin loop, and what that reached was a wait budgeted in frames rather than in wall
   clock: the budget then measures the puller's throughput, not the thing it waits for.
   `CONTROL_OP_BUDGET` is what replaced it, and `taskset -c 0` against a couple of dozen spinners
@@ -145,7 +146,7 @@ coverage on this path.
   1 s `recv_timeout`s, tighter for standing up a real transport, and the first place to read if
   `test-windows` reddens.
 
-- **`test` and `test-windows` cap build time as well as memory.** `cargo test` links five test
+- **`test` and `test-windows` cap build time as well as memory.** `cargo test` links 42 test
   binaries and full debuginfo is most of that tail, worst on MSVC where it is PDBs. Cold on both
   sides, cargo's own build phase reads 18m29s → 12m39s on Linux and 31m13s → 17m54s on Windows, so
   the MSVC half is where it pays. Both set `CARGO_PROFILE_{DEV,TEST}_DEBUG` to `line-tables-only`,
@@ -178,7 +179,7 @@ coverage on this path.
   source-based coverage carries its own file/region table in `__llvm_covmap` and reads nothing from
   DWARF, and nothing reads a backtrace out of that job (the gate's two `test` jobs keep
   `line-tables-only` for the opposite reason, and
-  `services::tests::the_two_workflows_disagree_about_debug_info_on_purpose` holds the pair apart,
+  `crates/melodia/tests/packaging.rs`'s `the_two_workflows_disagree_about_debug_info_on_purpose` holds the pair apart,
   tidying them into agreement reddening nothing and silently costing the gate its `file:line`).
   Both `report` calls pass **`--ignore-filename-regex`** scoped to
   `melodia-ui`'s `OUT_DIR` — cargo-llvm-cov's built-in excludes reach the sysroot and registry but
@@ -218,12 +219,12 @@ work, and the two shipped apart for a whole release.
   unescaping layers. Deliberate; a `$` or a backtick in `$HOME` doesn't earn shell-quoting
   gymnastics in an installer.
 
-- **Windows is `wix/main.wxs`'s `FileAssociations` component, plain `RegistryValue` rows.** WiX's
+- **Windows is `crates/melodia/wix/main.wxs`'s `FileAssociations` component, plain `RegistryValue` rows.** WiX's
   `ProgId`/`Extension`/`Verb` predate Vista: no `Capabilities` + `RegisteredApplications` (what
   Win10/11 reads for Default apps), and `Extension` claims `HKCR\.mp3`'s default outright.
   **`ApplicationDescription` is required** — without it the app is absent from that list and every
   key under it unreachable. `MultiSelectModel=Player` hands a whole selection to one invocation.
-  `the_msi_offers_every_audio_extension` walks `media::AUDIO_EXTENSIONS` against the
+  `the_msi_offers_every_audio_extension` walks `utils::audio_ext::AUDIO_EXTENSIONS` against the
   comment-stripped wxs, the one format no Linux runner builds.
 
 ## Licences — every format ships `licenses/`, and the five spellings are pinned by name
@@ -232,9 +233,9 @@ The two fonts and the vendored winit fork compile *into* the binary, so each art
 them and owes the licence text (Apache-2.0 §4(a); SIL's OFL FAQ recommends it for a bundled font).
 Five formats, five toolchains, one an MSI no Linux runner can build — so a format that quietly
 stops shipping the text fails nowhere until a packager files it.
-**`services::tests::every_package_format_ships_the_licenses_dir` holds a named list**
-(`build-rpm.sh`'s `%license`, `Cargo.toml`'s asset glob, `build-tarball.sh`'s `cp`,
-`build-appimage.sh`'s `cp`, `wix/main.wxs`'s `File` set), each needle the *mechanism* rather than
+**`crates/melodia/tests/packaging.rs`'s `every_package_format_ships_the_licenses_dir` holds a named list**
+(`build-rpm.sh`'s `%license`, the binary manifest's asset glob, `build-tarball.sh`'s `cp`,
+`build-appimage.sh`'s `cp`, `main.wxs`'s `File` set), each needle the *mechanism* rather than
 the word. Named because the set of formats is closed; the *font* set is open, so its sibling pin
 walks the directory instead.
 
@@ -263,30 +264,35 @@ walks the directory instead.
 
 - **`LICENSE` is an input to those tests** — hence its absence from the skip denylist above:
   compiling nothing is not the same as being unexercised. The other four needles live in
-  `scripts/`, `Cargo.toml` and `wix/`, which the denylist never reaches.
+  `scripts/`, `crates/melodia/Cargo.toml` and `crates/melodia/wix/`, which the denylist never
+  reaches.
 
-- **A face added under `melodia-ui/ui/assets/fonts/` owes an entry in
+- **A face added under `crates/melodia-ui/ui/assets/fonts/` owes an entry in
   `licenses/ATTRIBUTION.txt`** — `every_bundled_font_is_named_in_the_attribution` walks the
   directory rather than listing the faces, keying on each face's repo-relative path, the family
   name not being derivable from the file.
 
 ## The workspace split, as the release workflow sees it
 
-**Before adding a third member, grep the `release*.yml` and the packaging scripts for `melodia`.**
+**Before adding a member, grep the `release*.yml` and the packaging scripts for `melodia`.**
 The split to `melodia` + `melodia-ui` broke that workflow twice, both times on something
 identifying a thing by *name* that was unambiguous with one member, and both deep in a matrix slot:
 
 - `cargo wix` picks a package for you only when the workspace has exactly *one*, so the MSI step
-  now names `--package Melodia`.
+  names `--package melodia`. It selects the *manifest*, and cargo-wix then reads `wix/main.wxs`
+  relative to that, which is why the wxs sits under `crates/melodia/` rather than at the repo root
+  behind an `-I`: that flag's resolution base is undocumented and nothing short of a tagged Windows
+  release would exercise it.
 
-- The artifact upload's `path:` was a bare **`melodia-*`**, a prefix glob matching the new
-  `melodia-ui/` **directory** — all ten slots uploaded the Slint source tree and
+- The artifact upload's `path:` was a bare **`melodia-*`**, a prefix glob matching what was then a
+  `melodia-ui/` **directory** at the repo root — all ten slots uploaded the Slint source tree and
   `gh release upload artifacts/*` died on "is a directory". Now extension-qualified like the attest
-  and sign steps, **the third spelling of one list**.
+  and sign steps, **the third spelling of one list**. C13 moved that directory under `crates/`, so
+  the collision is gone and the qualifier is what keeps the next one from landing.
 
 Four places scrape the version out of the manifest rather than asking cargo, because they run
 without a toolchain (`release-prepare.yml`, `build-rpm.sh`, `build-appimage.sh`,
-`build-tarball.sh`); all four anchor on `[workspace.package]` by name, and both packages carry
+`build-tarball.sh`); all four anchor on `[workspace.package]` by name, and every member carries
 `version.workspace = true`.
 
 **A toolchain bump moves four things in lockstep** — `rust-toolchain.toml`, `Cargo.toml`'s

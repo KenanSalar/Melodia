@@ -30,7 +30,7 @@ lifts text up, raising it drops text down -- a ~150-unit step is roughly
 half a pixel at the app's UI font sizes (`dShift = fontSize / (2 * UPM)
 * dTypoAsc`).
 
-Output layout (all paths under melodia-ui/ui/assets/fonts/):
+Output layout (all paths under crates/melodia-ui/ui/assets/fonts/):
   originals/Vazirmatn-*.ttf   pristine upstream copy (not committed -- re-download to update)
   vazirmatn/Vazirmatn-*.ttf   patched, imported directly by the tree's app-window.slint
 
@@ -49,7 +49,7 @@ from fontTools.ttLib import TTFont
 METRICS = {"typo_asc": 1650, "typo_desc": -500}
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FONT_DIR = REPO_ROOT / "melodia-ui" / "ui" / "assets" / "fonts"
+FONT_DIR = REPO_ROOT / "crates" / "melodia-ui" / "ui" / "assets" / "fonts"
 ORIG_DIR = FONT_DIR / "originals"
 OUT_DIR = FONT_DIR / "vazirmatn"
 

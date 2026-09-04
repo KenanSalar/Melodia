@@ -23,7 +23,7 @@
 # three-way merge of a signed payload yields a file that still parses and no
 # longer verifies, and regenerating plus re-signing is the only resolution, so
 # git should refuse rather than guess.
-src/services/updater/tests/fixtures/*.json -text -merge
+crates/melodia-app/src/services/updater/tests/fixtures/*.json -text -merge
 *.bin     binary
 *.minisig binary
 

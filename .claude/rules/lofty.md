@@ -1,10 +1,11 @@
 ---
 paths:
-  - src/media/**/*.rs
-  - src/library/tags.rs
-  - src/library/mbid.rs
-  - src/tasks/file_event_processor/**/*.rs
-  - src/ui/callbacks/tags.rs
+  - crates/melodia-store/src/media/ingest/**/*.rs
+  - crates/melodia-artwork/src/media/image/**/*.rs
+  - crates/melodia-app/src/library/tags.rs
+  - crates/melodia-app/src/library/mbid.rs
+  - crates/melodia-app/src/tasks/file_event_processor/**/*.rs
+  - crates/melodia-views/src/ui/callbacks/tags.rs
 ---
 
 # Lofty Best Practices

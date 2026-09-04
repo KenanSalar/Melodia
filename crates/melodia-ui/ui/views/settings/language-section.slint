@@ -1,0 +1,65 @@
+import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { Dropdown } from "../../components/settings/dropdown.slint";
+
+// One row: the locale dropdown. Its options come from the `Settings` global, which
+// `crates/melodia-views/src/ui/settings/locale.rs::install_locale` fills from `SUPPORTED_LOCALES`. The native-name
+// labels are deliberately untranslated — a language picker always renders each option in its own
+// script — while the title and row label take `@tr()`.
+//
+// **This section is the pattern the other ten follow.** Each is a thin Rectangle hosting its card
+// inside an `if has-matches:`, so a card that matches nothing leaves the layout entirely, where
+// `visible: false` would keep its slot. The flag is an `out property` so the page can spot the
+// all-hidden state. The matching rule lives on `SettingsPage`; the local wrapper binds this
+// section's title once, so the per-row call sites stay two arguments.
+//
+// **A row's label and description are declared once, as properties, and read by both the
+// visibility term and the row itself.** The predicate is fed `label + " " + desc`, so spelling the
+// pair at each site lets a reworded description desync from what search matches on — invisible
+// until someone types a word from it and the card doesn't come up.
+export component LanguageSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> tab-name;
+
+    property <string> card-title: @tr("Language");
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.tab-name, root.card-title,
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    property <string> locale-label: @tr("Choose your preferred language");
+
+    out property <bool> has-matches: row-visible(locale-label, "");
+
+    // **The wrapper every section needs.** A `Rectangle` sizes to a layout
+    // child, never to a conditional one, so around a bare `if` it reports 0
+    // preferred-height. Wrapped, the height tracks the card when it's there and
+    // collapses to nothing when the filter hides it.
+    VerticalLayout {
+        if has-matches: SectionCard {
+            title: root.card-title;
+
+            if root.has-matches: SettingRow {
+                icon: "translate";
+                label: root.locale-label;
+                description: "";
+                Dropdown {
+                    options: Settings.language-names;
+                    selected-index <=> Settings.language-idx;
+                    trigger-width: 160px;
+                    // The dropdown has already written `selected-index`, so this
+                    // just forwards; Rust resolves the code, switches the
+                    // bundled translation and persists.
+                    selected(idx) => { Settings.language-changed(idx); }
+                }
+            }
+        }
+    }
+}

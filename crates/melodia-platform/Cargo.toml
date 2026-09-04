@@ -1,0 +1,51 @@
+[package]
+name = "melodia-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Tray, logging, crash reports, single-instance and the other OS adapters for Melodia"
+publish = false
+
+[lib]
+doctest = false
+
+# `melodia-core` and nothing else. A second workspace member here is the regression: the crates
+# above lean on this one for a tray icon, and would inherit whatever it named.
+[dependencies]
+melodia-core = { path = "../melodia-core" }
+
+interprocess.workspace = true
+flexi_logger.workspace = true
+log.workspace = true
+tokio.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+# The tray icon is decoded from the embedded PNG at startup.
+image.workspace = true
+# The single-instance socket name is a hash of the data directory, and
+# `desktop_integration` compares a staged file against what is already installed.
+blake3.workspace = true
+# `desktop_integration` stages its `.desktop` and icon through a temp file and a rename.
+tempfile.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus.workspace = true
+ksni.workspace = true
+libc.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys.workspace = true
+
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+tray-icon.workspace = true
+
+[dev-dependencies]
+melodia-testkit = { path = "../melodia-testkit" }
+
+[lints]
+workspace = true

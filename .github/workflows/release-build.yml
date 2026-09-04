@@ -77,10 +77,13 @@ jobs:
 
       # `--locked` is honest on every platform: the winit fork is vendored at
       # `winit/` and `[patch.crates-io]` points there, so checkout brings it along.
-      # No RUSTFLAGS stack workaround on Windows: `melodia-ui/build.rs` runs the
-      # Slint compile on a 16 MiB thread. (The root build.rs does no Slint work.)
+      # No RUSTFLAGS stack workaround on Windows: `crates/melodia-ui/build.rs` runs the
+      # Slint compile on a 16 MiB thread. (The binary's build.rs does no Slint work.)
+      #
+      # `-p melodia` because the root is virtual: with nothing to select, cargo selects
+      # every member, and this slot wants the binary and what it pulls in.
       - name: cargo build --release
-        run: cargo build --release --target ${{ inputs.target }} --locked
+        run: cargo build --release -p melodia --target ${{ inputs.target }} --locked
 
       - name: Package tarball
         if: inputs.kind == 'linux-tarball'
@@ -104,7 +107,7 @@ jobs:
 
       # Compiled from source rather than taiki-e/install-action, whose manifest
       # stopped covering cargo-deb for aarch64_linux. The pin is not just
-      # reproducibility: `license-file = "packaging/debian-copyright"` leans on
+      # reproducibility: `license-file = "../../packaging/debian-copyright"` leans on
       # undocumented cargo-deb behaviour, `has_copyright_metadata` (config.rs, not
       # the README) wanting a DEP-5 key in the first ten lines before it copies
       # the file verbatim. A bump that narrows it silently ships a copyright
@@ -121,7 +124,7 @@ jobs:
         if: inputs.kind == 'linux-deb'
         shell: bash
         run: |
-          cargo deb --target ${{ inputs.target }} --no-build
+          cargo deb -p melodia --target ${{ inputs.target }} --no-build
           src="$(ls target/${{ inputs.target }}/debian/*.deb)"
           cp "$src" "melodia-${TAG}-${ARCH}.deb"
 
@@ -137,10 +140,13 @@ jobs:
           # work. `--package` is required rather than redundant, cargo-wix
           # auto-selecting only in a single-member workspace and otherwise
           # refusing outright, so splitting out `melodia-ui` made it mandatory.
+          # It selects the manifest, and cargo-wix reads `wix/main.wxs` relative
+          # to that — which is why the wxs sits under `crates/melodia/` rather
+          # than at the repo root behind an `-I`.
           # `--toolset modern` too: the default Legacy path finds the preinstalled
           # WiX 3.14 on x64 and chokes on the v4 schema, and finds no candle.exe
           # at all on arm64. `-arch` needs no flag, cargo-wix deriving it.
-          cargo wix --toolset modern --package Melodia --target ${{ inputs.target }} --no-build --nocapture
+          cargo wix --toolset modern --package melodia --target ${{ inputs.target }} --no-build --nocapture
           Get-ChildItem -Path "target/wix/" -Filter "*.msi" -Recurse |
             ForEach-Object { Copy-Item $_.FullName -Destination "melodia-${env:TAG}-${env:ARCH}.msi" }
 
@@ -172,8 +178,10 @@ jobs:
           # arch in the name because upload-artifact requires unique names across
           # a job's slots; the publish job flattens them with `merge-multiple`.
           # Keep every glob extension-qualified: a bare `melodia-*` also matches
-          # DIRECTORIES, so `melodia-ui/` rode along on every slot and the publish
-          # job's `gh release upload artifacts/*` died on "is a directory".
+          # DIRECTORIES, so the `melodia-ui/` that sat at the repo root rode along
+          # on every slot and the publish job's `gh release upload artifacts/*`
+          # died on "is a directory". It lives under `crates/` now; the qualifier
+          # is what stops the next one repeating it.
           name: ${{ inputs.kind }}-${{ inputs.arch }}
           path: |
             melodia-*.tar.gz

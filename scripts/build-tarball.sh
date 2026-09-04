@@ -18,9 +18,9 @@ REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 BINARY="${BINARY:-$REPO_ROOT/target/release/Melodia}"
-[[ -f "$BINARY" ]] || { echo "ERROR: $BINARY not found. Run 'cargo build --release' first."; exit 1; }
+[[ -f "$BINARY" ]] || { echo "ERROR: $BINARY not found. Run 'cargo build --release -p melodia' first."; exit 1; }
 
-# Both packages inherit the version from `[workspace.package]`, so `[package]`
+# Every member inherits the version from `[workspace.package]`, so `[package]`
 # reads `version.workspace = true` and carries no literal. Anchor on the table
 # rather than taking the file's first `version = ` line.
 VERSION="$(awk -F'"' '

@@ -1,7 +1,6 @@
 ---
 paths:
-  - src/**/*.rs
-  - tests/**/*.rs
+  - crates/**/*.rs
 ---
 
 # Tokio Best Practices
@@ -11,7 +10,7 @@ paths:
 - `tokio::spawn` for async work that should run concurrently
 - `spawn_blocking` for blocking I/O only (file system, synchronous libraries) — **not** for CPU-bound work (use Rayon instead)
 - `spawn_blocking` tasks **cannot be cancelled** — keep them short and focused
-- The blocking pool is capped at 32 in `main.rs` (tokio's own default is 512), and `services::system_theme::spawn_color_watcher` is the one task allowed to hold a slot for the process lifetime. A second never-returning blocking loop has to re-justify that number
+- The blocking pool is capped at 32 in `main.rs` (tokio's own default is 512), and `services::platform::system_theme::spawn_color_watcher` is the one task allowed to hold a slot for the process lifetime. A second never-returning blocking loop has to re-justify that number
 - Avoid spawning tasks for trivial operations — just `.await` them inline
 
 ## Channel Selection

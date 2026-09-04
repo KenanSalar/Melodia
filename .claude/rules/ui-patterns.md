@@ -1,10 +1,10 @@
 ---
 paths:
-  - melodia-ui/ui/**/*.slint
-  - src/ui/**/*.rs
-  - src/boot/**/*.rs
-  - src/services/toast.rs
-  - melodia-ui/build.rs
+  - crates/melodia-ui/ui/**/*.slint
+  - crates/melodia-views/src/ui/**/*.rs
+  - crates/melodia/src/boot/**/*.rs
+  - crates/melodia-core/src/utils/toast.rs
+  - crates/melodia-ui/build.rs
 ---
 
 # UI patterns — what already exists
@@ -14,7 +14,8 @@ are wrong* are `slint-pitfalls.md`, which loads on the same globs and owns every
 file points at rather than restates.
 
 A rule rather than a `CLAUDE.md` beside the code: UI features cut across two trees (`.slint`
-under `melodia-ui/ui/`, Rust under `src/ui/`), so a per-directory file would reach one and
+under `crates/melodia-ui/ui/`, Rust under `crates/melodia-views/src/ui/`), so a per-directory
+file would reach one and
 silently miss the other.
 
 ## Shared components
@@ -102,7 +103,7 @@ silently miss the other.
   `↑`/`↓` into the label. It exists for what it makes *unspellable*: the per-pill slot, ternary and
   `active` comparison could each go missing at one site and look right until the sort moved. What
   the *mount* still owes is the two arrays lining up — a label with no matching field sorts by the
-  empty string — so both pins check lengths through `test_support::sort_pill_row_arrays`. `labels`
+  empty string — so both pins check lengths through `melodia_testkit::sort_mount_arrays`. `labels`
   stays an inline `[@tr("…"), …]` literal.
 
 ### Grids, strips, cards
@@ -154,7 +155,7 @@ silently miss the other.
   since the slot carries one fade for everything in it.
 
 - **`MosaicHeroTile`** is the 140 px artwork square both curated heroes draw, and it draws **one
-  composed collage, never a live `CoverMosaic`** — `media::artwork`'s `COMPOSITE_LAYOUTS` owns the
+  composed collage, never a live `CoverMosaic`** — `media::image::artwork`'s `COMPOSITE_LAYOUTS` owns the
   1/2/3/4 arrangement, so the square, the banner blur and a playlist thumbnail are all laid out the
   same. **What they do not share is what an unreadable source costs**, and the asymmetry is
   deliberate: the heroes go through `compose_cover`, which drops that source and picks the layout
@@ -446,7 +447,7 @@ silently miss the other.
   `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as
   the iter var), and translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
 
-- **Backend-thread toasts via `services::toast`.** `NotificationsUi` is `Rc`, so failures on tokio
+- **Backend-thread toasts via `utils::toast`.** `NotificationsUi` is `Rc`, so failures on tokio
   workers surface through a neutral `OnceLock<UnboundedSender<…>>` — no-op when uninstalled,
   holding no `ui::*` types, which preserves the `tasks`-no-`ui` rule. `install_toast_bridge` drains
   the `mpsc` (**not** a `watch` — errors must not coalesce), resolving the localized **title** by
@@ -455,7 +456,7 @@ silently miss the other.
 
 ### Filtering
 
-- **Every filter box answers "does this row match" through `src/ui/row_match.rs`, and none of them
+- **Every filter box answers "does this row match" through `crates/melodia-views/src/ui/row_match.rs`, and none of them
   spells `to_lowercase().contains(…)`.** It owns `search_fields` (ordered like the `tracks_fts`
   column list it mirrors), the `fold_needle` pair folding case **and accents**, and the predicates
   over them. Sixteen surfaces route through it; on all three tabbed pages the needle is **one
@@ -688,7 +689,7 @@ silently miss the other.
   owns the `weak.upgrade()` + `.set_parent(…)` half; the caller chains its own
   `add_filter`/`pick_*`/`save_file`. **Never build one inline**, and the reason is that the bug is
   invisible here: without the parent it z-orders behind Melodia on Windows and macOS, while Linux's
-  XDG portal parents OS-side regardless. Held by a test that **walks `src/`** rather than naming
+  XDG portal parents OS-side regardless. Held by a test that **walks every crate's `src/`** rather than naming
   the five sites, and carries a caller floor so a caller that stops opening a dialog trips it too.
 
 - **Keyboard shortcuts** — the root `FocusScope` is `ShortcutScope`, which owns every binding and

@@ -6,16 +6,16 @@ Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the
 
 | Scenario | RSS | PSS | Heap | Mapped | CPU |
 | --- | --- | --- | --- | --- | --- |
-| Idle (Fedora) | 157 MB | 86 MB | 34 MB | 122 MB | 0.3% |
-| Playing, list view (Fedora) | 157 MB | 87 MB | 35 MB | 122 MB | 0.6–0.7% |
-| Playing, visualizer live (Fedora) | 163 MB | 93 MB | 34 MB | 128 MB | 5.0% |
-| Idle (Windows) | 119 MB | 60 MB | 56 MB | 63 MB | 0.2–0.4% |
-| Playing, list view (Windows) | 124 MB | 65 MB | 61 MB | 63 MB | 0.4–1.2% |
-| Playing, visualizer live (Windows) | 134 MB | 75 MB | 70 MB | 64 MB | 7.3–8.4% |
+| Idle (Fedora) | 158 MB | 88 MB | 33 MB | 125 MB | 0.1% |
+| Playing, list view (Fedora) | 158 MB | 89 MB | 34 MB | 124 MB | 0.6% |
+| Playing, visualizer live (Fedora) | 166 MB | 96 MB | 34 MB | 132 MB | 4.0% |
+| Idle (Windows) | 117 MB | 58 MB | 54 MB | 63 MB | 0.1–0.2% |
+| Playing, list view (Windows) | 125 MB | 65 MB | 61 MB | 64 MB | 0.8–1.0% |
+| Playing, visualizer live (Windows) | 132 MB | 71 MB | 67 MB | 65 MB | 9.6–9.9% |
 
-Release build against the same 512-track library on both platforms, each on a 16-core machine with the window on the same 144 Hz display and nothing else contending for the GPU. CPU as a share of **one** core over paired 30-second windows. Memory on Fedora/Wayland from `smaps_rollup` and `/proc/self/status`; on Windows 11 from the working set, split by page backing into **Heap** (`MEM_PRIVATE`) and **Mapped** (`MEM_IMAGE` and `MEM_MAPPED`), with **PSS** taken as the private working set.
+Release build against the same 512-track library on both platforms, each on a 16-core machine with the window on the same 144 Hz display and nothing else contending for the GPU. CPU as a share of **one** core, over 60-second windows on Fedora and 30-second windows on Windows. Memory on Fedora/Wayland from `smaps_rollup` and `/proc/self/status`; on Windows 11 from the working set, split by page backing into **Heap** (`MEM_PRIVATE`) and **Mapped** (`MEM_IMAGE` and `MEM_MAPPED`), with **PSS** taken as the private working set. Both platforms' rows are from the current build, measured after the process had settled.
 
-**Heap** is what the application itself allocates, and it is the number that stays flat: grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it, though a higher-resolution screen raises the totals. The visualizer allocates nothing per frame, reusing its buffers. **Mapped** is the file-backed remainder, and the two together are essentially all of RSS: most of what the process appears to occupy is the binary and the shared graphics stack, not anything Melodia allocated. That is also why **PSS** is the fairer whole-process figure on a desktop already running other GL applications, since RSS charges those shared pages in full, around 80 MB of it here.
+**Heap** is what the application itself allocates, and it is the number that stays flat: grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it, though a higher-resolution screen raises the totals. The visualizer allocates nothing per frame, reusing its buffers. **Mapped** is the file-backed remainder, and the two together are essentially all of RSS: most of what the process appears to occupy is the binary and the shared graphics stack, not anything Melodia allocated. That is also why **PSS** is the fairer whole-process figure on a desktop already running other GL applications, since RSS charges those shared pages in full, around 70 MB of it here.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/github/v/release/KenanSalar/Melodia?label=version&color=blueviolet)](https://github.com/KenanSalar/Melodia/releases)
@@ -257,11 +257,11 @@ sudo dnf install fontconfig-devel freetype-devel alsa-lib-devel \
 git clone https://github.com/KenanSalar/Melodia.git
 cd Melodia
 
-cargo run                                      # debug build, runs the app
-cargo build --release                          # release build → target/release/Melodia
+cargo run -p melodia                           # debug build, runs the app
+cargo build --release -p melodia               # release build → target/release/Melodia
 cargo fmt --all                                # format
-cargo clippy --all-targets -- -D warnings      # lint
-cargo test                                     # run tests
+cargo clippy --all-targets --workspace -- -D warnings   # lint
+cargo test --workspace                         # run tests
 ```
 
 > **Note: a source build keeps its own library.**
@@ -307,7 +307,8 @@ cargo test                                     # run tests
 > never uploads your files anywhere). Nothing leaves the machine while the feature
 > is off, or while Discord isn't running. Building a **fork** needs its own Discord
 > **application ID**. It's public (it ships in every presence payload, so no CI
-> secret, unlike the Last.fm keys), and hardcoded in `services/discord/mod.rs`
+> secret, unlike the Last.fm keys), and hardcoded in
+> `crates/melodia-integrations/src/services/integrations/discord/mod.rs`
 > with a `MELODIA_DISCORD_APP_ID` compile-time override.
 
 > **Tip: cleaning up a loosely-tagged library.**
@@ -365,23 +366,29 @@ HTTP). There is no WebView and no IPC boundary:
   blocking socket read off that callback and feeding a ring the decoder pulls
   from.
 
-```
-src/
-├── boot/        startup sequencing
-├── database/    SQLx + SQLite (WAL, FTS5, migrations)
-├── entities/    domain model types (track, album, artist, genre, playlist, …)
-├── library/     playback, queue, tracks, albums, artists, genres, playlists, search, settings
-├── media/       scanner, metadata, artwork, cover-thumbnail cache, folder watcher
-├── player/      playback state machine + Symphonia decode + output layer (cpal device, dual-deck mixer, rate and channel conversion, clock) + graphic equalizer, ReplayGain, crossfade, spectrum & waveform DSP, live-stream buffering
-├── tasks/       background tasks (playback monitor, file events, queue prune, Material You)
-├── themes/      pluggable theme registry
-├── services/    updater, desktop integration, system theme, radio directory client
-├── state/       AppState, error types
-└── ui/          Slint bridge, callbacks, view handles, models
+A cargo workspace, layered so the compiler enforces the direction rather than a
+convention: each crate names only what sits below it, and the ones that must not
+meet cannot. The UI has no database or socket in its manifest; the decoders have
+no mixer; the tag writer has no state machine.
 
-melodia-ui/          the UI in its own crate, so it builds once
-├── ui/              the .slint sources, plus the fonts and icons they embed
-└── translations/    bundled .po catalogues
+```
+crates/
+├── melodia-core         errors, paths, domain types, the theme registry
+├── melodia-testkit      shared fixtures and corpus walkers (dev-only, names nothing)
+├── melodia-artwork      decode, resize, the artwork store, the thumbnail cache
+├── melodia-net          the HTTP primitives, the artwork/logo fetchers, the radio directory
+├── melodia-platform     tray, logging, crash reports, single instance, system theme
+├── melodia-audio        the AudioSource vocabulary, Symphonia decode, file/stream/HLS sources
+├── melodia-playback     the DSP chain and everything under it: EQ, ReplayGain, crossfade,
+│                        spectrum & waveform taps, the decks, the cpal device and clock
+├── melodia-engine       the playback state machine, its queue and the action list
+├── melodia-store        SQLx + SQLite (WAL, FTS5, migrations), scanner, tags, folder watcher
+├── melodia-integrations scrobbling, Discord presence, OS media controls
+├── melodia-app          the command layer: the library API, background tasks, AppState, settings
+├── melodia-views        the Slint bridge: view slices, callbacks, the shared component library
+├── melodia-ui           the .slint sources, the fonts and icons they embed, the .po catalogues,
+│                        compiled once into its own crate
+└── melodia              the binary: startup sequencing, shutdown, the window
 ```
 
 See [`CLAUDE.md`](CLAUDE.md) for a detailed architecture reference.

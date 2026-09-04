@@ -1,0 +1,26 @@
+[package]
+name = "melodia-testkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared test fixtures and corpus walkers for the Melodia workspace"
+publish = false
+
+[lib]
+doctest = false
+
+# Every other member dev-depends on this one, so it must name none of them: building a
+# member's test target compiles that member a second time under `cfg(test)`, and a type
+# handed back by a testkit linked against the plain rlib would not be the same type. Two
+# helpers that did name workspace types were removed rather than carried, and the rule is
+# the whole reason this crate is a leaf.
+[dependencies]
+# `write_test_png` and its two JPEG siblings, for the decode paths that need a real file.
+image.workspace = true
+# The throwaway directory each of those writes into.
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,31 +1,31 @@
 ---
 paths:
-  - src/ui/radio/**/*.rs
-  - src/library/radio/**/*.rs
-  - src/library/radio_files.rs
-  - src/services/radio_browser/**/*.rs
-  - src/player/stream_source.rs
-  - src/player/prebuffer.rs
-  - src/player/stream_decode.rs
-  - src/media/station_logo.rs
-  - src/entities/radio.rs
-  - src/database/queries/radio.rs
-  - src/tasks/radio_logo_cache.rs
-  - src/library/settings/radio.rs
-  - src/ui/settings/radio_settings.rs
-  - melodia-ui/ui/globals/radio.slint
-  - melodia-ui/ui/components/station-facts.slint
-  - melodia-ui/ui/views/radio-view.slint
-  - melodia-ui/ui/views/radio/browse-tab.slint
-  - melodia-ui/ui/views/radio/kept-stations-tab.slint
-  - melodia-ui/ui/views/radio/station-detail.slint
-  - melodia-ui/ui/views/radio/station-card.slint
-  - melodia-ui/ui/views/radio/station-grid.slint
-  - melodia-ui/ui/views/radio/facet-chip.slint
-  - melodia-ui/ui/views/radio/suggestion-pill.slint
-  - melodia-ui/ui/views/radio/tab-pills.slint
-  - melodia-ui/ui/views/settings/radio-section.slint
-  - melodia-ui/ui/components/dialog/add-station-body.slint
+  - crates/melodia-views/src/ui/radio/**/*.rs
+  - crates/melodia-app/src/library/radio/**/*.rs
+  - crates/melodia-app/src/library/radio_files.rs
+  - crates/melodia-net/src/services/net/radio_browser/**/*.rs
+  - crates/melodia-audio/src/player/source/stream_source.rs
+  - crates/melodia-audio/src/player/source/prebuffer.rs
+  - crates/melodia-audio/src/player/source/stream_decode.rs
+  - crates/melodia-net/src/media/fetch/station_logo.rs
+  - crates/melodia-core/src/entities/radio.rs
+  - crates/melodia-store/src/database/queries/radio.rs
+  - crates/melodia-app/src/tasks/radio_logo_cache.rs
+  - crates/melodia-app/src/library/settings/radio.rs
+  - crates/melodia-views/src/ui/settings/radio_settings.rs
+  - crates/melodia-ui/ui/globals/radio.slint
+  - crates/melodia-ui/ui/components/station-facts.slint
+  - crates/melodia-ui/ui/views/radio-view.slint
+  - crates/melodia-ui/ui/views/radio/browse-tab.slint
+  - crates/melodia-ui/ui/views/radio/kept-stations-tab.slint
+  - crates/melodia-ui/ui/views/radio/station-detail.slint
+  - crates/melodia-ui/ui/views/radio/station-card.slint
+  - crates/melodia-ui/ui/views/radio/station-grid.slint
+  - crates/melodia-ui/ui/views/radio/facet-chip.slint
+  - crates/melodia-ui/ui/views/radio/suggestion-pill.slint
+  - crates/melodia-ui/ui/views/radio/tab-pills.slint
+  - crates/melodia-ui/ui/views/settings/radio-section.slint
+  - crates/melodia-ui/ui/components/dialog/add-station-body.slint
   - migrations/20260820000000_radio_stations.sql
 ---
 
@@ -33,12 +33,12 @@ paths:
 
 The couplings no single file can hold: an off switch enforced one place and observable from four,
 two tables the artwork sweep has to know about, a stream whose prohibitions and dependency pins
-reach out of `src/player/`, and a handful of numbers spelled in both trees.
+reach out of `melodia-audio`, and a handful of numbers spelled in both trees.
 
 The page's own shape belongs to `.claude/rules/ui-patterns.md` — the Browse box and its scope
 pills, `StationCard` as an `EntityCard` host, and why three tabs share one `SectionActiveGate`.
 The sweep is `library-data.md`'s. The stream's own design, the ring included, is
-`src/player/CLAUDE.md`'s. None of those is restated here, and a paragraph here that starts to
+`.claude/rules/audio-stack.md`'s. None of those is restated here, and a paragraph here that starts to
 is the copy to delete.
 
 ## The off switch
@@ -46,8 +46,8 @@ is the copy to delete.
 - **The switch itself is argued on `library::radio`'s own items** — why it sits at the facade,
   what the getters are exempt from, and why the logo download is not. What spans is the pair of
   walks holding it, one per direction and neither covering the other's half:
-  `library::radio::tests::every_outbound_call_takes_its_client_from_behind_the_switch` counts the
-  reaches inside the facade, `radio_browser::tests::only_the_radio_facade_reaches_the_directory_client`
+  `crates/melodia/tests/radio_facade.rs`'s `every_outbound_call_takes_its_client_from_behind_the_switch` counts the
+  reaches inside the facade, `crates/melodia/tests/radio_facade.rs`'s `only_the_radio_facade_reaches_the_directory_client`
   counts them outside it. So **`http_client()` may be named exactly once across all of
   `library/radio/`** and `radio_browser` may be named nowhere else in the tree. Both walks read the
   facade off its **directory** rather than off a file list, so a sixth submodule is covered the day
@@ -96,12 +96,12 @@ is the copy to delete.
 
 ## The stream
 
-- **D8, the reconnect's home and what the ring is still for are `src/player/CLAUDE.md`'s**,
+- **D8, the reconnect's home and what the ring is still for are `.claude/rules/audio-stack.md`'s**,
   over `prebuffer.rs`'s and `stream_decode.rs`'s `//!`. That file loads on the whole directory,
   including `handlers.rs` — the monitor the reconnect argument is *about*, and the one file in it
   no glob here reaches.
 - **The feed thread's name is spelled inline and may not become a const.**
-  `services::tests::no_thread_name_outgrows_what_the_kernel_keeps` matches a literal after
+  `crates/melodia/tests/packaging.rs`'s `no_thread_name_outgrows_what_the_kernel_keeps` matches a literal after
   `.name(`, so lifting `"radio-buffer"` out would leave it silently unmeasured — the one refactor
   here that looks like an improvement and disables a check.
 - **Nothing may call `StreamDownload::new_http`** — it constructs its own unconfigured client behind
@@ -128,11 +128,11 @@ is the copy to delete.
 
 Each of these is written once in Rust and again in `.slint`, so each needs a pin or an argument.
 
-- **`media::station_logo::MIN_LOGO_DIM` is restated in `components/now-playing/source-artwork.slint`**,
+- **`media::fetch::station_logo::MIN_LOGO_DIM` is restated in `components/now-playing/source-artwork.slint`**,
   which argues from it that no source reaching that tile can be small enough for `ArtworkImage`'s
   inset arm to fire — so it binds no `native-size`. Lower the floor and the argument stops being
   true with nothing to say so. Pinned by
-  `media::station_logo::tests::the_slint_tile_that_skips_native_size_still_agrees_with_the_floor`.
+  `media::fetch::station_logo::tests::the_slint_tile_that_skips_native_size_still_agrees_with_the_floor`.
 - **`Radio.tab-count` is the sole definition of how many tabs there are.** `seed_tab` clamps the
   persisted index against the global's own count rather than a Rust const, `RadioTab` carries one
   variant per tab, and `tab_from_index` ends in a default arm so a fourth tab resolves to Browse

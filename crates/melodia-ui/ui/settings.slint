@@ -1,0 +1,518 @@
+// The Settings page's reactive state. Rust populates the lists and indices at startup and on every
+// chip / dot click; the UI binds chip groups and colour-dot grids to them and forwards
+// `selected(int)` to the change callbacks. The page's own search filter and row-visibility rule
+// live on `SettingsPage`: values the user configures vs. how the page configuring them is navigated.
+
+export global Settings {
+    // Stable across runs — populated once at startup from `themes::registry()`.
+    in property <[string]> theme-names;
+    in-out property <int> theme-idx;
+
+    // The chips themselves are inline `@tr` literals in `appearance-section.slint`, so
+    // bundled translations re-render them on a locale switch; Rust drives only the
+    // index. Same for `color-style-idx` below.
+    in-out property <int> variant-idx;
+
+    // Re-populated on every theme *or* variant change — Catppuccin shades each accent
+    // per variant, so one id renders different swatches in Latte and Mocha. 1:1 with
+    // `accent-names`, which the `ColorDotGrid` turns into per-dot tooltips.
+    in property <[brush]> accent-colors;
+    in property <[string]> accent-names;
+    in-out property <int> accent-idx;
+
+    // The palette is coming from Plasma's live colour scheme rather than the static
+    // Light/Dark tables: KDE Breeze, variant "System", and a parsed `kdeglobals`. The
+    // Accent Color row hides its dot grid on it, the OS having already picked one.
+    in property <bool> kde-system-active;
+
+    // 1:1 with `material_you::SchemeStyle::all()`, index 0 being None. Visible only
+    // under the Material 3 theme.
+    in-out property <int> color-style-idx;
+
+    // A non-`None` Color Style *and* a seed the coordinator actually extracted from the
+    // artwork. Prepends the dynamic-primary swatch to `accent-colors`, and flips the
+    // Color Style row's description so it's clear whether dynamic colour is live.
+    in property <bool> material-you-active;
+
+    // Fired on chip / dot click. Rust resolves idx → id, persists, applies the new
+    // palette and writes the lists back.
+    callback theme-changed(int);
+    callback variant-changed(int);
+    callback accent-changed(int);
+    callback color-style-changed(int);
+
+    // Hides the "Match Unfocused Window Background" row entirely off-KDE — the
+    // behaviour mirrors KDE's window-decoration fade and means nothing elsewhere.
+    in property <bool> match-unfocused-supported;
+
+    in-out property <bool> match-unfocused-bg;
+    callback match-unfocused-bg-changed(bool);
+
+    // Whether the tray subsystem runs at all. Never written from Slint: the switch is
+    // `manual: true` and routes through the `restart-tray` Dialog, the change only
+    // applying next launch. Opt-in.
+    in property <bool> tray-enabled;
+
+    // A tray icon was actually created. "Close to Tray" greys out rather than hiding when false —
+    // either the tray is off, or the session has no tray host (vanilla GNOME without AppIndicator)
+    // — because the close handlers then fall back to quitting and the toggle would do nothing.
+    in property <bool> tray-active;
+
+    // Applied synchronously to a process-global atomic so `window_chrome`'s close handlers see it
+    // on the next close, then persisted on the blocking pool. Off by default; with no tray icon
+    // active the close handlers quit regardless, so this can never strand the window.
+    in-out property <bool> close-to-tray: false;
+    callback close-to-tray-changed(bool);
+
+    // Persist-only from here — what applies it is `boot::ui_setup`, which turns it into
+    // `Nav.suppress-enter-animation` before the window is shown. Off by default, so the
+    // launch a release already ships is the one that keeps playing.
+    in-out property <bool> skip-startup-animation: false;
+    callback skip-startup-animation-changed(bool);
+
+    // Applied to `PlayerState.gapless_enabled` synchronously — the next 500 ms monitor
+    // tick picks it up — then persisted on the blocking pool.
+    in-out property <bool> gapless-playback: true;
+    callback gapless-playback-changed(bool);
+
+    // 0 = None, 1 = Equalizer; read by `PlayButton`. Rust maps idx ↔ token in both
+    // directions, so a malformed disk value can't pin the chip to an invalid index.
+    in-out property <int> play-button-animation-idx: 0;
+    callback play-button-animation-changed(int);
+
+    // Persist-only — no runtime side effect. `main.rs` consults the flag once at the
+    // next launch, after `restore_persisted_playback`.
+    in-out property <bool> resume-on-startup: false;
+    callback resume-on-startup-changed(bool);
+
+    // Each `*-changed` applies to the live playback engine synchronously before persisting on the
+    // blocking pool — the equalizer / ReplayGain two-phase shape. The duration is in **seconds**
+    // here, the slider's natural unit; Rust converts to the milliseconds the backend and
+    // `settings.json` use, and the bounds are seeded from `player::crossfade::{MIN,MAX}`.
+    // `-changed` fires live during a drag and only applies; `-committed` fires on release and
+    // persists — the `set-volume` / `commit-volume` split.
+    in-out property <bool> crossfade-enabled: false;
+    callback crossfade-enabled-changed(bool);
+    in-out property <float> crossfade-duration-secs: 2.0;
+    in property <float> crossfade-min-secs;
+    in property <float> crossfade-max-secs;
+    callback crossfade-duration-changed(float /* seconds */);
+    callback crossfade-duration-committed(float /* seconds */);
+    in-out property <bool> crossfade-skip-same-album: true;
+    callback crossfade-skip-same-album-changed(bool);
+    in-out property <bool> crossfade-manual: false;
+    callback crossfade-manual-changed(bool);
+    in-out property <bool> crossfade-fade-on-pause: false;
+    callback crossfade-fade-on-pause-changed(bool);
+
+    // Rust owns every property here — the `ScrobbleService` status-watch subscriber is the single
+    // writer — and the toggles route their events back to persist and refresh the shadow. Connect
+    // is opened inline from the section markup rather than through a callback, dodging Slint's
+    // recursion guard. `configured` says whether this build shipped Last.fm app keys.
+    in property <bool> scrobble-lastfm-configured;
+    in property <bool> scrobble-lastfm-connected;
+    in property <string> scrobble-lastfm-username;
+    in-out property <bool> scrobble-lastfm-enabled;
+    callback scrobble-lastfm-enabled-changed(bool);
+    callback scrobble-lastfm-disconnect();
+    // Mirror favorites to Last.fm Loved Tracks — independent of the two.
+    in-out property <bool> scrobble-lastfm-love;
+    callback scrobble-lastfm-love-changed(bool);
+    in property <bool> scrobble-listenbrainz-connected;
+    in property <string> scrobble-listenbrainz-username;
+    in-out property <bool> scrobble-listenbrainz-enabled;
+    callback scrobble-listenbrainz-enabled-changed(bool);
+    callback scrobble-listenbrainz-disconnect();
+    // Mirror favorites to ListenBrainz recording feedback.
+    in-out property <bool> scrobble-listenbrainz-love;
+    callback scrobble-listenbrainz-love-changed(bool);
+    // Auto-tag scanned tracks with their MusicBrainz Recording ID so loves work on untagged
+    // libraries; the button forces a re-sweep of tracks still missing one.
+    in-out property <bool> scrobble-mbid-auto-tag;
+    callback scrobble-mbid-auto-tag-changed(bool);
+    callback scrobble-lookup-missing-mbids();
+
+    // Same shape as scrobbling: the `DiscordPresenceService` status-watch subscriber is the single
+    // writer, so a Discord restart flips the status row live, and the toggles persist and refresh
+    // the shadow through `set_flags`, which starts and stops the IPC worker. No credentials — the
+    // application id is a compile-time constant, so everything fits on `Settings`.
+    in property <bool> discord-rpc-connected;
+    in-out property <bool> discord-rpc-enabled;
+    callback discord-rpc-enabled-changed(bool);
+    in-out property <bool> discord-rpc-artwork;
+    callback discord-rpc-artwork-changed(bool);
+    in-out property <bool> discord-rpc-hide-when-paused;
+    callback discord-rpc-hide-when-paused-changed(bool);
+
+    // The Radio section's master switch: the sidebar row and the index-10 router branch both
+    // read it, so flipping it mounts and unmounts the whole feature with no restart. Declared
+    // false so a settings read that fails leaves a local-only install local-only. **The gate
+    // that matters isn't either of these** — `library::radio` refuses on the Rust shadow, which
+    // is what makes "off" mean no traffic rather than a hidden row.
+    in-out property <bool> radio-enabled: false;
+    callback radio-enabled-changed(bool);
+    // Both sub-toggles declare their live default here. Only the click one differs from the
+    // master's cautious `false`, describing what the feature does rather than whether it runs.
+    // Nothing in Slint reads either: the segment filter runs in `library::radio::search` and the
+    // click on the play path, both off Rust shadows, so these are the control surface and not the
+    // answer.
+    in-out property <bool> radio-hide-segmented: false;
+    callback radio-hide-segmented-changed(bool);
+    in-out property <bool> radio-send-clicks: true;
+    callback radio-send-clicks-changed(bool);
+
+    // Persists, then flips the `FolderWatcher` on the tokio runtime rather than the
+    // blocking pool — the start needs an async DB query before it can take the
+    // parking_lot lock. **On by default**: consumer players auto-watch with no toggle
+    // at all, and shipping it off stranded new users in a stale-UI failure mode.
+    in-out property <bool> watch-for-file-changes: true;
+    callback watch-for-file-changes-changed(bool);
+
+    // Whether a star also lands in the file's own tag. **On by default**: a rating that lives
+    // only in the database is one a library rebuild loses and no other player can see, which is
+    // the reason the write path exists at all. The cost it buys is real though — lofty
+    // re-serializes the whole tag, so a rating rewrites the file — hence the switch.
+    in-out property <bool> write-ratings-to-tags: true;
+    callback write-ratings-to-tags-changed(bool);
+
+    // Logical pixels, mirrored into `Theme.shell-radius` on every change so the mantle shell and
+    // content panel repaint reactively. Rust clamps and snaps to the nearest chip preset on read,
+    // so the chip selection matches what's painted even after a hand-edited `settings.json`.
+    in-out property <int> corner-radius: 6;
+    callback corner-radius-changed(int);
+
+    // 0 = Standard (Material bar icons), 1 = macOS (traffic lights with hover-reveal glyphs).
+    // Mirrored into `Theme.titlebar-button-style` so `custom-titlebar.slint` reads it through
+    // `Theme`, the `shell-radius` precedent. Inert under the native titlebar.
+    in-out property <int> titlebar-button-style: 0;
+    callback titlebar-button-style-changed(int);
+
+    // 0 = Right (Windows / KDE), 1 = Left (macOS). Independent of the style — all four
+    // combinations render with close always at the outer window corner.
+    in-out property <int> titlebar-button-side: 0;
+    callback titlebar-button-side-changed(int);
+
+    // Mirrors `SettingsData.overflow_buttons`, a `Vec<String>` of ids. Discrete bools
+    // rather than a `[string]` model so the callback can name which button toggled
+    // without diffing arrays; Rust applies the add/remove and persists. The
+    // now-playing bar reads them to gate inline-vs-overflow visibility.
+    in-out property <bool> overflow-favorite;
+    in-out property <bool> overflow-repeat;
+    in-out property <bool> overflow-shuffle;
+    in-out property <bool> overflow-pin;
+    in-out property <bool> overflow-queue;
+    callback overflow-buttons-changed(string /*id*/, bool /*overflow-on*/);
+
+    // `language-names` carries native-name labels, always in the language's own script and never
+    // re-translated; `language-codes` the matching `SUPPORTED_LOCALES` codes. The change callback
+    // resolves idx → code and calls `slint::select_bundled_translation` synchronously, which
+    // re-renders every `@tr` on the next frame, then spawns the disk persist.
+    in property <[string]> language-names;
+    in property <[string]> language-codes;
+    in-out property <int>  language-idx;
+    callback language-changed(int);
+
+    // Opens `CARGO_PKG_REPOSITORY` in the system browser. No Slint-side handler.
+    callback open-repository();
+
+    // Opens the Ko-fi page, from the About card's button and the one-time support toast's action
+    // alike — hence `crates/melodia-views/src/ui/support.rs` rather than `about.rs`.
+    callback open-kofi();
+
+    // The Diagnostics card's three rows, all handled in `crates/melodia-views/src/ui/settings/diagnostics.rs`.
+    // `open-log-folder` is also the "crashed last run" toast's action, via `Notifications.action`.
+    callback open-log-folder();
+    callback save-diagnostics-report();
+    // Applied live via `LoggerHandle::set_new_spec` — no relaunch — then persisted. Inert when
+    // `RUST_LOG` is set, which wins outright; see `services::logging`.
+    in-out property <bool> verbose-logging: false;
+    callback verbose-logging-changed(bool);
+
+    // Everything below is a `pure callback` wrapping an `@tr` literal, Slint 1.16 exposing no
+    // Rust-callable `tr(...)`: Rust invokes these at push time so each string resolves in the
+    // locale selected right then, not the one active when the notification was built.
+    pure callback watcher-disabled-title() -> string;
+    watcher-disabled-title => {
+        return @tr("File watching disabled");
+    }
+    pure callback watcher-disabled-message() -> string;
+    watcher-disabled-message => {
+        return @tr("Tracks won't reflect disk changes until you re-enable it.");
+    }
+
+    // Surfaced on a watcher-overflow rescan (`FileEvent::RescanNeeded`).
+    pure callback library-resyncing-title() -> string;
+    library-resyncing-title => {
+        return @tr("Library re-syncing");
+    }
+    pure callback library-resyncing-message() -> string;
+    library-resyncing-message => {
+        return @tr("Filesystem event burst — rescanning your folders.");
+    }
+
+    // The updater's three toasts. "Available" carries the `install-update` action kind
+    // and dispatches `Updater.install()`; "installed" carries `update-restart` and
+    // respawns the binary; "failed" is action-less and surfaces the error in its body.
+    pure callback update-available-title() -> string;
+    update-available-title => {
+        return @tr("Update available");
+    }
+    pure callback update-available-message(string /*version*/) -> string;
+    update-available-message(version) => {
+        return @tr("Melodia {} is ready to install.", version);
+    }
+    pure callback update-install-action-label() -> string;
+    update-install-action-label => {
+        return @tr("Install");
+    }
+    pure callback update-installed-title() -> string;
+    update-installed-title => {
+        return @tr("Update installed");
+    }
+    pure callback update-installed-message() -> string;
+    update-installed-message => {
+        return @tr("Restart Melodia to start using the new version.");
+    }
+    pure callback update-restart-action-label() -> string;
+    update-restart-action-label => {
+        return @tr("Restart");
+    }
+    pure callback update-failed-title() -> string;
+    update-failed-title => {
+        return @tr("Update failed");
+    }
+    // `kind` mirrors `FailureKind::as_kind_str`, which classifies the underlying
+    // `AppError`: "network", "signature", "parse", "io", or anything else. The bank
+    // lives here so each variant goes through `@tr`; the raw error was already logged
+    // at the send site.
+    pure callback update-failed-reason(string /*kind*/) -> string;
+    update-failed-reason(kind) => {
+        if (kind == "network") {
+            return @tr("Couldn't reach the update server. Check your internet connection.");
+        }
+        if (kind == "signature") {
+            return @tr("Signature check failed. The downloaded update may be corrupted; please try again.");
+        }
+        if (kind == "parse") {
+            return @tr("The update server returned an unexpected response.");
+        }
+        if (kind == "io") {
+            return @tr("Couldn't write the downloaded update to disk.");
+        }
+        return @tr("Update failed. See logs for details.");
+    }
+
+    // Saving a diagnostics bundle from the Diagnostics card.
+    pure callback diagnostics-saved-title() -> string;
+    diagnostics-saved-title => {
+        return @tr("Diagnostics report saved");
+    }
+    pure callback diagnostics-saved-message(string /*path*/) -> string;
+    diagnostics-saved-message(path) => {
+        return @tr("Saved to {}", path);
+    }
+    pure callback diagnostics-failed-title() -> string;
+    diagnostics-failed-title => {
+        return @tr("Couldn't save the diagnostics report");
+    }
+    pure callback diagnostics-failed-message() -> string;
+    diagnostics-failed-message => {
+        return @tr("See the log for details.");
+    }
+
+    // Pushed once on the launch after a panic, by `crash_report::take_unseen`.
+    // The action label deliberately repeats the Diagnostics card's button, both
+    // because it goes to the same place and so the two share one msgid.
+    pure callback crash-report-title() -> string;
+    crash-report-title => {
+        return @tr("Melodia crashed last time");
+    }
+    pure callback crash-report-message() -> string;
+    crash-report-message => {
+        return @tr("A crash report was written. Open the log folder to find it.");
+    }
+    pure callback crash-report-action-label() -> string;
+    crash-report-action-label => {
+        return @tr("Open Folder");
+    }
+
+    // Pushed once ever, by `ui::support`, on an early launch that isn't the first.
+    // Sticky for the crash notice's reason: it fires once, so a notice the user was
+    // looking away for is a notice that did nothing.
+    pure callback support-prompt-title() -> string;
+    support-prompt-title => {
+        return @tr("Enjoying Melodia?");
+    }
+    pure callback support-prompt-message() -> string;
+    support-prompt-message => {
+        return @tr("It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once.");
+    }
+    pure callback support-prompt-action-label() -> string;
+    support-prompt-action-label => {
+        return @tr("Support");
+    }
+
+    // Pushed by `tasks::audio_health` when the output device goes away. No action
+    // button — there is no device picker to send the user to.
+    pure callback audio-device-lost-title() -> string;
+    audio-device-lost-title => {
+        return @tr("Audio device disconnected");
+    }
+    pure callback audio-device-lost-message() -> string;
+    audio-device-lost-message => {
+        return @tr("Playback won't be audible until you reconnect it and restart Melodia.");
+    }
+
+    // The import/export header pills on the Playlists view.
+    pure callback playlist-import-title(int /*imported*/) -> string;
+    playlist-import-title(imported) => {
+        return @tr("{n} playlist imported" | "{n} playlists imported" % imported);
+    }
+    pure callback playlist-import-message(int /*tracks*/, int /*missing*/) -> string;
+    playlist-import-message(tracks, missing) => {
+        // Pluralized on the track count; the no-missing branch shares its msgid with
+        // `add-to-playlist-message`.
+        return missing > 0
+            ? @tr("{n} track added · {} missing" | "{n} tracks added · {} missing" % tracks, missing)
+            : @tr("{n} track added" | "{n} tracks added" % tracks);
+    }
+    pure callback playlist-import-failed-title() -> string;
+    playlist-import-failed-title => {
+        return @tr("Import failed");
+    }
+    pure callback playlist-import-failed-message() -> string;
+    playlist-import-failed-message => {
+        return @tr("Couldn't read the selected playlist file(s).");
+    }
+
+    pure callback playlist-export-title(int /*exported*/) -> string;
+    playlist-export-title(exported) => {
+        return @tr("{n} playlist exported" | "{n} playlists exported" % exported);
+    }
+    pure callback playlist-export-message(string /*folder*/) -> string;
+    playlist-export-message(folder) => {
+        return @tr("Saved to {}", folder);
+    }
+    pure callback playlist-export-failed-title() -> string;
+    playlist-export-failed-title => {
+        return @tr("Export failed");
+    }
+    pure callback playlist-export-failed-message() -> string;
+    playlist-export-failed-message => {
+        return @tr("Couldn't write the playlist files.");
+    }
+
+    // The station list's own pair. Separate msgids rather than a shared "{n} items imported":
+    // a station is not a playlist, and the skipped line has no playlist equivalent.
+    pure callback station-import-title(int /*imported*/) -> string;
+    station-import-title(imported) => {
+        return @tr("{n} station added" | "{n} stations added" % imported);
+    }
+    pure callback station-import-message(int /*skipped*/) -> string;
+    station-import-message(skipped) => {
+        // Empty where nothing was skipped, which is the ordinary import — the card drops a blank
+        // body, where an unconditional line reports "0 were already in your list."
+        return skipped > 0
+            ? @tr("{n} was already in your list." | "{n} were already in your list." % skipped)
+            : "";
+    }
+    pure callback station-import-failed-title() -> string;
+    station-import-failed-title => {
+        return @tr("Import failed");
+    }
+    pure callback station-import-failed-message() -> string;
+    station-import-failed-message => {
+        return @tr("Couldn't read any stations from the selected file(s).");
+    }
+
+    pure callback station-export-title(int /*exported*/) -> string;
+    station-export-title(exported) => {
+        return @tr("{n} station exported" | "{n} stations exported" % exported);
+    }
+    pure callback station-export-message(string /*path*/) -> string;
+    station-export-message(path) => {
+        return @tr("Saved to {}", path);
+    }
+    pure callback station-export-failed-title() -> string;
+    station-export-failed-title => {
+        return @tr("Export failed");
+    }
+    pure callback station-export-failed-message() -> string;
+    station-export-failed-message => {
+        return @tr("Couldn't write the station list.");
+    }
+
+    // Titles for the generic backend-failure toasts coming through the
+    // `services::toast` bridge, resolved by toast kind. The dynamic detail — a path or
+    // an error message — rides on the body and is not translated.
+    pure callback toast-playback-error-title() -> string;
+    toast-playback-error-title => {
+        return @tr("Playback error");
+    }
+    pure callback toast-operation-failed-title() -> string;
+    toast-operation-failed-title => {
+        return @tr("Something went wrong");
+    }
+    pure callback toast-mbid-title() -> string;
+    toast-mbid-title => {
+        return @tr("MusicBrainz IDs");
+    }
+    pure callback toast-love-sync-title() -> string;
+    toast-love-sync-title => {
+        return @tr("Loved tracks");
+    }
+    pure callback toast-radio-vote-title() -> string;
+    toast-radio-vote-title => {
+        return @tr("Vote not counted");
+    }
+    // The one toast kind whose body is localized too — a restart that couldn't
+    // relaunch carries no path or error worth showing, only an instruction.
+    pure callback toast-restart-required-title() -> string;
+    toast-restart-required-title => {
+        return @tr("Restart Required");
+    }
+    pure callback toast-restart-required-message() -> string;
+    toast-restart-required-message => {
+        return @tr("Melodia couldn't relaunch itself. Close and reopen it to apply the change.");
+    }
+
+    // The Add-to-Playlist picker's commit toast: title pluralizes on playlists,
+    // message on tracks added.
+    pure callback add-to-playlist-title(int /*playlists*/) -> string;
+    add-to-playlist-title(playlists) => {
+        return @tr("Added to {n} playlist" | "Added to {n} playlists" % playlists);
+    }
+    pure callback add-to-playlist-message(int /*tracks*/) -> string;
+    add-to-playlist-message(tracks) => {
+        return @tr("{n} track added" | "{n} tracks added" % tracks);
+    }
+
+    // `tag-multiple-values` is the placeholder a disagreeing field shows in a batch
+    // edit; the rest are the Save completion toast.
+    pure callback tag-multiple-values() -> string;
+    tag-multiple-values => {
+        return @tr("‹multiple values›");
+    }
+    pure callback tag-edit-title(int /*updated*/) -> string;
+    tag-edit-title(updated) => {
+        return @tr("{n} track updated" | "{n} tracks updated" % updated);
+    }
+    pure callback tag-edit-message(int /*failed*/, int /*unsupported*/) -> string;
+    tag-edit-message(failed, unsupported) => {
+        if (failed > 0) {
+            return @tr("{n} file failed" | "{n} files failed" % failed);
+        }
+        if (unsupported > 0) {
+            return @tr("{n} file has unsupported fields" | "{n} files have unsupported fields" % unsupported);
+        }
+        return "";
+    }
+    pure callback tag-edit-failed-title() -> string;
+    tag-edit-failed-title => {
+        return @tr("Couldn't save tags");
+    }
+    pure callback tag-edit-failed-message() -> string;
+    tag-edit-failed-message => {
+        return @tr("No tracks were updated.");
+    }
+}

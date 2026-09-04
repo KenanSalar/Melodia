@@ -21,9 +21,9 @@ REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 BINARY="${BINARY:-$REPO_ROOT/target/release/Melodia}"
-[[ -f "$BINARY" ]] || { echo "ERROR: $BINARY not found. Run 'cargo build --release' first."; exit 1; }
+[[ -f "$BINARY" ]] || { echo "ERROR: $BINARY not found. Run 'cargo build --release -p melodia' first."; exit 1; }
 
-# Both packages inherit the version from `[workspace.package]`, so `[package]`
+# Every member inherits the version from `[workspace.package]`, so `[package]`
 # reads `version.workspace = true` and carries no literal. Anchor on the table
 # rather than taking the file's first `version = ` line.
 VERSION="$(awk -F'"' '
@@ -114,7 +114,8 @@ cp "$REPO_ROOT/assets/icons/logo-with-background.svg" "$APPDIR/melodia.svg"
 # DEB asset `scripts/Melodia.desktop` + `assets/desktop/Melodia.desktop.tmpl`.
 # Drift here means AppImage users can't open audio files via "Open with…"
 # and KDE shows two taskbar entries (no StartupWMClass to merge them).
-# The MIME drift-guard test in `src/services/tests/desktop_integration_tests.rs`
+# The MIME drift-guard test in
+# `crates/melodia-platform/src/services/platform/tests/desktop_integration_tests.rs`
 # covers the four sources — keep this body byte-identical bar the `Exec=`
 # command: AppImage binaries sit at the AppDir root so `Melodia` is the relative
 # name, RPM/DEB resolve `melodia` via PATH. The ` %F` is not optional; without it

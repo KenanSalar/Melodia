@@ -101,18 +101,20 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           shared-key: ci-clippy
-      # Covers both packages, and package *selection* isn't what decides that:
-      # cargo sets RUSTC_WORKSPACE_WRAPPER=clippy-driver for every member it
-      # compiles. Plant a `needless_return` in each before adding `-p melodia-ui`.
+      # `--workspace` is redundant against a virtual root with no `default-members`,
+      # which already selects every member, and spelled anyway: it is what keeps the
+      # gate whole if either of those stops being true. Lints don't depend on it at
+      # all — cargo sets RUSTC_WORKSPACE_WRAPPER=clippy-driver for every member it
+      # compiles, so a member's lib is linted however it got selected.
       - name: cargo clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: cargo clippy --all-targets --locked --workspace -- -D warnings
 
-  # The full suite, `tests/headless.rs` included, and plain `cargo test`: nobody
+  # The full suite, `crates/melodia/tests/headless.rs` included, and plain `cargo test`: nobody
   # reads a coverage delta to decide a merge, so deploy-coverage.yml runs the
   # instrumented build on demand. The `CARGO_BUILD_JOBS: 4` memory cap overrides
   # .cargo/config.toml's jobs=8: past the ceiling nothing fails, it swaps, and
   # the job looks like a hang. `line-tables-only` is a build-time cap rather
-  # than a memory one: `cargo test` links five test binaries and full debuginfo
+  # than a memory one: `cargo test` links 42 test binaries and full debuginfo
   # is most of that tail, while file:line survives for the backtraces this job
   # exists to print — hence not the `0` deploy-coverage.yml sets. Both profiles,
   # since `cargo test` builds dependencies under `dev` and test targets under
@@ -135,7 +137,7 @@ jobs:
       - uses: ./.github/actions/headless-audio
 
       - name: cargo test
-        run: cargo test --locked
+        run: cargo test --locked --workspace
 
   # The clippy table's Windows half. `test-windows` type-checks these arms, but
   # `[workspace.lints.clippy]` needs clippy-driver and nothing had ever pointed
@@ -153,7 +155,7 @@ jobs:
         with:
           shared-key: ci-clippy
       - name: cargo clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: cargo clippy --all-targets --locked --workspace -- -D warnings
 
   # The suite's Windows half, and the only place it has ever run:
   # `release-build.yml` compiles the Windows lib and bin, but only on a tag and
@@ -184,7 +186,7 @@ jobs:
       # Linux job uses. Skipped by name, not by target selection, so a new
       # integration test runs here by default — the denylist argument again.
       - name: cargo test
-        run: cargo test --locked -- --skip headless_scan_persists_track
+        run: cargo test --locked --workspace -- --skip headless_scan_persists_track
 
   # Mark THIS as the required status check in branch protection. Green iff every
   # job passed or was skipped, `skipped` as a pass being what lets a docs-only PR
@@ -197,8 +199,10 @@ jobs:
     steps:
       # Derived from `needs:` above rather than restating it, so adding a job is
       # one edit. `toJSON` can't see a job that never reached `needs:`; that half
-      # is pinned by `services::tests`. Through `env:` rather than `${{ }}` in
-      # the script, interpolating into bash being the shape that goes wrong.
+      # is pinned by `crates/melodia/tests/packaging.rs`'s
+      # `the_aggregate_waits_on_every_job_in_the_gate_workflow`. Through `env:`
+      # rather than `${{ }}` in the script, interpolating into bash being the
+      # shape that goes wrong.
       - name: Check job results
         env:
           NEEDS: ${{ toJSON(needs) }}
