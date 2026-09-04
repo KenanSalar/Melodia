@@ -15,7 +15,7 @@ there; `.claude/rules/audio-stack.md` holds what spans it and the DSP chain abov
 
 ### Format Probing
 
-- **A `Hint` does not steer 0.5's probe** — `Probe::format` takes it as `_hint` and resolves the format by matching a two-byte marker, scoring still a `TODO`. Pass one anyway (it costs a line and 0.6 keeps the parameter), but never rely on it to break a tie: a container whose marker isn't registered is one the probe will mis-assign, silently and to whichever reader matches first. **This tree carried two Symphonia majors for that reason and no longer does** — rodio is gone entirely and everything decodes through `player::decode` against 0.6, whose probe scores each candidate against the frames that follow it. Read that module before touching either decoder.
+- **A `Hint` does not steer 0.5's probe** — `Probe::format` takes it as `_hint` and resolves the format by matching a two-byte marker, scoring still a `TODO`. Pass one anyway (it costs a line and 0.6 keeps the parameter), but never rely on it to break a tie: a container whose marker isn't registered is one the probe will mis-assign, silently and to whichever reader matches first. **This tree carried two Symphonia majors for that reason and no longer does** — everything decodes through `player::decode` against 0.6, whose probe scores each candidate against the frames that follow it. Read that module before touching either decoder; `docs/adr/0007-symphonia-and-cpal-not-rodio.md` is why it exists.
 - Use `MediaSourceStream` (not `BufReader`) — it provides optimized buffering for multimedia I/O
 - Search for the first audio track explicitly — default track may be video in container formats
 
@@ -76,8 +76,9 @@ loop {
   from its packet table and no decoder it feeds ever uses them; Opus-in-Ogg fills `delay` from
   `pre_skip` for a decoder 0.6.1 does not ship. So AAC is trimmed here rather than upstream, in
   `player::aac_trim`, which reads the two places a file states its padding and hands `file_decode` a
-  head and a playable length; that module argues the whole design and the numbers, and
-  `.claude/rules/audio-stack.md` says why it sits outside the shared `decode`. rox reached the same
+  head and a playable length; that module argues the numbers,
+  `docs/adr/0011-aac-trim-read-from-the-file.md` argues why we read them rather than trusting the
+  flag, and `.claude/rules/audio-stack.md` says why it sits outside the shared `decode`. rox reached the same
   conclusion from the other direction, distrusting the trimming enough to plan its own before
   verifying that MP3's holds, and then shipping only the harness that checks it
 

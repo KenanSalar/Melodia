@@ -6,6 +6,13 @@ Status: **proposed** · Owner: Kenan · Created: 2026-06-16
 > `/websites/doc_rust-lang_cargo`, feature-flags reference) and the live source
 > tree. Corrections from the first draft are flagged inline with **[fix]**.
 
+> **This plan predates the workspace split and now has to argue against
+> `docs/adr/0018-what-is-not-split-and-zero-features.md`, which holds the feature count at zero.**
+> That ADR names the one condition that would justify the first feature and it is exactly this
+> plan's premise: a distribution channel requiring the network fetch and self-replace code to be
+> provably absent rather than disabled. So this is not overruled, it is gated. Pursuing a channel
+> that asks for it supersedes ADR 18; wanting a smaller binary does not.
+
 ## Goal
 
 Make the in-app auto-updater a **compile-time Cargo feature** (`self-update`,

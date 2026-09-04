@@ -391,7 +391,8 @@ crates/
 └── melodia              the binary: startup sequencing, shutdown, the window
 ```
 
-See [`CLAUDE.md`](CLAUDE.md) for a detailed architecture reference.
+See [`CLAUDE.md`](CLAUDE.md) for a detailed architecture reference, and
+[`docs/adr/`](docs/adr/) for why the pieces above were chosen over the alternatives.
 
 ## Configuration & Data
 

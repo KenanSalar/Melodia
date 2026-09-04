@@ -47,6 +47,10 @@ sideways later.
 
 <!--
 Open questions, decisions already made, traps that will build and look right
-and be wrong — or just a link to a working `.md` doc at the repo root carrying
-the real design, if the work is big enough to have one.
+and be wrong — or just a link to a working doc under `docs/plans/` carrying the
+real design, if the work is big enough to have one.
+
+A working doc is deleted when its feature ships, so anything in it that is a
+choice with a live alternative gets an ADR under `docs/adr/` before that
+happens. That is what stops the reasoning going out with the file.
 -->
