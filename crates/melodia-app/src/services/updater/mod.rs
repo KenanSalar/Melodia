@@ -11,8 +11,10 @@
 //! `assets/updater-pubkey.b64`, and the client fails closed on a missing or invalid
 //! signature.
 
+#[cfg(target_os = "linux")]
 use std::path::PathBuf;
 
+#[cfg(target_os = "linux")]
 use melodia_core::error::AppResult;
 
 pub mod asset_cache;
@@ -24,6 +26,7 @@ pub mod manifest;
 pub mod minisign;
 pub mod version;
 
+#[cfg(target_os = "linux")]
 use melodia_platform::services::platform::install_kind::install_target;
 
 pub use check::{CheckOutcome, check_for_update};
