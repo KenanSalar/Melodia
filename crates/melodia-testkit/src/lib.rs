@@ -286,12 +286,12 @@ pub fn rust_sources() -> Vec<(String, String)> {
 /// Brace-depth walk over `src[from..to]`, quote-aware, returning the **lowest** depth the
 /// range reaches, or `None` where it closes a scope it never opened.
 ///
-/// The lowest rather than the last, because `tests/index_persist.rs`' `inside_block` is asking
-/// whether a scope was ever left: a write hoisted out of the ordering closure and into any block
-/// after it ends the range back above zero and reads as though it never moved.
+/// The lowest rather than the last, because `crates/melodia/tests/index_persist.rs`' `inside_block`
+/// is asking whether a scope was ever left: a write hoisted out of the ordering closure and into
+/// any block after it ends the range back above zero and reads as though it never moved.
 ///
-/// `tests/scrollbars.rs`' walk asks the other way round: that one lifts a block's body,
-/// this one asks whether two offsets share one. Comments are stripped by the caller for
+/// `crates/melodia/tests/scrollbars.rs`' walk asks the other way round: that one lifts a block's
+/// body, this one asks whether two offsets share one. Comments are stripped by the caller for
 /// the same reason the quotes are handled — a brace inside either unbalances the count.
 /// Continuation bytes are all `>= 0x80`, so walking bytes can't mistake one for a brace.
 pub fn depth_between(src: &str, from: usize, to: usize) -> Option<usize> {

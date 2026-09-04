@@ -109,7 +109,7 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --all-targets --locked --workspace -- -D warnings
 
-  # The full suite, `tests/headless.rs` included, and plain `cargo test`: nobody
+  # The full suite, `crates/melodia/tests/headless.rs` included, and plain `cargo test`: nobody
   # reads a coverage delta to decide a merge, so deploy-coverage.yml runs the
   # instrumented build on demand. The `CARGO_BUILD_JOBS: 4` memory cap overrides
   # .cargo/config.toml's jobs=8: past the ceiling nothing fails, it swaps, and

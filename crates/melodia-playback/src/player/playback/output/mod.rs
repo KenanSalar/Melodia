@@ -7,8 +7,8 @@
 //! the ladder that opens it.
 //!
 //! [`AudioOutput`] is the whole public surface: build it, hand [`Mixer`] to the decks, keep it
-//! alive. `tests/crossfade.rs` skips it and drives [`mixer::pair`] directly, which is what lets the
-//! full chain be tested with no sound card.
+//! alive. `crates/melodia/tests/crossfade.rs` skips it and drives [`mixer::pair`] directly, which
+//! is what lets the full chain be tested with no sound card.
 
 pub mod convert;
 pub mod device;

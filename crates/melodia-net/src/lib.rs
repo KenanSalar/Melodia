@@ -5,7 +5,7 @@
 //! is a crate rather than a directory: a URL from outside the app is *parsed* rather than
 //! prefix-tested, and a body is streamed under a cap rather than allocated and measured after.
 //! Both are violable from any file and neither fails visibly, so the corpus walks in
-//! `tests/net_primitives.rs` hold them.
+//! `crates/melodia/tests/net_primitives.rs` hold them.
 
 pub mod services {
     pub mod net;

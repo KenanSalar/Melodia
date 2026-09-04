@@ -1,7 +1,7 @@
 //! The host and URL contract the fallback and every discovered mirror share.
 //!
-//! The walk holding this module's reach prohibition is `tests/radio_facade.rs`: its other half
-//! asks the same question of `melodia-app`, and neither covers the other's direction.
+//! The walk holding this module's reach prohibition is `crates/melodia/tests/radio_facade.rs`: its
+//! other half asks the same question of `melodia-app`, and neither covers the other's direction.
 
 use super::{ApiStation, FALLBACK_HOST, SERVERS_URL, page_from, url_for};
 use melodia_core::entities::radio::DEFAULT_PAGE_LIMIT;

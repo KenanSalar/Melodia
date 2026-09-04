@@ -114,24 +114,37 @@ fn names_bound_from_members(code: &str) -> BTreeSet<&str> {
 }
 
 /// The first path segment of every re-export in `code`, in any visibility `pub` can carry, and one
-/// per path where a line spells more than one.
+/// per path where a statement spells more than one.
 ///
 /// `pub(super) use` and `pub(in …) use` are here for the same reason `pub(crate)` is: each one
 /// hands the item to somewhere its own manifest does not reach.
+///
+/// Read to the `;` rather than to the end of a line, for [`names_bound_from_members`]' reason: a
+/// root group is the shape rustfmt wraps, and read per line it spells a head on none of them.
 fn re_export_heads(code: &str) -> impl Iterator<Item = &str> {
-    code.lines().flat_map(|line| {
-        let Some(path) = re_export_path(line) else {
-            return Vec::new();
+    let mut heads = Vec::new();
+    let mut from = 0;
+    while let Some(at) = code[from..].find("use ").map(|rel| rel + from) {
+        let line_start = code[..at].rfind('\n').map_or(0, |nl| nl + 1);
+        let Some(len) = code[at..].find(';') else {
+            break;
+        };
+        let statement = &code[line_start..at + len];
+        from = at + len;
+
+        let Some(path) = re_export_path(statement) else {
+            continue;
         };
         // A group at the root spells no head of its own and reaches one path per item, so
         // `pub use {a::X, b::Y};` owes two answers rather than whichever it lists first. Splitting
         // on the comma lets a nested group contribute its inner names too, which only ever widens
-        // the set the caller tests, and `melodia-views` writes the flat form for its macros.
+        // the set the caller tests.
         match path.strip_prefix('{') {
-            Some(group) => group.split(',').filter_map(path_head).collect(),
-            None => path_head(path).into_iter().collect(),
+            Some(group) => heads.extend(group.split(',').filter_map(path_head)),
+            None => heads.extend(path_head(path)),
         }
-    })
+    }
+    heads.into_iter()
 }
 
 /// The path a `pub use` line re-exports through, past whatever names the module's own namespace

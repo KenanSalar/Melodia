@@ -43,7 +43,7 @@ coverage on this path.
   two, a `results=( … )` bash array restating `needs:`, and a job in only the first was silently
   unenforced. What `toJSON` cannot see is a job that never reached `needs:` at all — the aggregate
   then doesn't wait on it and reports green while it is still running — so
-  `tests/packaging.rs`'s `the_aggregate_waits_on_every_job_in_the_gate_workflow` walks the file for that.
+  `crates/melodia/tests/packaging.rs`'s `the_aggregate_waits_on_every_job_in_the_gate_workflow` walks the file for that.
 
 - **The advisory scan is one policy with two callers.** `.github/actions/cargo-audit` (composite)
   holds the `taiki-e/install-action` pin and `cargo audit --deny unsound --deny unmaintained`;
@@ -76,7 +76,7 @@ coverage on this path.
   a change to the clippy invocation or the job list merge without the jobs it governs ever running.
   Anything new under `.github/` runs everything by default — an exclusion is earned.
 
-- **Headless audio** — `test` runs `tests/headless.rs` and `AppState::init` opens cpal's default
+- **Headless audio** — `test` runs `crates/melodia/tests/headless.rs` and `AppState::init` opens cpal's default
   device, which no runner has. `.github/actions/headless-audio` is the whole shim and argues
   itself. It works because the shim is an *ALSA* one and `output::device` opens whatever
   `pcm.!default` names, then walks every config the device reports rather than giving up on the
@@ -138,7 +138,7 @@ coverage on this path.
   job and sets nothing: it never codegens, so it doesn't reach that peak. **`RUST_TEST_THREADS` is
   deliberately not capped alongside it** — `.cargo/config.toml`'s 8 stands, oversubscribing a
   4-core runner 2:1, because the cap answers a memory ceiling and most harness threads are waiting
-  rather than running. `tests/crossfade.rs` is the exception, its thirteen tests each turning the
+  rather than running. `crates/melodia/tests/crossfade.rs` is the exception, its thirteen tests each turning the
   mixer from a spin loop, and what that reached was a wait budgeted in frames rather than in wall
   clock: the budget then measures the puller's throughput, not the thing it waits for.
   `CONTROL_OP_BUDGET` is what replaced it, and `taskset -c 0` against a couple of dozen spinners
@@ -179,7 +179,7 @@ coverage on this path.
   source-based coverage carries its own file/region table in `__llvm_covmap` and reads nothing from
   DWARF, and nothing reads a backtrace out of that job (the gate's two `test` jobs keep
   `line-tables-only` for the opposite reason, and
-  `tests/packaging.rs`'s `the_two_workflows_disagree_about_debug_info_on_purpose` holds the pair apart,
+  `crates/melodia/tests/packaging.rs`'s `the_two_workflows_disagree_about_debug_info_on_purpose` holds the pair apart,
   tidying them into agreement reddening nothing and silently costing the gate its `file:line`).
   Both `report` calls pass **`--ignore-filename-regex`** scoped to
   `melodia-ui`'s `OUT_DIR` — cargo-llvm-cov's built-in excludes reach the sysroot and registry but
@@ -233,7 +233,7 @@ The two fonts and the vendored winit fork compile *into* the binary, so each art
 them and owes the licence text (Apache-2.0 §4(a); SIL's OFL FAQ recommends it for a bundled font).
 Five formats, five toolchains, one an MSI no Linux runner can build — so a format that quietly
 stops shipping the text fails nowhere until a packager files it.
-**`tests/packaging.rs`'s `every_package_format_ships_the_licenses_dir` holds a named list**
+**`crates/melodia/tests/packaging.rs`'s `every_package_format_ships_the_licenses_dir` holds a named list**
 (`build-rpm.sh`'s `%license`, the binary manifest's asset glob, `build-tarball.sh`'s `cp`,
 `build-appimage.sh`'s `cp`, `main.wxs`'s `File` set), each needle the *mechanism* rather than
 the word. Named because the set of formats is closed; the *font* set is open, so its sibling pin

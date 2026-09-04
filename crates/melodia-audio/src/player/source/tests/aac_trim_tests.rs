@@ -220,7 +220,7 @@ fn resolved(duration: Option<u64>, delay: u64, playable: Option<u64>) -> Option<
 /// ffmpeg writes one shape and it is the only one in `test-assets/`: a version 0 edit list of a
 /// single entry, under 32-bit box headers, in a file with one track. Everything below is legal MP4
 /// the walk has to read the same way, so the boxes are written out here the way
-/// `tests/crossfade.rs` writes its WAV headers.
+/// `crates/melodia/tests/crossfade.rs` writes its WAV headers.
 mod synthetic {
     use super::{asset, edit_lists};
     use melodia_core::error::AppError;

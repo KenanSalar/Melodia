@@ -1,8 +1,9 @@
 //! Which root a boot lands on: the environment override, and the two the build's shape picks
 //! between when there isn't one.
 //!
-//! Everything under the root is [`Paths::rooted_at`], which `tests/headless.rs` covers by handing
-//! it a tempdir. What is left is the choice above it, and it decides which database opens.
+//! Everything under the root is [`Paths::rooted_at`], which `crates/melodia/tests/headless.rs`
+//! covers by handing it a tempdir. What is left is the choice above it, and it decides which
+//! database opens.
 
 use super::*;
 use melodia_testkit::with_env_var;

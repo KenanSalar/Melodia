@@ -6,9 +6,9 @@
 //! do nothing in the ordinary case and flatten the fade in the one case it fired.
 //!
 //! [`pair`] builds the two halves with no device between them, which is what lets
-//! `tests/crossfade.rs` and `tests/stream_rate.rs` drive the whole chain — decoder, EQ, ramp, tap,
-//! sum — by pulling [`MixerPull`] on the test thread. Anything that stops being reachable that way
-//! stops being testable without a sound card.
+//! `crates/melodia/tests/crossfade.rs` and `crates/melodia/tests/stream_rate.rs` drive the whole
+//! chain — decoder, EQ, ramp, tap, sum — by pulling [`MixerPull`] on the test thread. Anything that
+//! stops being reachable that way stops being testable without a sound card.
 
 use std::sync::Arc;
 

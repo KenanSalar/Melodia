@@ -70,7 +70,7 @@ fn compute_hash_empty_input() {
 
 // `STORE_MAX_DIM` has to clear every cover tier, or each one upscales from a source the store
 // already threw away. That assertion names `ui::grid_prewarm` and `ui::util`, so it cannot live
-// in the tier that owns the cap: `tests/cross_tier.rs` holds it from outside both.
+// in the tier that owns the cap: `crates/melodia/tests/cross_tier.rs` holds it from outside both.
 
 // ── store_image ──
 

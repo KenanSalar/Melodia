@@ -18,7 +18,7 @@ pub fn set_visualizer_enabled(state: &AppState, enabled: bool) -> Result<(), App
 }
 
 /// Persist the chosen visualizer style, by key. The caller resolves the key
-/// from its style table (`crate::ui::visualizer`), so nothing unrecognized
+/// from its style table (`melodia-views`' `ui/visualizer/`), so nothing unrecognized
 /// reaches the file.
 pub fn set_visualizer_style(state: &AppState, style: String) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {

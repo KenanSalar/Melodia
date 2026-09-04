@@ -221,7 +221,7 @@ pub struct VisualizerFlags {
 }
 
 /// The style key a fresh install starts on, and the one an unrecognized key
-/// resolves back to. `crate::ui::visualizer`'s style table must *head with the
+/// resolves back to. `melodia-views`' `ui/visualizer/`'s style table must *head with the
 /// same key* — its own fallbacks land on index 0 — which its tests pin.
 pub const DEFAULT_VIZ_STYLE: &str = "bars";
 

@@ -136,7 +136,7 @@ none left anywhere, because the mutation moved behind the safe helpers.
 next, and one sat in `library/settings/tests/folders_tests.rs` over a file with no
 `unsafe` in it at all. Routing a file through the shared helper is exactly the edit that
 strands one, and it has retired four (`target_tests.rs`, `system_install_tests.rs`,
-`linux_pkg_tests.rs`, `settings_tests.rs`). `tests/headless.rs` is the fifth and got there
+`linux_pkg_tests.rs`, `settings_tests.rs`). `crates/melodia/tests/headless.rs` is the fifth and got there
 the other way — `Paths::rooted_at` left it no reason to touch the environment at all. The
 one that remains is on `with_env_set` itself — on the function, not the file, per the
 narrowest-item rule above.

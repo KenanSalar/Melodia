@@ -35,8 +35,8 @@ fn pump(pull: &mut VoicePull, frames: usize) -> Vec<f32> {
 }
 
 /// A background thread standing in for the output callback, so a control op that blocks until it is
-/// serviced has something to be serviced by. `tests/crossfade.rs` runs the same arrangement the
-/// other way round, pulling on the test thread and driving the control op off it.
+/// serviced has something to be serviced by. `crates/melodia/tests/crossfade.rs` runs the same
+/// arrangement the other way round, pulling on the test thread and driving the control op off it.
 struct Callback {
     stop: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
@@ -367,7 +367,7 @@ fn a_replace_lands_while_a_successor_is_only_staged() {
 
 /// The converter is built against the source's own shape, so a second source at a different rate
 /// gets its own rather than inheriting whatever the first one negotiated. This is the fault
-/// `tests/stream_rate.rs` covers end to end, asked at the level it now lives at.
+/// `crates/melodia/tests/stream_rate.rs` covers end to end, asked at the level it now lives at.
 #[test]
 fn a_second_source_is_converted_from_its_own_rate() {
     let device = mono(48_000);

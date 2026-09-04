@@ -1,7 +1,8 @@
 //! Tests for the sum.
 //!
-//! `tests/crossfade.rs` covers the same ground through the whole chain, with a real decoder and a
-//! real ramp; what is here is the property on its own, so a change to the sum fails at the sum.
+//! `crates/melodia/tests/crossfade.rs` covers the same ground through the whole chain, with a real
+//! decoder and a real ramp; what is here is the property on its own, so a change to the sum fails
+//! at the sum.
 
 use std::sync::Arc;
 

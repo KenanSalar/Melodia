@@ -293,7 +293,7 @@ async fn bm25_weights_cover_every_indexed_column() -> Result<(), AppError> {
 // What the fts5 column list covers is load-bearing outside the file that declares it: the
 // per-view filter boxes narrow in-memory caches through `ui::row_match::search_fields`, which
 // mirrors it by hand. Pinning the two against each other names a `ui::` module, so it lives in
-// `tests/cross_tier.rs`.
+// `crates/melodia/tests/cross_tier.rs`.
 
 /// A filename normally repeats the title and artist beside it, so under the
 /// default uniform weights a filename echo outranks the track the query

@@ -3,9 +3,9 @@
 //! The pure-`apply_edit` cases need nothing on disk. The round-trips copy a real
 //! fixture out of `test-assets/` into a `TempDir` first — **never** write to the
 //! checked-in asset, and note the assets deliberately do NOT live in
-//! `tests/fixtures/`: `tests/headless.rs` adds that directory as a library folder
-//! and asserts `scanned == 1`, and the scan is recursive, so any audio file added
-//! under it breaks that test.
+//! `crates/melodia/tests/fixtures/`: `headless.rs` beside it adds that directory as a
+//! library folder and asserts `scanned == 1`, and the scan is recursive, so any audio
+//! file added under it breaks that test.
 
 use std::path::{Path, PathBuf};
 

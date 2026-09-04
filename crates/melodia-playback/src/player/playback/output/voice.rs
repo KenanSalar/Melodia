@@ -8,9 +8,10 @@
 //! **`clear` blocks until the callback has serviced it**, which is not an accident of the
 //! implementation but the contract the layer above rests on: `Decks::cut_to` clears both decks and
 //! then starts a source on one, and a clear that had not landed yet would take the new source with
-//! it. `tests/crossfade.rs` is the audio thread while it pulls, which is why a control op that
-//! blocks has to be driven from another thread there. It is the only one: a seek is a `replace`,
-//! which carries a source the caller has already positioned and so has nothing to wait for.
+//! it. `crates/melodia/tests/crossfade.rs` is the audio thread while it pulls, which is why a
+//! control op that blocks has to be driven from another thread there. It is the only one: a seek
+//! is a `replace`, which carries a source the caller has already positioned and so has nothing to
+//! wait for.
 
 use std::collections::VecDeque;
 use std::sync::Arc;

@@ -352,5 +352,5 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     // The visualizer is deliberately absent: its tap is armed by the
     // Now-Playing view being on screen, not by a persisted flag, so it must
     // stay disarmed until `Visualizer.set-active` fires. See
-    // `crate::ui::visualizer`.
+    // `melodia-views`' `ui/visualizer/`.
 }

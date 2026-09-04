@@ -19,7 +19,7 @@
 //!
 //! It also has to survive CI, where there is no sound card and `.github/actions/headless-audio`
 //! points ALSA's default PCM at the userspace `null` device. A stricter open than this one makes
-//! `tests/headless.rs` fail looking like a scan bug.
+//! `crates/melodia/tests/headless.rs` fail looking like a scan bug.
 
 use std::time::Duration;
 

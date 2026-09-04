@@ -107,9 +107,9 @@ fn test_view_sort_in_view_state() -> Result<(), AppError> {
     Ok(())
 }
 
-// Both halves of the nav-index bound now sit in `tests/cross_tier.rs`: the write clamp is this
-// crate's and the read guard the binary's, and no crate can `include_str!` both. What stays here
-// is the round trip itself, which needs neither.
+// Both halves of the nav-index bound now sit in `crates/melodia/tests/cross_tier.rs`: the write
+// clamp is this crate's and the read guard the binary's, and no crate can `include_str!` both.
+// What stays here is the round trip itself, which needs neither.
 
 /// A `views.json` naming Radio comes back naming Radio.
 #[test]

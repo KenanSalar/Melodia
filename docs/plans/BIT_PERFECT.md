@@ -215,7 +215,7 @@ CPU does.
 longer a greenfield layout — it is four files to extend rather than one `shared.rs` to write:
 
 ```
-src/player/output/
+crates/melodia-playback/src/player/playback/output/
   mod.rs        AudioOutput: the open handle, and the only door onto Mixer
   device.rs     the cpal stream, the config ladder, Negotiated, the period math
   mixer.rs      the unclamped sum, in LOCKSTEP_FRAMES steps
@@ -336,7 +336,7 @@ end of the phase).
    `Negotiated::reason`. This is the deliverable that makes the claim checkable.
 4. **The round-trip test.** Fixtures: a short 16-bit and a short 24-bit WAV. Build
    the full chain with everything bypassed, pull `MixerPull` directly (via
-   `output::mixer::pair`, as `tests/crossfade.rs` already does), assert the
+   `output::mixer::pair`, as `crates/melodia/tests/crossfade.rs` already does), assert the
    samples are bit-identical to the decoder's output. No device needed. This is the
    test rox doesn't have, and it's what stops a future DSP change quietly breaking
    the claim.
