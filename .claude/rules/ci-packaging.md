@@ -229,9 +229,8 @@ work, and the two shipped apart for a whole release.
 
 ## Licences — every format ships `licenses/`, and the five spellings are pinned by name
 
-Why every artifact owes the text, and why five formats exist to owe it, are
-`docs/adr/0006-agpl-and-what-artifacts-owe.md` and `docs/adr/0031-five-package-formats.md`. What
-lives here is the consequence: a format that quietly stops shipping it fails nowhere until a
+Why every artifact owes the text, and why five formats exist to owe it, are both in
+`docs/adr/`. What lives here is the consequence: a format that quietly stops shipping it fails nowhere until a
 packager files it, so the pins are named rather than reviewed.
 **`crates/melodia/tests/packaging.rs`'s `every_package_format_ships_the_licenses_dir` holds a named list**
 (`build-rpm.sh`'s `%license`, the binary manifest's asset glob, `build-tarball.sh`'s `cp`,

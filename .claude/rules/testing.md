@@ -232,7 +232,7 @@ So none of it gets proposed as an improvement:
   is a real argument to make, not a default to reach for.
 - **No `benches/`, no criterion, no fuzzing.** Performance work here is measured with
   flamegraph, heaptrack and peak RSS instead; `rust-performance.md` has the discipline and
-  `docs/adr/0034-performance-is-profiled-not-benchmarked.md` argues why there is no gate.
+  `docs/adr/` argues why there is no gate.
 - **No coverage threshold.** Coverage is a manual workflow publishing HTML, and it never
   blocks a merge.
 - **No `slint::testing` call anywhere**, despite the API existing. The UI is pinned from

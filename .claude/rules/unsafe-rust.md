@@ -16,8 +16,8 @@ safe code fast. Reach for it first. Nothing here is a performance technique.
 
 ## Why the bar is where it is
 
-Argued in `docs/adr/0028-no-unsafe-outside-ffi-no-unwrap-anywhere.md`: what a soundness bug
-costs here, and why never for performance. What matters at this glob is the spelling.
+Argued in `docs/adr/`: what a soundness bug costs here, and why never for performance.
+What matters at this glob is the spelling.
 
 **`deny`, not `forbid`** — that's what makes the per-site `#[allow]` legal, and it's
 deliberate. Don't "tighten" it to `forbid`; the FFI below can't be deleted, so the only

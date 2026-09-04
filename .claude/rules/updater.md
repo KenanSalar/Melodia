@@ -21,8 +21,8 @@ paths:
 
 The trust boundary is the GitHub repo — a manifest the publisher signed is trusted content, so the
 threat model stops at transport and integrity, not at a hostile manifest.
-`docs/adr/0019-updater-trust-boundary-is-the-repo.md` argues it, including what the line costs and
-why the mitigations against a hostile manifest are not worth building.
+`docs/adr/` argues it, including what the line costs and why the mitigations against a hostile
+manifest are not worth building.
 
 `main()`'s `--version` literal-first branch is the one piece of this that lives in the root
 `CLAUDE.md`, because it is a forward-compat contract older clients depend on and you can break it

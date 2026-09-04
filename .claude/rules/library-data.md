@@ -33,7 +33,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 - **The artwork sweep runs *after* that tx commits, never inside it** (`tasks::artwork_sweep`,
   spawned beside `retroactive_hash`). It deletes by reference rather than by refcount, argued in
-  `docs/adr/0020-artwork-swept-not-refcounted.md`. Two gates, both required: the name has to parse back into the scheme
+  `docs/adr/`. Two gates, both required: the name has to parse back into the scheme
   `media::image::artwork` writes, and nothing in the reference set may name it. **That set is six
   columns** — `tracks.artwork_path`, `albums.artwork_path`, `artists.image_path`,
   **`playlists.thumbnail_path`**, **`radio_stations.artwork_path`** and
