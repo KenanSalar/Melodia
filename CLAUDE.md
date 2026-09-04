@@ -17,6 +17,7 @@ This file holds what applies repo-wide. Subsystem contracts load on demand — *
 | `.claude/rules/radio.md` | the directory facade and its off switch, the two station tables, the stream path's ring and feed thread, the numbers both trees spell |
 | `.claude/rules/ci-packaging.md` | the PR gate, the skip matrix, coverage, action pinning, the five package formats and their licence pins |
 | `.claude/rules/diagnostics.md` | the logging sink, the crash hook, the bug-report bundle |
+| `.claude/rules/testing.md` | where a test goes, the shared fixtures and corpus walkers, what a walk owes, assertion discipline under the lint set, what the tree deliberately doesn't use |
 | `.claude/rules/*.md` (rest) | per-crate best practices (tokio, sqlx, slint, symphonia, lofty, rayon, serde, blake3, rust-performance) plus `slint-pitfalls`, `unsafe-rust` and `code-style` |
 
 Rules are **path-scoped** by a `paths:` glob and load when Claude *reads* a matching file, so a grep hit or a clippy failure won't pull one in. **A rule earns its place only when its subject has no single anchor file**: a coupling between trees (Rust ↔ `.slint`, Rust ↔ CI, Rust ↔ a shipped migration nobody may edit), or a comparison across peers that no one of them owns. Everything else is argued *at its anchor*, in the doc comment on the constant, function or migration it constrains, where it cannot drift out of sight of the code it describes. A **prohibition** violable from outside that anchor's directory stays in this file. Hence "no `unwrap`", the zbus footgun and the `--version` contract sitting here.
@@ -168,12 +169,13 @@ See `.claude/rules/tokio.md`. Project-specific:
 
 ## Testing
 
+**The contract is `.claude/rules/testing.md`**: the three homes a test can have, the shared
+fixtures and corpus walkers, what a walk owes to not pass vacuously, and what an assertion may
+contain under a lint set that denies `unwrap` and warns `expect`, `panic` and `println!`. It loads
+on a test file, so what stays here is what is violable from a file that is not one.
+
 - **Unit tests** — per-module `tests/` subdirs, referenced via `#[cfg(test)] #[path = "tests/<name>_tests.rs"] mod tests;`. Never inline `#[cfg(test)] mod tests { ... }`.
-- **Integration tests** — `crates/melodia/tests/`, which is where a test needing the whole app goes. Dev-deps: `melodia-testkit`, `tempfile`, `tokio` (`test-util`), the two audio tiers `crossfade`/`stream_rate` drive directly, plus `glob` for the rules pin and `sqlx` for `cross_tier.rs`'s `pragma_table_info` read.
-- **Repo-wide checks** — `crates/melodia/tests/`, beside the integration tests. **A check that enumerates a corpus lives there, a pin on one named file lives beside that file.** The rule is what keeps `cargo test -p <crate>` a question about that crate: a walk left inside one makes that crate's suite compile the whole tree to answer a question about neither, which is what `melodia-net`'s did. It also retires the self-exemption such a walk otherwise owes, being its own first hit — and two had bent their shape around it, one splitting its needle as `concat!("Result", "<")`. Where that self-check was a walk's only vacuity guard, a floor replaces it.
-- **DB tests** — `DbPool::test_pool()` (in-memory); fixtures in `crates/melodia-store/src/database/queries/fixtures.rs` (`make_test_metadata`, `insert_test_track`, `setup_seeded_db`), `#[doc(hidden)] pub` because `library`'s and `tasks`' suites seed through them from another crate.
-- **Player DSP tests** — helpers in `crates/melodia-playback/src/player/playback/tests/helpers.rs`: `TestSource` (in-memory `AudioSource`), `approx_eq`/`assert_approx`, `bits` (bit-identical passthrough without a float `==`), `fill_sine`. `crossfade_tests` takes none of it on purpose — pure predicates, tighter tolerance.
-- **UI tests** — `slint::testing` exists but UI coverage is intentionally light; test the **library** layer thoroughly.
+- **A check that enumerates a corpus lives in `crates/melodia/tests/`, a pin on one named file lives beside that file.** The rule is what keeps `cargo test -p <crate>` a question about that crate: a walk left inside one makes that crate's suite compile the whole tree to answer a question about neither, which is what `melodia-net`'s did.
 - **The suite assumes an LF checkout, and `.gitattributes` is what guarantees one.** Without it a clone under `core.autocrlf=true` rewrites line endings on the way out and thirteen tests fail on Windows alone: every source walk that splits on `"\n}\n"` or parses a rule's `---` frontmatter, the packaging text compared against `LICENSE`, and all seven updater-signature tests — git having quietly rewritten the *signed* fixtures, which is why they are pinned `-text` there rather than left to its text heuristic.
 - **A path in a fixture is joined, never spelled.** `format!("{dir}/x.mp3")` is a path only the CI runner has; the code under test looks the row up by what `Path::join` gave it, so a hand-spelled `/` seeds a row Windows can never match and the test fails for a reason that has nothing to do with what it is checking. Where the *separator itself* is the subject, build it from `MAIN_SEPARATOR_STR` so the assertion means something on both platforms — a literal `\` only ever fails on Linux, which is how `find_folder_for_path` shipped broken for every Windows install.
 
