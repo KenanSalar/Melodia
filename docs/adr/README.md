@@ -26,6 +26,8 @@ chronological and the groups are not, so a low number can sit anywhere.
 | [28. No `unsafe` outside platform FFI, and no `unwrap` anywhere](0028-no-unsafe-outside-ffi-no-unwrap-anywhere.md) | Accepted, 2026-05-25 |
 | [30. Memory is a product requirement, and three knobs hold it](0030-memory-is-a-product-requirement.md) | Accepted, 2026-05-25 |
 | [34. Performance is held by profiling and by shape, not by a benchmark suite](0034-performance-is-profiled-not-benchmarked.md) | Accepted, 2026-09-04 |
+| [36. Architecture is held by tests that read the source](0036-architecture-held-by-corpus-walks.md) | Accepted, 2026-08-03 |
+| [37. One workspace-wide error type, and a failure is never carried as a `String`](0037-one-error-type-never-a-string.md) | Accepted, 2026-05-25 |
 
 ### Audio
 
@@ -37,6 +39,7 @@ chronological and the groups are not, so a low number can sit anywhere.
 | [10. The DSP chain is one wrapper in a fixed order, with lock-free state](0010-one-dsp-wrapper-lock-free-state.md) | Accepted, 2026-06-16 |
 | [11. AAC encoder delay is read out of the file, not switched on](0011-aac-trim-read-from-the-file.md) | Accepted, 2026-09-02 |
 | [14. The network never touches the audio callback thread](0014-no-network-on-the-audio-callback.md) | Accepted, 2026-08-20 |
+| [35. State mutation returns an action list, and the pair is serialized](0035-player-actions-and-lock-ordering.md) | Accepted, 2026-05-25 |
 
 ### Library and data
 
