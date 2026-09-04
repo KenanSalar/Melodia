@@ -9,11 +9,11 @@ Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the
 | Idle (Fedora) | 158 MB | 88 MB | 33 MB | 125 MB | 0.1% |
 | Playing, list view (Fedora) | 158 MB | 89 MB | 34 MB | 124 MB | 0.6% |
 | Playing, visualizer live (Fedora) | 166 MB | 96 MB | 34 MB | 132 MB | 4.0% |
-| Idle (Windows) | 119 MB | 60 MB | 56 MB | 63 MB | 0.2–0.4% |
-| Playing, list view (Windows) | 124 MB | 65 MB | 61 MB | 63 MB | 0.4–1.2% |
-| Playing, visualizer live (Windows) | 134 MB | 75 MB | 70 MB | 64 MB | 7.3–8.4% |
+| Idle (Windows) | 117 MB | 58 MB | 54 MB | 63 MB | 0.1–0.2% |
+| Playing, list view (Windows) | 125 MB | 65 MB | 61 MB | 64 MB | 0.8–1.0% |
+| Playing, visualizer live (Windows) | 132 MB | 71 MB | 67 MB | 65 MB | 9.6–9.9% |
 
-Release build against the same 512-track library on both platforms, each on a 16-core machine with the window on the same 144 Hz display and nothing else contending for the GPU. CPU as a share of **one** core, over 60-second windows on Fedora and 30-second windows on Windows. Memory on Fedora/Wayland from `smaps_rollup` and `/proc/self/status`; on Windows 11 from the working set, split by page backing into **Heap** (`MEM_PRIVATE`) and **Mapped** (`MEM_IMAGE` and `MEM_MAPPED`), with **PSS** taken as the private working set. The Fedora rows are from the current build; the Windows rows predate the Symphonia decoder migration and the workspace split, and stand until the next Windows run.
+Release build against the same 512-track library on both platforms, each on a 16-core machine with the window on the same 144 Hz display and nothing else contending for the GPU. CPU as a share of **one** core, over 60-second windows on Fedora and 30-second windows on Windows. Memory on Fedora/Wayland from `smaps_rollup` and `/proc/self/status`; on Windows 11 from the working set, split by page backing into **Heap** (`MEM_PRIVATE`) and **Mapped** (`MEM_IMAGE` and `MEM_MAPPED`), with **PSS** taken as the private working set. Both platforms' rows are from the current build, measured after the process had settled.
 
 **Heap** is what the application itself allocates, and it is the number that stays flat: grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it, though a higher-resolution screen raises the totals. The visualizer allocates nothing per frame, reusing its buffers. **Mapped** is the file-backed remainder, and the two together are essentially all of RSS: most of what the process appears to occupy is the binary and the shared graphics stack, not anything Melodia allocated. That is also why **PSS** is the fairer whole-process figure on a desktop already running other GL applications, since RSS charges those shared pages in full, around 70 MB of it here.
 
