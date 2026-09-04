@@ -96,10 +96,10 @@ The other way paths arrive from outside, and the one that can arrive before ther
 
 - **Two verbs, and they are not one.** A drop appends (`queue_import_files`, routed by
   `drop_coalescer`, *discarded* when neither the queue sheet nor a playlist is open); an open
-  **replaces the queue and plays** (`queue::open_files`), as VLC, foobar2000 and Strawberry all
-  default to. They share `sort_for_queue` and nothing else. **Neither existing fn was the whole
-  answer**: `queue_import_files` never sets `current_index`, and `player_play_tracks` wants ids in
-  order where `ImportFilesResult::track_ids` is partly `HashMap` order.
+  **replaces the queue and plays** (`queue::open_files`). They share `sort_for_queue` and nothing
+  else. **Neither existing fn was the whole answer**: `queue_import_files` never sets
+  `current_index`, and `player_play_tracks` wants ids in order where
+  `ImportFilesResult::track_ids` is partly `HashMap` order.
 
 - **A cold start with files skips resume-on-startup** — `open_startup_files` runs synchronously
   after `restore_persisted_playback`, so resume would only be visible for the moment it takes them

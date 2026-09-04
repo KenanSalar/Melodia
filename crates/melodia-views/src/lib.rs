@@ -7,8 +7,9 @@
 //! below re-exports either, so `melodia_store::database` does not resolve here at all rather
 //! than resolving to something private.
 //!
-//! Not split further, and the argument is in `docs/plans/WORKSPACE_SPLIT.md`: the slices are a
-//! dense mesh, the component library imports fourteen of them, and cutting it needs a view
-//! registry nothing else in the tree wants.
+//! Not split further, and the argument is in
+//! `docs/adr/0018-what-is-not-split-and-zero-features.md`: the slices are a dense mesh, the
+//! component library imports fourteen of them, and cutting it needs a view registry nothing else
+//! in the tree wants.
 
 pub mod ui;

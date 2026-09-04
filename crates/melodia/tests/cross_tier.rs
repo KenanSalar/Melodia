@@ -6,8 +6,8 @@
 //! settings test may not name the nav map, and a database test may not name the filter boxes.
 //! Held from outside all of them instead, which is also the only place that can see both.
 //!
-//! `docs/plans/WORKSPACE_SPLIT.md` finding 8 gives every corpus walk one home; these are the
-//! walks' compile-time cousins and land in the same place for the same reason.
+//! `.claude/rules/testing.md` gives every corpus walk one home; these are the walks'
+//! compile-time cousins and land in the same place for the same reason.
 
 use melodia_core::error::AppError;
 

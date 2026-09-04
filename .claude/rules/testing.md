@@ -231,7 +231,8 @@ So none of it gets proposed as an improvement:
   reasons `unsafe-rust.md` gives, and nothing else has needed a framework yet. Adding one
   is a real argument to make, not a default to reach for.
 - **No `benches/`, no criterion, no fuzzing.** Performance work here is measured with
-  flamegraph, heaptrack and peak RSS instead; `rust-performance.md` has the discipline.
+  flamegraph, heaptrack and peak RSS instead; `rust-performance.md` has the discipline and
+  `docs/adr/` argues why there is no gate.
 - **No coverage threshold.** Coverage is a manual workflow publishing HTML, and it never
   blocks a merge.
 - **No `slint::testing` call anywhere**, despite the API existing. The UI is pinned from

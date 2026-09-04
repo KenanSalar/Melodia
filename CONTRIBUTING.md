@@ -31,6 +31,13 @@ For a fix or a small improvement, just open a PR. For anything with real scope, 
 an issue first so we can agree on the shape. Melodia is opinionated about where things
 live, and a conversation up front is cheaper than a rewrite after review.
 
+Before proposing a different library, a different threading shape or a different boundary
+between crates, read [`docs/adr/`](docs/adr/). Each record is one page and says what was
+chosen, what was not, and what the choice costs, so you can see whether your idea was
+already weighed and on what grounds. If it was and the grounds have changed, that is a good
+issue to open. A change that moves one of those seams should name the ADR it follows, or add
+one.
+
 ## Pull requests
 
 - **Target `main`**, the only long-lived branch. Merging ships nothing on its own:

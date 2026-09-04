@@ -2,64 +2,48 @@
 
 **A fast, lightweight cross-platform desktop music player built with [Slint](https://slint.dev/) and pure Rust.**
 
-Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900 MB** to the figures below, with no IPC layer and no web runtime.
-
-| Scenario | RSS | PSS | Heap | Mapped | CPU |
-| --- | --- | --- | --- | --- | --- |
-| Idle (Fedora) | 158 MB | 88 MB | 33 MB | 125 MB | 0.1% |
-| Playing, list view (Fedora) | 158 MB | 89 MB | 34 MB | 124 MB | 0.6% |
-| Playing, visualizer live (Fedora) | 166 MB | 96 MB | 34 MB | 132 MB | 4.0% |
-| Idle (Windows) | 117 MB | 58 MB | 54 MB | 63 MB | 0.1–0.2% |
-| Playing, list view (Windows) | 125 MB | 65 MB | 61 MB | 64 MB | 0.8–1.0% |
-| Playing, visualizer live (Windows) | 132 MB | 71 MB | 67 MB | 65 MB | 9.6–9.9% |
-
-Release build against the same 512-track library on both platforms, each on a 16-core machine with the window on the same 144 Hz display and nothing else contending for the GPU. CPU as a share of **one** core, over 60-second windows on Fedora and 30-second windows on Windows. Memory on Fedora/Wayland from `smaps_rollup` and `/proc/self/status`; on Windows 11 from the working set, split by page backing into **Heap** (`MEM_PRIVATE`) and **Mapped** (`MEM_IMAGE` and `MEM_MAPPED`), with **PSS** taken as the private working set. Both platforms' rows are from the current build, measured after the process had settled.
-
-**Heap** is what the application itself allocates, and it is the number that stays flat: grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it, though a higher-resolution screen raises the totals. The visualizer allocates nothing per frame, reusing its buffers. **Mapped** is the file-backed remainder, and the two together are essentially all of RSS: most of what the process appears to occupy is the binary and the shared graphics stack, not anything Melodia allocated. That is also why **PSS** is the fairer whole-process figure on a desktop already running other GL applications, since RSS charges those shared pages in full, around 70 MB of it here.
-
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/github/v/release/KenanSalar/Melodia?label=version&color=blueviolet)](https://github.com/KenanSalar/Melodia/releases)
-[![Platforms](https://img.shields.io/badge/platforms-Linux%20%C2%B7%20Windows-success.svg)](#platforms)
+[![Platforms](https://img.shields.io/badge/platforms-Linux%20%C2%B7%20Windows-success.svg)](#installation)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust%20%2B%20Slint-orange.svg)](https://www.rust-lang.org/)
+
+Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900 MB** to 158 MB idle on Linux and 117 MB on Windows; the [full numbers](#footprint) are below.
 
 ---
 
 ## Screenshots
 
+Six theme families, light and dark variants, configurable accents, and Material You dynamic color; the shots below are a handful of them, all on the default aurora backdrop. See [Themes](#themes) below for the full list.
+
 ### Library
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/albums.png" alt="Albums view"><br><sub><b>Albums</b>: a virtualized cover grid (light theme here).</sub></td>
-    <td width="50%"><img src="assets/screenshots/artists_detail.png" alt="Artist detail view"><br><sub><b>Artist detail</b>: a hero-blur backdrop, an albums strip, and the track list.</sub></td>
+    <td width="50%"><img src="assets/screenshots/albums.png" alt="My Library on the Albums tab"><br><sub><b>My Library</b>: one page and five tabs, here over a virtualized cover grid.</sub></td>
+    <td width="50%"><img src="assets/screenshots/playlist-detail.png" alt="A playlist opened inside My Library"><br><sub><b>Detail in place</b>: opening a playlist grows the band into its banner, tabs still in reach.</sub></td>
   </tr>
   <tr>
-    <td><img src="assets/screenshots/tracks.png" alt="Tracks view"><br><sub><b>Tracks</b>: every song, with sortable, resizable, toggleable columns.</sub></td>
-    <td><img src="assets/screenshots/browse.png" alt="File-system browse view"><br><sub><b>Browse</b>: navigate the library by folder.</sub></td>
-  </tr>
-</table>
-
-### Playlists & Collections
-
-<table>
-  <tr>
-    <td width="50%"><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b>: an artwork mosaic hero over tabs for songs, most played, and favorite artists.</sub></td>
-    <td width="50%"><img src="assets/screenshots/recently_played.png" alt="Recently Played view"><br><sub><b>Recently Played</b>: newest first, updating live as you listen, with a most-played tab beside it.</sub></td>
-  </tr>
-  <tr>
-    <td><img src="assets/screenshots/playlists.png" alt="Playlists view"><br><sub><b>Playlists</b>: manual and smart playlists, with M3U8 import and export.</sub></td>
-    <td><img src="assets/screenshots/playlists_detail.png" alt="Playlist detail view"><br><sub><b>Playlist detail</b>: inline favorites and hover-revealed star ratings.</sub></td>
+    <td><img src="assets/screenshots/search.png" alt="Search view"><br><sub><b>Search</b>: a top-result card over songs, albums, artists, and genres.</sub></td>
+    <td><img src="assets/screenshots/browse.png" alt="File-system browse view"><br><sub><b>Browse</b>: navigate the library by folder, as a list or a grid of cards.</sub></td>
   </tr>
 </table>
 
-### Theming
-
-Six theme families, light and dark variants, configurable accents, and Material You dynamic color. See [Themes](#themes) below for the full list.
+### Favorites
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings under the Catppuccin theme"><br><sub><b>Catppuccin Mocha</b>: theme, variant, and accent picker.</sub></td>
-    <td width="50%"><img src="assets/screenshots/settings_material.png" alt="Settings under the Material 3 theme"><br><sub><b>Material 3</b>: the same screen with a different palette.</sub></td>
+    <td><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b>: an artwork mosaic hero over tabs for songs, most played, and favorite artists. Recently Played is built the same way.</sub></td>
+  </tr>
+</table>
+
+### Internet Radio
+
+Off until you switch it on, under Settings ▸ Services ▸ Radio.
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Browse</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate.</sub></td>
+    <td width="50%"><img src="assets/screenshots/radio-detail.png" alt="Radio station page"><br><sub><b>Station page</b>: logo, homepage, format, bitrate, votes, and what the station has announced this session.</sub></td>
   </tr>
 </table>
 
@@ -78,95 +62,67 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 
 ## Features
 
-### Library Management
-- Automatic scanning of music folders with parallel metadata extraction (Rayon)
-- First-launch auto-detection of the OS Music directory
-- Real-time folder watching with debounced re-scanning and incremental updates
-- Content-hash-based moved-file detection (BLAKE3) that preserves play counts, favorites, and queue state when files are renamed or relocated
-- Search across tracks, albums, artists, and genres, with a top-result card, entity rows, and persistent recent search history. Tracks are full-text indexed (SQLite FTS5) on title, artist, album artist, album, genre, composer, year, and file name, so a genre or a year finds everything tagged with it and a partial year ("199") finds the decade. The album and artist rows match by name *and* through their own tracks, so searching a song title, a year or a genre surfaces the albums and artists behind it, and a genre can itself be the top result. That index ignores accents on both sides, so "bjork" finds Björk and "be" finds Bế Tắc; because the album and artist rows match through it too, an unaccented query still surfaces them. Results are ranked by relevance: a match in the title outranks one in the artist, and a filename that merely echoes the tags beside it ranks below the tags it repeats
-- Filter boxes search the same fields and ignore accents at least as readily, so a genre, an album artist, a year or a decade narrows the songs list, an album / artist / genre / playlist, Favorites or Recently Played much as it narrows the Search view. Years are the one place a filter box is looser on purpose: it matches them anywhere, so "98" finds 1998 and the 1980s alike. The Albums grid takes a year too, and the Settings page's search reaches the accented labels in the translated catalogues
-- **My Library** gathers your whole collection into one page with five tabs (Songs, Albums, Artists, Genres and Playlists) under a band that carries the tabs, the count and that tab's own actions. One search box serves all of them and always means whatever is currently on screen; switching tabs clears it. Opening an album, artist, genre or playlist doesn't take you to another page: the band **grows into that entity's banner**, showing its artwork, its title and a live summary of it, with the tabs still in place and a back arrow beside them, and the same box now filters what's inside. The page reopens on the tab you left it on
-- Browse by albums, artists, genres, or the file system; the folder browser draws either as a detailed list or as a grid of cards mixing subfolders and cover art, and reopens the way you left it
-- Deezer-backed artist image fetching with local caching
-- Favorites view built around a hero banner (artwork mosaic, live counts, and a tab bar sharing that row with the filter) over three sub-views: every favorite as a sortable track list, your most-played favorites as a browsable card grid, and your favorite artists as another. Favorite artists sort by name or by how many of their tracks you've favorited, either direction; the filter narrows whichever tab you're on, and the page reopens on the tab and the sort you left it on
-- Recently-Played view built the same way, over two sub-views: the tracks you last listened to (newest first, updating live as you play) and your most-played tracks as a browsable card grid. The filter narrows whichever tab you're on, and the page reopens on the tab you left it on. The recency list is deliberately unsortable, since recency is what it's for
-- Play-count and skip-count tracking per track
-- Per-track star ratings (0–5), set inline via a hover-revealed star control in any track list and from the Now Playing view
-- Edit track information (title, artist, album, album artist, genre, year, track/disc number, composer, comment, BPM, lyrics, and cover art) for one or many selected tracks at once, written straight back to the files; batch edits leave differing fields untouched and save only the fields you change
-- Natural sort ordering for file and track names
-- Customizable, resizable, and toggleable track-list columns
-- Playlist creation and management with custom thumbnails
-- Smart (dynamic) playlists whose membership is defined by rules rather than a fixed track list: match **all** or **any** of a set of conditions across fields like genre, artist, rating, year, play count, favorite, or when a track was last played/added, with an optional size cap and ordering (e.g. "50 most-played" or "top-rated"); membership is resolved live, so a smart playlist keeps itself up to date as your library and listening change
-- Import and export playlists as standard `.m3u8` files (with embedded BLAKE3 content hashes) so they survive a database reset and interoperate with other players
-- Drag-and-drop file import to playlists and the queue
-- Drag-and-drop track reordering in playlists and the play queue
-- Automatic pre-migration database backups, kept in a `backups/` folder beside the library database; the three most recent are retained and older ones retire themselves, so upgrading never accumulates copies of your library without bound
+### Library
+- Parallel folder scanning, live folder watching, and incremental re-scans
+- Content hashing (BLAKE3), so a moved or renamed file keeps its play counts, favorites, and place in the queue
+- Full-text search (SQLite FTS5) over tracks, albums, artists, and genres: accent-insensitive, relevance-ranked, with a top-result card and recent history. The filter box on every list searches the same fields
+- **My Library** gathers everything into one page with five tabs (Songs, Albums, Artists, Genres, Playlists); opening an entity grows the tab band into its banner rather than navigating away
+- Favorites and Recently Played, each a hero banner over sortable lists and browsable card grids
+- Browse by folder, as a detailed list or a grid of cards
+- Star ratings, play and skip counts, natural sort, resizable and toggleable columns
+- Tag editing for one track or many at once, cover art included, written straight back to the files
+- Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, drag-and-drop import and reordering
+- A database backup before every schema migration, three kept
 
 ### Playback
-- Gapless playback, with the next track staged on the deck before the current one ends. AAC albums run edge to edge too: an AAC encoder pads the start of every track and writes down how much, and Melodia reads that back from either the `iTunSMPB` tag or the MP4 edit list and drops those frames, along with the padding at the end
-- Audio crossfade (1–12 s) that overlaps the end of one track with the start of the next, running the two on separate mixer decks with a sample-accurate complementary ramp so the sum can never clip; optionally skips same-album transitions to keep continuous mixes gapless, extends to manual track changes, and fades out on pause and stop
-- Queue management with shuffle and repeat modes (Off, All, One)
-- Playing a track from any list (an album, a playlist, a folder in Files, search results, Favorites) loads that whole list into the queue and starts on the track you picked, so the rest of the album or playlist follows on its own. With shuffle already on, the remaining tracks are shuffled behind your pick rather than played in order. **Play Next** and **Add to Queue** in the right-click menu still add to the existing queue without replacing it
-- A **Shuffle** pill on Favorites, Recently Played (two on each, one per tab that has a list to shuffle) and on every open album, artist, genre and playlist loads whatever is currently showing and opens on a random track rather than the top of the list; filter it first and only the matches are queued
-- Full-screen Now Playing view with track details, an up-next list, and album-art cross-fade transitions
-- Audio visualizer under the Now Playing artwork, tapped off the post-DSP audio and tinted to the album's own accent colour, in three styles switchable from the view itself or from Settings: a 64-band spectrum analyzer, the same bands mirrored about a centre line, or a live waveform trace; bands are logarithmic across 50 Hz – 16 kHz (the equalizer's own range) so every bar covers the same musical interval, and the whole thing decays to rest on pause or can be switched off entirely
-- 10-band graphic equalizer (31 Hz – 16 kHz) with adjustable preamp, nine built-in presets plus hand-tuned custom curves, and a soft-knee clip-protection limiter so boosts compress instead of clipping
-- ReplayGain loudness normalization applies per-track or per-album gain from the file's loudness tags (Track or Album mode), with an adjustable preamp and optional peak-based clip prevention; reuses the equalizer's soft-knee limiter so a boosted track compresses instead of clipping, and works with the equalizer off
-- Playback speed control (0.25× – 2.0×)
-- Sleep timer that pauses playback after a preset (15–90 min) or custom duration, or at the end of the current track; the duration countdown is playback-linked, so pausing the music holds the timer
-- Volume control (0–100%) with mute
-- Resume playback on startup
-- OS media-key support
-- Configurable play-button animation (none, or animated equalizer bars)
-- Customizable player bar: relocate secondary controls into a compact overflow menu
-- Responsive mini-player: shrinking the window past a threshold collapses the full UI into a compact horizontal strip or a square widget (the square grows an up-next list when tall enough); restore the full window from the mini-player's expand button
-- Skippable startup animation: the view Melodia opens on fades and slides into place by default; a Motion switch under Settings ▸ Interface turns that off so the window comes up with the library already on screen, leaving navigation animated as usual
+- Gapless, including the AAC encoder delay and padding read back from `iTunSMPB` or the MP4 edit list
+- Crossfade (1–12 s) across two decks with a clip-safe ramp, optionally skipped between same-album tracks
+- 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter
+- ReplayGain in track or album mode, with preamp and peak-based clip prevention
+- Queue with shuffle and repeat; playing from any list queues that list behind your pick
+- Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
+- Playback speed 0.25×–2.0×, a playback-linked sleep timer, resume on startup, media keys
+- Responsive mini-player: shrink the window and the UI collapses to a strip or a square widget
 
 ### Internet Radio
-- **Off until you switch it on**, under Settings ▸ Services ▸ Radio. Nothing contacts the station directory until you do, so a Melodia you never enable it on stays exactly as local as it was. Turning it back off stops whatever station is playing and removes the section outright, while leaving your saved stations in place for whenever you turn it on again
-- Browse a worldwide directory (**radio-browser.info**, no account and no API key) by station name, narrowed by country, language, genre tag, codec or minimum bitrate and ordered by what people actually listen to. Type something that looks like a country, a language, a genre or a dial frequency and Melodia offers it as a one-click filter instead of searching for it as a name
-- Add your own stream URLs. Melodia connects once to confirm the stream really is audio it can decode and fills the station name in from the stream itself, so a mount that turns out to be a web page or a codec with no decoder is refused at the dialog rather than at the first click; `.pls`, `.m3u` and `.asx` pointers resolve to the audio behind them
-- Favorites and a Recently Played tab of their own, both filterable and sortable, and a station page carrying the logo, homepage, format, bitrate, vote count and the songs that station has announced this session
-- Live track titles read off the stream reach the player bar, the full Now Playing view, your desktop's media controls and Discord presence exactly as a local track's tags do. A **LIVE** badge stands where the progress bar would be, and buffering and reconnection are handled underneath without the station dropping off the deck. The station you were listening to is still there after a restart
-- Station logos are fetched and cached locally; a station with none gets a tile derived from its own name rather than one shared icon
-- Import and export your stations as a plain playlist file, so they survive a database reset and move between machines
-- **Segmented (HLS) stations play like any other**, whether the station serves transport streams or fragmented MP4: Melodia assembles the segments back into one stream and keeps fetching ahead of the decoder. They take a few seconds longer to start than a direct mount, which is the whole of what *Hide segmented stations* is for; it is off by default, since they play
+- **Off until you switch it on**, under Settings ▸ Services ▸ Radio. Nothing contacts the directory until you do
+- A worldwide directory (**radio-browser.info**, no account and no API key) narrowed by country, language, genre, codec, or bitrate
+- Your own stream URLs, checked at the dialog rather than at the first click; `.pls`, `.m3u`, and `.asx` resolve to the audio behind them
+- Live titles reach the player bar, Now Playing, your desktop's media controls, and Discord, with buffering and reconnection handled underneath
+- Favorites, Recently Played, station pages, cached logos, and playlist-file import and export
+- Segmented (HLS) stations play like any other
 
 ### Themes
-Six theme families, each with light and dark variants and configurable accent colors:
-- **Catppuccin** (Latte, Frappé, Macchiato, Mocha)
-- **Material 3**
-- **GNOME Adwaita**
-- **KDE Breeze**
-- **Windows Fluent**
-- **macOS**
+Six families, each with light and dark variants and configurable accents: **Catppuccin** (Latte, Frappé, Macchiato, Mocha), **Material 3**, **GNOME Adwaita**, **KDE Breeze**, **Windows Fluent**, and **macOS**. System dark/light is followed automatically, KDE color schemes are read from `kdeglobals`, and Material You derives a palette from the current artwork in seven color styles. Headers paint an aurora of the album's own colors by default, or a blurred cover instead. The titlebar is custom and transparent, with native decorations available.
 
-Automatic system dark/light mode detection is supported. Material You dynamic theming derives a palette from the current track's artwork, with selectable color styles (Tonal Spot, Vibrant, Expressive, Fidelity, Content, Monochrome, Neutral). On KDE, color schemes are read from `kdeglobals` for native palette integration, and the sidebar and now-playing bar can be tinted toward the content background when the window loses focus. A custom transparent titlebar is used by default, with an adjustable window corner radius, alongside an option to fall back to native window decorations.
+### Formats and languages
+MP3, FLAC, M4A/M4B (AAC and ALAC), raw AAC (`.aac`), Ogg Vorbis (`.ogg`, `.oga`), WAV (PCM and ADPCM), AIFF/AIFF-C, Matroska (`.mka`), and CAF. Matroska and CAF carry no tags Melodia can read, so those tracks list under their filename, as does anything whose tags are too damaged to parse.
 
-Every header (Now Playing and the six library heroes) can be painted two ways. By default **Aurora Backdrop** sweeps the album's own colors broadly across the surface over the theme's background, so the header follows the theme's light or dark polarity; turn it off and the cover art is blurred behind them instead. Headers with no cover to draw from still get one: a genre washes the colors of its own name-derived gradient, and anything untagged washes your accent. The aurora skips the per-cover blur entirely, and switching either way takes effect on the next launch.
+Seven locales (English, German, French, Spanish, Turkish, Greek, Italian), switchable at runtime with no restart.
 
-### Supported Audio Formats
-MP3, FLAC, M4A/M4B (AAC and ALAC), raw AAC (`.aac`), Ogg Vorbis (`.ogg`, `.oga`), WAV (PCM and ADPCM), AIFF/AIFF-C, Matroska (`.mka`) and CAF
+### System integration
+- Scrobbling to **Last.fm** and **ListenBrainz**, each independently, with loved-track sync that catches your existing favorites up on connect, and a durable offline queue
+- Optional MusicBrainz auto-tagging, so loved tracks resolve even for a library with no MusicBrainz IDs
+- **Discord Rich Presence** (off by default): title, artist, album, and optionally a cover looked up on Deezer, sent to your running Discord client. Nothing leaves the machine while it is off
+- OS media controls (MPRIS2 on Linux, SMTC on Windows) and media keys
+- Set Melodia as your default player and double-click a track; it runs as a single instance, so files open in the window you already have
+- Always-on-top on KDE and GNOME, a self-deploying desktop entry, and AppStream metadata for KDE Discover and GNOME Software
+- Window, queue, and navigation state persisted across sessions
 
-Matroska and CAF carry no tags Melodia can read, so those tracks are listed under their filename with the duration taken from the file itself. Anything whose tags are too damaged to parse is listed the same way rather than being skipped.
+## Footprint
 
-### Internationalization
-- 7 locales: English, German, French, Spanish, Turkish, Greek, Italian
-- Slint-native `@tr()` translations with bundled `.po` files compiled into the binary
-- Runtime locale switching with no restart
+| Scenario | RSS | PSS | Heap | Mapped | CPU |
+| --- | --- | --- | --- | --- | --- |
+| Idle (Fedora) | 158 MB | 88 MB | 33 MB | 125 MB | 0.1% |
+| Playing, list view (Fedora) | 158 MB | 89 MB | 34 MB | 124 MB | 0.6% |
+| Playing, visualizer live (Fedora) | 166 MB | 96 MB | 34 MB | 132 MB | 4.0% |
+| Idle (Windows) | 117 MB | 58 MB | 54 MB | 63 MB | 0.1–0.2% |
+| Playing, list view (Windows) | 125 MB | 65 MB | 61 MB | 64 MB | 0.8–1.0% |
+| Playing, visualizer live (Windows) | 132 MB | 71 MB | 67 MB | 65 MB | 9.6–9.9% |
 
-### System Integration
-- Scrobbling to **Last.fm** and **ListenBrainz**: connect either or both, report each qualifying play plus a live "now playing" status, and mirror your favorites to their loved/feedback tracks with a **per-service toggle** (each independent). Turning a service's loved-tracks sync on, or connecting it later while sync is on, **syncs your existing favorites automatically**, no need to re-toggle each heart. Plays and loves are held in a durable offline queue and submitted on reconnect
-- Optional **MusicBrainz auto-tagging** (opt-in, ListenBrainz-driven) resolves each track's MusicBrainz Recording ID and writes it into your files, so "loved" favorites work on ListenBrainz even for an untagged library; runs automatically on new imports and on demand from Settings
-- **Discord Rich Presence** (opt-in, off by default) shows **Listening to \<song\>** on your Discord profile with artist, album cover, a live progress bar, and a link button; updates on track change, pause, resume, seek and stop, and clears when playback stops or you quit. A **Hide while paused** option and an album-cover toggle live in Settings → Services → Discord
-- OS media controls (Linux: MPRIS2, Windows: SMTC)
-- **Set Melodia as your default music player** and double-click a track to play it; select several and they open together, in order. Melodia runs as a single instance, so opening a file while it's already running plays it in the window you have, rather than starting a second copy. On Linux it appears under "Open with…" once installed; on Windows, under Settings → Apps → Default apps
-- Always-on-top support (Linux: KDE via KWin D-Bus, GNOME via shell extension)
-- Window state persistence (size, position, maximized)
-- Queue and navigation state persistence across sessions
-- Signed auto-updater (minisign) with in-app install and toast notifications
-- Self-deploying desktop entry and icon for tarball installs
-- AppStream metadata so the app appears with full name, icon, and license in KDE Discover and GNOME Software
+Release builds against the same 512-track library, each on a 16-core machine with the window on the same 144 Hz display, measured after the process had settled. CPU is a share of **one** core.
+
+**Heap** is what the application itself allocates, and it is the number that stays flat: grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it. **Mapped** is the file-backed remainder, mostly the binary and the shared graphics stack rather than anything Melodia allocated, which is why **PSS** is the fairer whole-process figure on a desktop already running other GL applications.
 
 ## Keyboard Shortcuts
 
@@ -194,38 +150,21 @@ Matroska and CAF carry no tags Melodia can read, so those tracks are listed unde
 
 OS media keys (play/pause, next, previous, stop) are also handled.
 
-## Platforms
-
-- Linux (X11 and Wayland)
-- Windows
-
-Pre-built releases ship for both `x86_64` and `aarch64`.
-
 ## Installation
 
-Download the latest release for your platform from the
+Linux (X11 and Wayland) and Windows, on both `x86_64` and `aarch64`. Take the latest build from the
 [Releases page](https://github.com/KenanSalar/Melodia/releases).
-
-### Linux
 
 | Format | Install |
 |--------|---------|
 | `.rpm` (Fedora/RHEL) | `sudo dnf install ./melodia-*.rpm` |
 | `.deb` (Debian/Ubuntu) | `sudo apt install ./melodia-*.deb` |
 | AppImage | `chmod +x melodia-*.AppImage && ./melodia-*.AppImage` |
-| Tarball | Extract, then run `./install-linux.sh` (no `sudo` needed; installs into `~/.local/share/Melodia`) |
+| Tarball | Extract, then `./install-linux.sh`, which installs into `~/.local/share/Melodia` with no `sudo`, so the in-app updater needs no polkit prompt |
+| Windows | Run the installer, or use the portable binary |
 
-The tarball install is fully user-local, so the in-app updater works without a polkit prompt.
-
-### Windows
-
-Download and run the installer, or use the portable binary.
-
-### Updates
-
-Melodia ships a built-in, minisign-signed auto-updater that can download and install
-new releases in place. Release artifacts also carry build-provenance attestations,
-verifiable with:
+Melodia updates itself in place, minisign-signed. Release artifacts also carry
+build-provenance attestations, verifiable with:
 
 ```bash
 gh attestation verify <file> --repo KenanSalar/Melodia
@@ -233,11 +172,9 @@ gh attestation verify <file> --repo KenanSalar/Melodia
 
 ## Building from Source
 
-### Prerequisites
-
-- [Rust](https://rustup.rs/) **1.97.0**, edition 2024 (pinned by `rust-toolchain.toml`; rustup installs it automatically)
-
-**Linux**: development packages for Slint's FemtoVG renderer (no WebKitGTK required):
+[Rust](https://rustup.rs/) **1.97.0**, edition 2024, pinned by `rust-toolchain.toml` and installed by
+rustup on its own. Linux additionally needs the development packages for Slint's FemtoVG renderer
+(no WebKitGTK); macOS and Windows need nothing extra.
 
 ```bash
 # Debian/Ubuntu
@@ -249,254 +186,99 @@ sudo dnf install fontconfig-devel freetype-devel alsa-lib-devel \
                  libxkbcommon-devel vulkan-loader wayland-devel
 ```
 
-**macOS / Windows**: no extra dependencies.
-
-### Build
-
 ```bash
 git clone https://github.com/KenanSalar/Melodia.git
 cd Melodia
 
-cargo run -p melodia                           # debug build, runs the app
-cargo build --release -p melodia               # release build → target/release/Melodia
-cargo fmt --all                                # format
-cargo clippy --all-targets --workspace -- -D warnings   # lint
-cargo test --workspace                         # run tests
+cargo run -p melodia                                     # debug build, runs the app
+cargo build --release -p melodia                         # release → target/release/Melodia
+cargo clippy --all-targets --workspace -- -D warnings    # lint
+cargo test --workspace                                   # tests
 ```
 
-> **Note: a source build keeps its own library.**
-> `cargo run` and `target/release/Melodia` store their data under `Melodia-dev`,
-> beside an installed copy's `Melodia` folder rather than inside it. A schema
-> migration still on a branch therefore can't leave an installed Melodia unable to
-> open its own database, and the two can run at the same time, each with its own
-> library, settings and queue. `MELODIA_DATA_DIR` points either build at a
-> directory of your choosing, which is how you reproduce something against real
-> data, and how a library built up under an older source build is reached after
-> this split. A source build also has no Updates card in Settings, `target/`
-> being cargo's to overwrite.
+A source build keeps its own library under `Melodia-dev`, beside an installed copy's folder rather
+than inside it, so a schema migration still on a branch can't leave an installed Melodia unable to
+open its database, and the two can run at once. `MELODIA_DATA_DIR` points either build at a
+directory of your choosing.
 
-> **Note: vendored winit fork.**
-> The `winit/` directory is a checked-in copy of winit 0.30.13 plus an unmerged
-> Wayland file drag-and-drop fix ([winit#1881]); `Cargo.toml`'s
-> `[patch.crates-io]` block points at it. A fresh clone builds with no setup,
-> since the fork ships in the repo. Removing the `[patch.crates-io]` block (and
-> `winit/`) drops Wayland file-manager drag-and-drop; everything else still
-> builds.
->
-> [winit#1881]: https://github.com/rust-windowing/winit/issues/1881
+`winit/` is a checked-in copy of winit 0.30.13 plus an unmerged Wayland file drag-and-drop fix
+([winit#1881]), wired by `Cargo.toml`'s `[patch.crates-io]`. A fresh clone builds with no setup;
+dropping the patch costs only that drag-and-drop.
 
-> **Note: Last.fm API credentials (optional).**
-> Last.fm scrobbling needs a registered [API application](https://www.last.fm/api/account/create),
-> a key + shared secret that identify the *app*, not any account. They're read
-> at compile time from the `LASTFM_API_KEY` / `LASTFM_SHARED_SECRET` environment
-> variables (`option_env!`), so nothing secret lives in the repo. Official
-> releases inject them as CI secrets. For local development, copy `.env.example`
-> to `.env` (gitignored) and paste your keys; `build.rs` bakes them into the
-> compile automatically, no exporting needed. A build without them is fully
-> functional: **ListenBrainz** still works and the Last.fm **Connect** button
-> reports "not configured in this build". ListenBrainz needs no such setup (each
-> user pastes their own token).
+Last.fm scrobbling needs an [API application](https://www.last.fm/api/account/create)'s key and
+shared secret, which identify the app rather than any account. They are read at compile time from
+`LASTFM_API_KEY` / `LASTFM_SHARED_SECRET`, so nothing secret lives in the repo; for local builds,
+copy `.env.example` to `.env` and `build.rs` bakes them in. A build without them is fully
+functional, ListenBrainz included, and the Last.fm Connect button reports "not configured in this
+build". A fork wanting its own Discord presence sets `MELODIA_DISCORD_APP_ID`.
 
-> **Note: Discord Rich Presence (optional, off by default).**
-> When enabled, Melodia sends the current track's **title, artist, album** (and,
-> when the album-cover option is on, an **album-cover URL**) to your running
-> Discord client over its local IPC socket. Resolving that cover is the feature's
-> one outbound network call: the artist + album are looked up on **Deezer's public
-> API**, falling back to Apple's keyless **iTunes Search API** when Deezer has no
-> match, and Discord's own CDN then fetches the returned URL server-side (Melodia
-> never uploads your files anywhere). Nothing leaves the machine while the feature
-> is off, or while Discord isn't running. Building a **fork** needs its own Discord
-> **application ID**. It's public (it ships in every presence payload, so no CI
-> secret, unlike the Last.fm keys), and hardcoded in
-> `crates/melodia-integrations/src/services/integrations/discord/mod.rs`
-> with a `MELODIA_DISCORD_APP_ID` compile-time override.
-
-> **Tip: cleaning up a loosely-tagged library.**
-> The optional MusicBrainz auto-tagging (Settings → Services → Scrobbling → *Add MusicBrainz
-> IDs to your music*) resolves each track's MusicBrainz Recording ID by looking up
-> its **artist + title** on ListenBrainz, so it only works when your files already
-> carry reasonably correct tags. For music ripped from YouTube or otherwise loosely
-> tagged (artist fields like `NoCopyrightSounds` or `<unknown>`, titles full of
-> `(Official Video)` cruft), a text lookup can't identify most
-> tracks, so they stay untagged (and can't be "loved" on ListenBrainz).
->
-> For those, run **[MusicBrainz Picard](https://picard.musicbrainz.org/)** first.
-> Picard identifies tracks by **acoustic fingerprint**, analysing the actual
-> audio rather than the tags, then writes clean metadata plus the MusicBrainz
-> IDs, with a review step so you approve matches before they're saved. On Fedora:
-> `sudo dnf install picard` (or the `org.musicbrainz.Picard` Flatpak); add your
-> music, **Scan**, then **Save**. Melodia picks up the new tags on its next scan,
-> and both your metadata and the ListenBrainz "loved" sync then work across the
-> whole library.
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| UI | [Slint](https://slint.dev/) 1.16 (FemtoVG renderer) |
-| Backend | Pure Rust: direct calls + tokio channels, no IPC |
-| Async runtime | [Tokio](https://tokio.rs/) |
-| Audio | [Symphonia](https://github.com/pdeljanov/Symphonia) decoding, [cpal](https://github.com/RustAudio/cpal) device output; the mixer, rate and channel conversion, playback speed and clock in between are Melodia's own |
-| Radio streaming | [stream-download](https://crates.io/crates/stream-download) + [icy-metadata](https://crates.io/crates/icy-metadata), decoded on the same Symphonia path as local files |
-| Station directory | [radio-browser.info](https://www.radio-browser.info) (no account, CC0 data) |
-| Equalizer DSP | [biquad](https://crates.io/crates/biquad) (peaking-filter bands) |
-| Spectrum analysis | [`realfft`](https://crates.io/crates/realfft) (real-to-complex FFT) |
-| Media Controls | [Souvlaki](https://github.com/Sinono3/souvlaki) (MPRIS2, SMTC) |
-| Metadata | [Lofty](https://github.com/Serial-ATA/lofty-rs) |
-| File Hashing | [BLAKE3](https://github.com/BLAKE3-team/BLAKE3) |
-| Parallelism | [Rayon](https://github.com/rayon-rs/rayon) |
-| File Watching | [notify](https://github.com/notify-rs/notify) + notify-debouncer-full |
-| Database | SQLite via [SQLx](https://github.com/launchbadge/sqlx) with FTS5 |
-| Dynamic Color | [material-colors](https://crates.io/crates/material-colors) |
-| Auto-updater | [minisign-verify](https://crates.io/crates/minisign-verify) |
-| Windowing | [winit](https://github.com/rust-windowing/winit) (vendored fork for Wayland DnD) |
+[winit#1881]: https://github.com/rust-windowing/winit/issues/1881
 
 ## Architecture
 
-Melodia runs the Slint UI on the main thread and a single multi-threaded Tokio
-runtime for all backend work (database, scanner, file watcher, player control,
-HTTP). There is no WebView and no IPC boundary:
+The Slint UI runs on the main thread and a single multi-threaded Tokio runtime handles the database,
+scanner, watcher, player control, and HTTP. There is no WebView and no IPC boundary: UI callbacks
+spawn async work, state flows back over `watch` and `mpsc` channels consumed by UI-thread tasks, and
+cpal's device callback pulls the mixer directly, so decoding, the DSP chain, and the mix stay off the
+runtime entirely.
 
-- **UI → backend**: Slint callbacks spawn `async` work on the Tokio runtime.
-- **Backend → UI**: state flows back over `tokio::sync::watch` / `mpsc`
-  channels, consumed by UI-thread tasks that update Slint properties.
-- **Audio**: cpal's device callback pulls the mixer directly, so decoding, the
-  DSP chain and the mix run on the audio thread rather than on the runtime. A
-  live stream is the one thing that needs a thread of its own, keeping the
-  blocking socket read off that callback and feeding a ring the decoder pulls
-  from.
+Fourteen crates, layered so the compiler enforces the direction rather than a convention: the UI
+names no database or socket, the decoders name no mixer, the tag writer names no state machine.
+Slint 1.16 on FemtoVG, Tokio, Symphonia and cpal, SQLite via SQLx with WAL and FTS5, Lofty for tags,
+Rayon, BLAKE3, and minisign for the updater.
 
-A cargo workspace, layered so the compiler enforces the direction rather than a
-convention: each crate names only what sits below it, and the ones that must not
-meet cannot. The UI has no database or socket in its manifest; the decoders have
-no mixer; the tag writer has no state machine.
+[`CLAUDE.md`](CLAUDE.md) is the architecture reference; [`docs/adr/`](docs/adr/) records why each
+piece was chosen over the alternatives.
 
-```
-crates/
-├── melodia-core         errors, paths, domain types, the theme registry
-├── melodia-testkit      shared fixtures and corpus walkers (dev-only, names nothing)
-├── melodia-artwork      decode, resize, the artwork store, the thumbnail cache
-├── melodia-net          the HTTP primitives, the artwork/logo fetchers, the radio directory
-├── melodia-platform     tray, logging, crash reports, single instance, system theme
-├── melodia-audio        the AudioSource vocabulary, Symphonia decode, file/stream/HLS sources
-├── melodia-playback     the DSP chain and everything under it: EQ, ReplayGain, crossfade,
-│                        spectrum & waveform taps, the decks, the cpal device and clock
-├── melodia-engine       the playback state machine, its queue and the action list
-├── melodia-store        SQLx + SQLite (WAL, FTS5, migrations), scanner, tags, folder watcher
-├── melodia-integrations scrobbling, Discord presence, OS media controls
-├── melodia-app          the command layer: the library API, background tasks, AppState, settings
-├── melodia-views        the Slint bridge: view slices, callbacks, the shared component library
-├── melodia-ui           the .slint sources, the fonts and icons they embed, the .po catalogues,
-│                        compiled once into its own crate
-└── melodia              the binary: startup sequencing, shutdown, the window
-```
+## Data and Logs
 
-See [`CLAUDE.md`](CLAUDE.md) for a detailed architecture reference.
-
-## Configuration & Data
-
-Melodia stores its data under the OS application-data directory
-(`~/.local/share/Melodia` on Linux, `%APPDATA%\Melodia` on Windows):
+Everything lives under the OS application-data directory, `~/.local/share/Melodia` on Linux and
+`%APPDATA%\Melodia` on Windows:
 
 | File / folder | Purpose |
 |---------------|---------|
-| `melodia.db` | SQLite music library (WAL + FTS5) |
-| `settings.json` | App/user preferences (theme, locale, playback, window geometry) |
-| `views.json` | Per-view UI state (column widths, sort, browse path and view mode, open detail, active tab) |
-| `queue.json` | Persisted play queue, and the radio station tuned over it |
-| `search_history.json` | Recent search terms (capped at 10) |
-| `scrobble_credentials.json` | Last.fm session key + ListenBrainz token (`0600` on Unix) |
-| `scrobble_queue.json` | Durable offline scrobble/love queue |
-| `scrobble_mbid_attempted.json` | Tracks already looked up for a MusicBrainz ID, so they aren't re-queried |
-| `logs/` | Rolling log files and crash reports (see [Troubleshooting](#troubleshooting)) |
+| `melodia.db` | The music library (SQLite, WAL + FTS5) |
+| `settings.json`, `views.json`, `queue.json` | Preferences, per-view UI state, and the queue with the station tuned over it |
+| `scrobble_*.json` | Last.fm session key and ListenBrainz token (`0600` on Unix), plus the offline queue |
+| `artwork/`, `artists/`, `radio-logos/` | Cached album, artist, and station images |
 | `backups/` | Database copies taken before each schema migration |
-| `artwork/`, `artists/`, `radio-logos/` | Cached album, artist and radio-station images |
+| `logs/` | Rolling logs and crash reports |
 
-Setting `MELODIA_DATA_DIR` moves the whole folder somewhere else, resolving a
-relative value against the working directory. A build run from the source tree
-uses `Melodia-dev` instead, so it never shares a database with an installed copy.
+`MELODIA_DATA_DIR` moves the whole folder somewhere else.
 
-## Troubleshooting
+Melodia writes a log on every run, with no environment variable and no terminal needed, and leaves a
+crash report beside it if it ever panics. The current log is `melodia_rCURRENT.log`; it rotates at
+2 MiB and keeps the 7 most recent, so `logs/` stays under about 16 MiB.
 
-Melodia writes a log file on every run, with no environment variable and no
-terminal needed, and if it ever panics it leaves a crash report beside it. Both
-live in `logs/` under the data directory above:
+**Settings → About → Diagnostics** opens that folder, saves a single `melodia-diagnostics-*.txt` to
+attach to a bug report, and toggles verbose logging. The report carries your version, OS, desktop
+session and install method, your library's size, a short fixed list of settings, recent crash
+reports, and the tail of the logs. Home directory paths are shortened to `~`, and **no credentials,
+tokens or session keys are ever included**; those live in a separate file the report doesn't read.
 
-- **Linux**: `~/.local/share/Melodia/logs/`
-- **Windows**: `%APPDATA%\Melodia\logs\`
+If Melodia won't start at all, `melodia --logs` prints the log directory and exits. That covers Linux
+and macOS: a Windows build runs with no console attached, so use `%APPDATA%\Melodia\logs\` directly.
+For finer control than the verbose switch, `RUST_LOG=debug melodia` overrides the filter for both the
+log file and the terminal.
 
-The current log is `melodia_rCURRENT.log`; it rotates at 2 MiB, keeping the 7 most
-recent rotated files, so the folder stays under about 16 MiB. On Linux and macOS
-it also rotates at the turn of each day you actually run Melodia, which makes that
-roughly a week of daily listening, and proportionally longer if you use it less
-often. Windows doesn't report a file's creation date reliably, so there the daily
-rotation only applies to a session running across midnight; a log carried over from
-an earlier day rotates on size alone, and the same 16 MiB covers a longer stretch.
-Crash reports are
-`crash-<date>-<time>.txt` and hold the panic message, the thread and location, a
-backtrace, and what Melodia knows about your system.
+## Contributing and Support
 
-**Settings → About → Diagnostics** has the three controls worth knowing about:
+Contributions are welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the setup, the checks to run
+before pushing, and how pull requests are handled.
 
-- **Open Folder** opens that directory.
-- **Save…** writes a single `melodia-diagnostics-*.txt`, the file to attach to a
-  bug report. It contains your Melodia version, OS, desktop session and install
-  method; how many tracks and folders your library has; a short, fixed list of
-  settings (theme, language, titlebar, tray, crossfade, EQ, ReplayGain,
-  auto-update, verbose logging); the most recent crash reports; and the tail of
-  the logs. Home directory paths are shortened to `~`, and **no credentials,
-  tokens or session keys are ever included**; those live in a separate file this
-  report doesn't read.
-- **Verbose logging** records extra detail. Turn it on, reproduce the problem,
-  then save a report. The change applies immediately, with no restart, and it
-  stays on across launches so a problem that happens during startup is captured
-  too. Leave it off otherwise: the log files are size-capped, so the extra detail
-  costs you the older history a report would have carried.
-
-If Melodia crashed the last time you ran it, the next launch says so and offers to
-open the folder.
-
-If Melodia won't start at all, the one case where none of the above is reachable,
-`melodia --logs` prints that directory and exits. The log and any crash report from
-the failed launch are already in it. On Linux and macOS only: a Windows build runs
-without a console attached, so it can't print to the terminal you launched it
-from; use the `%APPDATA%\Melodia\logs\` path above instead.
-
-For finer control than the Verbose logging switch, set `RUST_LOG`, for example
-`RUST_LOG=debug melodia`. It overrides the built-in filter for both the log file
-and the terminal, and it takes precedence over the switch, which then leaves the
-filter alone and says so in the log.
-
-## Contributing
-
-Contributions are welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the setup, the
-checks to run before pushing, and how pull requests are handled.
-
-## Support
-
-Melodia is free, open source and built in my spare time. If it's useful to you,
-you can support me at [ko-fi.com/kenansalar](https://ko-fi.com/kenansalar).
-The same link is in the app, at **Settings → About**.
-
-Nothing is gated behind it.
+Melodia is free, open source, and built in my spare time, with nothing gated behind payment. If it's
+useful to you, you can support me at [ko-fi.com/kenansalar](https://ko-fi.com/kenansalar), the same
+link the app carries at **Settings → About**.
 
 ## License
 
-Copyright (C) 2026 Kenan Salar
+Copyright (C) 2026 Kenan Salar. Melodia is free software under the
+[GNU Affero General Public License](LICENSE), version 3 or, at your option, any later version, and is
+distributed without any warranty.
 
-Melodia is free software: you can redistribute it and/or modify it under the
-terms of the [GNU Affero General Public License](LICENSE) as published by the
-Free Software Foundation, either version 3 of the License, or (at your option)
-any later version.
-
-Melodia is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE. See the [GNU Affero General Public License](LICENSE) for
-more details.
-
-The AGPL covers Melodia itself. Two fonts and a patched winit fork are compiled
-into the binary under their own terms. See [`licenses/`](licenses/), which
-every package ships alongside this file.
+The AGPL covers Melodia itself. Two fonts and a patched winit fork are compiled into the binary under
+their own terms; every one of those licenses ships in [`licenses/`](licenses/), which every package
+carries alongside this file.
 
 ## Acknowledgments
 
@@ -505,15 +287,13 @@ Built on the work of the [Slint](https://slint.dev/),
 [Symphonia](https://github.com/pdeljanov/Symphonia), and
 [SQLx](https://github.com/launchbadge/sqlx) projects, the
 [Catppuccin](https://catppuccin.com/) palette, and
-[Material Foundation](https://m3.material.io/)'s color utilities, along with
-the many other crates listed in `Cargo.toml`.
+[Material Foundation](https://m3.material.io/)'s color utilities, along with the many other crates
+listed in `Cargo.toml`. The station directory is [radio-browser.info](https://www.radio-browser.info)
+(CC0 data, no account).
 
-Melodia's interface is set in
-[Vazirmatn](https://github.com/rastikerdar/vazirmatn) (SIL Open Font License
-1.1) and draws its icons from
-[Material Symbols Rounded](https://github.com/google/material-design-icons)
-(Apache License 2.0). Both are modified: Vazirmatn's line metrics are
-repatched for the renderer, and the icon faces are subset to the glyphs the app
-uses. So is the vendored [winit](https://github.com/rust-windowing/winit) fork
-(Apache License 2.0) that gives Wayland its drag-and-drop events. Every license,
-and the details of what changed in each, ship in [`licenses/`](licenses/).
+Melodia's interface is set in [Vazirmatn](https://github.com/rastikerdar/vazirmatn) (SIL Open Font
+License 1.1) and draws its icons from
+[Material Symbols Rounded](https://github.com/google/material-design-icons) (Apache License 2.0).
+Both are modified, as is the vendored [winit](https://github.com/rust-windowing/winit) fork
+(Apache License 2.0) that gives Wayland its drag-and-drop events. What changed in each ships in
+[`licenses/`](licenses/).
