@@ -77,6 +77,7 @@ exists for the mirror-image reason, an integration binary being unable to reach 
 | float comparison that will not trip `float_cmp` | the same module's `approx_eq`, `assert_approx`, `bits` |
 | a `Shape` from two integers | `helpers::shape`, or `tests/common/mod.rs`'s for an integration binary |
 | a real audio file in a format you do not have | `test-assets/` at the repo root, reached through `ASSETS_DIR` |
+| a server to point a real HTTP client at | `melodia_testkit::http::TestServer`, whose `requests()` is how a test asserts a call did *not* happen |
 
 `crossfade_tests` deliberately takes none of the DSP helpers: it is pure predicates at a
 tighter tolerance than `approx_eq` allows, and reaching for the shared one would loosen it.
@@ -226,10 +227,13 @@ So none of it gets proposed as an improvement:
 
 - **No doctests.** Every library carries `[lib] doctest = false`, so a `# Examples` block
   documents and does not run.
-- **No proptest, insta, mockall, rstest, serial_test, assert_cmd, trybuild or nextest.**
-  Serialising the env-touching tests is hand-rolled behind testkit's private lock for the
-  reasons `unsafe-rust.md` gives, and nothing else has needed a framework yet. Adding one
-  is a real argument to make, not a default to reach for.
+- **No proptest, insta, mockall, rstest, serial_test, assert_cmd, trybuild, nextest,
+  wiremock or httptest.** Both places that would have reached for one are hand-rolled behind
+  a testkit helper: the env lock for the reasons `unsafe-rust.md` gives, and
+  `melodia_testkit::http` because enough HTTP/1.1 to serve a canned response is eighty lines,
+  where a mock framework's matching DSL is the half nothing here would use. Adding one is a
+  real argument to make, not a default to reach for — and the argument has now been made
+  twice, both times against.
 - **No `benches/`, no criterion, no fuzzing.** Performance work here is measured with
   flamegraph, heaptrack and peak RSS instead; `rust-performance.md` has the discipline and
   `docs/adr/` argues why there is no gate.
@@ -249,7 +253,10 @@ skips it by name.
 
 The acceptance gate on a *shipped* binary is the updater's `--version` smoke test, which
 spawns the new executable and rolls back unless it exits 0 with the right prefix. That is
-why the branch in `main()` is a forward-compat contract rather than a convenience.
+why the branch in `main()` is a forward-compat contract rather than a convenience, and why
+`crates/melodia/tests/cli_contract.rs` is the one test that spawns the built binary: what
+the verifier reads is behaviour, so no source walk can stand in for it. It is also the only
+test allowed to, and a second one wanting a process should ask what it is really testing.
 
 Above that it is a manual run, and `CONTRIBUTING.md` asks for one by name on UI changes.
 There is no browser-style end-to-end tier because there is no browser.

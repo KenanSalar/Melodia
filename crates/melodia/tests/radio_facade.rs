@@ -10,10 +10,11 @@
 //! ended up in `melodia-app` and `melodia-net`, each seeing half: the first passes with a second
 //! module fetching on its own, the second passes with every call in the facade on a raw client.
 //!
-//! Source walks because the alternative is asserting a network call did *not* happen, and the
-//! tree has no network tests. The play-count ordering below rides along on the same corpus:
-//! it needs an `AppState`, a socket and a station that is reliably down, where the ordering is
-//! the whole invariant and is legible from the text.
+//! Source walks because the property is about every call site at once. `TestServer::requests()`
+//! can now say a particular call did not happen, which is one call site per test and exactly the
+//! coverage a new one added off the facade would sit outside. The play-count ordering below rides
+//! along on the same corpus: driving it needs an `AppState` and a station that is reliably down,
+//! where the ordering is the whole invariant and is legible from the text.
 
 use melodia_testkit::{rust_sources, stripped_sources};
 
@@ -53,8 +54,8 @@ fn facade_source() -> String {
 /// covers the other's half: that one would pass with every call here on a raw client, and this one
 /// would pass with a second module fetching on its own.
 ///
-/// A source walk because the alternative is asserting a network call did *not* happen, and the
-/// tree has no network tests.
+/// A source walk because a per-call-site assertion is exactly what a new call added off the
+/// facade would not be covered by.
 #[test]
 fn every_outbound_call_takes_its_client_from_behind_the_switch() {
     let src = facade_source();

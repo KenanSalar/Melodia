@@ -31,6 +31,7 @@ use melodia_platform::services::platform::install_kind::install_target;
 
 pub use check::{CheckOutcome, check_for_update};
 pub use event::{FailureKind, UpdaterEvent};
+pub use github::RELEASES_BASE;
 pub use install::{download_and_install, prune_stale_staging};
 
 /// Whether this build has an in-app updater at all.

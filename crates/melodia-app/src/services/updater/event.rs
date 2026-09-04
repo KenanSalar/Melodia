@@ -79,3 +79,7 @@ impl FailureKind {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/event_tests.rs"]
+mod tests;

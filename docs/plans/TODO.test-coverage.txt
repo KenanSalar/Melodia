@@ -11,9 +11,9 @@ generated 2026-09-04 18:12. Absence claims ("nothing tests X") were each checked
 against the tree on the same day by grepping the test files rather than inferred
 from the percentage.
 
-The auto-updater has its own backlog in TODO.test-coverage.updater.txt and is not
-repeated here beyond the one blocker the two share. Read that file for the
-updater; read this one for everything else.
+The auto-updater had its own backlog in TODO.test-coverage.updater.txt. It is
+spent and the file is gone; what it left deliberately untested is at the bottom of
+this one, under DELIBERATELY NOT ON THIS LIST.
 
 
 THE SHAPE OF THE REPORT
@@ -76,23 +76,22 @@ TWO BLOCKERS THAT GATE MOST OF THE BACKLOG
 
 Neither is a test. Between them they gate roughly 3600 uncovered lines, which is
 most of what is worth writing. Both are structural and both should be settled
-before the tests that depend on them.
+before the tests that depend on them. B1 has since been settled; B2 has not.
 
-B1. There is no HTTP test double in this tree.
+B1. DONE — the HTTP test double is built.
 
-    No test stands up a local server (checked: no TcpListener, no 127.0.0.1, no
-    wiremock/httptest/axum dev-dependency anywhere). .claude/rules/testing.md is
-    explicit that adding a framework is an argument to make rather than a default,
-    and the argument does not need to be made: a std::net::TcpListener on port 0
-    with a thread speaking enough HTTP/1.1 to serve a canned status, headers and
-    body is about eighty lines and no new dependency. It names no workspace type,
-    so its home is melodia-testkit, which may name no member.
+    melodia_testkit::http::TestServer: std::net::TcpListener on port 0, one accept
+    thread, enough HTTP/1.1 to serve a canned status, headers and body. No new
+    dependency. Its handler sees the request, which is what the resume protocol
+    needed, and requests() records what was sent so a test can assert a call did
+    not happen. Landed with the updater backlog, whose P1.1 and P1.3 are its first
+    customers; the items below need nothing further from it.
 
-    What it unlocks, by uncovered lines: scrobble/submit.rs (235),
+    What is now reachable, by uncovered lines: scrobble/submit.rs (235),
     radio_browser/mod.rs (144), listenbrainz.rs (170), lastfm.rs (132),
     logo_discovery.rs (98), radio/logos.rs (205, partly), artist_images.rs (44),
-    net/mod.rs (46), plus the updater doc's P1.1 through P1.3 (213). Roughly 1250
-    lines behind one fixture, across four subsystems that share nothing else.
+    net/mod.rs (46). Roughly 1050 lines across four subsystems that share nothing
+    else, each of them now only a matter of writing the tests.
 
 B2. AppState cannot be built in a test, and the library API takes it.
 
@@ -275,7 +274,7 @@ policy are argued once there for every caller.
 
 
 ================================================================================
-P2: INTEGRATIONS AND THE NETWORK (1085 + 421 uncovered, blocked on B1)
+P2: INTEGRATIONS AND THE NETWORK (1085 + 421 uncovered, unblocked by B1)
 ================================================================================
 
 Scrobbling is the one subsystem whose bugs are published under the user's name.
@@ -299,7 +298,7 @@ merge_retry and merge_opt (the backoff arithmetic) and take_batch (the cap).
 collect_writeback is the one that decides which queue entries survive a partial
 success, which is where a duplicate submission would come from.
 
-The rest of the network tier behind B1:
+The rest of the network tier, all of it reachable through the B1 server now:
 
   radio_browser/mod.rs      9.4% of 159   the directory client. Its query builder
                                           is 100% and its model 91.8%; the client
@@ -327,8 +326,8 @@ the scheduler that drives them from a thread, is zero.
 
 These are genuinely harder: what is untested is a feed thread filling a ring
 buffer against a blocking socket read, which is the arrangement that exists to
-keep the network off the audio callback (ADR 14). A test needs B1 plus a way to
-step the thread deterministically.
+keep the network off the audio callback (ADR 14). A test needs the B1 server plus a way to
+step the thread deterministically, and only the second half is still missing.
 
 Worth doing after P0 through P2, and worth scoping tightly when it happens: the
 ring's fill and drain boundaries, the abandon poll, and the live-edge segment
@@ -388,6 +387,30 @@ DELIBERATELY NOT ON THIS LIST
   - Anything already above 90% (melodia-playback, melodia-artwork, the query
     layer). The remaining lines there are error formatting.
 
+  Carried over from the spent updater backlog, so none of it gets re-proposed:
+
+  - The updater's UI layer (ui/callbacks/updater/**, ui/settings/updater_settings.rs,
+    378 uncovered lines). paint.rs is six upgrade_in_event_loop calls with no
+    logic. The one piece with real logic is install.rs's asset-cache fallback
+    ladder over the five CheckOutcome variants, and the honest way to test that is
+    to lift the decision out of the spawned future, not to drive Slint.
+
+  - updater/asset_cache.rs (0%, 13 lines). A OnceLock<Mutex<Option<_>>> with three
+    one-line accessors. A test would assert that a mutex works.
+
+  - install_via_msiexec / install_via_package_manager / elevate_swap_via_pkexec.
+    Subprocess wrappers around binaries CI does not have.
+
+  - verify_swapped_binary's 5 s timeout. Argued at its definition against slow ARM
+    hardware; a test would either sleep for five seconds or re-assert the constant
+    against itself.
+
+  - fetch_latest_manifest's happy path. It verifies against the embedded release
+    key and nothing here holds the secret half. A pubkey parameter would make it
+    testable and would put a test seam on the boundary ADR 19 draws. The refusals
+    are covered instead, including a valid signature from the wrong key, which is
+    what establishes that the check runs at all. Argued in github_tests.rs.
+
 
 ================================================================================
 SUGGESTED ORDER
@@ -399,9 +422,8 @@ SUGGESTED ORDER
      both with a pure decision layer a paused clock can drive.
   3. B2: narrow the contexts, starting with library/playlists.rs as the proof.
   4. P0.2 (queue and station), then the P1 list in the order given.
-  5. B1: build the test server in melodia-testkit. Share it with the updater doc's
-     P1.1 through P1.3, which are the same fixture's first customers.
-  6. P2, then P3, then the three items worth keeping from P4.
+  5. P2, then P3, then the three items worth keeping from P4. B1 is already built,
+     so the network tier is unblocked whenever it comes up the list.
 
 Steps 1 and 2 need no new infrastructure and cover every path where a defect costs
 the user something a reinstall does not return.

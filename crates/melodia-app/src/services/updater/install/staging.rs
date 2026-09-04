@@ -39,7 +39,15 @@ pub(crate) enum InstallMethod {
 
 /// Maps the resolved target key onto the install strategy.
 pub(crate) fn resolve_install_method() -> InstallMethod {
-    match current_target_key() {
+    install_method_for_key(current_target_key())
+}
+
+/// The mapping itself, split from the host lookup the way `format_key` is split from
+/// `current_target_key` next door and for the same reason: a typo in one of the six literals
+/// falls through to `AtomicSwap` and renames a package over the live binary, and on a host that
+/// answers with one key the other five are unreachable from a test.
+pub(crate) fn install_method_for_key(key: Option<&str>) -> InstallMethod {
+    match key {
         Some("linux-x86_64-rpm" | "linux-aarch64-rpm") => {
             InstallMethod::LinuxPackage(LinuxPackageFormat::Rpm)
         }
@@ -111,31 +119,41 @@ pub async fn prune_stale_staging() {
         let Some(cache) = dirs::cache_dir() else {
             return;
         };
-        let dir = cache.join("Melodia").join("update-staging");
-        let Ok(entries) = std::fs::read_dir(&dir) else {
+        let Some(cutoff) = std::time::SystemTime::now().checked_sub(STAGING_TTL) else {
             return;
         };
-        let Some(cutoff) =
-            std::time::SystemTime::now().checked_sub(std::time::Duration::from_hours(7 * 24))
-        else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let Ok(meta) = entry.metadata() else {
-                continue;
-            };
-            if !meta.is_file() {
-                continue;
-            }
-            let Ok(modified) = meta.modified() else {
-                continue;
-            };
-            if modified < cutoff {
-                let _ = std::fs::remove_file(entry.path());
-            }
-        }
+        prune_dir(&cache.join("Melodia").join("update-staging"), cutoff);
     })
     .await;
+}
+
+/// How long a verified artifact is kept for a retry that never came. Long enough to span the
+/// week a user might leave a prompt dismissed, short enough that an abandoned install isn't a
+/// permanent tenant of the cache dir.
+const STAGING_TTL: std::time::Duration = std::time::Duration::from_hours(7 * 24);
+
+/// The sweep itself, over a directory it is handed. Split from the cache-dir lookup so the
+/// cutoff can be driven from both sides, this being the only thing in the module that deletes.
+fn prune_dir(dir: &Path, cutoff: std::time::SystemTime) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        // Directories are nobody's staged artifact, and recursing would put a user-chosen cache
+        // subtree within reach of a sweep that only understands flat files.
+        if !meta.is_file() {
+            continue;
+        }
+        let Ok(modified) = meta.modified() else {
+            continue;
+        };
+        if modified < cutoff {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
 }
 
 /// Best-effort URL basename: strip fragment and query, take the last segment.
@@ -276,3 +294,7 @@ pub(crate) fn discard_staging_if_sidecar_mismatches(
     let _ = std::fs::remove_file(&sidecar);
     None
 }
+
+#[cfg(test)]
+#[path = "../tests/staging_tests.rs"]
+mod tests;

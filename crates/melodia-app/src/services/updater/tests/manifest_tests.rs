@@ -109,12 +109,11 @@ fn round_trip_preserves_new_fields() -> TestResult {
     Ok(())
 }
 
+/// Tripwire: a bump is a coordinated protocol change rather than a constant edit. The other half
+/// is `crates/melodia/tests/updater_contract.rs`, which reads the script's default rather than
+/// asking the reader to keep the two in step.
 #[test]
 fn supported_schema_constant_is_one() {
-    // Tripwire: bumping SUPPORTED_MANIFEST_SCHEMA is a coordinated
-    // protocol change. If you bump it, also update build-latest-json.py's
-    // --manifest-schema-version default + the CI invocation that produces
-    // the live latest.json.
     assert_eq!(SUPPORTED_MANIFEST_SCHEMA, 1);
 }
 

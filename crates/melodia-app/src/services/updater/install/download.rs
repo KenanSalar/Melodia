@@ -251,3 +251,7 @@ pub(super) async fn download_to_file(
     file.flush()?;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../tests/download_tests.rs"]
+mod tests;

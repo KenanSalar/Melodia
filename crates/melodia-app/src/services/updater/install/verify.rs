@@ -137,3 +137,9 @@ pub(super) fn attempt_post_swap_rollback(target: &Path) {
         log::warn!("updater: smoke test failed; rollback not implemented on this platform");
     }
 }
+
+// Linux-only: the stand-in for a swapped binary is a shell script, and the rollback half
+// reaches `old_path`, which only exists on the two platforms that retain one.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "../tests/verify_tests.rs"]
+mod tests;

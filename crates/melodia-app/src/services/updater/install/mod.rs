@@ -49,14 +49,29 @@ pub async fn download_and_install(
     on_progress: impl Fn(u8) + Send + Sync,
 ) -> AppResult<()> {
     let target = install_target()?;
+    // Housekeeping rather than a step of this install: it collects whatever a *previous* attempt
+    // left behind once the retention window closed, and runs here because an install attempt is
+    // the moment the staging dir is known to matter.
+    prune_stale_staging().await;
+    download_and_install_to(http, asset, expected_version, target, on_progress).await
+}
+
+/// The sequencing, against a target it is handed. Split from the host lookup so a test can drive
+/// the failure path without the only target available to it being its own running binary — which
+/// is precisely the file a regression to rename-before-verify would replace.
+async fn download_and_install_to(
+    http: &reqwest::Client,
+    asset: &PlatformAsset,
+    expected_version: &str,
+    target: std::path::PathBuf,
+    on_progress: impl Fn(u8) + Send + Sync,
+) -> AppResult<()> {
     let method = resolve_install_method();
     let staged = match method {
         InstallMethod::LinuxPackage(format) => staged_package_path(&asset.url, format)?,
         InstallMethod::WindowsMsi => staged_msi_path(&asset.url)?,
         InstallMethod::AtomicSwap => resolve_staged_path(&target)?,
     };
-
-    prune_stale_staging().await;
 
     download_to_file(http, &asset.url, expected_version, asset.size, &staged, &on_progress).await?;
 
@@ -128,6 +143,9 @@ pub async fn download_and_install(
     Ok(())
 }
 
-#[cfg(test)]
+// Linux-only: every assertion is about the atomic-swap path, which is the method a cargo-built
+// binary resolves to. On Windows the same code resolves to msiexec and stages into the real user
+// cache dir, so there is nothing here to drive without a second seam nobody needs.
+#[cfg(all(test, target_os = "linux"))]
 #[path = "../tests/install_tests.rs"]
 mod tests;

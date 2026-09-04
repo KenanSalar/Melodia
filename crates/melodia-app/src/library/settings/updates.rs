@@ -19,14 +19,9 @@ pub fn set_auto_check_enabled(state: &AppState, on: bool) -> Result<(), AppError
     })
 }
 
-/// Record a successful manifest fetch. Resets `consecutive_failures` to
-/// zero (mitigates flaky-network thrash that bumped it earlier in the
-/// session), updates the `ETag` so the next loop iteration can short-circuit
-/// on `304`, and stores the latest version we observed.
-///
-/// `latest_version` is `None` when the fetch returned `304 Not Modified` —
-/// the cached version is still the most-recently-seen value, so we leave
-/// `last_known_release` untouched.
+/// Persist a successful manifest fetch. What it does to the flags is
+/// [`UpdateFlags::record_success`](crate::services::settings::UpdateFlags::record_success),
+/// which is where the `304` case is argued.
 pub fn record_check_success(
     state: &AppState,
     now: DateTime<Utc>,
@@ -34,28 +29,15 @@ pub fn record_check_success(
     etag: Option<String>,
 ) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
-        settings.updates.last_check_unix = now.timestamp();
-        settings.updates.consecutive_failures = 0;
-        if let Some(v) = latest_version {
-            settings.updates.last_known_release = v;
-        }
-        if let Some(tag) = etag {
-            settings.updates.last_manifest_etag = tag;
-        }
+        settings.updates.record_success(now.timestamp(), latest_version, etag);
     })
 }
 
-/// Record a failed manifest fetch. Increments `consecutive_failures`
-/// (saturating at `u8::MAX`) and updates `last_check_unix` so the loop's
-/// 24h elapsed gate still advances — otherwise repeated failures would
-/// re-fire on every loop iteration. The daily task swaps to a 7d re-arm
-/// cadence once the counter reaches 3, reverting to 6h on the next
-/// successful check.
+/// Persist a failed manifest fetch. The daily task swaps to a longer re-arm cadence once the
+/// counter reaches 3, reverting to 6h on the next successful check.
 pub fn record_check_failure(state: &AppState, now: DateTime<Utc>) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
-        settings.updates.last_check_unix = now.timestamp();
-        settings.updates.consecutive_failures =
-            settings.updates.consecutive_failures.saturating_add(1);
+        settings.updates.record_failure(now.timestamp());
     })
 }
 
