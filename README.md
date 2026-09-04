@@ -26,40 +26,37 @@ Release build against the same 512-track library on both platforms, each on a 16
 
 ## Screenshots
 
+Six theme families, light and dark variants, configurable accents, and Material You dynamic color; the shots below are a handful of them, all on the default aurora backdrop. See [Themes](#themes) below for the full list.
+
 ### Library
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/albums.png" alt="Albums view"><br><sub><b>Albums</b>: a virtualized cover grid (light theme here).</sub></td>
-    <td width="50%"><img src="assets/screenshots/artists_detail.png" alt="Artist detail view"><br><sub><b>Artist detail</b>: a hero-blur backdrop, an albums strip, and the track list.</sub></td>
+    <td width="50%"><img src="assets/screenshots/albums.png" alt="My Library on the Albums tab"><br><sub><b>My Library</b>: one page and five tabs, here over a virtualized cover grid.</sub></td>
+    <td width="50%"><img src="assets/screenshots/playlist-detail.png" alt="A playlist opened inside My Library"><br><sub><b>Detail in place</b>: opening a playlist grows the band into its banner, tabs still in reach.</sub></td>
   </tr>
   <tr>
-    <td><img src="assets/screenshots/tracks.png" alt="Tracks view"><br><sub><b>Tracks</b>: every song, with sortable, resizable, toggleable columns.</sub></td>
-    <td><img src="assets/screenshots/browse.png" alt="File-system browse view"><br><sub><b>Browse</b>: navigate the library by folder.</sub></td>
-  </tr>
-</table>
-
-### Playlists & Collections
-
-<table>
-  <tr>
-    <td width="50%"><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b>: an artwork mosaic hero over tabs for songs, most played, and favorite artists.</sub></td>
-    <td width="50%"><img src="assets/screenshots/recently_played.png" alt="Recently Played view"><br><sub><b>Recently Played</b>: newest first, updating live as you listen, with a most-played tab beside it.</sub></td>
-  </tr>
-  <tr>
-    <td><img src="assets/screenshots/playlists.png" alt="Playlists view"><br><sub><b>Playlists</b>: manual and smart playlists, with M3U8 import and export.</sub></td>
-    <td><img src="assets/screenshots/playlists_detail.png" alt="Playlist detail view"><br><sub><b>Playlist detail</b>: inline favorites and hover-revealed star ratings.</sub></td>
+    <td><img src="assets/screenshots/search.png" alt="Search view"><br><sub><b>Search</b>: a top-result card over songs, albums, artists, and genres.</sub></td>
+    <td><img src="assets/screenshots/browse.png" alt="File-system browse view"><br><sub><b>Browse</b>: navigate the library by folder, as a list or a grid of cards.</sub></td>
   </tr>
 </table>
 
-### Theming
-
-Six theme families, light and dark variants, configurable accents, and Material You dynamic color. See [Themes](#themes) below for the full list.
+### Favorites
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings under the Catppuccin theme"><br><sub><b>Catppuccin Mocha</b>: theme, variant, and accent picker.</sub></td>
-    <td width="50%"><img src="assets/screenshots/settings_material.png" alt="Settings under the Material 3 theme"><br><sub><b>Material 3</b>: the same screen with a different palette.</sub></td>
+    <td><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b>: an artwork mosaic hero over tabs for songs, most played, and favorite artists. Recently Played is built the same way.</sub></td>
+  </tr>
+</table>
+
+### Internet Radio
+
+Off until you switch it on, under Settings ▸ Services ▸ Radio.
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Browse</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate.</sub></td>
+    <td width="50%"><img src="assets/screenshots/radio-detail.png" alt="Radio station page"><br><sub><b>Station page</b>: logo, homepage, format, bitrate, votes, and what the station has announced this session.</sub></td>
   </tr>
 </table>
 
