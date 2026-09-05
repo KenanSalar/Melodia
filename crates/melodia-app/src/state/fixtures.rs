@@ -1,4 +1,5 @@
-//! A [`PlaybackContext`] the library suites can build, with no audio device under it.
+//! What the library suites build over: a data root with settings already written, and a
+//! [`PlaybackContext`] with no audio device under it.
 //!
 //! `#[cfg(test)] pub(crate)` rather than the `#[doc(hidden)] pub` its two namesakes in
 //! `melodia-store` and `melodia-engine` carry: those are visible because a `cfg(test)` item cannot
@@ -24,6 +25,7 @@ use tempfile::TempDir;
 use tokio::sync::watch;
 
 use super::PlaybackContext;
+use crate::services::settings::{SettingsData, write_settings};
 use melodia_audio::player::source::audio::{Sample, Shape};
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
@@ -60,6 +62,33 @@ pub(crate) fn test_sinks() -> PlayerSinks {
         queue,
         media_controls: None,
     }
+}
+
+/// A data root nothing else writes to, with `settings.json` already on disk.
+///
+/// Seeded rather than left empty because `read_settings` answers a missing file with
+/// `SettingsData::default()`, which reaches `XDG_CURRENT_DESKTOP` and all four locale variables
+/// through its serde defaults — a read racing the sibling suites that mutate them. One write under
+/// `reading_env` settles it for every later read: `write_settings` skips no field, so nothing
+/// downstream parses a default. Not callable from inside a `with_env_var` body, the lock being
+/// held by both and reentrant in neither.
+pub(crate) fn seeded_root() -> Result<(TempDir, Paths), AppError> {
+    seeded_root_with(|_| {})
+}
+
+/// [`seeded_root`] with `mutate` applied to what it seeds, for a suite whose first call has to
+/// read a value an earlier launch left behind.
+pub(crate) fn seeded_root_with(
+    mutate: impl FnOnce(&mut SettingsData),
+) -> Result<(TempDir, Paths), AppError> {
+    let tmp = TempDir::new()?;
+    let paths = Paths::rooted_at(tmp.path().to_path_buf());
+    paths.create_dirs()?;
+
+    let mut settings = melodia_testkit::reading_env(SettingsData::default);
+    mutate(&mut settings);
+    write_settings(&paths, &settings)?;
+    Ok((tmp, paths))
 }
 
 pub(crate) struct TestPlayback {

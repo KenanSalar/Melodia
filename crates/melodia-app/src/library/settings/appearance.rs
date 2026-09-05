@@ -14,6 +14,7 @@ use crate::services::{
     settings::{SettingsData, ThemePreference},
 };
 use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
 /// Backfill `theme_preferences[theme_id]` from the top-level theme fields when
@@ -29,7 +30,13 @@ use melodia_core::error::AppError;
 /// Takes the settings the caller already read rather than re-reading them:
 /// `mutate_settings` writes unconditionally, which would turn a one-off
 /// migration into a full rewrite of `settings.json` on every launch.
-pub fn seed_theme_preference(state: &AppState, mut settings: SettingsData) -> Result<(), AppError> {
+pub fn seed_theme_preference(state: &AppState, settings: SettingsData) -> Result<(), AppError> {
+    seed_preference(&state.paths, settings)
+}
+
+/// [`seed_theme_preference`]'s body, narrowed to the one field of `AppState` it reaches so the
+/// no-op guard and the Material You arm can be driven without one.
+fn seed_preference(paths: &Paths, mut settings: SettingsData) -> Result<(), AppError> {
     if settings.theme_preferences.contains_key(&settings.theme_id) {
         return Ok(());
     }
@@ -47,7 +54,7 @@ pub fn seed_theme_preference(state: &AppState, mut settings: SettingsData) -> Re
             last_static_accent,
         },
     );
-    services::settings::write_settings(&state.paths, &settings)
+    services::settings::write_settings(paths, &settings)
 }
 
 /// Persist the user's appearance picks (theme / variant / accent) into
@@ -67,7 +74,17 @@ pub fn set_appearance(
     theme_variant: String,
     accent_color: String,
 ) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+    write_appearance(&state.paths, theme_id, theme_variant, accent_color)
+}
+
+/// [`set_appearance`]'s body, narrowed so the accent the Material You arm preserves can be driven.
+fn write_appearance(
+    paths: &Paths,
+    theme_id: String,
+    theme_variant: String,
+    accent_color: String,
+) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         let preserved_static =
             settings.theme_preferences.get(&theme_id).and_then(|p| p.last_static_accent.clone());
         let last_static_accent = if accent_color == melodia_core::themes::MATERIAL_YOU_ACCENT_ID {
@@ -122,3 +139,7 @@ pub fn set_corner_radius(state: &AppState, px: u32) -> Result<(), AppError> {
         settings.corner_radius = clamped;
     })
 }
+
+#[cfg(test)]
+#[path = "tests/appearance_tests.rs"]
+mod tests;

@@ -6,6 +6,7 @@
 use crate::services;
 use crate::services::settings::SupportFlags;
 use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
 /// Which launch asks. Not the first: someone still deciding whether to keep the app
@@ -38,13 +39,17 @@ pub fn count_launch(flags: &mut SupportFlags) -> bool {
 /// writer that can race the read below is a second one, which a process-local `static`
 /// doesn't reach either way.
 pub fn record_launch(state: &AppState) -> Result<bool, AppError> {
-    if services::settings::read_settings(&state.paths)?.support.support_prompt_seen {
+    record_launch_at(&state.paths)
+}
+
+/// [`record_launch`]'s body, narrowed to the one field of `AppState` it reaches so the pair above
+/// can be driven against a real file rather than asserted positionally in source text.
+fn record_launch_at(paths: &Paths) -> Result<bool, AppError> {
+    if services::settings::read_settings(paths)?.support.support_prompt_seen {
         return Ok(false);
     }
 
-    services::settings::mutate_settings_with(&state.paths, |settings| {
-        count_launch(&mut settings.support)
-    })
+    services::settings::mutate_settings_with(paths, |settings| count_launch(&mut settings.support))
 }
 
 /// Spend the one prompt.
@@ -61,3 +66,7 @@ pub fn mark_support_prompt_seen(state: &AppState) -> Result<(), AppError> {
 #[cfg(test)]
 #[path = "tests/support_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/support_writers_tests.rs"]
+mod writer_tests;

@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 
 use crate::services;
 use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
 /// Persist the user toggle for "Automatically check for updates". The
@@ -28,7 +29,17 @@ pub fn record_check_success(
     latest_version: Option<String>,
     etag: Option<String>,
 ) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+    write_check_success(&state.paths, now, latest_version, etag)
+}
+
+/// [`record_check_success`]'s body, narrowed so what the flags do to the file can be driven.
+fn write_check_success(
+    paths: &Paths,
+    now: DateTime<Utc>,
+    latest_version: Option<String>,
+    etag: Option<String>,
+) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.updates.record_success(now.timestamp(), latest_version, etag);
     })
 }
@@ -36,7 +47,12 @@ pub fn record_check_success(
 /// Persist a failed manifest fetch. The daily task swaps to a longer re-arm cadence once the
 /// counter reaches 3, reverting to 6h on the next successful check.
 pub fn record_check_failure(state: &AppState, now: DateTime<Utc>) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+    write_check_failure(&state.paths, now)
+}
+
+/// [`record_check_failure`]'s body, narrowed beside its sibling.
+fn write_check_failure(paths: &Paths, now: DateTime<Utc>) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.updates.record_failure(now.timestamp());
     })
 }
@@ -47,7 +63,13 @@ pub fn record_check_failure(state: &AppState, now: DateTime<Utc>) -> Result<(), 
 /// version. A strictly-newer version clears the skip via
 /// [`reset_skipped_release`] (callsite: the loop's notify gate).
 pub fn set_skipped_release(state: &AppState, version: String) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+    write_skipped_release(&state.paths, version)
+}
+
+/// [`set_skipped_release`]'s body, narrowed so the pair with [`clear_skipped_release`] can be
+/// driven end to end.
+fn write_skipped_release(paths: &Paths, version: String) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.updates.skipped_release = version;
     })
 }
@@ -57,7 +79,12 @@ pub fn set_skipped_release(state: &AppState, version: String) -> Result<(), AppE
 /// skip — at that point the skip becomes stale and the user should see
 /// the new version's toast.
 pub fn reset_skipped_release(state: &AppState) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, |settings| {
+    clear_skipped_release(&state.paths)
+}
+
+/// [`reset_skipped_release`]'s body, narrowed beside its sibling.
+fn clear_skipped_release(paths: &Paths) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, |settings| {
         settings.updates.skipped_release.clear();
     })
 }
@@ -65,3 +92,7 @@ pub fn reset_skipped_release(state: &AppState) -> Result<(), AppError> {
 #[cfg(test)]
 #[path = "tests/updates_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/updates_writers_tests.rs"]
+mod writer_tests;

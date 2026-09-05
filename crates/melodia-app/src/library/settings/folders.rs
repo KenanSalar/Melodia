@@ -15,7 +15,7 @@ use crate::state::{AppState, ScanProgressTick};
 use crate::tasks::{self, TaskSpawner};
 use melodia_core::entities::folder;
 use melodia_core::error::AppError;
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::scanner::{
     collect_media_files, scan_files_parallel, track_is_current,
 };
@@ -71,17 +71,7 @@ fn validate_folder_path(
 }
 
 pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder, AppError> {
-    let new_path = Path::new(&path);
-    let existing_folders = queries::folder::get_all_folders(&state.db).await?;
-    let children_to_remove = validate_folder_path(new_path, &existing_folders)?;
-
-    queries::folder::delete_folders_by_ids(&state.db, &children_to_remove).await?;
-
-    let canonical = melodia_core::utils::canonicalize_path(new_path)
-        .map_err(|e| AppError::Validation(format!("Cannot resolve path: {e}")))?;
-    let canonical_str = canonical.to_string_lossy().into_owned();
-
-    let folder = queries::folder::insert_folder(&state.db, &canonical_str, true).await?;
+    let folder = insert_replacing_children(&state.db, &path).await?;
 
     // Notify subscribers (Tracks view, folder list) — the new folder row is
     // visible immediately, and any child folders that were auto-aggregated
@@ -90,6 +80,25 @@ pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder
     state.library_changed.bump();
 
     Ok(folder)
+}
+
+/// [`add_folder`]'s body, narrowed to the pool it reaches.
+///
+/// The delete is the half worth driving: a folder superseded by a new parent takes its tracks with
+/// it, and a rescan brings the files back with none of the ratings, play counts or favourites that
+/// were on them.
+async fn insert_replacing_children(db: &DbPool, path: &str) -> Result<folder::Folder, AppError> {
+    let new_path = Path::new(path);
+    let existing_folders = queries::folder::get_all_folders(db).await?;
+    let children_to_remove = validate_folder_path(new_path, &existing_folders)?;
+
+    queries::folder::delete_folders_by_ids(db, &children_to_remove).await?;
+
+    let canonical = melodia_core::utils::canonicalize_path(new_path)
+        .map_err(|e| AppError::Validation(format!("Cannot resolve path: {e}")))?;
+    let canonical_str = canonical.to_string_lossy().into_owned();
+
+    queries::folder::insert_folder(db, &canonical_str, true).await
 }
 
 pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
@@ -473,3 +482,7 @@ impl Drop for ScanProgressGuard<'_> {
 #[cfg(test)]
 #[path = "tests/folders_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/folders_writer_tests.rs"]
+mod writer_tests;

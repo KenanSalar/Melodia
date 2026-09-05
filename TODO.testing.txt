@@ -31,16 +31,27 @@ WHERE IT STANDS
   after steps 1 and 2 below (2026-09-05)
   TOTAL   function 45.9% (2724/5931)   line 43.9% (18651/42497)   region 41.1%
 
-  now, after step 3 below (2026-09-05)
+  after step 3 below (2026-09-05)
   TOTAL   function 46.2% (2745/5944)   line 44.1% (18767/42523)   region 41.3%
 
-  So the branch is worth 7.1 points of line coverage. Steps 1 and 2 are 0.8 of
+  now, after step 4 below (2026-09-05)
+  TOTAL   function 46.6% (2776/5961)   line 44.5% (18933/42587)   region 41.5%
+
+  So the branch is worth 7.5 points of line coverage. Steps 1 and 2 are 0.8 of
   them, all of it inside `tasks/`. Read a tenth of a point as noise, for the reason
   the last doc gave (the same command over the same tree read 41.26% and 41.3% on
   consecutive days), and only a move larger than that as a result.
 
-  **The row above this one was read before `379258ea` landed**, so part of the
-  difference between them is step 2's own tail rather than step 3's: `state/` is 23
+  **Step 4 is the entry where the percentage is worth least, and its own numbers
+  say so**: 82 lines across eighteen files, against three cases that turn a
+  cascade-delete from unexercised into pinned. `folders.rs` moved 0.5 of a point
+  and gained the most valuable test in the step, because `headless.rs` already
+  ran `add_folder` once and what was missing was never the lines — it was the
+  branch that deletes. Read P1's table below as a map of where nothing runs, per
+  the rule's own advice, and not as a score.
+
+  **The steps 1-and-2 row was read before `379258ea` landed**, so part of the
+  difference between it and step 3's is step 2's own tail: `state/` is 23
   lines larger here because `stage_playable` moved into the fixture in that commit,
   and `core`, `engine` and `net` all gained readers from the same tests. What step 3
   can be attributed is the five files P0.2 names, 432 uncovered lines to 369, plus
@@ -103,10 +114,13 @@ kinds, and only the third is hard.
      last doc declined thirteen queue wrappers and eleven playlist wrappers on
      exactly that ground.
 
-     The radio half is spent by step 3, and the deciding was most of it: of those
-     432 lines, 63 held a decision a pool can drive, the switch itself wanted a
-     walk rather than a fixture, and the rest wait behind tier 3's seam. Expect
-     `settings/*` to sort the same way rather than to come back whole.
+     Spent. The radio half went in step 3 and the settings half in step 4, and
+     the deciding was most of both: of radio's 432 lines, 63 held a decision a
+     pool can drive; of settings' 523, 82 did. `settings/*` sorted exactly as the
+     radio half predicted, and added one rule the radio half could not see —
+     **a narrowed door stays uncovered unless something at `headless.rs`'s level
+     drives it**, so half of each file is out of reach by construction. The tier
+     is now closed: what is left everywhere in it wants a real `AppState`.
 
   3. Genuinely needs a seam nobody has built. P2.2b as the last doc left it
      (`radio_browser`, `deezer`/`artist_images`) and `stream_source`'s feed thread.
@@ -251,76 +265,127 @@ plain suite hid. They are serialized behind one mutex now.
 
 
 ================================================================================
-P1: THE SETTINGS LAYER, WHICH IS SEVENTEEN FILES OF ONE SHAPE
+P1: THE SETTINGS LAYER, WHICH IS SEVENTEEN FILES OF ONE SHAPE   [SPENT]
 ================================================================================
 
-  library/settings/folders.rs      64.6% of 277    98 uncovered
-  library/settings/view.rs         36.4% of 143    91
-  library/window.rs                 0.0% of  66    66
-  library/settings/appearance.rs    0.0% of  62    62
-  library/settings/updates.rs       0.0% of  35    35
-  library/settings/scrobble.rs      0.0% of  33    33
-  library/settings/crossfade.rs     0.0% of  31    31
-  library/settings/playback.rs      0.0% of  28    28
-  library/settings/replaygain.rs    0.0% of  26    26
-  library/settings/equalizer.rs     0.0% of  25    25
-  library/settings/radio.rs         0.0% of  18    18
-  library/settings/discord.rs       0.0% of  18    18
-  library/settings/support.rs      31.8% of  22    15
-  library/settings/mod.rs           0.0% of  13    13
-  library/settings/visualizer.rs    0.0% of  12    12
-  library/settings/diagnostics.rs   0.0% of   6     6
-  library/settings/motion.rs        0.0% of   6     6
-  library/settings/ratings.rs       0.0% of   6     6
+  library/settings/folders.rs      65.1% of 281    98 uncovered  (was 64.6%)
+  library/settings/view.rs         36.4% of 143    91            (unchanged)
+  library/window.rs                39.7% of  73    44            (was  0.0%)
+  library/settings/scrobble.rs      0.0% of  33    33            (declined)
+  library/settings/appearance.rs   58.9% of  73    30            (was  0.0%)
+  library/settings/crossfade.rs     0.0% of  31    31            (declined)
+  library/settings/replaygain.rs    0.0% of  26    26            (declined)
+  library/settings/equalizer.rs     0.0% of  25    25            (declined)
+  library/settings/updates.rs      55.8% of  52    23            (was  0.0%)
+  library/settings/radio.rs         0.0% of  18    18            (declined)
+  library/settings/discord.rs       0.0% of  18    18            (declined)
+  library/settings/playback.rs     51.4% of  37    18            (was  0.0%)
+  library/settings/mod.rs           0.0% of  13    13            (declined)
+  library/settings/visualizer.rs    0.0% of  12    12            (declined)
+  library/settings/support.rs      60.9% of  23     9            (was 31.8%)
+  library/settings/diagnostics.rs   0.0% of   6     6            (declined)
+  library/settings/motion.rs        0.0% of   6     6            (declined)
+  library/settings/ratings.rs       0.0% of   6     6            (declined)
 
-Step 8 already did this to `view.rs`, at its smallest: the door keeps its
-`&AppState` and hands a `&Paths` to a `write_*` beside it. No call site moves and
-`melodia-views` learns nothing. The same edit applies unchanged to the rest.
+Twenty-two cases in six suites, and the narrowing is step 8's `view.rs` edit
+applied nine more times: the door keeps its `&AppState` and spells the default, a
+private `write_*` takes what it reaches. No call site moved and `melodia-views`
+learned nothing.
 
-**Eight of the seventeen are not work, and saying which is the job.** A setter that
-is one `mutate_settings(|s| s.field = v)` is the pass-through B2 declined to test
-twice already. `radio.rs`, `discord.rs`, `scrobble.rs`, `ratings.rs`, `motion.rs`,
-`diagnostics.rs` and `visualizer.rs` are that, `mod.rs` is four getters over the
-same shape, and so are five of `window.rs`'s seven. That is 112 of the 523 lines,
-and they will move as a side effect of the files below rather than on their own.
+**Three things the entry got wrong, which is most of what the next reader needs.**
 
-What holds a decision:
+  `folders.rs`'s 98 lines are not `validate_folder_path` and
+  `reconcile_watched_folders`. The first has had eight cases since the last
+  backlog; the second is unreachable (below). What was untested is the *consumer*,
+  `add_folder`, and it is the one path in this entry with a P0 cost: a new parent
+  folder deletes the children it covers, `tracks.folder_id` carries
+  `ON DELETE CASCADE`, and the rescan that brings the files back brings none of
+  the ratings, play counts or favourites that were on them. Same miss P0.2
+  recorded for `is_listed` — a pure function pinned, its destructive caller not.
+  Its line count barely moved because `headless.rs` already ran the door once and
+  `scan_folder_internal` is most of the file; what the three cases bought is the
+  delete branch, which nothing had ever executed.
 
-  appearance.rs. `seed_theme_preference` no-ops once the map has an entry and
-  writes the whole file rather than going through `mutate_settings`, both for
-  reasons its doc comment gives. `set_appearance` updates `last_static_accent` only
-  when the pick is not `MATERIAL_YOU_ACCENT_ID`. Losing that rule is the exact bug
-  the migration exists to fix: a user launching with a custom accent loses it on
-  the first theme swap.
+  **The clamp files are forwards, and "one case per bound per file" would have
+  tested the callee twice.** `clamp_crossfade_ms`, `clamp_preamp` (NaN arm
+  included), `clamp_rg_preamp` and `normalize_gains` all have boundary suites in
+  `melodia-playback`. Only `playback.rs` writes its decisions inline, so it is the
+  one of the four that was taken.
 
-  folders.rs. The largest of them, and `validate_folder_path` plus
-  `reconcile_watched_folders` are where its 98 lines are. A folder path that
-  validates when it should not is a scan pointed somewhere the user did not ask
-  for.
+  **`view.rs` is finished, not half-finished.** Its 91 lines are the five doors
+  step 8 narrowed plus the bare `mutate_view_state` inserts, and the
+  column-width writer the entry asked for is not in the file at all —
+  `view_column_widths` is written by `melodia-views`' `track_list_view.rs`.
 
-  updates.rs. `set_skipped_release` / `reset_skipped_release` and the two
-  `record_check_*` writers. A skipped release that fails to clear is an update the
-  user is never offered again, and nothing else in the tree would notice.
+The general shape, since every row above shows it: **a narrowed door stays
+uncovered unless something at `headless.rs`'s level drives it**, so roughly half
+of each file is out of reach by construction and the 523 lines were never all
+reachable. 82 of them moved.
 
-  support.rs. A launch counter behind a one-time prompt, which is boundary
-  analysis and nothing else: the launch before the threshold, the launch on it, and
-  the launch after, plus `mark_support_prompt_seen` making all three moot.
+What held a decision, and what each case is for:
 
-  crossfade.rs, equalizer.rs, playback.rs, replaygain.rs. The clamps, and only the
-  clamps. One case per bound per file, working the real constant.
+  appearance.rs. `last_static_accent`, which the two writers treat differently on
+  purpose: `seed_theme_preference` records `None` under a Material You accent,
+  `set_appearance` *preserves* whatever the entry held. Losing the second is the
+  exact bug the migration exists to fix. Seven cases over both factors, plus the
+  guard that stops the migration rewriting the file on every launch.
 
-  view.rs. 91 lines after step 8 took five doors, and `snap_to_preset` plus the
-  column-width and sort writers are what is left.
+  window.rs. Two of seven, both needing the probe as a parameter.
+  `write_use_native_titlebar` takes `is_kde` rather than reading
+  `XDG_CURRENT_DESKTOP`, which is what keeps the suite off the env lock entirely;
+  three cases cover the silent second write, its absence elsewhere, and that
+  turning the titlebar back off leaves the tint alone. `apply_then_persist` takes
+  the method, and `always_on_top::apply` answers `Native` with `Ok(())` and
+  `Unsupported` with `AppError::Window` touching no OS — so both arms of the
+  apply-before-persist ordering run with no window and no D-Bus.
 
-  window.rs. Two of seven. `set_use_native_titlebar` turns
-  `match_unfocused_to_system_bg` on when the toggle goes on *and*
-  `is_kde_desktop()`, which is a silent second write the user did not ask for, and
-  leaves it alone on the way back off. `set_always_on_top` applies before it
-  persists, so a desktop with no supported method answers `AppError::Window` and
-  writes nothing, which is what lets the caller revert the optimistic toggle it
-  already performed on the UI thread. The apply half is platform FFI and stays
-  where the rest of that tier is; the ordering is the part worth a case, and it
-  needs the method to be a parameter rather than read off `state`.
+  playback.rs. The token whitelist (the retired `"ripple"` falls to `"none"`) and
+  both speed bounds against the real constants. **One production fix went in
+  here**: `set_playback_speed` was the only clamp in the directory with no NaN arm
+  where its two siblings have one, and `f64::clamp` passes NaN through, serde_json
+  writes a non-finite float as `null`, and the next launch fails to parse
+  `settings.json` and falls back to defaults — one write costing every setting the
+  user has. Not reachable from today's UI, which passes seven literal presets. It
+  refuses rather than substitutes, matching `write_locale` three files over.
+
+  updates.rs. Two cases, both about what the doors compose rather than what they
+  assign: a `DateTime<Utc>` reaches the file as seconds and clears the failure run
+  the retry cadence reads, and a skip resets to the empty string the notify gate
+  compares against rather than to an absent key.
+
+  support.rs. `record_launch` against a real file, which is what neither
+  `count_launch`'s suite nor the source-text pin above it can reach: that the
+  counter being counted is the persisted one. A version reading a fresh default
+  every launch satisfies both and never reaches the threshold.
+
+Declined out loud, since the table counts their lines:
+
+  `crossfade.rs`, `equalizer.rs`, `replaygain.rs`, and `appearance::set_corner_radius`
+  — the last because `read_settings` re-applies the same `.min(MAX_CORNER_RADIUS)`,
+  so no read-back can tell the write clamp from the read clamp, and the read clamp
+  is pinned in `services/tests/settings_tests.rs` already.
+
+  The eight pass-through files the entry named, plus `set_dynamic_color_style`,
+  `set_match_unfocused_to_system_bg`, `set_auto_check_enabled`,
+  `mark_support_prompt_seen` and window.rs's other five. A test that a field
+  assignment assigns a field.
+
+  `reconcile_watched_folders`, `scan_folder_internal`, `toggle_folder_watching`
+  and `set_folder_watching_enabled`. Each reaches `TaskSpawner::from_state` or
+  `state.watcher`, so the honest level for them is `headless.rs`, not a narrowed
+  body. The CAS gate could be asserted from source text; a positional assertion is
+  weaker than no assertion reading as coverage. This is what most of `folders.rs`'s
+  remaining 98 lines are.
+
+One thing found on the way and fixed here: **every settings suite was reading the
+process environment unlocked.** `read_settings` on a root with no `settings.json`
+builds a `SettingsData::default()`, which reaches `XDG_CURRENT_DESKTOP` and all
+four locale variables through its serde defaults, and `services/tests/settings_tests.rs`
+*mutates* those in the same binary — a live race per `.claude/rules/unsafe-rust.md`,
+across four local copies of the same two-line fixture. `state::fixtures::seeded_root`
+and `seeded_root_with` replace all of them: one write under `reading_env`, after
+which every read parses a complete file and no serde default fires. It is not
+callable from inside a `with_env_var` body, the lock being reentrant in neither.
 
 
 ================================================================================
@@ -342,7 +407,9 @@ wrong that the next reader should not re-derive:
 
   `one_shot.rs` has no private free function at all — only the generic `pub fn
   spawn` over an `&AppState`. It is not in the same tier as the four below it, and
-  its `OnFailure` arms and the `label`/`marker` split still want P1's narrowing.
+  **P1 did not unlock it**: that narrowing went per function onto a `&Paths` or a
+  `&DbPool`, which a generic `spawn` taking the whole state has nothing to narrow
+  to. Its `OnFailure` arms and the `label`/`marker` split want `headless.rs`.
 
   `queue_prune::reconcile_once`'s property is not only the auto-skip. The guard
   beside it (`source_allows(PlaybackSource::advances_queue)`) is the one nothing
@@ -384,8 +451,8 @@ different route.
 that failed part way still records its marker. Both arms need a case, and so does
 the pair of fields `Sweep` deliberately keeps separate: collapsing `label` onto
 `marker` turns "Rating import failed" into a flag name, which is invisible until
-someone reads a bug report. It takes an `&AppState`, so it wants P1's narrowing
-first.
+someone reads a bug report. It takes an `&AppState` and there is nothing narrower
+underneath, so it belongs with `first_launch` and `radio_logo_cache` below.
 
 `first_launch.rs`, `radio_logo_cache.rs` and `discord_presence.rs` are the tail.
 The first two are short and take an `&AppState`; the third is 107 lines of detector
@@ -593,9 +660,17 @@ SUGGESTED ORDER
      answered by two more walks rather than by a fixture, for the reason its entry
      now gives.
 
-  4. P1, the settings layer, in the order its entry lists: appearance, folders,
-     updates, support, view, then the four clamp files. Decide the pass-throughs
-     out loud rather than by omission, so the next reader knows they were weighed.
+  4. [DONE] P1, the settings layer. Three of the entry's own claims were wrong
+     and its table now says which; the short version is that `folders.rs`'s value
+     was `add_folder`'s cascade rather than the two functions it named, three of
+     the four clamp files are forwards onto suites that already exist, and
+     `view.rs` was already finished.
+
+     Left behind for whoever takes the next one:
+     `state::fixtures::{seeded_root, seeded_root_with}` is the settings root every
+     suite should build on. It seeds `settings.json` under `reading_env`, which is
+     what stops a suite reading the process environment unlocked beside the tests
+     that mutate it.
 
   5. P4's pure halves (`reconcile_live_stream`, `reconnect_delay`,
      `sleep_unless_abandoned`) and P5's `media_controls`. All four are free
@@ -608,8 +683,9 @@ SUGGESTED ORDER
 
   7. P5's three query files, last, for the reason its entry gives.
 
-Steps 1 through 3 are the whole of what is left with a user-visible cost that a
-reinstall does not undo. Step 4 is the largest block of lines and the smallest per
-line. Everything from step 5 down is worth doing and worth doing after those.
+Steps 1 through 3 were the whole of what had a user-visible cost a reinstall does
+not undo, and step 4 turned out to hold one more of those — `add_folder` — behind a
+P1 heading. Everything from step 5 down is worth doing and worth doing after those.
 
-With 1 through 3 spent, that first group is closed and step 4 is next.
+With 1 through 4 spent, step 5 is next, and it is the first step in this document
+whose entries are all pure functions over plain values.

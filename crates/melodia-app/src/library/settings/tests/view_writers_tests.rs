@@ -6,29 +6,19 @@
 //! from the outside once it is wrong: a rejected locale reads as a settings write that did not
 //! happen, and a nav index past the last section lands the next boot somewhere unselectable.
 
-use tempfile::TempDir;
-
 use super::{
     read_view_sort, write_last_detail_id, write_last_nav_index, write_locale, write_overflow_button,
 };
 use crate::services;
-use melodia_core::config::Paths;
+use crate::state::fixtures::seeded_root;
 use melodia_core::entities::locale::SUPPORTED_LOCALES;
 use melodia_core::error::AppError;
-
-/// A data root nothing else writes to, with the directories `Paths::resolve` would have made.
-fn rooted(tmp: &TempDir) -> Result<Paths, AppError> {
-    let paths = Paths::rooted_at(tmp.path().to_path_buf());
-    paths.create_dirs()?;
-    Ok(paths)
-}
 
 /// A code with no bundled catalogue is refused before the write, so `settings.json` cannot be
 /// pinned to a locale Slint would fall back out of on every launch.
 #[test]
 fn an_unsupported_locale_is_refused_and_never_written() -> Result<(), AppError> {
-    let tmp = TempDir::new()?;
-    let paths = rooted(&tmp)?;
+    let (_tmp, paths) = seeded_root()?;
     let before = services::settings::read_settings(&paths)?.locale;
 
     let refused = write_locale(&paths, "xx-YZ".to_owned());
@@ -40,8 +30,7 @@ fn an_unsupported_locale_is_refused_and_never_written() -> Result<(), AppError> 
 
 #[test]
 fn a_bundled_locale_is_persisted() -> Result<(), AppError> {
-    let tmp = TempDir::new()?;
-    let paths = rooted(&tmp)?;
+    let (_tmp, paths) = seeded_root()?;
     let Some(&code) = SUPPORTED_LOCALES.iter().find(|&&code| code != "en") else {
         unreachable!("the app ships more than one locale")
     };
@@ -57,8 +46,7 @@ fn a_bundled_locale_is_persisted() -> Result<(), AppError> {
 /// list grows a duplicate per click and the overflow menu shows the same button twice.
 #[test]
 fn toggling_an_overflow_button_never_duplicates_it() -> Result<(), AppError> {
-    let tmp = TempDir::new()?;
-    let paths = rooted(&tmp)?;
+    let (_tmp, paths) = seeded_root()?;
 
     write_overflow_button(&paths, "shuffle".to_owned(), true)?;
     write_overflow_button(&paths, "shuffle".to_owned(), true)?;
@@ -70,8 +58,7 @@ fn toggling_an_overflow_button_never_duplicates_it() -> Result<(), AppError> {
 
 #[test]
 fn turning_an_overflow_button_off_removes_it() -> Result<(), AppError> {
-    let tmp = TempDir::new()?;
-    let paths = rooted(&tmp)?;
+    let (_tmp, paths) = seeded_root()?;
     write_overflow_button(&paths, "shuffle".to_owned(), true)?;
 
     write_overflow_button(&paths, "shuffle".to_owned(), false)?;
@@ -86,8 +73,7 @@ fn turning_an_overflow_button_off_removes_it() -> Result<(), AppError> {
 /// section lands the next launch on a tab nothing routes.
 #[test]
 fn a_nav_index_outside_the_range_is_clamped_before_it_is_written() -> Result<(), AppError> {
-    let tmp = TempDir::new()?;
-    let paths = rooted(&tmp)?;
+    let (_tmp, paths) = seeded_root()?;
     let top = services::view_state::MAX_NAV_INDEX;
 
     write_last_nav_index(&paths, top + 1)?;
@@ -102,8 +88,7 @@ fn a_nav_index_outside_the_range_is_clamped_before_it_is_written() -> Result<(),
 /// sentinel: an entry left behind reopens a detail the user navigated out of.
 #[test]
 fn closing_a_detail_drops_its_entry_rather_than_keeping_one() -> Result<(), AppError> {
-    let tmp = TempDir::new()?;
-    let paths = rooted(&tmp)?;
+    let (_tmp, paths) = seeded_root()?;
 
     write_last_detail_id(&paths, "album-detail", Some(7))?;
     assert_eq!(
@@ -124,8 +109,7 @@ fn closing_a_detail_drops_its_entry_rather_than_keeping_one() -> Result<(), AppE
 /// own default rather than the module inventing one.
 #[test]
 fn a_view_with_no_persisted_sort_answers_none() -> Result<(), AppError> {
-    let tmp = TempDir::new()?;
-    let paths = rooted(&tmp)?;
+    let (_tmp, paths) = seeded_root()?;
 
     assert!(read_view_sort(&paths, "tracks").is_none());
     Ok(())
@@ -133,8 +117,7 @@ fn a_view_with_no_persisted_sort_answers_none() -> Result<(), AppError> {
 
 #[test]
 fn a_persisted_sort_comes_back_for_its_own_view_only() -> Result<(), AppError> {
-    let tmp = TempDir::new()?;
-    let paths = rooted(&tmp)?;
+    let (_tmp, paths) = seeded_root()?;
     let sort = services::settings::ViewSort {
         field: "album".to_owned(),
         dir: services::settings::SortDir::Desc,

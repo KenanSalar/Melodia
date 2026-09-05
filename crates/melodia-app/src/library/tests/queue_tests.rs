@@ -174,7 +174,8 @@ use melodia_engine::player::engine::types::PersistableQueue;
 use melodia_store::database::queries::fixtures::insert_test_track;
 use tempfile::TempDir;
 
-use crate::services::settings::{SettingsData, read_settings, write_settings};
+use crate::services::settings::read_settings;
+use crate::state::fixtures::seeded_root_with;
 
 fn persisted(
     track_ids: Vec<i64>,
@@ -207,13 +208,11 @@ fn plan_of(
 /// A data directory with `settings.json` already written, since `mutate_settings_with` reads
 /// before it writes and a `Paths` alone points at nothing.
 fn seeded_paths(shuffle_enabled: bool) -> Result<(TempDir, Arc<Paths>), AppError> {
-    let tmp = TempDir::new()?;
-    let paths = Arc::new(Paths::rooted_at(tmp.path().to_path_buf()));
-    let mut settings = SettingsData::default();
-    settings.queue.shuffle_enabled = shuffle_enabled;
-    settings.queue.repeat_mode = RepeatMode::All;
-    write_settings(&paths, &settings)?;
-    Ok((tmp, paths))
+    let (tmp, paths) = seeded_root_with(|s| {
+        s.queue.shuffle_enabled = shuffle_enabled;
+        s.queue.repeat_mode = RepeatMode::All;
+    })?;
+    Ok((tmp, Arc::new(paths)))
 }
 
 // The four corners of what the file can carry, per the cross-the-flags rule: queue and station
