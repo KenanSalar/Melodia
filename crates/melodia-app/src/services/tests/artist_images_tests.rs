@@ -13,11 +13,19 @@ use melodia_core::error::AppError;
 use melodia_store::database::DbPool;
 use tempfile::TempDir;
 
+/// Both tests below read and write one process-global flag, so they are one test's worth of state
+/// seen twice and must not overlap: the first clears `PASS_IN_FLIGHT` on its way out, and landing
+/// that between the second's `store(true)` and its own call turns the deferral under test into a
+/// real pass against a closed pool. Tokio's mutex rather than `std`'s, the guard crossing an
+/// `.await` either way.
+static PASS_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// The early return in front of the batching loop, which is also what keeps this test off the
 /// network: the schema seeds an "Unknown Artist" sentinel carrying no image, so a library is only
 /// free of work once every row has one.
 #[tokio::test]
 async fn a_library_whose_artists_all_have_images_asks_for_nothing() -> Result<(), AppError> {
+    let _serialized = PASS_LOCK.lock().await;
     let tmp = TempDir::new()?;
     let paths = Paths::rooted_at(tmp.path().to_path_buf());
     paths.create_dirs()?;
@@ -36,6 +44,7 @@ async fn a_library_whose_artists_all_have_images_asks_for_nothing() -> Result<()
 /// actually walked the library would fail on the first query rather than answering zero.
 #[tokio::test]
 async fn a_request_landing_on_a_running_pass_defers_to_it() -> Result<(), AppError> {
+    let _serialized = PASS_LOCK.lock().await;
     let tmp = TempDir::new()?;
     let paths = Paths::rooted_at(tmp.path().to_path_buf());
     paths.create_dirs()?;

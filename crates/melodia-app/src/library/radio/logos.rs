@@ -13,7 +13,7 @@
 use crate::state::AppState;
 use melodia_core::entities::radio::{self, StoredLogo};
 use melodia_core::error::AppError;
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 
 use super::directory_client;
 
@@ -117,9 +117,15 @@ pub async fn prune_logo_answers(state: &AppState) -> Result<u64, AppError> {
 /// Failing to record is a debug line rather than an error: the row is an optimization over asking
 /// again, and asking again is exactly what its absence causes.
 pub async fn record_logo_outcome(state: &AppState, favicon_url: &str, logo: Option<&StoredLogo>) {
+    record_outcome(&state.db, favicon_url, logo).await;
+}
+
+/// [`record_logo_outcome`]'s body, narrowed to the pool it reaches so the schedule a miss earns
+/// can be read back off the table.
+async fn record_outcome(db: &DbPool, favicon_url: &str, logo: Option<&StoredLogo>) {
     let recorded = match logo {
-        Some(logo) => note_logo_hit(state, favicon_url, logo).await,
-        None => note_logo_miss(state, favicon_url).await,
+        Some(logo) => note_logo_hit(db, favicon_url, logo).await,
+        None => note_logo_miss(db, favicon_url).await,
     };
     if let Err(e) = recorded {
         log::debug!("radio: logo outcome not recorded: {}", melodia_core::error::describe(&e));
@@ -132,15 +138,13 @@ fn miss_backoff_hours(attempts: i64) -> i64 {
 }
 
 /// Record that `favicon_url` answered with nothing, pushing its next attempt further out.
-async fn note_logo_miss(state: &AppState, favicon_url: &str) -> Result<(), AppError> {
-    let attempts = queries::radio::logo_miss_attempts(&state.db, favicon_url)
-        .await?
-        .unwrap_or(0)
-        .saturating_add(1);
+async fn note_logo_miss(db: &DbPool, favicon_url: &str) -> Result<(), AppError> {
+    let attempts =
+        queries::radio::logo_miss_attempts(db, favicon_url).await?.unwrap_or(0).saturating_add(1);
     let hours = miss_backoff_hours(attempts);
     let retry_after = chrono::Utc::now() + chrono::TimeDelta::try_hours(hours).unwrap_or_default();
     queries::radio::record_logo_miss(
-        &state.db,
+        db,
         favicon_url,
         attempts,
         &retry_after.to_rfc3339(),
@@ -154,13 +158,9 @@ async fn note_logo_miss(state: &AppState, favicon_url: &str) -> Result<(), AppEr
 /// **This is what makes the store a cache.** The file is named by a hash of its own bytes, so
 /// nothing can know a URL's path without downloading the bytes first; without the row, every
 /// browsed logo was re-fetched on every launch and rewritten identically.
-async fn note_logo_hit(
-    state: &AppState,
-    favicon_url: &str,
-    logo: &StoredLogo,
-) -> Result<(), AppError> {
+async fn note_logo_hit(db: &DbPool, favicon_url: &str, logo: &StoredLogo) -> Result<(), AppError> {
     queries::radio::record_logo_hit(
-        &state.db,
+        db,
         favicon_url,
         &logo.path,
         i64::try_from(logo.bytes).unwrap_or(i64::MAX),
@@ -405,7 +405,7 @@ pub(super) async fn adopted(state: &AppState, id: i64, path: String) -> Option<S
 
 /// Record that a site advertised nothing usable.
 async fn note_site_miss(state: &AppState, origin: &str) {
-    if let Err(e) = note_logo_miss(state, origin).await {
+    if let Err(e) = note_logo_miss(&state.db, origin).await {
         log::debug!("radio: site outcome not recorded: {}", melodia_core::error::describe(&e));
     }
 }

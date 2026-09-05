@@ -172,3 +172,48 @@ fn a_station_that_cannot_be_reached_is_still_counted_as_played() {
          today never reaches the recents list that would let the user find it again"
     );
 }
+
+/// **One switch, one reading of it.** `ensure_enabled` is where "off means no traffic" is decided,
+/// and a second door reading `state.radio_enabled` for itself is a copy that can be got wrong
+/// separately — `station_to_restore` spelled one by hand until this walk was written.
+///
+/// Fails in both directions, which is the point of an equality: a second reader takes the count to
+/// two, and deleting the one that enforces it takes the count to zero.
+#[test]
+fn the_switch_is_read_in_one_place() {
+    let src = facade_source();
+
+    assert_eq!(
+        src.matches("radio_enabled").count(),
+        1,
+        "`radio_enabled` may be named exactly once in `library::radio`, inside `ensure_enabled` — \
+         a door that reads it for itself is a guard nothing else can hold"
+    );
+}
+
+/// **The stream is the reach the client count cannot see.** A station opens through
+/// `PlaybackContext.http` rather than through [`super::directory_client`], so
+/// [`every_outbound_call_takes_its_client_from_behind_the_switch`] passes with `play_station`'s
+/// guard deleted and a user who switched Radio off still streaming — from a restored queue, a
+/// media key, or the Now-Playing bar.
+#[test]
+fn a_station_reaches_the_deck_only_from_behind_the_switch() {
+    let src = facade_source();
+
+    assert_eq!(
+        src.matches("playback_ctx()").count(),
+        1,
+        "the transport is reached from one place in the facade, or this pin covers only one of them"
+    );
+
+    let body = src
+        .split_once("pub async fn play_station")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
+    assert!(!body.is_empty(), "`play_station` moved or changed shape, so this pin reads nothing");
+    assert!(
+        body.contains("ensure_enabled(state)?"),
+        "the one door that seats a station has to ask the switch itself — its client comes off \
+         `PlaybackContext`, which no count of `http_client()` reaches"
+    );
+}

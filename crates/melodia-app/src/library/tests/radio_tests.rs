@@ -4,10 +4,11 @@ use melodia_core::entities::radio::{
     DirectoryStation, Facet, FacetKind, RadioStation, StationPage,
 };
 use melodia_core::error::AppError;
+use melodia_store::database::{DbPool, queries};
 
 use super::authoring::{ensure_editable, resolve_station_name, website_url};
 use super::directory::{hide_segmented, hide_segmented_codecs, names_segmented};
-use super::is_listed;
+use super::{drop_from_favorites, drop_from_recent, is_listed};
 
 /// One directory row, segmented or not. Spelled out rather than defaulted: `DirectoryStation` has
 /// no `Default`, a station with no uuid and no URL being one nothing may keep.
@@ -300,4 +301,108 @@ fn a_station_takes_the_best_name_on_offer() {
         "an unparseable URL has no host to fall back to, and losing the text entirely would \
          leave the row with no name at all"
     );
+}
+
+/// A row in the table, from the same shape the cases above are spelled in. The star and the stamp
+/// go on through their own writers, `save_station` owning neither.
+async fn seed(db: &DbPool, station: &RadioStation) -> Result<i64, AppError> {
+    let id = queries::radio::save_station(db, &station.to_new_station()).await?;
+    queries::radio::set_favorite(db, id, station.is_favorite).await?;
+    if station.last_played.is_some() {
+        queries::radio::mark_played(db, id).await?;
+    }
+    Ok(id)
+}
+
+/// The row, or nothing where the removal took it. A miss is the answer here rather than a failure,
+/// so it is matched rather than swallowed with the errors that are.
+async fn stored_row(db: &DbPool, id: i64) -> Result<Option<RadioStation>, AppError> {
+    match queries::radio::get_station_by_id(db, id).await {
+        Ok(station) => Ok(Some(station)),
+        Err(AppError::NotFound(_)) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// A station Browse can rewrite keeps its plays when the star goes, which is the whole reason the
+/// removal is a ladder rather than a delete: Recently Played is still showing it.
+#[tokio::test]
+async fn un_starring_a_played_directory_station_keeps_its_row() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let mut station = stored(Some("uuid-1"));
+    station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
+    let id = seed(&db, &station).await?;
+
+    drop_from_favorites(&db, id).await?;
+
+    let kept = stored_row(&db, id).await?;
+    assert!(matches!(&kept, Some(row) if !row.is_favorite), "the star is what was asked for");
+    assert!(
+        matches!(kept, Some(row) if row.last_played.is_some()),
+        "and the history the other tab lists it by is not the star's to take"
+    );
+    Ok(())
+}
+
+/// The row nothing would list any more. Left behind it accumulates on every browse-and-unstar, and
+/// no tab can show the user what they have.
+#[tokio::test]
+async fn un_starring_a_never_played_directory_station_deletes_its_row() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let id = seed(&db, &stored(Some("uuid-1"))).await?;
+
+    drop_from_favorites(&db, id).await?;
+
+    assert!(stored_row(&db, id).await?.is_none());
+    Ok(())
+}
+
+/// A hand-typed station has no directory page to be restored from and its card offers no star, so
+/// leaving it on its plays alone strands it: Recently Played goes on showing a row nothing can put
+/// back in Favorites.
+#[tokio::test]
+async fn un_starring_a_hand_typed_station_deletes_it_however_often_it_was_played()
+-> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let mut station = stored(None);
+    station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
+    let id = seed(&db, &station).await?;
+
+    drop_from_favorites(&db, id).await?;
+
+    assert!(stored_row(&db, id).await?.is_none());
+    Ok(())
+}
+
+/// The mirror, and the half that says the ladder reads the star as well as the stamp: clearing a
+/// history under a starred row must leave Favorites holding it.
+#[tokio::test]
+async fn clearing_the_history_of_a_starred_station_keeps_its_row() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let mut station = stored(Some("uuid-1"));
+    station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
+    let id = seed(&db, &station).await?;
+
+    drop_from_recent(&db, id).await?;
+
+    let kept = stored_row(&db, id).await?;
+    assert!(matches!(&kept, Some(row) if row.last_played.is_none()), "the plays are forgotten");
+    assert!(matches!(kept, Some(row) if row.is_favorite), "and the star still lists it");
+    Ok(())
+}
+
+/// Removing from Recently Played what only its plays were holding. This is the trash on that tab,
+/// and a row surviving it is one the user has just removed from the only place it appeared.
+#[tokio::test]
+async fn clearing_the_history_of_an_unstarred_station_deletes_its_row() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let mut station = stored(Some("uuid-1"));
+    station.is_favorite = false;
+    station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
+    let id = seed(&db, &station).await?;
+
+    drop_from_recent(&db, id).await?;
+
+    assert!(stored_row(&db, id).await?.is_none());
+    Ok(())
 }

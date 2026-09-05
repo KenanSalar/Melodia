@@ -44,7 +44,7 @@ pub(super) use authoring::{resolve_station_name, validated_overrides};
 use crate::state::AppState;
 use melodia_core::entities::radio;
 use melodia_core::error::AppError;
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 
 /// How far back the recently-played station list reaches.
 ///
@@ -116,8 +116,14 @@ pub async fn set_favorite(state: &AppState, id: i64, favorite: bool) -> Result<(
 /// the moment it is kept again. A hand-typed one has no directory to be rewritten from, so this
 /// is its delete either way — see [`is_listed`].
 pub async fn remove_from_favorites(state: &AppState, id: i64) -> Result<(), AppError> {
-    set_favorite(state, id, false).await?;
-    delete_if_unlisted(state, id).await
+    drop_from_favorites(&state.db, id).await
+}
+
+/// [`remove_from_favorites`]'s body, narrowed to the pool it reaches so the ladder can be driven
+/// against real rows rather than a copy of it.
+async fn drop_from_favorites(db: &DbPool, id: i64) -> Result<(), AppError> {
+    queries::radio::set_favorite(db, id, false).await?;
+    delete_unlisted(db, id).await
 }
 
 /// Drop a station out of the Recently Played tab.
@@ -125,8 +131,13 @@ pub async fn remove_from_favorites(state: &AppState, id: i64) -> Result<(), AppE
 /// The mirror of [`remove_from_favorites`]: forget the plays, and keep the row while a star still
 /// lists it somewhere.
 pub async fn remove_from_recent(state: &AppState, id: i64) -> Result<(), AppError> {
-    queries::radio::clear_play_history(&state.db, id).await?;
-    delete_if_unlisted(state, id).await
+    drop_from_recent(&state.db, id).await
+}
+
+/// [`remove_from_recent`]'s body, narrowed the same way as [`drop_from_favorites`].
+async fn drop_from_recent(db: &DbPool, id: i64) -> Result<(), AppError> {
+    queries::radio::clear_play_history(db, id).await?;
+    delete_unlisted(db, id).await
 }
 
 /// Delete a row no tab would list any more.
@@ -138,11 +149,17 @@ pub async fn remove_from_recent(state: &AppState, id: i64) -> Result<(), AppErro
 /// same place; [`set_directory_favorite`] deliberately doesn't decide, so the surface calling it
 /// has to, or a browse-and-unstar leaves a row behind on every pass.
 pub async fn delete_if_unlisted(state: &AppState, id: i64) -> Result<(), AppError> {
-    let station = get_station(state, id).await?;
+    delete_unlisted(&state.db, id).await
+}
+
+/// [`delete_if_unlisted`]'s body, narrowed to the pool it reaches so what a removal leaves behind
+/// can be read back off the table.
+async fn delete_unlisted(db: &DbPool, id: i64) -> Result<(), AppError> {
+    let station = queries::radio::get_station_by_id(db, id).await?;
     if is_listed(&station) {
         return Ok(());
     }
-    queries::radio::delete_station(&state.db, id).await
+    queries::radio::delete_station(db, id).await
 }
 
 /// Whether either local tab would still show a station: the star is Favorites' filter and the

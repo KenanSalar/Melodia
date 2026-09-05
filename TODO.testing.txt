@@ -28,31 +28,41 @@ WHERE IT STANDS
   after the eight steps on this branch (2026-09-05)
   TOTAL   function 45.2% (2680/5929)   line 43.1% (18309/42474)   region 40.3%
 
-  now, after steps 1 and 2 below (2026-09-05)
+  after steps 1 and 2 below (2026-09-05)
   TOTAL   function 45.9% (2724/5931)   line 43.9% (18651/42497)   region 41.1%
 
-  So the branch is worth 6.9 points of line coverage. Steps 1 and 2 are 0.8 of
+  now, after step 3 below (2026-09-05)
+  TOTAL   function 46.2% (2745/5944)   line 44.1% (18767/42523)   region 41.3%
+
+  So the branch is worth 7.1 points of line coverage. Steps 1 and 2 are 0.8 of
   them, all of it inside `tasks/`. Read a tenth of a point as noise, for the reason
   the last doc gave (the same command over the same tree read 41.26% and 41.3% on
   consecutive days), and only a move larger than that as a result.
 
+  **The row above this one was read before `379258ea` landed**, so part of the
+  difference between them is step 2's own tail rather than step 3's: `state/` is 23
+  lines larger here because `stage_playable` moved into the fixture in that commit,
+  and `core`, `engine` and `net` all gained readers from the same tests. What step 3
+  can be attributed is the five files P0.2 names, 432 uncovered lines to 369, plus
+  two source walks that carry no percentage at all.
+
   subsystem                                    line cov          uncovered
   --------------------------------------------------------------------------
   UI (melodia-views)                  13.9% ( 2701/19475)           16774
-  library API (melodia-app/library)   48.8% ( 1706/ 3496)            1790
-  background tasks (melodia-app/tasks) 45.6% (  859/ 1884)            1025
+  library API (melodia-app/library)   51.0% ( 1795/ 3522)            1727
+  background tasks (melodia-app/tasks) 45.8% (  863/ 1884)           1021
   integrations (scrobble/discord/mpris) 55.4% ( 1043/ 1884)           841
   binary (main/boot/shutdown)          2.3% (   19/  834)             815
   platform (tray, theme, logging)     45.7% (  548/ 1198)             650
-  app services (settings, state)      69.0% (  976/ 1414)             438
   store (db queries, ingest, scanner) 87.6% ( 3087/ 3522)             435
+  app services (settings, state)      71.6% ( 1013/ 1414)             401
   audio (sources, decode)             82.3% ( 1384/ 1682)             298
-  engine (player state machine)       85.1% ( 1526/ 1794)             268
-  net (radio dir, blocklist, fetch)   76.0% (  785/ 1033)             248
-  core (entities, utils, themes)      85.0% (  624/  734)             110
+  engine (player state machine)       85.3% ( 1531/ 1794)             263
+  net (radio dir, blocklist, fetch)   77.0% (  795/ 1033)             238
   playback (dsp, decks, output)       95.3% ( 1786/ 1874)              88
+  core (entities, utils, themes)      88.3% (  648/  734)              86
   artwork (image, covers)             92.9% (  870/  936)              66
-  app state                           84.2% (  187/  222)              35
+  app state                           85.7% (  210/  245)              35
   testkit                             96.3% (  474/  492)              18
 
   The UI's 16774 lines are not on this list, for the reason issue #38 gave and the
@@ -92,6 +102,11 @@ kinds, and only the third is hard.
      all: a pass-through is not made worth testing by becoming reachable, and the
      last doc declined thirteen queue wrappers and eleven playlist wrappers on
      exactly that ground.
+
+     The radio half is spent by step 3, and the deciding was most of it: of those
+     432 lines, 63 held a decision a pool can drive, the switch itself wanted a
+     walk rather than a fixture, and the rest wait behind tier 3's seam. Expect
+     `settings/*` to sort the same way rather than to come back whole.
 
   3. Genuinely needs a seam nobody has built. P2.2b as the last doc left it
      (`radio_browser`, `deezer`/`artist_images`) and `stream_source`'s feed thread.
@@ -167,47 +182,72 @@ deleted there, the old file being left unreferenced for the sweep to retire. A t
 that runs it and asserts the source file still exists is what stops that becoming
 an unlink under a `one_shot` marker that will never run again.
 
-P0.2  the Radio off switch, and the doors behind it
+P0.2  the Radio off switch, and the doors behind it                 [SPENT]
 ----------------------------------------------------
 
-  library/radio/logos.rs      16.8% of 208   173 uncovered
-  library/radio/authoring.rs  30.9% of 152   105
-  library/radio/playback.rs    0.0% of  75    75
-  library/radio/mod.rs        10.5% of  57    51
-  library/radio/directory.rs  44.0% of  50    28
+  library/radio/logos.rs      33.5% of 206   137 uncovered  (was 16.8%)
+  library/radio/authoring.rs  34.2% of 158   104            (was 30.9%)
+  library/radio/playback.rs   35.3% of  85    55            (was  0.0%)
+  library/radio/mod.rs        34.8% of  69    45            (was 10.5%)
+  library/radio/directory.rs  44.0% of  50    28            (unchanged)
 
-`ensure_enabled` is the entire implementation of "Radio off means no traffic", and
-CLAUDE.md states it as a prohibition. What holds it today is
-`crates/melodia/tests/radio_facade.rs`, which walks every file under the directory
-and counts `.http_client()` reaches. That walk sees the *reach* and cannot see the
-*guard*: a door added past the switch, or one handed a client by its caller, passes
-it and still bills a user who turned Radio off.
+Fifteen cases and two source walks. The narrowing is B2's and it went per function
+rather than per module: nine private workers over `&DbPool`, no door's signature
+moved, and `melodia-views` learned nothing.
 
-So the first case is table-driven and boring, and it is the point of the entry:
-with the flag off, every door answers `AppError::Settings`, and the stored-table
-getters (`get_favorites`, `get_recent`, `get_station`) still answer, which is the
-exemption `mod.rs` argues for in prose. Hiding a feature is not deleting what the
-user kept.
+**The table-driven half this entry asked for was not taken, and should not be.**
+"With the flag off every door answers `AppError::Settings`" needs an `AppState`, and
+`AppState::init` opens the card — `headless.rs` is the only thing below which one can
+be built. What the sketch was reaching for is a claim about every call site at once,
+which is the shape the two walks beside it already had, so it went there:
 
-The second half of the entry is `delete_if_unlisted`, which every un-star owes.
-`is_listed` is pure and already pinned; its two callers are not, and a miss there
-leaves a row no tab can reach and the user cannot get back to. Three cases split
-the partition:
+  `the_switch_is_read_in_one_place` counts `radio_enabled` and demands exactly one.
+  The reach counts were already exactly one; this is the guard, and it fails on a
+  deleted one as readily as on a second. `station_to_restore` carried a hand-rolled
+  copy of the switch, which this collapsed onto `ensure_enabled`.
 
-  a directory station with a play behind it keeps its row when un-starred;
-  one with no play is deleted;
-  a hand-typed station (empty uuid) is deleted by the un-star whatever it has been
-  played, because no directory page can rewrite it and Recently Played alone cannot
-  restore it.
+  `a_station_reaches_the_deck_only_from_behind_the_switch` covers the door the
+  client count structurally cannot: a station opens through `PlaybackContext.http`,
+  so `play_station` reaches the network naming no client at all. Delete its
+  `ensure_enabled` and every other test in the tree stays green.
 
-The seam is B2's, and it is cheaper here than anywhere it has been applied so far.
-Every door takes `&AppState` and reaches `state.db`, `state.paths`,
-`state.radio_enabled` and `state.http_client()`. `state::fixtures::TestPlayback`
-already carries the first two and an `Arc<OnceLock<reqwest::Client>>` for the last,
-so a `TestServer`-backed client has a home the moment one is wanted.
+The four decisions a bare pool can drive:
 
-`logos.rs` is the largest file in the group and most of its 173 lines are the
-`&AppState` half P2.2a deliberately left. Its pure half is already at 100%.
+  the removal ladder. `is_listed` was pinned pure and its consumer was not, so
+  nothing said the ladder asked it or that `delete_station` ran. Five cases over the
+  truth table through the real writer, which is where the row is actually lost.
+
+  `keep_station`'s `if logo.is_some()`. `save_station`'s conflict clause yields on
+  `artwork_path`, so that one line is the whole of what stops a re-browse blanking a
+  logo, and its absence is the moved logo that shows the old one forever.
+
+  `merged_onto_existing`, the one branch of adding a station that reaches no socket.
+  The merge stars what it finds, so a re-pasted URL promotes a played station into
+  the kept list rather than costing a connect and a second identical card.
+
+  `note_logo_miss`'s read-increment-schedule loop. The store takes the attempt count
+  from its caller and `miss_backoff_hours` is pinned over a number nobody feeds it,
+  so a version writing `1` every time passed both while asking a dead host daily
+  forever. `queries/tests/radio_tests.rs` already owns the table's own three rules;
+  what is here is only the loop between them.
+
+Declined out loud, since the table above counts their lines:
+
+  the one-line getters and the `save_station` / `set_favorite` / `mark_played` /
+  `set_artwork` / `logo_answers` pass-throughs. One delegation each onto
+  `queries::radio`, which has its own suite. The exemption they are the subject of is
+  what the `radio_enabled` count holds: a getter that started reading the switch for
+  itself takes it to two.
+
+  `directory.rs` whole, `fetch_logo`, `ask_logo_url`, `heal_station_logo`,
+  `discover_site_logo`, and the probe halves of both authoring doors. Every one needs
+  a client behind the seam, which is P3's argument and P3's seam. That is most of
+  what is still uncovered in the table above.
+
+One thing found on the way, fixed and not part of this entry: the two
+`services/tests/artist_images_tests.rs` cases share the process-global
+`PASS_IN_FLIGHT` and could interleave, which the instrumented build surfaced and the
+plain suite hid. They are serialized behind one mutex now.
 
 
 ================================================================================
@@ -292,7 +332,7 @@ P2: THE TASKS THAT ARE ALREADY REACHABLE
   tasks/queue_prune.rs      65.2% of  66    23           [SPENT, was  0.0%]
   tasks/first_launch.rs      0.0% of  53    53
   tasks/playback_monitor.rs 43.2% of  44    25           [SPENT, was  0.0%]
-  tasks/retroactive_hash.rs 83.7% of  49     8           [SPENT, was 30.6%]
+  tasks/retroactive_hash.rs 87.8% of  49     6           [SPENT, was 30.6%]
   tasks/one_shot.rs          0.0% of  28    28
   tasks/radio_logo_cache.rs  0.0% of  17    17
 
@@ -359,9 +399,15 @@ P3: THE NETWORK TIER'S SECOND HALF, STILL NEEDING A SEAM
 ================================================================================
 
   net/services/net/radio_browser/mod.rs  36.5% of 159   101 uncovered
-  net/media/fetch/deezer.rs              20.3% of 123    98
-  app/services/artist_images.rs          19.3% of 119    96
+  net/media/fetch/deezer.rs              28.5% of 123    88
+  app/services/artist_images.rs          48.7% of 119    61
   net/media/fetch/itunes.rs              10.0% of  30    27
+
+`artist_images` reads 29 points higher here than it did two rows above the last
+time, and none of that is new tests. Its two cases shared the process-global
+`PASS_IN_FLIGHT` and could interleave, so which of them early-returned was decided
+by the scheduler and the module's own coverage moved run to run. They are serialized
+now, which is also what makes this number mean anything.
 
 This is P2.2b, unchanged, and the code has not moved since it was written down.
 `url_for` spells `https://` inline, so a base parameter alone does not reach a
@@ -542,8 +588,10 @@ SUGGESTED ORDER
      fixture rather than a copy inside `library/tests/playback_tests.rs`, so a
      suite that needs a playing queue over real files has one call for it.
 
-  3. P0.2, the radio doors. This is B2's split at its widest, and the one place
-     where the walk holding a prohibition can see the reach and not the guard.
+  3. [DONE] P0.2, the radio doors. The split was narrower than "B2 at its widest"
+     turned out to mean: nine private workers over `&DbPool`, and the switch itself
+     answered by two more walks rather than by a fixture, for the reason its entry
+     now gives.
 
   4. P1, the settings layer, in the order its entry lists: appearance, folders,
      updates, support, view, then the four clamp files. Decide the pass-throughs
@@ -564,4 +612,4 @@ Steps 1 through 3 are the whole of what is left with a user-visible cost that a
 reinstall does not undo. Step 4 is the largest block of lines and the smallest per
 line. Everything from step 5 down is worth doing and worth doing after those.
 
-With 1 and 2 spent, step 3 is now the only entry left in that first group.
+With 1 through 3 spent, that first group is closed and step 4 is next.
