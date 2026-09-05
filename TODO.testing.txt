@@ -1,0 +1,525 @@
+TODO: TEST COVERAGE, ROUND TWO
+==============================
+
+Working doc. Delete when the backlog below is spent.
+
+Created: 2026-09-05, against `test/coverage` at fb0592b1.
+
+Supersedes `docs/plans/TODO.test-coverage.txt`, which is spent and gone. Everything
+that file argued *out* is carried into DELIBERATELY NOT ON THIS LIST below, so
+nothing it settled gets re-proposed here.
+
+Current numbers are one run of
+
+    cargo llvm-cov --workspace --locked --summary-only
+
+on 2026-09-05. The baseline is the published report at
+https://kenansalar.github.io/Melodia/, generated 2026-09-04 18:12, which is where
+this branch started. Every absence claim below ("nothing tests X") was checked by
+reading the file, not inferred from a percentage.
+
+
+WHERE IT STANDS
+---------------
+
+  baseline (2026-09-04, published)
+  TOTAL   function 38.9% (2278/5859)   line 37.0% (15542/42028)   region 34.7%
+
+  now (2026-09-05, after the eight steps on this branch)
+  TOTAL   function 45.2% (2680/5929)   line 43.1% (18309/42474)   region 40.3%
+
+  So the branch is worth 6.1 points of line coverage: 2767 newly covered lines
+  against 446 new ones. Read a tenth of a point as noise, for the reason the last
+  doc gave (the same command over the same tree read 41.26% and 41.3% on
+  consecutive days), and only a move larger than that as a result.
+
+  subsystem                                    line cov          uncovered
+  --------------------------------------------------------------------------
+  UI (melodia-views)                  13.9% ( 2701/19475)           16774
+  library API (melodia-app/library)   48.8% ( 1706/ 3496)            1790
+  background tasks (melodia-app/tasks) 31.5% (  593/ 1884)           1291
+  integrations (scrobble/discord/mpris) 55.4% ( 1043/ 1884)           841
+  binary (main/boot/shutdown)          2.3% (   19/  834)             815
+  platform (tray, theme, logging)     45.7% (  548/ 1198)             650
+  app services (settings, state)      69.0% (  976/ 1414)             438
+  store (db queries, ingest, scanner) 87.6% ( 3087/ 3522)             435
+  audio (sources, decode)             82.3% ( 1384/ 1682)             298
+  engine (player state machine)       85.1% ( 1526/ 1794)             268
+  net (radio dir, blocklist, fetch)   76.0% (  785/ 1033)             248
+  core (entities, utils, themes)      85.0% (  624/  734)             110
+  playback (dsp, decks, output)       95.3% ( 1786/ 1874)              88
+  artwork (image, covers)             92.9% (  870/  936)              66
+  app state                           84.2% (  187/  222)              35
+  testkit                             96.3% (  474/  492)              18
+
+  The UI's 16774 lines are not on this list, for the reason issue #38 gave and the
+  last doc repeated: UI coverage is intentionally light, and what does pin it is
+  the corpus walks in `crates/melodia/tests/`, which show up as no percentage at
+  all.
+
+
+THE SHAPE OF WHAT IS LEFT
+-------------------------
+
+The old thesis is spent. "A well-tested destructive primitive called by an untested
+decision" described every P0 path in the last backlog and describes almost nothing
+in this one, because those decisions now have tests. What remains sorts into three
+kinds, and only the third is hard.
+
+  1. Already reachable, and simply never written. This is the surprise in the
+     current numbers and it is the cheapest tier here. `tasks/artwork_sweep.rs`
+     exposes `run(db, paths)` and `run_radio_logos(db, paths)` as `pub(crate)`.
+     `artwork_renormalize::renormalize`, `retroactive_hash::hash_unhashed_tracks`,
+     `playback_monitor::persist` and `material_you::react` are private functions
+     over plain arguments, which an in-module suite reaches. `queue_prune::
+     reconcile_once` takes exactly the four fields `state::fixtures::TestPlayback`
+     already hands out. Nothing is blocked. Roughly 400 uncovered lines sit behind
+     no obstacle whatsoever.
+
+  2. One narrowing away, and it is B2's narrowing for the seventh time. The door
+     keeps its `&AppState`, the work takes what it reaches. `library/settings/*`
+     is seventeen files of that shape over `state.paths` (523 uncovered), and
+     `library/radio/*` is five files of it over `state.db` plus the shared client
+     (432 more). The cost per file is small and the precedent is exact. The
+     real work in this tier is deciding which of those files hold a decision at
+     all: a pass-through is not made worth testing by becoming reachable, and the
+     last doc declined thirteen queue wrappers and eleven playlist wrappers on
+     exactly that ground.
+
+  3. Genuinely needs a seam nobody has built. P2.2b as the last doc left it
+     (`radio_browser`, `deezer`/`artist_images`) and `stream_source`'s feed thread.
+     Unchanged, and still the only entries here that should be argued before they
+     are written.
+
+Read the priority order against cost of failure, not against the size of the
+number. `melodia/src` at 2.3% is 815 uncovered lines and generates one paragraph,
+at the bottom, saying to leave it.
+
+
+================================================================================
+P0: PATHS THAT DELETE OR MOVE SOMETHING A RESCAN DOES NOT RETURN
+================================================================================
+
+P0.1  the artwork sweep, and the one store that cannot be rebuilt
+-----------------------------------------------------------------
+
+  tasks/artwork_sweep.rs        52.1% of  71    34 uncovered
+  tasks/artwork_renormalize.rs   0.0% of  64    64 uncovered
+
+Not blocked, and that is most of the argument for putting it first. `run` and
+`run_radio_logos` are already `pub(crate) async fn(&DbPool, &Paths)`; `renormalize`
+is the same signature one visibility down.
+
+The pass unlinks files out of three directories against one reference set, and
+`queries::artwork` builds that set from six columns: `tracks.artwork_path`,
+`albums.artwork_path`, `artists.image_path`, `playlists.thumbnail_path`,
+`radio_stations.artwork_path` and `radio_logo_answers.artwork_path`. Five of the
+six name something a rescan rebuilds. The radio pair does not, which is the whole
+reason `radio-logos/` is its own directory: a station logo came off a third-party
+host and there is nothing local to re-derive it from.
+
+Two claims in `sweep_stores`' own doc comment are prose today and are the two worth
+pinning first.
+
+  The ordering. "Listed first, and the reference set read second... a row committed
+  in between is visible to the query, where the reverse reads it as an orphan and
+  unlinks a live cover." A test that commits a row between the listing and the
+  query is the whole of that sentence, and swapping the two halves is the mutation
+  that has to fail it.
+
+  The single set over however many directories, which is what lets a logo be held
+  alive by `radio_stations.artwork_path` or by its cache row wherever the file
+  happens to sit, and what makes the logos predating their own directory safe.
+
+Then the grace windows, which are two constants with a documented asymmetry:
+`sweep::GRACE` for a scan-triggered pass and `RADIO_GRACE` (3 min) for the
+logo-only entry point. Boundary analysis on each: a file younger than its window is
+spared, one older is retired, and `run_radio_logos` uses the short one while `run`
+uses the long one over the same directory.
+
+`artwork_renormalize` is the sibling and its property is a negative: nothing is
+deleted there, the old file being left unreferenced for the sweep to retire. A test
+that runs it and asserts the source file still exists is what stops that becoming
+an unlink under a `one_shot` marker that will never run again.
+
+P0.2  the Radio off switch, and the doors behind it
+----------------------------------------------------
+
+  library/radio/logos.rs      16.8% of 208   173 uncovered
+  library/radio/authoring.rs  30.9% of 152   105
+  library/radio/playback.rs    0.0% of  75    75
+  library/radio/mod.rs        10.5% of  57    51
+  library/radio/directory.rs  44.0% of  50    28
+
+`ensure_enabled` is the entire implementation of "Radio off means no traffic", and
+CLAUDE.md states it as a prohibition. What holds it today is
+`crates/melodia/tests/radio_facade.rs`, which walks every file under the directory
+and counts `.http_client()` reaches. That walk sees the *reach* and cannot see the
+*guard*: a door added past the switch, or one handed a client by its caller, passes
+it and still bills a user who turned Radio off.
+
+So the first case is table-driven and boring, and it is the point of the entry:
+with the flag off, every door answers `AppError::Settings`, and the stored-table
+getters (`get_favorites`, `get_recent`, `get_station`) still answer, which is the
+exemption `mod.rs` argues for in prose. Hiding a feature is not deleting what the
+user kept.
+
+The second half of the entry is `delete_if_unlisted`, which every un-star owes.
+`is_listed` is pure and already pinned; its two callers are not, and a miss there
+leaves a row no tab can reach and the user cannot get back to. Three cases split
+the partition:
+
+  a directory station with a play behind it keeps its row when un-starred;
+  one with no play is deleted;
+  a hand-typed station (empty uuid) is deleted by the un-star whatever it has been
+  played, because no directory page can rewrite it and Recently Played alone cannot
+  restore it.
+
+The seam is B2's, and it is cheaper here than anywhere it has been applied so far.
+Every door takes `&AppState` and reaches `state.db`, `state.paths`,
+`state.radio_enabled` and `state.http_client()`. `state::fixtures::TestPlayback`
+already carries the first two and an `Arc<OnceLock<reqwest::Client>>` for the last,
+so a `TestServer`-backed client has a home the moment one is wanted.
+
+`logos.rs` is the largest file in the group and most of its 173 lines are the
+`&AppState` half P2.2a deliberately left. Its pure half is already at 100%.
+
+
+================================================================================
+P1: THE SETTINGS LAYER, WHICH IS SEVENTEEN FILES OF ONE SHAPE
+================================================================================
+
+  library/settings/folders.rs      64.6% of 277    98 uncovered
+  library/settings/view.rs         36.4% of 143    91
+  library/window.rs                 0.0% of  66    66
+  library/settings/appearance.rs    0.0% of  62    62
+  library/settings/updates.rs       0.0% of  35    35
+  library/settings/scrobble.rs      0.0% of  33    33
+  library/settings/crossfade.rs     0.0% of  31    31
+  library/settings/playback.rs      0.0% of  28    28
+  library/settings/replaygain.rs    0.0% of  26    26
+  library/settings/equalizer.rs     0.0% of  25    25
+  library/settings/radio.rs         0.0% of  18    18
+  library/settings/discord.rs       0.0% of  18    18
+  library/settings/support.rs      31.8% of  22    15
+  library/settings/mod.rs           0.0% of  13    13
+  library/settings/visualizer.rs    0.0% of  12    12
+  library/settings/diagnostics.rs   0.0% of   6     6
+  library/settings/motion.rs        0.0% of   6     6
+  library/settings/ratings.rs       0.0% of   6     6
+
+Step 8 already did this to `view.rs`, at its smallest: the door keeps its
+`&AppState` and hands a `&Paths` to a `write_*` beside it. No call site moves and
+`melodia-views` learns nothing. The same edit applies unchanged to the rest.
+
+**Eight of the seventeen are not work, and saying which is the job.** A setter that
+is one `mutate_settings(|s| s.field = v)` is the pass-through B2 declined to test
+twice already. `radio.rs`, `discord.rs`, `scrobble.rs`, `ratings.rs`, `motion.rs`,
+`diagnostics.rs` and `visualizer.rs` are that, `mod.rs` is four getters over the
+same shape, and so are five of `window.rs`'s seven. That is 112 of the 523 lines,
+and they will move as a side effect of the files below rather than on their own.
+
+What holds a decision:
+
+  appearance.rs. `seed_theme_preference` no-ops once the map has an entry and
+  writes the whole file rather than going through `mutate_settings`, both for
+  reasons its doc comment gives. `set_appearance` updates `last_static_accent` only
+  when the pick is not `MATERIAL_YOU_ACCENT_ID`. Losing that rule is the exact bug
+  the migration exists to fix: a user launching with a custom accent loses it on
+  the first theme swap.
+
+  folders.rs. The largest of them, and `validate_folder_path` plus
+  `reconcile_watched_folders` are where its 98 lines are. A folder path that
+  validates when it should not is a scan pointed somewhere the user did not ask
+  for.
+
+  updates.rs. `set_skipped_release` / `reset_skipped_release` and the two
+  `record_check_*` writers. A skipped release that fails to clear is an update the
+  user is never offered again, and nothing else in the tree would notice.
+
+  support.rs. A launch counter behind a one-time prompt, which is boundary
+  analysis and nothing else: the launch before the threshold, the launch on it, and
+  the launch after, plus `mark_support_prompt_seen` making all three moot.
+
+  crossfade.rs, equalizer.rs, playback.rs, replaygain.rs. The clamps, and only the
+  clamps. One case per bound per file, working the real constant.
+
+  view.rs. 91 lines after step 8 took five doors, and `snap_to_preset` plus the
+  column-width and sort writers are what is left.
+
+  window.rs. Two of seven. `set_use_native_titlebar` turns
+  `match_unfocused_to_system_bg` on when the toggle goes on *and*
+  `is_kde_desktop()`, which is a silent second write the user did not ask for, and
+  leaves it alone on the way back off. `set_always_on_top` applies before it
+  persists, so a desktop with no supported method answers `AppError::Window` and
+  writes nothing, which is what lets the caller revert the optimistic toggle it
+  already performed on the UI thread. The apply half is platform FFI and stays
+  where the rest of that tier is; the ordering is the part worth a case, and it
+  needs the method to be a parameter rather than read off `state`.
+
+
+================================================================================
+P2: THE TASKS THAT ARE ALREADY REACHABLE
+================================================================================
+
+  tasks/material_you.rs      0.0% of 180   180 uncovered
+  tasks/discord_presence.rs  0.0% of 107   107
+  tasks/queue_prune.rs       0.0% of  66    66
+  tasks/first_launch.rs      0.0% of  53    53
+  tasks/playback_monitor.rs  0.0% of  44    44
+  tasks/retroactive_hash.rs 30.6% of  49    34
+  tasks/one_shot.rs          0.0% of  28    28
+  tasks/radio_logo_cache.rs  0.0% of  17    17
+
+`material_you.rs` is the largest zero in the tree outside the binary, and its
+decision layer is already a free function. `react` takes seven plain arguments and
+folds the appearance snapshot, the OS colour signal and the latest view model into
+a publish, a clear or a skip. None of it needs Slint: `repaint_tx` is a
+`watch::Sender<SystemColorState>` and the UI-thread subscriber is somewhere else
+entirely. Three things in it are worth cases. The `is_dark` resolution is a
+three-way over the variant string where an unrecognised value falls through to the
+OS, which is the arm a settings file written by an older build lands on. The
+`LastApplied` gate is what stops a repaint per position tick. And the startup drive
+before the select loop is what makes a launch with a persisted style pick up the
+restored queue's artwork, which is the case that reads as cosmetic and is not: it
+is the difference between the app opening in the user's colours and opening grey
+until the next track change.
+
+`queue_prune::reconcile_once(db, player_state, sinks, engine)` is drivable straight
+off `TestPlayback` with no new seam at all. Its property is the auto-skip: a
+currently-playing entry whose row has gone has to advance rather than strand the
+transport on an id that resolves to nothing.
+
+`playback_monitor::persist(db, queue_path, snapshot)` is the periodic queue and
+position save that CLAUDE.md deliberately keeps off the `PlayerAction` list. It is
+here rather than in P0 because its loss window is one save interval rather than the
+whole queue, but it writes the same `queue.json` the last backlog spent fifteen
+tests on the round trip of, and nothing currently drives the writer.
+
+`retroactive_hash::hash_unhashed_tracks(db)` takes a pool and nothing else. What it
+backfills is the column a cross-device move is matched on, so a batch that skips
+rows silently is the moved-file defect the last backlog found, arriving by a
+different route.
+
+`one_shot.rs` has two consumers and one knob, `OnFailure`, deciding whether a pass
+that failed part way still records its marker. Both arms need a case, and so does
+the pair of fields `Sweep` deliberately keeps separate: collapsing `label` onto
+`marker` turns "Rating import failed" into a flag name, which is invisible until
+someone reads a bug report. It takes an `&AppState`, so it wants P1's narrowing
+first.
+
+`first_launch.rs`, `radio_logo_cache.rs` and `discord_presence.rs` are the tail.
+The first two are short and take an `&AppState`; the third is 107 lines of detector
+loop around an IPC client CI does not run, and only `now_ts` and the presence
+payload shaping are testable, both of which `discord/payload.rs` already covers
+from the other side.
+
+
+================================================================================
+P3: THE NETWORK TIER'S SECOND HALF, STILL NEEDING A SEAM
+================================================================================
+
+  net/services/net/radio_browser/mod.rs  36.5% of 159   101 uncovered
+  net/media/fetch/deezer.rs              20.3% of 123    98
+  app/services/artist_images.rs          19.3% of 119    96
+  net/media/fetch/itunes.rs              10.0% of  30    27
+
+This is P2.2b, unchanged, and the code has not moved since it was written down.
+`url_for` spells `https://` inline, so a base parameter alone does not reach a
+loopback listener. `MIRROR` and the four facet cells are process-global
+`OnceCell`s with no reset, so the first test in the binary decides for every test
+after it. `deezer` and `itunes` interpolate nothing at all: their URLs are string
+literals inside the request builder (`.get("https://api.deezer.com/search/artist")`),
+and `deezer` additionally refuses any host that is not its own. `artist_images`
+adds three process globals and a real 750 ms beat between batches.
+
+The shape that would work is P2.1's ListenBrainz one, a base parameter defaulting
+to the public const, plus a `#[cfg(test)]` reset for the cells. **The reset is the
+part with no precedent here and it is why this is P3.** A `OnceCell` a test can
+clear is production surface whose only caller is a test, which is the trade
+`fetch_latest_manifest`'s pubkey already refused once. Argue it before writing it.
+
+Two things in this tier need no seam and can be taken now, in whichever step
+touches the file next:
+
+  `page_from`'s `has_more`, read off the raw response length rather than off what
+  survived the drop. It is a private function over a `Vec<ApiStation>` and it is
+  what makes paging step over a page the blocklist emptied. Getting it wrong stops
+  Browse at the first heavily blocked page.
+
+  `fetch_facets`' ceiling warning, which is the only report anyone gets that a
+  facet list came back cut short. A cut list is invisible on screen: the missing
+  tags are simply not offered.
+
+Discord IPC (11.1% of 198) and the OS media controls (24.1% of 170) sit below all
+of this, and only their pure halves are on this list at all. See P5.
+
+
+================================================================================
+P4: THE FEED THREAD, AND THE ENGINE TICK'S RESIDUE
+================================================================================
+
+  audio/source/stream_source.rs  49.7% of 332   167 uncovered
+  engine/handlers.rs             46.0% of 202   109
+  audio/source/hls/reader.rs     62.5% of 200    75
+
+Step 8 took the schedulers' pure halves and left the threads. What is uncovered in
+`stream_source` is `connect`, `reopen`, `open_segments` and `feed_loop`: a blocking
+socket read filling a ring buffer, which is the arrangement ADR 14 exists to
+create. A test needs the `TestServer` plus a way to step the thread
+deterministically, and only the second half is still missing.
+
+Two things in it are pure and want no thread at all: `reconnect_delay`'s backoff
+ladder, including the arm that gives up, and `sleep_unless_abandoned`'s abandon
+poll. Both are places a constant is load-bearing and `.claude/rules/radio.md`
+already spells the numbers both trees have to agree on, which makes them the
+natural first assertions.
+
+`reconcile_live_stream` is the cheaper half of `engine/handlers.rs` and is worth
+taking before any of the above. It takes a `&StreamShared`, a state handle and
+sinks, and its entire job is the two change checks that stop it republishing the
+view model twice a second for a station that is perfectly happy. Both checks are
+observable off the sinks with no socket anywhere: a generation that has not moved
+and a buffering flag that has not changed must produce no emit, and either one
+moving must produce exactly one.
+
+
+================================================================================
+P5: THE PURE GAPS LEFT IN OTHERWISE-COVERED FILES
+================================================================================
+
+  store/queries/track.rs                      81.1% of 514    97 uncovered
+  store/queries/playlist.rs                   76.8% of 397    92
+  integrations/media_controls/mod.rs          24.1% of 170   129
+  platform/system_theme.rs                    44.9% of 234   129
+  store/queries/smart_playlist.rs             75.1% of 225    56
+  store/media/ingest/watcher.rs               51.7% of  87    42
+  store/database/backup.rs                    79.2% of 106    22
+
+`media_controls` is the one worth pulling forward and the file has no test module
+at all. `translate_event` is a decision table from an OS media-key event to a
+`PlayerEvent`, including the events that map to nothing, and
+`PublishedMetadata::still_current` is the dedup guard deciding whether the OS gets
+a metadata write. Both are private free functions over plain values. Everything
+else in the file is `souvlaki` against a session bus and belongs with the tray.
+
+`system_theme`'s KDE half is INI parsing behind one unseamed line. `read_kdeglobals`
+resolves `kdeglobals_path()` directly, so a `read_kdeglobals_from(&Path)` is the
+whole change, and `parse_rgb`, `blend`, `get_color`, `get_inactive_color_effect`
+and `kde_palette_from_sections` are pure after it. What makes it worth the line:
+this is one of the two *generated* palettes CLAUDE.md says has no variant id to
+match on, and a `Palette` that comes back missing one of `red`/`green`/`yellow` is
+the failure that paints traffic lights, toasts and the star rating grey. That is
+invisible in review and obvious on screen.
+
+The three query files are the last of the store's own gap and are the cheapest
+tests in this document, being one pool and one assertion each. They are last
+because a projection that returns the wrong column shows up immediately in the UI,
+where everything above shows up as nothing at all.
+
+`backup.rs` and `ingest/watcher.rs` are in the table for completeness and not much
+else. What is uncovered in the first is the retention arm's refusal to delete a
+name it cannot parse back into its own scheme, which is worth one case and only
+one; the second is `notify` wiring, and the reconcile underneath it is already at
+80.7%.
+
+
+================================================================================
+DELIBERATELY NOT ON THIS LIST
+================================================================================
+
+Carried forward from the spent backlog, unchanged:
+
+  - The UI (melodia-views, 16774 uncovered, 13.9%). Issue #38 says UI coverage is
+    intentionally light and `.claude/rules/testing.md` records that there is no
+    `slint::testing` call anywhere on purpose. The `.slint` tree is pinned from the
+    Rust side by the corpus walks in `crates/melodia/tests/`, which catch the drift
+    that actually happens and show up as no percentage.
+
+  - Tray, always-on-top, desktop integration, DWM caption. FFI and D-Bus against a
+    session bus CI does not have.
+
+  - Discord IPC beyond the pure frame encoding. A named-pipe client against a
+    process CI does not run.
+
+  - Anything already above 90%: melodia-playback, melodia-artwork, testkit. The
+    remaining lines there are error formatting.
+
+  - `library/playback.rs`'s eight EQ and ReplayGain forwarders. One store each into
+    a lock-free cell the engine publishes no reader for, so a test can call them
+    and assert nothing. The clamps underneath are pinned by melodia-playback's own
+    suites.
+
+  - The thirteen `queue_*` transport wrappers and the eleven `playlists.rs`
+    wrappers. One delegation each, with no transformation, onto layers that already
+    have their own suites. Narrowing them moves a percentage and tests nothing new.
+    Where those layers are themselves thin, the gap is P5's, at the query.
+
+  - Every Last.fm path past its readiness gate. `is_configured()` reads
+    `option_env!` keys baked in at compile time, so the same test exercises a real
+    POST on a keyed build and skips on a keyless CI one while reporting
+    identically. Its retry policy is covered through `lastfm_reaction` instead.
+    Argued at `LASTFM_ENDPOINT`.
+
+  - The updater's UI layer, `asset_cache.rs`, `install_via_msiexec` /
+    `install_via_package_manager` / `elevate_swap_via_pkexec`,
+    `verify_swapped_binary`'s 5 s timeout, and `fetch_latest_manifest`'s happy
+    path. Each argued in the spent updater backlog and at the code.
+
+New to this list:
+
+  - The binary, `melodia/src` (815 uncovered): `main.rs`, the four
+    `boot/ui_setup/` files and `boot/tasks.rs`. The last doc named three things in
+    this tier worth taking and step 8 took all three: the `--version` and `--logs`
+    literal branches (`crates/melodia/tests/cli_contract.rs`), `shutdown.rs`'s
+    respawn marking (`src/tests/shutdown_tests.rs`), and `single_instance`'s two
+    name spellings. What is left is `slint::run_event_loop_until_quit` and the
+    wiring around it, which needs an `AppWindow`, an `AppState` and a live runtime
+    to do work that is entirely "call these in this order". `headless.rs` already
+    boots the real backend.
+
+  - The one-line settings toggles named in P1. Reachable after that entry's
+    narrowing and still not worth a case: a test that a field assignment assigns a
+    field.
+
+  - `deezer`'s and `itunes`' host refusals past a seam. If P3's argument comes out
+    against the `OnceCell` reset, these go with it rather than being tested
+    halfway: a base parameter that stops at the first global is a test that
+    reports coverage it does not have.
+
+
+================================================================================
+SUGGESTED ORDER
+================================================================================
+
+  1. P0.1, the artwork sweep and the renormalize pass beside it. Nothing is
+     blocked, it unlinks files, and one of the three stores it sweeps cannot be
+     rebuilt from anything local. The ordering claim in `sweep_stores`' doc comment
+     is the first mutation to check.
+
+  2. P2's already-reachable tasks, `material_you.rs` first, then `queue_prune`,
+     `playback_monitor` and `retroactive_hash`. Same reason as step 1 and the
+     largest zero in the tree. `one_shot`, `first_launch` and `radio_logo_cache`
+     wait for step 4's narrowing.
+
+  3. P0.2, the radio doors. This is B2's split at its widest, and the one place
+     where the walk holding a prohibition can see the reach and not the guard.
+
+  4. P1, the settings layer, in the order its entry lists: appearance, folders,
+     updates, support, view, then the four clamp files. Decide the pass-throughs
+     out loud rather than by omission, so the next reader knows they were weighed.
+
+  5. P4's pure halves (`reconcile_live_stream`, `reconnect_delay`,
+     `sleep_unless_abandoned`) and P5's `media_controls`. All four are free
+     functions over plain values and none needs a socket. `system_theme`'s KDE half
+     joins them once its one-line path seam is in.
+
+  6. P3, and only after its seam is argued on its own. If the answer is that a
+     resettable `OnceCell` is not worth the production surface, take the two
+     seam-free items in that entry and close it.
+
+  7. P5's three query files, last, for the reason its entry gives.
+
+Steps 1 through 3 are the whole of what is left with a user-visible cost that a
+reinstall does not undo. Step 4 is the largest block of lines and the smallest per
+line. Everything from step 5 down is worth doing and worth doing after those.
