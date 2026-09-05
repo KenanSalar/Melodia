@@ -3,7 +3,7 @@ TODO: TEST COVERAGE (REPO-WIDE)
 
 Working doc for issue #38. Delete when the backlog below is spent.
 
-Status: steps 1 and 2 spent (P0.4, P0.5, P0.1, P0.3). Next is B2.
+Status: steps 1, 2 and 3 spent (P0.4, P0.5, P0.1, P0.3, B2). Next is P0.2.
 Created: 2026-09-04
 
 Numbers are from the published report at https://kenansalar.github.io/Melodia/,
@@ -46,9 +46,16 @@ WHERE IT STANDS
   Measured again on the same command after steps 1 and 2:
   TOTAL   function 40.3%              line 38.9% (16428/42222)   region 36.5%
 
+  And after step 3:
+  TOTAL   function 41.1%              line 39.7% (16789/42274)   region 37.3%
+
   The table below is the original survey, left as written. Two things moved that
   first line, only one of them this backlog: the updater tests landed after the
   report was generated.
+
+  The one row that has moved far enough to be misleading is the library API,
+  now 37.0% (1268/3425) rather than 28.1%. Step 3's four files are the whole of
+  that.
 
   subsystem                                    line cov          uncovered
   --------------------------------------------------------------------------
@@ -83,7 +90,7 @@ TWO BLOCKERS THAT GATE MOST OF THE BACKLOG
 
 Neither is a test. Between them they gate roughly 3600 uncovered lines, which is
 most of what is worth writing. Both are structural and both should be settled
-before the tests that depend on them. B1 has since been settled; B2 has not.
+before the tests that depend on them. Both have since been settled.
 
 B1. DONE — the HTTP test double is built.
 
@@ -100,26 +107,52 @@ B1. DONE — the HTTP test double is built.
     net/mod.rs (46). Roughly 1050 lines across four subsystems that share nothing
     else, each of them now only a matter of writing the tests.
 
-B2. AppState cannot be built in a test, and the library API takes it.
+B2. DONE — the door takes the state, the work takes the database.
 
     AppState owns an AudioOutput, a PlaybackEngine and a tokio Handle, and only
-    AppState::init builds one, which opens the audio device. Every
-    library::* entry point takes &AppState, so the layer CLAUDE.md calls the only
-    door onto the database is unreachable from a unit test. That is the whole
-    reason library/ sits at 28.1% while the queries underneath it sit at 85.8%:
-    the query layer is testable and the composition over it is not.
+    AppState::init builds one, which opens the audio device. Every library::*
+    entry point took &AppState, so the layer CLAUDE.md calls the only door onto
+    the database was unreachable from a unit test.
 
-    The tree already contains the fix, one directory over. PlaybackContext exists
-    precisely so library::playback::* takes six Arc clones rather than &AppState.
-    The generalisation is to let the functions that only need the database take
-    what they only need. library/playlists.rs is the clean case: thirteen
-    functions, every one of them a single queries::playlist::* call through
-    &state.db, and taking &DbPool instead makes all thirteen testable against the
-    DbPool::test_pool() fixture that already exists.
+    The fix was not the signature sweep this entry proposed. radio_files.rs
+    already carried the answer and credited playlist_files with it: the library
+    door keeps the &AppState and the work moves to a body taking what it reaches.
+    So playlist_files had narrowed only its inner halves, leaving the export loop,
+    the filename de-duplication and the match counts stranded above the seam, and
+    finishing that was most of the work. tags::write_tag_edit, mbid::write_mbids
+    and ratings::write_rating_to_files are the same split one field wider.
 
-    Do not solve this by building a test AppState behind the headless-audio shim.
-    That works (headless.rs proves it) but it makes every library test pay for an
-    audio device to ask a question about SQL.
+    Keeping the door is what makes it cheap: no call site moved, melodia-views
+    still never holds a DbPool, and state/contexts.rs's note that per-domain
+    contexts were deliberately not added stays true, because none was added.
+    Four files got the split, chosen by what a test could then say:
+    playlist_files (both doors), import (both, and the ids-only half had no
+    caller at all and a doc comment naming one), browse and playlists (two
+    functions, not thirteen).
+
+    browse is the one worth remembering. Its test file opened with a private
+    copy of the production guard ladder, written because the shipped function
+    could not be called, and browse.rs said so in a doc comment. The copy carried
+    no library-folder guard, so the half deciding whether a path may be browsed
+    at all had never run. The split deleted the copy and the guard is now pinned
+    from both sides, enabled and disabled.
+
+    What the eleven remaining playlists.rs wrappers were is worth recording,
+    since this entry used to call them the easiest win: each is a single
+    queries::playlist::* call with no transformation, and
+    queries/tests/playlist_tests.rs already covers that layer with sixteen tests.
+    Narrowing them would have moved a percentage and tested nothing new.
+
+    Do not solve the rest by building a test AppState behind the headless-audio
+    shim. That works (headless.rs proves it) but it makes every library test pay
+    for an audio device to ask a question about SQL.
+
+    Twenty-four tests: eight new on playlist_files' doors beside the thirteen it
+    already had on the helpers, four on import, four on playlists, and browse's
+    five rewired onto the shipped walk plus three the copy could not reach. Two
+    were mutation-checked: a byte compare in place of natord puts "10" before "9"
+    in a dropped batch, and dropping the is_enabled filter lets a switched-off
+    folder be browsed.
 
 
 ================================================================================
@@ -300,7 +333,7 @@ lines are backfill and run_sweep, and the attempted set is 25 of them.
 
 
 ================================================================================
-P1: THE LIBRARY API (2431 uncovered, blocked on B2)
+P1: THE LIBRARY API (2157 uncovered, unblocked by B2)
 ================================================================================
 
 CLAUDE.md is emphatic that melodia-app/src/library is the only door onto the
@@ -312,18 +345,26 @@ and resolve_start_slot has all five of its branches, including the one the doc
 comment argues for, where a row vanished between the id list and the fetch.
 tags_tests.rs is 370 lines. radio_files_tests.rs is 593.
 
-What is untested is every pub async fn that touches state.db, because of B2. Do
-the context narrowing first, then take these in order of what a failure costs:
+What was untested was every pub async fn that touches state.db, because of B2.
+Step 3 took the four where the door/work split let a test say something the
+queries underneath had not already answered. What is left, in order of what a
+failure costs:
 
   library/playback.rs      4.9% of 268   the play/pause/seek entry points
   library/favorites.rs     0.0% of 102   set_favorite, and the love sync under it
-  library/playlists.rs     0.0% of 126   thirteen thin query wrappers, the easiest
-                                         win once B2 lands
-  library/browse.rs       23.1% of 130   folder-tree navigation
-  library/import.rs        0.0% of  88   the drop/open-with path
-  library/playlist_files  52.6% of 173   the M3U8 writer around a 98.9% formatter
   library/settings/view.rs 6.2% of 128   views.json, the per-view UI state
   library/tags.rs         69.7% of 234   the edit-track orchestrator
+  library/playlists.rs    26.5% of 151   the eleven wrappers, and see B2 for why
+                                         they are not work
+
+  Spent in step 3, measured after:
+  library/browse.rs         92.0% of 138
+  library/import.rs         90.9% of  99
+  library/playlist_files.rs 87.6% of 185
+
+library/playback.rs is not blocked and never was: every one of its functions
+already takes &PlaybackContext, which is B2's shape from before this backlog
+existed. It is simply untested, which makes it the cheapest thing on this list.
 
 library/tags.rs deserves a note out of order. Its doc comment warns not to
 shortcut the post-write re-extract into a hand-built UPDATE, because a fresh
@@ -333,7 +374,10 @@ data-integrity trap with a named failure mode and no test.
 
 favorites.rs is the other one worth pulling forward: it ends in sync_love, so a
 favourite toggle reaches a third-party account, and the batching and best-effort
-policy are argued once there for every caller.
+policy are argued once there for every caller. Its four readers are pass-throughs
+of the kind B2 declined to write tests for; the two writers are the work, and
+they need db, player_state, sinks, library_changed and a ScrobbleService, so the
+honest place for them is beside P2's scrobbling rather than here.
 
 
 ================================================================================
@@ -485,9 +529,13 @@ SUGGESTED ORDER
   2. DONE — P0.1 (rating write-back) and P0.3 (play counts). P0.3 needed no
      production change; P0.1 needed the AppState narrowing its entry describes,
      which is B2's shape applied to one task.
-  3. B2: narrow the contexts, starting with library/playlists.rs as the proof.
-     Next up, and P0.1 is now a worked precedent for the shape.
-  4. P0.2 (queue and station), then the P1 list in the order given.
+  3. DONE — B2, on the four files where the split unlocked a decision worth
+     pinning. Not the sweep this list proposed; see its entry above for why the
+     door stayed put and why playlists.rs got two tests rather than thirteen.
+  4. P0.2 (queue and station), then what is left of the P1 list. Next up. Queue
+     is the last P0 and the only tier where a defect costs the user something no
+     rescan returns; it wants a decision of its own about &PlaybackContext, which
+     is why B2 did not reach it.
   5. P2, then P3, then the three items worth keeping from P4. B1 is already built,
      so the network tier is unblocked whenever it comes up the list.
 

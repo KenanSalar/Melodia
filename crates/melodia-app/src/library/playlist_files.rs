@@ -63,11 +63,21 @@ pub async fn export_playlists_to_folder(
     playlist_ids: &[i64],
     folder: &Path,
 ) -> Result<ExportPlaylistsResult, AppError> {
+    write_playlists(&state.db, playlist_ids, folder).await
+}
+
+/// [`export_playlists_to_folder`]'s body, narrowed to what it actually reaches so the tests can
+/// drive it off a bare pool.
+async fn write_playlists(
+    db: &DbPool,
+    playlist_ids: &[i64],
+    folder: &Path,
+) -> Result<ExportPlaylistsResult, AppError> {
     let mut failed: Vec<(String, String)> = Vec::new();
     let mut prepared: Vec<(String, String)> = Vec::with_capacity(playlist_ids.len());
 
     for &id in playlist_ids {
-        match prepare_export(&state.db, id).await {
+        match prepare_export(db, id).await {
             Ok((name, text)) => prepared.push((name, text)),
             Err(e) => failed.push((format!("playlist {id}"), e.to_string())),
         }
@@ -128,6 +138,11 @@ pub async fn import_playlist_from_file(
     state: &AppState,
     src: &Path,
 ) -> Result<ImportPlaylistResult, AppError> {
+    read_playlist_file(&state.db, src).await
+}
+
+/// [`import_playlist_from_file`]'s body, narrowed the same way [`write_playlists`] is.
+async fn read_playlist_file(db: &DbPool, src: &Path) -> Result<ImportPlaylistResult, AppError> {
     let content = tokio::fs::read_to_string(src).await?;
     let parsed = m3u::parse(&content);
 
@@ -142,10 +157,10 @@ pub async fn import_playlist_from_file(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "Imported Playlist".to_owned());
 
-    let outcome = match_entries(&state.db, &parsed.entries, src.parent()).await?;
+    let outcome = match_entries(db, &parsed.entries, src.parent()).await?;
 
-    let playlist = queries::playlist::create_playlist(&state.db, &name, None).await?;
-    queries::playlist::add_tracks_to_playlist(&state.db, playlist.id, &outcome.ordered_ids).await?;
+    let playlist = queries::playlist::create_playlist(db, &name, None).await?;
+    queries::playlist::add_tracks_to_playlist(db, playlist.id, &outcome.ordered_ids).await?;
 
     Ok(ImportPlaylistResult {
         playlist_id: playlist.id,
