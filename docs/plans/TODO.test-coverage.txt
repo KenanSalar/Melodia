@@ -3,7 +3,7 @@ TODO: TEST COVERAGE (REPO-WIDE)
 
 Working doc for issue #38. Delete when the backlog below is spent.
 
-Status: survey complete, no tests written yet
+Status: step 1 spent (P0.4, P0.5). Next is step 2: P0.1 + P0.3.
 Created: 2026-09-04
 
 Numbers are from the published report at https://kenansalar.github.io/Melodia/,
@@ -198,42 +198,64 @@ a per-song flush does not imply the library changed, and a subscriber reading
 before the commit sees the old count.
 
 
-P0.4  Watcher reconcile and the moved-file path (reconcile.rs, 13.6% of 242)
+P0.4  DONE — watcher reconcile, and the defect it turned up
 -----------------------------------------------------------------------------
 
-handle_created, handle_renamed and handle_modified decide whether a file that
-appeared somewhere new is the same track relocated or a different track imported.
-Get it wrong in the relocating direction and two rows exist for one file; get it
-wrong the other way and the original row is deleted, taking its rating, play count
-and favourite with it.
+Thirteen tests added to tasks/tests/reconcile_tests.rs, which previously held two
+(both on handle_renamed's mtime source). Ten drive the handlers directly against
+DbPool::test_pool() with nothing on disk; three drive process_batch against real
+copies of test-assets/silence.mp3, which is the only level where a delete and a
+create meet.
 
-BLAKE3 plus the partial index idx_tracks_file_hash is the mechanism, the watcher
-retains the hash on delete so the match can be made, and tasks/retroactive_hash.rs
-backfills. Every piece of that is covered (scanner.rs 93.7%) except the reconcile
-that uses it, and ingest/watcher.rs itself is at 51.7%.
+Writing them turned up a live data-loss defect, now fixed in the same change.
 
-This is testable today against DbPool::test_pool() with no blocker, because
-process_batch takes a DbPool and a Paths rather than an AppState. It is the
-largest no-blocker win in P0.
+  CLAUDE.md claimed "the watcher retains the hash on delete". Nothing implemented
+  that: delete_track_by_path is a hard DELETE and there is no tombstone anywhere
+  in migrations/. What actually carried a move across a delete was
+  process_batch's moved_candidates map, resolved before the write transaction
+  opens — and it was defeated by event order. deduplicate_events returns
+  state.into_iter() over a HashMap, so the batch arrived in an order that varied
+  per run, and a cross-device move reaches the watcher as Removed + Created
+  rather than as a Renamed. Removed first meant the row was hard-deleted, the
+  re-point then affected 0 rows, and handle_created fell through to a fresh
+  insert. Rating, play count and favourite gone, roughly half the time.
 
-Boundary cases worth the table: a rename inside the library, a rename in from
-outside it, a rename out of it, a delete followed by a create of identical bytes,
-and a modify that changes the hash (which is a re-tag, not a move).
+  The fix is one stable sort in process_batch putting a batch's deletes last,
+  which is the ordering the pre-transaction candidate map was already written
+  for. CLAUDE.md now describes the real mechanism.
+
+Worth knowing for anything similar: tracks.id is a bare INTEGER PRIMARY KEY, so an
+insert takes max(rowid) + 1 and re-uses the id a delete just freed whenever the
+deleted row held the largest — which a one-row fixture guarantees. An assertion on
+the id alone therefore passes while the user's state is gone; the rating and play
+count are the evidence.
+
+Still uncovered here and deliberately: the 500 ms batching window in
+file_event_processor/mod.rs, which needs an AppState (B2), and ingest/watcher.rs's
+notify wiring. classify_event and deduplicate_events were already covered.
 
 
-P0.5  mbid_backfill's persisted attempted set (0% of 164)
+P0.5  DONE — mbid_backfill's persisted attempted set
 -----------------------------------------------------------
 
-Listed here for a reason CLAUDE.md gives directly: this file and the rule
-describing it once came to disagree about whether the set was persisted, each
-correct on the day it was written. That is the exact drift a test would have
-caught and prose did not.
+Six tests in the new tasks/tests/mbid_backfill_tests.rs. No production change was
+needed: load_attempted and persist_attempted already took a &Path and a
+&HashSet<i64>, so the round trip runs against a TempDir with no AppState.
 
-load_attempted and persist_attempted are a HashSet<i64> over a JSON file, testable
-with a temp dir and no blocker at all. The behaviour worth pinning is that the set
-suppresses a re-lookup across a restart, that the manual kick clears both the set
-and the file, and that the writer does not bump library_changed, since that is
-what stops the task waking itself in a loop.
+Pinned: the set survives a restart (compared as a set, since the ids leave a
+HashSet and the on-disk array order is not ours); a missing file loads empty; all
+three ways of failing to read it fold to empty rather than to a skip-list nobody
+can clear; the manual kick rewrites the file rather than only clearing memory;
+summarize's three arms; and, as a source pin over both tasks/mbid_backfill.rs and
+library/mbid.rs, that neither bumps a signal. The task subscribes to
+library_changed, and write_resolved_mbids holds an &AppState, so nothing but that
+pin notices a bump being added. It was mutation-checked: adding a real bump to
+write_resolved_mbids fails it.
+
+Untouched: backfill() and run_sweep(), which take &AppState and call the real
+ListenBrainz client. Covering those means the write_mbids-style split (a core
+taking db + client) plus the B1 server, and belongs with P2's scrobbling work
+rather than here.
 
 
 ================================================================================
@@ -416,10 +438,11 @@ DELIBERATELY NOT ON THIS LIST
 SUGGESTED ORDER
 ================================================================================
 
-  1. P0.4 (watcher reconcile) and P0.5 (mbid attempted set): highest consequence
-     of the no-blocker items, and both testable against fixtures that exist.
+  1. DONE — P0.4 (watcher reconcile) and P0.5 (mbid attempted set). Both were
+     testable against fixtures that already existed, and P0.4 found a live
+     data-loss defect on the moved-file path; see its entry above.
   2. P0.1 (rating write-back) and P0.3 (play counts): the two that write user data,
-     both with a pure decision layer a paused clock can drive.
+     both with a pure decision layer a paused clock can drive. Next up.
   3. B2: narrow the contexts, starting with library/playlists.rs as the proof.
   4. P0.2 (queue and station), then the P1 list in the order given.
   5. P2, then P3, then the three items worth keeping from P4. B1 is already built,

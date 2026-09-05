@@ -274,3 +274,7 @@ async fn persist_attempted(path: &Path, attempted: &HashSet<i64>) {
         Err(e) => log::warn!("MBID backfill: attempted-set persist task panicked: {e}"),
     }
 }
+
+#[cfg(test)]
+#[path = "tests/mbid_backfill_tests.rs"]
+mod tests;
