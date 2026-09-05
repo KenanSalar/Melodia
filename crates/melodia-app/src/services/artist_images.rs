@@ -256,3 +256,7 @@ pub fn spawn_fetch(paths: Arc<Paths>, db: DbPool, client: reqwest::Client) {
         }
     });
 }
+
+#[cfg(test)]
+#[path = "tests/artist_images_tests.rs"]
+mod tests;

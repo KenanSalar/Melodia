@@ -682,3 +682,7 @@ fn sleep_unless_abandoned(shared: &StreamShared, delay: Duration) -> bool {
 #[cfg(test)]
 #[path = "tests/stream_source_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/stream_probe_tests.rs"]
+mod probe_tests;

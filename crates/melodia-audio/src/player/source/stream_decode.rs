@@ -101,3 +101,7 @@ impl Iterator for StreamDecoder {
         self.cursor.next_sample(&mut *self.format, &mut *self.decoder, self.track)
     }
 }
+
+#[cfg(test)]
+#[path = "tests/stream_decode_tests.rs"]
+mod tests;

@@ -9,6 +9,7 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::player::engine::state::PlayerViewModelLight;
 use melodia_core::entities::track::TrackSummary;
 use melodia_playback::player::playback::crossfade::CrossfadeSettings;
 
@@ -305,4 +306,76 @@ fn a_live_source_still_publishes_its_elapsed_time() {
     assert_eq!(state.position_ms, 12_345);
     // Elapsed listening time, not a fraction of anything: a live stream has no length.
     assert_eq!(out.as_ref().map(|t| t.tick.duration_ms), Some(0));
+}
+
+// --- The live-stream reconcile ---------------------------------------------
+
+/// A handle seated on a state, plus a receiver on the view-model sink, which is the only way to
+/// see whether a tick published anything.
+fn seated(
+    state: PlayerState,
+) -> (PlayerStateHandle, PlayerSinks, watch::Receiver<Option<PlayerViewModelLight>>) {
+    let handle = PlayerStateHandle::default();
+    *lock_state(&handle) = state;
+    let (view_model, published) = watch::channel(None);
+    let (queue, _) = watch::channel(None);
+    let sinks = PlayerSinks {
+        view_model,
+        queue,
+        media_controls: None,
+    };
+    (handle, sinks, published)
+}
+
+/// The whole reason the change checks exist. A station that is playing happily changes neither
+/// its buffering flag nor its title, and the monitor runs twice a second: republishing the view
+/// model on every one of those ticks rebuilds it for nothing.
+#[test]
+fn a_station_with_nothing_to_report_publishes_nothing() {
+    let stream = StreamShared::new();
+    let (handle, sinks, published) = seated(playing_a_station());
+    let mut last_generation = stream.title_generation();
+
+    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+
+    assert_eq!(published.has_changed().ok(), Some(false));
+}
+
+/// A new title is the one thing a station changes on its own that the user can see, and it
+/// arrives on the feed thread with no way to reach the state lock from there. The generation is
+/// how this tick learns of it.
+#[test]
+fn a_moved_title_generation_publishes_the_station_again() {
+    let stream = StreamShared::new();
+    let (handle, sinks, published) = seated(playing_a_station());
+    // A generation the stream has never held, standing in for a title that landed since the last
+    // tick read one.
+    let mut last_generation = stream.title_generation().wrapping_sub(1);
+
+    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+
+    assert_eq!(published.has_changed().ok(), Some(true));
+    assert_eq!(last_generation, stream.title_generation(), "the tick has to record what it saw");
+}
+
+/// The buffering flag is the other half, and it moves in both directions: a station that has
+/// recovered has to have the indicator taken off it, not just put on.
+#[test]
+fn a_station_that_stopped_buffering_has_the_flag_cleared() {
+    let stream = StreamShared::new();
+    let mut state = playing_a_station();
+    if let Some(station) = state.station_mut() {
+        Arc::make_mut(station).buffering = true;
+    }
+    let (handle, sinks, published) = seated(state);
+    let mut last_generation = stream.title_generation();
+
+    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+
+    assert_eq!(published.has_changed().ok(), Some(true));
+    assert_eq!(
+        lock_state(&handle).station().map(|s| s.buffering),
+        Some(false),
+        "the stream is not buffering, so neither is the station the UI paints",
+    );
 }

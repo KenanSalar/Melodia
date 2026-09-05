@@ -370,3 +370,7 @@ async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, A
     )
     .await
 }
+
+#[cfg(test)]
+#[path = "tests/reader_tests.rs"]
+mod tests;

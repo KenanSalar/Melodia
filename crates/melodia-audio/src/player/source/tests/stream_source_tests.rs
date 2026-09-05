@@ -3,7 +3,8 @@ use std::time::Duration;
 use reqwest::Url;
 
 use crate::player::source::stream_source::{
-    first_stream_url, is_playlist_content_type, is_playlist_url, reconnect_delay,
+    PREFETCH_FALLBACK_BYTES, PREFETCH_MAX_BYTES, PREFETCH_MIN_BYTES, PREFETCH_SECONDS,
+    first_stream_url, is_playlist_content_type, is_playlist_url, prefetch_bytes, reconnect_delay,
 };
 
 /// `Some(verdict)` when `raw` parsed, `None` when it didn't — so a typo in a test URL fails the
@@ -176,4 +177,34 @@ fn the_decoder_probe_is_built_on_the_blocking_pool() {
              and deadlocks against the download that would satisfy it"
         );
     }
+}
+
+/// A station that states no usable bitrate gets the fallback rather than a figure derived from a
+/// zero, which the directory reports for a large share of live stations.
+#[test]
+fn a_station_with_no_stated_bitrate_prefetches_the_fallback() {
+    assert_eq!(prefetch_bytes(None), PREFETCH_FALLBACK_BYTES);
+    assert_eq!(prefetch_bytes(Some(0)), PREFETCH_FALLBACK_BYTES);
+}
+
+/// Both ends of the derived figure, worked against the constants rather than round numbers: the
+/// floor is what stops a thin stream stuttering through its first seconds, the ceiling what stops
+/// a fat one taking noticeably long to start, and between them the answer is
+/// [`PREFETCH_SECONDS`] of audio at the stated rate.
+#[test]
+fn the_prefetch_is_two_seconds_of_audio_between_its_floor_and_its_ceiling() {
+    // kbps → bytes, stepping either side of both clamps.
+    let cases = [
+        (131_u32, PREFETCH_MIN_BYTES),
+        (132, 33_000),
+        (320, 80_000),
+        (524, 131_000),
+        (525, PREFETCH_MAX_BYTES),
+    ];
+    for (kbps, expected) in cases {
+        assert_eq!(prefetch_bytes(Some(kbps)), expected, "at {kbps} kbps");
+    }
+
+    // The unclamped middle really is the stated number of seconds.
+    assert_eq!(prefetch_bytes(Some(320)), 320 * 1_000 / 8 * PREFETCH_SECONDS);
 }
