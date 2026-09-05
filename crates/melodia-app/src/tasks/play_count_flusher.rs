@@ -194,3 +194,7 @@ async fn flush_skip_counts(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/play_count_flusher_tests.rs"]
+mod tests;

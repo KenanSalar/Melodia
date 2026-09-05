@@ -119,3 +119,7 @@ fn read_each(unrated: &[(i64, String)]) -> Vec<(i64, i32)> {
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "tests/rating_import_tests.rs"]
+mod tests;

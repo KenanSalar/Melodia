@@ -3,7 +3,7 @@ TODO: TEST COVERAGE (REPO-WIDE)
 
 Working doc for issue #38. Delete when the backlog below is spent.
 
-Status: step 1 spent (P0.4, P0.5). Next is step 2: P0.1 + P0.3.
+Status: steps 1 and 2 spent (P0.4, P0.5, P0.1, P0.3). Next is B2.
 Created: 2026-09-04
 
 Numbers are from the published report at https://kenansalar.github.io/Melodia/,
@@ -42,6 +42,13 @@ WHERE IT STANDS
 ---------------
 
   TOTAL   function 38.9% (2278/5859)   line 37.0% (15542/42028)   region 34.7%
+
+  Measured again on the same command after steps 1 and 2:
+  TOTAL   function 40.3%              line 38.9% (16428/42222)   region 36.5%
+
+  The table below is the original survey, left as written. Two things moved that
+  first line, only one of them this backlog: the updater tests landed after the
+  report was generated.
 
   subsystem                                    line cov          uncovered
   --------------------------------------------------------------------------
@@ -129,35 +136,47 @@ The destructive primitives are already well covered. What is missing every time 
 the decision above them.
 
 
-P0.1  Rating write-back coalescing (tasks/rating_writeback.rs, 0% of 72)
+P0.1  DONE — rating write-back, and the seam it needed
 -------------------------------------------------------------------------
 
-This is the highest-consequence untested code in the repo. It rewrites the user's
-audio files: lofty re-serializes the whole tag, so rating a 32 MB MP3 rewrites
-32 MB of the user's own music, and the value it writes is chosen by a coalescing
-map and a quiet period that nothing tests.
+Eight tests: six in the new tasks/tests/rating_writeback_tests.rs against real
+copies of test-assets/silence.flac, and two in tasks/tests/rating_import_tests.rs
+for the sweep that reads ratings the other way. All three behaviours the module
+doc names are pinned, and the first two were mutation-checked: making the map
+first-wins puts a one in the file where the user asked for four, and dropping the
+switch read writes to files after the user said not to.
 
-The module's own doc names three behaviours, none of them pinned:
+This one needed a production change, because none of the three was reachable.
+run, flush and flush_at_exit all took an &AppState, and the coalescing map was an
+unnamed local inside run, so there was nothing to call.
 
-  - a star strip is five adjacent click targets, so a user picking four stars
-    usually sends one, two, three and four on the way, and only the last may be
-    written
-  - the write-ratings-to-tags switch is read at flush time rather than at send,
-    because the switch can move while a burst is in flight
-  - the quiet period is what turns a walk across the strip into a single write
+  The narrowing is the split the tree had already made twice.
+  library::ratings::write_rating_to_files now takes the four arguments it was only
+  forwarding, exactly as library::tags::write_tag_edit and library::mbid::write_mbids
+  take them, and the loop holds a small Writeback of those four plus the SharedFlag,
+  built by from_state at spawn. Behaviour is unchanged; what moved is who names
+  AppState.
 
-Get the first wrong and a four-star rating lands in the file as one. Get the
-second wrong and Melodia writes to files after the user turned that off, which is
-the one behaviour a user would call a violation rather than a bug.
+  The hand-rolled OnceLock<UnboundedSender<..>> went too, replaced by the
+  EventBridge that play_count_flusher was already using for the identical job one
+  file over. Same semantics, eight fewer lines, one fewer place to get a set-once
+  channel wrong.
 
-The primitives beneath it are fine: ingest/rating_tags.rs is 100% and
-tag_writer.rs is 84.7%. The coalescing map is pure over (id, value, elapsed) and
-testable with a paused clock, which .claude/rules/tokio.md already covers.
+Worth knowing before writing the next timed test: start_paused and
+DbPool::test_pool() do not mix. The pool is one connection onto sqlite::memory:,
+so the database lives *in* that connection, and a clock that auto-advances past
+sqlx's idle and lifetime timers has the pool reap it. What comes back is a pool
+timeout that says nothing about the code under test. Both suites here say so at
+the test that would otherwise have reached for it.
 
-Pair it with library/ratings.rs (4.5% of 67, and ratings_tests.rs is thirteen
-lines) and tasks/rating_import.rs (0% of 52), which is the one-shot sweep that
-reads ratings out of files on first launch and is the same data flowing the other
-way.
+Still uncovered: library/ratings.rs's set_rating and set_current_rating, which
+reach PlayerState as well as the database and want B2, and tasks/one_shot.rs's
+marker ladder, which takes an &AppState for the same reason. write_rating_to_files
+is now exercised end to end through the loop.
+
+Measured: rating_writeback.rs 0% -> 67.0% line (97 lines now, up from 72: the
+Writeback struct and its two methods are new), rating_import.rs 0% -> 23.1%,
+library/ratings.rs 4.5% -> 34.9%. What is left in each is the AppState half.
 
 
 P0.2  The queue and the station seated under it (library/queue.rs, 1.7% of 240)
@@ -182,21 +201,37 @@ removed between sessions.
 Blocked on B2 for the persistence half. The restore decision itself is pure.
 
 
-P0.3  Play counts (tasks/play_count_flusher.rs, 0% of 124)
+P0.3  DONE — play counts
 -----------------------------------------------------------
 
-The batched UPDATE consumer of the play_counts bridge, and utils/play_counts.rs,
-the producer half, is 0% of 6. Play count and last_played are what Favorites'
-Most Played strip and the whole Recently Played page rank on, and they accumulate
-over the life of an install: a flush that drops a batch loses history no rescan
-returns.
+Ten tests and no production change: spawn already took a DbPool and a Signal
+rather than an AppState, and run, flush and record already took plain arguments.
+Nine are in the new tasks/tests/play_count_flusher_tests.rs; the tenth is in
+melodia-core, covering the bridge itself.
 
-What to pin: a batch is flushed once and not twice, a flush at shutdown does not
-strand the pending map, and the stats_changed signal fires after the write rather
-than before it. The last matters because the two Signals are deliberately split so
-a per-song flush does not imply the library changed, and a subscriber reading
-before the commit sees the old count.
+All three of the properties this entry asked for are held. A drained map cannot be
+written twice. Both ways the loop can end owe a final flush, and the shutdown one
+is driven with the events still in the channel, which is the order where the drain
+rather than the recv arm has to see them. And the bump is gated on the write: a
+flush against a closed pool writes nothing and wakes nobody, which is what
+separates "bump after the write" from "bump regardless".
 
+The rest are properties the entry did not name and the split signals turn on: a
+skip-only flush writes the row and does not bump, one flush is one bump however
+many rows rode in it, and a play stamps last_played where a skip must not. The
+first two are why a skip burst does not cost Favorites, Recently Played and the
+stat-dependent smart playlists a re-fetch each; the third is why a skipped track
+does not appear at the top of Recently Played.
+
+The core-side test is one test rather than several because EventBridge is a
+OnceLock: the claim is one-shot per process, so a second test could only assert
+that it had already happened. It follows toast_tests.rs, which says the same.
+
+Still uncovered: the two chunked SQL builders past their first chunk, which would
+need 499 rows to reach, and spawn itself, which can only run once per test binary.
+
+Measured: play_count_flusher.rs 0% -> 93.6% line (8 uncovered),
+utils/play_counts.rs 0% -> 100%.
 
 P0.4  DONE — watcher reconcile, and the defect it turned up
 -----------------------------------------------------------------------------
@@ -234,6 +269,9 @@ Still uncovered here and deliberately: the 500 ms batching window in
 file_event_processor/mod.rs, which needs an AppState (B2), and ingest/watcher.rs's
 notify wiring. classify_event and deduplicate_events were already covered.
 
+Measured: reconcile.rs 13.6% -> 80.7% line (47 uncovered, most of it the bulk
+path above 20 events and the per-handler error arms).
+
 
 P0.5  DONE — mbid_backfill's persisted attempted set
 -----------------------------------------------------------
@@ -256,6 +294,9 @@ Untouched: backfill() and run_sweep(), which take &AppState and call the real
 ListenBrainz client. Covering those means the write_mbids-style split (a core
 taking db + client) plus the B1 server, and belongs with P2's scrobbling work
 rather than here.
+
+Measured: mbid_backfill.rs 0% -> 15.2% line. Low on purpose: the 139 uncovered
+lines are backfill and run_sweep, and the attempted set is 25 of them.
 
 
 ================================================================================
@@ -441,9 +482,11 @@ SUGGESTED ORDER
   1. DONE — P0.4 (watcher reconcile) and P0.5 (mbid attempted set). Both were
      testable against fixtures that already existed, and P0.4 found a live
      data-loss defect on the moved-file path; see its entry above.
-  2. P0.1 (rating write-back) and P0.3 (play counts): the two that write user data,
-     both with a pure decision layer a paused clock can drive. Next up.
+  2. DONE — P0.1 (rating write-back) and P0.3 (play counts). P0.3 needed no
+     production change; P0.1 needed the AppState narrowing its entry describes,
+     which is B2's shape applied to one task.
   3. B2: narrow the contexts, starting with library/playlists.rs as the proof.
+     Next up, and P0.1 is now a worked precedent for the shape.
   4. P0.2 (queue and station), then the P1 list in the order given.
   5. P2, then P3, then the three items worth keeping from P4. B1 is already built,
      so the network tier is unblocked whenever it comes up the list.

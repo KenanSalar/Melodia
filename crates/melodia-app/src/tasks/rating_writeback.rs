@@ -12,21 +12,66 @@
 //! that matters is the one at the moment of writing.
 
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_util::sync::CancellationToken;
 
 use crate::library::ratings;
-use crate::state::AppState;
+use crate::state::{AppState, SharedFlag};
 use crate::tasks::TaskSpawner;
-use melodia_core::error::describe;
+use melodia_artwork::media::image::artwork::CoverCache;
+use melodia_core::error::{AppError, describe};
+use melodia_core::utils::event_bridge::EventBridge;
+use melodia_core::utils::self_writes::SelfWrites;
+use melodia_store::database::DbPool;
 
-/// Process-wide sender, set once by [`spawn`]. A `OnceLock` rather than a field on `AppState`
+/// Process-wide sender, claimed once by [`spawn`]. A bridge rather than a field on `AppState`
 /// for the reason `play_count_flusher` uses one: the senders sit on the rating callbacks, and
-/// an unset channel is exactly right for a test binary, where nothing should be touching files.
-static SENDER: OnceLock<UnboundedSender<(i64, i32)>> = OnceLock::new();
+/// an unclaimed channel is exactly right for a test binary, where nothing should be touching
+/// files.
+static BRIDGE: EventBridge<(i64, i32)> = EventBridge::new();
+
+/// What the loop needs to put a star into a file: the four `library::tags::write_tag_edit`
+/// already takes by name, plus the switch it consults at flush time.
+///
+/// Owned clones rather than an `&AppState`, for `PlaybackContext`'s reason and
+/// `write_tag_edit`'s: every field is cheap to clone, and naming them is what lets the
+/// coalescing map, the quiet period and the flush-time switch read be driven by a test at all.
+#[derive(Clone)]
+struct Writeback {
+    db: DbPool,
+    artwork_dir: PathBuf,
+    cover_cache: CoverCache,
+    self_writes: Arc<SelfWrites>,
+    write_to_tags: SharedFlag,
+}
+
+impl Writeback {
+    fn from_state(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            artwork_dir: state.paths.artwork_dir.clone(),
+            cover_cache: state.cover_cache.clone(),
+            self_writes: state.self_writes.clone(),
+            write_to_tags: state.write_ratings_to_tags.clone(),
+        }
+    }
+
+    async fn write(&self, ids: &[i64], rating: i32) -> Result<usize, AppError> {
+        ratings::write_rating_to_files(
+            &self.db,
+            &self.artwork_dir,
+            &self.cover_cache,
+            &self.self_writes,
+            ids,
+            rating,
+        )
+        .await
+    }
+}
 
 /// How long the ratings have to stop moving before anything is written.
 ///
@@ -49,28 +94,28 @@ const SHUTDOWN_FLUSH_MAX: usize = 8;
 
 /// Queue `ids` for a write at `rating`. Silent no-op when the task was never spawned.
 pub fn enqueue(ids: &[i64], rating: i32) {
-    let Some(tx) = SENDER.get() else {
-        return;
-    };
     for &id in ids {
-        // `send` fails only once the receiver is gone, which happens at shutdown after the
-        // final drain — losing a write in that window costs the tag, never the row.
-        let _ = tx.send((id, rating));
+        // A send lands nowhere only once the receiver is gone, which happens at shutdown after
+        // the final drain — losing a write in that window costs the tag, never the row.
+        BRIDGE.send((id, rating));
     }
 }
 
 /// Spawn the write-back loop. Idempotent; tracked by `spawner` so shutdown drains the queue
 /// before the runtime goes.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
-    let (tx, rx) = mpsc::unbounded_channel();
-    if SENDER.set(tx).is_err() {
+    let Some(rx) = BRIDGE.install() else {
         return;
-    }
-    let state = state.clone();
-    spawner.spawn_cancellable(move |shutdown| run(rx, shutdown, state));
+    };
+    let writeback = Writeback::from_state(state);
+    spawner.spawn_cancellable(move |shutdown| run(rx, shutdown, writeback));
 }
 
-async fn run(mut rx: UnboundedReceiver<(i64, i32)>, shutdown: CancellationToken, state: AppState) {
+async fn run(
+    mut rx: UnboundedReceiver<(i64, i32)>,
+    shutdown: CancellationToken,
+    writeback: Writeback,
+) {
     // Last value per track wins: the map is what makes 1→2→3→4 one write rather than four.
     let mut pending: HashMap<i64, i32> = HashMap::new();
 
@@ -88,12 +133,12 @@ async fn run(mut rx: UnboundedReceiver<(i64, i32)>, shutdown: CancellationToken,
                 while let Ok((id, rating)) = rx.try_recv() {
                     pending.insert(id, rating);
                 }
-                flush_at_exit(&state, &mut pending).await;
+                flush_at_exit(&writeback, &mut pending).await;
                 return;
             }
             event = rx.recv() => {
                 let Some((id, rating)) = event else {
-                    flush(&state, &mut pending).await;
+                    flush(&writeback, &mut pending).await;
                     return;
                 };
                 pending.insert(id, rating);
@@ -102,7 +147,7 @@ async fn run(mut rx: UnboundedReceiver<(i64, i32)>, shutdown: CancellationToken,
             }
             () = &mut quiet, if armed => {
                 armed = false;
-                flush(&state, &mut pending).await;
+                flush(&writeback, &mut pending).await;
             }
         }
     }
@@ -113,10 +158,10 @@ async fn run(mut rx: UnboundedReceiver<(i64, i32)>, shutdown: CancellationToken,
 /// Which of an over-cap set survives is `HashMap` order, i.e. arbitrary. There is no better
 /// answer available: the queue coalesces per track, so by the time a burst arrives here the order
 /// the user clicked in is already gone, and every entry is worth the same.
-async fn flush_at_exit(state: &AppState, pending: &mut HashMap<i64, i32>) {
+async fn flush_at_exit(writeback: &Writeback, pending: &mut HashMap<i64, i32>) {
     // The switch is read here as well as in `flush`, so a switched-off install doesn't announce
     // dropping writes it was never going to make.
-    let over_budget = if state.write_ratings_to_tags.get() {
+    let over_budget = if writeback.write_to_tags.get() {
         pending.len().saturating_sub(SHUTDOWN_FLUSH_MAX)
     } else {
         0
@@ -126,14 +171,14 @@ async fn flush_at_exit(state: &AppState, pending: &mut HashMap<i64, i32>) {
         *pending = within_budget;
         log::info!("rating: {over_budget} tag write(s) dropped at exit; the rows keep their stars");
     }
-    flush(state, pending).await;
+    flush(writeback, pending).await;
 }
 
-async fn flush(state: &AppState, pending: &mut HashMap<i64, i32>) {
+async fn flush(writeback: &Writeback, pending: &mut HashMap<i64, i32>) {
     if pending.is_empty() {
         return;
     }
-    if !state.write_ratings_to_tags.get() {
+    if !writeback.write_to_tags.get() {
         pending.clear();
         return;
     }
@@ -146,9 +191,13 @@ async fn flush(state: &AppState, pending: &mut HashMap<i64, i32>) {
     }
 
     for (rating, ids) in by_rating {
-        match ratings::write_rating_to_files(state, &ids, rating).await {
+        match writeback.write(&ids, rating).await {
             Ok(written) => log::debug!("rating: wrote {rating} into {written} file(s)"),
             Err(e) => log::warn!("rating: write-back failed: {}", describe(&e)),
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/rating_writeback_tests.rs"]
+mod tests;
