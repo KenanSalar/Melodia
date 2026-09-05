@@ -17,7 +17,7 @@ This file holds what applies repo-wide. Subsystem contracts load on demand — *
 | `.claude/rules/radio.md` | the directory facade and its off switch, the two station tables, the stream path's ring and feed thread, the numbers both trees spell |
 | `.claude/rules/ci-packaging.md` | the PR gate, the skip matrix, coverage, action pinning, the five package formats and their licence pins |
 | `.claude/rules/diagnostics.md` | the logging sink, the crash hook, the bug-report bundle |
-| `.claude/rules/testing.md` | where a test goes, the shared fixtures and corpus walkers, what a walk owes, assertion discipline under the lint set, what the tree deliberately doesn't use |
+| `.claude/rules/testing.md` | testing practice, not this tree's inventory: the ISTQB principles, how to pick cases, the Rust attribute and determinism rules, assertion discipline |
 | `.claude/rules/*.md` (rest) | per-crate best practices (tokio, sqlx, slint, symphonia, lofty, rayon, serde, blake3, rust-performance) plus `slint-pitfalls`, `unsafe-rust` and `code-style` |
 
 Rules are **path-scoped** by a `paths:` glob and load when Claude *reads* a matching file, so a grep hit or a clippy failure won't pull one in. **A rule earns its place only when its subject has no single anchor file**: a coupling between trees (Rust ↔ `.slint`, Rust ↔ CI, Rust ↔ a shipped migration nobody may edit), or a comparison across peers that no one of them owns. Everything else is argued *at its anchor*, in the doc comment on the constant, function or migration it constrains, where it cannot drift out of sight of the code it describes. A **prohibition** violable from outside that anchor's directory stays in this file. Hence "no `unwrap`", the zbus footgun and the `--version` contract sitting here.
@@ -171,10 +171,11 @@ See `.claude/rules/tokio.md`. Project-specific:
 
 ## Testing
 
-**The contract is `.claude/rules/testing.md`**: the three homes a test can have, the shared
-fixtures and corpus walkers, what a walk owes to not pass vacuously, and what an assertion may
-contain under a lint set that denies `unwrap` and warns `expect`, `panic` and `println!`. It loads
-on a test file, so what stays here is what is violable from a file that is not one.
+**`.claude/rules/testing.md` is how to test, not what this tree contains**: the ISTQB
+principles, equivalence partitioning and boundary analysis, the Rust attribute, double and
+determinism rules, and what an assertion may contain under a lint set that denies `unwrap`.
+It is a practice rule and deliberately holds no inventory of our fixtures, walks or counts,
+which rot silently because nothing compiles them. This tree's own arrangement stays here.
 
 - **Unit tests** — per-module `tests/` subdirs, referenced via `#[cfg(test)] #[path = "tests/<name>_tests.rs"] mod tests;`. Never inline `#[cfg(test)] mod tests { ... }`.
 - **A check that enumerates a corpus lives in `crates/melodia/tests/`, a pin on one named file lives beside that file.** The rule is what keeps `cargo test -p <crate>` a question about that crate: a walk left inside one makes that crate's suite compile the whole tree to answer a question about neither, which is what `melodia-net`'s did.
