@@ -6,21 +6,12 @@
 //! written because the door could not be called and each free to drift from the door it stood in
 //! for. The state machine underneath is `melodia-engine`'s and its builders are pinned in that
 //! crate's `state_tests.rs`; what is left here is the layer above them.
-//!
-//! The play paths run against real copies of `test-assets/silence.mp3`, because
-//! `execute_actions` pre-flights every `PlayMedia` with `Path::exists` and auto-skips past a file
-//! that is not there. A row pointing at nothing would walk the whole queue and stop, which is a
-//! different test from the one being written.
-
-use std::path::PathBuf;
 
 use super::*;
 use crate::services::settings::read_settings;
 use crate::state::fixtures::TestPlayback;
 use melodia_engine::player::engine::fixtures::test_station;
 use melodia_engine::player::engine::state::PlayerState;
-use melodia_store::database::queries::fixtures::insert_test_track;
-use melodia_testkit::ASSETS_DIR;
 
 fn make_summary(id: i64, duration_ms: i64) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {
@@ -50,38 +41,11 @@ fn seat<R>(fx: &TestPlayback, f: impl FnOnce(&mut PlayerState) -> R) -> R {
     with_state_emit(&fx.ctx.player_state, &fx.ctx.sinks, f)
 }
 
-/// `count` playable files under the fixture's root, with rows pointing at them.
-async fn stage_playable(fx: &TestPlayback, count: usize) -> Result<Vec<i64>, AppError> {
-    let dir = fx.tmp.path().join("music");
-    std::fs::create_dir_all(&dir)?;
-    queries::folder::insert_folder(&fx.ctx.db, &dir.to_string_lossy(), true).await?;
-
-    let silence = PathBuf::from(ASSETS_DIR).join("silence.mp3");
-    let mut ids = Vec::with_capacity(count);
-    for n in 1..=count {
-        let dest = dir.join(format!("track{n}.mp3"));
-        std::fs::copy(&silence, &dest)?;
-        let title = format!("Track {n}");
-        ids.push(
-            insert_test_track(
-                &fx.ctx.db,
-                &dest.to_string_lossy(),
-                &title,
-                "Artist",
-                "Album",
-                "Rock",
-            )
-            .await?,
-        );
-    }
-    Ok(ids)
-}
-
 /// A fixture already playing `count` staged files from the top, started the way the header Play
 /// pill starts one: no row picked, so the head is the fallback rather than a choice.
 async fn playing(count: usize) -> Result<(TestPlayback, Vec<i64>), AppError> {
     let fx = TestPlayback::empty().await?;
-    let ids = stage_playable(&fx, count).await?;
+    let ids = fx.stage_playable(count).await?;
     player_play_tracks(&fx.ctx, ids.clone(), None).await?;
     Ok((fx, ids))
 }
@@ -164,7 +128,7 @@ async fn the_queue_becomes_the_list_the_user_picked_from() -> Result<(), AppErro
 #[tokio::test]
 async fn a_pick_whose_row_is_gone_starts_at_the_head() -> Result<(), AppError> {
     let fx = TestPlayback::empty().await?;
-    let ids = stage_playable(&fx, 2).await?;
+    let ids = fx.stage_playable(2).await?;
     let with_a_hole = vec![ids[0], 9_999, ids[1]];
 
     player_play_tracks(&fx.ctx, with_a_hole, Some(1)).await?;
@@ -179,7 +143,7 @@ async fn a_pick_whose_row_is_gone_starts_at_the_head() -> Result<(), AppError> {
 #[tokio::test]
 async fn an_index_past_the_ids_handed_in_starts_at_the_head() -> Result<(), AppError> {
     let fx = TestPlayback::empty().await?;
-    let ids = stage_playable(&fx, 3).await?;
+    let ids = fx.stage_playable(3).await?;
 
     player_play_tracks(&fx.ctx, ids.clone(), Some(99)).await?;
 
@@ -209,7 +173,7 @@ async fn no_valid_ids_is_refused_without_touching_the_queue() -> Result<(), AppE
 #[tokio::test]
 async fn shuffle_already_on_anchors_the_picked_track() -> Result<(), AppError> {
     let fx = TestPlayback::empty().await?;
-    let ids = stage_playable(&fx, 8).await?;
+    let ids = fx.stage_playable(8).await?;
     seat(&fx, |s| s.queue.shuffle_enabled = true);
 
     player_play_tracks(&fx.ctx, ids.clone(), Some(5)).await?;

@@ -32,7 +32,9 @@ use melodia_engine::player::engine::event_sink::PlayerSinks;
 use melodia_engine::player::engine::state::PlayerStateHandle;
 use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::mixer;
-use melodia_store::database::DbPool;
+use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::database::{DbPool, queries};
+use melodia_testkit::ASSETS_DIR;
 
 /// The shape the device-free mixer is brought to. Nothing listens, so these only have to be a
 /// shape a `Converter` accepts and a decoder can be resampled to.
@@ -117,6 +119,39 @@ impl TestPlayback {
     /// A context over an empty in-memory library, for the commands that never read one.
     pub(crate) async fn empty() -> Result<Self, AppError> {
         Self::with_db(DbPool::test_pool().await?)
+    }
+
+    /// `count` playable files under the fixture's root, with rows pointing at them, returning
+    /// their ids in queue order.
+    ///
+    /// Real copies of `silence.mp3` because `execute_actions` pre-flights every `PlayMedia` with
+    /// `Path::exists` and auto-skips past a file that is not there — a queue of rows pointing at
+    /// nothing walks itself to the end and stops, which is a different test from any written
+    /// against this.
+    pub(crate) async fn stage_playable(&self, count: usize) -> Result<Vec<i64>, AppError> {
+        let dir = self.tmp.path().join("music");
+        std::fs::create_dir_all(&dir)?;
+        queries::folder::insert_folder(&self.ctx.db, &dir.to_string_lossy(), true).await?;
+
+        let silence = std::path::PathBuf::from(ASSETS_DIR).join("silence.mp3");
+        let mut ids = Vec::with_capacity(count);
+        for n in 1..=count {
+            let dest = dir.join(format!("track{n}.mp3"));
+            std::fs::copy(&silence, &dest)?;
+            let title = format!("Track {n}");
+            ids.push(
+                insert_test_track(
+                    &self.ctx.db,
+                    &dest.to_string_lossy(),
+                    &title,
+                    "Artist",
+                    "Album",
+                    "Rock",
+                )
+                .await?,
+            );
+        }
+        Ok(ids)
     }
 }
 

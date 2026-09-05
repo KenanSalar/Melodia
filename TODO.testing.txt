@@ -25,19 +25,22 @@ WHERE IT STANDS
   baseline (2026-09-04, published)
   TOTAL   function 38.9% (2278/5859)   line 37.0% (15542/42028)   region 34.7%
 
-  now (2026-09-05, after the eight steps on this branch)
+  after the eight steps on this branch (2026-09-05)
   TOTAL   function 45.2% (2680/5929)   line 43.1% (18309/42474)   region 40.3%
 
-  So the branch is worth 6.1 points of line coverage: 2767 newly covered lines
-  against 446 new ones. Read a tenth of a point as noise, for the reason the last
-  doc gave (the same command over the same tree read 41.26% and 41.3% on
+  now, after steps 1 and 2 below (2026-09-05)
+  TOTAL   function 45.9% (2724/5931)   line 43.9% (18651/42497)   region 41.1%
+
+  So the branch is worth 6.9 points of line coverage. Steps 1 and 2 are 0.8 of
+  them, all of it inside `tasks/`. Read a tenth of a point as noise, for the reason
+  the last doc gave (the same command over the same tree read 41.26% and 41.3% on
   consecutive days), and only a move larger than that as a result.
 
   subsystem                                    line cov          uncovered
   --------------------------------------------------------------------------
   UI (melodia-views)                  13.9% ( 2701/19475)           16774
   library API (melodia-app/library)   48.8% ( 1706/ 3496)            1790
-  background tasks (melodia-app/tasks) 31.5% (  593/ 1884)           1291
+  background tasks (melodia-app/tasks) 45.6% (  859/ 1884)            1025
   integrations (scrobble/discord/mpris) 55.4% ( 1043/ 1884)           841
   binary (main/boot/shutdown)          2.3% (   19/  834)             815
   platform (tray, theme, logging)     45.7% (  548/ 1198)             650
@@ -76,6 +79,10 @@ kinds, and only the third is hard.
      already hands out. Nothing is blocked. Roughly 400 uncovered lines sit behind
      no obstacle whatsoever.
 
+     Spent by steps 1 and 2. The tier held up: 266 lines of it came back without a
+     seam, a signature change or a dev-dependency. What it did not predict is that
+     `one_shot.rs` belongs in tier 2 rather than here.
+
   2. One narrowing away, and it is B2's narrowing for the seventh time. The door
      keeps its `&AppState`, the work takes what it reaches. `library/settings/*`
      is seventeen files of that shape over `state.paths` (523 uncovered), and
@@ -100,11 +107,29 @@ at the bottom, saying to leave it.
 P0: PATHS THAT DELETE OR MOVE SOMETHING A RESCAN DOES NOT RETURN
 ================================================================================
 
-P0.1  the artwork sweep, and the one store that cannot be rebuilt
+P0.1  the artwork sweep, and the one store that cannot be rebuilt   [SPENT]
 -----------------------------------------------------------------
 
-  tasks/artwork_sweep.rs        52.1% of  71    34 uncovered
-  tasks/artwork_renormalize.rs   0.0% of  64    64 uncovered
+  tasks/artwork_sweep.rs        92.9% of  71     5 uncovered  (was 52.1%)
+  tasks/artwork_renormalize.rs  81.2% of  64    12 uncovered  (was  0.0%)
+
+Eight cases in `tasks/tests/artwork_{sweep,renormalize}_tests.rs`. Neither source
+file moved a line; both gained the three-line test declaration and nothing else.
+
+**The ordering claim was not taken here, and should not be.** Listing before the
+reference query is a race, and the only deterministic test for it is
+`melodia-artwork`'s `sweep_tests::a_candidate_referenced_after_the_listing_is_
+still_spared`, which already exists. Faking the race at this layer needs a pool
+double whose only caller is a test. What this layer can answer honestly it now
+does: that `run` reaches all three stores, that `run_radio_logos` reaches one,
+that a logo left in `artwork/` from before `radio-logos/` existed is still held by
+its station row, and both sides of `RADIO_GRACE` a second apart.
+
+The renormalize fixture is worth knowing about before writing another: an
+in-bounds cover has to be seeded through `store_image` rather than copied under a
+name of the test's choosing. The store is content-addressed, so a hand-picked name
+is one no install has, and the pass re-points it for the name alone — which reads
+exactly like the bounds working.
 
 Not blocked, and that is most of the argument for putting it first. `run` and
 `run_radio_logos` are already `pub(crate) async fn(&DbPool, &Paths)`; `renormalize`
@@ -262,14 +287,28 @@ What holds a decision:
 P2: THE TASKS THAT ARE ALREADY REACHABLE
 ================================================================================
 
-  tasks/material_you.rs      0.0% of 180   180 uncovered
+  tasks/material_you.rs     53.9% of 180    83 uncovered  [SPENT, was  0.0%]
   tasks/discord_presence.rs  0.0% of 107   107
-  tasks/queue_prune.rs       0.0% of  66    66
+  tasks/queue_prune.rs      65.2% of  66    23           [SPENT, was  0.0%]
   tasks/first_launch.rs      0.0% of  53    53
-  tasks/playback_monitor.rs  0.0% of  44    44
-  tasks/retroactive_hash.rs 30.6% of  49    34
+  tasks/playback_monitor.rs 43.2% of  44    25           [SPENT, was  0.0%]
+  tasks/retroactive_hash.rs 83.7% of  49     8           [SPENT, was 30.6%]
   tasks/one_shot.rs          0.0% of  28    28
   tasks/radio_logo_cache.rs  0.0% of  17    17
+
+The four decision layers are taken; what is left in each file is the `spawn` half
+and the loop around it, which wants a real `AppState`. Two things the entry got
+wrong that the next reader should not re-derive:
+
+  `one_shot.rs` has no private free function at all — only the generic `pub fn
+  spawn` over an `&AppState`. It is not in the same tier as the four below it, and
+  its `OnFailure` arms and the `label`/`marker` split still want P1's narrowing.
+
+  `queue_prune::reconcile_once`'s property is not only the auto-skip. The guard
+  beside it (`source_allows(PlaybackSource::advances_queue)`) is the one nothing
+  else in the tree would catch: a station plays *over* the queue, so a row going
+  missing underneath must not stop it. That case is written and it is the one that
+  fails when the guard goes.
 
 `material_you.rs` is the largest zero in the tree outside the binary, and its
 decision layer is already a free function. `react` takes seven plain arguments and
@@ -492,15 +531,16 @@ New to this list:
 SUGGESTED ORDER
 ================================================================================
 
-  1. P0.1, the artwork sweep and the renormalize pass beside it. Nothing is
-     blocked, it unlinks files, and one of the three stores it sweeps cannot be
-     rebuilt from anything local. The ordering claim in `sweep_stores`' doc comment
-     is the first mutation to check.
+  1. [DONE] P0.1, the artwork sweep and the renormalize pass beside it.
 
-  2. P2's already-reachable tasks, `material_you.rs` first, then `queue_prune`,
-     `playback_monitor` and `retroactive_hash`. Same reason as step 1 and the
-     largest zero in the tree. `one_shot`, `first_launch` and `radio_logo_cache`
-     wait for step 4's narrowing.
+  2. [DONE] P2's four already-reachable tasks: `material_you`, `queue_prune`,
+     `playback_monitor`, `retroactive_hash`. `one_shot`, `first_launch` and
+     `radio_logo_cache` still wait for step 4's narrowing.
+
+     Left behind by these two steps, for whoever takes the next one:
+     `state::fixtures::TestPlayback::stage_playable` is now a method on the
+     fixture rather than a copy inside `library/tests/playback_tests.rs`, so a
+     suite that needs a playing queue over real files has one call for it.
 
   3. P0.2, the radio doors. This is B2's split at its widest, and the one place
      where the walk holding a prohibition can see the reach and not the guard.
@@ -523,3 +563,5 @@ SUGGESTED ORDER
 Steps 1 through 3 are the whole of what is left with a user-visible cost that a
 reinstall does not undo. Step 4 is the largest block of lines and the smallest per
 line. Everything from step 5 down is worth doing and worth doing after those.
+
+With 1 and 2 spent, step 3 is now the only entry left in that first group.

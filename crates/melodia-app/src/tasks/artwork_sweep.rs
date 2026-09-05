@@ -136,3 +136,7 @@ fn log_report(store: &str, report: SweepReport) {
         log::warn!("Could not retire {} {store} file(s); retrying next scan", report.failed);
     }
 }
+
+#[cfg(test)]
+#[path = "tests/artwork_sweep_tests.rs"]
+mod tests;

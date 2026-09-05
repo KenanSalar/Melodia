@@ -309,3 +309,7 @@ fn publish_repaint(
         log::debug!("material_you: repaint subscriber dropped: {e}");
     }
 }
+
+#[cfg(test)]
+#[path = "tests/material_you_tests.rs"]
+mod tests;
