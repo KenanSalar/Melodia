@@ -3,10 +3,12 @@ TODO: TEST COVERAGE (REPO-WIDE)
 
 Working doc for issue #38. Delete when the backlog below is spent.
 
-Status: P0 is spent, both blockers with it, and so is P1's playback entry and P2's
-scrobble half. What is left of P1 is favorites.rs and settings/view.rs; favorites
-ends in sync_love, so it can be written now that the scrobble seam exists. The next
-thing worth writing is P2's network half, which needs no production change at all.
+Status: P0 is spent, both blockers with it, and so are P1's playback entry, P2's
+scrobble half and the first group of its network half. What is left of P1 is
+favorites.rs and settings/view.rs; favorites ends in sync_love, so it can be written
+now that the scrobble seam exists, and it is the next thing worth writing. P2.2's
+second group (radio_browser, artist_images) still wants a bigger seam than anything
+so far and should be argued on its own.
 Created: 2026-09-04
 
 Numbers are from the published report at https://kenansalar.github.io/Melodia/,
@@ -65,6 +67,13 @@ WHERE IT STANDS
 
   And after step 6:
   TOTAL   function 43.1%              line 41.3% (17534/42409)   region 38.7%
+
+  And after step 7:
+  TOTAL   function 43.9%              line 42.0% (17805/42427)   region 39.4%
+
+  Every figure above is one run. The same command over the step-6 tree read 41.3% the
+  day it landed and 41.26% when it was re-run to baseline step 7, so a tenth of a point
+  is inside the noise and only a move larger than that is worth reading as one.
 
   The table below is the original survey, left as written. Two things moved that
   first line, only one of them this backlog: the updater tests landed after the
@@ -566,41 +575,72 @@ belong with whatever covers the settings handshake and the MBID backfill.
 P2.2  the rest of the network tier, and it splits by whether a seam is needed
 
 Surveyed while writing P2.1, since "reachable through the B1 server" turned out to
-be true of only half of it. Take the first group first: it needs no production
-change at all, which is the opposite of what P2.1 needed.
+be true of only half of it. The first group is spent; the second still wants an
+argument of its own.
 
-  Nothing to change, the URL already being a parameter:
 
-  net/media/fetch/logo_discovery.rs  0% of 98    icon_url takes the origin as a
-                                          &reqwest::Url and the module names no
-                                          host at all. Its whole HTML scraper
-                                          (icon_href's ordering, the </head> cut,
-                                          the byte-aligned lower/raw slicing, the
-                                          word-boundary attribute guard) is pure
-                                          and has no tests whatever. Drive it via
-                                          origin_for's homepage arm: the stream
-                                          fallback forces https and a loopback
-                                          server serves plain http.
-  media/fetch/station_logo.rs             fetch takes the client, the URL and the
-                                          output dir. Its five offline tests cover
-                                          the helpers; the status guard, the
-                                          header-versus-body cap disagreement and
-                                          the stored_extension bail are untouched.
-  services/net/mod.rs                     get_capped and read_capped take a parsed
-                                          URL. There is no behavioural test of
-                                          either: no cap crossed mid-stream, no
-                                          lying Content-Length, no non-success
-                                          status. Two source walks pin who calls
-                                          them, which is a different question.
-  library/radio/logos.rs    0% of 205     every entry point takes &AppState, but
-                                          six pure fns do not, and the backoff
-                                          boundary its consts spell out
-                                          (LOGO_MISS_BACKOFF_HOURS x MAX_ATTEMPTS
-                                          against MAX_AGE_DAYS) is a table worth
-                                          writing. classify_logo_answer takes now
-                                          as a &str, so no clock injection.
+P2.2a  DONE — the shared primitives, the scraper, and the parse a minifier defeated
+------------------------------------------------------------------------------------
 
-  Needs a seam, and more of one than P2.1 did:
+Forty-five tests over four files: ten on the two primitives every outbound fetch shares,
+eighteen on the logo scraper, seven added to station_logo's six, and ten on the answer
+table and the schedule deciding when a URL is asked again. Three of the four needed no
+production change, as this entry claimed. The fourth needed one line.
+
+Writing them turned up a live defect in the scraper.
+
+  attribute_value ended a bare attribute value at the first whitespace, `>` or `/`, and
+  the `/` was in that set for a self-closing `/>`. So `href=/logo.png` matched at index
+  zero, came back as the empty string, and folded to None: the site read as advertising
+  nothing at all. Every unquoted absolute href was dropped, which is the spelling an
+  HTML minifier emits. It reads the value to the tag now and trims a trailing slash, so
+  `href=/logo.png` and `href=logo.png/>` both answer with what they meant. The old
+  behaviour was invisible from outside, because the caller falls through to
+  /favicon.ico and for a site whose icon is /favicon.ico that is the same answer.
+
+The testkit needed one addition, and two assertions here are impossible without it.
+TestServer derived every Content-Length from the body it was about to send, so a cap
+refused on the header and a cap refused on the streamed body could not be told apart.
+TestResponse now carries a DeclaredLength: FromBody, Claimed(n) for a host that
+overstates, Undeclared for one that sends no length at all. get_capped's doc says the
+header check "is a courtesy a host can omit or lie about", and both halves of that
+sentence have a case now: a claim over the cap refuses a body that would have fit, and a
+host declaring nothing is still held to the streamed bound.
+
+The one production change is B2's shape at its smallest. logos.rs's backoff ladder was an
+expression inside note_logo_miss, which takes an &AppState, so the schedule its two
+consts define could not be reached at all. miss_backoff_hours(attempts) is that
+expression with a name, and the door keeps the &AppState. What it buys is the claim
+LOGO_MISS_MAX_AGE_DAYS makes about itself, that it sits "deliberately clear of
+LOGO_MISS_BACKOFF_HOURS x LOGO_MISS_MAX_ATTEMPTS, so nothing is pruned while it still
+suppresses anything". Prose until now: raising the attempt ceiling to 31 fails the pin
+with "a 744 h backoff outlives a 720 h retention window".
+
+Six pins were mutation-checked, and three are worth knowing. Reading an href out of the
+lowercased copy rather than the raw one answers /assets/logo.png for a site advertising
+/Assets/Logo.PNG, which is a 404 on every site with a capital in its path. Dropping
+get_capped's header check lets a host claiming three megabytes through on a four-byte
+body. And dropping artwork_is_present from classify_logo_answer turns a logo the sweep
+deleted into a Hit, which paints an empty tile forever, since nothing re-asks about a
+station that already has an answer.
+
+logos.rs's suite sits in library/tests/ rather than beside it, on mod.rs's own
+`#[path = "../tests/..."]`. crates/melodia/tests/radio_facade.rs walks library/radio/
+recursively and asserts `.http_client()` appears in it exactly once, so test text does
+not belong in that corpus.
+
+Still uncovered and each on purpose: build_http_client's fallback arm, which its own doc
+calls logged paranoia over a build documented infallible; tile_for's undecodable-source
+arm, which wants bytes whose header parses and whose body does not; and the &AppState
+half of logos.rs, which is most of its 173 remaining lines.
+
+Measured: logo_discovery.rs 0% -> 100% line (0 uncovered of 97), station_logo.rs 43.0%
+-> 96.8% (3 of 93), services/net/mod.rs 43.2% -> 92.6% (6 of 81), library/radio/logos.rs
+0% -> 16.8% (173 of 208, low on purpose). testkit's http.rs 95.9%. Workspace line
+coverage 41.26% -> 42.0% on the same command.
+
+
+P2.2b  needs a seam, and more of one than P2.1 did:
 
   radio_browser/mod.rs      9.4% of 159   url_for hardcodes the https scheme, so a
                                           base parameter alone does not reach a
@@ -767,14 +807,20 @@ SUGGESTED ORDER
      list proposed: the pure parts were never blocked, the endpoints were, and only
      one of the two providers can be pointed anywhere without lying about what CI
      runs. See its entry for the asymmetry and for the fourth hand-copied door.
-  7. P2.2's first group, which needs no production change and where logo_discovery
-     alone is a whole untested pure scraper. Then P1's favorites.rs, now that
-     sync_love has a drain that can be driven. Then P3, then the three items worth
-     keeping from P4. P2.2's second group (radio_browser, artist_images) wants a
-     bigger seam than anything so far and should be argued on its own.
+  7. DONE — P2.2a (the network half's first group). Three of its four files needed
+     nothing, as this list said; the fourth needed one line, and the testkit needed
+     a response that can lie about its own length. See its entry for the scraper
+     defect the cases turned up.
+  8. P1's favorites.rs, now that sync_love has a drain that can be driven. Then P3,
+     then the three items worth keeping from P4. P2.2b (radio_browser,
+     artist_images) wants a bigger seam than anything so far and should be argued
+     on its own.
 
 Steps 1 through 4 spend P0 entirely: every path where a defect costs the user
 something a reinstall does not return now has a test, and the four that were
 consequential were mutation-checked rather than merely written. Step 5 spends the
-one P1 entry that stands on its own, and step 6 the half of P2 that publishes under
-the user's name.
+one P1 entry that stands on its own, step 6 the half of P2 that publishes under the
+user's name, and step 7 everything in the network tier a loopback server can already
+reach. Two of the seven turned up a live defect while being written, both on a path
+nothing was looking at: the watcher's move detection, and the scraper's bare-href
+parse.

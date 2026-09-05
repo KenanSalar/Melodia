@@ -44,12 +44,29 @@ impl TestRequest {
     }
 }
 
+/// How a response states its own length.
+///
+/// A cap enforced on the streamed body and one enforced on the `Content-Length` refuse the same
+/// thing from either side of the download, so telling them apart needs a server that can overstate
+/// the header or omit it.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum DeclaredLength {
+    /// The body's own length.
+    #[default]
+    FromBody,
+    /// A length the body does not honour, so a header check refuses what the stream would admit.
+    Claimed(u64),
+    /// No `Content-Length` at all, leaving the close to delimit the body.
+    Undeclared,
+}
+
 /// What to answer with. Built by the handler, which sees the request first.
 #[derive(Debug, Clone)]
 pub struct TestResponse {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
+    pub declared: DeclaredLength,
 }
 
 impl TestResponse {
@@ -59,6 +76,7 @@ impl TestResponse {
             status: 200,
             headers: Vec::new(),
             body: body.into(),
+            declared: DeclaredLength::FromBody,
         }
     }
 
@@ -68,6 +86,7 @@ impl TestResponse {
             status,
             headers: Vec::new(),
             body: Vec::new(),
+            declared: DeclaredLength::FromBody,
         }
     }
 
@@ -80,6 +99,20 @@ impl TestResponse {
     #[must_use]
     pub fn header(mut self, field: &str, value: impl Into<String>) -> Self {
         self.headers.push((field.to_owned(), value.into()));
+        self
+    }
+
+    /// Overstate the body's length, so a caller checking the header refuses a body that would fit.
+    #[must_use]
+    pub fn claiming_length(mut self, len: u64) -> Self {
+        self.declared = DeclaredLength::Claimed(len);
+        self
+    }
+
+    /// Send no `Content-Length`, so the streamed cap is the only thing left to refuse on.
+    #[must_use]
+    pub fn without_declared_length(mut self) -> Self {
+        self.declared = DeclaredLength::Undeclared;
         self
     }
 }
@@ -227,10 +260,19 @@ fn write_response(stream: &mut TcpStream, response: &TestResponse) -> std::io::R
     lines.extend(response.headers.iter().map(|(field, value)| format!("{field}: {value}")));
 
     // A 304 carries no body by definition, and stating a length it will not send hangs a client
-    // that believes it. Everything else declares one so the read ends without waiting on close.
+    // that believes it, so it overrides whatever the response declares.
     let bodyless = response.status == 304;
-    if !bodyless {
-        lines.push(format!("Content-Length: {}", response.body.len()));
+    let declared = if bodyless {
+        None
+    } else {
+        match response.declared {
+            DeclaredLength::FromBody => Some(response.body.len().to_string()),
+            DeclaredLength::Claimed(len) => Some(len.to_string()),
+            DeclaredLength::Undeclared => None,
+        }
+    };
+    if let Some(len) = declared {
+        lines.push(format!("Content-Length: {len}"));
     }
     lines.push("Connection: close".to_owned());
 

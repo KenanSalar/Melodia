@@ -126,13 +126,18 @@ pub async fn record_logo_outcome(state: &AppState, favicon_url: &str, logo: Opti
     }
 }
 
+/// How long a URL that has missed `attempts` times is left alone.
+fn miss_backoff_hours(attempts: i64) -> i64 {
+    LOGO_MISS_BACKOFF_HOURS * attempts.min(LOGO_MISS_MAX_ATTEMPTS)
+}
+
 /// Record that `favicon_url` answered with nothing, pushing its next attempt further out.
 async fn note_logo_miss(state: &AppState, favicon_url: &str) -> Result<(), AppError> {
     let attempts = queries::radio::logo_miss_attempts(&state.db, favicon_url)
         .await?
         .unwrap_or(0)
         .saturating_add(1);
-    let hours = LOGO_MISS_BACKOFF_HOURS * attempts.min(LOGO_MISS_MAX_ATTEMPTS);
+    let hours = miss_backoff_hours(attempts);
     let retry_after = chrono::Utc::now() + chrono::TimeDelta::try_hours(hours).unwrap_or_default();
     queries::radio::record_logo_miss(
         &state.db,
@@ -416,3 +421,7 @@ async fn discover_logo_url(state: &AppState, origin: &reqwest::Url) -> Option<St
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/radio_logos_tests.rs"]
+mod tests;

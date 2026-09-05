@@ -147,16 +147,23 @@ fn attribute<'a>(tag_lower: &str, tag_raw: &'a str, name: &str) -> Option<&'a st
 }
 
 /// The value sitting immediately after an `=`, quoted or bare.
+///
+/// The `/` of a self-closing `/>` belongs to the tag and is trimmed; one anywhere else is a path.
+/// Terminating on it instead dropped every unquoted absolute href: `href=/logo.png` came back
+/// empty and the site read as advertising nothing, which is the spelling a minifier emits.
 fn attribute_value<'a>(rest_lower: &str, rest_raw: &'a str) -> Option<&'a str> {
     let quote = rest_lower.chars().next().filter(|c| *c == '"' || *c == '\'');
     let value = if let Some(quote) = quote {
         let end = 1 + rest_raw[1..].find(quote)?;
         &rest_raw[1..end]
     } else {
-        let end = rest_raw
-            .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
-            .unwrap_or(rest_raw.len());
-        &rest_raw[..end]
+        let end = rest_raw.find(|c: char| c.is_whitespace() || c == '>').unwrap_or(rest_raw.len());
+        let bare = &rest_raw[..end];
+        bare.strip_suffix('/').unwrap_or(bare)
     };
     (!value.is_empty()).then_some(value)
 }
+
+#[cfg(test)]
+#[path = "tests/logo_discovery_tests.rs"]
+mod tests;
