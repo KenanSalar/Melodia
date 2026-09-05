@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
-use melodia_engine::player::engine::state::PlayerState;
+use melodia_engine::player::engine::state::{PlayerState, lock_state};
 
 use super::*;
+use crate::state::fixtures::test_sinks;
 
 fn make_summary(id: i64) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {
@@ -349,5 +350,103 @@ async fn a_restore_with_no_tracks_leaves_the_shuffle_setting_alone() -> Result<(
 
     assert!(plan.shuffle_enabled, "nothing was restored, so nothing was overridden");
     assert!(read_settings(&paths)?.queue.shuffle_enabled);
+    Ok(())
+}
+
+// --- what a drop and a "Play Next" owe their input order ---
+
+/// A `TrackSummary` with a title of its own, since [`make_summary`] ties one to the id and the
+/// ordering tests need the two to vary apart.
+fn titled(id: i64, title: &str) -> Arc<TrackSummary> {
+    let mut summary = (*make_summary(id)).clone();
+    summary.title = title.to_owned();
+    Arc::new(summary)
+}
+
+/// Files from outside arrive in visual selection order on KDE and GNOME, not alphabetical, and
+/// `natord` is what puts "Track 2" ahead of "Track 10".
+#[test]
+fn a_dropped_batch_is_ordered_the_way_a_list_is() {
+    let mut batch = vec![
+        titled(1, "Track 10"),
+        titled(2, "Track 9"),
+        titled(3, "Track 1"),
+    ];
+
+    sort_for_queue(&mut batch);
+
+    assert_eq!(
+        batch.iter().map(|t| t.title.as_str()).collect::<Vec<_>>(),
+        ["Track 1", "Track 9", "Track 10"],
+        "a byte compare puts 10 ahead of 9, which is every numbered album out of order"
+    );
+}
+
+/// The sort is stable, so a batch the tags cannot tell apart keeps the order the file manager
+/// handed it over in rather than an arbitrary one.
+#[test]
+fn equal_titles_keep_the_order_the_drop_handed_over() {
+    let mut batch = vec![
+        titled(7, "Untitled"),
+        titled(3, "Untitled"),
+        titled(5, "Untitled"),
+    ];
+
+    sort_for_queue(&mut batch);
+
+    assert_eq!(batch.iter().map(|t| t.id).collect::<Vec<_>>(), [7, 3, 5]);
+}
+
+/// "Play Next" on a multi-row selection has to land in the order the rows were listed. Every
+/// `insert_next` goes to `current_index + 1`, so the batch is walked backwards to come out
+/// forwards, and nothing else in the queue moves.
+#[tokio::test]
+async fn play_next_lands_a_batch_in_input_order_behind_the_current_track() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let mut picked = Vec::new();
+    for n in 1..=3 {
+        let title = format!("Pick {n}");
+        picked.push(
+            insert_test_track(&db, &format!("/music/pick{n}.mp3"), &title, "A", "B", "Rock")
+                .await?,
+        );
+    }
+
+    let player_state = PlayerStateHandle::default();
+    let sinks = test_sinks();
+    with_state_emit(&player_state, &sinks, |s| {
+        s.queue.add_tracks(vec![make_summary(100), make_summary(200)]);
+        s.queue.current_index = Some(0);
+    });
+
+    play_next_many(&db, &player_state, &sinks, &picked).await?;
+
+    let state = lock_state(&player_state);
+    let mut expected = vec![100];
+    expected.extend(picked.iter().copied());
+    expected.push(200);
+    assert_eq!(
+        state.queue.tracks_in_play_order().iter().map(|t| t.id).collect::<Vec<_>>(),
+        expected,
+        "the selection lands behind what is playing, in the order it was picked"
+    );
+    Ok(())
+}
+
+/// The context menu can fire on an empty selection, and the guard is what keeps that off the
+/// database and off the view-model channel.
+#[tokio::test]
+async fn play_next_with_nothing_picked_does_not_reach_the_queue() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let player_state = PlayerStateHandle::default();
+    let sinks = test_sinks();
+    let mut published = sinks.view_model.subscribe();
+    published.borrow_and_update();
+
+    play_next_many(&db, &player_state, &sinks, &[]).await?;
+
+    assert!(!published.has_changed().unwrap_or(true), "nothing was picked, so nothing changed");
+    assert!(lock_state(&player_state).queue.tracks.is_empty());
     Ok(())
 }

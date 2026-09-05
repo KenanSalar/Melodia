@@ -5,6 +5,7 @@ paths:
   - crates/melodia-testkit/src/**/*.rs
   - crates/melodia-store/src/database/queries/fixtures.rs
   - crates/melodia-engine/src/player/engine/fixtures.rs
+  - crates/melodia-app/src/state/fixtures.rs
   - crates/*/Cargo.toml
   - .cargo/config.toml
 ---
@@ -55,10 +56,12 @@ has a write clamp in one crate and a read guard in another, so both halves went 
 **A fixture two crates share is `#[doc(hidden)] pub`, never `#[cfg(test)]`.** A `cfg(test)`
 item cannot cross a crate boundary, and `lto = "fat"` is what makes the shipped binary pay
 nothing for the visibility. There are three: `queries::fixtures`,
-`player::engine::fixtures` and `DbPool::test_pool`. `crates/melodia/tests/common/mod.rs`
-exists for the mirror-image reason, an integration binary being unable to reach a
-`cfg(test)` module in the other direction, and each binary picks it up with a plain
-`mod common;`.
+`player::engine::fixtures` and `DbPool::test_pool`. `melodia-app`'s `state::fixtures` is named
+after them and is deliberately *not* one: it has no reader outside its own crate, so it stays
+`#[cfg(test)] pub(crate)` and the shipped API never learns it exists.
+`crates/melodia/tests/common/mod.rs` exists for the mirror-image reason, an integration binary
+being unable to reach a `cfg(test)` module in the other direction, and each binary picks it up
+with a plain `mod common;`.
 
 ## Reach for what exists
 
@@ -73,6 +76,8 @@ exists for the mirror-image reason, an integration binary being unable to reach 
 | a throwaway image on disk | `write_test_png` / `write_test_jpeg` / `write_test_jpeg_sized` |
 | an in-memory database, migrations applied | `DbPool::test_pool()` |
 | a library with rows in it | `setup_seeded_db()`, `insert_test_track`, `make_test_metadata` |
+| a `PlaybackContext` with no audio device under it | `melodia-app`'s `state::fixtures::TestPlayback` |
+| the two sinks `with_state_emit` takes, without an engine | the same module's `test_sinks` |
 | an `AudioSource` with known samples | `player::playback::tests::helpers::TestSource` |
 | float comparison that will not trip `float_cmp` | the same module's `approx_eq`, `assert_approx`, `bits` |
 | a `Shape` from two integers | `helpers::shape`, or `tests/common/mod.rs`'s for an integration binary |

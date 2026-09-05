@@ -6,8 +6,10 @@ use melodia_core::config::Paths;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::{AppError, AppResult};
 use melodia_engine::player::engine::actions::emit_and_execute;
+use melodia_engine::player::engine::event_sink::PlayerSinks;
 use melodia_engine::player::engine::state::{
-    PlayerAction, PlayerState, play_track_inner, restore_queue, restore_station, with_state_emit,
+    PlayerAction, PlayerState, PlayerStateHandle, play_track_inner, restore_queue, restore_station,
+    with_state_emit,
 };
 use melodia_engine::player::engine::types::{PersistedPlayback, RadioNowPlaying, RepeatMode};
 use melodia_store::database::{DbPool, queries};
@@ -94,18 +96,29 @@ pub async fn queue_add_tracks(state: &AppState, track_ids: Vec<i64>) -> Result<(
 /// so the queue reads `[current, id_0, …, id_n, …]`. One DB round-trip and one
 /// `with_state_emit` for the batch.
 pub async fn queue_play_next_many(state: &AppState, track_ids: Vec<i64>) -> Result<(), AppError> {
+    play_next_many(&state.db, &state.player_state, &state.sinks, &track_ids).await
+}
+
+/// [`queue_play_next_many`]'s body, narrowed to what it reaches so the batch's ordering can be
+/// driven off a bare pool.
+async fn play_next_many(
+    db: &DbPool,
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    track_ids: &[i64],
+) -> Result<(), AppError> {
     if track_ids.is_empty() {
         return Ok(());
     }
     let summaries: Vec<Arc<TrackSummary>> =
-        queries::track::get_track_summaries_by_ids(&state.db, &track_ids)
+        queries::track::get_track_summaries_by_ids(db, track_ids)
             .await?
             .into_iter()
             .map(Arc::new)
             .collect();
 
     log::debug!("queue: play next, {} track(s)", summaries.len());
-    with_state_emit(&state.player_state, &state.sinks, |s| {
+    with_state_emit(player_state, sinks, |s| {
         // `insert_next` always lands at `current_index + 1`, so walking the
         // input backwards is what produces forward order.
         for summary in summaries.into_iter().rev() {

@@ -3,8 +3,9 @@ TODO: TEST COVERAGE (REPO-WIDE)
 
 Working doc for issue #38. Delete when the backlog below is spent.
 
-Status: P0 is spent, and so are both blockers (P0.1 through P0.5, B1, B2). What is
-left starts at P1, whose cheapest entry is library/playback.rs.
+Status: P0 is spent, both blockers with it, and so is P1's playback entry. What is
+left of P1 is favorites.rs and settings/view.rs, and both of those want P2's
+scrobble work beside them. So the next thing worth writing is P2.
 Created: 2026-09-04
 
 Numbers are from the published report at https://kenansalar.github.io/Melodia/,
@@ -37,9 +38,11 @@ decision. tag_writer.rs is 84.7% covered and correct; nothing tests the coalesci
 map that picks which rating value it is handed.
 
 That is the thesis the priority order below is built on. The numbers in this
-section are the original survey and are not kept current: every file named in the
-second list has since been worked, which is what P0 and B2 were. The thesis held
-each time, and library/playback.rs is the one still standing where it was.
+section are the original survey and are not kept current: every file in the second
+list has since been worked, which is what P0, B2 and P1.1 were, and the thesis
+held every time. library/playback.rs was the last of them and the sharpest case:
+its 541-line test file was almost entirely tests of the state machine underneath,
+so the decision layer read as well covered while none of it had ever run.
 
 
 WHERE IT STANDS
@@ -56,12 +59,15 @@ WHERE IT STANDS
   And after step 4:
   TOTAL   function 41.2%              line 39.9% (16874/42289)   region 37.4%
 
+  And after step 5:
+  TOTAL   function 42.3%              line 40.7% (17215/42350)   region 38.1%
+
   The table below is the original survey, left as written. Two things moved that
   first line, only one of them this backlog: the updater tests landed after the
   report was generated.
 
   The one row that has moved far enough to be misleading is the library API,
-  now 38.6% (1327/3440) rather than 28.1%. Steps 3 and 4 are the whole of that.
+  now 44.6% (1537/3449) rather than 28.1%. Steps 3 through 5 are the whole of that.
 
   subsystem                                    line cov          uncovered
   --------------------------------------------------------------------------
@@ -259,6 +265,7 @@ wrappers, which take an &AppState and are one-line delegations to melodia-engine
 Queue (already at 95.7%). Same argument as playlists' eleven in B2. The two with
 a decision of their own are queue_play_next_many's reverse insert and
 sort_for_queue's natord ordering, and they belong with P1's playback entry points.
+P1.1 took both.
 
 Measured: library/queue.rs 1.7% -> 24.7% line (192 uncovered of 255, the wrappers),
 engine/state.rs 91.7%, engine/types.rs 60.3%. The library layer 37.0% -> 38.6%.
@@ -380,7 +387,6 @@ Step 3 took the four where the door/work split let a test say something the
 queries underneath had not already answered. What is left, in order of what a
 failure costs:
 
-  library/playback.rs      4.9% of 268   the play/pause/seek entry points
   library/favorites.rs     0.0% of 102   set_favorite, and the love sync under it
   library/settings/view.rs 6.2% of 128   views.json, the per-view UI state
   library/tags.rs         69.7% of 234   the edit-track orchestrator
@@ -392,9 +398,72 @@ failure costs:
   library/import.rs         90.9% of  99
   library/playlist_files.rs 87.6% of 185
 
-library/playback.rs is not blocked and never was: every one of its functions
-already takes &PlaybackContext, which is B2's shape from before this backlog
-existed. It is simply untested, which makes it the cheapest thing on this list.
+  Spent in step 5:
+  library/playback.rs       72.4% of 268
+  library/queue.rs          34.9% of 264
+
+P1.1  DONE — the transport doors, and the copies standing in for them
+---------------------------------------------------------------------
+
+Twenty-eight tests, and no production change to playback.rs at all: every
+function in it was already callable, and the reason none was being called turned
+out to be a belief rather than a blocker.
+
+  This entry used to say playback.rs "is not blocked and never was", because
+  every function takes &PlaybackContext. P0.2 concluded the opposite from the
+  same file, that a PlaybackContext carries a PlaybackEngine and is therefore no
+  more constructible than an AppState. Both were half right. PlaybackEngine needs
+  a Mixer, and output::mixer::pair builds one with no device between its halves,
+  which is what crates/melodia/tests/crossfade.rs has been driving the whole DSP
+  chain through since before this backlog existed.
+
+  So the seam is a fixture, not a signature: crates/melodia-app/src/state/
+  fixtures.rs, named after melodia-store's and melodia-engine's and deliberately
+  not one of them, having no reader outside its own crate. A thread stands in for
+  the audio callback, because Voice::clear waits for one and half the transport
+  clears a deck.
+
+What was there instead is the finding worth keeping. playback_tests.rs was 541
+lines and reached super:: for exactly two items, resolve_start_slot and
+needs_station_reopen; the other 28 tests drove melodia-engine's builders, and
+three of them were hand-copied production. A private toggle() retyped
+player_toggle_play_pause's branch with the fade length as a literal, and two more
+retyped player_play_tracks' seeding, one saying so in its doc comment. That is
+the browse.rs defect B2 named, at four times the size: a copy written because the
+door could not be called, free to drift from the door it stands in for. Nothing
+there would have noticed the toggle losing its resume_station short-circuit.
+
+The builder tests moved to melodia-engine's state_tests.rs, where the machine
+they test lives, and six weaker namesakes there went in the swap. test_toggle_mute,
+test_pause_and_resume and four siblings assigned a field and asserted it back, or
+restated a clamp inline rather than calling the builder that applies it.
+test_stop_preserves_track_for_resume was the same shape and got the two-line fix
+instead of the axe, since its assertions were about something.
+
+Five pins were mutation-checked, and the two worth knowing are the guards that
+read as noise: dropping !s.is_muted from player_set_volume's short-circuit means
+the slider can no longer unmute, since passing the volume it already holds *is*
+the unmute; and dropping player_toggle_play_pause's resume_station call makes the
+play half of a station toggle a Resume onto a socket the pause already closed.
+The other three are the sleep timer's refusal over a station, the Radio switch
+stopping a library track it has no business touching, and "Play Next" landing a
+multi-row selection backwards.
+
+Also here, being what P0.2 deferred to this entry: sort_for_queue's natord
+ordering, mutation-checked (a byte compare puts "Track 10" ahead of "Track 9"),
+and queue_play_next_many, which got the B2 split. Its door forwards to a body
+taking db, player_state and sinks, and that is the first one in the layer to show
+the seam needs no engine under it.
+
+Still uncovered in playback.rs, and each on purpose: the station network path
+(player_play_station and open_and_start_station, which want a TestServer and
+belong with P2), the eight EQ and ReplayGain forwarders (see DELIBERATELY NOT),
+and transport_fade_ms's fade arm, whose value nothing below a deck holding a real
+source can observe.
+
+Measured: library/playback.rs 4.9% -> 72.4% line, library/queue.rs 24.7% ->
+34.9%, engine/state.rs 91.7% -> 92.7%. The library layer 38.6% -> 44.6%,
+workspace line coverage 39.9% -> 40.7%.
 
 library/tags.rs deserves a note out of order. Its doc comment warns not to
 shortcut the post-write re-extract into a hand-built UPDATE, because a fresh
@@ -524,6 +593,18 @@ DELIBERATELY NOT ON THIS LIST
   - Anything already above 90% (melodia-playback, melodia-artwork, the query
     layer). The remaining lines there are error formatting.
 
+  - library/playback.rs's eight EQ and ReplayGain forwarders. One store each into
+    a lock-free cell the engine publishes no reader for, so a test can call them
+    and assert nothing, and the clamps underneath are pinned by melodia-playback's
+    own equalizer and replaygain suites. An accessor on PlaybackEngine would make
+    them assertable and would be production surface whose only caller is a test.
+    Their five crossfade siblings are covered instead, and only because
+    crossfade_settings() already exists for transport_fade_ms to read.
+
+  - The thirteen queue_* transport wrappers, still. P0.2's argument stands and
+    step 5 did not change it; what it did take is the two that decide something,
+    which is the whole of what that entry deferred here.
+
   Carried over from the spent updater backlog, so none of it gets re-proposed:
 
   - The updater's UI layer (ui/callbacks/updater/**, ui/settings/updater_settings.rs,
@@ -565,13 +646,16 @@ SUGGESTED ORDER
   4. DONE — P0.2 (queue and station). It wanted neither &PlaybackContext nor an
      AppState in the end: the seam that mattered was between resolving what to
      restore and seating it, since only the second half needs an audio device.
-  5. What is left of the P1 list, cheapest first. library/playback.rs is 268 lines
-     at 4.9% and already takes &PlaybackContext, so it needs no production change
-     at all — only a way to build one, which is the audio-device question P0.2
-     stepped around rather than answered.
+  5. DONE — P1.1 (the transport doors). It needed no production change to
+     playback.rs and no signature sweep: the audio-device question P0.2 stepped
+     around had already been answered by output::mixer::pair, so the seam was a
+     fixture. See its entry for what the old test file turned out to be.
   6. P2, then P3, then the three items worth keeping from P4. B1 is already built,
-     so the network tier is unblocked whenever it comes up the list.
+     so the network tier is unblocked whenever it comes up the list. What is left
+     of P1 (favorites.rs, and settings/view.rs) wants the scrobble work beside it,
+     so P2 is the next thing worth writing rather than the rest of P1.
 
 Steps 1 through 4 spend P0 entirely: every path where a defect costs the user
 something a reinstall does not return now has a test, and the four that were
-consequential were mutation-checked rather than merely written.
+consequential were mutation-checked rather than merely written. Step 5 spends the
+one P1 entry that stands on its own.
