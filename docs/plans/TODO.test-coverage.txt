@@ -3,7 +3,8 @@ TODO: TEST COVERAGE (REPO-WIDE)
 
 Working doc for issue #38. Delete when the backlog below is spent.
 
-Status: steps 1, 2 and 3 spent (P0.4, P0.5, P0.1, P0.3, B2). Next is P0.2.
+Status: P0 is spent, and so are both blockers (P0.1 through P0.5, B1, B2). What is
+left starts at P1, whose cheapest entry is library/playback.rs.
 Created: 2026-09-04
 
 Numbers are from the published report at https://kenansalar.github.io/Melodia/,
@@ -35,7 +36,10 @@ concentrated where a well-tested destructive primitive is called by an untested
 decision. tag_writer.rs is 84.7% covered and correct; nothing tests the coalescing
 map that picks which rating value it is handed.
 
-That is the thesis the priority order below is built on.
+That is the thesis the priority order below is built on. The numbers in this
+section are the original survey and are not kept current: every file named in the
+second list has since been worked, which is what P0 and B2 were. The thesis held
+each time, and library/playback.rs is the one still standing where it was.
 
 
 WHERE IT STANDS
@@ -49,13 +53,15 @@ WHERE IT STANDS
   And after step 3:
   TOTAL   function 41.1%              line 39.7% (16789/42274)   region 37.3%
 
+  And after step 4:
+  TOTAL   function 41.2%              line 39.9% (16874/42289)   region 37.4%
+
   The table below is the original survey, left as written. Two things moved that
   first line, only one of them this backlog: the updater tests landed after the
   report was generated.
 
   The one row that has moved far enough to be misleading is the library API,
-  now 37.0% (1268/3425) rather than 28.1%. Step 3's four files are the whole of
-  that.
+  now 38.6% (1327/3440) rather than 28.1%. Steps 3 and 4 are the whole of that.
 
   subsystem                                    line cov          uncovered
   --------------------------------------------------------------------------
@@ -212,26 +218,50 @@ Writeback struct and its two methods are new), rating_import.rs 0% -> 23.1%,
 library/ratings.rs 4.5% -> 34.9%. What is left in each is the AppState half.
 
 
-P0.2  The queue and the station seated under it (library/queue.rs, 1.7% of 240)
---------------------------------------------------------------------------------
+P0.2  DONE — the queue and the station seated under it
+-----------------------------------------------------
 
-queue.json is one file rather than two because, as CLAUDE.md puts it, a station
-leaves the queue seated underneath, so a restart owes both. That invariant is
-stated in prose and held by nothing. A restore that drops one half loses the
-user's queue, which is not recoverable from the library.
+Fifteen tests, across two crates because the invariant does: six in
+melodia-engine (what survives the file) and nine in melodia-app (what the ids
+still resolve to, and what shuffle and repeat come back as).
 
-queue_tests.rs exists and is 162 lines, all of it driving PlayerState in memory:
-shuffle, unshuffle, the repeat cycle, the current-track anchor. Good tests, and
-they are why the file is not worse. What they never touch is any of the thirteen
-functions that persist or restore, so the file reads 1.7%.
+The claim this entry was written about — queue.json is one file because a station
+leaves the queue seated underneath, so a restart owes both — is now held end to
+end. A state playing a queue with a station tuned over it goes through
+to_persisted, through serde_json, and back through restore_queue + restore_station,
+and both halves arrive. It was mutation-checked, and this is the one worth
+knowing: seating the station *before* the queue, which reads like the same code,
+restores the station and no queue at all. That is the loss the entry names, and
+the ordering is the only thing standing between the user and it.
 
-The four cases worth writing are the corners, per .claude/rules/testing.md's
-cross-the-flags guidance: a queue with no station, a station with no queue, both
-together, and a restore of a persisted pair where one side's rows no longer exist
-in the database. The last is the one that actually happens, since a folder can be
-removed between sessions.
+Three more the entry did not ask for and the round trip turned up. A station the
+user typed in but never saved has station_id == 0 and is deliberately not written
+down, since nothing could be looked back up with it. PersistedPlayback's serde
+flatten had no test at all, so the doc comment's forward-compatibility promise —
+a queue.json written before stations existed still parses — was prose only; a
+regression there is every existing install losing its queue on the first launch
+after an update. And restore_station evicting the track restore_queue just seated,
+while the queue underneath survives, is the D9 "two fields are one" claim.
 
-Blocked on B2 for the persistence half. The restore decision itself is pure.
+The production change is B2's split with the seam in a different place, because
+here the two halves cost different things to test. plan_restore takes a DbPool
+and a Paths: it resolves the persisted ids against the library and settles
+shuffle and repeat against settings.json. apply_restore is pure over PlayerState.
+Only the door needs the PlaybackEngine, and therefore an audio device, which is
+what nothing below it now pays for. The split also collapsed a duplication: the
+shuffle-forced-off rule used to be spelled twice, once for the file and once for
+the state, and the two could disagree. It is one expression now, and both sides
+of the flag are pinned — a restored queue turns shuffle off in the state *and* in
+the file, an empty restore leaves the user's setting alone.
+
+Still uncovered here and it is most of the file: the thirteen queue_* transport
+wrappers, which take an &AppState and are one-line delegations to melodia-engine's
+Queue (already at 95.7%). Same argument as playlists' eleven in B2. The two with
+a decision of their own are queue_play_next_many's reverse insert and
+sort_for_queue's natord ordering, and they belong with P1's playback entry points.
+
+Measured: library/queue.rs 1.7% -> 24.7% line (192 uncovered of 255, the wrappers),
+engine/state.rs 91.7%, engine/types.rs 60.3%. The library layer 37.0% -> 38.6%.
 
 
 P0.3  DONE — play counts
@@ -532,12 +562,16 @@ SUGGESTED ORDER
   3. DONE — B2, on the four files where the split unlocked a decision worth
      pinning. Not the sweep this list proposed; see its entry above for why the
      door stayed put and why playlists.rs got two tests rather than thirteen.
-  4. P0.2 (queue and station), then what is left of the P1 list. Next up. Queue
-     is the last P0 and the only tier where a defect costs the user something no
-     rescan returns; it wants a decision of its own about &PlaybackContext, which
-     is why B2 did not reach it.
-  5. P2, then P3, then the three items worth keeping from P4. B1 is already built,
+  4. DONE — P0.2 (queue and station). It wanted neither &PlaybackContext nor an
+     AppState in the end: the seam that mattered was between resolving what to
+     restore and seating it, since only the second half needs an audio device.
+  5. What is left of the P1 list, cheapest first. library/playback.rs is 268 lines
+     at 4.9% and already takes &PlaybackContext, so it needs no production change
+     at all — only a way to build one, which is the audio-device question P0.2
+     stepped around rather than answered.
+  6. P2, then P3, then the three items worth keeping from P4. B1 is already built,
      so the network tier is unblocked whenever it comes up the list.
 
-Steps 1 and 2 need no new infrastructure and cover every path where a defect costs
-the user something a reinstall does not return.
+Steps 1 through 4 spend P0 entirely: every path where a defect costs the user
+something a reinstall does not return now has a test, and the four that were
+consequential were mutation-checked rather than merely written.

@@ -1493,3 +1493,104 @@ fn the_transport_is_a_tracks_again_once_one_replaces_the_station() {
     assert_eq!(state.build_pause_actions(250), vec![PlayerAction::Pause { fade_ms: 250 }]);
     assert_eq!(state.status, PlaybackStatus::Paused, "pausing a track is not a stop");
 }
+
+// --- The restart -----------------------------------------------------------
+//
+// `queue.json` is one file rather than two because a station leaves the queue seated underneath
+// it, so a restart owes both back. The round trip below is the whole of that claim: everything
+// above pins one side of it in memory, and nothing pinned it across the file.
+
+/// A player mid-album with a station tuned over it, which is the state the two-halves claim is
+/// about.
+fn tuned_over_a_queue() -> PlayerState {
+    let mut state = playing_a_queue();
+    let (generation, _actions) = state.build_station_connecting_actions(station("Example FM"));
+    let _started = state.build_station_connected_actions(generation);
+    state
+}
+
+#[test]
+fn a_station_over_a_queue_writes_both_halves_down() {
+    let state = tuned_over_a_queue();
+
+    let persisted = state.to_persisted();
+
+    assert_eq!(persisted.queue.track_ids, vec![1, 2], "the queue underneath is still owed");
+    assert_eq!(persisted.station_id, Some(42));
+}
+
+/// A station the user typed in but never saved has `station_id == 0`, and nothing could be looked
+/// back up with it. Writing it down would restore a station with no row on the next boot.
+#[test]
+fn a_station_with_no_row_of_its_own_is_not_written_down() {
+    let mut state = playing_a_queue();
+    let unsaved = Arc::new(RadioNowPlaying {
+        station_id: 0,
+        ..(*station("Unsaved FM")).clone()
+    });
+    let (generation, _actions) = state.build_station_connecting_actions(unsaved);
+    let _started = state.build_station_connected_actions(generation);
+
+    assert!(state.station().is_some(), "the station is on the deck either way");
+    assert_eq!(state.to_persisted().station_id, None);
+}
+
+/// Seating the station is what evicts whatever the queue restore just put on the deck, the two
+/// being one field — but the queue itself has to survive that, or a stop hands back nothing.
+#[test]
+fn the_station_replaces_the_restored_track_and_not_the_queue_under_it() {
+    let mut state = PlayerState::default();
+    let persistable = PersistableQueue {
+        track_ids: vec![1, 2],
+        current_index: 0,
+    };
+    restore_queue(
+        &mut state,
+        vec![
+            make_summary(1, "One", 180_000),
+            make_summary(2, "Two", 180_000),
+        ],
+        &persistable,
+    );
+    assert!(state.current_track().is_some(), "the queue restore seats a track first");
+
+    let _actions = restore_station(&mut state, station("Example FM"));
+
+    assert!(state.current_track().is_none(), "a station is not a track");
+    assert_eq!(state.station().map(|s| s.name.as_str()), Some("Example FM"));
+    assert_eq!(state.queue.to_persistable(), persistable, "the queue must survive verbatim");
+    assert_eq!(state.status, PlaybackStatus::Paused);
+    assert_eq!(state.duration_ms, 0);
+    assert_eq!(state.position_ms, 0);
+}
+
+/// The full trip through the file: what a session writes down is what the next one puts back,
+/// both halves of it.
+#[test]
+fn a_restart_puts_the_queue_back_under_the_station() -> Result<(), AppError> {
+    let before = tuned_over_a_queue();
+    let written = serde_json::to_string(&before.to_persisted())
+        .map_err(|e| AppError::Validation(format!("serialize queue.json: {e}")))?;
+
+    let read: PersistedPlayback = serde_json::from_str(&written)
+        .map_err(|e| AppError::Validation(format!("parse queue.json: {e}")))?;
+    let mut after = PlayerState::default();
+    restore_queue(
+        &mut after,
+        vec![
+            make_summary(1, "One", 180_000),
+            make_summary(2, "Two", 180_000),
+        ],
+        &read.queue,
+    );
+    let _actions = restore_station(&mut after, station("Example FM"));
+
+    assert_eq!(
+        after.queue.to_persistable(),
+        before.queue.to_persistable(),
+        "the queue came back as it went down"
+    );
+    assert_eq!(after.station().map(|s| s.name.as_str()), Some("Example FM"));
+    assert_eq!(read.station_id, Some(42), "and the id that found it survived the file");
+    Ok(())
+}
