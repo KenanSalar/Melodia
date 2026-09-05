@@ -10,18 +10,21 @@
 //! way: enough HTTP/1.1 to serve a status, some headers and a body is this file, and a mock
 //! framework's matching DSL is the half these suites would not use.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 
-/// What the client asked for. Bodies are not read — every request these suites make is a GET.
+/// What the client asked for, body included: a scrobble suite's question is which listens went
+/// out, not that a POST happened.
 #[derive(Debug, Clone)]
 pub struct TestRequest {
     pub method: String,
     pub path: String,
     pub headers: Vec<(String, String)>,
+    /// Empty for a GET, and for any sender that streams rather than declaring a length.
+    pub body: Vec<u8>,
 }
 
 impl TestRequest {
@@ -32,6 +35,12 @@ impl TestRequest {
             .iter()
             .find(|(field, _)| field.eq_ignore_ascii_case(name))
             .map(|(_, value)| value.as_str())
+    }
+
+    /// The body as UTF-8, lossily. Every body these suites send is JSON or form-urlencoded.
+    #[must_use]
+    pub fn body_text(&self) -> std::borrow::Cow<'_, str> {
+        String::from_utf8_lossy(&self.body)
     }
 }
 
@@ -190,10 +199,22 @@ fn read_request(stream: &TcpStream) -> std::io::Result<Option<TestRequest>> {
         }
     }
 
+    // Only a declared length is read. A chunked sender would leave the body empty rather than
+    // block the accept thread hunting for a terminator, and reqwest declares one for every
+    // in-memory body (`.json()`, `.form()`) these suites send.
+    let declared = headers
+        .iter()
+        .find(|(field, _)| field.eq_ignore_ascii_case("content-length"))
+        .and_then(|(_, value)| value.parse::<usize>().ok())
+        .unwrap_or(0);
+    let mut body = vec![0u8; declared];
+    reader.read_exact(&mut body)?;
+
     Ok(Some(TestRequest {
         method,
         path,
         headers,
+        body,
     }))
 }
 

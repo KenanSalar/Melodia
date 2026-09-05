@@ -103,14 +103,16 @@ impl ScrobbleService {
                     .await
                 {
                     Ok(()) => clear_lastfm.extend(idx),
-                    Err(LastfmError::InvalidSession) => {
-                        self.disconnect_lastfm().await;
-                        drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
-                    }
-                    Err(e) => {
-                        log::info!("Last.fm scrobble deferred: {e}");
-                        retry_after = Some(merge_retry(retry_after, Duration::ZERO));
-                    }
+                    Err(e) => match lastfm_reaction(&e) {
+                        Reaction::Disconnect => {
+                            self.disconnect_lastfm().await;
+                            drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
+                        }
+                        Reaction::Retry(delay) => {
+                            log_deferral("Last.fm scrobble", &e, delay);
+                            retry_after = Some(merge_retry(retry_after, delay));
+                        }
+                    },
                 }
             }
         } else {
@@ -131,21 +133,25 @@ impl ScrobbleService {
         } else if let Some(creds) = lb_creds.as_ref() {
             let (batch, idx) = take_batch(&snapshot, |it| it.listenbrainz_remaining);
             if !batch.is_empty() {
-                match listenbrainz::submit_listens(&client, &creds.token, &batch).await {
+                match listenbrainz::submit_listens(
+                    &client,
+                    &self.listenbrainz_base,
+                    &creds.token,
+                    &batch,
+                )
+                .await
+                {
                     Ok(()) => clear_lb.extend(idx),
-                    Err(ListenBrainzError::InvalidToken) => {
-                        self.disconnect_listenbrainz().await;
-                        drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
-                    }
-                    Err(ListenBrainzError::RateLimited { reset_in_secs }) => {
-                        let d = listenbrainz::rate_limit_backoff(reset_in_secs);
-                        log::info!("ListenBrainz rate limited; retrying in {}s", d.as_secs());
-                        retry_after = Some(merge_retry(retry_after, d));
-                    }
-                    Err(e) => {
-                        log::info!("ListenBrainz submit deferred: {e}");
-                        retry_after = Some(merge_retry(retry_after, Duration::ZERO));
-                    }
+                    Err(e) => match listenbrainz_reaction(&e) {
+                        Reaction::Disconnect => {
+                            self.disconnect_listenbrainz().await;
+                            drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
+                        }
+                        Reaction::Retry(delay) => {
+                            log_deferral("ListenBrainz submit", &e, delay);
+                            retry_after = Some(merge_retry(retry_after, delay));
+                        }
+                    },
                 }
             }
         }
@@ -266,14 +272,17 @@ impl ScrobbleService {
                 .await
                 {
                     Ok(()) => clear_lastfm.push(i),
-                    Err(LastfmError::InvalidSession) => {
-                        self.disconnect_lastfm().await;
-                        drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
-                        break;
-                    }
                     Err(e) => {
-                        log::info!("Last.fm love deferred: {e}");
-                        retry_after = Some(merge_retry(retry_after, Duration::ZERO));
+                        match lastfm_reaction(&e) {
+                            Reaction::Disconnect => {
+                                self.disconnect_lastfm().await;
+                                drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
+                            }
+                            Reaction::Retry(delay) => {
+                                log_deferral("Last.fm love", &e, delay);
+                                retry_after = Some(merge_retry(retry_after, delay));
+                            }
+                        }
                         break;
                     }
                 }
@@ -306,6 +315,7 @@ impl ScrobbleService {
                 };
                 match listenbrainz::submit_feedback(
                     &client,
+                    &self.listenbrainz_base,
                     &creds.token,
                     mbid,
                     i8::from(love.loved),
@@ -313,20 +323,21 @@ impl ScrobbleService {
                 .await
                 {
                     Ok(()) => clear_lb.push(i),
-                    Err(ListenBrainzError::InvalidToken) => {
-                        self.disconnect_listenbrainz().await;
-                        drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
-                        break;
-                    }
-                    Err(ListenBrainzError::RateLimited { reset_in_secs }) => {
-                        let d = listenbrainz::rate_limit_backoff(reset_in_secs);
-                        log::info!("ListenBrainz rate limited; retrying in {}s", d.as_secs());
-                        retry_after = Some(merge_retry(retry_after, d));
-                        break;
-                    }
                     Err(e) => {
-                        log::info!("ListenBrainz feedback deferred: {e}");
-                        retry_after = Some(merge_retry(retry_after, Duration::ZERO));
+                        match listenbrainz_reaction(&e) {
+                            Reaction::Disconnect => {
+                                self.disconnect_listenbrainz().await;
+                                drop_flags(
+                                    &snapshot,
+                                    |it| it.listenbrainz_remaining,
+                                    &mut clear_lb,
+                                );
+                            }
+                            Reaction::Retry(delay) => {
+                                log_deferral("ListenBrainz feedback", &e, delay);
+                                retry_after = Some(merge_retry(retry_after, delay));
+                            }
+                        }
                         break;
                     }
                 }
@@ -347,6 +358,48 @@ impl ScrobbleService {
             self.persist_queue(queue_snapshot).await;
         }
         retry_after
+    }
+}
+
+/// What a failed provider call means for the queue. Both drains ask this of both providers, so
+/// the policy is written once rather than four times, and is decidable without a socket.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reaction {
+    /// Auth was rejected: clear the credential and drop this provider's pending flags, which
+    /// would otherwise retry forever against something we just deleted.
+    Disconnect,
+    /// Keep the entry queued. `Duration::ZERO` means the provider named no wait and the
+    /// submitter's own backoff picks one.
+    Retry(Duration),
+}
+
+/// Last.fm's retry policy. Only a rejected session disconnects: an unclassified code keeps its
+/// queue slot deliberately, since one mis-read as permanent silently loses the listen.
+fn lastfm_reaction(error: &LastfmError) -> Reaction {
+    match error {
+        LastfmError::InvalidSession => Reaction::Disconnect,
+        _ => Reaction::Retry(Duration::ZERO),
+    }
+}
+
+/// `ListenBrainz`'s retry policy. The one provider that names its own wait, via the 429's
+/// `X-RateLimit-Reset-In`.
+fn listenbrainz_reaction(error: &ListenBrainzError) -> Reaction {
+    match error {
+        ListenBrainzError::InvalidToken => Reaction::Disconnect,
+        ListenBrainzError::RateLimited { reset_in_secs } => {
+            Reaction::Retry(listenbrainz::rate_limit_backoff(*reset_in_secs))
+        }
+        _ => Reaction::Retry(Duration::ZERO),
+    }
+}
+
+/// The one deferral line both drains log, carrying the wait only when the provider named one.
+fn log_deferral(what: &str, cause: &dyn std::fmt::Display, delay: Duration) {
+    if delay.is_zero() {
+        log::info!("{what} deferred: {cause}");
+    } else {
+        log::info!("{what} deferred: {cause}; retrying in {}s", delay.as_secs());
     }
 }
 
@@ -391,3 +444,7 @@ fn take_batch(
     }
     (batch, idx)
 }
+
+#[cfg(test)]
+#[path = "tests/submit_tests.rs"]
+mod tests;

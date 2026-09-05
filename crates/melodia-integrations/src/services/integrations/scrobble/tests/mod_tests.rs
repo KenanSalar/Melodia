@@ -1,50 +1,8 @@
-use std::sync::{Arc, OnceLock};
-
-use super::{
-    LastfmCredentials, ListenBrainzCredentials, LoveItem, LoveTarget, QueuedItem, ScrobbleService,
-    ScrobbleTrack,
+use super::helpers::{
+    TestResult, favorite_row, init_service, lb_love_service, paths_in, sample_item, scrobble_row,
 };
-use melodia_core::config::Paths;
+use crate::services::integrations::scrobble::{LastfmCredentials, LoveTarget};
 use melodia_core::entities::integrations::ScrobbleFlags;
-use melodia_core::entities::track::ScrobbleRow;
-
-type TestResult = Result<(), Box<dyn std::error::Error>>;
-
-/// A [`Paths`] rooted in a throwaway directory, with the subdirectories [`Paths::resolve`]
-/// creates already in place. Creation is best-effort — a failure surfaces as a missing-file
-/// error in the test body.
-///
-/// Per-crate rather than shared: the testkit names no workspace type, which is what keeps it a
-/// leaf every other crate can dev-depend on without a cycle.
-fn paths_in(dir: &std::path::Path) -> Paths {
-    let paths = Paths::rooted_at(dir.to_path_buf());
-    let _ = paths.create_dirs();
-    paths
-}
-
-/// Build a service with a fresh (never-built) shared client `OnceLock` — the
-/// credential/queue tests here never touch the network.
-fn init_service(paths: &Paths, flags: &ScrobbleFlags) -> ScrobbleService {
-    ScrobbleService::init(paths, flags, Arc::new(OnceLock::new()))
-}
-
-fn sample_item() -> QueuedItem {
-    QueuedItem {
-        track: ScrobbleTrack {
-            artist: "Artist".to_owned(),
-            track: "Song".to_owned(),
-            album: None,
-            album_artist: None,
-            duration_secs: Some(180),
-            track_number: None,
-            recording_mbid: None,
-            release_mbid: None,
-        },
-        timestamp: 1_700_000_000,
-        lastfm_remaining: true,
-        listenbrainz_remaining: true,
-    }
-}
 
 #[test]
 fn fresh_service_is_disconnected_and_empty() -> TestResult {
@@ -169,46 +127,6 @@ async fn status_watch_observes_credential_and_flag_changes() -> TestResult {
     Ok(())
 }
 
-/// A `ScrobbleRow` with an optional recording MBID — the love-sync tests key on
-/// its presence for the `ListenBrainz` path. (Last.fm love can't be exercised
-/// here: it's gated on compile-time API keys, absent in a test build.)
-fn scrobble_row(mbid: Option<&str>) -> ScrobbleRow {
-    ScrobbleRow {
-        id: 1,
-        title: "Song".to_owned(),
-        artist: Some("Artist".to_owned()),
-        album: None,
-        album_artist: None,
-        duration_ms: 180_000,
-        track_number: None,
-        musicbrainz_track_id: mbid.map(str::to_owned),
-        musicbrainz_release_id: None,
-    }
-}
-
-/// A service with `ListenBrainz` connected and its love toggle on/off.
-async fn lb_love_service(
-    paths: &Paths,
-    love_sync: bool,
-) -> Result<ScrobbleService, Box<dyn std::error::Error>> {
-    let service = init_service(
-        paths,
-        &ScrobbleFlags {
-            lastfm_enabled: false,
-            listenbrainz_enabled: false,
-            listenbrainz_love_enabled: love_sync,
-            ..Default::default()
-        },
-    );
-    service
-        .set_listenbrainz_credentials(Some(ListenBrainzCredentials {
-            token: "tok".to_owned(),
-            username: "lb-user".to_owned(),
-        }))
-        .await?;
-    Ok(service)
-}
-
 #[tokio::test]
 async fn enqueue_love_queues_listenbrainz_when_mbid_present() -> TestResult {
     let dir = tempfile::tempdir()?;
@@ -232,7 +150,8 @@ async fn enqueue_love_skips_listenbrainz_without_mbid() -> TestResult {
     let dir = tempfile::tempdir()?;
     let service = lb_love_service(&paths_in(dir.path()), true).await?;
 
-    // No MBID for LB to key on and no Last.fm keys in a test build → nothing queued.
+    // No MBID for LB to key on, and Last.fm's love toggle is off in this fixture, so no
+    // provider wants the row.
     service.enqueue_love(&scrobble_row(None), true).await?;
     assert_eq!(service.queued_len(), 0);
     Ok(())
@@ -247,22 +166,6 @@ async fn love_sync_inactive_when_flag_disabled() -> TestResult {
     service.enqueue_love(&scrobble_row(Some("mbid-1")), true).await?;
     assert_eq!(service.queued_len(), 0);
     Ok(())
-}
-
-/// A favorite row with a distinct title so the queue's `(artist, track)`
-/// coalescing doesn't fold a batch into one entry.
-fn favorite_row(id: i64, title: &str, mbid: Option<&str>) -> ScrobbleRow {
-    ScrobbleRow {
-        id,
-        title: title.to_owned(),
-        artist: Some("Artist".to_owned()),
-        album: None,
-        album_artist: None,
-        duration_ms: 180_000,
-        track_number: None,
-        musicbrainz_track_id: mbid.map(str::to_owned),
-        musicbrainz_release_id: None,
-    }
 }
 
 #[tokio::test]
@@ -300,10 +203,11 @@ async fn backfill_loves_noop_when_target_not_armed() -> TestResult {
     Ok(())
 }
 
+/// Arming needs a stored session as well as the toggle, so turning love-sync on before
+/// connecting queues nothing. Asserted on the session rather than on `is_configured()`, which
+/// reads keys baked in at compile time and so differs between a keyed build and a keyless one.
 #[tokio::test]
-async fn backfill_loves_lastfm_unarmed_in_keyless_build() -> TestResult {
-    // Last.fm love needs compile-time API keys, absent in a test build, so the
-    // target is never armed and the backfill is a no-op regardless of the flag.
+async fn backfill_loves_is_unarmed_for_lastfm_without_a_stored_session() -> TestResult {
     let dir = tempfile::tempdir()?;
     let service = init_service(
         &paths_in(dir.path()),
@@ -358,52 +262,5 @@ async fn enqueue_loves_noop_when_love_sync_inactive() -> TestResult {
 
     service.enqueue_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], true).await?;
     assert_eq!(service.queued_len(), 0);
-    Ok(())
-}
-
-/// Regression: a favorite toggled the opposite way while a love POST is in
-/// flight coalesces a fresh `loved` into the same queued entry (`push_love`).
-/// The submit writeback clears by snapshot index, so without the `loved`-match
-/// guard it would drop that newer state. The guard must leave the reversed love
-/// pending so it goes out next round.
-#[tokio::test]
-async fn love_writeback_keeps_a_concurrently_reversed_toggle_pending() -> TestResult {
-    let dir = tempfile::tempdir()?;
-    let service = lb_love_service(&paths_in(dir.path()), true).await?;
-
-    // A love (heart) is queued, then snapshotted as the submitter would before
-    // POSTing it.
-    service.enqueue_love(&scrobble_row(Some("mbid-1")), true).await?;
-    let snapshot: Vec<LoveItem> = service.queue.lock().loves.iter().cloned().collect();
-
-    // Mid-flight, the user un-favorites the same track: the opposite `loved`
-    // coalesces into the queued entry.
-    let Some(track) = ScrobbleTrack::from_row(&scrobble_row(Some("mbid-1"))) else {
-        return Err("scrobble row should build".into());
-    };
-    service.queue.lock().push_love(LoveItem {
-        track,
-        loved: false,
-        lastfm_remaining: false,
-        listenbrainz_remaining: true,
-    });
-
-    // The writeback would clear index 0's LB flag on the POST's success, but the
-    // guard sees `loved` flipped (true → false) and skips it: nothing cleared,
-    // nothing removed.
-    let changed = service.collect_writeback(
-        |q| &mut q.loves,
-        &[],
-        &[0],
-        |i, current: &LoveItem| snapshot.get(i).is_some_and(|s| s.loved == current.loved),
-    );
-    assert!(changed.is_none());
-
-    let queue = service.queue.lock();
-    let Some(love) = queue.loves.front() else {
-        return Err("reversed love should still be queued".into());
-    };
-    assert!(!love.loved);
-    assert!(love.listenbrainz_remaining);
     Ok(())
 }

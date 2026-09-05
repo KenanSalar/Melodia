@@ -286,7 +286,13 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
             let state = state.clone();
             let weak = weak.clone();
             rt.spawn(async move {
-                match listenbrainz::validate_token(state.http_client(), &token).await {
+                match listenbrainz::validate_token(
+                    state.http_client(),
+                    listenbrainz::LB_API_BASE,
+                    &token,
+                )
+                .await
+                {
                     Ok(v) if v.valid => {
                         let credentials = ListenBrainzCredentials {
                             token,

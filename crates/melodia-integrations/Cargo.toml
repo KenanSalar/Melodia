@@ -36,6 +36,9 @@ thiserror.workspace = true
 log.workspace = true
 
 [dev-dependencies]
+# The submitter's drain is driven against `melodia_testkit::http::TestServer`, which is what lets
+# a rejected token or a 429 be a real response rather than a hand-built error value.
+melodia-testkit = { path = "../melodia-testkit" }
 # The scrobble queue's suites persist into a throwaway data root.
 tempfile.workspace = true
 # `discord::artwork`'s lookup test drives a paused clock, and `test-util` is what supplies one.

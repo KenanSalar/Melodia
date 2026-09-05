@@ -17,8 +17,10 @@ use reqwest::StatusCode;
 use crate::services::integrations::scrobble::model::ScrobbleTrack;
 use melodia_core::error::AppError;
 
-/// The `ListenBrainz` API root.
-const LB_API_BASE: &str = "https://api.listenbrainz.org";
+/// The `ListenBrainz` API root. Every entry point below takes its base as an argument and every
+/// production caller passes this, so the submitter's suites can point the whole drain at a local
+/// server without a second code path deciding where a listen goes.
+pub const LB_API_BASE: &str = "https://api.listenbrainz.org";
 
 /// Ceiling on a refusal's body. Tighter than [`ANSWER_MAX_BYTES`] because the text lands in an
 /// error a user reads, so a host answering with a page of HTML would otherwise be quoted in full.
@@ -64,10 +66,11 @@ pub struct ValidatedToken {
 /// 401) is a normal result, not an error: it returns `valid: false`.
 pub async fn validate_token(
     client: &reqwest::Client,
+    base_url: &str,
     token: &str,
 ) -> Result<ValidatedToken, ListenBrainzError> {
     let response = client
-        .get(format!("{LB_API_BASE}/1/validate-token"))
+        .get(format!("{base_url}/1/validate-token"))
         .header(reqwest::header::AUTHORIZATION, format!("Token {token}"))
         .send()
         .await
@@ -99,23 +102,25 @@ pub async fn validate_token(
 /// retried or queued.
 pub async fn submit_playing_now(
     client: &reqwest::Client,
+    base_url: &str,
     token: &str,
     track: &ScrobbleTrack,
 ) -> Result<(), ListenBrainzError> {
-    submit(client, token, &playing_now_payload(track)).await
+    submit(client, base_url, token, &playing_now_payload(track)).await
 }
 
 /// Submit one or more durable listens, each stamped with its real start time.
 /// An empty batch is a no-op.
 pub async fn submit_listens(
     client: &reqwest::Client,
+    base_url: &str,
     token: &str,
     listens: &[(&ScrobbleTrack, i64)],
 ) -> Result<(), ListenBrainzError> {
     if listens.is_empty() {
         return Ok(());
     }
-    submit(client, token, &listens_payload(listens)).await
+    submit(client, base_url, token, &listens_payload(listens)).await
 }
 
 /// Love or clear feedback for a recording via `POST /1/feedback/recording-feedback`.
@@ -124,12 +129,13 @@ pub async fn submit_listens(
 /// on that. Durable/retried like a listen, sharing the same error policy.
 pub async fn submit_feedback(
     client: &reqwest::Client,
+    base_url: &str,
     token: &str,
     recording_mbid: &str,
     score: i8,
 ) -> Result<(), ListenBrainzError> {
     let response = client
-        .post(format!("{LB_API_BASE}/1/feedback/recording-feedback"))
+        .post(format!("{base_url}/1/feedback/recording-feedback"))
         .header(reqwest::header::AUTHORIZATION, format!("Token {token}"))
         .json(&feedback_payload(recording_mbid, score))
         .send()
@@ -159,6 +165,7 @@ pub struct LookupQuery<'a> {
 /// short response can't misalign a mapping onto the wrong track.
 pub async fn lookup_recording_mbids_bulk(
     client: &reqwest::Client,
+    base_url: &str,
     token: &str,
     queries: &[LookupQuery<'_>],
 ) -> Result<Vec<Option<MbidMatch>>, ListenBrainzError> {
@@ -167,7 +174,7 @@ pub async fn lookup_recording_mbids_bulk(
     }
     debug_assert!(queries.len() <= MAX_LOOKUPS_PER_POST);
     let response = client
-        .post(format!("{LB_API_BASE}/1/metadata/lookup/"))
+        .post(format!("{base_url}/1/metadata/lookup/"))
         .header(reqwest::header::AUTHORIZATION, format!("Token {token}"))
         .json(&bulk_lookup_payload(queries))
         .send()
@@ -193,11 +200,12 @@ pub async fn lookup_recording_mbids_bulk(
 /// POST a payload to `/1/submit-listens` and classify the response.
 async fn submit(
     client: &reqwest::Client,
+    base_url: &str,
     token: &str,
     payload: &SubmitListens<'_>,
 ) -> Result<(), ListenBrainzError> {
     let response = client
-        .post(format!("{LB_API_BASE}/1/submit-listens"))
+        .post(format!("{base_url}/1/submit-listens"))
         .header(reqwest::header::AUTHORIZATION, format!("Token {token}"))
         .json(payload)
         .send()

@@ -183,7 +183,10 @@ async fn backfill(
 
         let Some(result) = shutdown
             .run_until_cancelled(listenbrainz::lookup_recording_mbids_bulk(
-                &client, token, &lookups,
+                &client,
+                listenbrainz::LB_API_BASE,
+                token,
+                &lookups,
             ))
             .await
         else {

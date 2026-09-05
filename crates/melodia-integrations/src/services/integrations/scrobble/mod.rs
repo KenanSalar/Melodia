@@ -99,6 +99,9 @@ pub struct ScrobbleService {
     /// The same lazy `OnceLock` as `AppState`'s client, so the
     /// whole app shares one connection pool built on first request.
     http: Arc<OnceLock<Client>>,
+    /// Where the `ListenBrainz` calls go. Always [`listenbrainz::LB_API_BASE`] in the app; the
+    /// submitter's suites swap it for a local server through [`Self::with_listenbrainz_base`].
+    listenbrainz_base: String,
     /// Publishes a fresh [`ScrobbleStatus`] whenever the credentials or enabled
     /// flags change, so the settings UI stays truthful for connect/disconnect
     /// *and* the submitter's auto-disconnect (invalid Last.fm session /
@@ -126,8 +129,18 @@ impl ScrobbleService {
             notify: Notify::new(),
             mbid_kick: Notify::new(),
             http,
+            listenbrainz_base: listenbrainz::LB_API_BASE.to_owned(),
             status_tx,
         }
+    }
+
+    /// Point the `ListenBrainz` calls at `base` instead of the public API, so the drain's suite
+    /// can drive it against a local server. Consuming, so a seated `Arc` can't reach it.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_listenbrainz_base(mut self, base: String) -> Self {
+        self.listenbrainz_base = base;
+        self
     }
 
     /// A cheap snapshot of connection + enabled state for the settings UI.
@@ -412,9 +425,10 @@ impl ScrobbleService {
 
         if let Some(creds) = lb_creds {
             let client = self.client();
+            let base = self.listenbrainz_base.clone();
             tokio::spawn(async move {
                 if let Err(e) =
-                    listenbrainz::submit_playing_now(&client, &creds.token, &track).await
+                    listenbrainz::submit_playing_now(&client, &base, &creds.token, &track).await
                 {
                     log::debug!("ListenBrainz now-playing failed: {e}");
                 }
@@ -450,6 +464,13 @@ impl ScrobbleService {
     }
 }
 
+// Inline so the fixtures can be a sibling module the submit drain's suite reaches too, which is
+// the shape `player/source/mod.rs` already uses for the helpers its crate's suites share. The
+// test bodies still live in their own files.
 #[cfg(test)]
-#[path = "tests/mod_tests.rs"]
-mod tests;
+pub(crate) mod tests {
+    pub(crate) mod helpers;
+
+    #[path = "mod_tests.rs"]
+    mod mod_tests;
+}

@@ -3,9 +3,10 @@ TODO: TEST COVERAGE (REPO-WIDE)
 
 Working doc for issue #38. Delete when the backlog below is spent.
 
-Status: P0 is spent, both blockers with it, and so is P1's playback entry. What is
-left of P1 is favorites.rs and settings/view.rs, and both of those want P2's
-scrobble work beside them. So the next thing worth writing is P2.
+Status: P0 is spent, both blockers with it, and so is P1's playback entry and P2's
+scrobble half. What is left of P1 is favorites.rs and settings/view.rs; favorites
+ends in sync_love, so it can be written now that the scrobble seam exists. The next
+thing worth writing is P2's network half, which needs no production change at all.
 Created: 2026-09-04
 
 Numbers are from the published report at https://kenansalar.github.io/Melodia/,
@@ -61,6 +62,9 @@ WHERE IT STANDS
 
   And after step 5:
   TOTAL   function 42.3%              line 40.7% (17215/42350)   region 38.1%
+
+  And after step 6:
+  TOTAL   function 43.1%              line 41.3% (17534/42409)   region 38.7%
 
   The table below is the original survey, left as written. Two things moved that
   first line, only one of them this backlog: the updater tests landed after the
@@ -487,31 +491,132 @@ Scrobbling is the one subsystem whose bugs are published under the user's name.
 A wrong submission is a wrong listen on a public Last.fm or ListenBrainz profile,
 and deleting it is the user's problem, not ours.
 
-  scrobble/submit.rs        7.5% of 254
-  scrobble/providers/listenbrainz.rs  27.7% of 235
-  scrobble/providers/lastfm.rs        39.7% of 219
-  scrobble/mod.rs          65.0% of 260
-  tasks/scrobble.rs         0.0% of 123
 
-submit.rs is the drain, and its uncovered logic is the part that decides what gets
-sent and what happens when the provider says no: the 50-listen batch cap, the
-per-provider readiness gate, auto-disconnect on rejected auth, and the
-rate-limit backoff. The queue underneath it is at 75.5% and the model layer is
-covered; the drain is not.
+P2.1  DONE — the drain, and the provider it can be pointed at
+-------------------------------------------------------------
 
-Two things there are pure and need no server, so write them before B1 lands:
-merge_retry and merge_opt (the backoff arithmetic) and take_batch (the cap).
-collect_writeback is the one that decides which queue entries survive a partial
-success, which is where a duplicate submission would come from.
+Twenty-two tests: eighteen in the new scrobble/tests/submit_tests.rs against a
+local ListenBrainz, four in the new tasks/tests/scrobble_tests.rs on the retry
+ladder wrapped around the drain. submit.rs had no test module at all.
 
-The rest of the network tier, all of it reachable through the B1 server now:
+The finding is the one B2 and P1.1 both turned up, a third time. mod_tests.rs
+reached collect_writeback directly and hand-built the keep closure, retyping the
+production one from submit.rs, because the drain could not be called. The copy is
+gone and the property it stood for now runs through submit_pending, with the
+reversal performed by the server handler mid-request, which is what the original
+was only describing.
 
-  radio_browser/mod.rs      9.4% of 159   the directory client. Its query builder
-                                          is 100% and its model 91.8%; the client
-                                          around them is untested.
-  net/media/fetch/logo_discovery.rs  0% of 98
-  library/radio/logos.rs             0% of 205
-  services/artist_images.rs       63.0% of 119
+  What blocks the drain is not what this entry assumed. merge_retry, merge_opt,
+  drop_flags and take_batch are private free functions over plain arguments and
+  needed nothing. The endpoints are the blocker: both providers interpolate a
+  private const straight into format!, so nothing could point the drain anywhere.
+
+  Last.fm cannot be tested on its ready path and no seam fixes that.
+  lastfm_reachable requires is_configured(), which reads option_env! keys baked in
+  at compile time. The repo .env supplies them, so a drain test would exercise the
+  POST locally and skip vacuously on a keyless CI build while claiming the same
+  coverage. ListenBrainz needs no app registration, so a stored token is the whole
+  credential and its arm is hermetic either way. Hence the asymmetry: LB_API_BASE
+  became a parameter on all five ListenBrainz entry points with the const public as
+  the default its four production callers spell, following updater/github.rs's
+  RELEASES_BASE; LASTFM_ENDPOINT stays a const with the reason written beside it.
+
+  The other production change collapses rather than adds. The disconnect / backoff /
+  defer ladder was spelled four times, once per provider per drain. It is now a pure
+  Reaction plus one lastfm_reaction and listenbrainz_reaction, which is what makes
+  Last.fm's retry policy assertable without a socket, and one log_deferral that
+  keeps the rate limit's seconds in the line. tasks/scrobble.rs got the same
+  treatment one level up: defer(requested, backoff) returns the wait and the next
+  rung, so the ladder is testable without driving the loop through a clock.
+
+  The seam is crate-local. with_listenbrainz_base is #[cfg(test)] pub(crate) and
+  consuming, the state::fixtures shape rather than a fourth #[doc(hidden)] pub
+  fixture, so the shipped API never learns it exists. That is what decided the
+  melodia-app half: run_submitter's tests drive a credential-less service, whose
+  drain settles the queue through the not-ready path with no socket at all, which
+  is the same property a working server would have proved about the flush.
+
+Five pins were mutation-checked. Numbering take_batch's batch rather than its
+snapshot clears a neighbour's flag; capping drop_flags like a batch pins ten
+entries forever; making Last.fm's unclassified arm disconnect deletes the user's
+session on an error 10; dropping the enabled term from listenbrainz_scrobble_ready
+posts to a provider the user switched off; and clearing rather than releasing the
+flags on a 401 leaves every pending listen retrying against a token just deleted.
+
+TestServer gained request bodies, which is what turns "a POST happened" into "the
+score the toggle asked for went out". It is the only assertion in the tier that
+speaks to what P2 is actually about, and it cost about a dozen lines in http.rs.
+
+Worth knowing before the next timed test: start_paused and real I/O do not mix,
+for the same reason the clock is useful. A request in flight looks like idle, so
+the clock jumps to the next deadline rather than waiting for the socket, and a
+timeout wrapped around real work fires every time. The shutdown-flush test failed
+on its FLUSH_TIMEOUT that way before taking a live clock. Same shape as P0.1's
+note about start_paused and test_pool, different mechanism.
+
+Measured: submit.rs 7.5% -> 71.6% line (278 lines now, up from 254),
+tasks/scrobble.rs 0% -> 18.3%, providers/listenbrainz.rs 27.7% -> 57.7%,
+scrobble/mod.rs 65.0% -> 69.9%, testkit's http.rs 95.5%. providers/lastfm.rs is
+unchanged at 39.7%, which is the asymmetry above showing up in the table.
+
+Still uncovered and deliberate: every Last.fm ready path, and the two ListenBrainz
+endpoints no drain reaches (validate_token, lookup_recording_mbids_bulk), which
+belong with whatever covers the settings handshake and the MBID backfill.
+
+P2.2  the rest of the network tier, and it splits by whether a seam is needed
+
+Surveyed while writing P2.1, since "reachable through the B1 server" turned out to
+be true of only half of it. Take the first group first: it needs no production
+change at all, which is the opposite of what P2.1 needed.
+
+  Nothing to change, the URL already being a parameter:
+
+  net/media/fetch/logo_discovery.rs  0% of 98    icon_url takes the origin as a
+                                          &reqwest::Url and the module names no
+                                          host at all. Its whole HTML scraper
+                                          (icon_href's ordering, the </head> cut,
+                                          the byte-aligned lower/raw slicing, the
+                                          word-boundary attribute guard) is pure
+                                          and has no tests whatever. Drive it via
+                                          origin_for's homepage arm: the stream
+                                          fallback forces https and a loopback
+                                          server serves plain http.
+  media/fetch/station_logo.rs             fetch takes the client, the URL and the
+                                          output dir. Its five offline tests cover
+                                          the helpers; the status guard, the
+                                          header-versus-body cap disagreement and
+                                          the stored_extension bail are untouched.
+  services/net/mod.rs                     get_capped and read_capped take a parsed
+                                          URL. There is no behavioural test of
+                                          either: no cap crossed mid-stream, no
+                                          lying Content-Length, no non-success
+                                          status. Two source walks pin who calls
+                                          them, which is a different question.
+  library/radio/logos.rs    0% of 205     every entry point takes &AppState, but
+                                          six pure fns do not, and the backoff
+                                          boundary its consts spell out
+                                          (LOGO_MISS_BACKOFF_HOURS x MAX_ATTEMPTS
+                                          against MAX_AGE_DAYS) is a table worth
+                                          writing. classify_logo_answer takes now
+                                          as a &str, so no clock injection.
+
+  Needs a seam, and more of one than P2.1 did:
+
+  radio_browser/mod.rs      9.4% of 159   url_for hardcodes the https scheme, so a
+                                          base parameter alone does not reach a
+                                          loopback server. Worse, the mirror and
+                                          the four facet caches are process-global
+                                          OnceCells with no reset, so the first
+                                          test in the binary decides for the rest.
+                                          Its suite must also live under
+                                          services/net/radio_browser/tests/ or it
+                                          trips radio_facade.rs's walk, which
+                                          forbids naming the module anywhere else.
+  services/artist_images.rs 63.0% of 119  delegates to deezer, whose URLs are
+                                          inline string literals rather than even
+                                          named consts, and which refuses any host
+                                          that is not deezer's. Three process
+                                          globals and a real 750 ms sleep on top.
 
 Discord and the OS media controls (ipc.rs 11.1%, media_controls 24.1%) are further
 down: a failure there is a missing rich-presence line, not lost or wrong data.
@@ -605,6 +710,14 @@ DELIBERATELY NOT ON THIS LIST
     step 5 did not change it; what it did take is the two that decide something,
     which is the whole of what that entry deferred here.
 
+  - Every Last.fm path past its readiness gate. Reaching one needs
+    is_configured(), which reads option_env! keys baked in at compile time, so the
+    same test exercises a real POST on a keyed build and skips on a keyless CI one
+    while reporting identically. A base-url parameter does not fix that; it would
+    only move where the test stops. Its retry policy is covered purely through
+    lastfm_reaction instead, and its payload builders already have their own suite.
+    Argued at LASTFM_ENDPOINT.
+
   Carried over from the spent updater backlog, so none of it gets re-proposed:
 
   - The updater's UI layer (ui/callbacks/updater/**, ui/settings/updater_settings.rs,
@@ -650,12 +763,18 @@ SUGGESTED ORDER
      playback.rs and no signature sweep: the audio-device question P0.2 stepped
      around had already been answered by output::mixer::pair, so the seam was a
      fixture. See its entry for what the old test file turned out to be.
-  6. P2, then P3, then the three items worth keeping from P4. B1 is already built,
-     so the network tier is unblocked whenever it comes up the list. What is left
-     of P1 (favorites.rs, and settings/view.rs) wants the scrobble work beside it,
-     so P2 is the next thing worth writing rather than the rest of P1.
+  6. DONE — P2.1 (the scrobble drain). Not the "write the pure parts first" this
+     list proposed: the pure parts were never blocked, the endpoints were, and only
+     one of the two providers can be pointed anywhere without lying about what CI
+     runs. See its entry for the asymmetry and for the fourth hand-copied door.
+  7. P2.2's first group, which needs no production change and where logo_discovery
+     alone is a whole untested pure scraper. Then P1's favorites.rs, now that
+     sync_love has a drain that can be driven. Then P3, then the three items worth
+     keeping from P4. P2.2's second group (radio_browser, artist_images) wants a
+     bigger seam than anything so far and should be argued on its own.
 
 Steps 1 through 4 spend P0 entirely: every path where a defect costs the user
 something a reinstall does not return now has a test, and the four that were
 consequential were mutation-checked rather than merely written. Step 5 spends the
-one P1 entry that stands on its own.
+one P1 entry that stands on its own, and step 6 the half of P2 that publishes under
+the user's name.

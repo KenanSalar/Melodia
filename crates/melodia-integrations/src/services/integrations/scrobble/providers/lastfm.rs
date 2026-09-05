@@ -37,6 +37,14 @@ const fn non_empty_env(value: Option<&str>) -> Option<&str> {
 }
 
 /// The Last.fm 2.0 API endpoint. Every method POSTs here as form-urlencoded.
+///
+/// Not a parameter, unlike [`listenbrainz::LB_API_BASE`]: reaching the POST at all needs
+/// [`is_configured`], which reads keys baked in at compile time, so a drain test would exercise
+/// the call on a keyed build and skip on a keyless CI one while asserting the same thing. What is
+/// testable either way is the retry policy, and `submit`'s `lastfm_reaction` holds that with no
+/// socket.
+///
+/// [`listenbrainz::LB_API_BASE`]: super::listenbrainz::LB_API_BASE
 const LASTFM_ENDPOINT: &str = "https://ws.audioscrobbler.com/2.0/";
 
 /// Ceiling on a response body. A scrobble answer is a few hundred bytes; the slack is for the
