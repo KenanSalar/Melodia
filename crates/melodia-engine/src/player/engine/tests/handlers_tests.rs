@@ -379,3 +379,42 @@ fn a_station_that_stopped_buffering_has_the_flag_cleared() {
         "the stream is not buffering, so neither is the station the UI paints",
     );
 }
+
+/// The generation is only how this tick learns that a title landed; the text is what the user
+/// reads. Its sibling above pins the publish and the generation it recorded, so dropping the
+/// assignment leaves every case here green while the station goes on announcing whatever it was
+/// called when it started.
+#[test]
+fn a_new_title_reaches_the_station_the_ui_paints() {
+    let stream = StreamShared::new();
+    let (handle, sinks, _published) = seated(playing_a_station());
+    let mut last_generation = stream.title_generation();
+    stream.set_title(Some("Night Bus".to_owned()));
+
+    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+
+    assert_eq!(
+        lock_state(&handle).station().and_then(|s| s.live_title.clone()).as_deref(),
+        Some("Night Bus"),
+    );
+}
+
+/// A cleared title is a title change, and the feed thread reports one the same way it reports a
+/// new song. The narrowing this reads as an invitation to — asking `stream.title()` for a `Some`
+/// and assigning only that — leaves the last song on screen for the rest of the session, which
+/// looks like a station that never changes track rather than one that stopped saying.
+#[test]
+fn a_station_that_stops_announcing_has_its_title_cleared() {
+    let stream = StreamShared::new();
+    let mut state = playing_a_station();
+    if let Some(station) = state.station_mut() {
+        Arc::make_mut(station).live_title = Some("Night Bus".to_owned());
+    }
+    let (handle, sinks, _published) = seated(state);
+    let mut last_generation = stream.title_generation();
+    stream.set_title(None);
+
+    reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
+
+    assert_eq!(lock_state(&handle).station().and_then(|s| s.live_title.clone()), None);
+}

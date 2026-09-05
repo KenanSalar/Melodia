@@ -34,13 +34,29 @@ WHERE IT STANDS
   after step 3 below (2026-09-05)
   TOTAL   function 46.2% (2745/5944)   line 44.1% (18767/42523)   region 41.3%
 
-  now, after step 4 below (2026-09-05)
+  after step 4 below (2026-09-05)
   TOTAL   function 46.6% (2776/5961)   line 44.5% (18933/42587)   region 41.5%
 
-  So the branch is worth 7.5 points of line coverage. Steps 1 and 2 are 0.8 of
+  now, after step 5 below (2026-09-06)
+  TOTAL   function 46.7% (2782/5962)   line 44.6% (19001/42589)   region 41.7%
+
+  So the branch is worth 7.6 points of line coverage. Steps 1 and 2 are 0.8 of
   them, all of it inside `tasks/`. Read a tenth of a point as noise, for the reason
   the last doc gave (the same command over the same tree read 41.26% and 41.3% on
   consecutive days), and only a move larger than that as a result.
+
+  **Step 5 is inside that band and is the entry that proves the band is the wrong
+  thing to read.** 82 lines across four files, and `engine/handlers.rs` moved
+  *zero* of them while gaining the two cases in the step that caught a mutation
+  nothing else caught. `reconcile_live_stream` was already fully executed by the
+  three tests that were there; what was missing was an assertion, and an assertion
+  is invisible to this command. Per `.claude/rules/testing.md`: a line covered by a
+  test with no assertion on it is not tested. Four rows, measured:
+
+    media_controls/mod.rs   24.1% → 48.8%   129 → 87 uncovered
+    system_theme.rs         44.9% → 53.4%   129 → 110
+    stream_source.rs        49.7% → 51.8%   167 → 160
+    engine/handlers.rs      46.0% → 46.0%   109 → 109
 
   **Step 4 is the entry where the percentage is worth least, and its own numbers
   say so**: 82 lines across eighteen files, against three cases that turn a
@@ -57,18 +73,22 @@ WHERE IT STANDS
   can be attributed is the five files P0.2 names, 432 uncovered lines to 369, plus
   two source walks that carry no percentage at all.
 
+  Every row is the 2026-09-05 run except the four step 5 moved, which are measured
+  on 2026-09-06 and marked. `engine` is in that group and did not move, which is the
+  same finding its files carry above.
+
   subsystem                                    line cov          uncovered
   --------------------------------------------------------------------------
   UI (melodia-views)                  13.9% ( 2701/19475)           16774
   library API (melodia-app/library)   51.0% ( 1795/ 3522)            1727
   background tasks (melodia-app/tasks) 45.8% (  863/ 1884)           1021
-  integrations (scrobble/discord/mpris) 55.4% ( 1043/ 1884)           841
   binary (main/boot/shutdown)          2.3% (   19/  834)             815
-  platform (tray, theme, logging)     45.7% (  548/ 1198)             650
+  integrations (scrobble/discord/mpris) 57.6% ( 1085/ 1884)          799   (was 841)
+  platform (tray, theme, logging)     48.2% (  579/ 1200)            621   (was 650)
   store (db queries, ingest, scanner) 87.6% ( 3087/ 3522)             435
   app services (settings, state)      71.6% ( 1013/ 1414)             401
-  audio (sources, decode)             82.3% ( 1384/ 1682)             298
-  engine (player state machine)       85.3% ( 1531/ 1794)             263
+  audio (sources, decode)             82.7% ( 1391/ 1682)            291   (was 298)
+  engine (player state machine)       85.3% ( 1531/ 1794)             263   (unchanged)
   net (radio dir, blocklist, fetch)   77.0% (  795/ 1033)             238
   playback (dsp, decks, output)       95.3% ( 1786/ 1874)              88
   core (entities, utils, themes)      88.3% (  648/  734)              86
@@ -511,29 +531,59 @@ of this, and only their pure halves are on this list at all. See P5.
 P4: THE FEED THREAD, AND THE ENGINE TICK'S RESIDUE
 ================================================================================
 
-  audio/source/stream_source.rs  49.7% of 332   167 uncovered
-  engine/handlers.rs             46.0% of 202   109
-  audio/source/hls/reader.rs     62.5% of 200    75
+  audio/source/stream_source.rs  51.8% of 332   160 uncovered  (was 49.7%)
+  engine/handlers.rs             46.0% of 202   109            (unchanged)
+  audio/source/hls/reader.rs     62.5% of 200    75            (untouched)
 
-Step 8 took the schedulers' pure halves and left the threads. What is uncovered in
-`stream_source` is `connect`, `reopen`, `open_segments` and `feed_loop`: a blocking
-socket read filling a ring buffer, which is the arrangement ADR 14 exists to
-create. A test needs the `TestServer` plus a way to step the thread
+The pure halves are spent. The threads are not, and what is uncovered in
+`stream_source` is still `connect`, `reopen`, `open_segments` and `feed_loop`: a
+blocking socket read filling a ring buffer, which is the arrangement ADR 14 exists
+to create. A test needs the `TestServer` plus a way to step the thread
 deterministically, and only the second half is still missing.
 
-Two things in it are pure and want no thread at all: `reconnect_delay`'s backoff
-ladder, including the arm that gives up, and `sleep_unless_abandoned`'s abandon
-poll. Both are places a constant is load-bearing and `.claude/rules/radio.md`
-already spells the numbers both trees have to agree on, which makes them the
-natural first assertions.
+**Two of this entry's three claims were wrong, and the next reader should not
+re-derive them.**
 
-`reconcile_live_stream` is the cheaper half of `engine/handlers.rs` and is worth
-taking before any of the above. It takes a `&StreamShared`, a state handle and
-sinks, and its entire job is the two change checks that stop it republishing the
-view model twice a second for a station that is perfectly happy. Both checks are
-observable off the sinks with no socket anywhere: a generation that has not moved
-and a buffering flag that has not changed must produce no emit, and either one
-moving must produce exactly one.
+  **`reconnect_delay` and `reconcile_live_stream` both already had tests**, so what
+  was written here is not what the entry asked for. `reconcile_live_stream`'s three
+  cases pinned exactly the sentence above — no emit when neither check moved, one
+  emit when either did — and `the_backoff_grows_and_then_gives_up` had the ladder.
+
+  **`.claude/rules/radio.md` spells none of these numbers.** It delegates the
+  reconnect to `.claude/rules/audio-stack.md`, which argues where the reconnect
+  lives and spells no figure either. There is no cross-tree pin here; the constants
+  live once, in Rust, and a test is the only thing that can hold them.
+
+What the four new cases are for:
+
+  the title, which nothing followed to the state. The sibling above asserts the
+  publish and the generation it recorded, not that the text moved, so
+  `radio.live_title = title` could be deleted outright with the whole suite green —
+  and it was, until this. Its other half is that a *cleared* title clears the line:
+  `title_moved.then(|| stream.title())` carries `Some(None)` through on purpose, and
+  the narrowing it reads as an invitation to strands the last song on screen for the
+  rest of the session. Both were mutation-checked and neither pin existed before.
+
+  `sleep_unless_abandoned`, which had nothing at all. Two cases, and the interesting
+  one is the elapsed bound: deleting the in-loop poll leaves the *return value*
+  correct — the trailing check still answers `false` — so a test asserting only the
+  verdict passes while the feed thread holds a dead socket open for the whole
+  sixteen seconds. The suite runs in 0.00s and 4.01s respectively, which is the
+  whole of the difference.
+
+  the backoff ladder, **replaced rather than added to**. The old test was a
+  `take_while`, a `for` loop and a `grew` accumulator around five assertions, which
+  is the shape `.claude/rules/testing.md` names outright, and its cap assertion read
+  `<= Duration::from_mins(1)` against a real `RECONNECT_MAX_DELAY` of 16 s — so the
+  constant could be 3.75× wrong and it still passed, which was confirmed by
+  mutation. The ladder is written out now, and its `///` carries the thing the
+  numbers do not say for themselves: the last rung lands exactly on the cap, so the
+  `.min()` clamps nothing today and only starts to if `RECONNECT_ATTEMPTS` rises.
+
+Declined out loud: the `is_some_and` asymmetry in `reconcile_live_stream`, where a
+moved title over a *track* rather than a station still latches the generation and
+publishes. The call site is guarded by `engine.stream_shared()` and the latch means
+it happens once, so a case there pins a wasted publish rather than anything visible.
 
 
 ================================================================================
@@ -542,27 +592,51 @@ P5: THE PURE GAPS LEFT IN OTHERWISE-COVERED FILES
 
   store/queries/track.rs                      81.1% of 514    97 uncovered
   store/queries/playlist.rs                   76.8% of 397    92
-  integrations/media_controls/mod.rs          24.1% of 170   129
-  platform/system_theme.rs                    44.9% of 234   129
+  integrations/media_controls/mod.rs          48.8% of 170    87  [SPENT, was 24.1%]
+  platform/system_theme.rs                    53.4% of 236   110  [SPENT, was 44.9%]
   store/queries/smart_playlist.rs             75.1% of 225    56
   store/media/ingest/watcher.rs               51.7% of  87    42
   store/database/backup.rs                    79.2% of 106    22
 
-`media_controls` is the one worth pulling forward and the file has no test module
-at all. `translate_event` is a decision table from an OS media-key event to a
-`PlayerEvent`, including the events that map to nothing, and
-`PublishedMetadata::still_current` is the dedup guard deciding whether the OS gets
-a metadata write. Both are private free functions over plain values. Everything
-else in the file is `souvlaki` against a session bus and belongs with the tray.
+`media_controls` was exactly as advertised: the one genuine zero, no test module at
+all, and eight cases doubled it. `translate_event` went in as a decision table
+including the three groups it refuses — a `Quit` that started answering would close
+the window from a headphone button — plus boundary analysis on the volume scale,
+where the clamp and the `.round()` are separate defects a truncating rewrite would
+take one of. `still_current` went in per field, which is where its own doc comment
+puts the argument: the id is deliberately outside the comparison, so a station
+announcing a new song and a track re-tagged in place both look identical without it.
+What is still uncovered is `souvlaki` against a session bus, and belongs with the
+tray.
 
-`system_theme`'s KDE half is INI parsing behind one unseamed line. `read_kdeglobals`
-resolves `kdeglobals_path()` directly, so a `read_kdeglobals_from(&Path)` is the
-whole change, and `parse_rgb`, `blend`, `get_color`, `get_inactive_color_effect`
-and `kde_palette_from_sections` are pure after it. What makes it worth the line:
-this is one of the two *generated* palettes CLAUDE.md says has no variant id to
-match on, and a `Palette` that comes back missing one of `red`/`green`/`yellow` is
-the failure that paints traffic lights, toasts and the star rating grey. That is
-invisible in review and obvious on screen.
+**`system_theme`'s entry was wrong about where its value was, and it is the third
+entry in this document to be wrong in the same direction.** Four of the five pure
+functions it named — `parse_rgb`, `blend`, `get_color`, `kde_palette_from_sections`
+— already had suites, and the traffic-lights-grey argument it is pitched on is
+already pinned by `kde_palette_semantics_fall_back_to_breeze_defaults`. The seam
+still earned its line, for the reason the entry could not see: **every one of those
+cases hand-builds its section tree through `build_sections`, so nothing said the
+parser produces the shape they assume.**
+
+**The seam taken is not the one named.** `read_kdeglobals_from(&Path)` buys a test
+that writes a file to test a string parser; splitting `parse_kdeglobals(&str)` out
+instead is the same one-line reach with no filesystem in the suite, and it mirrors
+the split already in the file — `kde_palette_from_sections` exists for exactly this
+reason and its doc comment says so. Six cases on the parser, of which the load-
+bearing one is that a value keeps every `=` after the first: Plasma writes shortcut
+and font entries that carry their own, and nothing in the palette reads those keys,
+so the parser is the only thing that can hold it. Plus one case on the join, which
+is the only place a document shaped the way KDE writes one reaches a palette at all.
+
+`get_inactive_color_effect` needed no seam and had simply never been written. It
+feeds `mantle_unfocused`, and `blend` does not clamp its factor — it extrapolates
+past both colours and saturates per channel — so an unclamped `ColorAmount` paints
+an unfocused titlebar a colour in neither the scheme nor the tint.
+
+Declined out loud: `kdeglobals_path` and `read_kdeglobals`' file read, two lines
+that cost `HOME`/`XDG_CONFIG_HOME` under the env lock; `get_kde_colors`, which is
+their two-line composition; and the whole zbus half, which is the session bus CI
+does not have and is already on the DELIBERATELY NOT list below.
 
 The three query files are the last of the store's own gap and are the cheapest
 tests in this document, being one pool and one assertion each. They are last
@@ -672,10 +746,18 @@ SUGGESTED ORDER
      what stops a suite reading the process environment unlocked beside the tests
      that mutate it.
 
-  5. P4's pure halves (`reconcile_live_stream`, `reconnect_delay`,
-     `sleep_unless_abandoned`) and P5's `media_controls`. All four are free
-     functions over plain values and none needs a socket. `system_theme`'s KDE half
-     joins them once its one-line path seam is in.
+  5. [DONE] P4's pure halves and P5's `media_controls`, with `system_theme`'s KDE
+     half beside them. Twenty-two cases in one new suite and three existing ones,
+     one test replaced, and one production split. Two of the five targets already
+     had the tests the entries asked for, and the two entries now say so.
+
+     Left behind for whoever takes the next one: **this step is the argument
+     against reading the percentage.** `engine/handlers.rs` moved zero lines and
+     gained the cases that caught the most mutations, because what it was missing
+     was an assertion over lines that already ran. Every pin here was
+     mutation-checked and each failed only its own test; two of them —
+     `reconnect_delay`'s cap and `sleep_unless_abandoned`'s in-loop poll — survive
+     mutations that the tests standing before this step passed.
 
   6. P3, and only after its seam is argued on its own. If the answer is that a
      resettable `OnceCell` is not worth the production surface, take the two
@@ -687,5 +769,5 @@ Steps 1 through 3 were the whole of what had a user-visible cost a reinstall doe
 not undo, and step 4 turned out to hold one more of those — `add_folder` — behind a
 P1 heading. Everything from step 5 down is worth doing and worth doing after those.
 
-With 1 through 4 spent, step 5 is next, and it is the first step in this document
-whose entries are all pure functions over plain values.
+With 1 through 5 spent, step 6 is next, and it is the first one in this document
+that has to argue a seam before it can be written. Nothing above it is left.

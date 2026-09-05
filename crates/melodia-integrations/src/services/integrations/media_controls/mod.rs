@@ -365,3 +365,7 @@ impl MediaControlsSync for MediaControlsHandle {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/mod_tests.rs"]
+mod tests;
