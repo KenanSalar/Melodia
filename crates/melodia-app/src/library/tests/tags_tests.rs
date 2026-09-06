@@ -590,3 +590,37 @@ async fn a_track_outside_every_library_folder_is_reported() -> Result<(), AppErr
     );
     Ok(())
 }
+
+/// Opening the dialog and pressing Save without changing anything must reach no file. lofty
+/// rewrites the tag whether or not anything differs, so without the guard a reflexive Save
+/// rewrites every file in the selection, moves every mtime, and hands the watcher a batch of
+/// changes the user never made.
+#[tokio::test]
+async fn an_edit_that_changes_nothing_rewrites_no_file() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let folder = tmp.path().to_string_lossy().into_owned();
+    queries::folder::insert_folder(&db, &folder, true).await?;
+
+    let path = stage(&tmp, "silence.mp3")?;
+    let id = seed_track(&db, &path.to_string_lossy()).await?;
+    let before = compute_file_hash(&path)?;
+
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir(&artwork_dir)?;
+    let (report, updated) = write_tag_edit(
+        &db,
+        &artwork_dir,
+        &artwork::new_cover_cache(),
+        &Arc::new(SelfWrites::default()),
+        &[id],
+        &TagEdit::default(),
+        None,
+    )
+    .await?;
+
+    assert_eq!(compute_file_hash(&path)?, before, "a Save that changed nothing rewrote the file");
+    assert_eq!(report.updated, 0);
+    assert!(updated.is_empty(), "and left the caller nothing to resync or repaint");
+    Ok(())
+}

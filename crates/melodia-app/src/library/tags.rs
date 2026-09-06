@@ -93,12 +93,6 @@ pub async fn apply_tag_edit(
     edit: TagEdit,
     artwork_source: Option<PathBuf>,
 ) -> Result<TagEditReport, AppError> {
-    // lofty rewrites the tag whether or not anything differs, so a reflexive
-    // open-then-Save must not touch disk.
-    if ids.is_empty() || edit.is_noop() {
-        return Ok(TagEditReport::default());
-    }
-
     let (report, updated_ids) = write_tag_edit(
         &state.db,
         &state.paths.artwork_dir,
@@ -151,6 +145,14 @@ pub(crate) async fn write_tag_edit(
     artwork_source: Option<&Path>,
 ) -> Result<(TagEditReport, Vec<i64>), AppError> {
     let mut report = TagEditReport::default();
+
+    // lofty rewrites the tag whether or not anything differs, so an edit carrying no change must
+    // stop short of the write pass: a reflexive Save on a 200-track album would otherwise rewrite
+    // all 200 and hand the watcher every one of them back. Here rather than at the door because
+    // `library::ratings` reaches this function directly.
+    if edit.is_noop() {
+        return Ok((report, Vec::new()));
+    }
 
     let rows = queries::track::get_track_paths_by_ids(db, ids).await?;
     if rows.is_empty() {

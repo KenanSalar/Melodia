@@ -57,18 +57,31 @@ WHERE IT STANDS
     after phase 1 below (2026-09-06)
     TOTAL   function 48.0% (2873/5992)   line 46.0% (19620/42701)   region 42.8%
 
-    now, after phase 2 below (2026-09-06)
+    after phase 2 below (2026-09-06)
     TOTAL   function 48.2% (2889/5992)   line 46.2% (19717/42701)   region 42.9%
 
-  Neither phase changed a line of production code, so the denominator has not moved once
-  and the 185 lines between the first row and the last are their tests rather than their
-  own refactors. Round three ended saying that is the only kind of row worth reading. The
-  four files they moved, every denominator unmoved:
+    now, after phase 3 below (2026-09-06)
+    TOTAL   function 48.4% (2913/6014)   line 46.5% (19959/42916)   region 43.2%
 
-    tasks/scrobble.rs        18.3% -> 49.2%   covered  23 -> 62   of 126
-    queries/track.rs         84.1% -> 86.8%   covered 432 -> 446   of 514
-    providers/listenbrainz   57.7% -> 90.0%   covered 139 -> 217   of 241
-    scrobble/mod.rs          69.9% -> 89.9%   covered 186 -> 239   of 266
+  Phases 1 and 2 changed no production code at all, so across both the denominator stood
+  still and the 185 lines they added are their tests rather than their own refactors.
+  Read the covered column, not the percentage:
+
+    tasks/scrobble.rs        18.3% -> 49.2%   covered  23 -> 62   of 126 (unmoved)
+    providers/listenbrainz   57.7% -> 90.0%   covered 139 -> 217   of 241 (unmoved)
+    scrobble/mod.rs          69.9% -> 89.9%   covered 186 -> 239   of 266 (unmoved)
+    queries/track.rs         84.1% -> 94.9%   covered 432 -> 488   of 514 (unmoved)
+
+  **Phase 3's row is the first that cannot be read that way, and the reason is not its
+  production edit.** The denominator moved 215 lines, 185 of them in `library/tags.rs`,
+  against an edit that removed four lines and added seven. What settles it is the file
+  next door: `melodia-core`'s `entities/tags.rs` went from 30 counted lines to 60,
+  exactly double, on a change that reflowed a doc comment and touched no code. Its code
+  is now instantiated in one more test binary than before, and llvm-cov sums those
+  entries rather than folding them back onto the source line. So a *test* can move the
+  denominator as surely as a refactor can, and the honest figures for phase 3 are its two
+  covered columns: `queries/track.rs` 446 -> 488 against an unmoved 514, and
+  `library/tags.rs` 174 -> 344.
 
   `queries/track.rs` was not a target. `get_scrobble_row` is what `fetch_row` calls, so it
   came with phase 1 for nothing, which is 14 of the 88 and the reason phase 3.2 is now one
@@ -348,8 +361,39 @@ needs the spawn to have somewhere to run.
 
 
 ================================================================================
-PHASE 3: THE WRITE-THROUGH DOOR, AND THE PROJECTIONS UNDER IT
+PHASE 3: THE WRITE-THROUGH DOOR, AND THE PROJECTIONS UNDER IT       [SPENT]
 ================================================================================
+
+Four cases, and 3.1 is the first entry in four documents whose answer was neither a
+narrowing nor a fixture. **The guard moved down instead.**
+
+The entry asked the right question, "price the narrowing against the guard", and the
+price turned out to be zero because the guard was in the wrong place to begin with. Its
+own comment argues about what lofty does to a *file*, which is `write_tag_edit`'s
+business, not the orchestrator's, and `write_tag_edit` already had a nothing-to-do early
+return of its own. Moving it there put the argument beside the write it constrains and
+made the property reachable by the suite that has been driving `write_tag_edit` with real
+files all along. No new API, no new struct, and `apply_tag_edit` is three lines shorter.
+
+**It also closed a hole nothing had noticed.** `library::ratings` calls `write_tag_edit`
+directly, one layer under the door, so the rating write-back was never behind the guard
+at all. It is safe today only because a rating edit is never a no-op by construction,
+which is an accident rather than a design; the guard now covers both callers.
+
+The `ids.is_empty()` half was **deleted** rather than moved. `chunked_in_query` answers
+an empty slice without touching the pool and the existing `rows.is_empty()` returns on
+what comes back, so the check was a third spelling of a question already asked twice.
+
+**The mutation settled a claim the comment only asserted.** Removing the guard fails the
+case on the file hash rather than on the report, so lofty does rewrite the bytes of an
+identical tag, which is the premise the whole guard rests on and which nothing had
+checked.
+
+`apply_tag_edit`'s other two gates stay undriven, and the reason is worth writing down
+rather than leaving to the percentage: both need an `AppState`, and what they decide is a
+repaint and a re-query, not a byte of user data. The resync gate is a cost optimisation
+its own comment argues, and the `library_changed` bump costs a redundant list refresh at
+worst. Neither is worth the fixture the guard turned out not to need.
 
 3.1  `tags::apply_tag_edit`'s no-op guard
 -----------------------------------------
@@ -549,8 +593,19 @@ SUGGESTED ORDER
      And the fold mutation caught a pin that could not fail for the third document
      running, this time because the fixture the case was built on woke nothing at all.
 
-  3. Phase 3.1 before 3.2. The guard is one line of production code and the most
-     expensive single wrong answer left in the tree that a test can reach.
+  3. [DONE] Phase 3.1 before 3.2, as written. Four cases, one guard moved down a
+     layer, and `get_track_meta`, `get_track_file_path` and `count_tracks` left where
+     3.2 put them: one scalar each, and a seeded pool has to be standing already to
+     make them worth the lines.
+
+     Left behind for whoever takes the next one: **ask where the guard belongs before
+     asking how to reach it.** Three documents have answered "this needs an `AppState`"
+     with a narrowing; here the guard simply sat one layer above the thing it
+     constrains, and moving it to where its own comment was already arguing made it
+     reachable by a suite that had been running for months. It also covered a second
+     caller nobody had noticed was outside it. And **a new test can move the
+     denominator by itself** by pulling a file's code into one more binary, which is
+     the artifact this phase's own row ran into.
 
   4. Phase 4. Two small pins, both against fixtures that already exist.
 

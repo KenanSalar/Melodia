@@ -989,3 +989,83 @@ async fn a_hash_backfill_leaves_the_rows_it_did_not_name_alone() -> Result<(), A
     assert_eq!(after, untouched, "a row outside the batch keeps the hash it had");
     Ok(())
 }
+
+// --- Detail-page list projections ---
+
+/// One album whose disc and track numbers agree with neither the row order nor the titles, plus a
+/// track in a second album, artist and genre.
+///
+/// The disagreement is the whole fixture: seeded in the order they come back, a missing `ORDER BY`
+/// is satisfied by a bare table scan, which is the trap [`seed_db_inserted_backwards`] was written
+/// for one section up. `make_test_metadata` gives every row disc 1 / track 1, so the numbers are
+/// patched after the insert rather than carried in.
+async fn seed_two_albums() -> Result<DbPool, AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    insert_test_track(&db, "/music/beta.mp3", "Beta", "Artist One", "Album A", "Rock").await?;
+    insert_test_track(&db, "/music/alpha.mp3", "Alpha", "Artist One", "Album A", "Rock").await?;
+    insert_test_track(&db, "/music/gamma.mp3", "Gamma", "Artist One", "Album A", "Rock").await?;
+    insert_test_track(&db, "/music/delta.mp3", "Delta", "Artist Two", "Album B", "Jazz").await?;
+
+    for (title, disc, track) in [("Beta", 1, 1), ("Gamma", 1, 2), ("Alpha", 2, 1)] {
+        sqlx::query("UPDATE tracks SET disc_number = ?, track_number = ? WHERE title = ?")
+            .bind(disc)
+            .bind(track)
+            .bind(title)
+            .execute(db.write())
+            .await?;
+    }
+    Ok(db)
+}
+
+async fn parent_id(db: &DbPool, table: &str, name: &str) -> Result<i64, AppError> {
+    let sql = format!("SELECT id FROM {table} WHERE name = ?");
+    let id = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql))
+        .bind(name)
+        .fetch_one(db.read())
+        .await?;
+    Ok(id)
+}
+
+fn titles(rows: &[melodia_core::entities::track::TrackListRow]) -> Vec<&str> {
+    rows.iter().map(|row| row.title.as_str()).collect()
+}
+
+/// An album reads in the order it was pressed: disc first, track second. Ordering on the track
+/// number alone files disc two's opener among disc one's, and ordering on `sort_key`, which is what
+/// every other track list uses, scrambles the album outright.
+#[tokio::test]
+async fn an_album_lists_by_disc_then_track() -> Result<(), AppError> {
+    let db = seed_two_albums().await?;
+    let album_id = parent_id(&db, "albums", "Album A").await?;
+
+    let rows = queries::track::get_tracks_by_album_for_list(&db, album_id).await?;
+
+    assert_eq!(titles(&rows), ["Beta", "Gamma", "Alpha"]);
+    Ok(())
+}
+
+/// An artist page is one flat list, so it takes the natural order every other track list takes,
+/// and it holds that artist's tracks alone.
+#[tokio::test]
+async fn an_artists_tracks_are_its_own_in_natural_order() -> Result<(), AppError> {
+    let db = seed_two_albums().await?;
+    let artist_id = parent_id(&db, "artists", "Artist One").await?;
+
+    let rows = queries::track::get_tracks_by_artist_for_list(&db, artist_id).await?;
+
+    assert_eq!(titles(&rows), ["Alpha", "Beta", "Gamma"]);
+    Ok(())
+}
+
+/// And a genre page the same, over the column one join away from the artist's.
+#[tokio::test]
+async fn a_genres_tracks_are_its_own_in_natural_order() -> Result<(), AppError> {
+    let db = seed_two_albums().await?;
+    let genre_id = parent_id(&db, "genres", "Rock").await?;
+
+    let rows = queries::track::get_tracks_by_genre_for_list(&db, genre_id).await?;
+
+    assert_eq!(titles(&rows), ["Alpha", "Beta", "Gamma"]);
+    Ok(())
+}
