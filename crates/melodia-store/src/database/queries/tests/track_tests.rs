@@ -849,3 +849,143 @@ async fn get_tracks_missing_mbid_filters_tagged_and_metadata_less_rows() -> Resu
     assert_eq!(title, "Gamma");
     Ok(())
 }
+
+/// **The keyset page is strictly past `after_id`, and the strictness is the whole of it.** The
+/// rating import writes ratings back between pages, so a row leaves `rating = 0` as it is
+/// handled; an `id >= ?` would re-serve the last row of every page, and one that stayed unrated
+/// (a file with no rating tag) would be handed back forever.
+#[tokio::test]
+async fn an_unrated_page_starts_past_the_id_it_was_given() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
+    let mut ordered = ids.clone();
+    ordered.sort_unstable();
+
+    let whole = queries::track::get_unrated_track_paths_after(&db, 0, 10).await?;
+    assert_eq!(whole.len(), 3, "every seeded row is unrated");
+
+    let after_first = queries::track::get_unrated_track_paths_after(&db, ordered[0], 10).await?;
+
+    assert_eq!(
+        after_first.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        [ordered[1], ordered[2]],
+        "the row named must not come back in the page after it"
+    );
+    Ok(())
+}
+
+/// The other half of that work-list: a row that has been rated leaves it. `rating = 0` is the
+/// only marker there is, so a filter reading anything else hands the import the whole library on
+/// every page.
+#[tokio::test]
+async fn a_rated_track_is_off_the_import_work_list() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
+    queries::track::set_rating(&db, &ids[..1], 4).await?;
+
+    let unrated = queries::track::get_unrated_track_paths_after(&db, 0, 10).await?;
+
+    assert_eq!(unrated.len(), 2);
+    assert!(!unrated.iter().any(|(id, _)| *id == ids[0]), "the rated row is not work");
+    Ok(())
+}
+
+/// A folder is named by the user and `_` is `LIKE`'s single-character wildcard, so an unescaped
+/// one reaches into the siblings either side of it. Built from [`MAIN_SEPARATOR_STR`] rather than
+/// a spelled `/`, since the pattern this query builds is the native separator and a hand-written
+/// one only ever fails on the platform nobody ran it on.
+#[tokio::test]
+async fn a_folder_named_with_an_underscore_does_not_reach_its_siblings() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = DbPool::test_pool().await?;
+    let root = format!("{SEP}music");
+    queries::folder::insert_folder(&db, &root, true).await?;
+    let asked = format!("{root}{SEP}my_music");
+    let sibling = format!("{root}{SEP}myXmusic");
+    insert_test_track(&db, &format!("{asked}{SEP}a.mp3"), "A", "Artist", "Album", "Rock").await?;
+    insert_test_track(&db, &format!("{sibling}{SEP}b.mp3"), "B", "Artist", "Album", "Rock").await?;
+
+    let rows = queries::track::get_tracks_in_directory(&db, &asked).await?;
+
+    assert_eq!(rows.iter().map(|r| r.title.as_str()).collect::<Vec<_>>(), ["A"]);
+    Ok(())
+}
+
+/// The same for `%`, which matches any run at all — a folder carrying one would answer with most
+/// of the library.
+#[tokio::test]
+async fn a_folder_named_with_a_percent_does_not_reach_its_siblings() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = DbPool::test_pool().await?;
+    let root = format!("{SEP}music");
+    queries::folder::insert_folder(&db, &root, true).await?;
+    let asked = format!("{root}{SEP}100% Live");
+    let sibling = format!("{root}{SEP}100 Proof Live");
+    insert_test_track(&db, &format!("{asked}{SEP}a.mp3"), "A", "Artist", "Album", "Rock").await?;
+    insert_test_track(&db, &format!("{sibling}{SEP}b.mp3"), "B", "Artist", "Album", "Rock").await?;
+
+    let rows = queries::track::get_tracks_in_directory(&db, &asked).await?;
+
+    assert_eq!(rows.iter().map(|r| r.title.as_str()).collect::<Vec<_>>(), ["A"]);
+    Ok(())
+}
+
+/// **The backfill correlates each row to its own id, and one row cannot show that.** The single
+/// UPDATE joins a `VALUES` list back onto `tracks` through two subqueries, so a mis-correlated
+/// one — reading the first row of the list for every track — writes one file's hash onto all of
+/// them. What that costs is the moved-file path: `file_hash` is what a cross-device move is
+/// matched on, and matching the wrong row re-imports the file and drops its rating and play
+/// count. Both columns, because the two subqueries can be crossed as easily as flattened.
+#[tokio::test]
+async fn a_hash_backfill_gives_each_row_its_own_values() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let mut ids: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
+    ids.sort_unstable();
+
+    let updates = vec![
+        (ids[0], "hash-first".to_owned(), Some("2021-01-01T00:00:00+00:00".to_owned())),
+        (ids[1], "hash-second".to_owned(), Some("2022-02-02T00:00:00+00:00".to_owned())),
+    ];
+    queries::track::batch_update_hashes(&db, &updates).await?;
+
+    let rows: Vec<(i64, Option<String>, Option<String>)> =
+        sqlx::query_as("SELECT id, file_hash, date_modified FROM tracks ORDER BY id")
+            .fetch_all(db.read())
+            .await?;
+
+    assert_eq!(rows[0].1.as_deref(), Some("hash-first"));
+    assert_eq!(rows[0].2.as_deref(), Some("2021-01-01T00:00:00+00:00"));
+    assert_eq!(rows[1].1.as_deref(), Some("hash-second"));
+    assert_eq!(rows[1].2.as_deref(), Some("2022-02-02T00:00:00+00:00"));
+    Ok(())
+}
+
+/// A row the batch did not name keeps what it had. The `WHERE id IN (SELECT id FROM v)` is what
+/// holds that: without it the correlated subqueries answer `NULL` for every other track and the
+/// UPDATE erases the hashes it was not asked about — which reads, later, as a library that needs
+/// rehashing rather than as a bug here.
+#[tokio::test]
+async fn a_hash_backfill_leaves_the_rows_it_did_not_name_alone() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let mut ids: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
+    ids.sort_unstable();
+    let untouched: Option<String> = sqlx::query_scalar("SELECT file_hash FROM tracks WHERE id = ?")
+        .bind(ids[2])
+        .fetch_one(db.read())
+        .await?;
+
+    queries::track::batch_update_hashes(&db, &[(ids[0], "hash-first".to_owned(), None)]).await?;
+
+    let after: Option<String> = sqlx::query_scalar("SELECT file_hash FROM tracks WHERE id = ?")
+        .bind(ids[2])
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(after, untouched, "a row outside the batch keeps the hash it had");
+    Ok(())
+}
