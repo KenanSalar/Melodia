@@ -270,10 +270,15 @@ fn the_last_track_neither_crossfades_nor_preloads() {
 /// decisions below are per-*track* transitions, so a queue with somewhere to go is exactly what
 /// makes the assertions mean something.
 fn playing_a_station() -> PlayerState {
+    playing_station_named("Example FM")
+}
+
+/// [`playing_a_station`] with the station's name chosen, for the one case that has to pick its
+/// own toast out of a process-wide queue.
+fn playing_station_named(name: &str) -> PlayerState {
     let mut state = playing_state();
-    let (generation, _actions) = state.build_station_connecting_actions(
-        crate::player::engine::fixtures::test_station("Example FM"),
-    );
+    let (generation, _actions) =
+        state.build_station_connecting_actions(crate::player::engine::fixtures::test_station(name));
     let _started = state.build_station_connected_actions(generation);
     state
 }
@@ -417,4 +422,50 @@ fn a_station_that_stops_announcing_has_its_title_cleared() {
     reconcile_live_stream(&stream, &handle, &sinks, &mut last_generation);
 
     assert_eq!(lock_state(&handle).station().and_then(|s| s.live_title.clone()), None);
+}
+
+// --- The station that gave up ----------------------------------------------
+
+/// A station that stops broadcasting is otherwise silence with no explanation, and the toast names
+/// the station rather than describing the failure: the name is what the user chose, and by the
+/// time this fires the state is about to forget it. Nothing tuned means nothing to name, so that
+/// arm has to stay quiet rather than raise an empty toast.
+///
+/// One test over both arms because the bridge is a process-wide `OnceLock` and the first `init` in
+/// a binary owns delivery.
+///
+/// It asserts the **whole** drain rather than filtering to its own sentinel, which is where it
+/// parts company with `utils::toast`'s suite one crate down. A filter cannot see the arm this test
+/// is half about: a version that toasts unconditionally raises an empty detail for the state with
+/// no station, the filter drops it, and the case passes against the mutation it exists for.
+/// Nothing else in this binary raises a toast, so the exact assertion is the stronger one; the day
+/// something does, it fails here, which is the right place to decide how the two coexist.
+#[test]
+fn a_station_that_gave_up_is_named_in_the_toast_and_nothing_else_raises_one()
+-> Result<(), Box<dyn std::error::Error>> {
+    const SENTINEL: &str = "Sentinel Sender FM";
+
+    let Some(mut toasts) = melodia_core::utils::toast::init() else {
+        return Err("the toast bridge was already claimed: this must be the only test in the \
+                    binary that installs it"
+            .into());
+    };
+
+    let handle = PlayerStateHandle::default();
+    *lock_state(&handle) = playing_station_named(SENTINEL);
+    notify_station_ended(&handle);
+
+    *lock_state(&handle) = playing_state();
+    notify_station_ended(&handle);
+
+    let raised: Vec<(melodia_core::utils::toast::ToastKind, String)> =
+        std::iter::from_fn(|| toasts.try_recv().ok())
+            .map(|request| (request.kind, request.detail))
+            .collect();
+    assert_eq!(
+        raised,
+        [(melodia_core::utils::toast::ToastKind::PlaybackFailed, SENTINEL.to_owned())],
+        "one toast, naming the station, and none at all for the state with no station in it"
+    );
+    Ok(())
 }

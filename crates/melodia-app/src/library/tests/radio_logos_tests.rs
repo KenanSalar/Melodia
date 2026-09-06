@@ -299,3 +299,30 @@ async fn an_outcome_is_recorded_as_the_arm_it_was_given() -> Result<(), Box<dyn 
     assert!(matches!(miss, Some(answer) if answer.artwork_path.is_none()));
     Ok(())
 }
+
+/// `AnswerSeed` exists so a page of stations costs one query rather than one per card, and nothing
+/// held that it is consulted at all. Ignoring it compiles, passes every case above, and turns a
+/// browse page into an N+1 walk whose only symptom is that the page is slower than it was.
+///
+/// The table is left empty, so a hit can only have come from the seed. The second call is the
+/// control that says so.
+#[tokio::test]
+async fn a_seeded_answer_is_taken_without_asking_the_table() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let logo = dir.path().join("logo.png");
+    std::fs::write(&logo, b"png")?;
+    let path = logo.to_string_lossy().into_owned();
+    let url = "https://site.example.test/favicon.ico";
+
+    let seeded = AnswerSeed(std::iter::once((url.to_owned(), answer(Some(&path), None))).collect());
+    let db = DbPool::test_pool().await?;
+
+    let found = stored_answer(&db, &seeded, url).await;
+
+    assert!(matches!(&found, LogoAnswer::Hit(at) if *at == path), "the seed answered");
+    assert!(
+        matches!(stored_answer(&db, &AnswerSeed::unseeded(), url).await, LogoAnswer::Unknown),
+        "and the table holds nothing, so it could not have"
+    );
+    Ok(())
+}

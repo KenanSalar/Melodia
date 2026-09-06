@@ -203,7 +203,7 @@ pub fn artwork_is_present(artwork_path: Option<&str>) -> bool {
 /// persisting a transport failure would suppress a perfectly good logo for a day over a moment
 /// offline. `ui::radio::logos` splits them the same way on the browse path.
 pub(super) async fn ask_logo_url(state: &AppState, seed: &AnswerSeed, url: &str) -> Option<String> {
-    match stored_answer(state, seed, url).await {
+    match stored_answer(&state.db, seed, url).await {
         LogoAnswer::Hit(path) => return Some(path),
         LogoAnswer::Suppressed => return None,
         LogoAnswer::Unknown => {}
@@ -267,12 +267,14 @@ impl AnswerSeed {
 /// One query either way, because a second would ask the same row the same thing. A hit whose file
 /// is gone is [`LogoAnswer::Unknown`]: the store is swept against the columns that reference it, and
 /// a path naming nothing paints an empty tile where the monogram was the honest answer.
-async fn stored_answer(state: &AppState, seed: &AnswerSeed, url: &str) -> LogoAnswer {
+/// Narrowed to the pool it reaches, like [`record_outcome`] beside it, so the seed's whole reason
+/// for existing can be read against a table holding nothing.
+async fn stored_answer(db: &DbPool, seed: &AnswerSeed, url: &str) -> LogoAnswer {
     if let Some(answer) = seed.0.get(url) {
         return classify_logo_answer(answer, &melodia_core::utils::now_rfc3339());
     }
     let asked = [url.to_owned()];
-    let Ok(answers) = logo_answers(state, &asked).await else {
+    let Ok(answers) = queries::radio::logo_answers(db, &asked).await else {
         return LogoAnswer::Unknown;
     };
     let now = melodia_core::utils::now_rfc3339();
@@ -378,7 +380,7 @@ pub async fn discover_site_logo(
     seed: &AnswerSeed,
     origin: &SiteOrigin,
 ) -> Option<String> {
-    match stored_answer(state, seed, origin.as_str()).await {
+    match stored_answer(&state.db, seed, origin.as_str()).await {
         LogoAnswer::Hit(path) => return Some(path),
         LogoAnswer::Suppressed => return None,
         LogoAnswer::Unknown => {}
