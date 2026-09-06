@@ -127,10 +127,11 @@ pub fn wire(
         updater.on_auto_check_changed(move |on| {
             let state_for_disk = state.clone();
             state.runtime.spawn_blocking(move || {
-                if let Err(e) =
-                    library::settings::updates::set_auto_check_enabled(&state_for_disk, on)
-                {
-                    log::warn!("updater: set_auto_check_enabled: {e}");
+                // Kicked inside the write and only on `Ok(())`: the loop re-reads the file on
+                // waking, so a kick over a failed write would wake it onto the old answer.
+                match library::settings::updates::set_auto_check_enabled(&state_for_disk, on) {
+                    Ok(()) => state_for_disk.auto_check_changed.bump(),
+                    Err(e) => log::warn!("updater: set_auto_check_enabled: {e}"),
                 }
             });
         });

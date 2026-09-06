@@ -7,9 +7,10 @@
 //!
 //! **Rust owns the mount and unmount timing.** The overlay is `if`-mounted on
 //! `Onboarding.mounted`, so a `changed` handler inside it watching either of these globals would
-//! stay registered against a property that outlives its own branch — and re-running the card moves
-//! both. So the two edges are `slint::Timer::single_shot` here instead: one frame after `mounted`
-//! to raise `open` and give `animate` an edge to run on, and one fade later to drop the branch.
+//! stay registered against a property that outlives its own branch and panic the next time it
+//! moves — which re-running the card does to both. So the two edges are `slint::Timer::single_shot`
+//! here instead: one frame after `mounted` to raise `open` and give `animate` an edge to run on,
+//! and one fade later to drop the branch.
 
 use std::cell::RefCell;
 use std::rc::Rc;

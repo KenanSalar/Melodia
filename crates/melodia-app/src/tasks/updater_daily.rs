@@ -11,7 +11,9 @@
 //! - **The auto-check switch is read per tick**, not at the spawn — the
 //!   welcome card and Settings ▸ Updates both offer it mid-session, and a
 //!   boot-time decision leaves either describing a task the user can no
-//!   longer start or stop.
+//!   longer start or stop. Toggling it also cuts the sleep short
+//!   (`AppState::auto_check_changed`), or the answer would land whenever
+//!   the loop next happened to wake.
 //! - **24 h elapsed gate** inside each tick reads
 //!   `settings.updates.last_check_unix`; if less than a day has passed
 //!   the tick logs "skipped" and re-sleeps. Lets the loop survive a
@@ -83,6 +85,8 @@ pub fn spawn(
     weak: Weak<AppWindow>,
     event_tx: watch::Sender<Option<UpdaterEvent>>,
 ) {
+    let mut auto_check = state.auto_check_changed.subscribe();
+
     spawner.spawn_cancellable(move |shutdown| async move {
         // Startup grace period — gives the first-launch scan + DB
         // pre-fetch room to settle before we add network I/O.
@@ -99,6 +103,15 @@ pub fn spawn(
             tokio::select! {
                 biased;
                 () = shutdown.cancelled() => return,
+                // Cuts a sleep the switch has outlived. Nothing here decides anything: the
+                // iteration re-reads the file, and `needs_check`'s 24 h floor is what stops a
+                // toggled switch turning into a request — a failed check stamps `last_check_unix`
+                // on its way out, so even a bounced switch under a live backoff cannot hammer.
+                woken = auto_check.changed() => {
+                    if woken.is_err() {
+                        return;
+                    }
+                }
                 () = tokio::time::sleep(delay) => {}
             }
         }
@@ -298,7 +311,13 @@ fn persist_success(
 }
 
 fn pick_next_delay(state: &AppState) -> Duration {
-    let count = settings::read_settings(&state.paths).map_or(0, |s| s.updates.consecutive_failures);
+    // A disabled loop records no failures, so the ladder describes nothing while the switch is
+    // off. The UI toggle cuts the sleep itself; this is the floor for a `settings.json` edited
+    // underneath us, which bumps nothing and would otherwise wait out a stale 7 d step.
+    let count = settings::read_settings(&state.paths)
+        .ok()
+        .filter(|s| s.updates.auto_check_enabled)
+        .map_or(0, |s| s.updates.consecutive_failures);
     let delay = backoff_delay_for(count);
     if count >= 2 {
         log::info!(

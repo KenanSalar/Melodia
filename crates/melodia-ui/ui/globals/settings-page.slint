@@ -30,6 +30,16 @@ export global SettingsPage {
     // Releases keyboard focus from the SearchBar, the `MyLibrary.blur-search-tick` pattern.
     in-out property <int> blur-search-tick: 0;
 
+    // The clear all three properties above owe, spelled once: nav-away is `app-window.slint`'s
+    // arm and a tab pick is Rust's `on_tab_changed`, so a copy in each is one no reader sees
+    // beside the other. A `public function` for the `Dialog.closed-teardown()` reason: a callback
+    // has one handler slot, and a Rust registration would replace the body.
+    public function clear-search() {
+        root.search-input = "";
+        root.search-query = "";
+        root.blur-search-tick += 1;
+    }
+
     // The two facts the view writes imperatively — a global can't be bound from a view, and the
     // page can't read its live width into a binding feeding a child's size without re-entering
     // layout. **Everything below derives from them.** The seed is a plausible narrow page: too

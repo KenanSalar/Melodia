@@ -116,10 +116,7 @@ export component AppWindow inherits Window {
     changed watched-nav-idx => {
         CompositeScroll.reset();
         if (self.watched-nav-idx != 9) {
-            // Both halves: the input is what the box shows, the query what the page is filtered by.
-            SettingsPage.search-input = "";
-            SettingsPage.search-query = "";
-            SettingsPage.blur-search-tick += 1;
+            SettingsPage.clear-search();
         }
         // My Library's band holds its hero across a tab leave, so a *nav* change is the only thing
         // that can hand it back — and a `SectionActiveGate` cannot see this edge: the sidebar

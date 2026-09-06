@@ -345,8 +345,8 @@ fn main() -> AppResult<()> {
 
     // One `watch` carries backend events from the daily task and the `Updater.*`
     // callbacks to the UI-thread subscriber that toasts them. The daily task
-    // spawns only when auto-check is on *and* the install path is user-writable
-    // — system-managed installs go through the OS package manager instead.
+    // spawns only where the install path is user-writable; system-managed
+    // installs go through the OS package manager instead.
     let (updater_event_tx, updater_event_rx) =
         watch::channel::<Option<services::updater::UpdaterEvent>>(None);
     ui::settings::updater_settings::install_event_subscriber(

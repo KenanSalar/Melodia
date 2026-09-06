@@ -1,13 +1,14 @@
 //! What the first-run card can break without failing a build.
 //!
-//! Every property here is invisible to review and to every other walk: a tracker that misfires
-//! only on the *second* open, a reordering of which surface Escape reaches first, a switch offered
+//! Every property here is invisible to review and to every other walk: a tracker that panics only
+//! on the *second* open, a reordering of which surface Escape reaches first, a switch offered
 //! where a package manager owns the answer, and a crash notice that stops being raised.
 
 use melodia_testkit::{UI_DIR, strip_line_comments};
 
 /// The card's own components. A floor rather than a list, so a sixth panel is covered on arrival,
-/// and low enough that deleting one file is an ordinary edit rather than a failure here.
+/// and low enough to survive two of the three panels being folded together, which is an ordinary
+/// edit rather than the walk's subject.
 const MIN_ONBOARDING_SOURCES: usize = 3;
 
 const MAIN: &str = include_str!("../src/main.rs");
@@ -60,7 +61,8 @@ fn onboarding_sources() -> Vec<(String, String)> {
 /// that gets dropped may watch is a property that dies with it. One reading `Onboarding.*` — or
 /// anything owned above the mount — leaves a tracker registered against a property that outlives
 /// the branch, and the Settings ▸ About row moves exactly such a property by re-opening the card:
-/// it builds, reviews clean, survives the first open, and misfires nowhere near the edit.
+/// it builds, reviews clean, survives the first open, and panics on the second, naming a component
+/// nowhere near whatever was edited.
 ///
 /// Rust owns the mount and unmount timers precisely so nothing here needs a tracker at all, and
 /// the step indicator is hand-drawn dots rather than a `TabBar` for the same reason. Holding the
@@ -82,7 +84,7 @@ fn no_onboarding_component_carries_a_change_tracker() {
     assert!(
         offenders.is_empty(),
         "components/onboarding must carry no `changed` handler — a tracker watching anything \
-         that outlives this dropped `if` branch misfires on the next open. Offenders: {offenders:?}"
+         that outlives this dropped `if` branch panics on the next open. Offenders: {offenders:?}"
     );
 }
 
@@ -150,6 +152,10 @@ fn the_card_gates_the_non_escape_shortcuts() {
 /// and `take_unseen` consumes the marker, so dropping the line doesn't defer a report, it
 /// retires the whole surface. The failure is silence: reports keep accruing and none is ever
 /// shown, which no other test and no run can notice.
+///
+/// It anchors on the call rather than on the closure's braces, so it catches the line going and
+/// not the line being hoisted out to a later statement. That one is the *old* behaviour rather
+/// than silence, and shows on the next launch.
 #[test]
 fn the_deferred_work_still_carries_the_crash_notice() {
     let boot = strip_line_comments(MAIN);
