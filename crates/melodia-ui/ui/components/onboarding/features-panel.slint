@@ -10,8 +10,6 @@ import { OnboardingFeatureRow } from "onboarding-feature-row.slint";
 // Step 3. One row per feature that leaves the machine, each carrying its own live state and each
 // flipping the same `Settings` callback its Settings row does, so nothing here needs a restart.
 export component OnboardingFeaturesPanel inherits VerticalLayout {
-    in property <length> content-w;
-
     min-width: 0px;
     spacing: Theme.pad-sm;
 

@@ -74,9 +74,10 @@ fn a_second_dismiss_inside_the_fade_is_a_no_op() {
 
 /// The three inputs `install` decides on, and the one that is easy to get backwards.
 ///
-/// `None` is an unreadable or absent `settings.json`. Treating it as "already seen" reads as the
-/// cautious choice and fails the wrong way: a fresh install has no file at all, so the card would
-/// never show on the one launch it exists for, and the window would open empty and silent.
+/// `None` is a `settings.json` that exists and won't read — a missing or corrupt one defaults, so
+/// a fresh install is the `Some`-at-`0` case below. Treating `None` as "already seen" reads as the
+/// cautious choice and fails the wrong way: the install least able to answer for itself loses the
+/// one surface that would.
 #[test]
 fn the_card_is_owed_on_a_fresh_or_unreadable_install_and_not_on_a_settled_one() {
     use melodia_app::services::settings::{ONBOARDING_VERSION, OnboardingFlags, SettingsData};

@@ -3,12 +3,10 @@ import { LibrarySettings } from "../../globals/library-settings.slint";
 import { ProgressBar } from "../settings/progress-bar.slint";
 import { SectionButton } from "../settings/section-button.slint";
 
-// Step 2, and not a question: `tasks::first_launch` has already added the Music folder and started
-// a scan by the time this paints, so the panel reports it rather than asking. On the install where
-// the auto-add found nothing, this panel is the reason the card exists at all.
+// Step 2, and not a question: `tasks::first_launch` adds the Music folder and starts a scan on its
+// own, so the panel reports whichever of the three states it finds rather than asking. On the
+// install where the auto-add found nothing, this panel is the reason the card exists at all.
 export component OnboardingMusicPanel inherits VerticalLayout {
-    in property <length> content-w;
-
     min-width: 0px;
     spacing: Theme.pad-sm;
 

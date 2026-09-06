@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::row_match::{self, Needle};
@@ -76,6 +76,18 @@ fn chunk_indices(count: i32, per_row: i32) -> Vec<Vec<i32>> {
     rows
 }
 
+/// Drop the filter and release the box's focus, both properties together.
+///
+/// In `on_tab_changed` rather than in the tab bar's `tab-selected` handler, so it covers the
+/// deep link out of the welcome card as well as a pick: a tab arrived at under a live query
+/// shows whatever survives it, which for a narrow query is nothing. Clearing only
+/// `search-query` would leave the box holding a string the page is no longer filtered by.
+fn clear_search(page: &SettingsPage<'_>) {
+    page.set_search_input(SharedString::new());
+    page.set_search_query(SharedString::new());
+    page.set_blur_search_tick(page.get_blur_search_tick().wrapping_add(1));
+}
+
 /// Seed the active tab from `views.json`. Call from
 /// `boot::ui_setup::hydrate_ui_from_settings`, which already has the view state loaded.
 pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
@@ -127,6 +139,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
         // As on the two curated pages: a tab pick moves no nav index, so
         // `nav_history::record_current` never hears about it.
         if let Some(ui) = weak.upgrade() {
+            clear_search(&ui.global::<SettingsPage>());
             crate::ui::view_tag::log_current(&ui);
         }
         persist.publish(tab);

@@ -8,6 +8,10 @@
 //! - **Then every 6 h**: re-arm via `tokio::time::sleep`. Not
 //!   `tokio::time::interval` — `interval` fires every tick instantly
 //!   after a laptop wake from sleep, which would burst-check.
+//! - **The auto-check switch is read per tick**, not at the spawn — the
+//!   welcome card and Settings ▸ Updates both offer it mid-session, and a
+//!   boot-time decision leaves either describing a task the user can no
+//!   longer start or stop.
 //! - **24 h elapsed gate** inside each tick reads
 //!   `settings.updates.last_check_unix`; if less than a day has passed
 //!   the tick logs "skipped" and re-sleeps. Lets the loop survive a
@@ -113,6 +117,12 @@ async fn run_one_iteration(
             return;
         }
     };
+
+    // Ahead of the elapsed gate: a disabled check owes no network I/O and no log line
+    // per 6 h either.
+    if !snapshot.auto_check_enabled {
+        return;
+    }
 
     if !needs_check(snapshot.last_check_unix) {
         log::info!(

@@ -356,8 +356,6 @@ fn main() -> AppResult<()> {
     );
     ui::callbacks::wire_updater(&app, &state, &notifications, &updater_event_tx);
 
-    let updater_settings_snapshot =
-        startup_settings.as_ref().map(|s| s.updates.clone()).unwrap_or_default();
     // The first-run card, opened only if this install hasn't seen the current revision. After
     // `hydrate_ui_from_settings`, so a deep link out of it isn't racing the boot's own nav and tab
     // writes, and before `app.show()`, like everything else that seeds a Slint property.
@@ -380,10 +378,10 @@ fn main() -> AppResult<()> {
             );
         }
 
-        if updater_settings_snapshot.auto_check_enabled
-            && services::updater::is_available()
-            && !platform::install_kind::is_system_install()
-        {
+        // Only the install shape gates the spawn — those two can't change while the process
+        // lives. The auto-check switch is read per tick instead, the welcome card and
+        // Settings ▸ Updates both offering it after this point.
+        if services::updater::is_available() && !platform::install_kind::is_system_install() {
             tasks::updater_daily::spawn(
                 &deferred_spawner,
                 deferred_state.clone(),
@@ -392,8 +390,7 @@ fn main() -> AppResult<()> {
             );
         } else {
             log::info!(
-                "updater_daily: not spawning (auto_check_enabled={}, available={}, system_managed={})",
-                updater_settings_snapshot.auto_check_enabled,
+                "updater_daily: not spawning (available={}, system_managed={})",
                 services::updater::is_available(),
                 platform::install_kind::is_system_install()
             );

@@ -72,9 +72,7 @@ fn wire_dismiss(ui: &AppWindow, state: &AppState, deferred: Rc<super::DeferredOn
         }
         onboarding.set_open(false);
 
-        state.persist_blocking("onboarding_version", |state| {
-            library::settings::set_onboarding_seen(state)
-        });
+        state.persist_blocking("onboarding_version", library::settings::set_onboarding_seen);
 
         // Held until the fade has run, so the card isn't cut off mid-animation. Taken from the
         // token the overlay animates on rather than restated here.

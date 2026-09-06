@@ -6,10 +6,10 @@
 //! doesn't.
 //!
 //! **Rust owns the mount and unmount timing.** The overlay is `if`-mounted on
-//! `Onboarding.mounted`, so a `changed` handler inside it would outlive its own branch and panic
-//! the next time the watched property moved — which re-running the card does. So the two edges are
-//! `slint::Timer::single_shot` here instead: one frame after `mounted` to raise `open` and give
-//! `animate` an edge to run on, and one fade later to drop the branch.
+//! `Onboarding.mounted`, so a `changed` handler inside it watching either of these globals would
+//! stay registered against a property that outlives its own branch — and re-running the card moves
+//! both. So the two edges are `slint::Timer::single_shot` here instead: one frame after `mounted`
+//! to raise `open` and give `animate` an edge to run on, and one fade later to drop the branch.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -59,10 +59,10 @@ const MOUNT_SETTLE: Duration = Duration::from_millis(1);
 
 /// Whether this install is owed the card.
 ///
-/// `None` is an unreadable or absent `settings.json`, which on a first run is exactly what a
-/// missing file looks like — so it counts as owed. The other reading fails the wrong way: a fresh
-/// install would open silent and empty with the one surface that explains it suppressed by the
-/// very absence it exists for.
+/// A fresh install arrives here as `Some` at revision `0` — `read_settings` defaults a missing or
+/// unparseable file rather than failing — so `None` is the narrower case of a file that exists and
+/// won't read. Owed anyway: the alternative suppresses the one surface that explains an empty
+/// window on the launch likeliest to have one.
 fn card_is_owed(startup_settings: Option<&SettingsData>) -> bool {
     startup_settings.is_none_or(|settings| settings.onboarding.needs_onboarding())
 }

@@ -1,14 +1,16 @@
-//! What the first-run card's `.slint` half can break without failing a build.
+//! What the first-run card can break without failing a build.
 //!
-//! Both properties here are invisible to review and to every other walk: one panics at runtime on
-//! the *second* open, the other silently reorders which surface Escape reaches first.
+//! Every property here is invisible to review and to every other walk: a tracker that misfires
+//! only on the *second* open, a reordering of which surface Escape reaches first, a switch offered
+//! where a package manager owns the answer, and a crash notice that stops being raised.
 
 use melodia_testkit::{UI_DIR, strip_line_comments};
 
 /// The card's own components. A floor rather than a list, so a sixth panel is covered on arrival,
 /// and low enough that deleting one file is an ordinary edit rather than a failure here.
-const MIN_ONBOARDING_SOURCES: usize = 5;
+const MIN_ONBOARDING_SOURCES: usize = 3;
 
+const MAIN: &str = include_str!("../src/main.rs");
 const APP_WINDOW: &str = include_str!("../../melodia-ui/ui/app-window.slint");
 const SHORTCUT_SCOPE: &str = include_str!("../../melodia-ui/ui/layout/shortcut-scope.slint");
 const UPDATE_SECTION: &str =
@@ -54,18 +56,21 @@ fn onboarding_sources() -> Vec<(String, String)> {
     out
 }
 
-/// The card is mounted behind `if Onboarding.mounted`, and a `changed` handler inside a branch
-/// that gets dropped outlives it: the generated `ChangeTracker` holds a `VWeakMapped` back to a
-/// component nothing can upgrade to any more, and `evaluate` opens with an `unwrap`.
+/// The card is mounted behind `if Onboarding.mounted`, and what a `changed` handler in a branch
+/// that gets dropped may watch is a property that dies with it. One reading `Onboarding.*` — or
+/// anything owned above the mount — leaves a tracker registered against a property that outlives
+/// the branch, and the Settings ▸ About row moves exactly such a property by re-opening the card:
+/// it builds, reviews clean, survives the first open, and misfires nowhere near the edit.
 ///
-/// It only fires if something re-dirties the watched property *after* the drop — which is exactly
-/// what the Settings ▸ About row does, by writing `Onboarding.open` to re-open the card. So this
-/// builds, reviews clean, survives the first open, and panics on the second, naming a component
-/// nowhere near whatever was edited.
+/// Rust owns the mount and unmount timers precisely so nothing here needs a tracker at all, and
+/// the step indicator is hand-drawn dots rather than a `TabBar` for the same reason. Holding the
+/// whole directory to none is the cheap way to hold that, since the two cases look alike.
 ///
-/// The cure is the ban rather than care: Rust owns both the mount and unmount timers precisely so
-/// nothing here needs a tracker, and the step indicator is hand-drawn dots rather than a `TabBar`
-/// for the same reason.
+/// **This reads the directory's own files, not what they mount.** `IconButton` brings a `Tooltip`
+/// in on the close button and that carries `changed hovered` — safe, the property being local to
+/// the branch, and `NowPlayingView` is the standing proof: it is `if`-mounted too and drops the
+/// same button on every close. A `SearchBar` or `MetaChipStrip` in a panel would not be, and lives
+/// outside this walk.
 #[test]
 fn no_onboarding_component_carries_a_change_tracker() {
     let offenders: Vec<String> = onboarding_sources()
@@ -76,8 +81,8 @@ fn no_onboarding_component_carries_a_change_tracker() {
 
     assert!(
         offenders.is_empty(),
-        "components/onboarding must carry no `changed` handler — a tracker in a dropped `if` \
-         branch panics on the next open. Offenders: {offenders:?}"
+        "components/onboarding must carry no `changed` handler — a tracker watching anything \
+         that outlives this dropped `if` branch misfires on the next open. Offenders: {offenders:?}"
     );
 }
 
@@ -137,5 +142,23 @@ fn the_card_gates_the_non_escape_shortcuts() {
     assert!(
         keys.contains("if (Dialog.open || Onboarding.open) {"),
         "the non-Escape early-out must name the card as well as the dialog"
+    );
+}
+
+/// The crash notice used to sit inside `settings::diagnostics::install`, where it could not be
+/// lost. It is a line in a closure in `main` now, so that the welcome card can hold it back —
+/// and `take_unseen` consumes the marker, so dropping the line doesn't defer a report, it
+/// retires the whole surface. The failure is silence: reports keep accruing and none is ever
+/// shown, which no other test and no run can notice.
+#[test]
+fn the_deferred_work_still_carries_the_crash_notice() {
+    let boot = strip_line_comments(MAIN);
+    let deferred =
+        boot.split_once("ui::onboarding::install(").map(|(_, rest)| rest).unwrap_or_default();
+
+    assert!(
+        deferred.contains("notify_previous_crash"),
+        "`main` must still raise the previous run's crash notice from the closure it hands \
+         `ui::onboarding::install`"
     );
 }

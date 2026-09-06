@@ -4,8 +4,8 @@
 // **`mounted` and `open` are two properties because the card is `if`-mounted.** `open` drives the
 // fade and `mounted` gates the branch, so a close clears the first and Rust clears the second a
 // beat later, once the card is gone. Rust owns both timers rather than a `changed t` handler in
-// the overlay: a change tracker inside a dropped `if` branch outlives it and panics the next time
-// its property moves, which re-running the card from Settings does directly.
+// the overlay: a tracker inside the dropped `if` branch watching one of these two stays registered
+// against a property that outlives it, and re-running the card from Settings moves both.
 export global Onboarding {
     // The branch gate. Nothing under `components/onboarding/` exists outside the launch it runs on.
     in-out property <bool> mounted;
