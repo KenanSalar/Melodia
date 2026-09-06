@@ -342,8 +342,54 @@ fail.
 
 
 ================================================================================
-PHASE 3: THE RESOLVER OVER THE LOOKUP THAT IS ALREADY TESTED
+PHASE 3: THE RESOLVER OVER THE LOOKUP THAT IS ALREADY TESTED   [SPENT]
 ================================================================================
+
+Three cases, no production change, both in `melodia-core`. Suite 2737 -> 2740, clean under
+fmt, clippy and test. One of the entry's three rungs was refused after reading the file.
+
+  registry_tests.rs `a_listed_accent_resolves_to_its_own_hex_and_not_the_defaults`
+                    `an_accent_no_theme_lists_falls_back_to_the_default_in_the_same_variant`
+  error_tests.rs    `every_io_boundary_variant_keeps_its_context_and_its_cause`
+
+**The refusal: rung three is unreachable, and a sibling test is what makes it so.** The entry
+asked for a hand-built `ThemeDef` whose `default_accent` is absent from its own `accents`, to
+reach the `overlay1` fallback. `every_theme_default_variant_and_accent_resolve` already asserts
+that no registry theme is shaped that way, and the implication carries further than it looks:
+it pins `accent_hex(default_accent, default_variant)` as `Some`, which means that accent's
+`per_variant` is non-empty, and `hex_in` falls back to `per_variant.first()` for *any* variant.
+So rung two can never answer `None` for a real theme and rung three cannot fire. Writing it
+would have cost a sixteen-field `Palette` const plus a `ThemeDef` static to assert that
+`unwrap_or` works on an input the tree forbids. Refused, and the sibling holding it is named
+here so the next round does not re-derive this.
+
+**The entry was also wrong about where rung two fires, and the correction sharpens it.** It
+claimed every Material You lookup lands there. It does not: when a dynamic palette exists,
+`theme_apply` takes `*dyn_accent` in a branch above and never calls the resolver. Rung two is
+what paints while the accent is *set* to Material You and `system.material_you` is still
+`None`, which is every launch before the first track's artwork lands, plus any run with the
+Color Style off. Still a real production path, and now stated as the one it is. The same read
+retired a second claim the entry made: `SYSTEM_VARIANT_ID` never reaches `resolved_accent_hex`,
+`theme_apply` resolving the variant to a real id first on all three of its paths.
+
+**Both variants are asserted on the fallback**, because a rung two answering out of
+`default_variant` rather than the requested one is the mutation that reads as a theming bug.
+It fails with `left: 13679871, right: 6770852`, the dark accent painted onto the light theme.
+
+**3.2 is a generalisation rather than a new subject.** `a_cause_is_appended_once_and_never
+_repeated` was one sample of the partition, `network`; the four struct variants exist for the
+same reason and `scanner` and `watcher` had never been built with a source anywhere in the
+suite. Expectations are written out in full rather than composed from context and cause, so
+the table cannot restate `describe`'s own append rule back at it.
+
+**Four mutations, each alone with the tree restored between.** Dropping the first rung so the
+resolver always answers with the default accent fails only 3.1's first case. Answering rung two
+out of `default_variant` fails only its second. Building `AppError::scanner` without its source
+fails only 3.2, and so does building `AppError::metadata` without its source, which is the more
+interesting of the two: `metadata(msg, source)` *was* being executed by the suite, so what was
+missing there was never the coverage, only the assertion.
+
+--- the entry as written, kept for the next round's reading ---
 
 **3.1  `ThemeDef::resolved_accent_hex` (`melodia-core/src/themes/palette.rs:117`)**
 
@@ -532,7 +578,14 @@ SUGGESTED ORDER
      test rather than settling for the first one that came to mind. The comment was wrong
      about why the test earns its place; the test was still worth keeping, for a different
      reason.
-  3. Phase 3. No production change, and it is round five's phase-1 shape found one layer up.
+  3. [DONE] Phase 3. Three cases of the four asked for, no production change, one rung
+     refused in writing.
+
+     Left behind for whoever takes the next one: **before writing a case for an arm, check
+     whether another test already forbids reaching it.** Rung three here is dead by
+     construction and the thing killing it is a sibling four tests up the same file. The
+     entry read the ladder and not its neighbours, which is the third round running that
+     "check the neighbours" has been the finding.
   4. Phase 4, only after reading the loop and pricing the extraction. It is the one entry
      here that can honestly be refused after the read, and refusing it in writing is a
      result.
