@@ -63,6 +63,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 ## Features
 
 ### Library
+- A first-run card that sets language, theme and accent, reports the scan already running over your Music folder, and names every feature that reaches the network so you can switch it on or leave it off. Three panels, closeable in a click, and reachable again from Settings ▸ About
 - Parallel folder scanning, live folder watching, and incremental re-scans
 - Content hashing (BLAKE3), so a moved or renamed file keeps its play counts, favorites, and place in the queue
 - Full-text search (SQLite FTS5) over tracks, albums, artists, and genres: accent-insensitive, relevance-ranked, with a top-result card and recent history. The filter box on every list searches the same fields
@@ -105,6 +106,8 @@ Seven locales (English, German, French, Spanish, Turkish, Greek, Italian), switc
 - Optional MusicBrainz auto-tagging, so loved tracks resolve even for a library with no MusicBrainz IDs
 - **Discord Rich Presence** (off by default): title, artist, album, and optionally a cover looked up on Deezer, sent to your running Discord client. Nothing leaves the machine while it is off
 - OS media controls (MPRIS2 on Linux, SMTC on Windows) and media keys
+- A system-tray icon with playback controls, on by default, and an optional close-to-tray; both under Settings ▸ Interface
+- A daily update check, named on first run and switchable under Settings ▸ Updates. It asks GitHub for a signed manifest and nothing else; package-managed installs skip it entirely
 - Set Melodia as your default player and double-click a track; it runs as a single instance, so files open in the window you already have
 - Always-on-top on KDE and GNOME, a self-deploying desktop entry, and AppStream metadata for KDE Discover and GNOME Software
 - Window, queue, and navigation state persisted across sessions

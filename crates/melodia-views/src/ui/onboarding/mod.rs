@@ -69,3 +69,7 @@ pub fn open(ui: &AppWindow) {
         }
     });
 }
+
+#[cfg(test)]
+#[path = "tests/onboarding_tests.rs"]
+mod tests;

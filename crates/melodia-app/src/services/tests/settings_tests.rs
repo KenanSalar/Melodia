@@ -470,3 +470,57 @@ fn test_radio_sub_toggles_survive_an_older_settings_file() -> Result<(), AppErro
     assert!(settings.radio.radio_send_clicks);
     Ok(())
 }
+
+/// `0` is what a file written before the card existed deserializes to, and it is the only value
+/// that has to mean "owed". The comparison is `<` rather than `!=` so an install carrying a
+/// revision from a *newer* build — a downgrade, or a shared home directory — is left alone rather
+/// than shown a card it has already seen.
+#[test]
+fn the_welcome_card_is_owed_only_below_the_current_revision() {
+    assert!(
+        OnboardingFlags {
+            onboarding_version: 0
+        }
+        .needs_onboarding()
+    );
+    assert!(
+        !OnboardingFlags {
+            onboarding_version: ONBOARDING_VERSION
+        }
+        .needs_onboarding()
+    );
+    assert!(
+        !OnboardingFlags {
+            onboarding_version: ONBOARDING_VERSION + 1
+        }
+        .needs_onboarding()
+    );
+}
+
+/// The field is flattened, so an install written before the card existed has no key at all — and
+/// that absence is what has to read as "never seen" rather than as a parse failure.
+#[test]
+fn an_older_settings_file_is_owed_the_welcome_card() -> Result<(), AppError> {
+    let json = r#"{"theme_id": "catppuccin"}"#;
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(settings.onboarding.onboarding_version, 0);
+    assert!(settings.onboarding.needs_onboarding());
+    Ok(())
+}
+
+/// The tray is the one deliberate exception to defaults-off, and what makes it safe is that it
+/// reaches nobody who already has a `settings.json`: every field serializes, so a file from any
+/// previous build spells `tray_enabled` and keeps its own answer.
+#[test]
+fn the_tray_ships_on_but_never_overrides_a_saved_answer() -> Result<(), AppError> {
+    assert!(reading_env(SettingsData::default).tray.tray_enabled);
+
+    let json = r#"{"theme_id": "catppuccin", "tray_enabled": false}"#;
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    assert!(!settings.tray.tray_enabled);
+
+    // The window still closes to a quit unless asked otherwise, tray or no tray.
+    assert!(!reading_env(SettingsData::default).tray.close_to_tray);
+    Ok(())
+}
