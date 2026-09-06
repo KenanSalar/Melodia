@@ -337,8 +337,49 @@ same `&AppState`; they are not worth a fixture on their own.
 
 
 ================================================================================
-PHASE 3: THE ORDER TWO WELL-TESTED FILTERS ARE APPLIED IN
+PHASE 3: THE ORDER TWO WELL-TESTED FILTERS ARE APPLIED IN   [SPENT]
 ================================================================================
+
+The extraction was accepted, and five cases went in behind it. `BatchPlan` is the three
+things a batch can turn out to be, `plan_batch` decides which, and the loop is a drain,
+a plan and a match over it. `SelfWrites::default()` is the whole fixture; the `&AppState`
+this entry was worried about never came into it.
+
+**The boundary is after `deduplicate_events`, not around it, and that is the one design
+decision here.** Wrapping dedup would have made the defensive `any` unreachable through
+`plan_batch`, because dedup collapses a rescan batch to the singleton and nothing could
+then hand the check a batch where the flag is not alone. The check's whole contract is
+that it holds *independently* of dedup, so the function has to be reachable with a batch
+dedup would never produce. `plan_batch` is therefore correct for any batch rather than
+only a deduplicated one, which its doc says.
+
+**This entry was wrong about the ordering it was written to defend, and the correction is
+the interesting part.** It claimed that suppressing before the rescan check means "a
+`RescanNeeded` arriving in the same batch as our own tag write can be filtered away". That
+cannot happen: `suppress_self_writes` drops only `Modified`, so a `RescanNeeded` passes
+through it by construction. Confirmed by mutation, not by reading alone: with the two
+steps swapped, the plan is still `Rescan`.
+
+The real cost is quieter and is stated in a different file. `take_recent` *consumes*, so
+suppressing first spends the mark on a batch that is about to be thrown away for a full
+reconcile, and the write's actual echo then arrives unsuppressed inside its TTL, costing
+the re-hash, the lofty re-parse and the artwork re-extract that the set exists to avoid.
+`melodia-core`'s `self_writes.rs` header lists exactly this under "Accepted trades" as
+settled, describing behaviour that lives in this loop, and nothing held the two together.
+That is the two-copies-of-one-argument shape `CLAUDE.md` warns about, and the pin now sits
+on the side that can actually break.
+
+Three mutations, each applied alone:
+
+  - `any` replaced by the slice pattern `[FileEvent::RescanNeeded]`, which is the tempting
+    simplification: both rescan cases fail, on "a rescan routed into process_batch is a
+    panic, not a slow path". `dedup_rescan_supersedes_everything_in_batch` keeps passing,
+    which is why nothing caught this before.
+  - suppression moved ahead of the rescan check: exactly one case fails, on "the mark has
+    to survive to suppress the echo when it actually arrives". The plan is still `Rescan`,
+    which is the entry's error above made visible.
+  - suppression skipped entirely: the mixed-batch case fails printing both events where one
+    was expected, and the all-suppressed case fails.
 
     melodia-app/src/tasks/file_event_processor/mod.rs   13.5% of 52   4 of 6 fns never run
 
@@ -352,9 +393,10 @@ two comments argue for at length:
     dedup -> RescanNeeded short-circuit -> suppress_self_writes -> process_batch
 
 The comments say why, and both halves are reversible without breaking a compile or a
-test. Putting suppression before the rescan check means a `RescanNeeded` arriving in the
-same batch as our own tag write can be filtered away, and the comment calls that out:
-"a rescan must never be filtered away". Putting `process_batch` before suppression means
+test. [Putting suppression first was described here as letting a `RescanNeeded` be
+"filtered away", quoting the comment that says so. That is wrong, and the SPENT note
+above has the correction and what the real cost turned out to be.] Putting
+`process_batch` before suppression means
 every file we wrote a tag to is re-hashed, re-parsed and re-extracted, which is a
 performance property with a correctness edge, since a re-ingest is the path
 `CLAUDE.md` says drops ratings, play counts and favourites when the move-detection halves
@@ -520,8 +562,22 @@ SUGGESTED ORDER
      what nothing measured was that one `if` gated three effects. When a percentage is high
      and the risk is real, ask what the covered function's callers do with its answer.
 
-  4. Phase 3, only if the classification extraction is accepted. Otherwise decline it in
-     writing and say so here, the way bf79e967 declined the feed thread.
+  4. [DONE] Phase 3. The extraction was accepted, with its boundary one step tighter than
+     the entry drew it.
+
+     Left behind for whoever takes the next one: **the comment you are writing a test
+     against can be right about the rule and wrong about the reason.** "A rescan must never
+     be filtered away" is true and is not what the ordering protects, because the filter
+     cannot touch a rescan. Reversing the two steps on purpose is what showed that, and it
+     is the same move as breaking the code to review a pin. Do it before quoting a comment
+     as the failure mode.
+
+     And **an extraction's boundary is a testability decision, not only a tidiness one.**
+     Wrapping one more call would have put the defensive check out of reach of every test
+     that could ever fail on it.
+
+With phases 1 through 3 spent, what remains on this list is phase 4's two small entries.
+The next round starts from a fresh measurement, not from this document's rows.
 
 Three things to carry into every entry, all of them findings the last three documents
 ended on rather than predictions:

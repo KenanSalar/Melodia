@@ -8,6 +8,7 @@
 //!
 //! - [`dedup`] collapses a batch of raw watcher events to one event per path.
 //! - [`suppress_self_writes`] drops the echo of our own tag writes.
+//! - [`plan_batch`] decides which of the three things a batch turns out to be.
 //! - [`reconcile`] extracts metadata and applies the batch to the database.
 
 mod dedup;
@@ -45,6 +46,48 @@ fn suppress_self_writes(batch: &mut Vec<FileEvent>, self_writes: &SelfWrites) {
     });
 }
 
+/// What a drained batch amounts to, once the rescan flag and our own writes are accounted for.
+enum BatchPlan {
+    /// Nothing left worth a database round trip.
+    Nothing,
+    /// The watcher overflowed, so its per-file stream is truncated and untrustworthy.
+    Rescan,
+    /// Apply these, the echo of our own tag writes already dropped.
+    Process(Vec<FileEvent>),
+}
+
+/// Decide what to do with a batch, dropping our own tag-write echoes on the way.
+///
+/// Correct for any batch rather than only a deduplicated one, which is the point of the `any`:
+/// `process_batch` `unreachable!()`s on a `RescanNeeded`, and [`deduplicate_events`] collapsing
+/// such a batch to the singleton is a second guarantee rather than the one being relied on.
+///
+/// The rescan is answered *before* the suppression because `take_recent` consumes: spending a
+/// mark on a batch about to be discarded for a full reconcile would leave the real echo
+/// unsuppressed inside its TTL. [`SelfWrites`]' own header states that ordering as settled and
+/// cannot see this function, which is what these two lines are holding together.
+fn plan_batch(mut batch: Vec<FileEvent>, self_writes: &SelfWrites) -> BatchPlan {
+    if batch.is_empty() {
+        return BatchPlan::Nothing;
+    }
+    if batch.iter().any(|e| matches!(e, FileEvent::RescanNeeded)) {
+        return BatchPlan::Rescan;
+    }
+
+    let before = batch.len();
+    suppress_self_writes(&mut batch, self_writes);
+    let suppressed = before - batch.len();
+    if suppressed > 0 {
+        log::debug!("Suppressed {suppressed} watcher event(s) from our own tag writes");
+    }
+
+    if batch.is_empty() {
+        BatchPlan::Nothing
+    } else {
+        BatchPlan::Process(batch)
+    }
+}
+
 /// Spawn the file-event-processor on the shared task lifecycle so the main
 /// shutdown sequence waits for the current batch's transaction to commit
 /// before the runtime is torn down.
@@ -68,51 +111,23 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
                 batch.push(event);
             }
 
-            let mut batch = deduplicate_events(batch);
-            if batch.is_empty() {
-                continue;
-            }
-
-            // RescanNeeded supersedes everything else in the batch; reconcile
-            // every enabled folder against disk instead of trusting the
-            // (now-truncated) per-file event stream. `deduplicate_events`
-            // collapses any batch containing RescanNeeded to the singleton,
-            // but check defensively rather than slice-pattern matching so a
-            // future dedup change can't silently route a rescan into
-            // `process_batch` (whose match arms `unreachable!()` on it).
-            if batch.iter().any(|e| matches!(e, FileEvent::RescanNeeded)) {
-                log::warn!("Rescan requested via watcher overflow flag");
-                crate::library::settings::reconcile_watched_folders(&state);
-                state.rescan_notice.bump();
-                continue;
-            }
-
-            // Our own tag writes echo back as `Modified`. Drop them here —
-            // after the rescan short-circuit above (a rescan must never be
-            // filtered away) and before `process_batch`, so the expensive
-            // re-hash / re-parse / re-extract never runs for a file we just
-            // wrote. `process_batch` takes `(&db, &paths, &cover_cache)` rather
-            // than `&AppState`, so this is also the only place the set is in
-            // scope without widening its signature.
-            let before = batch.len();
-            suppress_self_writes(&mut batch, &state.self_writes);
-            let suppressed = before - batch.len();
-            if suppressed > 0 {
-                log::debug!("Suppressed {suppressed} watcher event(s) from our own tag writes");
-            }
-            if batch.is_empty() {
-                continue;
-            }
-
-            log::info!("Processing batch of {} file events", batch.len());
-
-            // Don't bail on cancellation here — let the in-flight batch's tx
-            // commit so we don't leave orphan rows behind.
-            match process_batch(&state.db, &state.paths, &state.cover_cache, batch).await {
-                Ok(()) => {
-                    state.library_changed.bump();
+            match plan_batch(deduplicate_events(batch), &state.self_writes) {
+                BatchPlan::Nothing => {}
+                BatchPlan::Rescan => {
+                    log::warn!("Rescan requested via watcher overflow flag");
+                    crate::library::settings::reconcile_watched_folders(&state);
+                    state.rescan_notice.bump();
                 }
-                Err(e) => log::error!("File event batch processing failed: {e}"),
+                BatchPlan::Process(batch) => {
+                    log::info!("Processing batch of {} file events", batch.len());
+
+                    // Don't bail on cancellation here — let the in-flight batch's tx
+                    // commit so we don't leave orphan rows behind.
+                    match process_batch(&state.db, &state.paths, &state.cover_cache, batch).await {
+                        Ok(()) => state.library_changed.bump(),
+                        Err(e) => log::error!("File event batch processing failed: {e}"),
+                    }
+                }
             }
         }
         log::info!("File event processor stopped");
