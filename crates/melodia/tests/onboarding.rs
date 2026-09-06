@@ -11,6 +11,10 @@ const MIN_ONBOARDING_SOURCES: usize = 5;
 
 const APP_WINDOW: &str = include_str!("../../melodia-ui/ui/app-window.slint");
 const SHORTCUT_SCOPE: &str = include_str!("../../melodia-ui/ui/layout/shortcut-scope.slint");
+const UPDATE_SECTION: &str =
+    include_str!("../../melodia-ui/ui/views/settings/update-section.slint");
+const FEATURES_PANEL: &str =
+    include_str!("../../melodia-ui/ui/components/onboarding/features-panel.slint");
 
 /// Every `.slint` under `components/onboarding/`, comment-stripped.
 ///
@@ -98,6 +102,31 @@ fn the_card_sits_under_the_dialog_in_paint_and_in_escape_order() {
         matches!(escape, (Some(dialog), Some(card)) if dialog < card),
         "Escape must reach the dialog before the card, matching the paint order above: {escape:?}"
     );
+}
+
+/// Both places the daily update check is named hide it where a package manager owns updates.
+///
+/// `updater_daily` is already gated on the install kind, so the switch on an RPM, DEB or `AppImage`
+/// build would describe a task that never runs — a control the user can toggle to no effect, which
+/// is worse than not offering it. The card and the Settings row grew the row independently and
+/// nothing ties them together but this.
+#[test]
+fn neither_update_row_offers_a_switch_a_package_manager_already_owns() {
+    let hosts = [
+        ("update-section.slint", strip_line_comments(UPDATE_SECTION)),
+        ("features-panel.slint", strip_line_comments(FEATURES_PANEL)),
+    ];
+
+    for (name, src) in hosts {
+        assert!(
+            src.contains("auto-check-enabled"),
+            "{name} no longer mounts the auto-check switch"
+        );
+        assert!(
+            src.contains("!MelodiaUpdater.system-managed"),
+            "{name} offers the auto-check switch without gating on system-managed"
+        );
+    }
 }
 
 /// Every non-Escape shortcut early-outs while the card is up, or Space pauses playback through the

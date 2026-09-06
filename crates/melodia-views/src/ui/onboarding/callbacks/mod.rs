@@ -12,7 +12,7 @@ use slint::ComponentHandle;
 /// other one, and neither is the other's to publish.
 const NAV_SETTINGS: i32 = 9;
 
-pub(super) fn wire(ui: &AppWindow, state: &AppState, deferred: super::Deferred) {
+pub(super) fn wire(ui: &AppWindow, state: &AppState, deferred: Rc<super::DeferredOnce>) {
     wire_dismiss(ui, state, deferred);
     wire_open_services(ui);
     wire_run_again(ui);
@@ -58,7 +58,7 @@ fn wire_open_services(ui: &AppWindow) {
 /// Every dismissal path lands here, including Skip on the first panel: a card that comes back
 /// because it was closed early is a nag, and Settings ▸ About is where someone who dismissed by
 /// reflex gets it again.
-fn wire_dismiss(ui: &AppWindow, state: &AppState, deferred: super::Deferred) {
+fn wire_dismiss(ui: &AppWindow, state: &AppState, deferred: Rc<super::DeferredOnce>) {
     let weak = ui.as_weak();
     let state = state.clone();
 
@@ -87,9 +87,7 @@ fn wire_dismiss(ui: &AppWindow, state: &AppState, deferred: super::Deferred) {
                 ui.global::<Onboarding>().set_mounted(false);
             }
             // The surfaces `main` held back so the card wasn't one of three at once.
-            if let Some(run) = deferred.borrow_mut().take() {
-                run();
-            }
+            deferred.run();
         });
     });
 }

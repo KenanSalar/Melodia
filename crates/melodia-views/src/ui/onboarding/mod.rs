@@ -26,34 +26,65 @@ mod callbacks;
 ///
 /// The first thirty seconds shouldn't be three stacked surfaces, so the update toast and the crash
 /// notice wait behind the card. **Deferred, not suppressed**: the crash notice consumes its marker
-/// when it fires, so skipping it loses the report. `FnOnce` behind a `Cell` because the dismiss
-/// callback is an `Fn` that a stray second Escape can re-enter.
-pub(super) type Deferred = Rc<RefCell<Option<Box<dyn FnOnce()>>>>;
+/// when it fires, so skipping it loses the report.
+///
+/// A type rather than a bare `Option` because the once-ness is the contract, and holding an
+/// `FnOnce` behind a `take` is what makes a second run unrepresentable: `dismiss` is an `Fn` a
+/// stray second Escape can re-enter, and running this twice spawns a second daily updater task.
+pub(super) struct DeferredOnce {
+    work: RefCell<Option<Box<dyn FnOnce()>>>,
+}
+
+impl DeferredOnce {
+    fn new(work: impl FnOnce() + 'static) -> Rc<Self> {
+        Rc::new(Self {
+            work: RefCell::new(Some(Box::new(work))),
+        })
+    }
+
+    /// Run the held work. Every call after the first is a no-op.
+    pub(super) fn run(&self) {
+        // Taken before the call, not during: the work reaches back into Slint, and a re-entrant
+        // `dismiss` inside it would otherwise find the borrow still open.
+        let work = self.work.borrow_mut().take();
+        if let Some(work) = work {
+            work();
+        }
+    }
+}
 
 /// One frame, so the branch exists before `open` moves and the fade has an edge to animate from.
 /// `init` would be too early: it runs after bindings resolve, making `true` the initial value.
 const MOUNT_SETTLE: Duration = Duration::from_millis(1);
 
+/// Whether this install is owed the card.
+///
+/// `None` is an unreadable or absent `settings.json`, which on a first run is exactly what a
+/// missing file looks like — so it counts as owed. The other reading fails the wrong way: a fresh
+/// install would open silent and empty with the one surface that explains it suppressed by the
+/// very absence it exists for.
+fn card_is_owed(startup_settings: Option<&SettingsData>) -> bool {
+    startup_settings.is_none_or(|settings| settings.onboarding.needs_onboarding())
+}
+
 /// Wire the card and open it if this install has not seen the current revision.
 ///
-/// `startup_settings` is the snapshot `main` already read; `None` means the file was unreadable,
-/// which on a first run is exactly what a missing file looks like, so the card is owed. `deferred`
-/// runs when the card closes, or right here when it never opens.
+/// `startup_settings` is the snapshot `main` already read; `deferred` runs when the card closes,
+/// or right here when it never opens.
 pub fn install(
     ui: &AppWindow,
     state: &AppState,
     startup_settings: Option<&SettingsData>,
     deferred: impl FnOnce() + 'static,
 ) {
-    let owed = startup_settings.is_none_or(|settings| settings.onboarding.needs_onboarding());
-    if !owed {
-        callbacks::wire(ui, state, Rc::new(RefCell::new(None)));
-        deferred();
+    let deferred = DeferredOnce::new(deferred);
+    callbacks::wire(ui, state, Rc::clone(&deferred));
+
+    if card_is_owed(startup_settings) {
+        open(ui);
         return;
     }
-
-    callbacks::wire(ui, state, Rc::new(RefCell::new(Some(Box::new(deferred)))));
-    open(ui);
+    deferred.run();
 }
 
 /// Mount the card, then raise it a frame later.
