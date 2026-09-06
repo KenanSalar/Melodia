@@ -13,7 +13,9 @@
 use crate::library;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_core::config::Paths;
 use melodia_core::error::{AppError, describe};
+use melodia_store::database::DbPool;
 
 /// Prune the answer table and sweep the store behind it, in the background.
 ///
@@ -23,16 +25,20 @@ use melodia_core::error::{AppError, describe};
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let state = state.clone();
     spawner.spawn(async move {
-        if let Err(e) = run(&state).await {
+        if let Err(e) = run(&state.db, &state.paths).await {
             log::warn!("Radio logo cache pass failed: {}", describe(&e));
         }
     });
 }
 
-async fn run(state: &AppState) -> Result<(), AppError> {
-    let dropped = library::radio::prune_logo_answers(state).await?;
+async fn run(db: &DbPool, paths: &Paths) -> Result<(), AppError> {
+    let dropped = library::radio::prune_logo_answers(db).await?;
     if dropped > 0 {
         log::debug!("radio: {dropped} cached logo answer(s) fell outside the cache bounds");
     }
-    super::artwork_sweep::run_radio_logos(&state.db, &state.paths).await
+    super::artwork_sweep::run_radio_logos(db, paths).await
 }
+
+#[cfg(test)]
+#[path = "tests/radio_logo_cache_tests.rs"]
+mod tests;

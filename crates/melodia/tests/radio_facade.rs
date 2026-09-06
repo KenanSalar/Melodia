@@ -173,6 +173,27 @@ fn a_station_that_cannot_be_reached_is_still_counted_as_played() {
     );
 }
 
+/// **The third route, and the last one.** The two reaches above are equalities pinned at one
+/// apiece, so a door wanting traffic past the switch cannot ask for a client; what is left is
+/// building one. It costs a line and it reads like plumbing rather than like a hole in a setting,
+/// which is exactly why nothing else would notice.
+///
+/// Together with the two counts this is what makes "off means no traffic" a property of the
+/// directory rather than of the doors in it: a submodule nobody has written yet has no way to
+/// reach the network that these three do not already name.
+#[test]
+fn the_facade_builds_no_client_of_its_own() {
+    const CONSTRUCTORS: [&str; 3] = ["Client::new", "Client::builder", "ClientBuilder"];
+    let src = facade_source();
+
+    let built: Vec<&str> = CONSTRUCTORS.into_iter().filter(|needle| src.contains(needle)).collect();
+    assert!(
+        built.is_empty(),
+        "`library::radio` names {built:?}, so it can reach the network without asking \
+         `directory_client` — take the client from the seam, which is where the switch is"
+    );
+}
+
 /// **One switch, one reading of it.** `ensure_enabled` is where "off means no traffic" is decided,
 /// and a second door reading `state.radio_enabled` for itself is a copy that can be got wrong
 /// separately — `station_to_restore` spelled one by hand until this walk was written.

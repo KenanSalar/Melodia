@@ -91,12 +91,15 @@ fn answer_is_suppressed(answer: &radio::StoredLogoAnswer, now: &str) -> bool {
 ///
 /// The files those rows named become unreferenced by dropping, so the store follows on the next
 /// sweep rather than being touched here — see the query's own note.
-pub async fn prune_logo_answers(state: &AppState) -> Result<u64, AppError> {
+///
+/// Takes the pool rather than the state, being the one door here with no network behind it and
+/// so nothing for the switch to gate: its caller is a maintenance pass, not a user asking.
+pub async fn prune_logo_answers(db: &DbPool) -> Result<u64, AppError> {
     let now = chrono::Utc::now();
     let miss_cutoff = now - chrono::TimeDelta::try_days(LOGO_MISS_MAX_AGE_DAYS).unwrap_or_default();
     let hit_cutoff = now - chrono::TimeDelta::try_days(LOGO_CACHE_MAX_AGE_DAYS).unwrap_or_default();
     queries::radio::prune_logo_answers(
-        &state.db,
+        db,
         &miss_cutoff.to_rfc3339(),
         &hit_cutoff.to_rfc3339(),
         LOGO_CACHE_MAX_BYTES,

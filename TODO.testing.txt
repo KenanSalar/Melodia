@@ -38,8 +38,14 @@ WHERE IT STANDS
   after step 2 below (2026-09-06)
   TOTAL   function 47.3% (2853/6036)   line 45.3% (19477/43030)   region 42.2%
 
-  now, after steps 3 and 4 below (2026-09-06)
+  after steps 3 and 4 below (2026-09-06)
   TOTAL   function 47.2% (2872/6082)   line 45.3% (19633/43297)   region 42.2%
+
+  now, after step 5 below (2026-09-06)
+  TOTAL   function 47.2% (2894/6137)   line 45.3% (19730/43584)   region 42.2%
+
+  Four of the five rows above are the same three figures. Read the per-file table
+  below and the entries, not this.
 
   Step 7 is 117 lines, which is inside the noise band the last two documents both
   recorded, and its own commit message says where its value was instead: the
@@ -57,6 +63,10 @@ WHERE IT STANDS
     library/import.rs       90.9% -> 94.2%   covered  90 -> 180   of  99 -> 191
     tasks/rating_import.rs  23.1% -> 53.7%   covered  12 ->  58   of  52 -> 108
     tasks/mbid_backfill.rs  15.0% -> 19.9%   covered  25 ->  70   of 167 -> 351
+    library/radio/logos.rs  33.5% -> 37.9%   covered  69 -> 147   of 206 -> 388
+    tasks/first_launch.rs    0.0% ->  7.4%   covered   0 ->   8   of  53 -> 108
+    tasks/radio_logo_cache   0.0% -> 23.5%   covered   0 ->   8   of  17 ->  34
+    tasks/one_shot.rs        0.0% ->  4.9%   covered   0 ->   3   of  28 ->  61
 
   Read the covered column. `queue.rs`'s *uncovered* count went up, from 172 to 302,
   and step 2 moved the workspace line percentage **down** by four hundredths while
@@ -408,7 +418,7 @@ discarded one call later and none of this would be observable.
 
 
 ================================================================================
-P1: THE SECOND LEVEL, WHICH IS ONE TEST
+P1: THE SECOND LEVEL, WHICH IS ONE TEST                              [SPENT]
 ================================================================================
 
   tasks/one_shot.rs                 0.0% of  28    28 uncovered
@@ -487,6 +497,63 @@ What it unlocks, in the order their cost falls:
 Deliberately not in this entry: the binary's own boot wiring. `headless.rs` builds
 the backend, and `main.rs` past that point is `slint::run_event_loop_until_quit`
 and the wiring around it, which needs an `AppWindow`. Still declined, below.
+
+--------------------------------------------------------------------------------
+SPENT, AND THE FIXTURE WAS REFUSED. Eleven cases, one new walk, three narrowings
+and no boot. **This entry is the fourth in this family of documents to be wrong,
+and the first to be wrong about its own headline.**
+
+**Nothing was left needing the fixture once each item was read.** Taken in order:
+
+  radio_logo_cache.rs. The narrowing landed, as the entry guessed. `prune_logo_
+  answers` was the one door in `library/radio` with no network behind it, so it
+  takes the pool now and `run` takes `(&DbPool, &Paths)` like `artwork_sweep::run`
+  beside it. Two cases, and the ordering its `//!` argues fails when reversed: an
+  expired answer's logo is gone by the end of one pass, and a live answer's is not.
+
+  one_shot.rs. **It has no `&AppState` problem, it has a `matches!` inside a
+  closure.** The knob is `records_marker(passed)`, one line, and lifting it also
+  wrote the mark-or-return once where the body had it as a nested `if let Err` plus
+  an `if matches!`. The full 2x2 is a table with no state at all: three rows agree
+  and the fourth is the feature.
+
+  the Radio off switch. **Re-proposed here and re-refused, and round two had
+  already refused it for the reason this entry walked past.** A runtime table is a
+  fixed list of doors, which is the exact shape `file_dialog.rs`' own header argues
+  against: "a pin over a fixed list is the pin that new site walks past". Round
+  two's note says it went to walks for that reason. What this entry actually found
+  is that the two existing walks are equalities pinned at one apiece over the only
+  two ways to reach a client, so the residual route is not a door that forgets the
+  guard but a door that **builds a client rather than asking for one**. That is
+  `the_facade_builds_no_client_of_its_own`, three needles and no fixture, and a
+  submodule nobody has written yet is covered by it the way a table never would be.
+
+  first_launch.rs. The half worth having is `already_watched`, now a free function
+  over `(&[Folder], &Path)`. The entry's "second launch touches nothing" is a test
+  of an early return; the duplicate check is where the cost is, and it is the whole
+  music library indexed twice.
+
+  library/settings/folders.rs. Still declined, and now for a named reason rather
+  than a deferred one: `RECONCILE_IN_FLIGHT` is a process-global `static
+  AtomicBool`, so a test that drives the CAS gate leaves it set for whatever runs
+  next in the same binary. `.claude/rules/testing.md` calls that out by name.
+  `toggle_folder_watching` and `set_folder_watching_enabled` are two lines each
+  over it and over `watcher.start`.
+
+**What the fixture would have cost, since the entry never priced it.**
+`pr-validation.yml`'s Windows job skips `headless_scan_persists_track` **by exact
+name**, and its comment argues that on purpose: "Skipped by name, not by target
+selection, so a new integration test runs here by default." So every booting test
+owes a line in that denylist, and the alternative (a shared prefix the skip
+matches) hands a future author a way to opt out silently, which is the property
+the comment exists to protect. One modest test for that is not a trade worth
+making, and after the four items above there was only one left.
+
+**Two of the eleven cases were pins that could not fail, both caught by mutation
+and not by review.** `already_watched`'s "two spellings" case first used a trailing
+separator, which `Path` equality normalises away on its own, so it passed against a
+version doing no resolution at all; it is a traversal now, standing in for the
+symlinked home that cannot be written portably. The other is recorded at P0.1.
 
 
 ================================================================================
@@ -730,9 +797,19 @@ SUGGESTED ORDER
      itself, which `file_dialog.rs`' helper-and-exemption shape could not have
      expressed.
 
-  5. P1, the fixture, and everything that has been waiting on it. Settle
-     `radio_logo_cache`'s narrowing first; if it lands, this step is four items
-     instead of five.
+  5. [DONE] P1, and the fixture it is named after was refused. Eleven cases, three
+     narrowings and one walk; `radio_logo_cache`'s narrowing landed as guessed, and
+     with it and `one_shot`'s predicate and `first_launch`'s duplicate check taken
+     at their own level, the only item left wanting a boot was a runtime table
+     round two had already refused for a reason this entry walked past.
+
+     Left behind for whoever takes the next one: **"needs an `AppState`" was an
+     assumption in four of five cases and nobody had checked it.** Two backlogs
+     deferred this entry and a third re-proposed the fixture; what it actually
+     wanted was a pool, a predicate, a free function and a third needle on a walk
+     that already existed. Price the fixture against the items *after* reading
+     each one, not before, and price the CI denylist line each booting test owes
+     while you are at it.
 
   6. P2's `Scheduler::drain` and `watcher::start`, both of which have their server
      or their temp dir already written.
