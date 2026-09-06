@@ -130,14 +130,20 @@ fn two_data_directories_get_two_names() {
     let two = socket_name(Path::new("/home/bo/.local/share/Melodia")).ok();
 
     assert!(one.is_some());
-    assert_ne!(format!("{one:?}"), format!("{two:?}"));
+    assert_ne!(one, two);
 }
 
 #[test]
 fn the_same_data_directory_gets_the_same_name() {
     let path = Path::new("/home/alice/.local/share/Melodia");
 
-    assert_eq!(format!("{:?}", socket_name(path).ok()), format!("{:?}", socket_name(path).ok()));
+    let first = socket_name(path).ok();
+    let second = socket_name(path).ok();
+
+    // Without this the equality below holds just as well for a `socket_name` that derives
+    // nothing, both sides being `None`.
+    assert!(first.is_some(), "the name has to derive before sameness means anything");
+    assert_eq!(first, second);
 }
 
 /// Why a real socket earns its setup: the two halves can each be right and

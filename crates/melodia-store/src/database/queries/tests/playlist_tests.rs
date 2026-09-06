@@ -9,7 +9,7 @@ async fn create_playlist_returns_correct_fields() -> Result<(), AppError> {
     let pl = queries::playlist::create_playlist(&db, "My Playlist", Some("A description")).await?;
     assert_eq!(pl.name, "My Playlist");
     assert_eq!(pl.description.as_deref(), Some("A description"));
-    assert!(pl.id > 0);
+    assert_eq!(pl.id, 1, "the first playlist in a fresh database");
     Ok(())
 }
 
@@ -179,7 +179,7 @@ async fn playlist_stats_track_count() -> Result<(), AppError> {
 
     let stats = queries::playlist::get_playlist_by_id(&db, pl.id).await?;
     assert_eq!(stats.track_count, 3);
-    assert!(stats.total_duration_ms > 0);
+    assert_eq!(stats.total_duration_ms, 3 * 180_000, "the seed's three tracks, summed");
     Ok(())
 }
 
@@ -199,7 +199,7 @@ async fn clearing_thumbnail_persists_after_adding_tracks() -> Result<(), AppErro
 
     let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
-    assert!(track_ids.len() >= 2, "test expects seeded_db to have >= 2 tracks");
+    assert_eq!(track_ids.len(), 3, "test setup: the seed's three tracks");
 
     // Create playlist and add the first track — this auto-populates
     // thumbnail_path from the track's artwork via the WHERE custom_thumbnail=FALSE branch.

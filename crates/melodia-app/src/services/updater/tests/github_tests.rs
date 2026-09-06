@@ -136,7 +136,8 @@ async fn a_forced_refresh_sends_no_conditional_header() -> TestResult {
     assert!(outcome.is_err(), "the unsigned body is still refused");
 
     let sent = server.requests();
-    assert!(!sent.is_empty(), "the manifest must still be requested");
+    assert_eq!(sent.len(), 2, "manifest then signature, the 304's short-circuit skipped: {sent:?}");
     assert_eq!(sent[0].header("if-none-match"), None);
+    assert!(sent[1].path.ends_with(".minisig"), "the second is the signature: {sent:?}");
     Ok(())
 }

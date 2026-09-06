@@ -50,8 +50,9 @@ async fn get_artist_by_id_not_found() -> Result<(), AppError> {
 async fn get_artists_without_images() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let artists = queries::artist::get_artists_without_images(&db).await?;
-    // All test artists have no image — should include at least the ones we inserted
-    assert!(artists.len() >= 2);
+    // The seed's two, plus the schema's Unknown Artist sentinel, which has no image either and
+    // is exactly the row a floor here would let the query start or stop returning unnoticed.
+    assert_eq!(artists.len(), 3);
     Ok(())
 }
 

@@ -145,18 +145,20 @@ fn a_providers_own_wait_wins_over_the_local_ladder() {
 /// plausible session, and a listen queued early would never be retried at all.
 #[test]
 fn the_backoff_ladder_doubles_up_to_its_ceiling_and_stays_there() {
+    // Seconds, written out rather than folded into a monotonicity check: a ladder that jumped
+    // straight from the first step to the ceiling satisfies "never backwards, never past it" and
+    // is exactly the regression worth catching.
+    const CLIMB: [u64; 8] = [30, 60, 120, 240, 480, 900, 900, 900];
+
     let mut backoff = BASE_BACKOFF;
-    let mut seen = Vec::new();
-    for _ in 0..12 {
+    let mut seen = Vec::with_capacity(CLIMB.len());
+    for _ in 0..CLIMB.len() {
         let (_, next) = defer(Duration::ZERO, backoff);
         backoff = next;
-        seen.push(backoff);
+        seen.push(next.as_secs());
     }
 
-    assert_eq!(seen.first(), Some(&(BASE_BACKOFF * 2)));
-    assert!(seen.windows(2).all(|pair| pair[0] <= pair[1]), "the ladder never goes backwards");
-    assert!(seen.iter().all(|&d| d <= MAX_BACKOFF), "and never past its ceiling: {seen:?}");
-    assert_eq!(seen.last(), Some(&MAX_BACKOFF), "twelve deferrals is well past it");
+    assert_eq!(seen, CLIMB, "a 15s base doubling into a 15min ceiling");
 }
 
 /// `None` is how the loop parks until something wakes it, and it must not resolve on its own.

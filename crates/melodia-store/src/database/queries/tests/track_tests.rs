@@ -474,7 +474,7 @@ async fn set_rating_updates_value() -> Result<(), AppError> {
 async fn set_rating_targets_only_given_ids() -> Result<(), AppError> {
     let db = seed_db().await?;
     let all = queries::track::get_all_tracks(&db).await?;
-    assert!(all.len() >= 2);
+    assert_eq!(all.len(), 3, "test setup: the seed's three tracks");
 
     queries::track::set_rating(&db, &[all[0].id], 5).await?;
 

@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 use crate::library::mbid;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_integrations::services::integrations::scrobble::ScrobbleService;
 use melodia_integrations::services::integrations::scrobble::providers::listenbrainz::{
@@ -279,8 +279,22 @@ async fn backfill(
         };
 
         let step = BatchStep::for_outcome(&result);
-        if let Err(e) = &result {
-            log::warn!("MBID backfill lookup error: {e}");
+        // One line per outcome, in one place, so a new variant has to say what it reports rather
+        // than inheriting a neighbour's. A rate limit is what the pacing above exists to absorb,
+        // so it is not a warning; the tail of this log ships inside bug reports.
+        match step {
+            BatchStep::Answered => {}
+            BatchStep::Skipped => {
+                if let Err(e) = &result {
+                    log::warn!("MBID backfill lookup error: {}", describe(e));
+                }
+            }
+            BatchStep::Throttled(wait) => {
+                log::info!("MBID backfill rate-limited; waiting {}s", wait.as_secs());
+            }
+            BatchStep::Abandoned => {
+                log::warn!("MBID backfill: ListenBrainz token rejected; stopping sweep");
+            }
         }
 
         if let Ok(matches) = result {
@@ -307,12 +321,8 @@ async fn backfill(
         progress.advance_past(step, chunk.iter().map(|(id, ..)| *id), attempted);
 
         let Some(wait) = step.wait_before_next() else {
-            log::warn!("MBID backfill: ListenBrainz token rejected; stopping sweep");
             break;
         };
-        if let BatchStep::Throttled(wait) = step {
-            log::info!("MBID backfill rate-limited; waiting {}s", wait.as_secs());
-        }
         if shutdown.run_until_cancelled(tokio::time::sleep(wait)).await.is_none() {
             break;
         }
