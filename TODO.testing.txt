@@ -41,11 +41,17 @@ WHERE IT STANDS
   after steps 3 and 4 below (2026-09-06)
   TOTAL   function 47.2% (2872/6082)   line 45.3% (19633/43297)   region 42.2%
 
-  now, after step 5 below (2026-09-06)
+  after step 5 below (2026-09-06)
   TOTAL   function 47.2% (2894/6137)   line 45.3% (19730/43584)   region 42.2%
 
-  Four of the five rows above are the same three figures. Read the per-file table
-  below and the entries, not this.
+  now, after step 6 below (2026-09-06)
+  TOTAL   function 47.3% (2900/6137)   line 45.4% (19791/43584)   region 42.3%
+
+  Five of the six rows above are the same three figures, and the sixth is the one
+  step that changed no production code at all: with the denominator standing still,
+  61 covered lines read as a clean tenth of a point. Every other row is measuring
+  its own refactor as much as its tests. Read the per-file table below and the
+  entries, not this.
 
   Step 7 is 117 lines, which is inside the noise band the last two documents both
   recorded, and its own commit message says where its value was instead: the
@@ -67,6 +73,8 @@ WHERE IT STANDS
     tasks/first_launch.rs    0.0% ->  7.4%   covered   0 ->   8   of  53 -> 108
     tasks/radio_logo_cache   0.0% -> 23.5%   covered   0 ->   8   of  17 ->  34
     tasks/one_shot.rs        0.0% ->  4.9%   covered   0 ->   3   of  28 ->  61
+    hls/reader.rs           62.5% -> 78.0%   covered 125 -> 156   of 200 (unmoved)
+    ingest/watcher.rs       51.7% -> 85.1%   covered  45 ->  74   of  87 (unmoved)
 
   Read the covered column. `queue.rs`'s *uncovered* count went up, from 172 to 302,
   and step 2 moved the workspace line percentage **down** by four hundredths while
@@ -591,6 +599,46 @@ transition: failures reset on the first good reload and return at the budget. Th
 reset is the interesting half, because a version that never resets gives up on a
 station that hiccupped twice in an hour.
 
+SPENT for `drain`, and **the entry was right that no seam was needed and wrong
+about why nothing had driven it.** `reader_tests.rs`' own header said "the
+scheduler loop is not here... stepping it deterministically wants a seam the tree
+does not have yet", and that is true of `run` and was never true of `drain`, which
+is a plain `async fn` over `&mut self` a test can seat and await. The header says
+which is which now. Six cases and no production change.
+
+`run`'s ladder is **not** taken and is the one thing left in this file: it is the
+`select!` over a sleep and a closed channel that the header's sentence is actually
+about.
+
+Two things worth carrying:
+
+  **The refused-segment case had to put the refusal last.** The first draft served
+  a 503 for the middle of three segments, and a later success carried
+  `next_sequence` past the gap anyway, so the pin passed against a version that
+  advanced only on success. It is two cases now: one that a refusal does not cost
+  the segments after it, one that a refusal is not re-asked, and the second uses a
+  playlist whose last segment is the refused one.
+
+  **A fixture's channel depth is not the production constant.** Seating the
+  scheduler on `SEGMENT_QUEUE_DEPTH` meant the fell-behind mutation *deadlocked* on
+  a full channel rather than failing, since nothing drains during a `drain`. The
+  fixture takes 64 now, with the reason at the constant: a scheduler fetching more
+  than it should has to fail an assertion, not park.
+
+SPENT for `watcher::start`. Two cases, and **the entry named three properties of
+which only two are observable.** "It stops the previous debouncer first" is not:
+the assignment on the next line drops the old one regardless, so no caller can tell
+the order. What is observable is that a folder that is not there is skipped rather
+than refusing the whole call, which is one line and no waiting, and that a file
+appearing under a watched folder reaches the channel, which is the only claim in
+the module that says the watch was ever registered. The second spends the
+debouncer's window once, awaits the channel under a ceiling rather than sleeping,
+and is why there is one of them.
+
+Declined out loud: `stop`. Observing it means asserting that no event arrives,
+which is a wait-and-hope with no upper bound on being wrong, and
+`.claude/rules/testing.md` rules out sleeping for a condition.
+
 `watcher::start` and `stop` are the only two functions in `watcher.rs` never
 executed; everything under them (`classify_event`, `is_audio_file`) has 28 cases.
 What `start` decides is not classification: it stops the previous debouncer first,
@@ -811,8 +859,17 @@ SUGGESTED ORDER
      each one, not before, and price the CI denylist line each booting test owes
      while you are at it.
 
-  6. P2's `Scheduler::drain` and `watcher::start`, both of which have their server
-     or their temp dir already written.
+  6. [DONE] P2's `Scheduler::drain` and `watcher::start`. Eight cases, no
+     production change at all, and the two files went 62.5% -> 78.0% and
+     51.7% -> 85.1% against a denominator that did not move.
+
+     Left behind for whoever takes the next one: **the only step here that
+     measured its tests rather than its own refactor is the one that changed no
+     production code.** Every row above it moved a denominator. And two fixture
+     rules the mutations taught: a refusal has to be the *last* item in the batch
+     or a later success covers for it, and a fixture's queue depth must not be the
+     production constant, or a regression parks on a full channel instead of
+     failing an assertion.
 
   7. P2's `discard_staged_stream` and `stream_source`, each after its own fixture
      argument. These are the last two entries in the tree that need a seam nobody

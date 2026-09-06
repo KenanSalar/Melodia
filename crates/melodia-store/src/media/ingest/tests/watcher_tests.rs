@@ -257,3 +257,63 @@ fn audio_file_covers_every_scanned_extension() {
 fn alac_is_not_an_audio_extension() {
     assert!(!super::is_audio_file(&PathBuf::from("music").join("song.alac")));
 }
+
+// === Starting the watcher ===
+//
+// Everything above classifies an event `notify` already delivered. These two are the wiring that
+// decides whether one is delivered at all, and it is the half no amount of `classify_event`
+// coverage reaches: a `start` that refuses, or that watches nothing, leaves the library silently
+// out of step with the disk until the next manual rescan.
+
+use std::time::Duration;
+
+use melodia_core::error::AppError;
+use tempfile::TempDir;
+use tokio::sync::mpsc;
+
+use super::super::watcher::{FileEvent, FolderWatcher};
+
+/// Five times the debouncer's own window, which is headroom for a loaded runner and not a
+/// measurement: the `await` is what waits, so a passing run never reaches this and a broken one
+/// spends all of it. Both halves are why it is not larger.
+const BEFORE_GIVING_UP: Duration = Duration::from_secs(10);
+
+/// A library folder the user unplugged, renamed, or has not created yet. Every one of those is
+/// ordinary, and refusing the whole call over it leaves every *other* folder unwatched too.
+#[tokio::test]
+async fn a_folder_that_is_not_there_is_skipped_rather_than_refused() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (tx, _rx) = mpsc::channel(8);
+    let mut watcher = FolderWatcher::new(tx);
+
+    watcher.start(&[tmp.path().join("unplugged")])?;
+    Ok(())
+}
+
+/// The whole point of the module, end to end and against the real `notify` backend: a file
+/// appearing under a watched folder reaches the processor as a `Created`. Nothing below this
+/// level can say the watch was actually registered, only that an event would classify correctly
+/// if one arrived.
+///
+/// It spends the debouncer's window once, which is why there is one of these and not four. The
+/// wait is an `await` on the channel under a ceiling rather than a sleep of its own, so the
+/// duration above bounds a failure instead of timing the pass.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_file_appearing_under_a_watched_folder_reaches_the_channel() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (tx, mut rx) = mpsc::channel(8);
+    let mut watcher = FolderWatcher::new(tx);
+    watcher.start(&[tmp.path().to_path_buf()])?;
+
+    let arriving = tmp.path().join("arriving.mp3");
+    std::fs::write(&arriving, b"not really audio")?;
+
+    let event = tokio::time::timeout(BEFORE_GIVING_UP, rx.recv()).await;
+
+    assert!(
+        matches!(&event, Ok(Some(FileEvent::Created(path))) if *path == arriving),
+        "expected a Created for {}, got {event:?}",
+        arriving.display()
+    );
+    Ok(())
+}

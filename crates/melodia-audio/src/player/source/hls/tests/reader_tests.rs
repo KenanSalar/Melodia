@@ -6,8 +6,9 @@
 //! there is which segment a client tuning in starts on, and the numbers deciding that are
 //! `LIVE_EDGE_SEGMENTS` and the playlist's own length.
 //!
-//! The scheduler loop is not here. It runs on the runtime behind a channel the reader parks on,
-//! and stepping it deterministically wants a seam the tree does not have yet.
+//! One turn of the scheduler is here and the loop around it is not: `drain` is a plain `async fn`
+//! over `&mut self` that a test can seat and await, where `run` is a `select!` over a sleep and a
+//! closed channel and stepping it deterministically wants a seam the tree does not have yet.
 
 use melodia_testkit::http::{TestResponse, TestServer};
 
@@ -201,4 +202,166 @@ fn a_live_stream_reports_its_position_and_refuses_to_move() {
         reader.seek(SeekFrom::Start(0)).map_err(|e| e.kind()),
         Err(io::ErrorKind::Unsupported),
     );
+}
+
+// --- One turn of the scheduler ----------------------------------------------
+//
+// `drain` is a plain `async fn` over `&mut self`, so it needs none of the seam `run` does: a test
+// seats a `Scheduler` and awaits one turn against the loopback server. What it decides is which
+// segments are asked for and how long to wait before asking again, and every one of those
+// failures is silent — a station that plays, or plays and then quietly stops.
+
+/// Segments a case can leave unread. Deliberately not `SEGMENT_QUEUE_DEPTH`: the cushion is not
+/// what any of these are about, and a scheduler that starts fetching more than it should has to
+/// fail an assertion rather than park on a full channel with nobody draining it.
+const UNREAD_SEGMENTS: usize = 64;
+
+/// A scheduler pointed at `server`, already `next_sequence` segments in.
+fn scheduler_over(server: &TestServer, next_sequence: u64) -> (Scheduler, mpsc::Receiver<Vec<u8>>) {
+    let (chunks, received) = mpsc::channel(UNREAD_SEGMENTS);
+    let Ok(playlist_url) = Url::parse(&format!("{}{PLAYLIST_PATH}", server.base_url())) else {
+        unreachable!("the server's own base is a parseable URL")
+    };
+    let scheduler = Scheduler {
+        client: reqwest::Client::new(),
+        playlist_url,
+        segments: SegmentReader::default(),
+        next_sequence,
+        refresh: Duration::ZERO,
+        stalled: 0,
+        chunks,
+    };
+    (scheduler, received)
+}
+
+/// A reload naming `indices`, the first of them numbered `media_sequence`.
+///
+/// Built rather than parsed so the sequence number is the test's to choose: it is the only handle
+/// on how far behind the window the client is, and a playlist text would have to spell it.
+fn reload(server: &TestServer, media_sequence: u64, indices: &[usize]) -> MediaPlaylist {
+    let segments = indices
+        .iter()
+        .filter_map(|index| Url::parse(&format!("{}/seg-{index}.aac", server.base_url())).ok())
+        .collect::<Vec<_>>();
+    assert_eq!(segments.len(), indices.len(), "every segment URI has to parse");
+    MediaPlaylist {
+        target_duration: Duration::from_secs(6),
+        media_sequence,
+        segments,
+        init_segment: None,
+        ended: false,
+    }
+}
+
+/// A server that serves every segment but the second, which it refuses.
+fn refusing_segment_one() -> std::io::Result<TestServer> {
+    TestServer::start(|request| {
+        if request.path == "/seg-1.aac" {
+            return TestResponse::status(503);
+        }
+        TestResponse::ok(segment_at(&request.path))
+    })
+}
+
+/// Everything the scheduler pulled, in order.
+fn drained(received: &mut mpsc::Receiver<Vec<u8>>) -> Vec<String> {
+    let mut out = Vec::new();
+    while let Ok(chunk) = received.try_recv() {
+        out.push(String::from_utf8_lossy(&chunk).into_owned());
+    }
+    out
+}
+
+/// A client that fell behind the window skips the gap rather than catching up on it: the
+/// segments it missed are minutes of a live stream nobody wants played late, and fetching them
+/// means never reaching the edge. A version starting from `media_sequence` plays yesterday.
+#[tokio::test]
+async fn a_reload_that_moved_past_the_client_is_joined_at_the_client_s_own_place() {
+    let Ok(server) = serve_playlist(media_playlist(0)) else {
+        unreachable!("the loopback listener is the test's own")
+    };
+    let (mut scheduler, mut received) = scheduler_over(&server, 5);
+
+    assert!(scheduler.drain(&reload(&server, 0, &[0, 1, 2, 3, 4, 5, 6])).await);
+
+    assert_eq!(drained(&mut received), ["SEG-5", "SEG-6"]);
+    assert_eq!(scheduler.next_sequence, 7, "the next reload starts after the last one taken");
+}
+
+/// One refused segment is a gap the demuxer resyncs past, not the end of the reload.
+#[tokio::test]
+async fn a_segment_the_server_refused_does_not_cost_the_ones_after_it() {
+    let Ok(server) = refusing_segment_one() else {
+        unreachable!("the loopback listener is the test's own")
+    };
+    let (mut scheduler, mut received) = scheduler_over(&server, 0);
+
+    assert!(scheduler.drain(&reload(&server, 0, &[0, 1, 2])).await);
+
+    assert_eq!(drained(&mut received), ["SEG-0", "SEG-2"]);
+}
+
+/// The sequence moves past a refused segment as readily as past a taken one, and the case has to
+/// put the refusal last or a later success carries the number past it anyway. Advancing only on
+/// success re-asks the same dead URL on every reload for the rest of the session, which reads
+/// from the outside as a station that is merely slow.
+#[tokio::test]
+async fn a_segment_the_server_refused_is_not_asked_for_a_second_time() {
+    let Ok(server) = refusing_segment_one() else {
+        unreachable!("the loopback listener is the test's own")
+    };
+    let (mut scheduler, _received) = scheduler_over(&server, 0);
+    let playlist = reload(&server, 0, &[0, 1]);
+
+    assert!(scheduler.drain(&playlist).await);
+    assert!(scheduler.drain(&playlist).await);
+
+    let refused = server.requests().iter().filter(|r| r.path == "/seg-1.aac").count();
+    assert_eq!(refused, 1, "the second reload asked for it again");
+}
+
+/// A reload that brought audio is the healthy case: wait the period the playlist names, and put
+/// the stall count back to nothing.
+#[tokio::test]
+async fn a_reload_that_brought_audio_waits_the_full_period_and_clears_the_stall() {
+    let Ok(server) = serve_playlist(media_playlist(0)) else {
+        unreachable!("the loopback listener is the test's own")
+    };
+    let (mut scheduler, _received) = scheduler_over(&server, 0);
+    scheduler.stalled = 4;
+
+    assert!(scheduler.drain(&reload(&server, 0, &[0])).await);
+
+    assert_eq!(scheduler.refresh, Duration::from_secs(6));
+    assert_eq!(scheduler.stalled, 0, "audio arrived, so nothing is stalling");
+}
+
+/// The other arm, and the one that decides when a station is declared dead. Half a period is what
+/// the spec asks of a client that has caught up with a playlist still being written, so folding
+/// the two rates together either doubles the latency or doubles the request rate.
+#[tokio::test]
+async fn a_reload_that_brought_nothing_waits_half_a_period_and_counts_toward_the_stall() {
+    let Ok(server) = serve_playlist(media_playlist(0)) else {
+        unreachable!("the loopback listener is the test's own")
+    };
+    let (mut scheduler, _received) = scheduler_over(&server, 9);
+
+    // Every segment in it is behind the client, so the loop fetches nothing.
+    assert!(scheduler.drain(&reload(&server, 0, &[0, 1])).await);
+
+    assert_eq!(scheduler.refresh, Duration::from_secs(3));
+    assert_eq!(scheduler.stalled, 1);
+}
+
+/// The listener going away is not the stream ending, and only `false` tells `run` which it was:
+/// answering `true` leaves the loop reloading a playlist for a decoder that has been dropped.
+#[tokio::test]
+async fn a_drain_with_nobody_listening_reports_that_it_is_over() {
+    let Ok(server) = serve_playlist(media_playlist(0)) else {
+        unreachable!("the loopback listener is the test's own")
+    };
+    let (mut scheduler, received) = scheduler_over(&server, 0);
+    drop(received);
+
+    assert!(!scheduler.drain(&reload(&server, 0, &[0])).await);
 }
