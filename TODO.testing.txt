@@ -54,15 +54,21 @@ WHERE IT STANDS
     round four's start (2026-09-06, at bf79e967)
     TOTAL   function 47.8% (2864/5992)   line 45.7% (19532/42701)   region 42.6%
 
-    now, after phase 1 below (2026-09-06)
+    after phase 1 below (2026-09-06)
     TOTAL   function 48.0% (2873/5992)   line 46.0% (19620/42701)   region 42.8%
 
-  Phase 1 changed no production code, so its denominator did not move and the 88 lines it
-  added are its tests rather than its own refactor. Round three ended saying that is the
-  only kind of row worth reading. The two files it moved:
+    now, after phase 2 below (2026-09-06)
+    TOTAL   function 48.2% (2889/5992)   line 46.2% (19717/42701)   region 42.9%
 
-    tasks/scrobble.rs        18.3% -> 49.2%   covered  23 -> 62   of 126 (unmoved)
-    queries/track.rs         84.1% -> 86.8%   covered 432 -> 446   of 514 (unmoved)
+  Neither phase changed a line of production code, so the denominator has not moved once
+  and the 185 lines between the first row and the last are their tests rather than their
+  own refactors. Round three ended saying that is the only kind of row worth reading. The
+  four files they moved, every denominator unmoved:
+
+    tasks/scrobble.rs        18.3% -> 49.2%   covered  23 -> 62   of 126
+    queries/track.rs         84.1% -> 86.8%   covered 432 -> 446   of 514
+    providers/listenbrainz   57.7% -> 90.0%   covered 139 -> 217   of 241
+    scrobble/mod.rs          69.9% -> 89.9%   covered 186 -> 239   of 266
 
   `queries/track.rs` was not a target. `get_scrobble_row` is what `fetch_row` calls, so it
   came with phase 1 for nothing, which is 14 of the 88 and the reason phase 3.2 is now one
@@ -280,8 +286,30 @@ rule says to pass in rather than test; the other is four `clone`s and two
 
 
 ================================================================================
-PHASE 2: THE PROVIDER WHOSE SEAM IS ON THE OTHER SIDE OF THE WALL
+PHASE 2: THE PROVIDER WHOSE SEAM IS ON THE OTHER SIDE OF THE WALL   [SPENT]
 ================================================================================
+
+Nine cases, no production change. The entry was right about the seam: every entry point
+already took its base URL, `submit_tests.rs` already drove the same service against a
+`TestServer`, and nothing needed building. It was right about the question it flagged too,
+and the answer is that the handler says the request arrived on a channel rather than the
+test polling `requests()`, which would have been a sleep.
+
+**The mutation caught a second pin that could not fail, and this time in the case that
+looked most obviously right.** `waking_the_submitter_does_not_wake_the_backfill` was first
+written on `push_scrobble`, which notifies nothing at all. The "backfill is not woken"
+half then held whether the two `Notify`s were separate or the same object, and folding
+them left the test green. It is written on `enqueue_love` now, which does wake the
+submitter, and the fold fails it.
+
+**Two of the new async cases would have hung rather than failed under their own
+mutation.** An `await` on a channel a regression never feeds is not self-validating: the
+suite stops with no message instead of reporting. Both are bounded now. Under a paused
+clock the bound costs nothing, and the one case that cannot pause (real loopback I/O)
+takes a five-second bound that only a regression ever reaches.
+
+`server_error` needed no case of its own; the 503 arm of `validate_token` reaches it, and
+asserting the quoted body there is what pins it.
 
     scrobble/providers/listenbrainz.rs   57.7% of 241   15 of 41 fns never run
     scrobble/mod.rs                      69.9% of 266   12 of 49 fns never run
@@ -510,7 +538,16 @@ SUGGESTED ORDER
      what a passing test would *assert* before writing "the seam is already there",
      and price the arming as carefully as the argument list.
 
-  2. Phase 2, in `melodia-integrations` where the base URL can be redirected.
+  2. [DONE] Phase 2, in `melodia-integrations` where the base URL can be redirected.
+     Nine cases, no production change, and both files past 89%.
+
+     Left behind for whoever takes the next one: **an async pin owes a bound.** Two of
+     these awaited a channel their own mutation never feeds, so the regression they were
+     written for hung the suite instead of failing it, which reads as a CI timeout with
+     nothing to open. Under `start_paused` the bound is free; where real I/O rules a
+     paused clock out, take a wall-clock one large enough that only a regression sees it.
+     And the fold mutation caught a pin that could not fail for the third document
+     running, this time because the fixture the case was built on woke nothing at all.
 
   3. Phase 3.1 before 3.2. The guard is one line of production code and the most
      expensive single wrong answer left in the tree that a test can reach.
