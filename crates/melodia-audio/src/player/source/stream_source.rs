@@ -219,6 +219,25 @@ impl PreparedStream {
     }
 }
 
+/// A prepared stream with no socket behind it, and a handle that outlives it.
+///
+/// `#[doc(hidden)] pub` rather than `#[cfg(test)]`, for `melodia-engine::fixtures`' reason: the
+/// generation protocol this exists to drive is one crate up and a `cfg(test)` item cannot cross a
+/// crate boundary. The staging doors move a `PreparedStream` around without reading a sample from
+/// it, so a ring nothing ever fills is the whole of what they need.
+///
+/// The `Weak` is the observation. Nothing exposes whether a stage is still held, and adding a
+/// getter for one would be production API with only a test behind it; every strong reference to
+/// the cell lives inside the returned value, so an upgrade that fails is the stage having been
+/// dropped and the connection with it.
+#[doc(hidden)]
+pub fn prepared_stream_for_test(shape: Shape) -> (PreparedStream, std::sync::Weak<StreamShared>) {
+    let shared = StreamShared::new();
+    let watching = Arc::downgrade(&shared);
+    let (source, _writer) = PrebufferSource::new(Arc::clone(&shared), shape);
+    (PreparedStream { source, shared }, watching)
+}
+
 /// Open `url` and start feeding it, following one level of playlist indirection first.
 ///
 /// Directory stations arrive already resolved in `url_resolved`, so the follow is for hand-typed
