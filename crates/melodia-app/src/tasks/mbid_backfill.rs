@@ -87,6 +87,41 @@ impl BatchStep {
     }
 }
 
+/// How far into `pending` the sweep has got, and how much of it it can claim to have asked
+/// about.
+///
+/// Both move only through [`Self::advance_past`], with the attempted set, because retiring a
+/// chunk is one decision with three effects and every half-application is its own bug: ids in
+/// the set with the index behind them are asked about twice, an index past ids that never
+/// joined it gives those tracks up for the sweep, and a `looked_up` counting a chunk nobody
+/// answered persists the set and reports those tracks as done.
+/// [`BatchStep::retires_chunk`] is correct against all three on its own.
+#[derive(Default)]
+struct SweepProgress {
+    /// Index in `pending` the next chunk starts at.
+    idx: usize,
+    /// Tracks whose lookup completed, matched or not.
+    looked_up: usize,
+}
+
+impl SweepProgress {
+    /// Retire `chunk_ids` and step past them, or leave the sweep exactly where it stands.
+    fn advance_past(
+        &mut self,
+        step: BatchStep,
+        chunk_ids: impl ExactSizeIterator<Item = i64>,
+        attempted: &mut HashSet<i64>,
+    ) {
+        if !step.retires_chunk() {
+            return;
+        }
+        let len = chunk_ids.len();
+        attempted.extend(chunk_ids);
+        self.looked_up += len;
+        self.idx += len;
+    }
+}
+
 /// What one sweep accomplished, for logging + the user-facing toast.
 struct SweepOutcome {
     /// Tracks whose lookup completed this sweep (matched or not).
@@ -216,13 +251,12 @@ async fn backfill(
     log::info!("MBID backfill: {} track(s) to look up", pending.len());
 
     let client = state.http_client().clone();
-    let mut idx = 0;
-    let mut looked_up = 0usize;
+    let mut progress = SweepProgress::default();
     let mut written = 0usize;
 
-    while idx < pending.len() && !shutdown.is_cancelled() {
-        let end = (idx + MAX_LOOKUPS_PER_POST).min(pending.len());
-        let chunk = &pending[idx..end];
+    while progress.idx < pending.len() && !shutdown.is_cancelled() {
+        let end = (progress.idx + MAX_LOOKUPS_PER_POST).min(pending.len());
+        let chunk = &pending[progress.idx..end];
         let lookups: Vec<LookupQuery> = chunk
             .iter()
             .map(|(_id, _path, artist, title, album)| LookupQuery {
@@ -270,13 +304,7 @@ async fn backfill(
             }
         }
 
-        if step.retires_chunk() {
-            for (id, ..) in chunk {
-                attempted.insert(*id);
-            }
-            looked_up += chunk.len();
-            idx = end;
-        }
+        progress.advance_past(step, chunk.iter().map(|(id, ..)| *id), attempted);
 
         let Some(wait) = step.wait_before_next() else {
             log::warn!("MBID backfill: ListenBrainz token rejected; stopping sweep");
@@ -291,7 +319,7 @@ async fn backfill(
     }
 
     Ok(SweepOutcome {
-        looked_up,
+        looked_up: progress.looked_up,
         tagged: written,
     })
 }

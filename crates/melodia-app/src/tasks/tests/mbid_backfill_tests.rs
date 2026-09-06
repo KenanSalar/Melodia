@@ -212,3 +212,71 @@ fn only_an_answered_batch_pays_the_pacing_pause() {
     assert_eq!(BatchStep::for_outcome(&Ok(vec![])).wait_before_next(), Some(BATCH_PAUSE));
     assert_eq!(BatchStep::for_outcome(&server_error()).wait_before_next(), Some(Duration::ZERO));
 }
+
+// ---- the three things retiring a chunk changes ----
+
+/// A chunk of ids, sized to nothing in particular: every effect is counted off the chunk
+/// itself, so the length only has to be more than one.
+const CHUNK: [i64; 3] = [7, 8, 9];
+
+/// `(idx, looked_up, retired ids)` after one step over [`CHUNK`], the ids sorted so the set's
+/// iteration order cannot decide the assertion.
+fn after(step: BatchStep) -> (usize, usize, Vec<i64>) {
+    let mut progress = SweepProgress::default();
+    let mut attempted = HashSet::new();
+
+    progress.advance_past(step, CHUNK.iter().copied(), &mut attempted);
+
+    let mut retired: Vec<i64> = attempted.into_iter().collect();
+    retired.sort_unstable();
+    (progress.idx, progress.looked_up, retired)
+}
+
+/// The one step that actually asked about its chunk, and the row the other three are read
+/// against.
+#[test]
+fn an_answered_chunk_is_retired_counted_and_stepped_past() {
+    assert_eq!(after(BatchStep::Answered), (3, 3, vec![7, 8, 9]));
+}
+
+/// A refusal the next chunk may not hit retires anyway: the sweep gets one pass per launch, and
+/// what it gives up on is reachable again through the manual kick.
+#[test]
+fn a_transient_refusal_retires_its_chunk_like_an_answer() {
+    assert_eq!(after(BatchStep::Skipped), (3, 3, vec![7, 8, 9]));
+}
+
+/// The row the type exists for. Nobody looked these tracks up, so an id joining the attempted
+/// set here is out of reach of every later sweep and every later launch until the user finds
+/// the manual button.
+#[test]
+fn a_rate_limited_chunk_moves_nothing_at_all() {
+    assert_eq!(after(BatchStep::Throttled(Duration::from_secs(5))), (0, 0, vec![]));
+}
+
+/// A rejected token ends the sweep, and ending it having counted the chunk it died on would
+/// persist the set and report those tracks to the user as looked up.
+#[test]
+fn a_rejected_token_moves_nothing_at_all() {
+    assert_eq!(after(BatchStep::Abandoned), (0, 0, vec![]));
+}
+
+/// What a single step cannot show: the chunk a 429 kept has to be the next one asked about. An
+/// index that moved without the ids gives those tracks up for the rest of the sweep, which is
+/// the quieter half of the same mistake.
+#[test]
+fn the_chunk_a_rate_limit_kept_is_the_one_retried_next() {
+    let mut progress = SweepProgress::default();
+    let mut attempted = HashSet::new();
+
+    progress.advance_past(
+        BatchStep::Throttled(Duration::from_secs(1)),
+        CHUNK.iter().copied(),
+        &mut attempted,
+    );
+    assert_eq!(progress.idx, 0, "the retry has to start where the refusal did");
+
+    progress.advance_past(BatchStep::Answered, CHUNK.iter().copied(), &mut attempted);
+    assert_eq!((progress.idx, progress.looked_up), (3, 3));
+    assert_eq!(attempted.len(), 3, "the retry retires the chunk once, not twice");
+}

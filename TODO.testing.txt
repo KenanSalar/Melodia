@@ -255,8 +255,35 @@ against the `DATE_OPS` edit, it is asserting the wrong thing.
 
 
 ================================================================================
-PHASE 2: THE THREE MUTATIONS ONE PREDICATE IS SUPPOSED TO GATE
+PHASE 2: THE THREE MUTATIONS ONE PREDICATE IS SUPPOSED TO GATE   [SPENT]
 ================================================================================
+
+Five cases and one extraction. `SweepProgress` holds the index and the `looked_up` tally,
+and `advance_past` is the only thing that moves either, together with the attempted set.
+The loop's three-effect `if` becomes one call.
+
+**The entry's premise was confirmed rather than assumed.** All three mutations were applied
+one at a time, and under every one of them
+`only_a_rate_limit_keeps_the_chunk_it_was_refused_over` kept passing. The decision table's
+own cases are blind to the loop misusing it, which is what the entry claimed and what makes
+`retires_chunk` at 100% coverage worth nothing here:
+
+  - attempted set written outside the guard: the two "moves nothing" cases fail. A 429's
+    tracks join the permanent skip list having never been asked about.
+  - index advanced outside the guard: those two plus
+    `the_chunk_a_rate_limit_kept_is_the_one_retried_next`, with "the retry has to start
+    where the refusal did".
+  - `looked_up` counted outside the guard: those two, and the retry case catches the double
+    count at `(3, 6)` against `(3, 3)`.
+
+**The extraction removed a second spelling of one number.** `idx = end` and
+`looked_up += chunk.len()` were the same quantity written two ways, `end` being
+`min(idx + MAX_LOOKUPS_PER_POST, len)`. `advance_past` takes the chunk's ids and derives all
+three effects from that one length, so the index and the count cannot disagree about how big
+the chunk was. `end` survives only as the slice bound.
+
+**`run_sweep` was left where the entry put it.** Its two decisions still take an `&AppState`
+and are worth a case each only if something else builds that fixture.
 
     melodia-app/src/tasks/mbid_backfill.rs   24.5% of 184   11 of 19 fns never run
 
@@ -484,7 +511,14 @@ SUGGESTED ORDER
   2. Phase 4, both. Neither has a seam question and 4.1's fixture already exists in two
      other suites.
 
-  3. Phase 2, extraction first and argued at the function before any case is written.
+  3. [DONE] Phase 2, extraction first as written. Five cases, eleven lines of production
+     change, and the entry's premise confirmed by mutation rather than taken on trust.
+
+     Left behind for whoever takes the next one: **a function at 100% coverage can be the
+     reason a bug is invisible.** `retires_chunk` has four cases and passed against all
+     three ways its caller can misuse it. What the coverage row measured was the predicate;
+     what nothing measured was that one `if` gated three effects. When a percentage is high
+     and the risk is real, ask what the covered function's callers do with its answer.
 
   4. Phase 3, only if the classification extraction is accepted. Otherwise decline it in
      writing and say so here, the way bf79e967 declined the feed thread.
