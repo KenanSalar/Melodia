@@ -522,3 +522,7 @@ fn install_window_icon(app: &AppWindow) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/main_order_tests.rs"]
+mod tests;
