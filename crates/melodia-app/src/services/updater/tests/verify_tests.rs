@@ -15,10 +15,20 @@ use std::path::{Path, PathBuf};
 
 use melodia_core::error::AppError;
 use tempfile::{TempDir, tempdir};
+use tokio::sync::Mutex;
 
 use super::{attempt_post_swap_rollback, old_path, verify_swapped_binary};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+/// One test at a time may write a double and then spawn it.
+///
+/// `execve` refuses a file any process still holds open for writing, and between a sibling test's
+/// `fork` and its `exec` the child holds every descriptor this thread had, including the double
+/// being written next door. That is an `ETXTBSY` on a file nothing in the failing test touched,
+/// and it fires perhaps once in fifty under coverage instrumentation. The guard has to span the
+/// write *and* the spawn, since the window is the pair.
+static SPAWNING: Mutex<()> = Mutex::const_new(());
 
 /// A stand-in for the freshly swapped binary, answering `--version` however the case needs.
 fn fake_binary(dir: &Path, body: &str) -> std::io::Result<PathBuf> {
@@ -40,6 +50,7 @@ fn refusal(outcome: Result<(), AppError>) -> Result<String, Box<dyn std::error::
 #[tokio::test]
 async fn a_binary_that_answers_with_its_version_passes_the_smoke_test() -> TestResult {
     let dir = tempdir()?;
+    let _spawning = SPAWNING.lock().await;
     let binary = fake_binary(dir.path(), "echo 'Melodia 0.3.0'")?;
 
     verify_swapped_binary(&binary, "0.3.0").await?;
@@ -51,6 +62,7 @@ async fn a_binary_that_answers_with_its_version_passes_the_smoke_test() -> TestR
 #[tokio::test]
 async fn a_nonzero_exit_fails_the_smoke_test() -> TestResult {
     let dir = tempdir()?;
+    let _spawning = SPAWNING.lock().await;
     let binary = fake_binary(dir.path(), "echo 'Melodia 0.3.0'; exit 3")?;
 
     let msg = refusal(verify_swapped_binary(&binary, "0.3.0").await)?;
@@ -71,6 +83,7 @@ async fn output_that_misses_the_contract_fails_the_smoke_test() -> TestResult {
         ("echo 'Melodia 0.3.0' >&2", "the line on stderr rather than stdout"),
     ];
 
+    let _spawning = SPAWNING.lock().await;
     for (body, what) in cases {
         let dir = tempdir()?;
         let binary = fake_binary(dir.path(), body)?;
@@ -87,6 +100,9 @@ async fn a_target_that_cannot_be_spawned_fails_the_smoke_test() -> TestResult {
     let dir = tempdir()?;
     let missing = dir.path().join("Melodia");
 
+    // Spawns nothing of its own, but still forks, so it is one of the threads a sibling's write
+    // has to be kept away from.
+    let _spawning = SPAWNING.lock().await;
     let msg = refusal(verify_swapped_binary(&missing, "0.3.0").await)?;
     assert!(msg.contains("failed to spawn"), "{msg}");
     Ok(())
