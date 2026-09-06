@@ -88,6 +88,12 @@ pub struct AppState {
     /// also what `RECONCILE_IN_FLIGHT` does to the reconcile spawn
     /// itself.
     pub rescan_notice: Signal,
+    /// Bumped after the auto-update switch reaches disk. `tasks::updater_daily` sleeps for hours
+    /// at a stretch and up to a week under the failure backoff, so without this the switch is a
+    /// control whose effect lands whenever the loop happens to wake. The tick only wakes it early;
+    /// what it does on waking is still decided by the file, which is what keeps a hand-edited
+    /// `settings.json` working.
+    pub auto_check_changed: Signal,
     /// Bumped by `tasks::audio_health` when the output device goes away. A
     /// UI-thread subscriber pushes a sticky warning toast — nothing else
     /// notices, so playback runs on with the position ticking and no sound.
@@ -249,6 +255,7 @@ impl AppState {
             stats_changed: Signal::new(),
             locale_changed: Signal::new(),
             rescan_notice: Signal::new(),
+            auto_check_changed: Signal::new(),
             audio_device_lost: Signal::new(),
             scan_progress_tx,
             watcher,

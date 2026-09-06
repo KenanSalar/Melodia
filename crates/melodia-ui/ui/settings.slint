@@ -219,6 +219,10 @@ export global Settings {
     // alike — hence `crates/melodia-views/src/ui/support.rs` rather than `about.rs`.
     callback open-kofi();
 
+    // The About card's "Welcome Guide" row. Handled in `crates/melodia-views/src/ui/onboarding/`,
+    // which owns the card, rather than in `about.rs` — the Ko-fi row's split, for its reason.
+    callback run-onboarding();
+
     // The Diagnostics card's three rows, all handled in `crates/melodia-views/src/ui/settings/diagnostics.rs`.
     // `open-log-folder` is also the "crashed last run" toast's action, via `Notifications.action`.
     callback open-log-folder();

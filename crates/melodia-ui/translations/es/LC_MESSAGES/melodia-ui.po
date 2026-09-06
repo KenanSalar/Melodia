@@ -1968,3 +1968,67 @@ msgstr "Emisora"
 
 msgid "{}: {}"
 msgstr "{}: {}"
+
+# ---- First-run welcome card --------------------------------------------------
+
+# Title of the first-run card. The product name stays untranslated.
+msgid "Welcome to Melodia"
+msgstr "Te damos la bienvenida a Melodia"
+
+# Footer button on the welcome card: close it without walking the remaining panels.
+msgid "Skip"
+msgstr "Omitir"
+
+# Body line under the Appearance heading on the welcome card.
+msgid "Pick how Melodia looks. Every change applies as you make it."
+msgstr "Elige el aspecto de Melodia. Cada cambio se aplica al instante."
+
+# Heading of the welcome card's second panel, about the user's library folders.
+msgid "Your music"
+msgstr "Tu música"
+
+# Body line under "Your music": states what the first-launch scan already did.
+msgid "Melodia watches your Music folder and picks up changes on its own."
+msgstr "Melodia vigila tu carpeta de música y detecta los cambios por sí solo."
+
+# Heading of the welcome card's third panel, listing the features that use the network.
+msgid "What Melodia can reach"
+msgstr "A qué puede acceder Melodia"
+
+# Body line under "What Melodia can reach".
+msgid "Melodia works offline. These are the parts that reach out."
+msgstr "Melodia funciona sin conexión. Estas son las partes que salen a la red."
+
+# Plural: how many library folders the welcome card reports when no scan is running.
+# Turkish keeps both slots but does not pluralize after a numeral.
+msgid "{n} folder in your library"
+msgid_plural "{n} folders in your library"
+msgstr[0] "{n} carpeta en tu biblioteca"
+msgstr[1] "{n} carpetas en tu biblioteca"
+
+# Button on the welcome card's scrobbling row: closes the card onto Settings ▸ Services.
+msgid "Set Up"
+msgstr "Configurar"
+
+# Body line on the welcome card's scrobbling row.
+msgid "Send what you play to Last.fm or ListenBrainz"
+msgstr "Envía lo que escuchas a Last.fm o ListenBrainz"
+
+# Shared by the welcome card's last row and the Settings ▸ Updates switch, which are the
+# only two places the daily check is named.
+msgid "Check for updates automatically"
+msgstr "Buscar actualizaciones automáticamente"
+
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Una vez al día, Melodia pregunta a GitHub si hay una versión más reciente."
+
+# Settings ▸ About row that re-opens the first-run card.
+msgid "Welcome Guide"
+msgstr "Guía de bienvenida"
+
+msgid "Run the first-run setup again."
+msgstr "Vuelve a mostrar la configuración inicial."
+
+# Button on the About row above. Short by design — it sits in a narrow control slot.
+msgid "Show"
+msgstr "Mostrar"

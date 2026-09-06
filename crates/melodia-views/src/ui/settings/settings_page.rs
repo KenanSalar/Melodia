@@ -127,6 +127,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
         // As on the two curated pages: a tab pick moves no nav index, so
         // `nav_history::record_current` never hears about it.
         if let Some(ui) = weak.upgrade() {
+            ui.global::<SettingsPage>().invoke_clear_search();
             crate::ui::view_tag::log_current(&ui);
         }
         persist.publish(tab);

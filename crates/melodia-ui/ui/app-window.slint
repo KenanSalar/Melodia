@@ -21,6 +21,7 @@ import { HeroChips } from "globals/hero-chips.slint";
 import { LibrarySettings } from "globals/library-settings.slint";
 import { MyLibrary } from "globals/my-library.slint";
 import { Nav, NavEnterFrom } from "globals/nav.slint";
+import { Onboarding } from "globals/onboarding.slint";
 import { Player } from "globals/player.slint";
 import { Playlists, PlaylistDetail } from "globals/playlists.slint";
 import { Queue, NowPlaying } from "globals/queue.slint";
@@ -51,6 +52,7 @@ import { NowPlayingView } from "views/now-playing-view.slint";
 import { MiniPlayerView } from "views/mini-player.slint";
 import { QueueSheet } from "views/queue-sheet.slint";
 import { DialogOverlay } from "components/dialog/dialog.slint";
+import { OnboardingOverlay } from "components/onboarding/onboarding-overlay.slint";
 import { CustomTitleBar } from "components/custom-titlebar.slint";
 import { NotificationStack } from "components/dialog/notification-stack.slint";
 import { MiniPlayerSwitch } from "components/mini-player-switch.slint";
@@ -60,7 +62,7 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers, Radio, RadioForm,
+    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
@@ -114,10 +116,7 @@ export component AppWindow inherits Window {
     changed watched-nav-idx => {
         CompositeScroll.reset();
         if (self.watched-nav-idx != 9) {
-            // Both halves: the input is what the box shows, the query what the page is filtered by.
-            SettingsPage.search-input = "";
-            SettingsPage.search-query = "";
-            SettingsPage.blur-search-tick += 1;
+            SettingsPage.clear-search();
         }
         // My Library's band holds its hero across a tab leave, so a *nav* change is the only thing
         // that can hand it back — and a `SectionActiveGate` cannot see this edge: the sidebar
@@ -208,6 +207,15 @@ export component AppWindow inherits Window {
     // overflow entry are both TouchArea clicks — so a filter SearchBar swallows the `a`.
     property <bool> watched-queue-open: Queue.open;
     changed watched-queue-open => {
+        shortcut-scope.grab-focus();
+    }
+
+    // The welcome card's buttons can hold focus, and Slint doesn't hand it back to an ancestor
+    // scope when the focused item is destroyed — so without this the shortcuts stay dead after it
+    // closes, until the next click. It mounts no composite view, so it owes no `CompositeScroll`
+    // reset beside this.
+    property <bool> watched-onboarding-mounted: Onboarding.mounted;
+    changed watched-onboarding-mounted => {
         shortcut-scope.grab-focus();
     }
 
@@ -562,6 +570,16 @@ export component AppWindow inherits Window {
     // and ours to advertise: not while maximized, where it's a no-op, and not in native mode, where
     // the OS draws its own border. Geometry comes from the same `Theme.resize-*` tokens above.
     if !Theme.use-native-titlebar && !WindowChrome.is-maximized: ResizeRing {
+        width: 100%;
+        height: 100%;
+    }
+
+    // The first-run card, and deliberately *below* `DialogOverlay`: step 2's folder picker can
+    // raise a real `Dialog` on failure, which has to paint over the card and take Esc first.
+    // `if`-mounted rather than permanent — this one opens once ever, so none of it exists before
+    // the launch it runs on or after the click that closes it. Rust holds the unmount a beat past
+    // `Onboarding.open` so the fade can play; see the global.
+    if Onboarding.mounted: OnboardingOverlay {
         width: 100%;
         height: 100%;
     }

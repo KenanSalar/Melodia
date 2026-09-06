@@ -1,5 +1,6 @@
 import { Dialog } from "../globals/dialog.slint";
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
+import { Onboarding } from "../globals/onboarding.slint";
 import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
@@ -131,6 +132,12 @@ export component ShortcutScope inherits FocusScope {
                 Dialog.open = false;
                 return accept;
             }
+            // Below the dialog arm, matching the paint order: the welcome card sits under
+            // `DialogOverlay`, so an error dialog raised from it cancels first.
+            if (Onboarding.open) {
+                Onboarding.dismiss();
+                return accept;
+            }
             if (root.queue-sheet-up) {
                 // Clear a selection first; close only on the second press.
                 if (Queue.selected-count > 0) {
@@ -151,8 +158,8 @@ export component ShortcutScope inherits FocusScope {
 
         // A form dialog's input consumes its typed keys naturally, but a confirm-only
         // kind has no input — so without this guard, Space still pauses playback
-        // through the backdrop.
-        if (Dialog.open) {
+        // through the backdrop. The welcome card has no input at all and owes it twice over.
+        if (Dialog.open || Onboarding.open) {
             return reject;
         }
 

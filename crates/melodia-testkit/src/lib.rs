@@ -67,7 +67,7 @@ pub const UNBOUNDED: f32 = f32::MAX * 2.0;
 /// **Checked for equality, not containment.** What this guards is a subtree that stops
 /// existing, which a floor cannot see: every count-based pin over the corpus quietly loses
 /// that slice's coverage and all of them still pass.
-pub const CALLBACK_HOMES: [&str; 13] = [
+pub const CALLBACK_HOMES: [&str; 14] = [
     "albums",
     "artists",
     "browse",
@@ -76,6 +76,7 @@ pub const CALLBACK_HOMES: [&str; 13] = [
     "favorites",
     "genres",
     "my_library",
+    "onboarding",
     "playlists",
     "queue_sheet",
     "radio",

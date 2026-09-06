@@ -120,12 +120,9 @@ export component SettingsView inherits Rectangle {
             filter-placeholder: @tr("Search settings…");
             blur-tick: SettingsPage.blur-search-tick;
 
-            tab-selected(i) => {
-                SettingsPage.search-input = "";
-                SettingsPage.search-query = "";
-                SettingsPage.blur-search-tick += 1;
-                SettingsPage.tab-changed(i);
-            }
+            // The filter reset rides `tab-changed` in Rust, so the welcome card's deep link
+            // into Services clears it too.
+            tab-selected(i) => { SettingsPage.tab-changed(i); }
             search-edited => { root.filter-tick-pending += 1; }
         }
 

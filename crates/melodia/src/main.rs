@@ -345,8 +345,8 @@ fn main() -> AppResult<()> {
 
     // One `watch` carries backend events from the daily task and the `Updater.*`
     // callbacks to the UI-thread subscriber that toasts them. The daily task
-    // spawns only when auto-check is on *and* the install path is user-writable
-    // — system-managed installs go through the OS package manager instead.
+    // spawns only where the install path is user-writable; system-managed
+    // installs go through the OS package manager instead.
     let (updater_event_tx, updater_event_rx) =
         watch::channel::<Option<services::updater::UpdaterEvent>>(None);
     ui::settings::updater_settings::install_event_subscriber(
@@ -356,21 +356,46 @@ fn main() -> AppResult<()> {
     );
     ui::callbacks::wire_updater(&app, &state, &notifications, &updater_event_tx);
 
-    let updater_settings_snapshot =
-        startup_settings.as_ref().map(|s| s.updates.clone()).unwrap_or_default();
-    if updater_settings_snapshot.auto_check_enabled
-        && services::updater::is_available()
-        && !platform::install_kind::is_system_install()
-    {
-        tasks::updater_daily::spawn(&spawner, state.clone(), weak.clone(), updater_event_tx);
-    } else {
-        log::info!(
-            "updater_daily: not spawning (auto_check_enabled={}, available={}, system_managed={})",
-            updater_settings_snapshot.auto_check_enabled,
-            services::updater::is_available(),
-            platform::install_kind::is_system_install()
-        );
-    }
+    // The first-run card, opened only if this install hasn't seen the current revision. After
+    // `hydrate_ui_from_settings`, so a deep link out of it isn't racing the boot's own nav and tab
+    // writes, and before `app.show()`, like everything else that seeds a Slint property.
+    //
+    // The two surfaces that would otherwise land on top of it wait in this closure: the first
+    // thirty seconds shouldn't be three stacked surfaces. Held rather than skipped — the crash
+    // notice consumes its marker as it fires — and it runs immediately on every launch that opens
+    // no card. Deferring a *daily* check by the length of a welcome card costs nothing. The Ko-fi
+    // prompt can't collide, being spent on the fifth launch behind a two-minute delay.
+    let deferred_spawner = spawner.clone();
+    let deferred_state = state.clone();
+    let deferred_weak = weak.clone();
+    let deferred_notifications = notifications.clone();
+    ui::onboarding::install(&app, &state, startup_settings.as_ref(), move || {
+        if let Some(ui) = deferred_weak.upgrade() {
+            ui::settings::diagnostics::notify_previous_crash(
+                &ui,
+                &deferred_state,
+                &deferred_notifications,
+            );
+        }
+
+        // Only the install shape gates the spawn — those two can't change while the process
+        // lives. The auto-check switch is read per tick instead, the welcome card and
+        // Settings ▸ Updates both offering it after this point.
+        if services::updater::is_available() && !platform::install_kind::is_system_install() {
+            tasks::updater_daily::spawn(
+                &deferred_spawner,
+                deferred_state.clone(),
+                deferred_weak.clone(),
+                updater_event_tx,
+            );
+        } else {
+            log::info!(
+                "updater_daily: not spawning (available={}, system_managed={})",
+                services::updater::is_available(),
+                platform::install_kind::is_system_install()
+            );
+        }
+    });
 
     // Independent of the daily check: the in-attempt prune only fires on the
     // next install click, so a cancelled install leaves a verified package in

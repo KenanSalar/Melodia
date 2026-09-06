@@ -1,0 +1,158 @@
+import { Theme } from "../../theme.slint";
+import { Onboarding } from "../../globals/onboarding.slint";
+import { IconButton } from "../icon-button.slint";
+import { SectionButton } from "../settings/section-button.slint";
+import { OnboardingAppearancePanel } from "appearance-panel.slint";
+import { OnboardingMusicPanel } from "music-panel.slint";
+import { OnboardingFeaturesPanel } from "features-panel.slint";
+
+// The first-run card. Borrows `DialogOverlay`'s backdrop and card treatment and owns the rest:
+// a step index, and a footer that doesn't close on Next.
+//
+// **Nothing written here may carry a `changed` handler.** The branch mounting it is dropped on
+// close, and a tracker watching anything that outlives the branch — a global, or a property owned
+// above the mount — stays registered against it and panics the next time it moves, which
+// re-running the card from Settings does directly. That rules out `TabBar` (hence the hand-drawn
+// dots below), `SearchBar`, `MetaChipStrip`, `GridColumnsSync`, `FilterThrottle` and
+// `FocusLossWatcher`. A tracker on a property local to the branch is fine and one is already here:
+// `IconButton` brings a `Tooltip`, whose `changed hovered` dies with the button — `NowPlayingView`
+// is `if`-mounted too and drops the same one on every close.
+export component OnboardingOverlay inherits Rectangle {
+    width: 100%;
+    height: 100%;
+
+    private property <float> t: Onboarding.open ? 1.0 : 0.0;
+    animate t { duration: Theme.dur-fast; easing: ease-out; }
+    // `DialogOverlay`'s bias, for its reason: the card's small-area fade lands about when the
+    // full-viewport dim hits its perceptual ceiling.
+    private property <float> card-t: min(1.0, root.t * 1.5);
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.45 * root.t);
+    }
+    TouchArea {
+        width: 100%;
+        height: 100%;
+        enabled: Onboarding.open;
+        mouse-cursor: pointer;
+        clicked => { Onboarding.dismiss(); }
+    }
+
+    card := Rectangle {
+        // Wide enough for the feature rows' label-plus-description pairs without the copy running
+        // to a second line at every locale.
+        property <length> max-w: 560px;
+        // What the panels have to lay out inside. Derived from `parent.width`, which the window
+        // fixes independently of anything in here, so a panel sizing itself off it is not a cycle.
+        property <length> content-w: self.width - 2 * Theme.pad-lg;
+
+        width: min(self.max-w, max(360px, parent.width - 96px));
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2 + (1.0 - root.card-t) * 12px;
+        // Uncapped, as every non-scrolling dialog kind is: nothing here clips, so a card squeezed
+        // shorter than its children paints the remainder onto the backdrop. A panel that outgrows a
+        // short window owes a scroller rather than a cap here.
+        height: layout.preferred-height;
+        background: Theme.surface0;
+        // Not `Theme.border` — all four Catppuccin variants define it as the same hex as
+        // `surface0`, so the rim would paint its own fill.
+        border-color: Theme.surface2;
+        border-width: 1px;
+        border-radius: Theme.radius-lg;
+        opacity: root.card-t;
+        visible: root.card-t > 0.01;
+
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            enabled: Onboarding.open;
+            // Swallows card clicks so the backdrop's dismiss doesn't fire underneath.
+            clicked => { }
+        }
+
+        close-button := IconButton {
+            x: parent.width - self.width - Theme.pad-sm;
+            y: Theme.pad-sm;
+            icon: "close";
+            icon-size: 18px;
+            diameter: 32px;
+            button-enabled: Onboarding.open;
+            tooltip-text: @tr("Close");
+            clicked => { Onboarding.dismiss(); }
+        }
+
+        layout := VerticalLayout {
+            padding: Theme.pad-lg;
+            spacing: Theme.pad-md;
+
+            Text {
+                text: @tr("Welcome to Melodia");
+                font-size: Theme.hero-title-size;
+                font-weight: 700;
+                color: Theme.text;
+                // Every Text that can meet a long-plural locale elides rather than clipping: the
+                // default `clip` pushes a scissor at the line box and cuts through glyphs.
+                overflow: elide;
+            }
+
+            // Hand-drawn rather than a `TabBar`, which carries a change tracker. The literal is
+            // pinned against `step-count` by `ui::onboarding::tests`.
+            HorizontalLayout {
+                spacing: Theme.pad-xs;
+                alignment: start;
+                for i in [0, 1, 2]: Rectangle {
+                    width: i == Onboarding.step ? 20px : 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: i == Onboarding.step ? Theme.accent : Theme.surface2;
+                    animate width, background { duration: Theme.dur-fast; easing: ease-out; }
+                }
+            }
+
+            // Only step 1 takes the width: its strips wrap against it, where the other two lay
+            // themselves out from the layout alone.
+            if Onboarding.step == 0: OnboardingAppearancePanel { content-w: card.content-w; }
+            if Onboarding.step == 1: OnboardingMusicPanel { }
+            if Onboarding.step == 2: OnboardingFeaturesPanel { }
+
+            HorizontalLayout {
+                spacing: Theme.pad-sm;
+                padding-top: Theme.pad-sm;
+
+                // Only while there is something left to skip; on the last panel Done says it.
+                if Onboarding.step < Onboarding.step-count - 1: SectionButton {
+                    label: @tr("Skip");
+                    icon: "";
+                    primary: false;
+                    button-enabled: Onboarding.open;
+                    clicked => { Onboarding.dismiss(); }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                if Onboarding.step > 0: SectionButton {
+                    label: @tr("Back");
+                    icon: "";
+                    primary: false;
+                    button-enabled: Onboarding.open;
+                    clicked => { Onboarding.advance(-1); }
+                }
+                SectionButton {
+                    label: Onboarding.step < Onboarding.step-count - 1 ? @tr("Next") : @tr("Done");
+                    icon: "";
+                    primary: true;
+                    button-enabled: Onboarding.open;
+                    clicked => {
+                        if (Onboarding.step < Onboarding.step-count - 1) {
+                            Onboarding.advance(1);
+                        } else {
+                            Onboarding.dismiss();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -42,6 +42,9 @@ export component AboutSection inherits Rectangle {
     property <string> license-label: @tr("License");
     property <string> license-desc: "AGPL-3.0-or-later";
     property <string> kofi-label: @tr("Support me on Ko-fi");
+    property <string> welcome-label: @tr("Welcome Guide");
+    property <string> welcome-desc: @tr("Run the first-run setup again.");
+    property <string> welcome-action: @tr("Show");
 
     property <bool> show-app: row-visible(app-label, version-desc);
     property <bool> show-author: row-visible(author-label, repo-label);
@@ -50,8 +53,10 @@ export component AboutSection inherits Rectangle {
     property <bool> show-support: row-visible(support-label, support-desc)
         || row-visible(kofi-label, "Ko-fi");
     property <bool> show-license: row-visible(license-label, license-desc);
+    property <bool> show-welcome: row-visible(welcome-label, welcome-desc);
 
-    out property <bool> has-matches: show-app || show-author || show-support || show-license;
+    out property <bool> has-matches: show-app || show-author || show-support || show-license
+        || show-welcome;
 
     // Wrapper so the root's preferred-height tracks the card's natural height —
     // see `language-section.slint`.
@@ -102,6 +107,22 @@ export component AboutSection inherits Rectangle {
                 icon: "balance";
                 label: root.license-label;
                 description: root.license-desc;
+            }
+
+            // Wired from `ui/onboarding/`, not `about.rs`: the card owns its own callback the way
+            // Ko-fi's does, so neither the row nor the feature has to know about the other.
+            if (root.show-app || root.show-author || root.show-support || root.show-license)
+                && root.show-welcome: SectionDivider {}
+            if root.show-welcome: SettingRow {
+                icon: "waving_hand";
+                label: root.welcome-label;
+                description: root.welcome-desc;
+                SectionButton {
+                    label: root.welcome-action;
+                    icon: "";
+                    primary: false;
+                    clicked => { Settings.run-onboarding(); }
+                }
             }
         }
     }

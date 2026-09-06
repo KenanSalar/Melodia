@@ -1,0 +1,114 @@
+import { Theme } from "../../theme.slint";
+import { Settings } from "../../settings.slint";
+import { ChipGroup } from "../settings/chip-group.slint";
+import { ColorDotGrid } from "../settings/color-dot-grid.slint";
+
+// Step 1. Every control here is the Interface tab's own and fires the same `Settings.*-changed`
+// callback, so the card recolours itself under the pointer as they're used — which is the whole
+// demonstration and costs nothing to build.
+//
+// Composed directly rather than through `SettingRowStacked`: that row pads `pad-lg` of its own and
+// derives its strip width from `SettingsPage`, so on a card that already pads it would indent the
+// controls past the heading and size them against the Settings page's width.
+export component OnboardingAppearancePanel inherits VerticalLayout {
+    // The width the card leaves its content. Handed to every strip explicitly — they default to
+    // `SettingsPage.row-content-w`, which is the Settings page's width and not this one.
+    in property <length> content-w;
+
+    min-width: 0px;
+    spacing: Theme.pad-sm;
+
+    Text {
+        text: @tr("Appearance");
+        font-size: Theme.font-size-lg;
+        font-weight: 700;
+        color: Theme.text;
+        overflow: elide;
+    }
+    Text {
+        text: @tr("Pick how Melodia looks. Every change applies as you make it.");
+        font-size: Theme.font-size-sm;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+    }
+
+    // Chips rather than the Language card's `Dropdown`: a popup inside a branch this card drops on
+    // close is a question not worth having, and seven names shown at once suit a welcome panel.
+    // The names are native and deliberately untranslated, so a Rust-pushed model is right here.
+    VerticalLayout {
+        spacing: Theme.pad-xs;
+        padding-top: Theme.pad-sm;
+        Text {
+            text: @tr("Language");
+            font-size: Theme.font-size-sm;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+        ChipGroup {
+            options: Settings.language-names;
+            selected-index <=> Settings.language-idx;
+            avail-width: root.content-w;
+            selected(i) => { Settings.language-changed(i); }
+        }
+    }
+
+    VerticalLayout {
+        spacing: Theme.pad-xs;
+        padding-top: Theme.pad-sm;
+        Text {
+            text: @tr("Theme");
+            font-size: Theme.font-size-sm;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+        // `<=>` is mandatory: `ChipGroup` writes its own `selected-index` on click, which orphans a
+        // one-way binding and leaves Rust's later `set_theme_idx` unable to reach the chips.
+        ChipGroup {
+            options: Settings.theme-names;
+            selected-index <=> Settings.theme-idx;
+            avail-width: root.content-w;
+            selected(i) => { Settings.theme-changed(i); }
+        }
+    }
+
+    VerticalLayout {
+        spacing: Theme.pad-xs;
+        padding-top: Theme.pad-sm;
+        Text {
+            text: @tr("Theme Variant");
+            font-size: Theme.font-size-sm;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+        // Inline literals rather than a Rust-pushed model: `@tr()` only translates at codegen, so a
+        // seeded `[string]` renders English whatever the locale. Order must match
+        // `appearance-section.slint`'s copy of this list, both indexing `Settings.variant-idx`.
+        ChipGroup {
+            options: Settings.theme-idx == 0
+                ? ["Latte", "Frappe", "Macchiato", "Mocha", @tr("System")]
+                : [@tr("Dark"), @tr("Light"), @tr("System")];
+            selected-index <=> Settings.variant-idx;
+            avail-width: root.content-w;
+            selected(i) => { Settings.variant-changed(i); }
+        }
+    }
+
+    VerticalLayout {
+        spacing: Theme.pad-xs;
+        padding-top: Theme.pad-sm;
+        Text {
+            text: @tr("Accent Color");
+            font-size: Theme.font-size-sm;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+        ColorDotGrid {
+            colors: Settings.accent-colors;
+            labels: Settings.accent-names;
+            first-is-dynamic: Settings.material-you-active;
+            selected-index <=> Settings.accent-idx;
+            avail-width: root.content-w;
+            selected(i) => { Settings.accent-changed(i); }
+        }
+    }
+}

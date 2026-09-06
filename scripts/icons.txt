@@ -92,6 +92,7 @@ tonality
 translate
 travel_explore
 tune
+update
 upload
 view_list
 visibility
@@ -99,3 +100,4 @@ volume_down
 volume_off
 volume_up
 warning
+waving_hand
