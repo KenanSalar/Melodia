@@ -15,6 +15,16 @@ fn playback_status_as_str_all_variants() {
     assert_eq!(PlaybackStatus::Loading.as_str(), "loading");
 }
 
+/// Both enums reach the view model the same way, as whatever `as_str` returns, and only
+/// `PlaybackStatus` had a case for it. `crates/melodia/tests/view_model_strings.rs` holds the
+/// other half: that the sheet compares against these strings and not some others.
+#[test]
+fn repeat_mode_as_str_all_variants() {
+    assert_eq!(RepeatMode::Off.as_str(), "off");
+    assert_eq!(RepeatMode::All.as_str(), "all");
+    assert_eq!(RepeatMode::One.as_str(), "one");
+}
+
 #[test]
 fn playback_status_serde_roundtrip() -> Result<(), AppError> {
     for status in [
