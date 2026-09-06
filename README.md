@@ -7,7 +7,7 @@
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%C2%B7%20Windows-success.svg)](#installation)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust%20%2B%20Slint-orange.svg)](https://www.rust-lang.org/)
 
-Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900 MB** to 158 MB idle on Linux and 117 MB on Windows; the [full numbers](#footprint) are below.
+Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900MB** to 88MB idle on Linux and 58MB on Windows (PSS); the [full numbers](#footprint) are below.
 
 ---
 

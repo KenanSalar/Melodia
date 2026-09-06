@@ -37,8 +37,11 @@ WHERE IT STANDS
   after step 4 below (2026-09-05)
   TOTAL   function 46.6% (2776/5961)   line 44.5% (18933/42587)   region 41.5%
 
-  now, after step 5 below (2026-09-06)
+  after step 5 below (2026-09-06)
   TOTAL   function 46.7% (2782/5962)   line 44.6% (19001/42589)   region 41.7%
+
+  now, after step 6 below (2026-09-06)
+  TOTAL   function 47.0% (2812/5979)   line 45.0% (19172/42647)   region 42.0%
 
   So the branch is worth 7.6 points of line coverage. Steps 1 and 2 are 0.8 of
   them, all of it inside `tasks/`. Read a tenth of a point as noise, for the reason
@@ -482,49 +485,113 @@ from the other side.
 
 
 ================================================================================
-P3: THE NETWORK TIER'S SECOND HALF, STILL NEEDING A SEAM
+P3: THE NETWORK TIER'S SECOND HALF                                  [SPENT]
 ================================================================================
 
-  net/services/net/radio_browser/mod.rs  36.5% of 159   101 uncovered
-  net/media/fetch/deezer.rs              28.5% of 123    88
-  app/services/artist_images.rs          48.7% of 119    61
-  net/media/fetch/itunes.rs              10.0% of  30    27
+  net/services/net/radio_browser/mod.rs  69.7% of 188    57 uncovered  (was 36.5% of 159, 101)
+  net/media/fetch/deezer.rs              69.3% of 140    43            (was 28.5% of 123,  88)
+  net/media/fetch/itunes.rs              74.4% of  39    10            (was 10.0% of  30,  27)
+  net/services/net/radio_browser/query.rs 100% of 113     0            (was 100%)
+  app/services/artist_images.rs          35.3% of 119    77            (declined)
 
-`artist_images` reads 29 points higher here than it did two rows above the last
-time, and none of that is new tests. Its two cases shared the process-global
-`PASS_IN_FLIGHT` and could interleave, so which of them early-returned was decided
-by the scheduler and the module's own coverage moved run to run. They are serialized
-now, which is also what makes this number mean anything.
+Twenty-one cases in four suites, three private narrowings and one extraction. The
+line totals grew because the narrowings added the workers; the doors did not move
+and `melodia-app` learned nothing.
 
-This is P2.2b, unchanged, and the code has not moved since it was written down.
-`url_for` spells `https://` inline, so a base parameter alone does not reach a
-loopback listener. `MIRROR` and the four facet cells are process-global
-`OnceCell`s with no reset, so the first test in the binary decides for every test
-after it. `deezer` and `itunes` interpolate nothing at all: their URLs are string
-literals inside the request builder (`.get("https://api.deezer.com/search/artist")`),
-and `deezer` additionally refuses any host that is not its own. `artist_images`
-adds three process globals and a real 750 ms beat between batches.
+**The seam this entry demanded was not built, and should not be. Four of its own
+claims were wrong** — the fourth entry in this document to be wrong in the same
+direction, which by now is the finding rather than the surprise.
 
-The shape that would work is P2.1's ListenBrainz one, a base parameter defaulting
-to the public const, plus a `#[cfg(test)]` reset for the cells. **The reset is the
-part with no precedent here and it is why this is P3.** A `OnceCell` a test can
-clear is production surface whose only caller is a test, which is the trade
-`fetch_latest_manifest`'s pubkey already refused once. Argue it before writing it.
+  `page_from`'s `has_more` already had three cases. One of the two "seam-free items
+  that can be taken now" was spent before the entry named it.
 
-Two things in this tier need no seam and can be taken now, in whichever step
-touches the file next:
+  **The seam partly existed.** `get_json` takes the URL as a parameter and two
+  `#[tokio::test]`s were already driving it against a `TestServer`. `url_for`'s
+  inline `https://` is real and irrelevant: nothing has to go through `url_for` to
+  reach the wire.
 
-  `page_from`'s `has_more`, read off the raw response length rather than off what
-  survived the drop. It is a private function over a `Vec<ApiStation>` and it is
-  what makes paging step over a page the blocklist emptied. Getting it wrong stops
-  Browse at the first heavily blocked page.
+  **The precedent is not the pubkey refusal.** `fetch_latest_manifest` *does* take
+  a `base_url`, and `RELEASES_BASE`'s own doc says it is threaded through so a test
+  can point it at a local server; `LB_API_BASE` is the same shape five times over.
+  What ADR 19 refused is the **pubkey**, which is a different trade — a seam on the
+  trust boundary, not a seam on a hostname.
 
-  `fetch_facets`' ceiling warning, which is the only report anyone gets that a
-  facet list came back cut short. A cut list is invisible on screen: the missing
-  tags are simply not offered.
+  **So the `OnceCell` reset is refused and is also unnecessary.** There is no
+  `#[cfg(test)]` reset anywhere in the tree; the two cache-bypass precedents are
+  `if cfg!(test) { return probe(); }` in `install_kind/`, which here would put a
+  real outbound request in front of every directory test. `MIRROR` and the four
+  facet cells are untouched.
 
-Discord IPC (11.1% of 198) and the OS media controls (24.1% of 170) sit below all
-of this, and only their pure halves are on this list at all. See P5.
+What was taken instead is B2's narrowing for the seventh time — the door keeps its
+signature, the work takes the URL it reaches. Five `*_at` workers under
+`radio_browser`'s doors, `discover_mirror` taking the mirror-list URL
+(`RELEASES_BASE`'s shape one visibility down), and one worker under each of
+`deezer`'s and `itunes`' searches over a named `API_BASE` / `SEARCH_URL`. All
+private, no call site moved.
+
+What each case is for:
+
+  the click and the vote, which read opposite halves of one response and whose
+  "neither can borrow the other's guard" was prose in two doc comments. A click is
+  judged on status and the body is never touched; a vote is judged on the body and
+  never on the status, a refusal arriving as `200 {"ok":false}` carrying the
+  server's own wording. Four cases, and swapping either guard onto the other's half
+  fails exactly one of them.
+
+  **the status that is not a miss, which is the highest-value pin in the step and
+  is one property held in two files.** `itunes::search_album_cover` and
+  `deezer::search_album_cover` both answer a non-success status with an `Err`
+  rather than `Ok(None)`, because `discord::artwork::run_lookup` caches a `None` as
+  "this album has no cover" for the rest of the session — so one rate-limit blanks
+  that album until restart. Both were documented and neither was pinned.
+
+  `discover_mirror`, which had nothing. An empty list is an error rather than a
+  pick, and the guard is load-bearing rather than defensive: `random_range` panics
+  on an empty range. The pick itself is asserted as *membership* of the served
+  list, so `rand` stays deterministic — a version answering `FALLBACK_HOST` there
+  leaves discovery working, every session on one mirror, and nothing else able to
+  tell.
+
+  `facet_list_is_capped`, extracted from `fetch_facets` because its only report was
+  a `log::warn!` with nothing downstream to assert. Boundary analysis against the
+  real constants, each kind measured against its own ceiling — and driving the real
+  fetch to one would mean serving 25 000 rows to watch a `>=`.
+
+  the two composition cases, deliberately thin. `into_directory_station` and
+  `into_facet` already have thorough `model_tests` suites, so these hold only that
+  the body reaches the projection at all. **Their first drafts asserted the trimmed
+  name and the folded code field and were pinning `model_tests`' claims a second
+  time**; mutation caught it, the doc comments now say what they do not cover.
+
+**One pin failed its own mutation check and was rewritten.** The Deezer host
+allowlist case matched `AppError::Network` alone, and a host that gets past the
+guard fails the fetch anyway on a name that does not resolve — same variant, so the
+test passed with the allowlist deleted. It reads the refusal's wording now. That is
+the whole argument for the check: it was the one case in the step written against
+a guard rather than against a projection, and the only one that could not fail.
+
+Declined out loud:
+
+  `artist_images` whole. It has no URL of its own — the host is `deezer`'s, spelled
+  a crate away — three process globals of which `ATTEMPTED` has no reset and is not
+  even nameable from a test, and a 750 ms inter-batch beat a paused clock cannot
+  help with, the pass doing real I/O. Its row above is a `--workspace` reading and
+  is not comparable to the `48.7%` this entry used to carry; measured under one
+  protocol before and after, this step left it unchanged at 31.1%.
+
+  `download_and_cache_artist_image` past a seam. Its `.deezer.com`/`.dzcdn.net`
+  allowlist and its HTTPS check are a real guard, and admitting a loopback listener
+  means relaxing the thing under test. Both refusals fire ahead of the request, so
+  both are pinned with no server at all.
+
+One thing fixed on the way: `artist_images_tests.rs` set `PASS_IN_FLIGHT` by hand
+and restored it two lines later, so an assertion firing in between stranded the flag
+`true` for the rest of the binary — every later test then deferring, passing, and
+measuring nothing. It is an RAII guard now, and it clears `PASS_REQUESTED_AGAIN`
+too, which the deferral sets and only a live pass would otherwise read back down.
+
+Discord IPC (11.1% of 198) and the OS media controls sit below all of this, and
+only their pure halves are on this list at all. See P5.
 
 
 ================================================================================
@@ -708,10 +775,15 @@ New to this list:
     narrowing and still not worth a case: a test that a field assignment assigns a
     field.
 
-  - `deezer`'s and `itunes`' host refusals past a seam. If P3's argument comes out
-    against the `OnceCell` reset, these go with it rather than being tested
-    halfway: a base parameter that stops at the first global is a test that
-    reports coverage it does not have.
+  - `deezer`'s host refusal past a seam, and `artist_images` whole. Settled by
+    step 6 and argued in P3: admitting a loopback listener to the download means
+    relaxing the allowlist under test, and the refusals need no server anyway. The
+    pass above them has no URL of its own to point anywhere.
+
+  - `radio_browser`'s `endpoint`, `mirror` and `url_for`. What is left uncovered in
+    that file after step 6, and left there on purpose: reaching them means resolving
+    `MIRROR`, which is one process-global fetch per test binary and a real outbound
+    request the first time. The doors they feed are covered underneath them.
 
 
 ================================================================================
@@ -759,9 +831,18 @@ SUGGESTED ORDER
      `reconnect_delay`'s cap and `sleep_unless_abandoned`'s in-loop poll — survive
      mutations that the tests standing before this step passed.
 
-  6. P3, and only after its seam is argued on its own. If the answer is that a
-     resettable `OnceCell` is not worth the production surface, take the two
-     seam-free items in that entry and close it.
+  6. [DONE] P3, the network tier's second half. The seam was argued and refused:
+     the entry's own precedent turned out to be about a pubkey rather than a base
+     URL, one of its two seam-free items was already written, and the rest fell to
+     B2's narrowing with the `OnceCell`s untouched. Four claims wrong; its table
+     now says which.
+
+     Left behind for whoever takes the next one: **the mutation check is the step,
+     not the postscript.** One pin here passed against the code it was written for
+     and passed again with that code deleted, because `AppError::Network` is also
+     what the unguarded path returns — and two more were pinning a sibling suite's
+     claims rather than their own. Neither is visible in a percentage or in a green
+     run; both were found by breaking the code on purpose.
 
   7. P5's three query files, last, for the reason its entry gives.
 
@@ -769,5 +850,11 @@ Steps 1 through 3 were the whole of what had a user-visible cost a reinstall doe
 not undo, and step 4 turned out to hold one more of those — `add_folder` — behind a
 P1 heading. Everything from step 5 down is worth doing and worth doing after those.
 
-With 1 through 5 spent, step 6 is next, and it is the first one in this document
-that has to argue a seam before it can be written. Nothing above it is left.
+With 1 through 6 spent, step 7 is the only entry left, and this document is one
+step from being deletable. Its own map has moved since it was written: the
+projections its entry ranks first are the half that shows up in the UI, where
+`smart_playlist.rs`'s builder is the half that does not — `escape_like` has no
+coverage at all, ten of `column_for`'s sixteen field arms are unpinned, and the
+parens `push_where` wraps each rule in are non-load-bearing today because every
+test of an `OR`-emitting predicate uses a single rule. Sharpen that entry before
+taking it.

@@ -2,8 +2,13 @@
 //!
 //! The updater's resume protocol turns on what the server does with a `Range` header, and its
 //! manifest fetch is a fail-closed ladder over response codes. Neither can be pinned by reading
-//! source: what they answer to is a socket. Everything else in the tree that touches the network
-//! is held by a source walk instead, because asserting a call did *not* happen needs no server.
+//! source: what they answer to is a socket, and so is every status a fetch reads as a verdict —
+//! whether a refusal is an error or a definitive miss is a question only a response can ask.
+//!
+//! The division, since both halves are in the tree: a socket where the behaviour *is* the
+//! response, a source walk where the claim is about every call site at once. Asserting that a call
+//! did **not** happen anywhere needs no server, and a suite cannot see a call site nobody has
+//! written yet.
 //!
 //! Hand-rolled against `std::net` rather than taken as a dependency. `.claude/rules/testing.md`
 //! asks for an argument before a framework arrives, and the argument here comes out the other

@@ -61,9 +61,16 @@ pub async fn search(
     client: &reqwest::Client,
     search: &StationSearch,
 ) -> Result<StationPage, AppError> {
-    let url = endpoint(client, "stations/search").await;
+    search_at(client, &endpoint(client, "stations/search").await, search).await
+}
+
+async fn search_at(
+    client: &reqwest::Client,
+    url: &str,
+    search: &StationSearch,
+) -> Result<StationPage, AppError> {
     let stations: Vec<ApiStation> =
-        get_json(client, &url, &query::search_params(search), "search").await?;
+        get_json(client, url, &query::search_params(search), "search").await?;
     Ok(page_from(stations, search.limit))
 }
 
@@ -104,8 +111,12 @@ fn page_from(stations: Vec<ApiStation>, limit: u32) -> StationPage {
 /// repeated call is not an error and needs no client-side debounce.
 pub async fn count_click(client: &reqwest::Client, station_uuid: &str) -> Result<(), AppError> {
     let url = endpoint(client, &format!("url/{station_uuid}")).await;
+    count_click_at(client, &url).await
+}
+
+async fn count_click_at(client: &reqwest::Client, url: &str) -> Result<(), AppError> {
     let response = client
-        .get(&url)
+        .get(url)
         .timeout(REQUEST_TIMEOUT)
         .send()
         .await
@@ -138,8 +149,15 @@ pub async fn station_by_uuid(
         return Err(AppError::Validation("Not a radio directory station id".to_owned()));
     }
     let url = endpoint(client, &format!("stations/byuuid/{station_uuid}")).await;
+    station_by_uuid_at(client, &url).await
+}
+
+async fn station_by_uuid_at(
+    client: &reqwest::Client,
+    url: &str,
+) -> Result<Option<DirectoryStation>, AppError> {
     let stations: Vec<ApiStation> =
-        get_json(client, &url, &BTreeMap::new(), "station lookup").await?;
+        get_json(client, url, &BTreeMap::new(), "station lookup").await?;
 
     Ok(stations
         .into_iter()
@@ -161,7 +179,11 @@ pub async fn cast_vote(client: &reqwest::Client, station_uuid: &str) -> Result<(
         return Err(AppError::Validation("Not a radio directory station id".to_owned()));
     }
     let url = endpoint(client, &format!("vote/{station_uuid}")).await;
-    let vote: ApiVote = get_json(client, &url, &BTreeMap::new(), "vote").await?;
+    cast_vote_at(client, &url).await
+}
+
+async fn cast_vote_at(client: &reqwest::Client, url: &str) -> Result<(), AppError> {
+    let vote: ApiVote = get_json(client, url, &BTreeMap::new(), "vote").await?;
 
     if vote.ok {
         return Ok(());
@@ -193,16 +215,23 @@ fn facet_cell(kind: FacetKind) -> &'static OnceCell<Arc<[Facet]>> {
 }
 
 async fn fetch_facets(client: &reqwest::Client, kind: FacetKind) -> Result<Arc<[Facet]>, AppError> {
+    fetch_facets_at(client, &endpoint(client, query::facet_path(kind)).await, kind).await
+}
+
+async fn fetch_facets_at(
+    client: &reqwest::Client,
+    url: &str,
+    kind: FacetKind,
+) -> Result<Arc<[Facet]>, AppError> {
     let path = query::facet_path(kind);
-    let url = endpoint(client, path).await;
-    let facets: Vec<ApiFacet> = get_json(client, &url, &query::facet_params(kind), path).await?;
+    let facets: Vec<ApiFacet> = get_json(client, url, &query::facet_params(kind), path).await?;
 
     // A ceiling is not optional — omitting the parameter takes the directory's own
     // default slice rather than everything — so the only question is whether hitting
-    // one is silent. Read off the **raw** length, before the blocklist thins it, for
+    // one is silent. Measured on the **raw** length, before the blocklist thins it, for
     // `page_from`'s reason. A cut list is a degradation nothing else can report: the
     // missing tags are simply not offered, and no surface looks wrong.
-    if facets.len() >= query::facet_limit(kind) as usize {
+    if query::facet_list_is_capped(kind, facets.len()) {
         log::warn!("radio: the {path} list came back at its ceiling and is likely cut short");
     }
 
@@ -240,7 +269,7 @@ fn url_for(host: &str, path: &str) -> String {
 async fn mirror(client: &reqwest::Client) -> &'static str {
     MIRROR
         .get_or_init(|| async {
-            match discover_mirror(client).await {
+            match discover_mirror(client, SERVERS_URL).await {
                 Ok(host) => host,
                 Err(e) => {
                     log::warn!(
@@ -257,9 +286,13 @@ async fn mirror(client: &reqwest::Client) -> &'static str {
 }
 
 /// Ask for the mirror list and pick one of its hosts.
-async fn discover_mirror(client: &reqwest::Client) -> Result<String, AppError> {
+///
+/// The list URL is threaded through rather than read from [`SERVERS_URL`] at the fetch, so a test
+/// can point discovery at a local server — the shape `updater::github::RELEASES_BASE` already
+/// carries, and deliberately not a second configuration surface: the one caller spells the const.
+async fn discover_mirror(client: &reqwest::Client, servers_url: &str) -> Result<String, AppError> {
     let servers: Vec<ApiServer> =
-        get_json(client, SERVERS_URL, &BTreeMap::new(), "mirror list").await?;
+        get_json(client, servers_url, &BTreeMap::new(), "mirror list").await?;
 
     let mut hosts = model::hosts(&servers);
     if hosts.is_empty() {

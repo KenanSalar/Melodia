@@ -4,6 +4,10 @@ use melodia_core::error::AppError;
 /// slack against a schema change rather than a budget.
 const MAX_RESPONSE_BYTES: u64 = 512 * 1024;
 
+/// The iTunes Search endpoint. Named so the fetch below can take its URL as an argument and a
+/// test can point it at a local server, the door spelling this.
+const SEARCH_URL: &str = "https://itunes.apple.com/search";
+
 #[derive(serde::Deserialize)]
 struct ItunesSearchResponse {
     results: Vec<ItunesAlbum>,
@@ -24,11 +28,20 @@ pub async fn search_album_cover(
     artist: &str,
     album: &str,
 ) -> Result<Option<String>, AppError> {
+    search_album_cover_at(client, SEARCH_URL, artist, album).await
+}
+
+async fn search_album_cover_at(
+    client: &reqwest::Client,
+    url: &str,
+    artist: &str,
+    album: &str,
+) -> Result<Option<String>, AppError> {
     // iTunes has no field-pinning search syntax; a combined term with entity=album is
     // the conventional album lookup.
     let term = format!("{artist} {album}");
     let response: reqwest::Response = client
-        .get("https://itunes.apple.com/search")
+        .get(url)
         .query(&[("term", term.as_str()), ("entity", "album"), ("limit", "1")])
         .send()
         .await
